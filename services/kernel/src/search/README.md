@@ -1303,6 +1303,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 The request-only Realm and Collection prefix path uses the same operation and retained native prefix producer; its
 predicate, readiness, caller and finite refill bounds are specified in [scoped suggestions](./scoped-suggestion.md).
 
+Decision: `:suggest` consumes qualified work context through one optional batch adapter over at most ten admitted Subject IDs; until the producer is wired, context is explicitly unavailable, and available creator-role context must pass the producer's final currentness check without per-hit reads or guessed destinations.
+
+Search calls that adapter once for the accepted page and sends at most one context row per Subject, with a 16 KiB serialized context ceiling. This base has no provider wired and adds zero context queries; the eventual adapter must reuse the producer's bounded full-key batch seeks and disclosed fan-out. Global and admitted scoped suggestions recheck the selected Subject identities after the ordinary summary completion, then recheck the context producer's source identity, disclosure and release before returning. A context carries the exact creator property and role, an explicitly directed work/release relation, original partial calendar precision and an admitted overflow destination without a count; withheld and unavailable states carry no creator identity.
+
 - Touches: GET validates 1–64 code points (<= 128 UTF-16 units), limit 1–10 (default 8); `subjects-suggest-v1`
   queries `names.typeahead` and its 2/3-gram fields in one pinned physical-generation template request. Reads <= 20 hits, then the same
   partition-grouped disclosure, projection, generation and freshness paths. Grow N/P with limit, text and selected

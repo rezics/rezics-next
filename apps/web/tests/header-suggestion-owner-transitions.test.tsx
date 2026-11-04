@@ -27,6 +27,44 @@ const result = (label: string): SuggestionResult => ({
   types: {},
 });
 
+const contextualResult = (): SuggestionResult => ({
+  ...result('Prince'),
+  subjects: [
+    {
+      id: '123e4567-e89b-12d3-a456-426614174010',
+      type: 'schema:Book',
+      labels: { en: 'Prince' },
+      summary: null,
+      workContext: {
+        subjectId: '123e4567-e89b-12d3-a456-426614174010',
+        status: 'available',
+        creator: {
+          id: '123e4567-e89b-12d3-a456-426614174020',
+          label: { value: 'Mary Shelley', language: 'en' },
+          property: 'schema:author',
+          role: { value: 'Author', language: 'en' },
+        },
+      },
+    },
+    {
+      id: '123e4567-e89b-12d3-a456-426614174011',
+      type: 'schema:Book',
+      labels: { en: 'Prince' },
+      summary: null,
+      workContext: {
+        subjectId: '123e4567-e89b-12d3-a456-426614174011',
+        status: 'available',
+        creator: {
+          id: '123e4567-e89b-12d3-a456-426614174021',
+          label: { value: 'Milo Manara', language: 'en' },
+          property: 'schema:illustrator',
+          role: { value: 'Illustrator', language: 'en' },
+        },
+      },
+    },
+  ],
+});
+
 type Props = {
   locale: string;
   boundary: number;
@@ -203,7 +241,7 @@ test('header suggestions retire at locale, scope and loader owner transitions', 
 
     await transition({ scope: scopeB });
     expect(pendingA.signal.aborted).toBe(true);
-    await act(async () => pendingA.resolve(result('Late scope A result')));
+    await act(async () => pendingA.resolve(contextualResult()));
     expect(app.options()).toHaveLength(0);
     await app.pause();
     const currentB = app.requests.at(-1)!;
@@ -297,4 +335,39 @@ test('unavailable scoped suggestions stay unavailable until the user removes sco
   } finally {
     await app.close();
   }
+});
+
+test('same-title context stays accessible and pointer and keyboard choose the same admitted Subject', async () => {
+  const choose = async (mode: 'keyboard' | 'pointer') => {
+    const app = await mountSearch();
+    try {
+      await app.render({ locale: 'en', boundary: 0, globalLoader: app.loader('context') });
+      await act(async () => app.input().focus());
+      await app.pause();
+      await act(async () => app.requests.at(-1)!.resolve(contextualResult()));
+
+      expect(app.options()).toHaveLength(2);
+      const context = app.options()[1]!.querySelector('[data-suggestion-work-context]')!;
+      expect(context.textContent).toBe('Illustrator · Milo Manara');
+      expect([...context.querySelectorAll('bdi')].map((label) => [label.textContent, label.lang, label.dir])).toEqual([
+        ['Illustrator', 'en', 'auto'],
+        ['Milo Manara', 'en', 'auto'],
+      ]);
+      const href = app.options()[1]!.querySelector('a')!.getAttribute('href')!;
+      if (mode === 'keyboard') {
+        await act(async () => app.key('ArrowDown'));
+        await act(async () => app.key('ArrowDown'));
+        await act(async () => app.key('Enter'));
+      } else {
+        await act(async () => app.options()[1]!.querySelector('a')!.click());
+      }
+      expect(app.visits).toEqual([href]);
+      expect(href).toContain('123e4567-e89b-12d3-a456-426614174011');
+    } finally {
+      await app.close();
+    }
+  };
+
+  await choose('keyboard');
+  await choose('pointer');
 });

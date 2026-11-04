@@ -421029,6 +421029,303 @@
                           },
                           "type": {
                             "type": "string"
+                          },
+                          "workContext": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "subjectId": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "status": {
+                                    "const": "available",
+                                    "type": "string"
+                                  },
+                                  "creator": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid"
+                                      },
+                                      "label": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "value": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 256
+                                          },
+                                          "language": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 35
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "language"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "property": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 128
+                                      },
+                                      "role": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "value": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 256
+                                          },
+                                          "language": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 35
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "language"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "label",
+                                      "property",
+                                      "role"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "relation": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "enum": [
+                                          "work",
+                                          "release"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid"
+                                      },
+                                      "label": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "value": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 256
+                                          },
+                                          "language": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 35
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "language"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "date": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "value",
+                                                "type": "string"
+                                              },
+                                              "property": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128
+                                              },
+                                              "value": {
+                                                "type": "string",
+                                                "pattern": "^\\d{4}$"
+                                              },
+                                              "precision": {
+                                                "const": "year",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "property",
+                                              "value",
+                                              "precision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "value",
+                                                "type": "string"
+                                              },
+                                              "property": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128
+                                              },
+                                              "value": {
+                                                "type": "string",
+                                                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                                              },
+                                              "precision": {
+                                                "const": "month",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "property",
+                                              "value",
+                                              "precision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "value",
+                                                "type": "string"
+                                              },
+                                              "property": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128
+                                              },
+                                              "value": {
+                                                "type": "string",
+                                                "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+                                              },
+                                              "precision": {
+                                                "const": "day",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "property",
+                                              "value",
+                                              "precision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "enum": [
+                                                  "unknown",
+                                                  "no_value",
+                                                  "withheld",
+                                                  "unavailable",
+                                                  "not_applicable"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "property": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 128
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "property"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "id",
+                                      "label"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "overflow": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "destination": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                          },
+                                          "kind": {
+                                            "enum": [
+                                              "subject",
+                                              "work",
+                                              "release"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "kind"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    },
+                                    "required": [
+                                      "destination"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "subjectId",
+                                  "status",
+                                  "creator"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "subjectId": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "absent",
+                                      "not_applicable",
+                                      "empty",
+                                      "withheld",
+                                      "unavailable"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "subjectId",
+                                  "status"
+                                ],
+                                "type": "object"
+                              }
+                            ]
                           }
                         },
                         "required": [
@@ -421039,7 +421336,8 @@
                         ],
                         "type": "object"
                       },
-                      "type": "array"
+                      "type": "array",
+                      "maxItems": 10
                     }
                   },
                   "required": [
