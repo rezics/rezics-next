@@ -289,12 +289,10 @@ function ShelfSelectionBar({
   };
   const closeReview = () => {
     setReviewSnapshot(null);
-    if (controls.isCurrent()) requestAnimationFrame(() => launcher.current?.isConnected && launcher.current.focus());
   };
   useEffect(() => {
     if (!reviewSnapshot || reviewSnapshot === signature) return;
     setReviewSnapshot(null);
-    if (controls.isCurrent()) requestAnimationFrame(() => launcher.current?.isConnected && launcher.current.focus());
   }, [reviewSnapshot, signature, controls.isCurrent]);
   const reviewSelectedState = () => {
     if (!selectedState || !controls.isCurrent() || reviewSnapshot !== signature) return;
@@ -379,6 +377,7 @@ function ShelfSelectionBar({
         statusBlocked={controls.selectionBlocked}
         pending={controls.pending}
         hydrated={controls.hydrated}
+        episodeKey={signature}
         onStatusChange={(value) => {
           if (value !== selectedState) controls.invalidateBulkStatusReview();
           setChosen(value);

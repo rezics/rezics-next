@@ -29,6 +29,7 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     navigator: browser.navigator,
     HTMLElement: browser.HTMLElement,
     HTMLInputElement: browser.HTMLInputElement,
+    HTMLSelectElement: browser.HTMLSelectElement,
     Element: browser.Element,
     Node: browser.Node,
     DocumentFragment: browser.DocumentFragment,
@@ -43,6 +44,7 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
 
   function Harness() {
     const [open, setOpen] = useState(true);
+    const [status, setStatus] = useState('reading');
     const launcher = useRef<HTMLButtonElement>(null);
     return (
       <>
@@ -53,14 +55,21 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
         <SelectionReviewView
           open={open}
           onOpenChange={setOpen}
-          items={[{ subjectId: 'subject-1', title: 'Current work' }]}
-          statusChoices={[]}
-          statusValue=""
-          statusAllowed={false}
+          items={[
+            { subjectId: 'subject-1', title: 'Current work' },
+            { subjectId: 'subject-2', title: 'Current volume' },
+          ]}
+          statusChoices={[
+            { id: 'reading', label: { text: 'Reading', lang: 'en' } },
+            { id: 'paused', label: { text: 'Paused', lang: 'en' } },
+          ]}
+          statusValue={status}
+          statusAllowed
           statusBlocked={false}
           pending={false}
           hydrated
-          onStatusChange={() => undefined}
+          episodeKey="selected-set-1"
+          onStatusChange={setStatus}
           onReviewStatus={() => undefined}
           launcher={launcher}
           isCurrent={() => true}
@@ -81,6 +90,12 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     });
     expect(host.querySelector('output')?.getAttribute('data-mobile')).toBe('true');
     expect(browser.document.querySelector('[data-slot="drawer-popup"]')).not.toBeNull();
+    expect(browser.document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    const choice = browser.document.querySelector<HTMLSelectElement>('select[aria-label]')!;
+    choice.focus();
+    choice.value = 'paused';
+    await act(async () => choice.dispatchEvent(new browser.Event('change', { bubbles: true })));
+    expect(choice.value).toBe('paused');
 
     await act(async () => {
       width = 1024;
@@ -88,13 +103,33 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     });
     expect(host.querySelector('output')?.getAttribute('data-mobile')).toBe('false');
     expect(browser.document.querySelector('[data-slot="dialog-content"]')).not.toBeNull();
+    expect(browser.document.querySelector('[data-slot="drawer-popup"]')).toBeNull();
+    expect(browser.document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(browser.document.querySelector('select[aria-label]')).toBe(choice);
+    expect(choice.value).toBe('paused');
+    expect(browser.document.activeElement).toBe(choice);
+    expect(browser.document.querySelectorAll('[data-selection-review-entry]')).toHaveLength(2);
+
+    await act(async () => {
+      width = 390;
+      mediaQuery?.dispatchEvent(new browser.Event('change'));
+    });
+    expect(browser.document.querySelector('[data-slot="dialog-content"]')).toBeNull();
+    expect(browser.document.querySelector('[data-slot="drawer-popup"]')).not.toBeNull();
+    expect(browser.document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(browser.document.querySelector('select[aria-label]')).toBe(choice);
+    expect(choice.value).toBe('paused');
+    expect(browser.document.activeElement).toBe(choice);
+    expect(browser.document.querySelectorAll('[data-selection-review-entry]')).toHaveLength(2);
 
     const done = [...browser.document.querySelectorAll('button')].find(
       (button) => button.textContent?.trim() === m.library_selection_review_close(),
     );
     expect(done).toBeDefined();
     await act(async () => done?.click());
-    await act(async () => new Promise<void>((resolve) => browser.requestAnimationFrame(() => resolve())));
+    await act(async () =>
+      new Promise<void>((resolve) => browser.requestAnimationFrame(() => browser.requestAnimationFrame(() => resolve()))),
+    );
     expect(browser.document.activeElement).toBe(host.querySelector('button'));
     expect(browser.document.querySelector('[data-slot="dialog-content"]')).toBeNull();
   } finally {

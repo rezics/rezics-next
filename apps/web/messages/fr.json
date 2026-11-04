@@ -730,6 +730,7 @@
   "collection_filter_to": "À",
   "collection_filter_unsupported": "Ce filtre ne peut pas être utilisé sur cette collection.",
   "collection_filter_failed": "Les filtres sont temporairement indisponibles. Cette collection n’est pas présentée comme filtrée.",
+  "collection_filter_review_description": "Modifiez les critères du filtre, puis appliquez-les ou annulez pour revenir à cette collection.",
   "collection_filters": "Filtres",
   "editor_apply": "Appliquer",
   "editor_blocks": "Blocs",

@@ -730,6 +730,7 @@
   "collection_filter_to": "최댓값",
   "collection_filter_unsupported": "이 컬렉션에서는 이 필터를 사용할 수 없습니다.",
   "collection_filter_failed": "필터를 일시적으로 사용할 수 없습니다. 이 컬렉션은 필터링된 상태로 표시되지 않습니다.",
+  "collection_filter_review_description": "필터 조건을 편집한 다음 적용하거나 취소하고 이 컬렉션으로 돌아가세요.",
   "collection_filters": "필터",
   "editor_apply": "적용",
   "editor_blocks": "블록",

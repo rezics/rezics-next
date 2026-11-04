@@ -1,6 +1,8 @@
 # Rezics UI
 
-`@rezics/ui` is Rezics's shared React component library. Import the base controls from `@rezics/ui/shadcn/<name>` (see below), the site's own components from `@rezics/ui/<name>` such as `@rezics/ui/cover`, shared hooks from `@rezics/ui/hooks/use-is-mobile`, and the theme stylesheet from `@rezics/ui/styles.css`.
+`@rezics/ui` is Rezics's shared React component library. Import the base controls from `@rezics/ui/shadcn/<name>` (see below), the site's own components from `@rezics/ui/<name>` such as `@rezics/ui/cover`, shared hooks from `@rezics/ui/hooks/use-mobile`, and the theme stylesheet from `@rezics/ui/styles.css`.
+
+Use `@rezics/ui/responsive-dialog` when one open interaction must remain continuous as the Dialog and phone BottomSheet presentations change.
 
 Run `bun run storybook` in this directory to review components. Run `bun run check` to type-check the package and run its unit and accessible browser story tests.
 

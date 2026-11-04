@@ -1,15 +1,6 @@
-import { useIsMobile } from '@rezics/ui/hooks/use-mobile';
-import { BottomSheet } from '@rezics/ui/bottom-sheet';
+import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@rezics/ui/shadcn/dialog';
+import { useRef } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { m } from '../paraglide/messages.js';
 
@@ -50,6 +41,7 @@ export function SelectionReviewView({
   statusBlocked,
   pending,
   hydrated,
+  episodeKey,
   onStatusChange,
   onReviewStatus,
   launcher,
@@ -65,25 +57,36 @@ export function SelectionReviewView({
   statusBlocked: boolean;
   pending: boolean;
   hydrated: boolean;
+  episodeKey: string;
   onStatusChange: (value: string) => void;
   onReviewStatus: () => void;
   launcher: RefObject<HTMLButtonElement | null>;
   isCurrent: () => boolean;
 }) {
-  const mobile = useIsMobile();
+  const observedEpisodeKey = useRef(episodeKey);
+  const episodeEpoch = useRef(0);
+  if (observedEpisodeKey.current !== episodeKey) {
+    observedEpisodeKey.current = episodeKey;
+    episodeEpoch.current += 1;
+  }
+  const activeEpisode = useRef<{ key: string; epoch: number } | null>(
+    open ? { key: episodeKey, epoch: episodeEpoch.current } : null,
+  );
+  const previousOpen = useRef(open);
+  if (open && !previousOpen.current) activeEpisode.current = { key: episodeKey, epoch: episodeEpoch.current };
+  previousOpen.current = open;
+  const isCurrentEpisode = () =>
+    activeEpisode.current?.key === episodeKey && activeEpisode.current.epoch === episodeEpoch.current;
+  const current = open && isCurrentEpisode() && isCurrent();
   const selectedChoice = statusChoices.find((choice) => choice.id === statusValue);
   const canReviewStatus =
     statusAllowed && !statusBlocked && !pending && hydrated && !!selectedChoice && items.length > 0;
   const close = (next: boolean) => {
+    if (!isCurrent() || (!next && !isCurrentEpisode())) return;
     onOpenChange(next);
-    if (next) return;
-    const restore = () => {
-      if (isCurrent() && launcher.current?.isConnected) launcher.current.focus();
-    };
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(restore);
-    else queueMicrotask(restore);
   };
-  const returnFocus = () => (isCurrent() && launcher.current?.isConnected ? launcher.current : false);
+  const returnFocus = () =>
+    isCurrentEpisode() && isCurrent() && launcher.current?.isConnected ? launcher.current : false;
   const summary = (
     <>
       <p role="status" className="text-sm">
@@ -121,36 +124,17 @@ export function SelectionReviewView({
     </>
   );
 
-  if (mobile)
-    return (
-      <BottomSheet
-        open={open}
-        onOpenChange={close}
-        title={m.library_selection_review_title()}
-        closeLabel={m.library_selection_review_close()}
-        finalFocus={returnFocus}
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">{m.library_selection_review_description()}</p>
-          {summary}
-        </div>
-      </BottomSheet>
-    );
-
   return (
-    <Dialog open={open} onOpenChange={close}>
-      <DialogContent showCloseButton={false} className="sm:max-w-lg" finalFocus={returnFocus}>
-        <DialogHeader>
-          <DialogTitle>{m.library_selection_review_title()}</DialogTitle>
-          <DialogDescription>{m.library_selection_review_description()}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">{summary}</div>
-        <DialogFooter>
-          <DialogClose render={<Button variant="outline" className="min-h-11" />}>
-            {m.library_selection_review_close()}
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ResponsiveDialog
+      open={current}
+      onOpenChange={close}
+      title={m.library_selection_review_title()}
+      description={m.library_selection_review_description()}
+      closeLabel={m.library_selection_review_close()}
+      className="sm:max-w-lg"
+      finalFocus={returnFocus}
+    >
+      <div className="space-y-4">{current ? summary : null}</div>
+    </ResponsiveDialog>
   );
 }

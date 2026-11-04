@@ -15,9 +15,7 @@ import { requestLanguages } from '../kernel/languages';
 import { Exposure } from '../kernel/exposure';
 import { SaveQueryLink } from './save-query';
 import { admitSavedQuerySelection, hasSavedQueryInput } from './saved-query-editor/selection';
-import { BottomSheet } from '@rezics/ui/bottom-sheet';
-import { useIsMobile } from '@rezics/ui/hooks/use-mobile';
-import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
+import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import { SlidersHorizontalIcon } from 'lucide-react';
 import { Refinement, type RefinementData } from '../search/refinement/refinement';
@@ -40,6 +38,12 @@ export type CollectionFilterProperty = {
   unit?: string;
   targets?: readonly string[];
 };
+
+type CollectionFilterEpisode = Readonly<{
+  identity: string;
+  sourceEpoch: number;
+  sequence: number;
+}>;
 
 /** Shared rendered outcomes for filtered empty, unsupported, and preparing reads. */
 export function CollectionFilterFeedback({
@@ -128,8 +132,6 @@ export function CollectionFilters({
   };
   const showSaveQuery = hasSavedQueryInput(saveQueryInput);
   const saveQuerySelection = admitSavedQuerySelection(saveQueryInput);
-  const mobile = useIsMobile();
-  const [open, setOpen] = useState(false);
   const refinementProperties = properties.map((property): RefinementProperty => ({
     property: property.id,
     labels: property.labels ?? { [locale]: property.label },
@@ -153,7 +155,27 @@ export function CollectionFilters({
     filter: params.document ?? null,
     selected: params.selected,
     ranges: params.ranges,
+    source: search,
   });
+  const sourceIdentity = useRef(identity);
+  const sourceEpoch = useRef(0);
+  if (sourceIdentity.current !== identity) {
+    sourceIdentity.current = identity;
+    sourceEpoch.current += 1;
+  }
+  const [episode, setEpisode] = useState<CollectionFilterEpisode | null>(null);
+  const episodeRef = useRef(episode);
+  episodeRef.current = episode;
+  const focusEpisode = useRef<CollectionFilterEpisode | null>(null);
+  const closingEpisode = useRef<CollectionFilterEpisode | null>(null);
+  const completedEpisode = useRef<number | null>(null);
+  const episodeSequence = useRef(0);
+  const open =
+    episode !== null &&
+    episode.identity === identity &&
+    episode.sourceEpoch === sourceEpoch.current &&
+    episodeRef.current?.sequence === episode.sequence;
+  const activeEpisode = open ? episode : null;
   const [shown, setShown] = useState(initialShown);
   const [draftConditions, setDraftConditions] = useState(() => collectionConditions(params, refinementProperties));
   const [draftLabels, setDraftLabels] = useState(params.selectedLabels);
@@ -167,18 +189,61 @@ export function CollectionFilters({
     setRangeDraftState(createRangeDraftState(identity));
     setShown(initialShown);
   }, [identity]);
+
+  function isCurrentEpisode(task: CollectionFilterEpisode | null): task is CollectionFilterEpisode {
+    return Boolean(
+      task &&
+        sourceIdentity.current === task.identity &&
+        sourceEpoch.current === task.sourceEpoch &&
+        episodeRef.current?.sequence === task.sequence,
+    );
+  }
+
+  function canRestoreFocus(task: CollectionFilterEpisode | null) {
+    return Boolean(
+      task &&
+        sourceIdentity.current === task.identity &&
+        sourceEpoch.current === task.sourceEpoch &&
+        closingEpisode.current?.sequence === task.sequence,
+    );
+  }
+
+  function beginEpisode() {
+    const task: CollectionFilterEpisode = {
+      identity,
+      sourceEpoch: sourceEpoch.current,
+      sequence: ++episodeSequence.current,
+    };
+    focusEpisode.current = task;
+    episodeRef.current = task;
+    closingEpisode.current = null;
+    completedEpisode.current = null;
+    setDraftConditions(collectionConditions(params, refinementProperties));
+    setDraftLabels(params.selectedLabels);
+    setRangeDraftState(createRangeDraftState(identity));
+    setShown(initialShown);
+    setEpisode(task);
+  }
+
+  function retireEpisode(task: CollectionFilterEpisode) {
+    if (!isCurrentEpisode(task)) return;
+    closingEpisode.current = task;
+    episodeRef.current = null;
+    setEpisode(null);
+  }
+
   function changeOpen(next: boolean) {
     if (next) {
-      setDraftConditions(collectionConditions(params, refinementProperties));
-      setDraftLabels(params.selectedLabels);
-      setRangeDraftState(createRangeDraftState(identity));
-      setShown(initialShown);
+      beginEpisode();
+      return;
     }
-    setOpen(next);
-    if (!next) requestAnimationFrame(() => trigger.current?.focus());
+    const task = activeEpisode;
+    if (task) retireEpisode(task);
   }
-  function submit(event: FormEvent<HTMLFormElement>) {
+
+  function submit(event: FormEvent<HTMLFormElement>, task: CollectionFilterEpisode | null) {
     event.preventDefault();
+    if (!isCurrentEpisode(task) || completedEpisode.current === task.sequence) return;
     const form = new FormData(event.currentTarget);
     const selected: Record<string, string[]> = {};
     const labels: Record<string, string> = {};
@@ -212,14 +277,16 @@ export function CollectionFilters({
           ...(upper === undefined ? {} : { to: upper }),
         };
     }
-    changeOpen(false);
+    completedEpisode.current = task.sequence;
+    retireEpisode(task);
     window.location.assign(
       collectionFilterAddress(locale, id, selected, ranges, labels, type, new URLSearchParams(search)),
     );
   }
-  const form = open ? (
+
+  const form = activeEpisode ? (
     <form
-      onSubmit={submit}
+      onSubmit={(event) => submit(event, activeEpisode)}
       method="get"
       action={`/${locale}/collections/${encodeURIComponent(id)}`}
       className="min-w-0"
@@ -240,8 +307,11 @@ export function CollectionFilters({
           showSummary={false}
           deferNavigation
           perPropertyState
-          onConditionsChange={setDraftConditions}
+          onConditionsChange={(conditions) => {
+            if (isCurrentEpisode(activeEpisode)) setDraftConditions(conditions);
+          }}
           onValueSelectionChange={(property, values, firstValue, firstLabel) => {
+            if (!isCurrentEpisode(activeEpisode)) return;
             setDraftLabels((previous) => {
               const next = { ...previous };
               if (!values.length) delete next[property];
@@ -251,14 +321,23 @@ export function CollectionFilters({
             });
           }}
           selectedLabels={draftLabels}
-          onShownChange={setShown}
+          onShownChange={(properties) => {
+            if (isCurrentEpisode(activeEpisode)) setShown(properties);
+          }}
           rangeName={(property, bound) => `range.${bound}.${property}`}
           rangeDraftKey={identity}
           rangeDraftState={rangeDraftState}
-          onRangeDraftChange={(property, draft) =>
-            setRangeDraftState((previous) => updateRangeDraft(previous, identity, property, draft))
-          }
+          onRangeDraftChange={(property, draft) => {
+            if (isCurrentEpisode(activeEpisode))
+              setRangeDraftState((previous) => updateRangeDraft(previous, identity, property, draft));
+          }}
           load={async (facets, signal) => {
+            const task = activeEpisode;
+            if (!isCurrentEpisode(task) || signal.aborted) {
+              const retired = new Error('The Collection filter episode has ended.');
+              retired.name = 'AbortError';
+              throw retired;
+            }
             const request = collectionFacetRequest(
               {
                 resource: { kind: 'collection', id },
@@ -269,7 +348,13 @@ export function CollectionFilters({
               },
               facets,
             );
-            return (facetLoader ?? loadCollectionFacetValues)(request, signal);
+            const result = await (facetLoader ?? loadCollectionFacetValues)(request, signal);
+            if (!isCurrentEpisode(task) || signal.aborted) {
+              const retired = new Error('The Collection filter episode has ended.');
+              retired.name = 'AbortError';
+              throw retired;
+            }
+            return result;
           }}
         />
         {properties
@@ -318,28 +403,21 @@ export function CollectionFilters({
             >
               <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
             </Button>
-            {mobile ? (
-              <BottomSheet open={open} onOpenChange={changeOpen} title={m.collection_filters()}>
-                <div id={surfaceId}>{form}</div>
-              </BottomSheet>
-            ) : (
-              <Dialog open={open} onOpenChange={changeOpen}>
-                <DialogContent
-                  id={surfaceId}
-                  finalFocus={trigger}
-                  showCloseButton={false}
-                  className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto sm:max-w-lg"
-                >
-                  <DialogHeader className="flex-row items-center justify-between gap-4">
-                    <DialogTitle className="min-w-0 break-words">{m.collection_filters()}</DialogTitle>
-                    <DialogClose render={<Button type="button" variant="ghost" className="min-h-11" />}>
-                      {m.library_collection_cancel()}
-                    </DialogClose>
-                  </DialogHeader>
-                  {form}
-                </DialogContent>
-              </Dialog>
-            )}
+            <ResponsiveDialog
+              id={surfaceId}
+              open={open}
+              onOpenChange={changeOpen}
+              title={m.collection_filters()}
+              description={m.collection_filter_review_description()}
+              closeLabel={m.library_collection_cancel()}
+              className="sm:max-w-lg"
+              finalFocus={() => {
+                const task = focusEpisode.current;
+                return canRestoreFocus(task) && trigger.current?.isConnected ? trigger.current : false;
+              }}
+            >
+              {form}
+            </ResponsiveDialog>
           </>
         ) : null}
         {showSaveQuery ? (

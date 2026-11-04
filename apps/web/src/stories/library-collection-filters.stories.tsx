@@ -152,6 +152,23 @@ export const ActualCombined: Story = {
   render: () => <PageStory visitor="Signed Out" path={collectionFilterRoutePath(states.combined)} />,
 };
 
+export const ActualCombinedPhoneLight: Story = {
+  ...ActualCombined,
+  globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' },
+};
+export const ActualCombinedPhoneDarkTraditionalChinese: Story = {
+  ...ActualCombined,
+  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' }, theme: 'dark' },
+};
+export const ActualCombinedDesktop1440LightJapanese: Story = {
+  ...ActualCombined,
+  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'light' },
+};
+export const ActualCombinedDesktop1440Dark: Story = {
+  ...ActualCombined,
+  globals: { locale: 'en', viewport: { value: 'desktop1440' }, theme: 'dark' },
+};
+
 export const NoMatches: Story = {
   name: 'No matching results',
   play: ({ canvasElement }) => selectedState(canvasElement, 'noMatch'),

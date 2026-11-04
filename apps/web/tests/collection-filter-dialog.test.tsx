@@ -155,85 +155,77 @@ test('Collection filters open a correctly sized dialog or phone sheet and apply 
         input.dispatchEvent(new window.Event('input', { bubbles: true }));
       });
     };
-    for (const width of [1280, 390]) {
-      const visitsBefore = visits.length;
+    window.happyDOM.setWindowSize({ width: 1280, height: 900 });
+    await settle();
+    const visitsBefore = visits.length;
+    await act(async () => {
+      trigger.focus();
+      trigger.click();
+    });
+    await settle();
+    expect(surface()).not.toBeNull();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(surface().querySelector('form')).not.toBeNull();
+    expect(surface().querySelector('[data-slot="drawer-swipe-handle"]')).toBeNull();
+    const additional = surface().querySelector<HTMLInputElement>(`input[type="checkbox"][value="${otherConcept}"]`)!;
+    expect(additional.checked).toBe(true);
+    expect(additional.closest('label')?.textContent).toContain(otherConcept);
+    const focusedRange = lowerBound();
+    focusedRange.focus();
+    await edit();
+    expect(focusedRange.value).toBe('2000001');
+    for (const width of [390, 1280]) {
       window.happyDOM.setWindowSize({ width, height: 900 });
       await settle();
-      await act(async () => {
-        trigger.focus();
-        trigger.click();
-      });
-      await settle();
-      expect(surface()).not.toBeNull();
-      expect(document.querySelector('[role="menu"]')).toBeNull();
-      expect(surface().querySelector('form')).not.toBeNull();
       expect(surface().querySelector('[data-slot="drawer-swipe-handle"]') !== null).toBe(width === 390);
-      expect(lowerBound().value).toBe('1000001');
-      const additional = surface().querySelector<HTMLInputElement>(`input[type="checkbox"][value="${otherConcept}"]`)!;
-      expect(additional.checked).toBe(true);
-      expect(additional.closest('label')?.textContent).toContain(otherConcept);
-      expect(surface().contains(document.activeElement)).toBe(true);
-      await edit();
+      expect(lowerBound()).toBe(focusedRange);
+      expect(focusedRange.value).toBe('2000001');
+      expect(document.activeElement).toBe(focusedRange);
       expect(visits).toHaveLength(visitsBefore);
-      await act(async () => {
-        button(width === 390 ? 'Done' : m.library_collection_cancel()).click();
-      });
-      await settle();
-      expect(document.activeElement).toBe(trigger);
-      await act(async () => {
-        trigger.click();
-      });
-      await settle();
-      expect(lowerBound().value).toBe('1000001');
-      await edit();
-      if (width === 390)
-        await act(async () => {
-          surface().querySelector<HTMLInputElement>(`input[type="checkbox"][value="${otherConcept}"]`)!.click();
-        });
-      const reset = surface().querySelector<HTMLAnchorElement>('a')!;
-      expect(reset.textContent).toBe(m.collection_filter_clear());
-      expect(new URL(reset.href).search).toBe('?layout=grid&type=schema%3ABook');
-      await act(async () => {
-        button(m.collection_filter_apply()).click();
-      });
-      const next = visits.at(-1)!;
-      expect(next.pathname).toBe(`/en/collections/${page.id}`);
-      expect(next.searchParams.get('type')).toBe('schema:Book');
-      expect(next.searchParams.get('layout')).toBe('grid');
-      expect(next.searchParams.has('cursor')).toBe(false);
-      expect(next.searchParams.getAll('f.schema:keywords')).toEqual(
-        width === 390 ? [concept] : [concept, otherConcept],
-      );
-      expect(next.searchParams.get('l.schema:keywords')).toBe(params.selectedLabels['schema:keywords']);
-      expect(next.searchParams.get('r.schema:wordCount')).toBe('2000001,999999999999999');
-      await settle();
-      await act(async () => {
-        trigger.click();
-      });
-      await settle();
-      const clear = surface().querySelector<HTMLAnchorElement>('a')!;
-      clear.addEventListener(
-        'click',
-        (event) => {
-          event.preventDefault();
-          visits.push(new URL(clear.href));
-        },
-        { once: true },
-      );
-      await act(async () => {
-        clear.click();
-      });
-      const cleared = visits.at(-1)!;
-      expect(cleared.pathname).toBe(next.pathname);
-      expect(cleared.search).toBe('?layout=grid&type=schema%3ABook');
-      expect(readCollectionFilterParams(cleared.searchParams, release, 'schema:Book').document).toBeUndefined();
-      await act(async () => {
-        button(width === 390 ? 'Done' : m.library_collection_cancel()).click();
-      });
-      await settle();
-      expect([...host.querySelectorAll('[data-slot="collection-member-card"]')]).toEqual(members);
-      expect(page.members).toBe(collectionStoryMembers);
     }
+    await act(async () => button(m.library_collection_cancel()).click());
+    await settle();
+    expect(document.activeElement).toBe(trigger);
+    expect(visits).toHaveLength(visitsBefore);
+
+    await act(async () => trigger.click());
+    await settle();
+    expect(lowerBound().value).toBe('1000001');
+    await edit();
+    const reset = surface().querySelector<HTMLAnchorElement>('a')!;
+    expect(reset.textContent).toBe(m.collection_filter_clear());
+    expect(new URL(reset.href).search).toBe('?layout=grid&type=schema%3ABook');
+    await act(async () => button(m.collection_filter_apply()).click());
+    const next = visits.at(-1)!;
+    expect(visits).toHaveLength(visitsBefore + 1);
+    expect(next.pathname).toBe(`/en/collections/${page.id}`);
+    expect(next.searchParams.get('type')).toBe('schema:Book');
+    expect(next.searchParams.get('layout')).toBe('grid');
+    expect(next.searchParams.has('cursor')).toBe(false);
+    expect(next.searchParams.getAll('f.schema:keywords')).toEqual([concept, otherConcept]);
+    expect(next.searchParams.get('l.schema:keywords')).toBe(params.selectedLabels['schema:keywords']);
+    expect(next.searchParams.get('r.schema:wordCount')).toBe('2000001,999999999999999');
+    await settle();
+    await act(async () => trigger.click());
+    await settle();
+    const clear = surface().querySelector<HTMLAnchorElement>('a')!;
+    clear.addEventListener(
+      'click',
+      (event) => {
+        event.preventDefault();
+        visits.push(new URL(clear.href));
+      },
+      { once: true },
+    );
+    await act(async () => clear.click());
+    const cleared = visits.at(-1)!;
+    expect(cleared.pathname).toBe(next.pathname);
+    expect(cleared.search).toBe('?layout=grid&type=schema%3ABook');
+    expect(readCollectionFilterParams(cleared.searchParams, release, 'schema:Book').document).toBeUndefined();
+    await act(async () => button(m.library_collection_cancel()).click());
+    await settle();
+    expect([...host.querySelectorAll('[data-slot="collection-member-card"]')]).toEqual(members);
+    expect(page.members).toBe(collectionStoryMembers);
     expect(lookups).toEqual([]);
   } finally {
     await act(async () => root.unmount());

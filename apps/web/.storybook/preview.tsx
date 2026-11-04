@@ -33,6 +33,7 @@ const preview: Preview = {
       options: {
         phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
         desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
+        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '900px' }, type: 'desktop' },
       },
     },
   },
