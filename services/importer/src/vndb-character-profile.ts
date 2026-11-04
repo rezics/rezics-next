@@ -487,12 +487,14 @@ async function sendMissingProfileCommands(input: {
   return issues;
 }
 
-function profileVocabularyNeed(plan: CrossMediaPlan): {
-  ownerKey: string;
-  scheme: ShowcaseVocabularyRequirement;
-  concepts: ShowcaseVocabularyRequirement[];
-  codes: readonly VndbCharacterBloodTypeCode[];
-} | undefined {
+function profileVocabularyNeed(plan: CrossMediaPlan):
+  | {
+      ownerKey: string;
+      scheme: ShowcaseVocabularyRequirement;
+      concepts: ShowcaseVocabularyRequirement[];
+      codes: readonly VndbCharacterBloodTypeCode[];
+    }
+  | undefined {
   const ownerKey = profileOwnerKey(plan);
   const planned = planVndbCharacterProfile(plan);
   if (!ownerKey || !planned.requirements.length) return undefined;
@@ -505,15 +507,17 @@ function profileVocabularyNeed(plan: CrossMediaPlan): {
     schemeCitation,
     'skos:ConceptScheme',
   );
-  const concepts = planned.requirements.slice(0, 4).map((requirement) =>
-    profileRequirement(
-      ownerKey,
-      `${requirement.taxonomy}:${requirement.code}`,
-      requirement.conceptUri,
-      profileCitation(plan, requirement.code),
-      'skos:Concept',
-    ),
-  );
+  const concepts = planned.requirements
+    .slice(0, 4)
+    .map((requirement) =>
+      profileRequirement(
+        ownerKey,
+        `${requirement.taxonomy}:${requirement.code}`,
+        requirement.conceptUri,
+        profileCitation(plan, requirement.code),
+        'skos:Concept',
+      ),
+    );
   return { ownerKey, scheme, concepts, codes: planned.requirements.slice(0, 4).map((requirement) => requirement.code) };
 }
 
@@ -543,8 +547,7 @@ export async function prepareShowcaseVndbCharacterProfileVocabulary(input: {
   issues: readonly VndbCharacterProfileVocabularyIssue[];
 }> {
   const need = profileVocabularyNeed(input.plan);
-  if (!need)
-    return { requirements: [], bindings: emptyBindings, issues: [] };
+  if (!need) return { requirements: [], bindings: emptyBindings, issues: [] };
   const issues = await sendMissingProfileCommands({
     port: input.port,
     journal: input.journal,
@@ -620,10 +623,7 @@ export async function prepareShowcaseVndbCharacterProfileVocabulary(input: {
     })),
   );
   const conceptRequirements = need.concepts.map((requirement) => ({ ...requirement, schemeId: currentSchemeId }));
-  const bindings = await readVndbCharacterProfileBindings(
-    input.port,
-    journalProfileReferences(input.journal, need),
-  );
+  const bindings = await readVndbCharacterProfileBindings(input.port, journalProfileReferences(input.journal, need));
   return { requirements: [...schemeRequirements, ...conceptRequirements], bindings, issues };
 }
 

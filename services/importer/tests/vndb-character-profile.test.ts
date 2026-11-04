@@ -26,14 +26,7 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 const charsHeader =
   'id\timage\tbloodt\tcup_size\tsex\tspoil_sex\tgender\tspoil_gender\tmain\tmain_spoil\ts_bust\ts_waist\ts_hip\tbirthday\theight\tweight\tage\tdescription';
 
-function charsCopy(
-  id: string,
-  bloodt: string,
-  gender: string,
-  spoilGender: string,
-  height: string,
-  weight: string,
-) {
+function charsCopy(id: string, bloodt: string, gender: string, spoilGender: string, height: string, weight: string) {
   return [
     id,
     '\\N',
@@ -56,10 +49,7 @@ function charsCopy(
   ].join('\t');
 }
 
-async function authoredTables(
-  directory: string,
-  extra: string[] = [],
-): Promise<CrossMediaTables> {
+async function authoredTables(directory: string, extra: string[] = []): Promise<CrossMediaTables> {
   const dump = join(directory, 'vndb');
   await mkdir(join(dump, 'db'), { recursive: true });
   await writeFile(join(dump, 'db/chars.header'), `${charsHeader}\n`);
@@ -354,12 +344,14 @@ test('unknown, malformed, withheld gender, refused Concepts and interrupted send
     expect(withheld.concepts).toEqual([]);
 
     const first = await seedShowcaseVndbReleases(seedArgs(tables, plan, statePath, captured, withheld));
-    expect(first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c2' && row.reason === 'source_unknown')).toBe(
-      true,
-    );
-    expect(first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c3' && row.reason === 'invalid_source_value')).toBe(
-      true,
-    );
+    expect(
+      first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c2' && row.reason === 'source_unknown'),
+    ).toBe(true);
+    expect(
+      first.vndbCharacterProfileOmissions.some(
+        (row) => row.externalId === 'c3' && row.reason === 'invalid_source_value',
+      ),
+    ).toBe(true);
     expect(first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c1' && row.field === 'gender')).toBe(
       true,
     );
