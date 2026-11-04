@@ -8136,5 +8136,9 @@
   "discovery_collection_truncated": "這是合集的一部分，開啟合集查看更多。",
   "discovery_collection_empty": "此合集為空。",
   "discovery_collection_withheld": "沒有可顯示的成員。",
-  "discovery_collection_preview_unavailable": "內容預覽無法使用。"
+  "discovery_collection_preview_unavailable": "內容預覽無法使用。",
+  "sources_actions_unavailable": "暫時無法取得更正資格資訊。公開證據仍然顯示。",
+  "sources_correction_denied": "你目前的權限不允許提出更正。",
+  "sources_current_reading": "這是目前選定的內容。提案不會自動選定新證據。",
+  "sources_scope_unavailable": "此路徑無法表達 Realm 的編輯範圍，因此無法比較。"
 }

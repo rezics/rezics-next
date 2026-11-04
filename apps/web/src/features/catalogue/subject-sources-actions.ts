@@ -43,6 +43,7 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
       kind: 'ready',
       page: {
         ...page,
+        viewer: { account: read.account, actions: { state: 'unavailable' } },
         realm: data.realm,
         context: loaded.page.context,
         // A candidate comparison is a separate editorial journey with independent Context authority.
@@ -51,4 +52,36 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
         sourcesHref: contextHref(page.sourcesHref, data.realm),
       },
     };
+  });
+
+/** Hydrated private reading; the loader never serializes a viewer's action envelope into SSR. */
+export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict: false })
+  .validator((input: { id: string; locale: string; expectedReader: string }) => {
+    if (
+      !input ||
+      !/^[0-9a-f-]{36}$/i.test(input.id) ||
+      typeof input.locale !== 'string' ||
+      input.locale.length > 35 ||
+      typeof input.expectedReader !== 'string' ||
+      input.expectedReader.length > 128
+    )
+      throw new Error('Invalid Sources reader');
+    return input;
+  })
+  .handler(async ({ data }): Promise<SourcesResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const { candidateAuthorization } = await import('../../subject/candidate-admission');
+    const authorization = await candidateAuthorization(data.expectedReader);
+    if (!authorization) return { kind: 'denied' };
+    const [{ kernelClient }, { readRelease }] = await Promise.all([
+      import('../../kernel/client'),
+      import('../../subject/definitions'),
+    ]);
+    return readSubjectSources(
+      kernelClient(data.locale, authorization),
+      data.id,
+      data.locale,
+      readRelease().catch(() => undefined),
+      true,
+    );
   });

@@ -8136,5 +8136,9 @@
   "discovery_collection_truncated": "Eine Vorschau dieser Sammlung. Für mehr öffnen.",
   "discovery_collection_empty": "Diese Sammlung ist leer.",
   "discovery_collection_withheld": "Keine Einträge können angezeigt werden.",
-  "discovery_collection_preview_unavailable": "Inhaltsvorschau nicht verfügbar."
+  "discovery_collection_preview_unavailable": "Inhaltsvorschau nicht verfügbar.",
+  "sources_actions_unavailable": "Die Korrekturberechtigung ist vorübergehend nicht verfügbar. Öffentliche Belege bleiben sichtbar.",
+  "sources_correction_denied": "Mit deiner aktuellen Berechtigung kannst du keine Korrekturen vorschlagen.",
+  "sources_current_reading": "Dies ist die aktuell ausgewählte Fassung. Ein Vorschlag wählt keine neuen Belege aus.",
+  "sources_scope_unavailable": "Ein Vergleich ist nicht verfügbar, da diese Route den redaktionellen Realm-Kontext nicht ausdrücken kann."
 }

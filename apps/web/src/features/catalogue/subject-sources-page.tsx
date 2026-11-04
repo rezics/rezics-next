@@ -149,6 +149,22 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
         href={page.sourcesHref.split('?', 1)[0]!}
         locale={locale}
       />
+      <p role="status" className="text-sm text-muted-foreground">
+        {page.realm
+          ? m.sources_scope_unavailable({}, o)
+          : page.viewer?.actions.state !== 'available'
+            ? m.sources_actions_unavailable({}, o)
+            : !page.viewer.actions.actions.some(
+                  (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.propose'),
+                )
+              ? m.sources_correction_denied({}, o)
+              : m.sources_current_reading({}, o)}
+      </p>
+      {!page.realm && !page.viewer?.account && (
+        <a className={linkClassName} href={`/auth/sign-in?return_to=${encodeURIComponent(page.sourcesHref)}`}>
+          {m.account_sign_in({}, o)}
+        </a>
+      )}
       {observation && (
         <SourceObservationReader
           key={observation.visitKey}
@@ -213,6 +229,11 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
                           <CandidateValue snak={fact.snak} related={page.related} locale={locale} link={ContextLink} />
                         )}
                       </ContentItemHeading>
+                      {fact.correctionHref && (
+                        <a className={linkClassName} href={fact.correctionHref}>
+                          {m.correction_title({}, o)}
+                        </a>
+                      )}
                       {!!fact.qualifiers.length && (
                         <div data-content-item-slot="metadata" className="min-w-0 space-y-1 text-sm">
                           {fact.qualifiers.map((part, i) => (

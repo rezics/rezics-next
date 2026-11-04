@@ -8136,5 +8136,9 @@
   "discovery_collection_truncated": "このコレクションの一部です。開くと続きを確認できます。",
   "discovery_collection_empty": "このコレクションは空です。",
   "discovery_collection_withheld": "表示できる項目はありません。",
-  "discovery_collection_preview_unavailable": "内容のプレビューは利用できません。"
+  "discovery_collection_preview_unavailable": "内容のプレビューは利用できません。",
+  "sources_actions_unavailable": "訂正の権限情報を現在取得できません。公開の根拠は引き続き表示されます。",
+  "sources_correction_denied": "現在の権限では訂正を提案できません。",
+  "sources_current_reading": "現在選択されている内容です。提案によって新しい根拠が選択されることはありません。",
+  "sources_scope_unavailable": "この経路ではRealmの編集範囲を指定できないため、比較できません。"
 }

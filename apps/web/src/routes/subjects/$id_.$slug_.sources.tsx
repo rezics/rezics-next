@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react';
+import { csrfHeaders } from '../../threads/composer';
 import { validatePageRealm } from '../../features/pages/view-cursor';
 import { subjectRequestReader } from '../../features/pages/subject-queries';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { useSession } from '../../session/query';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
-import { loadSubjectSources } from '../../features/catalogue/subject-sources-actions';
+import { loadSubjectSources, readCurrentSubjectSources } from '../../features/catalogue/subject-sources-actions';
 import { SubjectSourcesPage } from '../../features/catalogue/subject-sources-page';
 import { useSourcesRetry } from '../../features/catalogue/subject-sources-retry';
 import type { SourcesResult } from '../../features/catalogue/subject-sources';
@@ -61,7 +63,37 @@ function SourcesRoute() {
   const { realm } = Route.useSearch();
   const session = useSession();
   const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, session));
-  return <SourcesPresentation result={currentReader ? result : { kind: 'loading' }} reader={reader} />;
+  const scope = JSON.stringify([result, session.state, session.subject, session.csrfToken]);
+  const [current, setCurrent] = useState<{ scope: string; result: SourcesResult }>();
+  useEffect(() => {
+    let live = true;
+    if (!realm && session.state === 'signed-in' && session.subject) {
+      void readCurrentSubjectSources({
+        data: {
+          id: result.kind === 'ready' ? result.page.id : '',
+          locale: getLocale(),
+          expectedReader: session.subject,
+        },
+        headers: csrfHeaders(),
+      })
+        .then((result) => {
+          if (live) setCurrent({ scope, result });
+        })
+        .catch(() => {
+          if (live) setCurrent({ scope, result: { kind: 'unavailable' } });
+        });
+    }
+    return () => {
+      live = false;
+    };
+  }, [scope, realm]);
+  const selected =
+    !realm && session.state === 'signed-in'
+      ? current?.scope === scope
+        ? current.result
+        : { kind: 'loading' as const }
+      : result;
+  return <SourcesPresentation result={currentReader ? selected : { kind: 'loading' }} reader={reader} />;
 }
 
 function SourcesError({ reset }: { reset: () => void }) {

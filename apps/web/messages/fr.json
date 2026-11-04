@@ -8136,5 +8136,9 @@
   "discovery_collection_truncated": "Aperçu de cette collection. Ouvrez-la pour en voir plus.",
   "discovery_collection_empty": "Cette collection est vide.",
   "discovery_collection_withheld": "Aucun élément ne peut être affiché.",
-  "discovery_collection_preview_unavailable": "Aperçu indisponible."
+  "discovery_collection_preview_unavailable": "Aperçu indisponible.",
+  "sources_actions_unavailable": "L’éligibilité à la correction est temporairement indisponible. Les preuves publiques restent visibles.",
+  "sources_correction_denied": "Vos autorisations actuelles ne permettent pas de proposer des corrections.",
+  "sources_current_reading": "Cette lecture reflète la sélection actuelle. Une proposition ne sélectionne pas de nouvelles preuves.",
+  "sources_scope_unavailable": "La comparaison est indisponible : cette route ne peut pas exprimer la portée éditoriale du Realm."
 }

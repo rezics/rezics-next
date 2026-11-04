@@ -8228,5 +8228,9 @@
   "discovery_collection_truncated": "A preview of this Collection. Open it for more.",
   "discovery_collection_empty": "This Collection is empty.",
   "discovery_collection_withheld": "No members can be shown.",
-  "discovery_collection_preview_unavailable": "Contents preview unavailable."
+  "discovery_collection_preview_unavailable": "Contents preview unavailable.",
+  "sources_actions_unavailable": "Correction eligibility is temporarily unavailable. Public evidence is still shown.",
+  "sources_correction_denied": "You cannot propose corrections with your current authority.",
+  "sources_current_reading": "This is the current selected reading. A proposal does not select new evidence.",
+  "sources_scope_unavailable": "Comparison is unavailable because this route cannot express the Realm editorial scope."
 }
