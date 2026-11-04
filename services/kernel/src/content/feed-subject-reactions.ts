@@ -48,6 +48,8 @@ export async function prepareFeedSubjectReactions(
   });
   if (!selected.size) return { finish: async () => retained };
 
+  const readerWitness = JSON.stringify(actor);
+  let finished = false;
   const context = { pool: dependencies.pool, deadline };
   const checks = new Map<string, AccessCheck>();
   const groups = new Map<number, string[]>();
@@ -114,6 +116,11 @@ export async function prepareFeedSubjectReactions(
   }
   return {
     async finish() {
+      if (finished || JSON.stringify(actor) !== readerWitness)
+        throw new TypeError('Retired feed Subject reaction preparation');
+      // A retry opens a new preparation at the same page frontier. This handle
+      // must never replay a retained viewer slot in another request lifetime.
+      finished = true;
       // Re-evaluate prepared Access/account evidence and exact identity after every
       // count/slot checkout. An alias change retires the original card entirely.
       const final = await observe();

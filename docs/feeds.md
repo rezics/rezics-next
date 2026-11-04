@@ -408,7 +408,8 @@ its reaction slot is never rebound to a survivor card.
 
 The composition deduplicates selected IDs before count/slot reads, groups identity checks by represented home and
 uses the installed native coverage and viewer readers. It copies selected Subject cards before preparation and
-never mutates the source summary. Initial and final identity checks include visibility, latest redirect, current
+never mutates the source summary. A preparation is single-use and retires if its reader operands change; retries
+prepare again at the same source frontier. Initial and final identity checks include visibility, latest redirect, current
 type and security revision. Native reaction aggregation and merge reconciliation retain their existing owners.
 Dependency failure propagates to the page owner rather than returning a guessed count or authenticated null slot.
 

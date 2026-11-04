@@ -78,6 +78,13 @@ test('selected native Subject projections distinguish coverage, five kinds, clea
     const pending = await prepare(actor, [original]);
     original.destination.id = world.conceptId;
     expect((await pending.finish())[0]?.destination.id).toBe(id);
+    await expect(pending.finish()).rejects.toThrow('Retired feed Subject reaction preparation');
+    const changedReader = await prepare();
+    const epoch = actor.authnEpoch;
+    try {
+      actor.authnEpoch = epoch + 1;
+      await expect(changedReader.finish()).rejects.toThrow('Retired feed Subject reaction preparation');
+    } finally { actor.authnEpoch = epoch; }
     await expect(prepare(actor, Array.from({ length: 21 }, () => row))).rejects.toThrow('At most 20');
     await expect(prepare(actor, [{ ...row, destination: { kind: 'subject', id: world.conceptId, title: null } }]))
       .rejects.toThrow('Ambiguous feed Subject reaction target');
