@@ -1701,6 +1701,37 @@ outcomes remain useful evidence; old protocol-specific home-certificate proof is
 
 ## Account population
 
+Decision: handleless Account rows withhold biography because the native public profile requires an exact live handle; a proven native Subject mapping remains independently followable.
+
+Account result hydration opts into `account-context.ts`; attribution, curators and repeated review authors retain
+summary-only reads. Biography is public context, excluded from indexed text, eligibility, counts and cursors. The
+native Account batch projects at most 1025 code points per row before foreign hydration (at most 4100 UTF-8 bytes),
+then retains a scalar-safe 1024-byte excerpt with explicit truncation. Absent, withheld and unavailable remain distinct.
+An Account context is at most 8192 serialized bytes; a selected page has at most 100 contexts (819200 bytes).
+The extra character detects truncation even for single-byte text. No unbounded biography crosses the native seam.
+
+Follow targets require the stored exact Account-agent link, reciprocal verification pointer/receipt when verified,
+and installed native identity mappings of both original and terminal with equal positive epochs. Derived IDs are
+lookup keys only. Missing, ambiguous, pending, concealed or unavailable mappings expose no target. Anonymous Semantic
+hydration supplies the label/type; indexed hints cannot fill a gap. Native binding observations bracket hydration,
+and final Account/claim revisions guard the reply. The composed Search page repeats these reads after private
+Follow preparation and restarts on replacement. A single Library private batch supplies Collection and Account
+advice, split into envelopes bound to exact disclosed target/source tuples. Subject follows keep the original
+native command operands and expected reader; there is no Account follow kind.
+
+Finite added cost per selected page K <= 100: two context hydrations in composition, each with two Account/claim
+rounds and two binding rounds; each binding round probes <=K native agent links and <=K verification pointers,
+plus <=2K native identity keys in batches of 100 through the existing bounded mapping reader. Subject/avatar work
+is deduplicated into batches of <=K. Each binding round has <=K source/control homes; no Account transaction spans
+foreign reads. Private Collection/Account advice shares two home snapshots, <=K exact edge probes per snapshot and
+32768 serialized bytes, inside the existing 65536-byte private page allowance. These are finite derived bounds,
+independent of unrelated populations of 256/1024/4096; focused native growth cases pin fixed selected-page reads.
+
+The mounted Search host owns Account Follow controls alongside Collection/Space controls. Reader, credential,
+locale, executed query, disclosure and source replacement retire advice, pending commands and feedback permanently.
+Public biography remains separate from the private envelope. The existing Library control and transport retain
+idempotency operands and uncertain-write recovery. Generated OpenAPI/client publication belongs to integration.
+
 The default starter and rebuild CLI install the actual Accounts source and current-summary readers in the closed
 Discovery registry. Both owners write canonical `discovery-v1` identities into the same `discovery-gN` family;
 legacy Subject callers retain their existing family and ABI. Account documents use only current handle/displayName,

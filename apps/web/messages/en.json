@@ -8714,5 +8714,10 @@
   "profile_contribution_actions_sign_in": "Sign in to check current contribution actions",
   "profile_contribution_actions_preparing": "Checking current contribution actions…",
   "profile_contribution_actions_unavailable": "Private actions are unavailable. You can still open each contribution.",
-  "profile_contribution_actions_retired": "These actions have expired. Return to the current page to check again."
+  "profile_contribution_actions_retired": "These actions have expired. Return to the current page to check again.",
+  "discovery_account_automated": "Automated account",
+  "discovery_account_bio_absent": "No public biography",
+  "discovery_account_bio_withheld": "Biography withheld",
+  "discovery_account_bio_unavailable": "Biography unavailable",
+  "discovery_account_bio_truncated": "Biography shortened"
 }

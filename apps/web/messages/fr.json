@@ -8622,5 +8622,10 @@
   "library_collection_metadata_history_cover_none": "Aucune couverture",
   "library_collection_metadata_history_first_page": "Première page",
   "library_collection_metadata_history_next_page": "Page suivante",
-  "library_collection_metadata_history_return_editor": "Revenir à l’éditeur de métadonnées"
+  "library_collection_metadata_history_return_editor": "Revenir à l’éditeur de métadonnées",
+  "discovery_account_automated": "Compte automatisé",
+  "discovery_account_bio_absent": "Aucune biographie publique",
+  "discovery_account_bio_withheld": "Biographie masquée",
+  "discovery_account_bio_unavailable": "Biographie indisponible",
+  "discovery_account_bio_truncated": "Biographie abrégée"
 }

@@ -11,7 +11,11 @@ import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KernelClock } from '../clock.ts';
 
-export type FollowDiscoveryTarget = Readonly<{ targetId: string; targetType: 'collection' | 'space'; source: string }>;
+export type FollowDiscoveryTarget = Readonly<{
+  targetId: string;
+  targetType: 'subject' | 'collection' | 'space';
+  source: string;
+}>;
 export type FollowDiscoveryRow = FollowDiscoveryTarget &
   Readonly<{
     following: boolean;
@@ -38,7 +42,7 @@ export async function readFollowDiscovery(
     targets.some(
       (target) =>
         routeOf(target.targetId) === null ||
-        !['collection', 'space'].includes(target.targetType) ||
+        !['subject', 'collection', 'space'].includes(target.targetType) ||
         typeof target.source !== 'string' ||
         target.source.length > 1024,
     ) ||

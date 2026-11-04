@@ -8622,5 +8622,10 @@
   "library_collection_metadata_history_cover_none": "无封面",
   "library_collection_metadata_history_first_page": "第一页",
   "library_collection_metadata_history_next_page": "下一页",
-  "library_collection_metadata_history_return_editor": "返回元数据编辑器"
+  "library_collection_metadata_history_return_editor": "返回元数据编辑器",
+  "discovery_account_automated": "自动化账号",
+  "discovery_account_bio_absent": "暂无公开简介",
+  "discovery_account_bio_withheld": "简介已隐藏",
+  "discovery_account_bio_unavailable": "简介暂不可用",
+  "discovery_account_bio_truncated": "简介已截短"
 }

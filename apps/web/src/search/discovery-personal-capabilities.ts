@@ -49,6 +49,7 @@ export function boundDiscoveryPrivateBytes(state: DiscoveryState, capabilities: 
   return new TextEncoder().encode(
     JSON.stringify({
       collectionFollows: state.status === 'ready' ? state.page.collectionFollows : null,
+      accountFollows: state.status === 'ready' ? state.page.accountFollows : null,
       viewerFacts: state.status === 'ready' ? state.page.viewerFacts : null,
       spaceEntries: state.status === 'ready' ? state.page.spaceEntries : null,
       capabilities,

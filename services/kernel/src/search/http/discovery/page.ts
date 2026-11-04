@@ -15,6 +15,7 @@ import {
   admitCollectionFollows,
   admitSubjectViewerFacts,
   snapshotViewerOverlays,
+  admitAccountFollows,
 } from './viewer-overlays.ts';
 import { SubjectHitSchema, admitSubjectHit, serializeSubjectHit } from './subject.ts';
 import { AccountHitSchema, admitAccountHit, serializeAccountHit } from './account.ts';
@@ -51,6 +52,7 @@ export const DiscoveryPageSchema = t.Object(
     freshness: t.Optional(SearchFreshnessSchema),
     viewerFacts: t.Optional(viewerFacts),
     collectionFollows: t.Optional(FollowDiscoverySchema),
+    accountFollows: t.Optional(FollowDiscoverySchema),
     emptyRecovery: t.Optional(EmptyRecoverySchema),
   },
   closed,
@@ -105,6 +107,7 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
     identities.add(identity);
   }
   admitCollectionFollows(page);
+  admitAccountFollows(page);
   admitSpaceEntries(page);
   admitSubjectViewerFacts(page);
   const kinds = new Set<string>();
@@ -118,7 +121,7 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
 /** Close and detach the owner replies after complete page admission. */
 export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
   admitDiscoveryPage(page);
-  const { hits, viewerFacts, collectionFollows, ...publicPage } = page;
+  const { hits, viewerFacts, collectionFollows, accountFollows, ...publicPage } = page;
   return {
     ...structuredClone(publicPage),
     hits: page.hits.map((hit): DiscoveryHttpPage['hits'][number] => {

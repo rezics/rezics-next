@@ -8622,5 +8622,10 @@
   "library_collection_metadata_history_cover_none": "表紙なし",
   "library_collection_metadata_history_first_page": "最初のページ",
   "library_collection_metadata_history_next_page": "次のページ",
-  "library_collection_metadata_history_return_editor": "メタデータ編集に戻る"
+  "library_collection_metadata_history_return_editor": "メタデータ編集に戻る",
+  "discovery_account_automated": "自動アカウント",
+  "discovery_account_bio_absent": "公開プロフィール文はありません",
+  "discovery_account_bio_withheld": "プロフィール文は非公開です",
+  "discovery_account_bio_unavailable": "プロフィール文を取得できません",
+  "discovery_account_bio_truncated": "プロフィール文を省略しています"
 }

@@ -48,7 +48,7 @@ export const collectionFollows = v.variant('state', [
       v.array(
         v.strictObject({
           targetId: id,
-          targetType: v.picklist(['collection', 'space']),
+          targetType: v.picklist(['subject', 'collection', 'space']),
           source: v.pipe(v.string(), v.maxLength(1024)),
           following: v.boolean(),
           actions: v.strictObject({ follow: v.boolean(), unfollow: v.boolean() }),
