@@ -17,7 +17,16 @@ export default {
   decorators: [authLocale],
   parameters: reviewParameters,
 };
-type Mode = 'signed-out' | 'not-found' | 'failed' | 'loading' | 'replacement' | 'acknowledged' | 'approved' | 'declined' | 'pending';
+type Mode =
+  | 'signed-out'
+  | 'not-found'
+  | 'failed'
+  | 'loading'
+  | 'replacement'
+  | 'acknowledged'
+  | 'approved'
+  | 'declined'
+  | 'pending';
 // Presentation responses only; the stories make no native execution claim.
 function Visit({ mode, dark = false }: { mode: Mode; dark?: boolean }) {
   const [ready, setReady] = useState(false);
@@ -94,7 +103,11 @@ function Visit({ mode, dark = false }: { mode: Mode; dark?: boolean }) {
       else window.sessionStorage.setItem(marker, retained);
     };
   }, [mode]);
-  return <div className={dark ? 'dark' : ''}><AuthShell>{ready ? <RouterProvider router={router} /> : null}</AuthShell></div>;
+  return (
+    <div className={dark ? 'dark' : ''}>
+      <AuthShell>{ready ? <RouterProvider router={router} /> : null}</AuthShell>
+    </div>
+  );
 }
 async function reachHistory(canvas: HTMLElement, pending = false, loading = false) {
   (await waitFor(() => button(canvas, m.auth_consent_approve()))).click();
@@ -140,8 +153,14 @@ const phone = { viewport: { ...reviewParameters.viewport, defaultViewport: 'phon
 const desktop = { viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
 async function latest(canvas: HTMLElement, decision: 'approve' | 'decline') {
   await reachHistory(canvas);
-  (await waitFor(() => button(canvas, decision === 'approve' ? m.auth_consent_approve() : m.auth_consent_decline()))).click();
-  await waitFor(() => canvas.textContent?.includes(decision === 'approve' ? m.auth_consent_approved() : m.auth_consent_declined_after_submission()));
+  (
+    await waitFor(() => button(canvas, decision === 'approve' ? m.auth_consent_approve() : m.auth_consent_decline()))
+  ).click();
+  await waitFor(() =>
+    canvas.textContent?.includes(
+      decision === 'approve' ? m.auth_consent_approved() : m.auth_consent_declined_after_submission(),
+    ),
+  );
 }
 export const UnknownThenApprovedPhoneLight = {
   parameters: phone,
@@ -149,7 +168,9 @@ export const UnknownThenApprovedPhoneLight = {
   play: ({ canvasElement }: { canvasElement: HTMLElement }) => latest(canvasElement, 'approve'),
 };
 export const UnknownThenApprovedDesktopDark = {
-  ...UnknownThenApprovedPhoneLight, parameters: desktop, render: () => <Visit mode="approved" dark />,
+  ...UnknownThenApprovedPhoneLight,
+  parameters: desktop,
+  render: () => <Visit mode="approved" dark />,
 };
 export const UnknownThenDeclinedPhoneDark = {
   parameters: phone,
