@@ -163,10 +163,18 @@ export const appearanceProperty = 'schema:character';
 export const identityProperty = 'rezics:relatedCharacterIdentity';
 export const appearanceAgeProperty = 'wdt:P3629';
 export const spoilerProperty = 'rezics:spoilerLevel';
+export const copyWorkProperty = 'schema:exampleOfWork';
 export type CharacterWorkUnavailableId = 'age-at-appearance' | 'main-character-linkage' | 'character-relationship';
-export type CharacterWorkIdentityOverlay = {
-  unavailable: { id: CharacterWorkUnavailableId; admitted: false }[];
+export type CopyWorkUnavailableId = 'copy-work-disclosure';
+export type SemanticPageOverlay = {
+  unavailable: { id: string; admitted: false }[];
   meanings: Record<string, { text: string; lang: string | null }>;
+};
+export type CharacterWorkIdentityOverlay = SemanticPageOverlay & {
+  unavailable: { id: CharacterWorkUnavailableId; admitted: false }[];
+};
+export type CopyWorkDisclosureOverlay = SemanticPageOverlay & {
+  unavailable: { id: CopyWorkUnavailableId; admitted: false }[];
 };
 
 function isType(release: Pick<Release, 'types'>, type: string, target: string, seen = new Set<string>()): boolean {
@@ -236,6 +244,21 @@ export function characterWorkIdentityOverlay(
     if (property) meanings[id] = pickLabel(property.labels, locale);
   }
   return { unavailable, meanings };
+}
+
+/** Released copy/release-to-work admission for the ordinary edition or release page. */
+export function copyWorkDisclosureOverlay(
+  release: Pick<Release, 'types' | 'properties'>,
+  type: string,
+  locale: string,
+): CopyWorkDisclosureOverlay | undefined {
+  if (!release.types[type]?.properties.includes(copyWorkProperty)) return;
+  const property = release.properties[copyWorkProperty];
+  const relation = property?.datatype === 'wikibase-item' && property.relation?.group === 'derivation';
+  return {
+    unavailable: relation ? [] : [{ id: 'copy-work-disclosure', admitted: false }],
+    meanings: property ? { [copyWorkProperty]: pickLabel(property.labels, locale) } : {},
+  };
 }
 
 /** The ordinary native page's template order and offered views, shared with pages.read. */
