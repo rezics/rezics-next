@@ -39,7 +39,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const draft = fromPlainText('A reply kept while the board enforces its posting interval.', 'blocks');
-const longDraft = fromPlainText('A long draft that remains readable while the posting interval is active. '.repeat(24), 'blocks');
+const longDraft = fromPlainText(
+  'A long draft that remains readable while the posting interval is active. '.repeat(24),
+  'blocks',
+);
 const boardId = recorded.thread.boardId;
 
 function policy(
@@ -212,12 +215,7 @@ export const PendingWriter: Story = {
 
 export const MaximumLongInterval: Story = {
   name: 'Maximum interval with a long draft',
-  render: () => (
-    <Journey
-      initial={policy(86400, new Date(Date.now() + 86400_000).toISOString())}
-      body={longDraft}
-    />
-  ),
+  render: () => <Journey initial={policy(86400, new Date(Date.now() + 86400_000).toISOString())} body={longDraft} />,
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     const title = await view.findByLabelText(m.thread_title_label());

@@ -67,9 +67,8 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider, useLocation } = await import(
-    '@tanstack/react-router'
-  );
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider, useLocation } =
+    await import('@tanstack/react-router');
   const { PostComposer } = await import('../src/threads/composer');
   const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
   const { sessionQuery } = await import('../src/session/query');
@@ -127,11 +126,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
         return (
           <AuthoringDepartureProvider>
             <SlowModePortProvider port={port}>
-              <SlowModeSetting
-                boardId={recorded.thread.boardId}
-                scopeKey={location.href}
-                credentialMode="session"
-              />
+              <SlowModeSetting boardId={recorded.thread.boardId} scopeKey={location.href} credentialMode="session" />
               <PostComposer
                 titleRequired
                 boardId={recorded.thread.boardId}

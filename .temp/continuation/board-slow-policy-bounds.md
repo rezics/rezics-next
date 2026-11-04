@@ -36,7 +36,7 @@ acceptance:
   command:
     - bun
     - run
-    - "--cwd"
+    - '--cwd'
     - services/kernel
     - check
     - test/content/board-slow-policy-journey.test.ts

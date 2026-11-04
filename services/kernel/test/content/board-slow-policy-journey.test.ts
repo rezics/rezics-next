@@ -83,10 +83,14 @@ async function addCompletedHistory(actor: Buffer, from: number, to: number) {
   const count = to - from;
   if (count <= 0) return;
   const commands = Array.from({ length: count }, (_, index) =>
-    createHash('sha256').update(`retained slow command:${from + index + 1}`).digest(),
+    createHash('sha256')
+      .update(`retained slow command:${from + index + 1}`)
+      .digest(),
   );
   const digests = Array.from({ length: count }, (_, index) =>
-    createHash('sha256').update(`retained slow request:${from + index + 1}`).digest(),
+    createHash('sha256')
+      .update(`retained slow request:${from + index + 1}`)
+      .digest(),
   );
   await f.pool.query(
     `INSERT INTO content.board_slow_permit
@@ -104,13 +108,19 @@ async function addUnrelatedReservations(from: number, to: number) {
   const count = to - from;
   if (count <= 0) return;
   const actorKeys = Array.from({ length: count }, (_, index) =>
-    createHmac('sha256', f.system.routeKey).update(`slow unrelated actor:${from + index + 1}`).digest(),
+    createHmac('sha256', f.system.routeKey)
+      .update(`slow unrelated actor:${from + index + 1}`)
+      .digest(),
   );
   const commandKeys = Array.from({ length: count }, (_, index) =>
-    createHash('sha256').update(`slow unrelated command:${from + index + 1}`).digest(),
+    createHash('sha256')
+      .update(`slow unrelated command:${from + index + 1}`)
+      .digest(),
   );
   const digests = Array.from({ length: count }, (_, index) =>
-    createHash('sha256').update(`slow unrelated request:${from + index + 1}`).digest(),
+    createHash('sha256')
+      .update(`slow unrelated request:${from + index + 1}`)
+      .digest(),
   );
   const route = routeOf(f.board.id)!;
   await f.pool.query(
@@ -209,15 +219,17 @@ test('complete policy journey, fresh pending classification and bounded retained
   await addPermit(currentKey, 'reserved', 'fresh-current-key');
   await addPermit(legacyKey, 'reserved', 'fresh-legacy-key');
   expect((await read('other')).value.admissionState).toBe('pending');
-  await f.pool.query(
-    'DELETE FROM content.board_slow_permit WHERE route=$1 AND board_id=$2 AND actor_key=$3',
-    [routeOf(f.board.id), f.board.id, currentKey],
-  );
+  await f.pool.query('DELETE FROM content.board_slow_permit WHERE route=$1 AND board_id=$2 AND actor_key=$3', [
+    routeOf(f.board.id),
+    f.board.id,
+    currentKey,
+  ]);
   expect((await read('other')).value.admissionState).toBe('pending');
-  await f.pool.query(
-    'DELETE FROM content.board_slow_permit WHERE route=$1 AND board_id=$2 AND actor_key=$3',
-    [routeOf(f.board.id), f.board.id, legacyKey],
-  );
+  await f.pool.query('DELETE FROM content.board_slow_permit WHERE route=$1 AND board_id=$2 AND actor_key=$3', [
+    routeOf(f.board.id),
+    f.board.id,
+    legacyKey,
+  ]);
   expect((await read('other')).value.admissionState).toBe('ready');
 
   const measures: { statements: number; responseBytes: number }[] = [];
@@ -232,7 +244,10 @@ test('complete policy journey, fresh pending classification and bounded retained
     } finally {
       await observer.close();
     }
-    measures.push({ statements: observer.records.length, responseBytes: Buffer.byteLength(JSON.stringify(result!.value)) });
+    measures.push({
+      statements: observer.records.length,
+      responseBytes: Buffer.byteLength(JSON.stringify(result!.value)),
+    });
   }
   expect(measures[1]!.statements).toBe(measures[0]!.statements);
   expect(measures[2]!.statements).toBe(measures[0]!.statements);
