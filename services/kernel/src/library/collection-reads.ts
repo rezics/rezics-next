@@ -880,16 +880,19 @@ export function createCollectionReads(
         ? { logical, version: await builtins.sourceVersion(viewer, logical, deadline, true) }
         : await loadCollection(viewer, id, deadline);
       if (!source) throw notFound();
-      const reader = viewer.kind === 'account'
-        ? await withConnection(pool, (client) =>
-            readAccount(deadlineClient(client, deadline), routeOf(viewer.accountId)!, viewer.accountId))
-        : null;
+      const reader =
+        viewer.kind === 'account'
+          ? await withConnection(pool, (client) =>
+              readAccount(deadlineClient(client, deadline), routeOf(viewer.accountId)!, viewer.accountId),
+            )
+          : null;
       return JSON.stringify({ source, reader, viewer }, (_key, value) =>
-        typeof value === 'bigint' ? value.toString() : value);
+        typeof value === 'bigint' ? value.toString() : value,
+      );
     };
     const before = await capture();
     return async () => {
-      if (before !== await capture()) throw new ProblemError('stale_cursor');
+      if (before !== (await capture())) throw new ProblemError('stale_cursor');
     };
   }
 
@@ -905,10 +908,9 @@ export function createCollectionReads(
       throw new RangeError('Collection personal actions accept at most 100 raw members');
     let facts: ViewerPersonalActionsPage;
     try {
-      const subjects = await readSubjectSummaryObservation(
-        { ...dependencies, actor: viewer, deadline },
-        [...new Set(result.members.map((member) => member.subjectId))],
-      );
+      const subjects = await readSubjectSummaryObservation({ ...dependencies, actor: viewer, deadline }, [
+        ...new Set(result.members.map((member) => member.subjectId)),
+      ]);
       // Missing native type evidence is unavailable, never a fabricated type or canonical sibling operand.
       const rows = result.members.flatMap((member, index) => {
         const subject = subjects.summaries.get(member.subjectId);
@@ -923,8 +925,7 @@ export function createCollectionReads(
       } else {
         facts = await dependencies.viewerPersonalActions(viewer, rows, STANDARD_QUESTION_ID, deadline);
       }
-      if (!(await subjects.current()))
-        facts = { state: 'unavailable', reason: 'currentness', retryable: true };
+      if (!(await subjects.current())) facts = { state: 'unavailable', reason: 'currentness', retryable: true };
     } catch (error) {
       // Operand/size violations are errors, never a truncated or successful private result.
       if (error instanceof RangeError) throw error;

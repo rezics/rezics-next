@@ -1143,9 +1143,10 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           admission.run('normal', job, () =>
             read().readMembers(actor, params.collectionId, sourceOptions, job.deadline),
           );
-        const finalSource = query.view === 'FULL' && actor.kind === 'account'
-          ? await read().observeMemberSource(actor, params.collectionId, job.deadline)
-          : undefined;
+        const finalSource =
+          query.view === 'FULL' && actor.kind === 'account'
+            ? await read().observeMemberSource(actor, params.collectionId, job.deadline)
+            : undefined;
         let result = await admission.run('normal', job, () =>
           query.filter !== undefined || query.sort !== undefined
             ? read().readMembers(actor, params.collectionId, query, job.deadline)

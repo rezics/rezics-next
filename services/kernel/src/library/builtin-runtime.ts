@@ -307,17 +307,11 @@ export function createBuiltinRuntime(
       },
     );
   }
-  async function sourceVersion(
-    actor: Actor,
-    source: BuiltinCollectionView,
-    deadline: number,
-    allowAbsent = false,
-  ) {
+  async function sourceVersion(actor: Actor, source: BuiltinCollectionView, deadline: number, allowAbsent = false) {
     return snapshot(async (client) => {
       const owner = await admitted(client, actor);
       if (!owner) throw new ProblemError('not_found');
-      if (source.builtinKind === 'liked')
-        return readLikedOriginalVersion(client, owner.accountId);
+      if (source.builtinKind === 'liked') return readLikedOriginalVersion(client, owner.accountId);
       const head = (
         await client.query<{ generation: string }>(
           'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2',
