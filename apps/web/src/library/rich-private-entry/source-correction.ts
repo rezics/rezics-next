@@ -46,7 +46,10 @@ export type TimestampShape = Readonly<{
 
 export type SourceCorrectionBuild =
   | Readonly<{ kind: 'ready'; body: PersonalEntrySourceCorrection }>
-  | Readonly<{ kind: 'invalid'; issues: Partial<Record<'privacy' | 'sourceCreated' | 'sourceUpdated', SourceCorrectionIssue>> }>;
+  | Readonly<{
+      kind: 'invalid';
+      issues: Partial<Record<'privacy' | 'sourceCreated' | 'sourceUpdated', SourceCorrectionIssue>>;
+    }>;
 
 const MAX_SOURCE_TIMESTAMP_LENGTH = 64;
 const MAX_SOURCE_PRIVACY_LENGTH = 192;
@@ -152,9 +155,7 @@ export function inspectSourceTimestamp(value: string): TimestampShape | SourceCo
     return issue ?? { precision: 'day', zone: 'unknown' };
   }
 
-  match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,18}))?)?(Z|[+-]\d{2}:\d{2})?$/.exec(
-    value,
-  );
+  match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,18}))?)?(Z|[+-]\d{2}:\d{2})?$/.exec(value);
   if (!match) return malformedOffset(value) ? 'invalid-offset' : 'malformed';
 
   const [, yearText, monthText, dayText, hourText, minuteText, secondText, fraction, offset] = match;
@@ -198,7 +199,10 @@ function privacyInput(field: PrivacyCorrectionDraft): PersonalEntryPrivacyValue 
   return { status: 'known', meaning: field.choice };
 }
 
-function fieldChange<T>(operation: CorrectionOperation, value: T | SourceCorrectionIssue): PersonalEntryFieldChange<T> | SourceCorrectionIssue {
+function fieldChange<T>(
+  operation: CorrectionOperation,
+  value: T | SourceCorrectionIssue,
+): PersonalEntryFieldChange<T> | SourceCorrectionIssue {
   if (operation === 'preserve') return { op: 'unchanged' };
   if (operation === 'clear') return { op: 'clear' };
   if (typeof value === 'string') return value as SourceCorrectionIssue;
@@ -228,8 +232,10 @@ export function buildSourceCorrection(
   draft: SourceCorrectionDraft,
 ): SourceCorrectionBuild {
   const privacyValue = draft.privacy.operation === 'set' ? privacyInput(draft.privacy) : { status: 'unknown' as const };
-  const createdValue = draft.sourceCreated.operation === 'set' ? timestampInput(draft.sourceCreated) : { status: 'unknown' as const };
-  const updatedValue = draft.sourceUpdated.operation === 'set' ? timestampInput(draft.sourceUpdated) : { status: 'unknown' as const };
+  const createdValue =
+    draft.sourceCreated.operation === 'set' ? timestampInput(draft.sourceCreated) : { status: 'unknown' as const };
+  const updatedValue =
+    draft.sourceUpdated.operation === 'set' ? timestampInput(draft.sourceUpdated) : { status: 'unknown' as const };
   const privacy = fieldChange(draft.privacy.operation, privacyValue);
   const sourceCreated = fieldChange(draft.sourceCreated.operation, createdValue);
   const sourceUpdated = fieldChange(draft.sourceUpdated.operation, updatedValue);
@@ -238,8 +244,7 @@ export function buildSourceCorrection(
   if (isIssue(sourceCreated)) issues.sourceCreated = sourceCreated;
   if (isIssue(sourceUpdated)) issues.sourceUpdated = sourceUpdated;
   if (Object.keys(issues).length) return { kind: 'invalid', issues };
-  if (!changed(privacy) && !changed(sourceCreated) && !changed(sourceUpdated))
-    return { kind: 'invalid', issues: {} };
+  if (!changed(privacy) && !changed(sourceCreated) && !changed(sourceUpdated)) return { kind: 'invalid', issues: {} };
   return {
     kind: 'ready',
     body: {
@@ -255,8 +260,9 @@ export function buildSourceCorrection(
 }
 
 export function sourceCorrectionHasChanges(draft: SourceCorrectionDraft) {
-  return draft.privacy.operation !== 'preserve' ||
+  return (
+    draft.privacy.operation !== 'preserve' ||
     draft.sourceCreated.operation !== 'preserve' ||
-    draft.sourceUpdated.operation !== 'preserve';
+    draft.sourceUpdated.operation !== 'preserve'
+  );
 }
-

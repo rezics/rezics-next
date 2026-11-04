@@ -196,12 +196,7 @@ function PrivateEntryReview({
   const [retirementKind, setRetirementKind] = useState<'account' | 'entry' | 'exposure' | null>(null);
   const sourceBusy = useRef(false);
   const sourceOpener = useRef<HTMLButtonElement | null>(null);
-  const sourceOwnerKey = JSON.stringify([
-    subject.id,
-    viewer,
-    origin.lifetime,
-    entryGuard,
-  ]);
+  const sourceOwnerKey = JSON.stringify([subject.id, viewer, origin.lifetime, entryGuard]);
   useEffect(() => {
     mounted.current = true;
     const stop = queryClient.getQueryCache().subscribe((event) => {
@@ -236,7 +231,8 @@ function PrivateEntryReview({
       const latest = current.current;
       if (
         latest.origin.isCurrent() &&
-        JSON.stringify([latest.subjectId, latest.viewer, latest.origin.lifetime, latest.entryGuard]) === sourceOwnerKey &&
+        JSON.stringify([latest.subjectId, latest.viewer, latest.origin.lifetime, latest.entryGuard]) ===
+          sourceOwnerKey &&
         !fresh.isError &&
         fresh.data?.kind === 'ready'
       ) {
@@ -611,16 +607,12 @@ function PrivateEntryReview({
   const sourceFactsReady =
     !!entryGuard && !sourceOwnerChanged && !(privateAuthorityRetired && retirementKind === 'entry');
 
-  if (
-    (privateAuthorityRetired && retirementKind !== 'entry') ||
-    readExposureChanged ||
-    writeExposureChanged
-  ) {
+  if ((privateAuthorityRetired && retirementKind !== 'entry') || readExposureChanged || writeExposureChanged) {
     return (
       <p role="status" className="mt-4 text-sm text-muted-foreground">
         {retirementKind === 'exposure' || readExposureChanged || writeExposureChanged
-            ? m.library_rich_entry_source_unavailable()
-            : m.library_rich_entry_signed_out()}
+          ? m.library_rich_entry_source_unavailable()
+          : m.library_rich_entry_signed_out()}
       </p>
     );
   }

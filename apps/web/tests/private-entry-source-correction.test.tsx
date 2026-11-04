@@ -52,7 +52,9 @@ const pause = () => new Promise((resolve) => setTimeout(resolve, 12));
 
 async function renderedReader(
   current: () => PersonalEntry,
-  transportOverride?: Partial<NonNullable<ComponentProps<typeof import('../src/library/rich-private-entry/view').RichPrivateEntry>['transport']>>,
+  transportOverride?: Partial<
+    NonNullable<ComponentProps<typeof import('../src/library/rich-private-entry/view').RichPrivateEntry>['transport']>
+  >,
 ) {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -179,7 +181,12 @@ test('source corrections preserve, set, or clear each fact independently and ret
 
   const createdSet = {
     ...preserved,
-    sourceCreated: { ...preserved.sourceCreated, operation: 'set' as const, choice: 'known' as const, value: '2004-02-29T23:59:01.123+08:00' },
+    sourceCreated: {
+      ...preserved.sourceCreated,
+      operation: 'set' as const,
+      choice: 'known' as const,
+      value: '2004-02-29T23:59:01.123+08:00',
+    },
   };
   const setCreated = buildSourceCorrection(before, createdSet);
   expect(setCreated).toEqual({
@@ -197,7 +204,12 @@ test('source corrections preserve, set, or clear each fact independently and ret
 
   const privacySet = {
     ...preserved,
-    privacy: { ...preserved.privacy, operation: 'set' as const, choice: 'unknown' as const, sourceValue: 'private_flag_v2' },
+    privacy: {
+      ...preserved.privacy,
+      operation: 'set' as const,
+      choice: 'unknown' as const,
+      sourceValue: 'private_flag_v2',
+    },
     sourceCreated: { ...preserved.sourceCreated, operation: 'clear' as const },
     sourceUpdated: { ...preserved.sourceUpdated, operation: 'set' as const, choice: 'known' as const, value: '2005' },
   };
@@ -226,14 +238,18 @@ test('source corrections preserve, set, or clear each fact independently and ret
     },
   });
 
-  expect(buildSourceCorrection(before, {
-    ...preserved,
-    privacy: { ...preserved.privacy, operation: 'set', choice: 'unknown', sourceValue: 'é'.repeat(97) },
-  })).toMatchObject({ kind: 'invalid', issues: { privacy: 'privacy-limit' } });
-  expect(buildSourceCorrection(before, {
-    ...preserved,
-    sourceCreated: { ...preserved.sourceCreated, operation: 'set', choice: 'unknown', sourceValue: 'é'.repeat(33) },
-  })).toMatchObject({ kind: 'invalid', issues: { sourceCreated: 'native-limit' } });
+  expect(
+    buildSourceCorrection(before, {
+      ...preserved,
+      privacy: { ...preserved.privacy, operation: 'set', choice: 'unknown', sourceValue: 'é'.repeat(97) },
+    }),
+  ).toMatchObject({ kind: 'invalid', issues: { privacy: 'privacy-limit' } });
+  expect(
+    buildSourceCorrection(before, {
+      ...preserved,
+      sourceCreated: { ...preserved.sourceCreated, operation: 'set', choice: 'unknown', sourceValue: 'é'.repeat(33) },
+    }),
+  ).toMatchObject({ kind: 'invalid', issues: { sourceCreated: 'native-limit' } });
 
   const privacyClear = {
     ...preserved,
@@ -280,7 +296,10 @@ test('review and recovery retry the exact command, then require re-review after 
     await reader.change(created.querySelector('select')!, 'set');
     const createdSelects = [...created.querySelectorAll('select')];
     await reader.change(createdSelects[1]!, 'known');
-    await reader.change(created.querySelector('input[type="text"]') as HTMLInputElement, '2004-02-29T23:59:01.123+08:00');
+    await reader.change(
+      created.querySelector('input[type="text"]') as HTMLInputElement,
+      '2004-02-29T23:59:01.123+08:00',
+    );
 
     const updated = reader.field(reader.m.library_rich_entry_source_updated());
     await reader.change(updated.querySelector('select')!, 'clear');
@@ -347,7 +366,9 @@ test('review and recovery retry the exact command, then require re-review after 
     latest = entry(saved);
     await reader.reply(2, { kind: 'saved', entry: latest, observation: saved });
     expect(reader.host.textContent).toContain(reader.m.library_rich_entry_source_saved({ revision: 4 }));
-    expect(reader.host.textContent).toContain(reader.m.library_rich_entry_source_field_saved({ value: reader.m.library_rich_source_cleared() }));
+    expect(reader.host.textContent).toContain(
+      reader.m.library_rich_entry_source_field_saved({ value: reader.m.library_rich_source_cleared() }),
+    );
     expect(reader.host.textContent).toContain(
       reader.m.library_rich_entry_before() +
         reader.m.library_rich_source_timestamp({
@@ -357,7 +378,9 @@ test('review and recovery retry the exact command, then require re-review after 
         }),
     );
     await reader.click(reader.m.library_rich_entry_cancel());
-    expect(reader.host.ownerDocument.activeElement).toBe(reader.button(reader.m.library_rich_entry_edit_source_facts()));
+    expect(reader.host.ownerDocument.activeElement).toBe(
+      reader.button(reader.m.library_rich_entry_edit_source_facts()),
+    );
   } finally {
     await reader.cleanup();
   }
@@ -368,11 +391,27 @@ test('private source facts and late results retire when account, incarnation, or
   for (const transition of transitions) {
     let latest = entry();
     let readCount = 0;
-    const refreshed = deferred<Awaited<ReturnType<NonNullable<ComponentProps<typeof import('../src/library/rich-private-entry/view').RichPrivateEntry>['transport']>['read']>>>();
+    const refreshed =
+      deferred<
+        Awaited<
+          ReturnType<
+            NonNullable<
+              ComponentProps<typeof import('../src/library/rich-private-entry/view').RichPrivateEntry>['transport']
+            >['read']
+          >
+        >
+      >();
     const reader = await renderedReader(() => latest, {
       read: async () => {
         readCount++;
-        if (readCount === 1) return { kind: 'ready', viewer: 'A', csrfToken: 'captured-csrf', credential: 'captured-credential', entry: latest };
+        if (readCount === 1)
+          return {
+            kind: 'ready',
+            viewer: 'A',
+            csrfToken: 'captured-csrf',
+            credential: 'captured-credential',
+            entry: latest,
+          };
         return refreshed.promise;
       },
     });
@@ -392,7 +431,9 @@ test('private source facts and late results retire when account, incarnation, or
       if (transition === 'account') {
         await reader.render({ session: { state: 'signed-in', subject: 'B', csrfToken: 'new-csrf' } });
       } else if (transition === 'incarnation') {
-        await reader.render({ entryGuard: { ...guard, incarnationId: '0192f3a0-6c1e-7b2a-9d4e-000000000002', currentRevision: 4 } });
+        await reader.render({
+          entryGuard: { ...guard, incarnationId: '0192f3a0-6c1e-7b2a-9d4e-000000000002', currentRevision: 4 },
+        });
       } else {
         await reader.render({ origin: { lifetime: 'visit-2', isCurrent: () => true, refreshEntry: async () => true } });
       }
@@ -404,7 +445,10 @@ test('private source facts and late results retire when account, incarnation, or
       expect(reader.host.textContent).not.toContain('2007-08');
 
       if (transition !== 'account') {
-        const refreshedObservation = observation({ revision: 3, privacy: { status: 'unknown', sourceValue: 'current-private-value' } });
+        const refreshedObservation = observation({
+          revision: 3,
+          privacy: { status: 'unknown', sourceValue: 'current-private-value' },
+        });
         latest = entry(refreshedObservation);
         refreshed.resolve({
           kind: 'ready',
@@ -422,4 +466,3 @@ test('private source facts and late results retire when account, incarnation, or
     }
   }
 });
-

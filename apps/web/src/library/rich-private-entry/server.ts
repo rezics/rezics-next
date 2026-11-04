@@ -382,12 +382,7 @@ export const savePrivateSourceCorrection = createServerFn({ method: 'POST' })
     if (session.state !== 'signed-in' || !session.csrfToken) return { kind: 'signed-out' };
     const identity = { viewer: session.subject, csrfToken: session.csrfToken, authorization: session.authorization };
     if (!expectedSession(data, identity)) return { kind: 'signed-out' };
-    const authorization = await originalAnnotationCredential(
-      getRequest(),
-      env as Partial<SessionEnv>,
-      identity,
-      data,
-    );
+    const authorization = await originalAnnotationCredential(getRequest(), env as Partial<SessionEnv>, identity, data);
     if (!authorization) return { kind: 'retired' };
     try {
       const result = await correctPrivateSourceObservation(kernelClient(), {

@@ -158,13 +158,14 @@ function valueForTimestamp(field: TimestampCorrectionDraft): string {
 
 function correctionRows(body: PersonalEntrySourceCorrection, current: PersonalEntryObservation | null) {
   return (['privacy', 'sourceCreated', 'sourceUpdated'] as const).map((field) => {
-    const now = current && field === 'privacy'
-      ? privacyFactText(current.privacy)
-      : current && field === 'sourceCreated'
-        ? timestampFactText(current.sourceCreated)
-        : current && field === 'sourceUpdated'
-          ? timestampFactText(current.sourceUpdated)
-          : m.library_rich_entry_source_record_missing();
+    const now =
+      current && field === 'privacy'
+        ? privacyFactText(current.privacy)
+        : current && field === 'sourceCreated'
+          ? timestampFactText(current.sourceCreated)
+          : current && field === 'sourceUpdated'
+            ? timestampFactText(current.sourceUpdated)
+            : m.library_rich_entry_source_record_missing();
     return { field, value: now };
   });
 }
@@ -274,7 +275,9 @@ function PrivacyCorrectionField({
                 aria-describedby={issue ? errorId : undefined}
                 onChange={(event) => onChange({ ...draft, sourceValue: event.currentTarget.value })}
               />
-              <span className="mt-1 block text-sm text-muted-foreground">{m.library_rich_entry_privacy_value_help()}</span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                {m.library_rich_entry_privacy_value_help()}
+              </span>
             </label>
           ) : null}
         </>
@@ -330,7 +333,12 @@ function TimestampCorrectionField({
               disabled={disabled}
               onChange={(event) => {
                 const choice = event.currentTarget.value as TimestampChoice;
-                onChange({ ...draft, choice, value: choice === 'known' ? draft.value : '', sourceValue: choice === 'unknown' ? draft.sourceValue : '' });
+                onChange({
+                  ...draft,
+                  choice,
+                  value: choice === 'known' ? draft.value : '',
+                  sourceValue: choice === 'unknown' ? draft.sourceValue : '',
+                });
               }}
             >
               <option value="known">{m.library_rich_entry_known_timestamp()}</option>
@@ -428,7 +436,11 @@ function SavedResult({
   };
   const rows = correctionRows(body, observation ?? current);
   return (
-    <section className="space-y-2 rounded-md border border-green-600/40 bg-green-600/5 p-3" role="status" aria-live="polite">
+    <section
+      className="space-y-2 rounded-md border border-green-600/40 bg-green-600/5 p-3"
+      role="status"
+      aria-live="polite"
+    >
       <h4 className="font-semibold" tabIndex={-1}>
         {m.library_rich_entry_source_saved({ revision: observation?.revision ?? body.revision })}
       </h4>
@@ -474,7 +486,8 @@ export function SourceCorrectionEditor({
   const built = useMemo(() => buildSourceCorrection(baseline, draft), [baseline, draft]);
   const issues = built.kind === 'invalid' ? built.issues : {};
   const hasChanges = sourceCorrectionHasChanges(draft);
-  const basisIsCurrent = current !== null && current.provider === baseline.provider && current.recordId === baseline.recordId;
+  const basisIsCurrent =
+    current !== null && current.provider === baseline.provider && current.recordId === baseline.recordId;
   const revisionIsCurrent = basisIsCurrent && current.revision === baseline.revision;
   const editingLocked =
     disabled || pending || notice === 'saved' || notice === 'conflict' || notice === 'retired' || notice === 'missing';
@@ -523,12 +536,7 @@ export function SourceCorrectionEditor({
         <div className="space-y-2 rounded-md border border-amber-500/50 p-3" role="status">
           <p>{m.library_rich_entry_source_unknown_outcome()}</p>
           {pending ? (
-            <button
-              type="button"
-              className="min-h-11 rounded-md border px-3"
-              disabled={disabled}
-              onClick={onRetry}
-            >
+            <button type="button" className="min-h-11 rounded-md border px-3" disabled={disabled} onClick={onRetry}>
               {m.library_rich_entry_source_retry_original()}
             </button>
           ) : null}
@@ -591,7 +599,10 @@ export function SourceCorrectionEditor({
         />
       </div>
 
-      <section className="space-y-3 rounded-md border bg-muted/20 p-3" aria-label={m.library_rich_entry_review_change()}>
+      <section
+        className="space-y-3 rounded-md border bg-muted/20 p-3"
+        aria-label={m.library_rich_entry_review_change()}
+      >
         <div>
           <h5 className="font-semibold">{m.library_rich_entry_review_change()}</h5>
           <p className="text-sm text-muted-foreground">{m.library_rich_entry_review_required()}</p>
@@ -614,7 +625,9 @@ export function SourceCorrectionEditor({
           />
         </dl>
         {!hasChanges ? (
-          <p className="text-sm text-destructive" role="alert">{m.library_rich_entry_source_no_changes()}</p>
+          <p className="text-sm text-destructive" role="alert">
+            {m.library_rich_entry_source_no_changes()}
+          </p>
         ) : null}
         <label className="flex min-h-11 items-start gap-2">
           <input
@@ -643,4 +656,3 @@ export function SourceCorrectionEditor({
     </form>
   );
 }
-
