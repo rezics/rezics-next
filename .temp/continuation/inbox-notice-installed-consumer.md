@@ -1,33 +1,32 @@
 ---
 {
-  "goal": "performance",
-  "manager": "performance",
-  "kind": "implementation",
-  "paths": [
-    "apps/web/src/inbox/inbox-notice-detail.tsx",
-    "apps/web/src/inbox/inbox-read.ts",
-    "apps/web/src/inbox/inbox-query.ts",
-    "apps/web/src/inbox/inbox-page.tsx",
-    "apps/web/src/routes/inbox.notice.tsx",
-    "apps/web/src/routes/inbox.tsx",
-    "apps/web/src/routeTree.gen.ts",
-    "apps/web/messages",
-    "apps/web/tests/inbox-notice-detail.test.tsx",
-    "apps/web/tests/inbox-read.test.ts",
-    "apps/web/tests/inbox-session-authority.test.ts"
-  ],
-  "riskAreas": [],
-  "criticalPath": false,
-  "after": [
-    "06531661-8526-4bab-b8e7-a3731fa4b8ca",
-    "c156a592-59c5-449a-9b99-d5ae76f7660a",
-    "d9c5a408-5c67-4d33-bf97-76a9918a21b5"
-  ],
-  "waiting": [],
-  "estimate": {
-    "lines": 1400,
-    "files": 11
-  }
+  'goal': 'performance',
+  'manager': 'performance',
+  'kind': 'implementation',
+  'paths':
+    [
+      'apps/web/src/inbox/inbox-notice-detail.tsx',
+      'apps/web/src/inbox/inbox-read.ts',
+      'apps/web/src/inbox/inbox-query.ts',
+      'apps/web/src/inbox/inbox-page.tsx',
+      'apps/web/src/routes/inbox.notice.tsx',
+      'apps/web/src/routes/inbox.tsx',
+      'apps/web/src/routeTree.gen.ts',
+      'apps/web/messages',
+      'apps/web/tests/inbox-notice-detail.test.tsx',
+      'apps/web/tests/inbox-read.test.ts',
+      'apps/web/tests/inbox-session-authority.test.ts',
+    ],
+  'riskAreas': [],
+  'criticalPath': false,
+  'after':
+    [
+      '06531661-8526-4bab-b8e7-a3731fa4b8ca',
+      'c156a592-59c5-449a-9b99-d5ae76f7660a',
+      'd9c5a408-5c67-4d33-bf97-76a9918a21b5',
+    ],
+  'waiting': [],
+  'estimate': { 'lines': 1400, 'files': 11 },
 }
 ---
 

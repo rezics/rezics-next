@@ -15,8 +15,7 @@ export function inboxNoticeBackHref(selection: InboxSelection, cursor?: string):
 function eventKind(notice: NoticeInboxItem) {
   if (notice.reportId) return <Flag aria-hidden="true" size={18} />;
   if (notice.kind === 'moderation_decision') return <Gavel aria-hidden="true" size={18} />;
-  if (notice.kind === 'thread_watch' || notice.kind === 'board_activity')
-    return <Bell aria-hidden="true" size={18} />;
+  if (notice.kind === 'thread_watch' || notice.kind === 'board_activity') return <Bell aria-hidden="true" size={18} />;
   return <MessageCircleReply aria-hidden="true" size={18} />;
 }
 

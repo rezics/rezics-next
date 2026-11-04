@@ -65,38 +65,41 @@ afterAll(async () => {
 });
 
 function notice(overrides: Partial<NoticeInboxItem> = {}): NoticeInboxItem {
-  return Object.assign({
-    id: 'notice-1',
-    kind: 'reply',
-    createdAt: '2026-11-03T10:00:00.000Z',
-    actorId: 'actor-1',
-    threadId: 'thread-1',
-    postId: 'post-1',
-    decisionId: null,
-    reportId: null,
-    actor: {
-      state: 'available',
-      accountId: 'actor-1',
-      displayName: 'Momo Lin',
-      handle: 'momo',
-      avatarUrl: 'https://images.test/momo.png',
-      automated: false,
-    },
-    target: {
-      state: 'available',
+  return Object.assign(
+    {
+      id: 'notice-1',
+      kind: 'reply',
+      createdAt: '2026-11-03T10:00:00.000Z',
+      actorId: 'actor-1',
       threadId: 'thread-1',
       postId: 'post-1',
-      boardId: 'board-1',
-      threadTitle: 'Current discussion',
-      boardTitle: 'Current board',
+      decisionId: null,
+      reportId: null,
+      actor: {
+        state: 'available',
+        accountId: 'actor-1',
+        displayName: 'Momo Lin',
+        handle: 'momo',
+        avatarUrl: 'https://images.test/momo.png',
+        automated: false,
+      },
+      target: {
+        state: 'available',
+        threadId: 'thread-1',
+        postId: 'post-1',
+        boardId: 'board-1',
+        threadTitle: 'Current discussion',
+        boardTitle: 'Current board',
+      },
+      summary: 'Momo replied in a discussion',
+      actions: {
+        open: { kind: 'thread_post', threadId: 'thread-1', postId: 'post-1' },
+        markSeen: { method: 'POST', path: '/v1/accounts/alice/notifications/notice-1:markSeen' },
+      },
+      unread: true,
     },
-    summary: 'Momo replied in a discussion',
-    actions: {
-      open: { kind: 'thread_post', threadId: 'thread-1', postId: 'post-1' },
-      markSeen: { method: 'POST', path: '/v1/accounts/alice/notifications/notice-1:markSeen' },
-    },
-    unread: true,
-  }, overrides);
+    overrides,
+  );
 }
 
 async function mount(item: NoticeInboxItem, selection: 'all' | 'unread', cursor?: string) {
