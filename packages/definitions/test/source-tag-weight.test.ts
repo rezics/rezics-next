@@ -37,7 +37,9 @@ test('the bundled classification release admits only the typed VNDB aggregate on
     pattern: '^(?:vndbTagsRating)$(?![\\s\\S])',
   });
   expect(release.properties['rezics:sourceSnapshot']?.value).toMatchObject({
-    pattern: '^unversioned:sha256:[0-9a-f]{64}$(?![\\s\\S])',
+    minLength: 83,
+    maxLength: 83,
+    pattern: '^unversioned:sha256:[0-9a-f]+$(?![\\s\\S])',
   });
 });
 
@@ -55,5 +57,11 @@ test('the native value remains exact, bounded to (0,3], and does not admit anoth
   expect(checkStatementInput(statement('+2.4', 'rawIndividualVote'), bundledRelease).violations).toContainEqual({
     pointer: '/statement/qualifiers/1/value/content',
     code: 'invalid_format',
+  });
+  const wrongDigest = structuredClone(statement('+2.4'));
+  wrongDigest.references[0].parts[1].value.content = `unversioned:sha256:${'a'.repeat(63)}`;
+  expect(checkStatementInput(wrongDigest, bundledRelease).violations).toContainEqual({
+    pointer: '/statement/references/0/parts/1/value/content',
+    code: 'out_of_range',
   });
 });

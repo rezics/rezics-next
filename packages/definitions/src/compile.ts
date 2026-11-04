@@ -167,10 +167,14 @@ export async function compileCatalogue(input: {
     allowed(slot, usage ? slotKeys : `slot_uri ${slotKeys}`, location);
     if (!record(slot)) return;
     if (slot.annotations !== undefined)
-      allowed(slot.annotations, `datatype units exact qualifiers disclosure minimum_exclusive ${relationAnnotationKeys.join(' ')}`, {
-        ...location,
-        pointer: at(location.pointer, 'annotations'),
-      });
+      allowed(
+        slot.annotations,
+        `datatype units exact qualifiers disclosure minimum_exclusive min_length max_length ${relationAnnotationKeys.join(' ')}`,
+        {
+          ...location,
+          pointer: at(location.pointer, 'annotations'),
+        },
+      );
     const annotations = object(slot.annotations);
     if (Object.hasOwn(annotations, 'exact') && annotations.exact !== true)
       add({ ...location, pointer: at(at(location.pointer, 'annotations'), 'exact') }, 'invalid', 'Exact must be true');
@@ -785,12 +789,33 @@ export async function compileCatalogue(input: {
         add(annotation('minimum_exclusive'), 'invalid', 'Exclusive minimum requires a quantity minimum');
       else property.minimumExclusive = true;
     }
+    const minLength = annotations.min_length;
+    const maxLength = annotations.max_length;
+    const usesTextBounds = minLength !== undefined || maxLength !== undefined;
+    const validLength = (value: unknown) =>
+      typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= 1500;
+    const validTextBounds =
+      !usesTextBounds ||
+      (['string', 'external-id', 'monolingualtext'].includes(datatype) &&
+        (minLength === undefined || validLength(minLength)) &&
+        (maxLength === undefined || validLength(maxLength)) &&
+        (minLength === undefined ||
+          maxLength === undefined ||
+          (typeof minLength === 'number' &&
+            typeof maxLength === 'number' &&
+            validLength(minLength) &&
+            validLength(maxLength) &&
+            minLength <= maxLength)));
+    if (!validTextBounds)
+      add(annotation('min_length'), 'invalid', 'String length bounds must be safe, ordered and at most 1500');
     if (property.targets && property.targets.length > RELEASE_LIMITS.types)
       add(field('any_of'), 'limit', `At most ${RELEASE_LIMITS.types} targets are allowed`);
     property.value = valueSchema(datatype, {
       ...(typeof slot.pattern === 'string' && ['string', 'external-id', 'monolingualtext'].includes(datatype)
         ? { pattern: slot.pattern }
         : {}),
+      ...(validTextBounds && typeof minLength === 'number' ? { minLength } : {}),
+      ...(validTextBounds && typeof maxLength === 'number' ? { maxLength } : {}),
       ...(property.units ? { units: property.units, integer: range === 'integer' } : {}),
       ...(datatype === 'quantity' && annotations.exact === true ? { exact: true } : {}),
     });
