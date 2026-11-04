@@ -264,14 +264,14 @@ test('review and recovery retry the exact command, then require re-review after 
     await reader.click(reader.m.library_rich_entry_edit_source_facts());
 
     const privacy = reader.field(reader.m.library_rich_entry_privacy());
+    await reader.change(privacy.querySelector('select')!, 'set');
     const privacySelects = [...privacy.querySelectorAll('select')];
-    await reader.change(privacySelects[0]!, 'set');
     await reader.change(privacySelects[1]!, 'unknown');
     await reader.change(privacy.querySelector('input[type="text"]') as HTMLInputElement, 'private_flag_v2');
 
     const created = reader.field(reader.m.library_rich_entry_source_created());
+    await reader.change(created.querySelector('select')!, 'set');
     const createdSelects = [...created.querySelectorAll('select')];
-    await reader.change(createdSelects[0]!, 'set');
     await reader.change(createdSelects[1]!, 'known');
     await reader.change(created.querySelector('input[type="text"]') as HTMLInputElement, '2004-02-29T23:59:01.123+08:00');
 
@@ -372,8 +372,8 @@ test('private source facts and late results retire when account, incarnation, or
       await reader.render();
       await reader.click(reader.m.library_rich_entry_edit_source_facts());
       const created = reader.field(reader.m.library_rich_entry_source_created());
+      await reader.change(created.querySelector('select')!, 'set');
       const selects = [...created.querySelectorAll('select')];
-      await reader.change(selects[0]!, 'set');
       await reader.change(selects[1]!, 'known');
       await reader.change(created.querySelector('input[type="text"]') as HTMLInputElement, '2007-08');
       await reader.change(reader.host.querySelector('input[type="checkbox"]') as HTMLInputElement, true);
