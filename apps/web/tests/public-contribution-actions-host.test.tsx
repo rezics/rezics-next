@@ -49,7 +49,7 @@ test('the one page host retires on page, read, source, author, credential and im
   const parent = {};
   const row = { id: 'rendered-row-only', threadId: id, parentContext: parent };
   const current = episode(client, row);
-  expect(sameContributionActionsEpisode(current, episode(client, row))).toBe(true);
+  expect(sameContributionActionsEpisode(current, { ...current, rows: observeContributionActionsRows([row]) })).toBe(true);
   for (const replacement of [
     { page: {} },
     { read: {} },
