@@ -236,6 +236,13 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
           calls[index]!.resolve(value);
           await Promise.resolve();
         });
+      const waitFor = async (ready: () => boolean) => {
+        for (let attempt = 0; attempt < 150 && !ready(); attempt++)
+          await act(async () => {
+            await Bun.sleep(10);
+          });
+        expect(ready()).toBe(true);
+      };
       const success = (index: number, failed = false): DraftPreviewResult => ({
         ok: true,
         digest: profileDigest(calls[index]!.input.profile),
@@ -260,18 +267,20 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
       expect(controls().getByText(m.draft_preview_changed({}, { locale }))).toBeTruthy();
       expect(calls[0]!.input.profile.types).toHaveLength(0);
       const editorRegion = canvas.getByRole('region', { name: m.curation_editor({}, { locale }) });
-      const frame = editorRegion.querySelector('iframe') as HTMLIFrameElement | null;
-      const frameDocument = frame?.contentDocument;
-      const heading = frameDocument
-        ? Array.from(frameDocument.querySelectorAll('h2')).find((element) =>
-            element.textContent?.includes('Draft overview sibling'),
-          )
-        : null;
-      if (heading && frameDocument) await act(async () => userEvent.setup({ document: frameDocument }).click(heading));
+      await waitFor(() => !!editorRegion.querySelector('[data-puck-layer-tree-id="heading"]'));
+      const headingRow = editorRegion.querySelector('[data-puck-layer-tree-id="heading"]')!;
+      await click(Array.from(headingRow.querySelectorAll('button')).find((item) => item.textContent === 'Heading')!);
+      await waitFor(() => !!editorRegion.querySelector('textarea[name="text.en"]'));
       const headingField = editorRegion.querySelector('textarea[name="text.en"]') as HTMLTextAreaElement | null;
       expect(headingField).not.toBeNull();
-      await act(async () => user.clear(headingField!));
-      await act(async () => user.type(headingField!, 'Reader-owned component edit'));
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(
+          headingField,
+          'Reader-owned component edit',
+        );
+        headingField!.dispatchEvent(new window.Event('input', { bubbles: true }));
+        headingField!.blur();
+      });
       const templates = within(canvas.getByRole('region', { name: m.curation_templates({}, { locale }) }));
       const companion = templates
         .getAllByRole('combobox', { name: m.curation_companion_view({}, { locale }) })
