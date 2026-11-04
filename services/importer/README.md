@@ -2044,7 +2044,9 @@ from authored COPY `releases.released`, `vn.devstatus` and `releases_vn.rtype`.
 The default selected-family seed uses the same coordinator through
 [`showcase-vndb-releases.ts`](src/showcase-vndb-releases.ts): it collects facts
 only for already selected works and releases, verifies current bindings, and
-composes that admission with any sibling adapter. TBA, unknown and absent release
+composes that admission with any sibling adapter. The ordinary CLI runs that
+adapter, then the existing public-tag importer, and writes both release facts
+and publicTags into the seed result. TBA, unknown and absent release
 dates remain distinct outcomes; date precision is never guessed. Completeness
 stays a `wdt:P31` qualifier gap on the release-to-work fact. These proposals do
 not contain VNDB votes, personal lists or score-derived facts. Decision: COPY
