@@ -455,13 +455,14 @@ export async function seedShowcaseVndbReleases(input: {
   plan?: CrossMediaPlan;
 }): Promise<ShowcaseVndbReleaseResult> {
   const plan = input.plan ?? (await planCrossMediaSeed(input.tables));
+  const catalogueSubjects = input.catalogueSubjects ?? input.extras?.episodeCatalogueSubjects;
   const prepared = await prepareShowcaseVndbReleases({
     tables: input.tables,
     plan,
     port: input.port,
     ...(input.bindings === undefined ? {} : { bindings: input.bindings }),
     ...(input.groups === undefined ? {} : { groups: input.groups }),
-    catalogueSubjects: input.catalogueSubjects ?? input.extras?.episodeCatalogueSubjects,
+    ...(catalogueSubjects === undefined ? {} : { catalogueSubjects }),
   });
   const vocabularyGaps: SourceVocabularyGap[] = [];
   const extras: CrossMediaSeedExtras = {
