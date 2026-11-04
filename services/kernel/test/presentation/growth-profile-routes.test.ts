@@ -86,7 +86,11 @@ async function insertProfiles(targets: readonly { digest: string; body: Presenta
 
 async function request(path: string): Promise<{ status: number; body: Record<string, unknown>; headers: Headers }> {
   const response = await kernel.handle(new Request(`http://kernel.test${path}`));
-  return { status: response.status, body: (await response.json()) as Record<string, unknown>, headers: response.headers };
+  return {
+    status: response.status,
+    body: (await response.json()) as Record<string, unknown>,
+    headers: response.headers,
+  };
 }
 
 async function checkRouteGrowth(kind: 'profile' | 'active-profile' | 'curation-opening'): Promise<void> {
