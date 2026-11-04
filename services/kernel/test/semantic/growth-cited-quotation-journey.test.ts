@@ -63,7 +63,11 @@ beforeAll(async () => {
                 content: { document: fromPlainText('Fixed line'), language: 'en', licence: 'CC-BY-4.0' },
               },
               references: [
-                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/q' } }] },
+                {
+                  parts: [
+                    { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/q' } },
+                  ],
+                },
               ],
             },
           ],
@@ -72,7 +76,11 @@ beforeAll(async () => {
               property: { id: 'schema:spokenByCharacter' },
               value: { type: 'somevalue' },
               references: [
-                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/s' } }] },
+                {
+                  parts: [
+                    { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/s' } },
+                  ],
+                },
               ],
             },
           ],
@@ -166,7 +174,9 @@ test('fixed quotation page work stays bounded as unrelated facts grow', async ()
 test('ten and one hundred extra document and relation manifests keep generic engines', async () => {
   for (const count of [10, 100]) {
     const bundled = bundledSources();
-    const classes = Array.from({ length: count }, (_, index) => `  ExtraQuote${index}:
+    const classes = Array.from(
+      { length: count },
+      (_, index) => `  ExtraQuote${index}:
     is_a: Thing
     class_uri: schema:ExtraQuote${index}
     slots: [extraText${index}, extraAbout${index}]
@@ -175,8 +185,11 @@ test('ten and one hundred extra document and relation manifests keep generic eng
       schema_org_type: https://schema.org/Quotation
       list_presentation:
         imageAspect: portrait
-        keyFacts: []`).join('\n');
-    const slots = Array.from({ length: count }, (_, index) => `  extraText${index}:
+        keyFacts: []`,
+    ).join('\n');
+    const slots = Array.from(
+      { length: count },
+      (_, index) => `  extraText${index}:
     slot_uri: schema:extraText${index}
     annotations:
       datatype: document
@@ -186,7 +199,8 @@ test('ten and one hundred extra document and relation manifests keep generic eng
     annotations:
       datatype: wikibase-item
       relation_group: association
-      inverse: none`).join('\n');
+      inverse: none`,
+    ).join('\n');
     const extraYaml = `id: https://rezics.com/catalogue/extra-quotes
 name: extra-quotes
 version: 1.0.0
@@ -202,7 +216,9 @@ slots:
 ${slots}
 `;
     const labels = {
-      types: Object.fromEntries(Array.from({ length: count }, (_, index) => [`schema:ExtraQuote${index}`, `extra ${index}`])),
+      types: Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [`schema:ExtraQuote${index}`, `extra ${index}`]),
+      ),
       properties: Object.fromEntries(
         Array.from({ length: count }, (_, index) => [
           [`schema:extraText${index}`, 'text'],
