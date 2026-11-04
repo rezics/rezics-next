@@ -46,7 +46,12 @@ test('owned semantic deletion and restore stay bounded across unrelated history 
         await proposal(unrelated);
       },
       async operation() {
+        const exact = `${path(selected)}/lifecycle?property=schema%3Aurl`;
+        status(await call('GET', exact), 200);
         status(await call('DELETE', path(selected)), 200);
+        const tombstone = await call('GET', exact);
+        status(tombstone, 200);
+        expect(tombstone.body.state).toBe('deleted');
         const deleted = await call('GET', `/v1/subjects/${subject}/candidates?property=schema%3Aurl&limit=1`);
         status(deleted, 200);
         expect(JSON.stringify(deleted.body)).not.toContain(selected.payload);
