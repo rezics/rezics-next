@@ -10,6 +10,7 @@ import { subjectPartition } from '../../src/search/source.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { labelOrderKey } from '../../src/semantic/link-keys.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
@@ -42,6 +43,7 @@ const kernel = createKernel({
   pool,
   access: realAccess.access,
   tokens,
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32).fill(12),
   writeRate: realAccess.writeRate,
 });
