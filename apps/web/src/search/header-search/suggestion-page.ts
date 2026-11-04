@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import type { SuggestionResult } from '../suggestions';
+import { admitSuggestionWorkContexts, suggestionWorkContextSchema } from '../suggestion-context';
 
 type NativeSuggestionPage = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$suggest']['get']>>['data']>;
 
@@ -43,6 +44,7 @@ const subject: v.GenericSchema<SuggestionResult['subjects'][number]> = v.strictO
   labels: textMap,
   summary: v.nullable(summary),
   facts: v.exactOptional(v.record(v.string(), v.pipe(v.array(fact), v.maxLength(3)))),
+  workContext: v.exactOptional(suggestionWorkContextSchema),
 });
 const nativeEnvelope = {
   subjects: v.pipe(v.array(subject), v.maxLength(10)),
@@ -67,6 +69,7 @@ function admitSuggestionIdentities(subjects: SuggestionResult['subjects']): void
     }
     identities.add(identity);
   }
+  admitSuggestionWorkContexts(subjects);
 }
 
 function parsePage<T extends { subjects: SuggestionResult['subjects'] }>(

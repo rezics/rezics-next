@@ -16,6 +16,31 @@ export type EmptyRecovery = {
     alternatives: { query: string; label: string }[];
     actions: EmptyRecoveryAction[];
 };
+
+type SuggestionContextLabelSchema = import("typebox").TObject<{ value: import("typebox").TString; language: import("typebox").TString }>;
+type SuggestionContextDateSchema = import("typebox").TUnion<[
+    import("typebox").TObject<{ state: import("typebox").TLiteral<"value">; property: import("typebox").TString; value: import("typebox").TString; precision: import("typebox").TLiteral<"year"> }>,
+    import("typebox").TObject<{ state: import("typebox").TLiteral<"value">; property: import("typebox").TString; value: import("typebox").TString; precision: import("typebox").TLiteral<"month"> }>,
+    import("typebox").TObject<{ state: import("typebox").TLiteral<"value">; property: import("typebox").TString; value: import("typebox").TString; precision: import("typebox").TLiteral<"day"> }>,
+    import("typebox").TObject<{ state: import("typebox").TUnion<[import("typebox").TLiteral<"unknown">, import("typebox").TLiteral<"no_value">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">, import("typebox").TLiteral<"not_applicable">]>; property: import("typebox").TString }>
+]>;
+type SuggestionWorkContextSchema = import("typebox").TUnion<[
+    import("typebox").TObject<{
+        subjectId: import("typebox").TString;
+        status: import("typebox").TLiteral<"available">;
+        creator: import("typebox").TObject<{ id: import("typebox").TString; label: SuggestionContextLabelSchema; property: import("typebox").TString; role: SuggestionContextLabelSchema }>;
+        relation: import("typebox").TOptional<import("typebox").TObject<{ kind: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">]>; id: import("typebox").TString; label: SuggestionContextLabelSchema; date: import("typebox").TOptional<SuggestionContextDateSchema> }>>;
+        overflow: import("typebox").TOptional<import("typebox").TObject<{ destination: import("typebox").TObject<{ id: import("typebox").TString; kind: import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">]> }> }>>;
+    }>,
+    import("typebox").TObject<{ subjectId: import("typebox").TString; status: import("typebox").TUnion<[import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">]> }>
+]>;
+type SuggestionContextLabel = { value: string; language: string };
+type SuggestionContextDate =
+    | { state: "value"; property: string; value: string; precision: "year" | "month" | "day" }
+    | { state: "unknown" | "no_value" | "withheld" | "unavailable" | "not_applicable"; property: string };
+type SuggestionWorkContext =
+    | { subjectId: string; status: "available"; creator: { id: string; label: SuggestionContextLabel; property: string; role: SuggestionContextLabel }; relation?: { kind: "work" | "release"; id: string; label: SuggestionContextLabel; date?: SuggestionContextDate }; overflow?: { destination: { id: string; kind: "subject" | "work" | "release" } } }
+    | { subjectId: string; status: "absent" | "not_applicable" | "empty" | "withheld" | "unavailable" };
 export declare const FactSchema: import("typebox").TUnion<[import("typebox").TObject<{
     kind: import("typebox").TLiteral<"item">;
     id: import("typebox").TString;
@@ -783,6 +808,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         }>;
                     }>, import("typebox").TNull]>;
                 }>, import("typebox").TNull]>;
+                workContext: import("typebox").TOptional<SuggestionWorkContextSchema>;
             }>>;
             as_of: import("typebox").TString;
         }>;
@@ -947,6 +973,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         };
                     } | null;
                 } | null;
+                workContext?: SuggestionWorkContext;
             }[];
             as_of: string;
         };
@@ -1059,6 +1086,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         };
                     } | null;
                 } | null;
+                workContext?: SuggestionWorkContext;
             }[];
             as_of: string;
         };
@@ -1178,6 +1206,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             }>;
                         }>, import("typebox").TNull]>;
                     }>, import("typebox").TNull]>;
+                workContext: import("typebox").TOptional<SuggestionWorkContextSchema>;
                 }>>;
                 as_of: import("typebox").TString;
             }>;
@@ -1379,6 +1408,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 };
             } | null;
         } | null;
+        workContext?: SuggestionWorkContext;
     }[];
     as_of: string;
 }>, {
@@ -1430,6 +1460,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         }>;
                     }>, import("typebox").TNull]>;
                 }>, import("typebox").TNull]>;
+                workContext: import("typebox").TOptional<SuggestionWorkContextSchema>;
             }>>;
             as_of: import("typebox").TString;
         }>;

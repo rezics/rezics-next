@@ -504,6 +504,20 @@ export function HeaderSearchView({
                         <span className="truncate text-sm font-medium" lang={label.lang}>
                           {label.text}
                         </span>
+                        {suggestion.workContext?.status === 'available' && (
+                          <span
+                            data-suggestion-work-context
+                            className="min-w-0 whitespace-normal text-xs leading-tight text-muted-foreground [overflow-wrap:anywhere]"
+                          >
+                            <bdi lang={suggestion.workContext.creator.role.language} dir="auto">
+                              {suggestion.workContext.creator.role.value}
+                            </bdi>
+                            <span aria-hidden="true"> · </span>
+                            <bdi lang={suggestion.workContext.creator.label.language} dir="auto">
+                              {suggestion.workContext.creator.label.value}
+                            </bdi>
+                          </span>
+                        )}
                         <SubjectMeta
                           type={localizedLabel(result?.types?.[suggestion.type] ?? {}, locale)}
                           year={hitYear(suggestion.facts)}
