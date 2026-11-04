@@ -126,10 +126,35 @@ const legacyHit = v.object({
   ...catalogueFields,
   labels: textMap,
 });
+const emptyRecoveryAction = v.variant('kind', [
+  v.strictObject({ kind: v.literal('edit-query') }),
+  v.strictObject({ kind: v.literal('remove-type') }),
+  v.strictObject({ kind: v.literal('remove-kind'), value: v.pipe(v.string(), v.maxLength(128)) }),
+  v.strictObject({
+    kind: v.literal('remove-facet'),
+    property: v.pipe(v.string(), v.maxLength(128)),
+    value: v.pipe(v.string(), v.maxLength(128)),
+  }),
+  v.strictObject({ kind: v.literal('remove-range'), property: v.pipe(v.string(), v.maxLength(128)) }),
+]);
+const emptyRecovery = v.strictObject({
+  status: v.picklist(['ready', 'preparing', 'unavailable']),
+  alternatives: v.pipe(
+    v.array(
+      v.strictObject({
+        query: v.pipe(v.string(), v.maxLength(128)),
+        label: v.pipe(v.string(), v.maxLength(128)),
+      }),
+    ),
+    v.maxLength(3),
+  ),
+  actions: v.pipe(v.array(emptyRecoveryAction), v.maxLength(8)),
+});
 const legacyPage = v.object({
   subjects: v.pipe(v.array(legacyHit), v.maxLength(100)),
   next: v.nullable(v.string()),
   as_of: v.string(),
+  emptyRecovery: v.exactOptional(emptyRecovery),
 });
 const route = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(65535));
 const resourceId = v.pipe(v.string(), v.minLength(1));
@@ -313,9 +338,11 @@ const page = v.object({
   as_of: v.string(),
   viewerFacts: v.exactOptional(viewerFacts),
   collectionFollows: v.exactOptional(collectionFollows),
+  emptyRecovery: v.exactOptional(emptyRecovery),
 });
 
 export type DiscoveryPage = v.InferOutput<typeof page>;
+export type EmptyRecovery = NonNullable<DiscoveryPage['emptyRecovery']>;
 export type LegacySearchPage = v.InferOutput<typeof legacyPage>;
 export type DiscoveryKinds = v.InferOutput<typeof kinds>;
 export type DiscoveryHit = DiscoveryPage['hits'][number];
@@ -360,6 +387,8 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
   const parsed = v.safeParse(page, value);
   if (!parsed.success) return;
   const result = parsed.output;
+  if (result.emptyRecovery && new TextEncoder().encode(JSON.stringify(result.emptyRecovery)).byteLength > 16_384)
+    return;
   for (const hit of result.hits) {
     if (hit.key.id !== hit.summary.value.id) return;
     switch (hit.summary.kind) {
@@ -460,6 +489,8 @@ function validKinds(value: DiscoveryKinds): boolean {
 export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefined {
   const parsed = v.safeParse(legacyPage, value);
   if (!parsed.success) return;
+  if (parsed.output.emptyRecovery && new TextEncoder().encode(JSON.stringify(parsed.output.emptyRecovery)).byteLength > 16_384)
+    return;
 
   const identities = new Set<string>();
   for (const { id, type, summary } of parsed.output.subjects) {

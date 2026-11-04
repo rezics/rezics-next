@@ -33,6 +33,8 @@ import {
 import { LIST_CURSOR_BOUNDS } from '../../tokens/list-cursor.ts';
 import { systemClock, type KernelClock } from '../../clock.ts';
 import { PublicFigureSchema } from '../../rating/public-figure-http.ts';
+import { readEmptyRecovery, type EmptyRecoveryAction, type EmptyRecoveryCandidate } from '../empty-recovery.ts';
+import { EmptyRecoveryActionsSchema, EmptyRecoverySchema } from './empty-recovery-schemas.ts';
 
 type SearchServiceImplementation = ReturnType<typeof createSearchService>;
 export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> & {
@@ -127,6 +129,7 @@ const searchResponse = t.Object(
     kinds: t.Optional(kindPage),
     next: t.Union([t.String(), t.Null()]),
     as_of: t.String({ format: 'date-time' }),
+    emptyRecovery: t.Optional(EmptyRecoverySchema),
   },
   object,
 );
@@ -177,6 +180,7 @@ const releaseChildrenResponse = t.Object(
 );
 type SearchHttpBase = Static<typeof genericBase>;
 type SearchHttpResponse = Omit<PublicSearchPage, 'subjects'> & {
+  emptyRecovery?: Static<typeof EmptyRecoverySchema>;
   subjects: (PublicSearchPage['subjects'][number] & {
     summary: SubjectSummary | null;
     kind: string;
@@ -395,6 +399,7 @@ export function searchRoutes<App>(
             descriptions: t.Optional(t.Boolean()),
             languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
             properties: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 4 })),
+            emptyRecoveryActions: EmptyRecoveryActionsSchema,
           },
           object,
         ),
@@ -421,6 +426,7 @@ export function searchRoutes<App>(
         },
       },
       async ({ body, authorize, admission, job, actor, set }) => {
+        const { emptyRecoveryActions: _emptyRecoveryActions, ...nativeBody } = body;
         if (body.population !== undefined || body.representation === 'discovery-v1')
           set.headers['cache-control'] = 'private, no-store';
         if (body.representation === 'discovery-v1' && body.population !== undefined)
@@ -445,6 +451,59 @@ export function searchRoutes<App>(
             ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
           });
         }
+        async function recoveryForPage(
+          page: { count: number; next: string | null; as_of: string },
+          scope: NonNullable<Parameters<SearchService['search']>[4]>['scope'],
+          active?: Awaited<ReturnType<typeof activeRelease>>,
+        ): Promise<Static<typeof EmptyRecoverySchema> | undefined> {
+          if (
+            page.count !== 0 ||
+            page.next !== null ||
+            body.cursor !== undefined ||
+            body.kindCursor !== undefined ||
+            !body.text?.trim()
+          )
+            return undefined;
+          const actions: EmptyRecoveryAction[] = [
+            { kind: 'edit-query' },
+            ...(body.emptyRecoveryActions ?? []).filter((action) => action.kind !== 'edit-query'),
+          ].slice(0, 8) as EmptyRecoveryAction[];
+          return readEmptyRecovery({
+            query: body.text,
+            asOf: page.as_of,
+            actions,
+            failureStatus: (error) =>
+              error instanceof ProblemError &&
+              (error.code === 'index_not_ready' || error.code === 'semantic_not_ready')
+                ? 'preparing'
+                : 'unavailable',
+            async read(prefix, limit) {
+              // Realm populations do not have an installed suggestion adapter; never suggest from Global.
+              if (body.population !== undefined || !search)
+                throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+              let completed:
+                | { asOf: string; candidates: EmptyRecoveryCandidate[] }
+                | undefined;
+              await search.suggest(prefix, limit, body.languages, {
+                deadline: job.deadline,
+                ...(body.filter === undefined ? {} : { filter: body.filter }),
+                ...(scope ? { scope } : {}),
+                async complete(suggestions) {
+                  const current = await fill(suggestions, authorize, body.languages ?? [], active);
+                  completed = {
+                    asOf: current.as_of,
+                    candidates: current.subjects.flatMap((subject) => {
+                      const label = subject.summary?.label;
+                      return label?.value.trim() ? [{ id: subject.id, label: label.value }] : [];
+                    }),
+                  };
+                },
+              });
+              if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+              return completed;
+            },
+          });
+        }
         async function mixed(): Promise<DiscoveryHttpPage> {
           const check = await prepare();
           return admission.run('normal', job, async () => {
@@ -462,10 +521,10 @@ export function searchRoutes<App>(
                   }
                 : null;
             };
-            return discoveryHttpPage(
+            const page = discoveryHttpPage(
               await discovery(
                 actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-                { ...body, representation: 'discovery-v1' },
+                { ...nativeBody, representation: 'discovery-v1' },
                 {
                   access: ownerAccess,
                   actor,
@@ -479,6 +538,11 @@ export function searchRoutes<App>(
                 },
               ),
             );
+            const emptyRecovery = await recoveryForPage(
+              { count: page.hits.length, next: page.next, as_of: page.as_of },
+              ownerAccess ? { access: ownerAccess, actor, deadline: job.deadline, routeKey } : undefined,
+            );
+            return emptyRecovery ? { ...page, emptyRecovery } : page;
           });
         }
         async function catalogue(): Promise<SearchHttpResponse> {
@@ -501,7 +565,7 @@ export function searchRoutes<App>(
             let completed: SearchHttpResponse | undefined;
             await search.search(
               actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
-              body,
+              nativeBody,
               clock().getTime(),
               active,
               {
@@ -518,8 +582,13 @@ export function searchRoutes<App>(
               },
             );
             if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-            await trending.submitted(actor, body);
-            return completed;
+            const emptyRecovery = await recoveryForPage(
+              { count: completed.subjects.length, next: completed.next, as_of: completed.as_of },
+              scopeOptions,
+              active,
+            );
+            await trending.submitted(actor, nativeBody);
+            return emptyRecovery ? { ...completed, emptyRecovery } : completed;
           });
         }
         async function grouped() {
@@ -541,7 +610,7 @@ export function searchRoutes<App>(
             const principal = actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
             const page = await search.releaseGroups(
               principal,
-              body as GroupedReleaseSearchRequest,
+              nativeBody as GroupedReleaseSearchRequest,
               clock().getTime(),
               active,
               { deadline: job.deadline, complete: async () => {} },
