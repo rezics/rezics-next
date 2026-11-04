@@ -689,6 +689,8 @@
   "candidate_selection_invalid": "部分选项需要重新核对，或超出了此字段的数量限制。",
   "candidate_confirm_reject": "拒绝此建议并保留原断言。确认时会检查你的权限。",
   "candidate_confirm_replace": "用此处显示的值和优先级替换整个字段的选用内容。未勾选的值将不再选用。确认时会检查你的权限。",
+  "candidate_confirm_head": "当前选用版本：{head}。",
+  "candidate_statement_identity": "已选陈述：{id}",
   "candidate_selection_confirmed": "公开读取已确认此选用列表及其优先级。",
   "candidate_draft_stale": "比较内容已更改，选用草稿已保留。请重新加载并比较，再明确确认新请求。",
   "candidate_compare_hint": "比较已披露的建议。接受、拒绝和公开选用是独立的决定。",

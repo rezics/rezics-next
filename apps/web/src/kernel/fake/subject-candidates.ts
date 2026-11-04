@@ -7,6 +7,7 @@ import {
   type Candidate,
   type CandidateCommand,
   type CandidateRead,
+  type CandidateViewerActions,
 } from '../../subject/candidates';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import type { FakeRoute } from '../fake-modules';
@@ -25,7 +26,35 @@ export type CandidateScenario =
   | 'stale-selection'
   | 'empty'
   | 'loading'
-  | 'invalid';
+  | 'invalid'
+  | 'actions-denied'
+  | 'actions-unavailable'
+  | 'concealed'
+  | 'malformed-ack';
+
+export function fixtureCandidateViewerActions(scenario: CandidateScenario = 'ready'): CandidateViewerActions {
+  if (scenario === 'actions-unavailable')
+    return {
+      subject: { state: 'unavailable', reason: 'unavailable' },
+      context: { state: 'unavailable', reason: 'unavailable' },
+    };
+  return {
+    subject:
+      scenario === 'concealed'
+        ? { state: 'unavailable', reason: 'not-found' }
+        : { state: 'available', actions: [] },
+    context: {
+      state: 'available',
+      actions:
+        scenario === 'actions-denied'
+          ? [{ action: 'context:accept', operations: ['subject.accept_candidate', 'subject.reject_candidate'] }]
+          : [
+              { action: 'context:accept', operations: ['subject.accept_candidate', 'subject.reject_candidate'] },
+              { action: 'context:adopt', operations: ['subject.adopt'] },
+            ],
+    },
+  };
+}
 
 /** A small native-shaped fake for the review region; it changes public facts only after adoption. */
 export function candidateFixture(
@@ -145,6 +174,20 @@ export function candidateFixture(
       body,
       key,
     });
+    if (request.method === 'POST' && url.pathname === '/v1/viewerActions') {
+      if (!request.headers.has('authorization')) return json({ code: 'authentication_required' }, 401);
+      if (scenario === 'actions-unavailable') return json({ code: 'dependency_unavailable' }, 503);
+      const resources = body?.resources as { type: string; id: string }[];
+      const actionComponents = fixtureCandidateViewerActions(scenario);
+      return json({
+        resources: resources.map((resource) => {
+            if (scenario === 'concealed' && resource.type === 'semantic.subject')
+              return { ...resource, error: 'not_found' };
+          const component = resource.type === 'semantic.context' ? actionComponents.context : actionComponents.subject;
+          return { ...resource, viewerActions: component.state === 'available' ? component.actions : [] };
+        }),
+      });
+    }
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${id}`) return json(publicRead);
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${id}/candidates`) {
       if (scenario === 'loading') return new Promise<Response>(() => {});
@@ -238,6 +281,8 @@ export function candidateFixture(
         revision: 4,
       };
       if (key) receipts.set(key, result);
+      if (scenario === 'malformed-ack')
+        return json({ ...result, adoption: { ...result.adoption, mode: 'suppress' } });
       return json(result);
     }
     return json({ code: 'not_found' }, 404);
@@ -247,7 +292,7 @@ export function candidateFixture(
     reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
     read: async (property, cursor, session): Promise<CandidateRead> => {
       const result = await readCandidates(client, 'Bearer fixture', id, property, cursor, undefined, session);
-      return result.ok ? { ...result, fields, names: {} } : result;
+      return result.ok ? { ...result, fields, names: {}, actions: fixtureCandidateViewerActions(scenario) } : result;
     },
     confirm: (command: CandidateCommand) => selectCandidate(client, 'Bearer fixture', command),
   };

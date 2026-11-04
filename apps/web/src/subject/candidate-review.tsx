@@ -110,7 +110,8 @@ function CandidateReviewLive({
   const [confirmation, setConfirmation] = useState<CandidateCommand['operation'] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, CandidateDraft>>({});
   const [modes, setModes] = useState<Record<string, 'inherit' | 'replace' | 'suppress'>>({});
-  const mode = modes[property] ?? 'replace';
+  const isContextReview = !!context && context !== candidateContext;
+  const mode = isContextReview ? (modes[property] ?? 'replace') : 'replace';
   const [busy, setBusy] = useState(false);
   const [requiresReload, setRequiresReload] = useState(false);
   const [failure, setFailure] = useState<CandidateFailure>();
@@ -149,7 +150,7 @@ function CandidateReviewLive({
     (availability) => availability === 'denied',
   );
   const actionAllowed = (operation: CandidateCommand['operation']) => {
-    if (!requireActionObservation) return true;
+    if (!actionObservationRequired) return true;
     if (actionFailure) return false;
     const action = operation === 'adopt' ? 'context:adopt' : 'context:accept';
     const operationId =
@@ -167,7 +168,7 @@ function CandidateReviewLive({
         (!current.actions ||
           current.actions.context.state !== 'available' ||
           (context && current.actions.subject.state !== 'available'))));
-  const publicRead = context
+  const publicRead = isContextReview
     ? (result?.contextReview?.reading ?? current?.contextReview?.reading)
     : result
       ? result.public
@@ -179,7 +180,7 @@ function CandidateReviewLive({
     returnHref && returnHref.startsWith('/') && !returnHref.startsWith('//') && !returnHref.includes('\\')
       ? returnHref
       : undefined;
-  const publicStatements = context
+  const publicStatements = isContextReview
     ? (result?.contextReview?.selected ?? current?.contextReview?.selected ?? []).filter(
         (statement) => statement.rank === 'normal' || statement.rank === 'preferred',
       )
@@ -191,7 +192,7 @@ function CandidateReviewLive({
   for (const item of current?.page?.candidates ?? [])
     choices.set(item.id, { statement: item.statement, eligible: candidateCanSelect(item) });
   const valid =
-    (context && mode !== 'replace') ||
+    (isContextReview && mode !== 'replace') ||
     (!!draft &&
       draft.selection.length <= maximum &&
       draft.selection.every((entry) => choices.get(entry.candidate)?.eligible));
@@ -199,7 +200,7 @@ function CandidateReviewLive({
     confirmation === 'reject'
       ? m.candidate_reject({}, options)
       : confirmation === 'adopt'
-        ? context
+        ? isContextReview
           ? m.context_adopt({}, options)
           : m.candidate_adopt({}, options)
         : m.candidate_accept({}, options);
@@ -251,7 +252,7 @@ function CandidateReviewLive({
           : next,
       );
       if (!cursor) setRequiresReload(false);
-      if (context)
+      if (isContextReview)
         setModes((previous) => ({
           ...previous,
           [field]:
@@ -402,7 +403,7 @@ function CandidateReviewLive({
         head: confirmation === 'adopt' ? (prepared.page?.adoption?.head ?? null) : candidate!.head,
         key: crypto.randomUUID(),
         ...(confirmation === 'adopt'
-          ? { selection: context && mode !== 'replace' ? [] : structuredClone(draft!.selection) }
+          ? { selection: isContextReview && mode !== 'replace' ? [] : structuredClone(draft!.selection) }
           : {}),
         ...(session.current ? { session: session.current } : {}),
         ...(slot ? { slot: structuredClone(slot) } : {}),
@@ -426,7 +427,7 @@ function CandidateReviewLive({
       } else {
         session.current = next.session ?? session.current;
         setResult(next);
-        if (context && next.contextRefreshFailed) {
+        if (isContextReview && next.contextRefreshFailed) {
           setRead(undefined);
           setCandidate(undefined);
         }
@@ -453,9 +454,9 @@ function CandidateReviewLive({
     if (item.retracted !== null) return m.candidate_retracted({}, options);
     if (item.decision === 'rejected') return m.candidate_rejected_state({}, options);
     if (publicStatements.some((statement) => statement.id === item.id))
-      return context ? m.context_selected({}, options) : m.candidate_selected({}, options);
+      return isContextReview ? m.context_selected({}, options) : m.candidate_selected({}, options);
     if (item.rank === 'normal' || item.rank === 'preferred')
-      return context ? m.context_pending({}, options) : m.candidate_pending({}, options);
+      return isContextReview ? m.context_pending({}, options) : m.candidate_pending({}, options);
     return item.decision === 'accepted' ? m.candidate_unselected({}, options) : m.candidate_unresolved({}, options);
   }
 
@@ -471,18 +472,18 @@ function CandidateReviewLive({
       </ContentItemHeading>
       <p className="text-sm">
         {confirmation === 'accept'
-          ? context
+          ? isContextReview
             ? m.context_confirm_accept({}, options)
             : m.candidate_confirm_accept({}, options)
           : confirmation === 'reject'
             ? m.candidate_confirm_reject({}, options)
-            : context && mode !== 'replace'
+            : isContextReview && mode !== 'replace'
               ? m.context_empty_selection({}, options)
-              : context
+              : isContextReview
                 ? m.context_confirm_replace({}, options)
                 : m.candidate_confirm_replace({}, options)}
       </p>
-      {context && confirmation === 'adopt' && (
+      {isContextReview && confirmation === 'adopt' && (
         <p>
           {mode === 'inherit'
             ? m.context_inherit({}, options)
@@ -491,7 +492,7 @@ function CandidateReviewLive({
               : m.context_replace({}, options)}
         </p>
       )}
-      {confirmation === 'adopt' && (!context || mode === 'replace') && (
+      {confirmation === 'adopt' && (!isContextReview || mode === 'replace') && (
         <ul className="space-y-2">
           {draft?.selection.map((entry) => {
             const value = choices.get(entry.candidate);
@@ -543,7 +544,7 @@ function CandidateReviewLive({
           {m.candidate_title({}, options)}
         </ContentItemHeading>
         <p className="text-sm text-muted-foreground">
-          {context ? m.context_authority({}, options) : m.candidate_intro({}, options)}
+          {isContextReview ? m.context_authority({}, options) : m.candidate_intro({}, options)}
         </p>
         {safeReturnHref && !busy && confirmation === null && !request.current && (
           <Link
@@ -557,8 +558,18 @@ function CandidateReviewLive({
           </Link>
         )}
         {returnUnavailable && <p role="status">{m.candidate_unavailable({}, options)}</p>}
-        {!actionObservationRequired && current?.actions && actionReadUnavailable && (
-          <p role="status">{m.candidate_actions_unavailable({}, options)}</p>
+        {!actionObservationRequired && current && actionReadUnavailable && !result && (
+          <div role="status" className="space-y-2">
+            <p>{m.candidate_actions_unavailable({}, options)}</p>
+            <Button
+              variant="outline"
+              className="min-h-11"
+              disabled={busy || !!request.current}
+              onClick={() => void load()}
+            >
+              {m.candidate_reload({}, options)}
+            </Button>
+          </div>
         )}
         {!actionObservationRequired && current?.actions && !actionReadUnavailable && actionDenied && (
           <p role="status">{m.candidate_denied({}, options)}</p>
@@ -611,22 +622,22 @@ function CandidateReviewLive({
             <div role="status" className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
               {result.contextRefreshFailed && <p>{m.context_read_unavailable({}, options)}</p>}
               <p>
-                {context && confirmation === null && result.kind !== 'accepted' && result.kind !== 'rejected'
+                {isContextReview && confirmation === null && result.kind !== 'accepted' && result.kind !== 'rejected'
                   ? m.context_saved({}, options)
                   : result.kind === 'selected'
                     ? m.candidate_selection_confirmed({}, options)
                     : result.kind === 'accepted'
-                      ? context
+                      ? isContextReview
                         ? m.context_accepted({}, options)
                         : m.candidate_accepted({}, options)
                       : result.kind === 'rejected'
-                        ? context
+                        ? isContextReview
                           ? m.context_rejected({}, options)
                           : m.candidate_rejected({}, options)
                         : m.candidate_pending({}, options)}
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                {!context && result.kind === 'selected' && result.public && (
+                {!isContextReview && result.kind === 'selected' && result.public && (
                   <a
                     className="underline underline-offset-4"
                     href={
@@ -647,7 +658,7 @@ function CandidateReviewLive({
           )}
           {current && (
             <>
-              {context && (
+              {isContextReview && (
                 <ContextComparisonView
                   read={result?.contextReview ? { ...current, contextReview: result.contextReview } : current}
                   property={property}
@@ -677,11 +688,11 @@ function CandidateReviewLive({
                   ))}
                 </NativeSelect>
               </Field>
-              {current.page && (!context || !result) && (
+              {current.page && (!isContextReview || !result) && (
                 <>
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      {context ? m.context_authority({}, options) : m.candidate_compare_hint({}, options)}
+                      {isContextReview ? m.context_authority({}, options) : m.candidate_compare_hint({}, options)}
                     </p>
                     {(!current.page.candidates.length ||
                       (exactCandidate && !current.page.candidates.some((item) => item.id === exactCandidate))) && (
@@ -743,7 +754,7 @@ function CandidateReviewLive({
                           data-candidate-panel="current"
                         >
                           <ContentItemHeading level={4} className="text-sm font-semibold">
-                            {context ? m.context_selected_values({}, options) : m.candidate_current({}, options)}
+                          {isContextReview ? m.context_selected_values({}, options) : m.candidate_current({}, options)}
                           </ContentItemHeading>
                           {!publicRead ? (
                             <p>{m.candidate_public_unconfirmed({}, options)}</p>
@@ -760,7 +771,7 @@ function CandidateReviewLive({
                               </div>
                             ))
                           ) : (
-                            <p>{context ? m.context_no_values({}, options) : m.candidate_no_current({}, options)}</p>
+                            <p>{isContextReview ? m.context_no_values({}, options) : m.candidate_no_current({}, options)}</p>
                           )}
                         </ContentItemFrame>
                         <ContentItemFrame
@@ -849,7 +860,7 @@ function CandidateReviewLive({
                   )}
                   {draft && (
                     <section
-                      aria-label={context ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
+                      aria-label={isContextReview ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
                       className="min-w-0"
                     >
                       <ContentItemFrame
@@ -858,9 +869,9 @@ function CandidateReviewLive({
                         data-candidate-draft
                       >
                         <ContentItemHeading level={3} className="font-semibold">
-                          {context ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
+                          {isContextReview ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
                         </ContentItemHeading>
-                        {context && current.contextReview && (
+                        {isContextReview && current.contextReview && (
                           <Field>
                             <FieldLabel htmlFor="context-mode">{m.context_mode({}, options)}</FieldLabel>
                             <NativeSelect
@@ -887,14 +898,14 @@ function CandidateReviewLive({
                           </Field>
                         )}
                         <p className="text-sm text-muted-foreground">
-                          {context && mode !== 'replace'
+                          {isContextReview && mode !== 'replace'
                             ? m.context_empty_selection({}, options)
-                            : context
+                            : isContextReview
                               ? m.context_replace_hint({}, options)
                               : m.candidate_replace_hint({}, options)}
                         </p>
                         <p className="text-sm">{m.candidate_selection_limit({ limit: String(maximum) }, options)}</p>
-                        {(!context || mode === 'replace') && (
+                        {(!isContextReview || mode === 'replace') && (
                           <ul className="space-y-3">
                             {[...new Set([...choices.keys(), ...draft.selection.map((entry) => entry.candidate)])].map(
                               (choice) => {
@@ -982,7 +993,7 @@ function CandidateReviewLive({
                             }
                             onClick={(event) => openConfirmation('adopt', event.currentTarget)}
                           >
-                            {context ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}
+                            {isContextReview ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}
                           </Button>
                         )}
                         {confirmation === 'adopt' && confirmationContent}

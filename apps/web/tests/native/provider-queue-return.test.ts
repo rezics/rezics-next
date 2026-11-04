@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import type { Page } from 'playwright';
 import { m } from '../../src/paraglide/messages.js';
+import { candidateContext } from '../../src/subject/candidates';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import {
   createCatalogueProviderReviewFixture,
@@ -44,6 +45,11 @@ async function chooseContext(page: Page): Promise<void> {
     }
   }
   throw new Error('Named Context choice did not resolve through the served directory');
+}
+
+async function chooseGlobal(page: Page): Promise<void> {
+  await page.getByRole('button', { name: m.prq_global(), exact: true }).click();
+  await page.getByText(m.provider_scope_selected({ label: m.prq_global() }), { exact: true }).waitFor();
 }
 
 async function waitForRows(page: Page): Promise<void> {
@@ -176,5 +182,116 @@ nativeTest(
     expect(queueReads.length).toBeGreaterThan(0);
     expect(new URL(queueReads.at(-1)!.url, current.stack.kernelOrigin).searchParams.has('cursor')).toBe(false);
     await page.close();
+  },
+);
+
+nativeTest(
+  'Global accepted candidate is deliberately selected by a separate editor and returns to its bounded frontier',
+  900_000,
+  async () => {
+    const current = fixture!;
+    const book = current.books[0]!;
+    const alice = await current.auth.signIn('alice');
+    const reviewerPage = pageFor(alice);
+    reviewerPage.setDefaultTimeout(30_000);
+    await reviewerPage.goto(`${current.stack.web}/en/imports/review`, { waitUntil: 'domcontentloaded' });
+    await hydrate(reviewerPage);
+    await chooseGlobal(reviewerPage);
+    await reviewerPage.getByLabel(m.prq_source()).fill(providerReviewSource);
+    await reviewerPage.getByRole('button', { name: m.prq_load(), exact: true }).click();
+    await waitForRows(reviewerPage);
+    await reviewerPage.getByRole('checkbox', { name: new RegExp(book.title) }).click();
+    await reviewerPage.getByRole('button', { name: m.candidate_accept(), exact: true }).click();
+    await reviewerPage.getByRole('button', { name: m.candidate_accept(), exact: true }).last().click();
+    await reviewerPage.getByText('Accepted. Review public selection separately.').waitFor();
+
+    const accepted = await readProviderReviewPage(current.stack, 'editor', candidateContext, 'accepted_unselected');
+    expect(accepted.status).toBe(200);
+    const acceptedRows = accepted.body.candidates as {
+      subject: string;
+      candidate: { id: string; statement: { property: { id: string } } };
+    }[];
+    expect(acceptedRows.length).toBeGreaterThan(0);
+    expect(acceptedRows.length).toBeLessThanOrEqual(20);
+    const exact = acceptedRows.find((row) => row.subject === book.id && row.candidate.id === book.candidate);
+    expect(exact).toBeDefined();
+
+    const editor = await current.auth.signIn('editor');
+    const page = pageFor(editor);
+    page.setDefaultTimeout(30_000);
+    const concurrentEditor = await current.auth.signIn('editor');
+    const concurrentPage = pageFor(concurrentEditor);
+    concurrentPage.setDefaultTimeout(30_000);
+    for (const targetPage of [page, concurrentPage]) {
+      await targetPage.goto(`${current.stack.web}/en/imports/review`, { waitUntil: 'domcontentloaded' });
+      await hydrate(targetPage);
+      await chooseGlobal(targetPage);
+      await targetPage.getByLabel(m.prq_source()).fill(providerReviewSource);
+      await targetPage.getByLabel(m.prq_status()).selectOption('accepted_unselected');
+      await targetPage.getByRole('button', { name: m.prq_load(), exact: true }).click();
+      const exactLink = targetPage.getByRole('link', { name: m.prq_open_candidate(), exact: true }).first();
+      await exactLink.waitFor({ state: 'visible' });
+      await exactLink.click();
+      await targetPage.waitForURL(/\/edit\?/);
+    }
+
+    const address = new URL(page.url());
+    expect(address.searchParams.get('reviewProperty')).toBe('schema:inLanguage');
+    expect(address.searchParams.get('candidate')).toBe(book.candidate);
+    expect(address.searchParams.get('context')).toBe(candidateContext);
+    expect(address.searchParams.get('returnTo')).toBe('queue');
+    const review = page.getByRole('region', { name: m.candidate_title(), exact: true });
+    expect(await review.getByRole('button', { name: m.candidate_reject(), exact: true }).isDisabled()).toBe(true);
+    expect(await review.getByRole('button', { name: m.candidate_adopt(), exact: true }).isDisabled()).toBe(false);
+    expect(await review.locator('#context-mode').count()).toBe(0);
+    const sourceReference = `https://openlibrary.org/works/${book.externalId}`;
+    await review.locator(`a[href="${sourceReference}"]`).waitFor({ state: 'visible' });
+    const include = review.locator(`#include-${book.candidate}`);
+    await include.click();
+    const concurrentReview = concurrentPage.getByRole('region', { name: m.candidate_title(), exact: true });
+    await concurrentReview.locator(`#include-${book.candidate}`).click();
+    await concurrentReview.getByRole('button', { name: m.candidate_adopt(), exact: true }).click();
+    await concurrentReview.getByText(m.candidate_confirm_head({ head: '—' }), { exact: true }).waitFor();
+    await review.getByRole('button', { name: m.candidate_adopt(), exact: true }).click();
+    await review.getByRole('button', { name: m.candidate_adopt(), exact: true }).last().click();
+    await review.getByText(m.candidate_selection_confirmed(), { exact: true }).waitFor();
+    await review.getByRole('link', { name: m.candidate_view_public(), exact: true }).waitFor();
+    const currentSelection = review.locator('[data-candidate-panel="current"]');
+    await currentSelection
+      .getByText(m.candidate_statement_identity({ id: book.candidate }), { exact: true })
+      .waitFor();
+    await currentSelection.locator(`a[href="${sourceReference}"]`).waitFor({ state: 'visible' });
+
+    await concurrentReview.getByRole('button', { name: m.candidate_adopt(), exact: true }).last().click();
+    await concurrentReview.getByRole('alert').getByText(m.candidate_draft_stale(), { exact: true }).waitFor();
+    await concurrentReview.getByRole('alert').getByRole('button', { name: m.candidate_reload(), exact: true }).click();
+    await concurrentReview
+      .locator('[data-candidate-panel="current"]')
+      .getByText(m.candidate_statement_identity({ id: book.candidate }), { exact: true })
+      .waitFor();
+    await concurrentReview.getByRole('button', { name: m.candidate_adopt(), exact: true }).click();
+    await concurrentReview.getByText(m.candidate_confirm_head({ head: '1' }), { exact: true }).waitFor();
+    await concurrentReview.getByRole('button', { name: m.candidate_adopt(), exact: true }).last().click();
+    await concurrentReview.getByText(m.candidate_selection_confirmed(), { exact: true }).waitFor();
+
+    const publicRead = await current.stack.kernel(`/v1/subjects/${book.id}`, {}, 'anonymous');
+    expect(publicRead.status).toBe(200);
+    const publicSubject = (await publicRead.json()) as {
+      subject: { statements: Record<string, { id: string; rank: string; value: { content: string } }[]> };
+    };
+    const selected = publicSubject.subject.statements['schema:inLanguage'] ?? [];
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toMatchObject({ id: book.candidate, rank: 'normal', value: { content: book.language } });
+
+    await concurrentPage.getByRole('link', { name: m.prq_return_to_queue(), exact: true }).click();
+    await concurrentPage.waitForURL(/\/imports\/review/);
+    await concurrentPage.getByText(m.prq_return_moved(), { exact: true }).waitFor();
+    expect(await concurrentPage.getByLabel(m.prq_source()).inputValue()).toBe(providerReviewSource);
+    expect(await concurrentPage.getByLabel(m.prq_status()).inputValue()).toBe('accepted_unselected');
+    await concurrentPage.getByText(m.provider_scope_selected({ label: m.prq_global() }), { exact: true }).waitFor();
+    expect(await concurrentPage.getByRole('link', { name: m.prq_open_candidate(), exact: true }).count()).toBe(0);
+    await page.close();
+    await concurrentPage.close();
+    await reviewerPage.close();
   },
 );

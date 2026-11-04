@@ -17,7 +17,10 @@ import {
   type PresentationPreview,
 } from './presentation-preview';
 import {
+  candidateContext,
+  candidateViewerActionsFor,
   readCandidates,
+  readCandidateAuthority,
   selectCandidate,
   type CandidateCommand,
   type CandidateSlot,
@@ -204,11 +207,15 @@ export const readSubjectCandidates = createServerFn({ method: 'POST', strict: fa
     if (!authorization || reader !== data.expectedReader) return { ok: false, reason: 'denied' };
     try {
       const locale = (await import('../../kernel/client')).requestLocale() ?? 'en';
-      const [release, result] = await Promise.all([
+      const client = kernelClient();
+      const [release, result, authority] = await Promise.all([
         readRelease(),
-        readCandidates(kernelClient(), authorization, data.id, data.property, data.cursor, data.slot, data.session),
+        readCandidates(client, authorization, data.id, data.property, data.cursor, data.slot, data.session),
+        readCandidateAuthority(client, authorization, candidateContext, [data.id]),
       ]);
       if (!result.ok) return result;
+      if (authority.disclosure === 'unreadable')
+        return { ok: false, reason: 'unavailable', clearPrivate: true } as const;
       // Relation slots require a target address; this picker lists descriptive property slots only.
       const admitted = new Set(release.types[result.public.subject.type]?.properties ?? []);
       const fields = Object.entries(release.properties)
@@ -223,6 +230,7 @@ export const readSubjectCandidates = createServerFn({ method: 'POST', strict: fa
         return { ok: false, reason: 'unavailable' };
       return {
         ...result,
+        actions: candidateViewerActionsFor(authority, data.id),
         fields,
         names: Object.fromEntries(Object.entries(release.properties).map(([id, value]) => [id, value.labels ?? {}])),
       };
