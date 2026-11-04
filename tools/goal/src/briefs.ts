@@ -34,8 +34,7 @@ export function assertBriefDispatchable(
   if (supersededCheckInstructionParagraph(markdown))
     warnings.push(`contains superseded check instructions; ${SUPERSEDED_CHECK_HINT}`);
   const bytes = Buffer.byteLength(markdown, 'utf8');
-  if (bytes > byteBudget)
-    warnings.push(`brief is ${bytes} bytes; diagnostic budget is ${byteBudget} bytes`);
+  if (bytes > byteBudget) warnings.push(`brief is ${bytes} bytes; diagnostic budget is ${byteBudget} bytes`);
   return warnings;
 }
 

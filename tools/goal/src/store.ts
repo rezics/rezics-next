@@ -1531,9 +1531,7 @@ export class WorkerStore implements AttemptFence {
           stage: 'worker',
           action: 'started',
           at: new Date().toISOString(),
-          ...(attempt.prompt
-            ? { detail: JSON.stringify({ prompt: { overBudget: attempt.prompt.overBudget } }) }
-            : {}),
+          ...(attempt.prompt ? { detail: JSON.stringify({ prompt: { overBudget: attempt.prompt.overBudget } }) } : {}),
         });
       if (previousState === 'running' && attempt.state !== 'running')
         recordFlow(this.db, {

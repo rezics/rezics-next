@@ -263,7 +263,9 @@ test('dispatch lints report local state, main checkout and superseded check inst
   expect(assertBriefDispatchable('See `.temp/goal/notes.md`.')[0]).toContain(BRIEF_AUTHORITY_HINT);
   expect(assertBriefDispatchable(`Keep files under ${MAIN}.`, MAIN)[0]).toContain(BRIEF_AUTHORITY_HINT);
   expect(
-    assertBriefDispatchable('A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.')[0],
+    assertBriefDispatchable(
+      'A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.',
+    )[0],
   ).toContain(SUPERSEDED_CHECK_HINT);
 });
 

@@ -410,7 +410,11 @@ function recoverClaims(
       if (matches.length === 1) {
         archiveCommittedClaim(runtime, goal, file, matches[0]!);
         const lintWarnings = taskLintWarnings(runtime.db, matches[0]!);
-        dispatched.push({ taskId: matches[0]!, brief: basename(file), ...(lintWarnings.length ? { lintWarnings } : {}) });
+        dispatched.push({
+          taskId: matches[0]!,
+          brief: basename(file),
+          ...(lintWarnings.length ? { lintWarnings } : {}),
+        });
         continue;
       }
       returnClaimToReady(goalDirectory, file);
