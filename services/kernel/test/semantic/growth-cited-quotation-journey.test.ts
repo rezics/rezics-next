@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { PROFILE_FORMAT, type PresentationProfile } from '@rezics/composition';
-import { bundledDigest, bundledRelease, bundledSources } from '@rezics/definitions/bundled';
+import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { RELEASE_LIMITS, validateRelease } from '@rezics/definitions';
 import { fromPlainText } from '@rezics/document';
