@@ -18,7 +18,11 @@ export type ArcExample = 'admitted' | 'unsupported' | 'continuation-unavailable'
 export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
   const release = structuredClone(bundledRelease);
   if (scenario === 'unsupported') delete release.types['wd:Q2620972'];
-  const summary = (id: string, label: string, type = 'schema:Book'): Forward['relations'][number]['summary'] => ({
+  const summary = (
+    id: string,
+    label: string,
+    type = 'schema:Book',
+  ): NonNullable<Forward['relations'][number]['summary']> => ({
     id,
     type,
     label: { value: label, language: 'en' },
@@ -74,7 +78,7 @@ export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
       related: {},
     };
   };
-  const freshness = { consistency: 'eventual' as const, target_seconds: 10, caught_up: true };
+  const freshness = { consistency: 'eventual' as const, target_seconds: 10 as const, caught_up: true };
   const first: Links = {
     links: [link(workId, 1, '2'), link(otherWorkId, 2, '1', true)],
     freshness,
@@ -91,6 +95,8 @@ export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
     relations: [
       {
         statement: appearance,
+        target: characterId,
+        external: null,
         summary: summary(characterId, 'Secret character', 'wd:Q95074'),
         related: {
           [arcId]: summary(arcId, 'Harbour arc', 'wd:Q2620972')!,
@@ -104,6 +110,8 @@ export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
     relations: [
       {
         statement: statement(5, 'rezics:sideStoryOf', otherWorkId, '4', true),
+        target: otherWorkId,
+        external: null,
         summary: summary(otherWorkId, 'Hidden narrative place', 'wd:Q2620972'),
         related: {},
       },
@@ -149,7 +157,15 @@ export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
         if (url.pathname.endsWith('/relations')) {
           const assertion = statement(6, 'rezics:storyArc', arcId, '2');
           return json({
-            relations: [{ statement: assertion, summary: summary(arcId, 'Harbour arc', 'wd:Q2620972'), related: {} }],
+            relations: [
+              {
+                statement: assertion,
+                target: arcId,
+                external: null,
+                summary: summary(arcId, 'Harbour arc', 'wd:Q2620972'),
+                related: {},
+              },
+            ],
             freshness,
             next: null,
           });
