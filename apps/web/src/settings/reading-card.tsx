@@ -16,11 +16,19 @@ import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { readSettingsPage, savePreferences } from './actions';
-import type { NativePreferenceFailure, PreferenceChange, ReadingPreferences, SpoilerLevel } from './preferences';
+import type {
+  NativePreferenceFailure,
+  PreferenceChange,
+  ReadingAdvice,
+  ReadingPreferences,
+  SpoilerLevel,
+} from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
 import { readingNeedsNavigationDecision, useSettingsNavigationDraft } from './reading-navigation';
 import {
+  ownerMayChangeReading,
   readingMutation,
+  readingReset,
   readReading,
   sameReading,
   sendReading,
@@ -59,6 +67,7 @@ type ReadingState = {
   pending: Readonly<PreferenceChange> | null;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'reloading' | 'review' | 'failed';
   knownCurrent: boolean;
+  advice?: ReadingAdvice | undefined;
   failureOrigin?: 'read' | undefined;
   reason?: string | undefined;
   failure?: NativePreferenceFailure | undefined;
@@ -84,6 +93,7 @@ export class ReadingDraftRecovery {
       pending: null,
       phase: 'idle',
       knownCurrent: true,
+      advice: initial.advice,
     };
   }
   snapshot = () => this.state;
@@ -128,6 +138,7 @@ export class ReadingDraftRecovery {
       pending: null,
       phase: matches ? 'saved' : 'review',
       failure: undefined,
+      advice: preferences.advice,
     });
     this.owner.onVersionChange(Math.max(this.owner.version(), preferences.version));
   }
@@ -153,9 +164,32 @@ export class ReadingDraftRecovery {
   }
   async edit(next: Partial<ReadingValues>) {
     if (!this.owner.canWrite()) return;
+    const supported = this.state.advice?.reading.supported;
+    if (next.spoilerLevel !== undefined && supported && !supported.spoilerLevels.includes(next.spoilerLevel)) return;
+    if (next.suitability !== undefined && supported && !supported.suitability.includes(next.suitability)) return;
     const autosave = this.state.phase === 'idle' || this.state.phase === 'saved';
     this.update({ draft: { ...this.state.draft, ...next } });
     if (autosave && !this.state.pending) await this.submit();
+  }
+  async resetToNativeDefaults() {
+    if (!this.owner.canWrite() || this.state.pending || this.state.phase === 'reloading') return;
+    if (this.owner.version() > this.state.known.version) {
+      this.update({
+        phase: 'conflict',
+        knownCurrent: false,
+        failureOrigin: undefined,
+        reason: undefined,
+        failure: undefined,
+      });
+      return;
+    }
+    const input = readingReset(this.state.known);
+    if (!input) {
+      this.update({ phase: 'idle', draft: this.state.known });
+      return;
+    }
+    this.update({ draft: { spoilerLevel: 0, suitability: 'blur' }, pending: input });
+    await this.send(false);
   }
   async reload(waiting = false) {
     if (!this.owner.canRead() || waiting || this.state.phase === 'saving' || this.state.phase === 'reloading') return;
@@ -186,6 +220,7 @@ export class ReadingDraftRecovery {
       reason: undefined,
       failure: undefined,
       failureOrigin: undefined,
+      advice: result.preferences.advice,
     });
     this.owner.onVersionChange(Math.max(this.owner.version(), result.preferences.version));
   }
@@ -205,6 +240,53 @@ export class ReadingDraftRecovery {
     if (waiting || !this.owner.canWrite() || this.state.phase !== 'uncertain') return;
     await this.send(true);
   }
+}
+
+function readingLabel(values: ReadingValues) {
+  return {
+    spoilers: levels[values.spoilerLevel]!.title(),
+    images: values.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
+  };
+}
+
+function ReadingPreview({
+  ids,
+  draft,
+  confirmed,
+}: {
+  ids: string;
+  draft: ReadingValues;
+  confirmed: ReadingValues;
+}) {
+  const draftPreview = !sameReading(draft, confirmed);
+  const values = draftPreview ? draft : confirmed;
+  return (
+    <figure className="min-w-0 max-w-full rounded-lg border border-border p-3" aria-labelledby={`${ids}-preview`}>
+      <figcaption id={`${ids}-preview`} className="text-sm font-medium">
+        {m.settings_reading_preview_legend()}
+      </figcaption>
+      <p className="text-sm text-muted-foreground">
+        {draftPreview ? m.settings_reading_preview_draft() : m.settings_reading_preview_confirmed()}
+      </p>
+      <p className="mt-2 font-medium">{m.settings_reading_preview_title()}</p>
+      <p className="text-sm">{m.settings_reading_preview_summary()}</p>
+      <p className="text-sm" data-spoiler="minor">
+        {values.spoilerLevel >= 1 ? m.settings_reading_preview_minor() : m.settings_reading_preview_hidden()}
+      </p>
+      <p className="text-sm" data-spoiler="major">
+        {values.spoilerLevel >= 2 ? m.settings_reading_preview_major() : m.settings_reading_preview_hidden()}
+      </p>
+      <div
+        className={`mt-2 max-w-40 rounded-md bg-muted p-6 text-center text-sm ${values.suitability === 'blur' ? 'blur-sm' : ''}`}
+        aria-hidden="true"
+      >
+        {m.settings_reading_preview_cover()}
+      </div>
+      <p className="sr-only">
+        {values.suitability === 'blur' ? m.settings_reading_preview_cover_blur() : m.settings_reading_preview_cover()}
+      </p>
+    </figure>
+  );
 }
 
 export function ReadingCard({
@@ -257,20 +339,21 @@ export function ReadingCard({
       return result;
     },
   };
-  const writable = hydrated && !!csrfToken;
+  const credentialed = hydrated && !!csrfToken;
+  const adviceRef = useRef(initial.advice);
   const latest = useRef({
     transport,
     isCurrent,
     readCurrent,
     onVersionChange,
-    writable,
+    credentialed,
   });
   latest.current = {
     transport,
     isCurrent,
     readCurrent,
     onVersionChange,
-    writable,
+    credentialed,
   };
   const [editor] = useState(
     () =>
@@ -281,7 +364,11 @@ export function ReadingCard({
           read: () => latest.current.transport.read(),
         },
         {
-          canWrite: () => mounted() && latest.current.writable && latest.current.isCurrent(),
+          canWrite: () =>
+            mounted() &&
+            latest.current.credentialed &&
+            latest.current.isCurrent() &&
+            ownerMayChangeReading(adviceRef.current),
           canRead: () => mounted() && latest.current.readCurrent(),
           version: () => sharedVersion.current,
           onVersionChange: (next) => latest.current.onVersionChange(next),
@@ -289,6 +376,12 @@ export function ReadingCard({
       ),
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
+  adviceRef.current = state.advice;
+  const ownerMayChange = ownerMayChangeReading(state.advice);
+  const mayWrite = credentialed && ownerMayChange;
+  const offered = state.advice?.reading.supported.spoilerLevels ?? [];
+  const offeredImages = state.advice?.reading.supported.suitability ?? [];
+  const choicesReady = offered.length > 0 && offeredImages.length > 0;
   useSettingsNavigationDraft(
     'reading',
     readingNeedsNavigationDecision(state),
@@ -336,58 +429,111 @@ export function ReadingCard({
           <h2 id="settings-reading-heading">{m.settings_reading_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_reading_text()}</CardDescription>
-        <CardDescription>{m.settings_automatic_save_help()}</CardDescription>
+        {choicesReady ? (
+          <CardDescription>
+            {ownerMayChange ? m.settings_automatic_save_help() : m.settings_reading_read_only_text()}
+          </CardDescription>
+        ) : null}
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-4">
-        <FieldGroup>
-          <FieldSet>
-            <FieldLegend id={`${ids}-spoilers`}>{m.settings_spoiler_legend()}</FieldLegend>
-            <FieldDescription>{m.settings_spoiler_text()}</FieldDescription>
-            <RadioGroup
-              value={String(state.draft.spoilerLevel)}
-              disabled={!hydrated || !csrfToken}
-              onValueChange={(value) =>
-                void editor.edit({
-                  spoilerLevel: Number(value) as SpoilerLevel,
-                })
-              }
-              aria-labelledby={`${ids}-spoilers`}
-            >
-              {levels.map((level) => (
-                <FieldLabel key={level.value} htmlFor={`${ids}-level-${level.value}`}>
+        {choicesReady ? (
+          <>
+            <FieldGroup>
+              <FieldSet>
+                <FieldLegend id={`${ids}-spoilers`}>{m.settings_spoiler_legend()}</FieldLegend>
+                <FieldDescription>{m.settings_spoiler_text()}</FieldDescription>
+                <RadioGroup
+                  value={String(state.draft.spoilerLevel)}
+                  disabled={!mayWrite}
+                  onValueChange={(value) =>
+                    void editor.edit({
+                      spoilerLevel: Number(value) as SpoilerLevel,
+                    })
+                  }
+                  aria-labelledby={`${ids}-spoilers`}
+                >
+                  {levels
+                    .filter((level) => offered.includes(level.value))
+                    .map((level) => (
+                      <FieldLabel key={level.value} htmlFor={`${ids}-level-${level.value}`}>
+                        <Field orientation="horizontal">
+                          <FieldContent>
+                            <FieldTitle id={`${ids}-level-${level.value}-title`}>{level.title()}</FieldTitle>
+                            <FieldDescription id={`${ids}-level-${level.value}-text`}>{level.text()}</FieldDescription>
+                          </FieldContent>
+                          <RadioGroupItem
+                            id={`${ids}-level-${level.value}`}
+                            value={String(level.value)}
+                            aria-labelledby={`${ids}-level-${level.value}-title`}
+                            aria-describedby={`${ids}-level-${level.value}-text`}
+                          />
+                        </Field>
+                      </FieldLabel>
+                    ))}
+                </RadioGroup>
+              </FieldSet>
+              {offeredImages.includes('blur') || offeredImages.includes('show') ? (
+                <FieldLabel htmlFor={`${ids}-suitability`}>
                   <Field orientation="horizontal">
                     <FieldContent>
-                      <FieldTitle id={`${ids}-level-${level.value}-title`}>{level.title()}</FieldTitle>
-                      <FieldDescription id={`${ids}-level-${level.value}-text`}>{level.text()}</FieldDescription>
+                      <FieldTitle id={`${ids}-suitability-title`}>{m.settings_suitability_title()}</FieldTitle>
+                      <FieldDescription id={`${ids}-suitability-text`}>{m.settings_suitability_text()}</FieldDescription>
                     </FieldContent>
-                    <RadioGroupItem
-                      id={`${ids}-level-${level.value}`}
-                      value={String(level.value)}
-                      aria-labelledby={`${ids}-level-${level.value}-title`}
-                      aria-describedby={`${ids}-level-${level.value}-text`}
+                    <Switch
+                      id={`${ids}-suitability`}
+                      checked={state.draft.suitability === 'show'}
+                      disabled={!mayWrite}
+                      onCheckedChange={(checked) => void editor.edit({ suitability: checked ? 'show' : 'blur' })}
+                      aria-labelledby={`${ids}-suitability-title`}
+                      aria-describedby={`${ids}-suitability-text`}
                     />
                   </Field>
                 </FieldLabel>
-              ))}
-            </RadioGroup>
-          </FieldSet>
-          <FieldLabel htmlFor={`${ids}-suitability`}>
-            <Field orientation="horizontal">
-              <FieldContent>
-                <FieldTitle id={`${ids}-suitability-title`}>{m.settings_suitability_title()}</FieldTitle>
-                <FieldDescription id={`${ids}-suitability-text`}>{m.settings_suitability_text()}</FieldDescription>
-              </FieldContent>
-              <Switch
-                id={`${ids}-suitability`}
-                checked={state.draft.suitability === 'show'}
-                disabled={!hydrated || !csrfToken}
-                onCheckedChange={(checked) => void editor.edit({ suitability: checked ? 'show' : 'blur' })}
-                aria-labelledby={`${ids}-suitability-title`}
-                aria-describedby={`${ids}-suitability-text`}
-              />
-            </Field>
-          </FieldLabel>
-        </FieldGroup>
+              ) : null}
+            </FieldGroup>
+            <p className="text-sm text-muted-foreground">
+              {m.settings_reading_effective({
+                ...readingLabel(state.known),
+                defaultSpoilers: levels[0]!.title(),
+                defaultImages: m.settings_reading_blur(),
+              })}
+            </p>
+            <ReadingPreview ids={ids} draft={state.draft} confirmed={state.known} />
+            {ownerMayChange && !recovery && (state.known.spoilerLevel !== 0 || state.known.suitability !== 'blur') ? (
+              <Button
+                className={preferenceActionClassName}
+                type="button"
+                variant="outline"
+                disabled={busy || !mayWrite}
+                onClick={() => void editor.resetToNativeDefaults()}
+              >
+                {m.settings_reading_reset()}
+              </Button>
+            ) : null}
+          </>
+        ) : (
+          <Alert>
+            <AlertTitle>{m.settings_reading_choices_unavailable_title()}</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3">
+              <p>{m.settings_reading_choices_unavailable_text()}</p>
+              <Button
+                className={preferenceActionClassName}
+                type="button"
+                variant="outline"
+                disabled={waiting || busy}
+                onClick={() => void editor.reload(waiting)}
+              >
+                {m.settings_reload()}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        {choicesReady && !ownerMayChange && state.advice ? (
+          <Alert>
+            <AlertTitle>{m.settings_reading_read_only_title()}</AlertTitle>
+            <AlertDescription>{m.settings_reading_read_only_text()}</AlertDescription>
+          </Alert>
+        ) : null}
         <div aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
           {state.phase === 'saving' ? m.settings_saving() : null}
           {state.phase === 'saved' ? m.settings_saved() : null}
@@ -439,7 +585,7 @@ export function ReadingCard({
                     className={preferenceActionClassName}
                     type="button"
                     variant="outline"
-                    disabled={waiting || busy || !csrfToken}
+                    disabled={waiting || busy || !mayWrite}
                     onClick={() => void editor.retry(waiting)}
                   >
                     {m.settings_reading_retry_original()}
@@ -459,7 +605,7 @@ export function ReadingCard({
                     <Button
                       className={preferenceActionClassName}
                       type="button"
-                      disabled={!csrfToken || sameReading(state.known, state.draft)}
+                      disabled={!mayWrite || sameReading(state.known, state.draft)}
                       onClick={() => void editor.submit()}
                     >
                       {m.settings_reading_save_draft()}

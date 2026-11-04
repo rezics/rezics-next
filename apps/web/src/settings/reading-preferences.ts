@@ -30,12 +30,53 @@ export function readingMutation(known: ReadingPreferences, draft: ReadingValues)
   });
 }
 
+/** Native defaults with the reviewed version; never a browser-invented default. */
+export function readingReset(known: ReadingPreferences): Readonly<PreferenceChange> | null {
+  if (known.spoilerLevel === 0 && known.suitability === 'blur') return null;
+  return Object.freeze({
+    expectedVersion: known.version,
+    spoilerLevel: 0 as const,
+    suitability: 'blur' as const,
+    idempotencyKey: crypto.randomUUID(),
+  });
+}
+
+export function ownerMayChangeReading(advice: ReadingPreferences['advice']): boolean {
+  return advice?.viewerState === 'current' && advice.allowedActions.update.allowed === true;
+}
+
+export function readingAdviceFor(
+  values: ReadingValues,
+  writable = true,
+): NonNullable<ReadingPreferences['advice']> {
+  return {
+    viewerState: 'current',
+    allowedActions: {
+      read: { allowed: true },
+      update: writable ? { allowed: true } : { allowed: false, reason: 'not_authorized' },
+    },
+    reading: {
+      supported: { spoilerLevels: [0, 1, 2], suitability: ['blur', 'show'] },
+      effective: { spoilerLevel: values.spoilerLevel, suitability: values.suitability },
+      defaults: { spoilerLevel: 0, suitability: 'blur' },
+    },
+  };
+}
+
+function supportedReading(preferences: ReadingPreferences): boolean {
+  const advice = preferences.advice;
+  if (!advice) return [0, 1, 2].includes(preferences.spoilerLevel) && ['blur', 'show'].includes(preferences.suitability);
+  return (
+    advice.reading.supported.spoilerLevels.includes(preferences.spoilerLevel) &&
+    advice.reading.supported.suitability.includes(preferences.suitability)
+  );
+}
+
 function validReading(preferences: ReadingPreferences, minimumVersion: number): boolean {
   return (
     Number.isSafeInteger(preferences.version) &&
     preferences.version >= Math.max(0, minimumVersion) &&
-    [0, 1, 2].includes(preferences.spoilerLevel) &&
-    ['blur', 'show'].includes(preferences.suitability)
+    supportedReading(preferences)
   );
 }
 
