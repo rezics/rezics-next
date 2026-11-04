@@ -1,3 +1,5 @@
+import { QuerySharePreview } from './query-share-preview';
+import { parseQueryShare, shareUnavailable } from './query-share';
 import { facetProperties, FILTER_LIMITS, parseFilter, type FilterDocument, type FilterRange } from '@rezics/filter';
 import * as v from 'valibot';
 import { Link, useRouter } from '@tanstack/react-router';
@@ -302,6 +304,22 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
     );
     if (state.status === 'closed') recovery = { status: 'closed' };
     return { ...state, ...(recovery ? { recovery } : {}) };
+  });
+
+const prepareShareWithLocale = createServerFn({ method: 'GET' })
+  .validator(validateSearchInput)
+  .handler(async ({ data }) => {
+    const reader = await readScopedSearchReader(getRequest());
+    if ((data.reader ?? undefined) !== reader?.owner) return shareUnavailable();
+    const body = discoveryRequest({ ...requestParams(data), cursor: undefined }, requestLanguages(data.locale));
+    const response = await kernelClient(data.locale).subjects.$search.post(
+      { ...body, prepareShare: true },
+      {
+        ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+        fetch: { signal: getRequest().signal },
+      },
+    );
+    return response.status === 200 ? parseQueryShare(response.data) : shareUnavailable();
   });
 
 const readSearchWithLocale = createServerFn({ method: 'GET' })
@@ -1300,6 +1318,32 @@ export function SearchPage({
   return (
     <section className="mx-auto max-w-5xl space-y-6">
       <PageHeading>{m.search_heading({}, options)}</PageHeading>
+      {data?.recovery?.status === 'ready' && data.queryState && (
+        <QuerySharePreview
+          key={JSON.stringify([stateKey, locale, session])}
+          locale={locale}
+          changed={editing || Object.keys(rangeDraftState.properties).length > 0}
+          prepare={() =>
+            prepareShareWithLocale({
+              data: {
+                query: committedState.query,
+                locale,
+                facetValues: committedState.facets,
+                type: committedState.type,
+                kinds: committedState.kinds,
+                languages: committedState.languages,
+                condition: committedState.condition,
+                ranges: committedState.ranges,
+                filter: committedState.filter,
+                sort: committedState.sort,
+                resourceScope: committedState.resourceScope,
+                ratingPopulation: committedState.ratingPopulation,
+                reader: session ?? undefined,
+              },
+            })
+          }
+        />
+      )}
       {hasFilterPanel ? (
         <>
           {filterEntrance}

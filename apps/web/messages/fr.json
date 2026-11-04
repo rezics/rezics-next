@@ -8092,5 +8092,16 @@
   "concept_explore_sign_in": "Connectez-vous pour vérifier si une correction est disponible.",
   "concept_explore_refresh_actions": "Actualiser la source et les actions",
   "concept_explore_pin_unsupported": "Une version historique de la source a été demandée, mais ce lecteur ne peut pas la résoudre.",
-  "concept_explore_pin_unsupported_detail": "La page ci-dessous lit la source actuelle et ne prétend pas suivre la version demandée."
+  "concept_explore_pin_unsupported_detail": "La page ci-dessous lit la source actuelle et ne prétend pas suivre la version demandée.",
+  "search_share_action": "Partager la recherche exécutée",
+  "search_share_draft": "Les modifications non appliquées sont exclues. Voici la dernière recherche exécutée.",
+  "search_share_executed": "Voici la dernière recherche exécutée. Les autorisations actuelles du destinataire s’appliquent.",
+  "search_share_loading": "Préparation de l’aperçu…",
+  "search_share_copy": "Copier le lien",
+  "search_share_copied": "Lien copié.",
+  "search_share_refused": "Copie refusée. Sélectionnez et copiez le lien ci-dessous.",
+  "search_share_oversized": "Cette recherche est trop grande pour un lien. Modifiez-la pour la réduire.",
+  "search_share_private": "Cette recherche contient des conditions privées ou non transférables. Retirez-les explicitement avant de partager.",
+  "search_share_unavailable": "Le partage est indisponible. Votre recherche est conservée ; réessayez.",
+  "search_share_close": "Fermer l’aperçu"
 }

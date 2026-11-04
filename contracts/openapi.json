@@ -409801,6 +409801,9 @@
                     ],
                     "type": "object"
                   },
+                  "prepareShare": {
+                    "type": "boolean"
+                  },
                   "properties": {
                     "items": {
                       "type": "string"
@@ -414868,6 +414871,157 @@
                         "children",
                         "next",
                         "as_of"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "anyOf": [
+                            {
+                              "const": "allowed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "disabled",
+                              "type": "string"
+                            },
+                            {
+                              "const": "unavailable",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "document": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "filter": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 16384,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "languages": {
+                                  "items": {
+                                    "maxLength": 35,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 8,
+                                  "type": "array"
+                                },
+                                "sort": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "text": {
+                                  "maxLength": 512,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "text",
+                                "filter",
+                                "languages",
+                                "sort"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "parameters": {
+                          "anyOf": [
+                            {
+                              "maxLength": 8192,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "const": "ready",
+                              "type": "string"
+                            },
+                            {
+                              "const": "private_context",
+                              "type": "string"
+                            },
+                            {
+                              "const": "unsupported",
+                              "type": "string"
+                            },
+                            {
+                              "const": "oversized",
+                              "type": "string"
+                            },
+                            {
+                              "const": "unavailable",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "selections": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "language": {
+                                "maxLength": 35,
+                                "type": "string"
+                              },
+                              "value": {
+                                "maxLength": 256,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "language"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 128,
+                          "type": "array"
+                        },
+                        "viewer": {
+                          "anyOf": [
+                            {
+                              "const": "anonymous",
+                              "type": "string"
+                            },
+                            {
+                              "const": "signed-in",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "viewer",
+                        "action",
+                        "reason",
+                        "document",
+                        "parameters",
+                        "selections"
                       ],
                       "type": "object"
                     }

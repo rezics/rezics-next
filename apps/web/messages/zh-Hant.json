@@ -8092,5 +8092,16 @@
   "concept_explore_sign_in": "登入以檢查是否可以更正。",
   "concept_explore_refresh_actions": "重新整理來源與操作",
   "concept_explore_pin_unsupported": "要求了歷史來源固定版本，但此讀取器無法解析固定歷史。",
-  "concept_explore_pin_unsupported_detail": "下方頁面讀取目前來源，不表示與要求的固定版本保持連續。"
+  "concept_explore_pin_unsupported_detail": "下方頁面讀取目前來源，不表示與要求的固定版本保持連續。",
+  "search_share_action": "分享已執行的搜尋",
+  "search_share_draft": "未套用的編輯不包含在內。這是上次執行的搜尋。",
+  "search_share_executed": "這是上次執行的搜尋。接收者仍須具有目前權限。",
+  "search_share_loading": "正在準備預覽…",
+  "search_share_copy": "複製連結",
+  "search_share_copied": "連結已複製。",
+  "search_share_refused": "複製遭拒。請選取並複製下方連結。",
+  "search_share_oversized": "此搜尋過大，無法透過連結分享。請繼續編輯以縮小搜尋。",
+  "search_share_private": "此搜尋含有私密或不可攜的條件。分享前請明確移除這些條件。",
+  "search_share_unavailable": "暫時無法分享。搜尋已保留，請重試。",
+  "search_share_close": "關閉預覽"
 }

@@ -8092,5 +8092,16 @@
   "concept_explore_sign_in": "修正が可能か確認するにはサインインしてください。",
   "concept_explore_refresh_actions": "ソースと操作を更新",
   "concept_explore_pin_unsupported": "過去のソース版が指定されましたが、この読み取り機能は版を固定できません。",
-  "concept_explore_pin_unsupported_detail": "以下のページは現在のソースを読み取り、指定された版との継続性を示しません。"
+  "concept_explore_pin_unsupported_detail": "以下のページは現在のソースを読み取り、指定された版との継続性を示しません。",
+  "search_share_action": "実行した検索を共有",
+  "search_share_draft": "未適用の編集は含まれません。最後に実行した検索です。",
+  "search_share_executed": "最後に実行した検索です。受信者の現在の権限が適用されます。",
+  "search_share_loading": "プレビューを準備中…",
+  "search_share_copy": "リンクをコピー",
+  "search_share_copied": "リンクをコピーしました。",
+  "search_share_refused": "コピーが拒否されました。以下のリンクを選択してコピーしてください。",
+  "search_share_oversized": "この検索はリンクには大きすぎます。編集して短くしてください。",
+  "search_share_private": "非公開または移植できない条件があります。共有前に明示的に削除してください。",
+  "search_share_unavailable": "共有を利用できません。検索は保持されています。再試行してください。",
+  "search_share_close": "プレビューを閉じる"
 }
