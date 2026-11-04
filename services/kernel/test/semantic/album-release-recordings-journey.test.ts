@@ -228,12 +228,16 @@ test('a reader follows an album through two released editions and ordered record
 
   const page = ok(await fixture.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: cd.id } }));
   expect(page.subject).toBe(cd.id);
-  expect(page.viewer).toEqual({ type: 'schema:MusicRelease', id: cd.id });
+  expect(page.catalogue).toMatchObject({ state: 'released', type: 'schema:MusicRelease', digest: bundledDigest });
+  expect(page.viewer).toMatchObject({
+    state: 'anonymous',
+    actions: { statementPropose: 'denied' },
+  });
   const actionStatus = (page as { actions?: { status: string } }).actions?.status ?? 'missing';
   expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(actionStatus);
   expect(Object.keys(page.reads as object).length).toBeLessThanOrEqual(16);
   const editorPage = ok(await fixture.request('editor', 'POST', '/v1/pages:read', { target: { subject: cd.id } }));
-  expect(editorPage.viewer).toEqual(page.viewer);
+  expect(editorPage.viewer).toMatchObject({ state: 'account', actions: { statementPropose: expect.stringMatching(/^(allowed|denied|unavailable)$/) } });
   const { viewer: _v, actions: _a, ...publicAnonymous } = page;
   const { viewer: _ev, actions: _ea, ...publicEditor } = editorPage;
   expect(publicEditor).toEqual(publicAnonymous);

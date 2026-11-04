@@ -198,7 +198,7 @@ test('patterns must be safe and releases are bounded', () => {
 
 test('the bundled catalogue admits exact file hashes, byte size and directed file associations', () => {
   const { types, properties } = bundledRelease;
-  expect(bundledRelease.catalogue.version).toBe('1.0.2');
+  expect(bundledRelease.catalogue.version).toBe('1.0.3');
   expect(types['schema:MediaObject']?.properties).toEqual(
     expect.arrayContaining([
       'wdt:P4092',
