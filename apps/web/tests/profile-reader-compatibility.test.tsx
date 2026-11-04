@@ -322,9 +322,9 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     ).toContain(avatarId);
     expect(host.innerHTML).toContain('organization.example.test');
     expect(publicSwitch(m.settings_public_reviews()).getAttribute('aria-checked')).toBe('true');
-    expect(publicSwitch(m.settings_public_reviews()).disabled).toBe(true);
+    expect(publicSwitch(m.settings_public_reviews()).getAttribute('aria-disabled')).toBe('true');
     expect(publicSwitch(m.settings_public_speakers()).getAttribute('aria-checked')).toBe('false');
-    expect(publicSwitch(m.settings_public_speakers()).disabled).toBe(true);
+    expect(publicSwitch(m.settings_public_speakers()).getAttribute('aria-disabled')).toBe('true');
     expect(button(m.settings_profile_reload_current()).disabled).toBe(false);
     const readOnlyState = readOnlyEditor.snapshot();
     readOnlyEditor.edit({ biography: 'A read-only callback must not change this.' });
@@ -428,7 +428,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await until(() => writableEditor.snapshot().phase === 'saved', 'profile save confirmation');
 
     const reviewSwitch = publicSwitch(m.settings_public_reviews());
-    expect(reviewSwitch.disabled).toBe(false);
+    expect(reviewSwitch.getAttribute('aria-disabled')).toBeNull();
     const viewSaveCount = saveRequests.length;
     await click(reviewSwitch);
     await until(() => saveRequests.length === viewSaveCount + 1, 'the public activity command');
