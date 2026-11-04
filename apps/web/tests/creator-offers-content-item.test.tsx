@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -37,12 +37,11 @@ test('Creator Offer shared items preserve admitted destinations independent cont
   mock.module('cloudflare:workers', () => ({ env: {} }));
   mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
   mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
-  mock.module('../src/checkout/creator-offers', () => ({
-    manageCreatorOffer: async (input: (typeof calls)[number]) => {
-      calls.push(input);
-      return result;
-    },
-  }));
+  const offersApi = await import('../src/checkout/creator-offers');
+  spyOn(offersApi, 'manageCreatorOffer').mockImplementation(async (input) => {
+    calls.push({ data: input.data, headers: { 'X-CSRF-Token': new Headers(input.headers).get('X-CSRF-Token')! } });
+    return result;
+  });
   const { createRoot } = await import('react-dom/client');
   const { CreatorOffersPage } = await import('../src/checkout/creator-offers-page');
   const { creatorOfferFixture, delistedCreatorOfferFixture, configuredPriceExample } =
