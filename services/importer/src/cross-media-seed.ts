@@ -2110,8 +2110,8 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
       ...result,
       status:
         result.status === 'imported-with-gaps' || characterResult.status === 'imported-with-gaps'
-          ? 'imported-with-gaps'
-          : 'imported',
+          ? ('imported-with-gaps' as const)
+          : ('imported' as const),
       readings: [...readings.values()],
       members: [...members.values()].sort(
         (left, right) => left.source.localeCompare(right.source) || left.key.localeCompare(right.key),
