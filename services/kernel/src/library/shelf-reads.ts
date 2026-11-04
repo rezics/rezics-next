@@ -303,10 +303,10 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
                 ? ''
                 : String(last.priority)
               : query.orderBy === 'lastActivity'
-              ? last.lastActivityAt
-              : query.orderBy === 'createdAt'
-                ? last.createdAt
-                : (last.finishedAt ?? ''));
+                ? last.lastActivityAt
+                : query.orderBy === 'createdAt'
+                  ? last.createdAt
+                  : (last.finishedAt ?? ''));
         return {
           entries: result.entries,
           ...(score ? { scoreQuestion: score.question } : {}),

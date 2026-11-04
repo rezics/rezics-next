@@ -36,7 +36,10 @@ for (const scale of [64, 512, 4096])
       priority: index % 17 === 0 || index % 13 === 0 ? null : (index % 100) + 1,
     }));
     const unrelatedRows: PriorityRow[] = Array.from({ length: scale }, () => ({
-      subjectId: newId(0x7b20), state: 'planned', typeId: typeA, priority: 1,
+      subjectId: newId(0x7b20),
+      state: 'planned',
+      typeId: typeA,
+      priority: 1,
     }));
 
     async function insert(accountId: string, ownerRoute: number, rows: PriorityRow[]) {
@@ -47,8 +50,16 @@ for (const scale of [64, 512, 4096])
            type_id,type_source_id,type_source_partition,type_source_epoch,type_source_position)
          SELECT $1,$2,x.subject_id,x.state,1,$3,$3,x.transaction_id,$3,NULL,x.type_id,x.subject_id,$4,1,0
          FROM unnest($5::uuid[],$6::text[],$7::uuid[],$8::uuid[]) AS x(subject_id,state,type_id,transaction_id)`,
-        [ownerRoute, accountId, at, partitionOf(0x7b20), rows.map((row) => row.subjectId), rows.map((row) => row.state),
-          rows.map((row) => row.typeId), transactions],
+        [
+          ownerRoute,
+          accountId,
+          at,
+          partitionOf(0x7b20),
+          rows.map((row) => row.subjectId),
+          rows.map((row) => row.state),
+          rows.map((row) => row.typeId),
+          transactions,
+        ],
       );
       const ranked = rows.filter((row) => row.priority !== null);
       if (ranked.length)
@@ -59,8 +70,15 @@ for (const scale of [64, 512, 4096])
            SELECT $1,$2,x.subject_id,x.fact_id,1,NULL,x.priority,$3,x.transaction_id,$3,$3,x.transaction_id
            FROM unnest($4::uuid[],$5::uuid[],$6::smallint[],$7::uuid[])
              AS x(subject_id,fact_id,priority,transaction_id)`,
-          [ownerRoute, accountId, at, ranked.map((row) => row.subjectId), ranked.map(() => newId(ownerRoute)),
-            ranked.map((row) => row.priority), ranked.map(() => newId(ownerRoute))],
+          [
+            ownerRoute,
+            accountId,
+            at,
+            ranked.map((row) => row.subjectId),
+            ranked.map(() => newId(ownerRoute)),
+            ranked.map((row) => row.priority),
+            ranked.map(() => newId(ownerRoute)),
+          ],
         );
     }
 
@@ -77,7 +95,11 @@ for (const scale of [64, 512, 4096])
     try {
       await insert(owner, route, ownerRows);
       await insert(foreign, route, unrelatedRows);
-      await insert(remote, foreignRoute, unrelatedRows.map((row) => ({ ...row, typeId: remoteType })));
+      await insert(
+        remote,
+        foreignRoute,
+        unrelatedRows.map((row) => ({ ...row, typeId: remoteType })),
+      );
 
       const allExpected = ordered(ownerRows, 'asc');
       const all = await page('asc', null, null, 19);
@@ -105,7 +127,10 @@ for (const scale of [64, 512, 4096])
         [route, owner, target.subjectId, at, newId(route)],
       );
       const moved = { ...target, priority: 1 };
-      const afterMutation = ordered(matching.map((row) => row.subjectId === target.subjectId ? moved : row), 'asc');
+      const afterMutation = ordered(
+        matching.map((row) => (row.subjectId === target.subjectId ? moved : row)),
+        'asc',
+      );
       const mutatedPage = await page('asc', 'planned', typeA, 3);
       expect(mutatedPage.entries.map((row) => [row.subjectId, row.priority])).toEqual(
         afterMutation.slice(0, 3).map((row) => [row.subjectId, row.priority]),

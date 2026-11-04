@@ -1,38 +1,32 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "apps/web/src/library/shelf-*",
-    "apps/web/src/library/entries-*",
-    "apps/web/src/library/*priority*",
-    "apps/web/src/library/rich-private-entry/*",
-    "apps/web/test/library/*priority*"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "account",
-    "deletion"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "estimate": {
-    "lines": 300,
-    "files": 6
-  },
-  "acceptance": {
-    "tests": [
-      "The existing shelf offers native priority order and both directions, shows each returned rank and explicit Unranked state, and retains current status/type filters and URL cursor reset behavior.",
-      "Priority edits use the existing revisioned private annotation seam and exact Entry incarnation; stale/currentness conflicts require fresh review, uncertain writes retain their original request key and operands, and navigation/account retirement prevents late responses from changing another visit.",
-      "The actual installed @rezics/client typing accepts orderBy priority and exposes priority as number|null without casts, handwritten declarations, or an untyped endpoint."
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'apps/web/src/library/shelf-*',
+      'apps/web/src/library/entries-*',
+      'apps/web/src/library/*priority*',
+      'apps/web/src/library/rich-private-entry/*',
+      'apps/web/test/library/*priority*',
     ],
-    "failing": true,
-    "workerOwned": true
-  }
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'account', 'deletion'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'estimate': { 'lines': 300, 'files': 6 },
+  'acceptance':
+    {
+      'tests':
+        [
+          'The existing shelf offers native priority order and both directions, shows each returned rank and explicit Unranked state, and retains current status/type filters and URL cursor reset behavior.',
+          'Priority edits use the existing revisioned private annotation seam and exact Entry incarnation; stale/currentness conflicts require fresh review, uncertain writes retain their original request key and operands, and navigation/account retirement prevents late responses from changing another visit.',
+          'The actual installed @rezics/client typing accepts orderBy priority and exposes priority as number|null without casts, handwritten declarations, or an untyped endpoint.',
+        ],
+      'failing': true,
+      'workerOwned': true,
+    },
 }
 ---
 
