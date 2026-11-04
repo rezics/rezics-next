@@ -47,9 +47,10 @@ import { profileSnapshot, ProfileInputError } from '../profile-cache.ts';
 import {
   cataloguePageMetadata,
   characterWorkIdentityOverlay,
+  copyWorkDisclosureOverlay,
   pageViewerActions,
   semanticPageView,
-  type CharacterWorkIdentityOverlay,
+  type SemanticPageOverlay,
 } from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
@@ -530,7 +531,8 @@ function nativePageRoute<App>(
         : undefined;
       const identityOverlay =
         subject && definitionRelease?.release
-          ? characterWorkIdentityOverlay(definitionRelease.release, subject.type, languages?.[0] ?? 'en')
+          ? (characterWorkIdentityOverlay(definitionRelease.release, subject.type, languages?.[0] ?? 'en') ??
+            copyWorkDisclosureOverlay(definitionRelease.release, subject.type, languages?.[0] ?? 'en'))
           : undefined;
       const pageViewer =
         pageCatalogue?.state === 'released' || identityOverlay
@@ -656,7 +658,7 @@ async function pageAnswer(input: {
   finalGuard?: (session: string | null) => Promise<string | null>;
   resolveBuiltin: NonNullable<Parameters<typeof readPage>[0]['resolveBuiltin']>;
   catalogue?: ReturnType<typeof cataloguePageMetadata>;
-  overlay?: CharacterWorkIdentityOverlay;
+  overlay?: SemanticPageOverlay;
   viewer?: () => Promise<{
     state: 'anonymous' | 'account';
     account?: string;
