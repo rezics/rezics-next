@@ -83,9 +83,13 @@ function parseReviewDestinationPage(value: unknown): ReviewDestinationPage {
     const normalizedLabel =
       label === null
         ? null
-        : record(label) && typeof (label as Record<string, unknown>).value === 'string' &&
+        : record(label) &&
+            typeof (label as Record<string, unknown>).value === 'string' &&
             typeof (label as Record<string, unknown>).language === 'string'
-          ? { value: (label as Record<string, unknown>).value as string, language: (label as Record<string, unknown>).language as string }
+          ? {
+              value: (label as Record<string, unknown>).value as string,
+              language: (label as Record<string, unknown>).language as string,
+            }
           : undefined;
     if (
       !subject ||

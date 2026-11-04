@@ -170,13 +170,15 @@ export async function readReviewDestinationPage(
     if (!decoded.ok || decoded.epoch !== current.subject.source.epoch || decoded.after.length !== 2)
       return expiredPage();
     const [value, horizon] = decoded.after;
-    if (typeof value !== 'string' || typeof horizon !== 'string')
-      return expiredPage();
+    if (typeof value !== 'string' || typeof horizon !== 'string') return expiredPage();
     const prefix = `${REVIEW_DESTINATION_CURSOR_POLICY}:`;
-    if (!horizon.startsWith(prefix) || !/^\d+$/.test(horizon.slice(prefix.length)))
-      return expiredPage();
+    if (!horizon.startsWith(prefix) || !/^\d+$/.test(horizon.slice(prefix.length))) return expiredPage();
     policyHorizon = Number(horizon.slice(prefix.length));
-    if (!Number.isSafeInteger(policyHorizon) || policyHorizon > now || now - policyHorizon > REVIEW_DESTINATION_POLICY_HORIZON_MS) {
+    if (
+      !Number.isSafeInteger(policyHorizon) ||
+      policyHorizon > now ||
+      now - policyHorizon > REVIEW_DESTINATION_POLICY_HORIZON_MS
+    ) {
       return expiredPage();
     }
     innerCursor = value;

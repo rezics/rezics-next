@@ -48,7 +48,9 @@ const calls: { path: string; query: string; authorization: string | null; method
 const headers: string[] = [];
 const serverFunctionSignals: (AbortSignal | undefined)[] = [];
 let realmRead: (cursor: string | null) => Promise<Response> = async (cursor) =>
-  cursor ? Response.json({ items: [laterRealm], next: null }) : Response.json({ items: [firstRealm], next: 'later-page' });
+  cursor
+    ? Response.json({ items: [laterRealm], next: null })
+    : Response.json({ items: [firstRealm], next: 'later-page' });
 let destinationRead: (realmId: string, _boardId: string | null) => Promise<Response> = async (realmId) =>
   Response.json({
     state: 'choices',
@@ -67,7 +69,12 @@ const client = createKernelClient('https://kernel.review.test', {
   fetch: async (input, init) => {
     const req = new Request(input, init);
     const url = new URL(req.url);
-    calls.push({ path: url.pathname, query: url.search, authorization: req.headers.get('authorization'), method: req.method });
+    calls.push({
+      path: url.pathname,
+      query: url.search,
+      authorization: req.headers.get('authorization'),
+      method: req.method,
+    });
     if (url.pathname === '/v1/me/realms') return realmRead(url.searchParams.get('cursor'));
     const match = /^\/v1\/realms\/([^/]+)\/review-destinations$/.exec(url.pathname);
     if (match) return destinationRead(decodeURIComponent(match[1]!), url.searchParams.get('boardId'));
@@ -126,7 +133,9 @@ mock.module('cloudflare:workers', () => ({
 }));
 mock.module('../src/kernel/client', () => ({ kernelClient: () => client, requestLocale: () => 'en' }));
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://review.test/en/subjects/review' });
 const globals = {
   window,
@@ -151,7 +160,10 @@ const { reviewThreadHref } = await import('../src/threads/review-policy');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const navigations: string[] = [];
-Object.defineProperty(window.location, 'assign', { configurable: true, value: (href: string) => navigations.push(href) });
+Object.defineProperty(window.location, 'assign', {
+  configurable: true,
+  value: (href: string) => navigations.push(href),
+});
 const signedIn = (subject = reader) => ({ state: 'signed-in', subject, csrfToken: csrf });
 const settle = () => act(async () => new Promise<void>((done) => window.setTimeout(done, 0)));
 
@@ -198,7 +210,9 @@ function reset() {
   navigations.length = 0;
   serverReader = reader;
   realmRead = async (cursor) =>
-    cursor ? Response.json({ items: [laterRealm], next: null }) : Response.json({ items: [firstRealm], next: 'later-page' });
+    cursor
+      ? Response.json({ items: [laterRealm], next: null })
+      : Response.json({ items: [firstRealm], next: 'later-page' });
   destinationRead = async (realmId) =>
     Response.json({
       state: 'choices',
@@ -247,19 +261,27 @@ test('the later Realm page and exact Board require deliberate selection before t
     await view.click(m.thread_review_write());
     await until(() => calls.filter(({ path }) => path === '/v1/me/realms').length === 1);
     expect(calls.filter(({ path }) => path.endsWith('/review-destinations'))).toHaveLength(0);
-    await until(() => [...view.host.querySelectorAll('button')].some((button) => button.textContent?.includes(m.realms_more())));
+    await until(() =>
+      [...view.host.querySelectorAll('button')].some((button) => button.textContent?.includes(m.realms_more())),
+    );
     await view.click(m.realms_more());
     await until(() => calls.filter(({ path }) => path === '/v1/me/realms').length === 2);
     expect(calls[1]?.query).toContain('cursor=later-page');
 
-    await until(() => [...view.host.querySelectorAll('button')].some((button) => button.textContent?.includes(laterRealm.name)));
+    await until(() =>
+      [...view.host.querySelectorAll('button')].some((button) => button.textContent?.includes(laterRealm.name)),
+    );
     await view.click(laterRealm.name);
     await until(() => calls.filter(({ path }) => path.endsWith('/review-destinations')).length === 1);
     const page = calls.find(({ path }) => path.endsWith('/review-destinations'))!;
     expect(page.path).toBe(`/v1/realms/${laterRealm.realmId}/review-destinations`);
     expect(page.query).toContain(`subjectId=${subjectId}`);
     expect(navigations).toHaveLength(0);
-    await until(() => [...view.host.querySelectorAll('button')].some((button) => button.textContent?.includes(m.thread_review_select_board())));
+    await until(() =>
+      [...view.host.querySelectorAll('button')].some((button) =>
+        button.textContent?.includes(m.thread_review_select_board()),
+      ),
+    );
     expect(view.host.textContent).toContain(longTitle);
     expect(view.host.textContent).toContain(laterRealm.name);
     expect(view.host.querySelector('a')).toBeNull();
@@ -270,7 +292,9 @@ test('the later Realm page and exact Board require deliberate selection before t
     expect(calls[3]?.query).toContain(`subjectId=${subjectId}`);
     expect(calls[3]?.query).toContain(`boardId=${recordedBoard.id}`);
     expect(navigations).toEqual([reviewThreadHref('en', recordedBoard.id, subjectId, subjectTitle)]);
-    expect(calls.every(({ authorization, method }) => authorization === 'Bearer review-token' && method === 'GET')).toBe(true);
+    expect(
+      calls.every(({ authorization, method }) => authorization === 'Bearer review-token' && method === 'GET'),
+    ).toBe(true);
     expect(headers.every((header) => header === 'cache-control: private, no-store')).toBe(true);
   } finally {
     await view.unmount();
@@ -293,7 +317,11 @@ test('a Realm replacement retires a late destination page and its selection', as
     await act(async () => view.query.setQueryData(sessionQuery.queryKey, signedIn(otherReader)));
     await settle();
     await act(async () => view.query.setQueryData(sessionQuery.queryKey, signedIn()));
-    await view.render({ subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000096', locale: 'zh-Hant', subjectTitle: '替換後的作品' });
+    await view.render({
+      subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000096',
+      locale: 'zh-Hant',
+      subjectTitle: '替換後的作品',
+    });
     expect(serverFunctionSignals.at(-1)?.aborted).toBe(true);
     pending.resolve(
       Response.json({

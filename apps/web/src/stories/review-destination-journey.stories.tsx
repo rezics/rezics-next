@@ -62,7 +62,9 @@ function fixture(mode: Mode) {
       if (url.origin !== 'http://kernel.local') return previous(input, init);
       observed.push({ path: url.pathname, query: url.search });
       if (url.pathname === '/v1/me/realms')
-        return mode === 'empty' ? Response.json({ items: [], next: null }) : Response.json({ items: [realm], next: null });
+        return mode === 'empty'
+          ? Response.json({ items: [], next: null })
+          : Response.json({ items: [realm], next: null });
       const destination = /^\/v1\/realms\/([^/]+)\/review-destinations$/.exec(url.pathname);
       if (!destination) return previous(input, init);
       if (held) await pending;
@@ -70,7 +72,13 @@ function fixture(mode: Mode) {
       if (mode === 'denied')
         return Response.json({ state: 'denied', viewer: { state: 'denied' }, context: null, items: [], next: null });
       if (mode === 'empty')
-        return Response.json({ state: 'no-destinations', viewer: { state: 'current' }, context, items: [], next: null });
+        return Response.json({
+          state: 'no-destinations',
+          viewer: { state: 'current' },
+          context,
+          items: [],
+          next: null,
+        });
       return Response.json({ state: 'choices', viewer: { state: 'current' }, context, items: [item], next: null });
     }) as typeof fetch;
     globalThis.fetch = fetcher;

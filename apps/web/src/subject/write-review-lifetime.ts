@@ -232,7 +232,12 @@ export function beginReviewEntryRead(
   kind: ReviewEntryReadTicket['kind'],
 ): ReviewEntryReadTicket | null {
   if (!visit.ready || !reviewEntryVisitIsCurrent(visit) || visit.pending[kind]) return null;
-  const ticket: ReviewEntryReadTicket = { visit, generation: ++visit.readGeneration, kind, controller: new AbortController() };
+  const ticket: ReviewEntryReadTicket = {
+    visit,
+    generation: ++visit.readGeneration,
+    kind,
+    controller: new AbortController(),
+  };
   visit.pending[kind] = ticket;
   return ticket;
 }

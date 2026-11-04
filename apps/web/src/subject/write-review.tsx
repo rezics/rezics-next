@@ -52,9 +52,10 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
   const [selectedRealm, setSelectedRealm] = useState<RealmLink | null>(null);
   const [boards, setBoards] = useState<BoardReadState>({ state: 'idle' });
   const [inspection, setInspection] = useState<InspectionState>({ state: 'idle' });
-  const tickets = useRef<{ realms: ReviewEntryReadTicket | null; boards: ReviewEntryReadTicket | null }>(
-    { realms: null, boards: null },
-  );
+  const tickets = useRef<{ realms: ReviewEntryReadTicket | null; boards: ReviewEntryReadTicket | null }>({
+    realms: null,
+    boards: null,
+  });
 
   function retireRead(kind: 'realms' | 'boards') {
     const previous = tickets.current[kind];
@@ -148,9 +149,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
     void readBoardPage(realm, undefined);
   }
 
-  async function chooseBoard(
-    board: ReviewDestinationPage['items'][number],
-  ) {
+  async function chooseBoard(board: ReviewDestinationPage['items'][number]) {
     const realm = selectedRealm;
     if (!realm || !reviewEntryVisitIsCurrent(visit)) return;
     retireRead('boards');
@@ -249,7 +248,9 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
             ) : null}
             {realms.state === 'failed' ? (
               <div className="space-y-2">
-                <p role="alert">{expiredRealmCursor ? m.thread_review_cursor_expired() : m.thread_review_unavailable()}</p>
+                <p role="alert">
+                  {expiredRealmCursor ? m.thread_review_cursor_expired() : m.thread_review_unavailable()}
+                </p>
                 {expiredRealmCursor ? (
                   <Button type="button" variant="outline" onClick={() => void readRealms(undefined)}>
                     {m.thread_review_restart()}
@@ -284,11 +285,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
                   ))}
                 </ul>
                 {realms.next ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void readRealms(realms.next!)}
-                  >
+                  <Button type="button" variant="outline" onClick={() => void readRealms(realms.next!)}>
                     {m.realms_more()}
                   </Button>
                 ) : null}
@@ -297,10 +294,15 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
           </section>
 
           {selectedRealm ? (
-            <section aria-labelledby="review-board-heading" className="min-w-0 space-y-3 border-t border-border/70 pt-4">
+            <section
+              aria-labelledby="review-board-heading"
+              className="min-w-0 space-y-3 border-t border-border/70 pt-4"
+            >
               <h3 id="review-board-heading" className="text-base font-semibold [overflow-wrap:anywhere]">
                 {m.thread_review_choose_board()}:{' '}
-                {boardPage?.context?.realm.id === selectedRealm.realmId ? boardPage.context.realm.title : selectedRealm.name}
+                {boardPage?.context?.realm.id === selectedRealm.realmId
+                  ? boardPage.context.realm.title
+                  : selectedRealm.name}
               </h3>
               {boards.state === 'idle' || boards.state === 'loading' ? (
                 <p role="status" className="text-sm text-muted-foreground">
@@ -310,7 +312,11 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
               {boards.state === 'failed' ? (
                 <div className="space-y-2">
                   <p role="alert">{m.thread_review_unavailable()}</p>
-                  <Button type="button" variant="outline" onClick={() => void readBoardPage(selectedRealm, boards.cursor)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void readBoardPage(selectedRealm, boards.cursor)}
+                  >
                     {m.subject_view_retry()}
                   </Button>
                 </div>

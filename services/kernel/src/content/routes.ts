@@ -711,14 +711,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const result =
               query.boardId === undefined
                 ? await readReviewDestinationPage(dependencies, actor, realmId, query.subjectId, context, query.cursor)
-                : await inspectReviewDestination(
-                    dependencies,
-                    actor,
-                    realmId,
-                    query.subjectId,
-                    query.boardId,
-                    context,
-                  );
+                : await inspectReviewDestination(dependencies, actor, realmId, query.subjectId, query.boardId, context);
             for (const anchor of result.anchors) session.record(sessionComponent(anchor));
             if (result.page.context) {
               const source = result.page.context.subject.source;

@@ -117,7 +117,9 @@ function validateReviewMyRealmsRead(input: unknown): { expected: ReviewReaderExp
     !input ||
     typeof input !== 'object' ||
     !('expected' in input) ||
-    ('cursor' in input && input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))
+    ('cursor' in input &&
+      input.cursor !== undefined &&
+      (typeof input.cursor !== 'string' || input.cursor.length > 4096))
   )
     throw new Error('Invalid review reader');
   return {

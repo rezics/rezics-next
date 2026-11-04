@@ -39,7 +39,8 @@ function validateReviewDestinationInput(input: unknown): ReviewDestinationInput 
     typeof value.locale !== 'string' ||
     value.locale.length < 2 ||
     value.locale.length > 32 ||
-    (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length < 1 || value.cursor.length > 4096)) ||
+    (value.cursor !== undefined &&
+      (typeof value.cursor !== 'string' || value.cursor.length < 1 || value.cursor.length > 4096)) ||
     (value.boardId !== undefined && (typeof value.boardId !== 'string' || !uuid.test(value.boardId))) ||
     (value.cursor !== undefined && value.boardId !== undefined)
   )
