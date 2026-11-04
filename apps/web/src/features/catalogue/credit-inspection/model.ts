@@ -2,9 +2,9 @@ import type { PageRead } from '@rezics/composition';
 import type { SubjectRead } from '@rezics/client';
 import type { SubjectSummary } from '../../../media/summary';
 import type { OverviewValue, Section } from '../../pages/overview';
-import { isRecord, type Snak, type Stmt } from '../../pages/shared';
+import type { Snak, Stmt } from '../../pages/shared';
 import { candidateContext } from '../../../subject/candidates';
-import { subjectViewHref } from '../../../subject/subject-href';
+export { creditWindowHref } from './navigation';
 import {
   relationDraft,
   relationSlotMatches,
@@ -13,6 +13,10 @@ import {
   type RelationSlot,
 } from '../../../subject/relation-candidates';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export type CreditAssertion = {
   holder: string;
   statement: Stmt & { rezics: { release: string; revision: number } };
@@ -20,7 +24,7 @@ export type CreditAssertion = {
   slot?: RelationSlot;
 };
 
-/** In-memory visit identity. The descriptor and its opaque cursor never become a return URL. */
+/** One native inverse window; labels and its Definition pin come only from the current caller. */
 export type CreditVisit = {
   person: string;
   node: string;
@@ -29,6 +33,8 @@ export type CreditVisit = {
   reader: string | null;
   release: string;
   propertyLabel: string;
+  labels?: Readonly<Record<string, string>>;
+  definition?: string;
   realm?: string | undefined;
 };
 
@@ -44,6 +50,21 @@ export function creditVisit(
     (entry) => entry.state === 'admitted' && entry.property === property && entry.direction === 'inverse',
   );
   if (admission?.state !== 'admitted') return;
+  const labels: Record<string, string> = {};
+  // The selected native page already bounds these rows, qualifiers and references. No vocabulary read is added.
+  for (const row of Array.isArray(section.body.links) ? section.body.links : []) {
+    if (!isRecord(row)) continue;
+    const credit = creditAssertion(row);
+    if (!credit) continue;
+    for (const part of [
+      credit.statement,
+      ...credit.statement.qualifiers,
+      ...credit.statement.references.flatMap((reference) => reference.parts),
+    ]) {
+      const label = value.candidatePropertyLabel?.(part.property.id);
+      if (label && label !== part.property.id) labels[part.property.id] = label;
+    }
+  }
   return {
     person: value.subject,
     node,
@@ -51,20 +72,11 @@ export function creditVisit(
     context: value.context?.id ?? candidateContext,
     reader: value.cacheReader ?? null,
     release: admission.release,
-    propertyLabel: (property && value.relations[property]?.forwardLabel) || property || '',
+    propertyLabel: (property && (labels[property] || value.relations[property]?.forwardLabel)) || value.unlabelled,
     realm: value.realm,
+    labels,
+    definition: value.releaseDigest ?? admission.release,
   };
-}
-
-/** Refresh only the native original window, never an arbitrary return address or a replacement candidate. */
-export function creditWindowHref(visit: CreditVisit, locale: string): string {
-  const cursor = visit.stream.kind === 'links' ? visit.stream.cursor : undefined;
-  const query = new URLSearchParams({
-    node: visit.node,
-    ...(cursor ? { cursor } : {}),
-    ...(visit.realm ? { realm: visit.realm } : {}),
-  });
-  return `${subjectViewHref({ id: visit.person, label: '' }, locale, 'works')}?${query}`;
 }
 
 function snak(value: unknown): value is Snak & Record<string, unknown> {
@@ -122,13 +134,20 @@ export function creditAssertion(row: Record<string, unknown>): CreditAssertion |
 }
 
 /** Adapt only supplied current labels to the lossless shared value renderer. */
-export function creditRelated(credit: CreditAssertion): SubjectRead['related'] {
+export function creditRelated(credit: CreditAssertion, locale = 'en'): SubjectRead['related'] {
   return Object.fromEntries(
     Object.entries(credit.related).flatMap(([id, summary]) => {
       const label = summary.label;
-      return label && typeof label !== 'string' && label.value && label.language
-        ? [[id, { labels: { [label.language]: label.value } }]]
-        : [];
+      return typeof label === 'string' && label.trim()
+        ? [[id, { labels: { [locale]: label } }]]
+        : label &&
+            typeof label !== 'string' &&
+            typeof label.value === 'string' &&
+            label.value.trim() &&
+            typeof label.language === 'string' &&
+            label.language.trim()
+          ? [[id, { labels: { [label.language]: label.value } }]]
+          : [];
     }),
   );
 }

@@ -1616,6 +1616,57 @@ Decision: original Person credit inspection opens disclosed destinations in a se
 window and focus; correction reads one exact slot page and uses only its authorized original candidate payload,
 remaining unavailable when that page cannot supply it. A public empty citation list means no disclosed citations.
 
+### Inspect and return to a Person credit
+
+`creditVisit` admits only the Works view's native LINKS page and the exact released inverse direction. It supplies
+current Definition labels for that window's original properties, qualifiers and reference parts; no creator alias or
+forward cast admission is added. `CreditInspectionSession` and `CreditInspection` retain the exact holder, assertion,
+revision, release and slot, shared value rendering, citations, revision metadata and native bounded correction editor.
+The readable inspection links the original work and Sources, keeps Character-qualified voices separate, and uses
+released field labels rather than property identifiers. Partial dates keep the shared renderer's exact precision.
+Missing field labels have an unavailable label; identifiers live only in explicit technical details. Unknown source
+values, an empty disclosed citation list, refused correction and unavailable correction remain distinct.
+Return metadata preserves the native caller's link decision for an unlabelled work; it never substitutes a new anchor.
+
+Decision: Person credit returns carry one bounded assertion locator; Context is revalidated against the fresh native
+window, never used as an authority override. Work, Character and Sources destinations carry that single validated `via`
+address with locale, Realm, native node/cursor and exact assertion focus. Slot comparison uses the existing SHA-256
+byte digest so even an unlabelled Character key never appears in a destination or return link. Disclosed destinations open separately;
+explicit return reloads the current native window. `CreditVisitReturn` consumes its locator once on mount and reopens
+only an exact current holder/property/assertion/revision/release/slot and Definition pin in that Context. A missing,
+replaced or newly concealed row reports an unavailable reading and focuses its surviving window, yielding to deliberate
+focus movement. Hash changes cannot revive an old reading. Whole-association concealment unmounts the inspection portal,
+links, labels, evidence and accessible names together. Current correction advice still comes only from viewerActions
+and the existing exact editor read; no return address or public reading grants mutation.
+
+The comparison baseline was the read-only `legacy-final` author page/work credits and `legacy-main-final` work Sources:
+explicit role/byline separation, labelled source details and continuation on the actual work. No legacy code is ported.
+The existing correction, draft departure, exact uncertain-command and late-response handling remains with its native
+editor and session boundary. The named Person visit stories cover qualified voices, two credits to one work, current
+labels, partial dates/source unavailability, concealment, Context return, replacement, correction refusal/unavailability,
+retry and retired replies, with 390/1440 light/dark and anonymous/ordinary signed-in fixtures. Browser captures and the
+original native/Search receiving, denial and growth acceptance remain integration work, not inferred from those stories.
+
+### Person credit visit Cost
+
+This presentation starts zero additional reads and decodes zero additional network/document bytes. It shares one
+already selected native LINKS window (planned limit L, at most 100; the normal Works page uses its supplied limit), its
+original assertions and related summaries. Let B be that supplied JSON page's UTF-8 bytes, P its distinct property IDs,
+Q its qualifier count, R its reference count and S its reference-part count. Retention is O(B + P labelled strings),
+traversal O(L + Q + R + S); it never accumulates continuation pages. The native statement contract bounds each assertion
+to 16 qualifiers and 16 references with 16 parts each, hence at most 273 Snaks per row. Labels reuse only the current
+caller's finite Definition projection, not a catalogue scan. Original work/Character summaries are already supplied;
+there is no per-row hydration or background authority probing. Unsupported document values add zero document bodies.
+
+Each destination retains one address, no body, label, source snapshot, draft or authority. Its opaque cursor keeps the
+existing 8192-character envelope, the local locator is at most 4096 characters, and the existing validated complete
+return address is capped at 32768 ASCII URL characters/UTF-8 bytes.
+Encoding that address once in a destination’s `via` costs at most 98304 ASCII bytes plus the destination path/query;
+the existing parser permits only one nested hop. Only one assertion locator is retained, with zero history addresses. Explicit return repeats the ordinary current-page
+reader once; opening revision metadata adds one exact revision request, and correction uses one existing exact slot-page
+read. Sources and destination pages retain their own current reader costs. No engine query, native index, polling or
+new growth-sensitive producer is introduced.
+
 ## Work cast comparison
 
 An admitted forward `wdt:P725` page groups the current returned credit window by the disclosed `wdt:P453` Character

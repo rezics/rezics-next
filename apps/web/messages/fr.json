@@ -1,4 +1,7 @@
 {
+  "credit_return_unavailable": "Ce crédit ou sa fenêtre actuelle a changé ou est indisponible. Sélectionnez un crédit actuel pour l’examiner.",
+  "credit_technical": "Détails techniques",
+  "credit_label_unavailable": "Libellé du champ indisponible",
   "credit_refresh_window": "Actualiser cette liste de crédits",
   "credit_inspect": "Examiner le crédit",
   "credit_original": "L’assertion originale de cette œuvre. Les cibles divulguées s’ouvrent dans un autre onglet pour conserver cette liste de crédits.",

@@ -1,4 +1,7 @@
 {
+  "credit_return_unavailable": "このクレジットまたは現在の表示範囲が変更されたか、取得できません。現在のクレジットを選択してください。",
+  "credit_technical": "技術的な詳細",
+  "credit_label_unavailable": "項目名を取得できません",
   "credit_refresh_window": "このクレジット一覧を更新",
   "credit_inspect": "クレジットを確認",
   "credit_original": "この作品の元の記述です。公開されたリンク先は別のタブで開き、このクレジット一覧を保持します。",
