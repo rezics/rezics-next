@@ -340,11 +340,11 @@ export function createImportTransport(options: ImportTransportOptions) {
       ensure(result.results.length === body.commands.length);
       result.results.forEach((item, index) => ensure(item.key === body.commands[index]!.key));
       const contention = result.results.some(
-        (item) =>
-          item.status === 503 &&
-          'problem' in item &&
-          item.problem.code === 'transaction_retry_exhausted' &&
-          item.problem.retryable === true,
+        (item) => {
+          const problem =
+            'problem' in item ? (item.problem as { code?: unknown; retryable?: unknown }) : undefined;
+          return item.status === 503 && problem?.code === 'transaction_retry_exhausted' && problem.retryable === true;
+        },
       );
       if (!contention || attempt >= 2) return result;
       // Successful peers replay their exact keys; each native attempt reauthorizes.
