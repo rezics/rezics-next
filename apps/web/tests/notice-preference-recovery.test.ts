@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { NotificationEditor } from '../src/settings/notification-recovery';
+import { settingsPreferencePage } from '../src/kernel/fake/settings-notifications';
 import {
   changeNotifications,
   changePreferences,
@@ -19,7 +20,8 @@ const { UnreadBadgeView } = await import('../src/inbox/unread-badge');
 const { m } = await import('../src/paraglide/messages.js');
 
 const token = 'A'.repeat(22);
-const initial = { notifications: { reply: true, mention: true }, version: 7 };
+const notifications = { reply: true, mention: true };
+const initial = settingsPreferencePage(notifications, 7);
 const currentDisclosure = { kind: 'current-disclosure' as const, at: '2026-11-04T00:00:00.000Z' };
 function session(fail = false) {
   let reads = 0;
@@ -53,7 +55,7 @@ function clientWith(fetcher: (request: Request) => Promise<Response> | Response)
   });
 }
 function preferenceJourney() {
-  let current = { ...initial, notifications: { ...initial.notifications } };
+  let current = { notifications: { ...notifications }, version: 7 };
   let receipt = current;
   let lose = true;
   let unavailableRead = false;
@@ -67,7 +69,12 @@ function preferenceJourney() {
     if (request.method === 'GET')
       return unavailableRead
         ? Response.json({ code: 'dependency_unavailable', retryable: true }, { status: 503 })
-        : Response.json({ spoilerLevel: 1, suitability: 'blur', ...current });
+        : Response.json({
+            spoilerLevel: 1,
+            suitability: 'blur',
+            ...current,
+            page: settingsPreferencePage(current.notifications, current.version),
+          });
     expect(request.headers.get('content-type')).toContain('application/merge-patch+json');
     const change = JSON.parse(body) as { expectedVersion: number; notifications: NotificationPreferences | null };
     const original = calls.find((call) => call.method === 'PATCH');
@@ -77,9 +84,18 @@ function preferenceJourney() {
       original.key === request.headers.get('idempotency-key')
     ) {
       expect(body).toBe(original.body);
-      return Response.json({ spoilerLevel: 1, suitability: 'blur', ...receipt });
+      return Response.json({
+        spoilerLevel: 1,
+        suitability: 'blur',
+        ...receipt,
+        page: settingsPreferencePage(receipt.notifications, receipt.version),
+      });
     }
-    if (change.expectedVersion !== current.version) return Response.json({ code: 'conflict' }, { status: 409 });
+    if (change.expectedVersion !== current.version)
+      return Response.json(
+        { code: 'conflict', page: settingsPreferencePage(current.notifications, current.version) },
+        { status: 409 },
+      );
     current = {
       version: current.version + 1,
       notifications:
@@ -92,7 +108,12 @@ function preferenceJourney() {
       lose = false;
       return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
     }
-    return Response.json({ spoilerLevel: 1, suitability: 'blur', ...current });
+    return Response.json({
+      spoilerLevel: 1,
+      suitability: 'blur',
+      ...current,
+      page: settingsPreferencePage(current.notifications, current.version),
+    });
   });
   const editor = new NotificationEditor(initial, {
     save: (change) => changeNotifications(client, owner.request('POST'), owner.env, change),
@@ -216,7 +237,7 @@ test('Closed, conflict, unknown-save and actual explicit readiness states preser
   expect(editor.snapshot()).toMatchObject({
     phase: 'uncertain',
     reason: 'unavailable',
-    known: initial,
+    known: { notifications, version: 7 },
     draft: { reply: false, mention: false },
   });
   expect(editor.snapshot().pending).toBe(pending);
@@ -313,6 +334,7 @@ test('closed or unavailable recovery reads retain the original notification comm
               suitability: 'show',
               version: 8,
               notifications: { reply: false, mention: true },
+              page: settingsPreferencePage({ reply: false, mention: true }, 8),
             });
     });
     const editor = new NotificationEditor(initial, {
@@ -328,7 +350,7 @@ test('closed or unavailable recovery reads retain the original notification comm
     expect(editor.snapshot()).toMatchObject({
       phase: 'uncertain',
       reason,
-      known: initial,
+      known: { notifications, version: 7 },
       draft: { reply: false, mention: false },
       failure: { status, code, requestId: 'readback-request' },
     });
@@ -350,7 +372,12 @@ test('automatic notification readback preserves edits made while the native GET 
     save: async () =>
       ++calls === 1
         ? { ok: false, reason: 'unavailable', failure: { status: 503, code: 'deadline_exceeded' } }
-        : { ok: true, notifications: { reply: false, mention: true }, version: 8 },
+        : {
+            ok: true,
+            notifications: { reply: false, mention: true },
+            version: 8,
+            page: settingsPreferencePage({ reply: false, mention: true }, 8),
+          },
     read: async () => {
       began();
       await delayed;
@@ -358,6 +385,7 @@ test('automatic notification readback preserves edits made while the native GET 
         signedIn: true,
         preferences: { spoilerLevel: 2, suitability: 'show', version: 8 },
         notifications: { reply: false, mention: true },
+        page: settingsPreferencePage({ reply: false, mention: true }, 8),
         securityHref: null,
       };
     },

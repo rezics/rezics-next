@@ -489,7 +489,8 @@ Private preferences are self-service account data: even a grant to another accou
 actor/path equality check. An operator-opened session changes the automated account's preferences as that
 account. Spoiler, suitability, shelf and notification settings belong to [preferences.ts][preferences];
 [Viewer preferences][access-preferences] defines their defaults and update contract. Content retains existing
-notification delivery and storage; Web owns settings/inbox. The
+notification delivery and storage; Web owns settings/inbox and consumes a bounded preference-page projection on the
+existing GET/PATCH; Accounts remains the catalogue and command owner. The
 [notification report](research/accounts-design-notification-preferences.md) is adopted with that ownership,
 superseding its alternative delivery allocation. Minimal scope remains in-app replies, mentions, thread-watch
 notices with a distinct default-on `thread_watch` preference, and required moderation/report/appeal outcomes, with no

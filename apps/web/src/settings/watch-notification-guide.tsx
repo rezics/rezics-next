@@ -8,7 +8,11 @@ export function WatchNotificationGuide() {
       <p>{m.inbox_thread_activity_text()}</p>
       <p>{m.inbox_board_activity_text()}</p>
       <p>{m.settings_watch_notifications_support()}</p>
-      <p>{m.settings_watch_notifications_mandatory()}</p>
+      <p>
+        <a href="#watches" className="text-foreground underline-offset-4 hover:underline">
+          {m.settings_notifications_watches_destination()}
+        </a>
+      </p>
     </aside>
   );
 }

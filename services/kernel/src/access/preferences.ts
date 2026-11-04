@@ -8,8 +8,10 @@ import { resourceAuthorization } from './resource-authorization.ts';
 import {
   DEFAULT_NOTIFICATIONS,
   NOTIFICATION_KINDS,
+  type NotificationKind,
   type Notifications,
   type NotificationsPatch,
+  type OptionalNotificationKind,
 } from './notification-kinds.ts';
 import allowed from './preferences-notification-allowed.sql';
 import read from './preferences-read.sql';
@@ -69,6 +71,20 @@ export type ShelfPatch = {
   gridSize?: Shelf['gridSize'] | null;
   tableColumns?: Shelf['tableColumns'] | null;
 };
+export type PreferencePageKind = {
+  kind: NotificationKind;
+  optional: boolean;
+  default: boolean;
+  enabled: boolean;
+};
+export type PreferencePageActionName = 'edit' | 'reset';
+export type PreferencePageAction = { name: PreferencePageActionName; expectedVersion: number };
+/** Bounded Settings projection: catalogue meaning, current values and admitted edit/reset actions. */
+export type PreferencePage = {
+  version: number;
+  kinds: PreferencePageKind[];
+  actions: PreferencePageAction[];
+};
 export type AccountPreferences = {
   spoilerLevel: 0 | 1 | 2;
   suitability: 'blur' | 'show';
@@ -126,6 +142,32 @@ function notificationOverrides(notifications: Notifications): NotificationsPatch
       ([kind, value]) => value !== DEFAULT_NOTIFICATIONS[kind as keyof Notifications],
     ),
   );
+}
+
+const preferencePageActions: readonly PreferencePageActionName[] = ['edit', 'reset'];
+
+/** In-memory Settings page for a preference read. Self-read admits edit and reset; PATCH still checks update. */
+export function projectPreferencePage(
+  preferences: Pick<AccountPreferences, 'notifications' | 'version'>,
+  actions: readonly PreferencePageActionName[] = preferencePageActions,
+): PreferencePage {
+  return {
+    version: preferences.version,
+    kinds: NOTIFICATION_KINDS.map((entry) => ({
+      kind: entry.kind,
+      optional: entry.optional,
+      default: entry.default,
+      enabled: entry.optional ? preferences.notifications[entry.kind as OptionalNotificationKind] : true,
+    })),
+    actions: actions.map((name) => ({ name, expectedVersion: preferences.version })),
+  };
+}
+
+export function withPreferencePage<T extends Pick<AccountPreferences, 'notifications' | 'version'>>(
+  preferences: T,
+  actions: readonly PreferencePageActionName[] = preferencePageActions,
+): T & { page: PreferencePage } {
+  return { ...preferences, page: projectPreferencePage(preferences, actions) };
 }
 
 /** One joined account/preference seek on the recipient's route, including suspended accounts. */

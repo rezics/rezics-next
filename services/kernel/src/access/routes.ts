@@ -13,6 +13,7 @@ import { routeOf } from '../route/route.ts';
 import {
   createPreferenceCommands,
   readAccountPreferences,
+  withPreferencePage,
   SHELF_GRID_SIZES,
   SHELF_LAYOUTS,
   SHELF_MAX_LAYOUTS,
@@ -322,7 +323,34 @@ const notifications = t.Unsafe<Notifications>(t.Object(notificationFields(t.Bool
 const notificationsPatch = t.Unsafe<NotificationsPatch>(
   t.Object(notificationFields(nullable(t.Boolean()), true), closed),
 );
-const preferences = t.Object({ ...preferenceValues, shelf, notifications, version: t.Integer({ minimum: 0 }) }, closed);
+const preferencePageKind = t.Object(
+  {
+    kind: t.String({ pattern: '^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$', minLength: 1, maxLength: 64 }),
+    optional: t.Boolean(),
+    default: t.Boolean(),
+    enabled: t.Boolean(),
+  },
+  closed,
+);
+const preferencePageAction = t.Object(
+  {
+    name: t.Union([t.Literal('edit'), t.Literal('reset')]),
+    expectedVersion: t.Integer({ minimum: 0 }),
+  },
+  closed,
+);
+const preferencePage = t.Object(
+  {
+    version: t.Integer({ minimum: 0 }),
+    kinds: t.Array(preferencePageKind, { minItems: 1, maxItems: 32 }),
+    actions: t.Array(preferencePageAction, { maxItems: 2 }),
+  },
+  closed,
+);
+const preferences = t.Object(
+  { ...preferenceValues, shelf, notifications, version: t.Integer({ minimum: 0 }), page: preferencePage },
+  closed,
+);
 const resource = t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, closed);
 const subject = t.Union([
   t.Object({ kind: t.Literal('active_accounts') }, closed),
@@ -968,7 +996,7 @@ export function accessRoutes(
           }),
         );
         set.headers['cache-control'] = 'private, no-store';
-        return value;
+        return withPreferencePage(value);
       },
     )
     .patch(
@@ -991,7 +1019,7 @@ export function accessRoutes(
         response: {
           200: withHeaders(preferences, { [SESSION_HEADER]: t.String() }),
           ...failures,
-          409: problemSchema('conflict'),
+          409: problemSchema('conflict', { page: preferencePage }),
           410: problemSchema('command_result_erased'),
         },
         detail: {
@@ -1005,15 +1033,23 @@ export function accessRoutes(
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         if (actor.accountId !== params.accountId) throw new ProblemError('forbidden');
         try {
-          const outcome = await admission.run('normal', job, () =>
-            preferenceCommands().setPreferences(
-              { pool: dependencies.pool, actor, deadline: job.deadline },
-              { ...body, accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
-            ),
-          );
+          const outcome = await admission.run('normal', job, async () => {
+            try {
+              return await preferenceCommands().setPreferences(
+                { pool: dependencies.pool, actor, deadline: job.deadline },
+                { ...body, accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
+              );
+            } catch (error) {
+              if (!(error instanceof ProblemError) || error.code !== 'conflict') throw error;
+              const current = await withConnection(dependencies.pool, (client) =>
+                readAccountPreferences(client, params.accountId),
+              );
+              throw new ProblemError('conflict', { extensions: { page: withPreferencePage(current).page } });
+            }
+          });
           session.record(outcome);
           set.headers['cache-control'] = 'private, no-store';
-          return outcome.value;
+          return withPreferencePage(outcome.value);
         } catch (error) {
           return denied(error);
         }

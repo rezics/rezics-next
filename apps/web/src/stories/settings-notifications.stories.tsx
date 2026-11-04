@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import recording from '../kernel/recorded/settings-preferences.json';
-import { notificationRecoveryTransport } from '../kernel/fake/settings-notifications';
+import { notificationRecoveryTransport, settingsPreferencePage } from '../kernel/fake/settings-notifications';
 import { m } from '../paraglide/messages.js';
 import { NotificationsCard } from '../settings/notifications';
 import type { NotificationEditorIO } from '../settings/notification-recovery';
@@ -43,10 +43,19 @@ function Example({
           return { ok: false, reason: 'forbidden', failure: { status: 403, code: 'forbidden' } };
         if (scenario === 'stale' && !originalKey) {
           originalKey = input.idempotencyKey;
-          current = { notifications: { reply: true, mention: false }, version: input.expectedVersion + 1 };
-          return { ok: false, reason: 'conflict', failure: { status: 409, code: 'conflict' } };
+          current = {
+            notifications: { ...recording.notifications, reply: true, mention: false },
+            version: input.expectedVersion + 1,
+          };
+          return {
+            ok: false,
+            reason: 'conflict',
+            page: settingsPreferencePage(current.notifications, current.version),
+            failure: { status: 409, code: 'conflict' },
+          };
         }
-        if (originalKey === input.idempotencyKey) return { ok: true, ...receipt };
+        if (originalKey === input.idempotencyKey)
+          return { ok: true, ...receipt, page: settingsPreferencePage(receipt.notifications, receipt.version) };
         originalKey = input.idempotencyKey;
         current = {
           notifications:
@@ -65,7 +74,7 @@ function Example({
         receipt = current;
         if ((scenario === 'lost' || scenario === 'unavailable') && input.expectedVersion === recording.version)
           return { ok: false, reason: 'unavailable', failure: { status: null } };
-        return { ok: true, ...current };
+        return { ok: true, ...current, page: settingsPreferencePage(current.notifications, current.version) };
       },
       read: async () =>
         scenario === 'unavailable'
@@ -79,6 +88,7 @@ function Example({
               signedIn: true,
               preferences: { spoilerLevel: 1, suitability: 'blur', version: current.version },
               notifications: current.notifications,
+              page: settingsPreferencePage(current.notifications, current.version),
               securityHref: null,
             },
       confirmed: setVersion,
@@ -87,7 +97,7 @@ function Example({
   return (
     <div className="mx-auto max-w-2xl">
       <NotificationsCard
-        initial={recording.notifications}
+        initial={recording.page}
         version={version}
         csrfToken="story-token"
         action="/en/settings"
@@ -109,6 +119,9 @@ export const OptionalNotices: Story = {
     const view = within(canvasElement);
     await expect(await view.findByRole('switch', { name: m.settings_notification_reply() })).toBeChecked();
     await view.findByText(m.settings_notifications_mandatory());
+    await view.findByText(m.settings_notifications_policy_heading());
+    await view.findByText(m.settings_notification_moderation_decision());
+    await view.findByRole('link', { name: m.settings_notifications_watches_destination() });
     await view.findByText(m.settings_notifications_text());
     const replies = view.getByRole('switch', { name: m.settings_notification_reply() });
     await expect(replies).toHaveAttribute('data-slot', 'switch');
@@ -150,8 +163,6 @@ export const StaleChoicesReviewed: Story = {
   render: () => <Example scenario="stale" />,
   play: async ({ canvasElement }) => {
     const view = await toggle(canvasElement);
-    await view.findByText(m.settings_conflict_title());
-    await userEvent.click(view.getByRole('button', { name: m.settings_reload() }));
     await view.findByText(m.settings_notifications_review_title());
     await userEvent.click(view.getByRole('button', { name: m.settings_notifications_use_current() }));
     await expect(view.getByRole('switch', { name: m.settings_notification_reply() })).toBeChecked();

@@ -18,6 +18,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { sessionQuery } from '../src/session/query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { settingsPreferencePage } from '../src/kernel/fake/settings-notifications';
 import { NotificationsCard } from '../src/settings/notifications';
 
 test('clean reading and same settings pathname query/hash changes navigate without a decision', () => {
@@ -135,17 +136,23 @@ test('reading and actual profile/public-activity state share one decision and ow
 test('notice originals and later drafts require a decision until exact recovery or Use current', async () => {
   const calls: unknown[] = [];
   const editor = new NotificationEditor(
-    { notifications: { reply: true, mention: true }, version: 0 },
+    settingsPreferencePage({ reply: true, mention: true }, 0),
     {
       save: async (input) => {
         calls.push(input);
         if (calls.length === 1) throw new Error('Lost response');
-        return { ok: true, notifications: { reply: false, mention: true }, version: 1 };
+        return {
+          ok: true,
+          notifications: { reply: false, mention: true },
+          version: 1,
+          page: settingsPreferencePage({ reply: false, mention: true }, 1),
+        };
       },
       read: async () => ({
         signedIn: true,
         preferences: { spoilerLevel: 0, suitability: 'blur', version: 1 },
         notifications: { reply: false, mention: true },
+        page: settingsPreferencePage({ reply: false, mention: true }, 1),
         securityHref: null,
       }),
     },
@@ -352,7 +359,7 @@ test('live actor and CSRF transitions retire old registrations before late contr
 test('standalone notice cards keep their native form without requiring a navigation or query provider', () => {
   const html = renderToStaticMarkup(
     createElement(NotificationsCard, {
-      initial: { reply: true },
+      initial: settingsPreferencePage({ reply: true }, 0),
       version: 0,
       csrfToken: null,
       action: '/en/settings',

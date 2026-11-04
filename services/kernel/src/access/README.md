@@ -2806,7 +2806,7 @@ there is no new numerical allowance or ledger.
 ## Viewer preferences
 
 Access stores one optional `account_preferences` row on the account's route and partition. Missing storage means
-`{ "spoilerLevel": 0, "suitability": "blur", "shelf": {}, "notifications": { "reply": true, "mention": true, "thread_watch": true }, "version": 0 }`.
+`{ "spoilerLevel": 0, "suitability": "blur", "shelf": {}, "notifications": { "reply": true, "mention": true, "thread_watch": true, "board_activity": true }, "version": 0 }`.
 Anonymous viewers use these defaults locally.
 
 - `spoilerLevel` is the highest `rezics:spoilerLevel` displayed without a reveal control: 0 (none), 1 (minor), or
@@ -2832,8 +2832,8 @@ Anonymous viewers use these defaults locally.
 
 - `notifications` maps every optional in-app notification kind to its effective boolean, using the saved override
   or the catalogue default. [`notification-kinds.ts`](notification-kinds.ts) is the frozen catalogue: `reply`,
-  `mention` and `thread_watch` are optional and enabled by default; `moderation_decision` is mandatory and cannot be
-  turned off. Thread-watch notices use their own preference.
+  `mention`, `thread_watch` and `board_activity` are optional and enabled by default; `moderation_decision` is mandatory
+  and cannot be turned off. Thread-watch notices use their own preference.
   Mandatory kinds are absent from this field. Content appends kinds to the catalogue, at most 32 total, with unique
   lowercase snake case keys and an `optional` flag and `default` boolean. Moderation decisions include the statement
   of reasons owed to a content author, the decision owed to a notifier and required appeal outcomes. These
@@ -2847,8 +2847,12 @@ Anonymous viewers use these defaults locally.
   2,048 bytes.
 
 `GET /v1/accounts/{accountId}/preferences` returns both settings, `shelf` (`{}` when nothing was saved, including
-when the account has no row), `notifications` and `version`. `PATCH` accepts `expectedVersion` (required, a nonnegative
-integer) and any of the settings, `shelf` and `notifications`. Omitted settings keep their current values.
+when the account has no row), `notifications`, `version` and `page`. `page` is the in-memory catalogue projection of
+each kind's optional/default/enabled meaning plus admitted `edit`/`reset` actions whose `expectedVersion` equals
+`page.version`. It is not stored. A successful self-read advertises edit and reset; PATCH still requires
+`account:update`. `PATCH` accepts `expectedVersion` (required, a nonnegative integer) and any of the settings, `shelf`
+and `notifications`. Omitted settings keep their current values. Stale versions answer 409 with the current `page` so
+the viewer can review a still-valid draft.
 
 `shelf` in a PATCH is a JSON Merge Patch (RFC 7396) applied to the stored shelf: an object merges key by key, `null`
 removes that key (a part such as `gridSize`, or one `layouts` or `sorts` entry), and an array (`tableColumns`) replaces
@@ -2867,7 +2871,7 @@ A changed value increments the version once. Unchanged values preserve the versi
 setting the initial defaults therefore leaves storage absent. Returning to the defaults after a change keeps the row
 and its advancing version. Stale expected versions answer 409; reusing a key with different input answers 422.
 Replaying a successful key returns its original values/version after current authorization, even if later commands
-changed the preferences. Every successful response includes both settings, the shelf, notifications and the version,
+changed the preferences. Every successful response includes both settings, the shelf, notifications, the version and `page`,
 and PATCH carries the session token for its command receipt. Each successful command emits the existing `account-updated` event with only
 the account ID, keeping preference values out of the event data. Invalid values and unknown fields answer 400.
 

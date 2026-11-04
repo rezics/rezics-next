@@ -4,6 +4,17 @@ Embedded inventory, detail, action-entry and rename-entry reads use a ten-second
 
 Applicant verification requests use the same ten-second account budget, including headers and bodies, with caller cancellation and explicit recovery only. Review and command readback never await optional subject titles: a separate cancellable title read enhances the existing generic label. Subject suggestions require a fresh caller-bound eligibility release; unavailable reads remain retryable failures, never empty or definitive ineligibility. Uncertain commands retain their exact original input and key, and cancellation grants no replay or completion authority. Reviewer transport remains separate.
 
+## Notifications
+
+The signed-in Settings notifications section reads the Access preference `page`: current optional kinds, compulsory
+notices as explained policy, honest defaults, and admitted `edit`/`reset` actions with the current version. The
+catalogue is the authority; the page does not invent kinds, title-case unknown keys, or promise email or push. Watch
+subscriptions stay at `/settings#watches`. Conflict reloads the current page and version; a still-valid draft needs
+review and never replays a removed or compulsory kind. A missing page renders unavailable rather than default-enabled
+values. Session change clears private policy and draft. Uncertain saves keep the original patch and key.
+
+**Decision:** A successful self-read advertises edit and reset; PATCH still checks `account:update` at command time.
+
 ## Watches
 
 `/settings#watches` is the existing private destination for a signed-in viewer. It reads one replaceable page for the selected `thread` or `board` kind through the generated `accounts({accountId}).watches.get` operation, with the exact opaque cursor and a limit of 20. Available rows link through existing localized thread or board routes. A withheld row exposes only its personal subscription identity, kind and revision so its owner can still remove it.

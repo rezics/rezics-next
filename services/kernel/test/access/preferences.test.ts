@@ -1,9 +1,28 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { DEFAULT_NOTIFICATIONS } from '../../src/access/notification-kinds.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { projectPreferencePage } from '../../src/access/preferences.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { cookies, nativeFixture, scopes } from './native-account-bindings-fixture.ts';
+
+function shown(value: {
+  spoilerLevel?: 0 | 1 | 2;
+  suitability?: 'blur' | 'show';
+  shelf?: unknown;
+  notifications?: typeof DEFAULT_NOTIFICATIONS;
+  version: number;
+}) {
+  const preferences = {
+    spoilerLevel: value.spoilerLevel ?? 0,
+    suitability: value.suitability ?? 'blur',
+    shelf: value.shelf ?? {},
+    notifications: value.notifications ?? DEFAULT_NOTIFICATIONS,
+    version: value.version,
+  };
+  return { ...preferences, page: projectPreferencePage(preferences) };
+}
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let fixture: Awaited<ReturnType<typeof nativeFixture>>;
@@ -58,13 +77,7 @@ afterAll(async () => {
 test('defaults require no preference row, and unchanged writes keep version zero', async () => {
   const read = await call(owner.accountId, owner.bearer);
   expect(read.response.status).toBe(200);
-  expect(read.value).toEqual({
-    spoilerLevel: 0,
-    suitability: 'blur',
-    shelf: {},
-    notifications: { reply: true, mention: true },
-    version: 0,
-  });
+  expect(read.value).toEqual(shown({ version: 0 }));
   const same = await call(owner.accountId, owner.bearer, { expectedVersion: 0, spoilerLevel: 0, suitability: 'blur' });
   expect(same.response.status).toBe(200);
   expect(same.value).toEqual(read.value);
@@ -83,13 +96,7 @@ test('versioned partial writes replay once, reject stale versions and bind the i
   const body = { expectedVersion: 0, spoilerLevel: 2 };
   const first = await call(owner.accountId, owner.bearer, body, key);
   expect(first.response.status).toBe(200);
-  expect(first.value).toEqual({
-    spoilerLevel: 2,
-    suitability: 'blur',
-    shelf: {},
-    notifications: { reply: true, mention: true },
-    version: 1,
-  });
+  expect(first.value).toEqual(shown({ spoilerLevel: 2, version: 1 }));
   expect(first.response.headers.has('rezics-session-token')).toBe(true);
   expect((await call(owner.accountId, owner.bearer, body, key)).value).toEqual(first.value);
   expect(
@@ -104,21 +111,11 @@ test('versioned partial writes replay once, reject stale versions and bind the i
   expect((await call(owner.accountId, owner.bearer, { expectedVersion: 0, suitability: 'show' })).response.status).toBe(
     409,
   );
-  expect((await call(owner.accountId, owner.bearer, { expectedVersion: 1, suitability: 'show' })).value).toEqual({
-    spoilerLevel: 2,
-    suitability: 'show',
-    shelf: {},
-    notifications: { reply: true, mention: true },
-    version: 2,
-  });
+  expect((await call(owner.accountId, owner.bearer, { expectedVersion: 1, suitability: 'show' })).value).toEqual(
+    shown({ spoilerLevel: 2, suitability: 'show', version: 2 }),
+  );
   const unchanged = await call(owner.accountId, owner.bearer, { expectedVersion: 2, suitability: 'show' });
-  expect(unchanged.value).toEqual({
-    spoilerLevel: 2,
-    suitability: 'show',
-    shelf: {},
-    notifications: { reply: true, mention: true },
-    version: 2,
-  });
+  expect(unchanged.value).toEqual(shown({ spoilerLevel: 2, suitability: 'show', version: 2 }));
   const stored = await db.admin.query(
     'SELECT count(*)::int AS count FROM access.account_preferences WHERE account_id=$1',
     [owner.accountId],
@@ -172,22 +169,10 @@ test('an operator-opened session reads and sets its automated account only', asy
   expect(opened.status).toBe(200);
   const token = await fixture.request('/token', {}, cookies(opened));
   const { access_token: bearer } = (await token.json()) as { access_token: string };
-  expect((await call(bot.accountId, bearer)).value).toEqual({
-    spoilerLevel: 0,
-    suitability: 'blur',
-    shelf: {},
-    notifications: { reply: true, mention: true },
-    version: 0,
-  });
+  expect((await call(bot.accountId, bearer)).value).toEqual(shown({ version: 0 }));
   const result = await call(bot.accountId, bearer, { expectedVersion: 0, suitability: 'show', spoilerLevel: 1 });
   expect(result.response.status).toBe(200);
-  expect(result.value).toEqual({
-    spoilerLevel: 1,
-    suitability: 'show',
-    shelf: {},
-    notifications: { reply: true, mention: true },
-    version: 1,
-  });
+  expect(result.value).toEqual(shown({ spoilerLevel: 1, suitability: 'show', version: 1 }));
   expect((await call(owner.accountId, bearer)).response.status).toBe(403);
   expect((await call(bot.accountId, owner.bearer, { expectedVersion: 1, spoilerLevel: 2 })).response.status).toBe(403);
 });
@@ -218,13 +203,7 @@ test('PATCH passes through write-rate admission before a preference or receipt w
     limited,
   );
   expect(denied.response.status).toBe(429);
-  expect((await call(person.accountId, person.bearer)).value).toEqual({
-    spoilerLevel: 1,
-    suitability: 'blur',
-    shelf: {},
-    notifications: { reply: true, mention: true },
-    version: 1,
-  });
+  expect((await call(person.accountId, person.bearer)).value).toEqual(shown({ spoilerLevel: 1, version: 1 }));
   expect((await db.admin.query('SELECT 1 FROM core.receipt WHERE idempotency_key=$1', [deniedKey])).rows).toHaveLength(
     0,
   );
@@ -251,13 +230,7 @@ test('a shelf is empty until saved, merges by part and entry, and null removes',
   const person = await fixture.person('preferences-shelf');
   expect((await call(person.accountId, person.bearer)).value.shelf).toEqual({});
   const empty = await call(person.accountId, person.bearer, { expectedVersion: 0, shelf: {} });
-  expect(empty.value).toEqual({
-    spoilerLevel: 0,
-    suitability: 'blur',
-    shelf: {},
-    notifications: { reply: true, mention: true },
-    version: 0,
-  });
+  expect(empty.value).toEqual(shown({ version: 0 }));
   expect((await shelfRow(person.accountId)).rows).toHaveLength(0);
   const book = 'https://rezics.com/vocab/Book';
   const first = await call(person.accountId, person.bearer, {
@@ -270,18 +243,17 @@ test('a shelf is empty until saved, merges by part and entry, and null removes',
     },
   });
   expect(first.response.status).toBe(200);
-  expect(first.value).toEqual({
-    spoilerLevel: 0,
-    suitability: 'blur',
-    shelf: {
-      layouts: { all: 'grid', [book]: 'table' },
-      sorts: { all: { field: 'title', direction: 'asc' } },
-      gridSize: 'large',
-      tableColumns: ['title', 'cover'],
-    },
-    notifications: { reply: true, mention: true },
-    version: 1,
-  });
+  expect(first.value).toEqual(
+    shown({
+      shelf: {
+        layouts: { all: 'grid', [book]: 'table' },
+        sorts: { all: { field: 'title', direction: 'asc' } },
+        gridSize: 'large',
+        tableColumns: ['title', 'cover'],
+      },
+      version: 1,
+    }),
+  );
   const second = await call(person.accountId, person.bearer, {
     expectedVersion: 1,
     shelf: {
@@ -307,13 +279,7 @@ test('a shelf is empty until saved, merges by part and entry, and null removes',
   });
   expect((await call(person.accountId, person.bearer)).value).toEqual(removed.value);
   const cleared = await call(person.accountId, person.bearer, { expectedVersion: 3, shelf: null });
-  expect(cleared.value).toEqual({
-    spoilerLevel: 0,
-    suitability: 'blur',
-    shelf: {},
-    notifications: { reply: true, mention: true },
-    version: 4,
-  });
+  expect(cleared.value).toEqual(shown({ version: 4 }));
   expect((await shelfRow(person.accountId)).rows[0].shelf).toEqual({});
 });
 

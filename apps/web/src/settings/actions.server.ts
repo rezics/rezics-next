@@ -48,10 +48,13 @@ function recoveryPage(
       ? m.settings_notification_reply()
       : kind === 'mention'
         ? m.settings_notification_mention()
-        : kind
-            .split(/[_-]+/)
-            .map((word) => word[0]!.toUpperCase() + word.slice(1))
-            .join(' ');
+        : kind === 'thread_watch'
+          ? m.settings_notification_thread_watch()
+          : kind === 'board_activity'
+            ? m.settings_notification_board_activity()
+            : kind === 'moderation_decision'
+              ? m.settings_notification_moderation_decision()
+              : kind;
   const values = (preferences: NotificationPreferences) =>
     `<ul>${Object.entries(preferences)
       .map(
@@ -162,7 +165,17 @@ export async function submitNotificationForm(request: Request): Promise<Response
   if (recovery[0] === 'review') {
     const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
     if (!page.signedIn) return recoveryPage(request, token, change, 'review', undefined, 403);
-    if (!('preferences' in page) || !page.notifications || page.preferences.version < change.expectedVersion)
+    if (!('preferences' in page) || !page.page || !page.notifications || page.preferences.version < change.expectedVersion)
+      return recoveryPage(request, token, change, 'review');
+    const admitted =
+      change.notifications === null
+        ? null
+        : Object.fromEntries(
+            Object.entries(change.notifications).filter(([kind]) =>
+              page.page!.kinds.some((entry) => entry.kind === kind && entry.optional),
+            ),
+          );
+    if (change.notifications !== null && Object.keys(admitted).length === 0)
       return recoveryPage(request, token, change, 'review');
     return recoveryPage(
       request,
@@ -170,6 +183,7 @@ export async function submitNotificationForm(request: Request): Promise<Response
       {
         ...change,
         expectedVersion: page.preferences.version,
+        notifications: admitted,
         idempotencyKey: crypto.randomUUID(),
       },
       'confirmed',

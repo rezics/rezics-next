@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { settingsPreferencePage } from '../src/kernel/fake/settings-notifications';
 import { NotificationEditor } from '../src/settings/notification-recovery';
 import type { NotificationChange, NotificationWriteResult } from '../src/settings/preferences';
 import { WatchNotificationGuide } from '../src/settings/watch-notification-guide';
@@ -201,7 +202,7 @@ test('all locales explain watch categories and mandatory outcomes, link preferen
       expect(html).toContain(m.inbox_kind_unknown());
       expect(html).not.toContain(m.inbox_kind_reply());
       const guide = renderToStaticMarkup(createElement(WatchNotificationGuide));
-      expect(guide).toContain(m.settings_watch_notifications_mandatory());
+      expect(guide).toContain(m.settings_notifications_watches_destination());
       expect(guide).toContain(m.inbox_board_activity_text());
       expect(renderToStaticMarkup(createElement(InboxPreferencesLink))).toContain(`/${locale}/settings#notifications`);
     }
@@ -216,19 +217,20 @@ test('native optional board activity uses original intent/key recovery and retir
   const initial = { reply: true, mention: true, board_activity: true };
   const current = { ...initial, board_activity: false };
   const editor = new NotificationEditor(
-    { notifications: initial, version: 4 },
+    settingsPreferencePage(initial, 4),
     {
       save: async (input) => {
         calls.push(input);
         return calls.length === 1
           ? { ok: false, reason: 'unavailable' }
-          : { ok: true, notifications: current, version: 5 };
+          : { ok: true, notifications: current, version: 5, page: settingsPreferencePage(current, 5) };
       },
       read: async () => ({
         signedIn: true,
         preferences: { spoilerLevel: 0, suitability: 'blur', version: 5 },
         securityHref: null,
         notifications: current,
+        page: settingsPreferencePage(current, 5),
       }),
     },
   );
@@ -239,7 +241,7 @@ test('native optional board activity uses original intent/key recovery and retir
   expect(editor.snapshot()).toMatchObject({ phase: 'saved', draft: current });
   let settle!: (result: NotificationWriteResult) => void;
   const retired = new NotificationEditor(
-    { notifications: initial, version: 4 },
+    settingsPreferencePage(initial, 4),
     {
       save: () =>
         new Promise((resolve) => {
@@ -251,7 +253,7 @@ test('native optional board activity uses original intent/key recovery and retir
   const pending = retired.edit('board_activity', false, 4);
   retired.dispose();
   const before = retired.snapshot();
-  settle({ ok: true, notifications: current, version: 5 });
+  settle({ ok: true, notifications: current, version: 5, page: settingsPreferencePage(current, 5) });
   await pending;
   expect(retired.snapshot()).toBe(before);
 });

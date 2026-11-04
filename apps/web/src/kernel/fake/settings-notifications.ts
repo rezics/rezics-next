@@ -1,6 +1,40 @@
 import type { FakeRoute } from '../fake-modules.ts';
 import recording from '../recorded/settings-preferences.json';
-import { parseNotificationChange, type NotificationPreferences } from '../../settings/preferences';
+import {
+  parseNotificationChange,
+  type NotificationPreferences,
+  type PreferencePage,
+} from '../../settings/preferences';
+
+const optionalDefaults = {
+  reply: true,
+  mention: true,
+  thread_watch: true,
+  board_activity: true,
+} as const;
+
+/** Recorded Settings page matching the native catalogue projection. */
+export function settingsPreferencePage(
+  notifications: NotificationPreferences,
+  version: number,
+): PreferencePage {
+  return {
+    version,
+    kinds: [
+      ...Object.entries(optionalDefaults).map(([kind, defaultEnabled]) => ({
+        kind,
+        optional: true,
+        default: defaultEnabled,
+        enabled: notifications[kind] ?? defaultEnabled,
+      })),
+      { kind: 'moderation_decision', optional: false, default: true, enabled: true },
+    ],
+    actions: [
+      { name: 'edit', expectedVersion: version },
+      { name: 'reset', expectedVersion: version },
+    ],
+  };
+}
 
 /** Native-shaped fetch responses for the default Settings journey; the real actions and editors stay connected. */
 export function notificationRecoveryTransport(fallback: typeof fetch) {
@@ -39,7 +73,7 @@ export function notificationRecoveryTransport(fallback: typeof fetch) {
             { code: failure.code, detail: 'Private notification read diagnostic', request_id: 'notification-read' },
             { status: failure.status, headers: failure.retryAfter ? { 'retry-after': failure.retryAfter } : {} },
           )
-        : Response.json(current);
+        : Response.json({ ...current, page: settingsPreferencePage(current.notifications, current.version) });
     }
     const body = await request.text();
     const key = request.headers.get('idempotency-key');
@@ -54,18 +88,27 @@ export function notificationRecoveryTransport(fallback: typeof fetch) {
     if (request.method !== 'PATCH' || !key) return new Response(null, { status: 405 });
     if (receipt?.key === key)
       return receipt.body === body
-        ? Response.json(receipt.settings)
+        ? Response.json({
+            ...receipt.settings,
+            page: settingsPreferencePage(receipt.settings.notifications, receipt.settings.version),
+          })
         : Response.json({ code: 'invalid_request' }, { status: 422 });
     const change = parseNotificationChange({ ...JSON.parse(body), idempotencyKey: JSON.parse(key) });
     if (!change) return Response.json({ code: 'invalid_request' }, { status: 422 });
-    if (change.expectedVersion !== current.version) return Response.json({ code: 'conflict' }, { status: 409 });
+    if (change.expectedVersion !== current.version)
+      return Response.json(
+        { code: 'conflict', page: settingsPreferencePage(current.notifications, current.version) },
+        { status: 409 },
+      );
     const notifications: NotificationPreferences =
       change.notifications === null ? { ...recording.notifications } : { ...current.notifications };
     for (const [kind, enabled] of Object.entries(change.notifications ?? {})) notifications[kind] = enabled ?? true;
     current = { ...current, notifications, version: current.version + 1 };
     const original = receipt === null;
     receipt = { key, body, settings: current };
-    return original ? Response.json({ code: 'dependency_unavailable' }, { status: 503 }) : Response.json(current);
+    return original
+      ? Response.json({ code: 'dependency_unavailable' }, { status: 503 })
+      : Response.json({ ...current, page: settingsPreferencePage(current.notifications, current.version) });
   }) as typeof fetch;
   return {
     fetcher,
