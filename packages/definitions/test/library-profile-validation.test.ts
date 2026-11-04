@@ -20,7 +20,7 @@ test('only explicit Copy condition admission survives compilation and release ro
   expect(kinds[1]).not.toHaveProperty('condition');
   const historical = await compileCatalogue(fixture());
   expect(validateRelease(historical)).toEqual([]);
-  expect(compiledProfile(libraryProfile())).toEqual(historical.libraryProfiles!['fixture.reading']);
+  expect(compiledProfile(libraryProfile())).toEqual(historical.libraryProfiles!['fixture.reading']!);
   for (const profile of Object.values(historical.libraryProfiles!))
     for (const kind of profile.copies?.kinds ?? []) expect(kind).not.toHaveProperty('condition');
 });
