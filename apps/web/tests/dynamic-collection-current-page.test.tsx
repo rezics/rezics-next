@@ -431,6 +431,7 @@ test('Explicit recovery replaces current definition-bound results and retires un
       members: ready('Old member').members,
     });
     await h.render(original, h.reader('origin-filter'));
+    await h.click(m.library_collection_share());
     await h.click(m.library_dynamic_retry_unavailable());
     expect(h.calls).toHaveLength(1);
     expect(h.host.textContent).toContain(m.library_dynamic_retry_pending());
@@ -443,6 +444,8 @@ test('Explicit recovery replaces current definition-bound results and retires un
       filterStatus: undefined,
     });
     await settle(() => h.calls[0]!.resolve({ ...ready('ignored partial member'), page: replacement }));
+    await settle(() => h.copies[0]!.reject(new Error('Retired source clipboard')));
+    expect(h.host.textContent).not.toContain(m.error_message());
     expect(h.host.textContent).toContain('New definition member');
     expect(h.host.textContent).toContain('Current saved title');
     expect(h.host.textContent).not.toContain('Old member');

@@ -149,6 +149,7 @@ function DynamicCollectionPageLifetime({
       });
       focusResult.current = explicit && document.activeElement === retryButton.current;
       observed.current += 1;
+      setCopyFailure(false);
       setObservation(observed.current);
     } catch {
       if (active.current) {
@@ -161,6 +162,7 @@ function DynamicCollectionPageLifetime({
           filterStatus: undefined,
         }));
         observed.current += 1;
+        setCopyFailure(false);
         setObservation(observed.current);
       }
     } finally {
@@ -199,10 +201,11 @@ function DynamicCollectionPageLifetime({
   async function copyLink(href: string) {
     if (!active.current) return;
     setCopyFailure(false);
+    const source = observed.current;
     try {
       await navigator.clipboard.writeText(`${location.origin}${href}`);
     } catch {
-      if (active.current) setCopyFailure(true);
+      if (active.current && observed.current === source) setCopyFailure(true);
     }
   }
   const locale = getLocale();
@@ -318,7 +321,7 @@ function DynamicCollectionPageLifetime({
           ))}
         </nav>
         {current.cursorRestarted ? <p role="status">{m.library_collections_cursor_reset()}</p> : null}
-        <SavedFilterReviewScopeBoundary scope={reviewScope}>
+        <SavedFilterReviewScopeBoundary key={observation} scope={reviewScope}>
           {current.filterProperties && current.filterParams ? (
             <CollectionFilters
               id={current.id}
