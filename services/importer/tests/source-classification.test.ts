@@ -484,7 +484,7 @@ test('malformed and opposite-state responses remain uncertain and retry the exac
       expect((sealed.body as { expectedObservation: string | null }).expectedObservation).toBeNull();
 
       const retry = await f.run();
-      expect(retry.status, `${mutationResponse}: ${retry.diagnostic}`).toBe('committed');
+      expect(retry.status, `${mutationResponse}: ${retry.diagnostic}; writes=${f.writes.length}`).toBe('committed');
       expect(f.writes).toEqual([sealed, sealed]);
     } finally {
       await f.close();
