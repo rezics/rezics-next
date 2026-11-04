@@ -493,7 +493,7 @@ function RecoveryDeparture({
   focus: () => void;
 }) {
   const blocker = useBlocker({
-    shouldBlockFn: ({ next }) => shouldWarn() && !(next.pathname === '/recovery' && next.hash),
+    shouldBlockFn: ({ next }) => shouldWarn() && next.pathname !== '/recovery',
     enableBeforeUnload: false,
     withResolver: true,
   });
