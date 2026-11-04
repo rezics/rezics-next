@@ -245,11 +245,7 @@ export class ProfileAvatarUpload {
     (!this.selection.reservation || !!this.resume) &&
     !['type', 'too-large', 'rejected'].includes(this.state.failure?.reason ?? 'unavailable');
   private bindIntent(selection: Selection) {
-    if (
-      selection.intent &&
-      selection.intent.file === selection.file &&
-      selection.intent.viewer === selection.accountId
-    )
+    if (selection.intent && selection.intent.file === selection.file && selection.intent.viewer === selection.accountId)
       return selection.intent;
     selection.intent = createMediaReservationIntent(
       { containerId: selection.accountId },
