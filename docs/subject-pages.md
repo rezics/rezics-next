@@ -1615,8 +1615,7 @@ Unlabelled or undisclosed Character targets stay unpaired and non-clickable. Reg
 their existing groups. The Character grouping and original credit order are both local presentations of the same native
 window; the scope label names that window, and the native continuation remains unchanged.
 
-Decision: disclosed Character and Person links open in same-locale new tabs, preserving the original work's loaded
-window, presentation, and focused link when the reader returns. An unlabelled target has no link.
+Decision: inspect the exact forward P725 holder/property/statement through the existing ValueExplanation entry; open disclosed Character and Person targets in same-locale new tabs with a validated Context/node/presentation/focus return carrying up to 16 opaque cursor addresses (16 KiB URL-encoded history cap), never old page data; each return or Previous route re-reads its selected current page, and a row that no longer qualifies reports the changed window and offers the current restart. An unlabelled or concealed target has no link.
 
 ### Work cast Cost
 
@@ -1634,6 +1633,8 @@ the native imported rights-text limits (8 KiB for cover-credit metadata). No mis
 or identifier. The Web adapter test charges typed calls, retained rows, and UTF-8 body bytes at 64, 512, and 4,096
 unrelated Subjects and historical assertions; those scales do not change this loaded window. This is not native SQL
 growth evidence; the directed-credit native growth acceptance remains separate.
+
+For one complete visit, the mounted controller retains only the selected current page (at most 100 original rows, 256 related summaries and 1,600 pair references) plus at most 16 cursor strings; encoded cursor history is capped at 16 KiB, and the full validated return remains under the existing 32 KiB address bound. Target return and Previous each resolve one selected page from the current native reader; More requests only its one next cursor. Original inspection reads the exact holder/property/statement through the existing value reader, and Sources uses its current selected statement; no prior authorized payload is retained in navigation.
 
 ## Scores on pages
 

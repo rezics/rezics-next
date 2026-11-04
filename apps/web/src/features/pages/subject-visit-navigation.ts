@@ -96,6 +96,92 @@ export type ConnectionReturnWindow = {
   index?: number;
 };
 
+export type WorkCastVisitReturn = {
+  context: string;
+  node: string;
+  presentation: 'character' | 'credit-order';
+  statement?: string;
+  character?: string;
+  /** Bounded opaque page addresses before the selected page; payloads are always re-read. */
+  history?: (string | null)[];
+};
+
+/** A work-cast return selects one current row and a bounded stream address, never its old payload. */
+export function workCastVisitReturn(fragment: string): WorkCastVisitReturn | undefined {
+  if (!fragment.startsWith('#work-cast?') || fragment.length > 32768) return;
+  const params = new URLSearchParams(fragment.slice('#work-cast?'.length));
+  const keys = [...params.keys()];
+  if (
+    keys.length < 3 ||
+    keys.length > 6 ||
+    new Set(keys).size !== keys.length ||
+    keys.some((key) => !['context', 'node', 'presentation', 'statement', 'character', 'history'].includes(key))
+  )
+    return;
+  const context = params.get('context');
+  const node = params.get('node');
+  const presentation = params.get('presentation');
+  const statement = params.get('statement');
+  const character = params.get('character');
+  const serializedHistory = params.get('history');
+  let history: (string | null)[] | undefined;
+  if (serializedHistory !== null) {
+    if (serializedHistory.length > 16000) return;
+    try {
+      const parsed: unknown = JSON.parse(serializedHistory);
+      if (
+        !Array.isArray(parsed) ||
+        parsed.length > 16 ||
+        parsed.some(
+          (cursor) =>
+            cursor !== null &&
+            (typeof cursor !== 'string' || cursor.length > 4096 || /[\u0000-\u001f\u007f]/u.test(cursor)),
+        )
+      )
+        return;
+      history = parsed as (string | null)[];
+    } catch {
+      return;
+    }
+  }
+  if (
+    !context ||
+    !new RegExp(`^${uuid}$`, 'i').test(context) ||
+    !node ||
+    !/^[A-Za-z0-9_-]{1,64}$/u.test(node) ||
+    (presentation !== 'character' && presentation !== 'credit-order') ||
+    (statement !== null && !new RegExp(`^${uuid}$`, 'i').test(statement)) ||
+    (character !== null && !new RegExp(`^${uuid}$`, 'i').test(character)) ||
+    (character !== null && statement === null)
+  )
+    return;
+  return {
+    context,
+    node,
+    presentation,
+    ...(statement ? { statement } : {}),
+    ...(character ? { character } : {}),
+    ...(history !== undefined ? { history } : {}),
+  };
+}
+
+export function workCastVisitReturnFragment(value: WorkCastVisitReturn, maxEncodedHistory = 16000): string {
+  const history = value.history ? [...value.history].slice(-16) : undefined;
+  const historyBudget = Math.max(0, Math.min(16000, Math.floor(maxEncodedHistory)));
+  while (history && history.length && encodeURIComponent(JSON.stringify(history)).length > historyBudget) history.shift();
+  const retainedHistory = history && encodeURIComponent(JSON.stringify(history)).length <= historyBudget ? history : undefined;
+  const params = new URLSearchParams({
+    context: value.context,
+    node: value.node,
+    presentation: value.presentation,
+    ...(value.statement ? { statement: value.statement } : {}),
+    ...(value.character ? { character: value.character } : {}),
+    ...(retainedHistory !== undefined ? { history: JSON.stringify(retainedHistory) } : {}),
+  });
+  const fragment = `#work-cast?${params}`;
+  return workCastVisitReturn(fragment) ? fragment : '#work-cast';
+}
+
 /** The released Character streams keep their existing native section owner on return. */
 export function connectionReturnGroup(window: ConnectionReturnWindow): 'relations' | 'characters' | 'credits' {
   if (window.stream === 'in:schema:character') return 'characters';
@@ -492,6 +578,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       fragment !== '#connections' &&
       !(subject && !subject[2] && fragment === '#supplied-names') &&
       !(subject && connectionReturnWindow(fragment)) &&
+      !(subject && workCastVisitReturn(fragment)) &&
       !(subject && summaryReadingReturn(fragment)) &&
       fragment !== '#manga-reader' &&
       !(subject && (fragment === '#work-tags' || workTagReturn(fragment))) &&

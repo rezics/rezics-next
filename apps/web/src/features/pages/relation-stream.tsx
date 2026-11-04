@@ -7,6 +7,7 @@ import { cn } from '@rezics/ui/utils';
 import { m } from '../../paraglide/messages.js';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { subjectViewHref } from '../../subject/subject-href';
+import { workCastVisitReturn } from './subject-visit-navigation';
 import { sessionQuery } from '../../session/query';
 import { CoverList } from './cover-list';
 import { creditVisit } from '../catalogue/credit-inspection/model';
@@ -31,7 +32,7 @@ import {
 } from './relation-stream-progress';
 import { StreamHeading, type StreamHeadingLevel } from './view-heading';
 import { workCastAdmitted, WORK_VOICE_PROPERTY } from '../catalogue/work-cast/model';
-import { WorkCastWindow } from '../catalogue/work-cast/view';
+import { WorkCastWindow, type WorkCastNavigation } from '../catalogue/work-cast/view';
 
 let nextRelationIncarnation = 0;
 let nextSectionIncarnation = 0;
@@ -41,6 +42,21 @@ const queryClientIncarnations = new WeakMap<QueryClient, number>();
 // Closing blocks new owners. Existing owners keep their weakly recorded lease, including StrictMode resumption.
 const privateReadingOwners = new WeakMap<object, WeakSet<object>>();
 const closedPrivateReadingObjects = new WeakSet<object>();
+const relationAddressLimit = 16;
+
+function currentCursor(section: Section, routeHref: string): string | null {
+  if (section.ok && (section.read.kind === 'relations' || section.read.kind === 'links') && section.read.cursor)
+    return section.read.cursor;
+  return new URL(routeHref, 'https://rezics.invalid').searchParams.get('cursor');
+}
+
+function nextAddress(cursors: readonly (string | null)[], index: number, cursor: string) {
+  const knownIndex = index + 1;
+  if (cursors[knownIndex] === cursor) return { cursors, index: knownIndex };
+  let next = [...cursors.slice(0, index + 1), cursor];
+  if (next.length > relationAddressLimit) next = next.slice(-relationAddressLimit);
+  return { cursors: next, index: next.length - 1 };
+}
 
 type OwnedQuery = { client: QueryClient; key: QueryKey };
 type StreamOwner = {
@@ -242,7 +258,7 @@ export function RelationStream(props: {
     },
     [],
   );
-  return <StreamState key={identity} identity={identity} registerOwner={registerOwner} {...props} />;
+  return <StreamState key={identity} identity={identity} routeHref={routeHref} registerOwner={registerOwner} {...props} />;
 }
 
 function StreamState({
@@ -255,6 +271,7 @@ function StreamState({
   workCast,
   headingLevel,
   identity,
+  routeHref,
   registerOwner,
 }: {
   value: OverviewValue;
@@ -266,6 +283,7 @@ function StreamState({
   workCast?: boolean | undefined;
   headingLevel?: StreamHeadingLevel | undefined;
   identity: string;
+  routeHref: string;
   registerOwner: (identity: string, retire: (updateState?: boolean) => void) => () => void;
 }) {
   const queryClient = useQueryClient();
@@ -273,17 +291,33 @@ function StreamState({
   type State = {
     page: Section | undefined;
     progress: RelationProgress;
+    pageCursor: string | null;
+    addressCursors: (string | null)[];
+    addressIndex: number;
+    returnState?: ReturnType<typeof workCastVisitReturn>;
     pending: boolean;
     error?: { status?: number | undefined; retryAt?: number | undefined } | undefined;
     completion?: { count: number; terminal: boolean; trigger: HTMLAnchorElement | null } | undefined;
   };
-  const [state, setState] = useState<State>(() => ({
-    page: section,
-    progress: startRelationProgress(section.ok ? relationCursor(section.body) : undefined),
-    pending: false,
-  }));
+  const [state, setState] = useState<State>(() => {
+    const pageCursor = currentCursor(section, routeHref);
+    const returnState = workCast ? workCastVisitReturn(new URL(routeHref, 'https://rezics.invalid').hash) : undefined;
+    const addressCursors =
+      returnState?.history !== undefined && pageCursor !== null
+        ? [...returnState.history, pageCursor].slice(-relationAddressLimit)
+        : [pageCursor];
+    return {
+      page: section,
+      progress: startRelationProgress(section.ok ? relationCursor(section.body) : undefined),
+      pageCursor,
+      addressCursors,
+      addressIndex: addressCursors.length - 1,
+      ...(returnState ? { returnState } : {}),
+      pending: false,
+    };
+  });
   const [, refreshOwner] = useState(0);
-  const { page, progress, pending, error, completion } = state;
+  const { page, progress, pageCursor, addressCursors, addressIndex, returnState, pending, error, completion } = state;
   const end = useRef<HTMLParagraphElement>(null);
   const active = useRef(false);
   const incarnation = useRelationIncarnation();
@@ -339,6 +373,10 @@ function StreamState({
           ...previous,
           page: undefined,
           progress: startRelationProgress(undefined),
+          pageCursor: null,
+          addressCursors: [null],
+          addressIndex: 0,
+          returnState: undefined,
           pending: false,
           error: undefined,
           completion: undefined,
@@ -464,6 +502,32 @@ function StreamState({
   const realm = value.realm ?? (value.context?.population.kind === 'realm' ? value.context.population.id : undefined);
   const query = new URLSearchParams({ node, ...(cursor ? { cursor } : {}), ...(realm ? { realm } : {}) });
   const href = base ? `${base}?${query}` : undefined;
+  const hasPrevious = addressIndex > 0;
+  const previousCursor = hasPrevious ? (addressCursors[addressIndex - 1] ?? null) : undefined;
+  const previousHref =
+    base && hasPrevious
+      ? `${base}?${new URLSearchParams({
+          node,
+          ...(typeof previousCursor === 'string' && previousCursor ? { cursor: previousCursor } : {}),
+          ...(realm ? { realm } : {}),
+        })}`
+      : undefined;
+  const restartQuery = new URLSearchParams({ node, ...(realm ? { realm } : {}) });
+  const restartHref = base ? `${base}?${restartQuery}` : undefined;
+  const castNavigation: WorkCastNavigation | undefined = workCast
+    ? {
+        view: currentView,
+        node,
+        cursor: pageCursor,
+        hasPrevious,
+        ...(hasPrevious ? { previousCursor: previousCursor ?? null } : {}),
+        ...(previousHref ? { previousHref } : {}),
+        returnHistory: addressCursors.slice(0, addressIndex),
+        previousHistory: addressIndex > 1 ? addressCursors.slice(0, addressIndex - 1) : [],
+        ...(returnState ? { returnState } : {}),
+        ...(restartHref ? { restartHref } : {}),
+      }
+    : undefined;
   const options = { locale: value.locale as never };
   async function more(event: MouseEvent<HTMLAnchorElement>) {
     if (
@@ -552,10 +616,16 @@ function StreamState({
             };
           }
           const nextCursor = next.ok ? relationCursor(next.body) : undefined;
-          const nextProgress = next.ok ? advanceRelationProgress(previous.progress, nextCursor) : previous.progress;
+          const knownPage = previous.addressCursors[previous.addressIndex + 1] === cursor;
+          const address = next.ok ? nextAddress(previous.addressCursors, previous.addressIndex, cursor) : undefined;
+          const nextProgress =
+            next.ok && !knownPage ? advanceRelationProgress(previous.progress, nextCursor) : previous.progress;
           return {
             ...previous,
             page: next.ok ? next : undefined,
+            pageCursor: next.ok ? cursor : previous.pageCursor,
+            ...(address ? { addressCursors: [...address.cursors], addressIndex: address.index } : {}),
+            returnState: next.ok ? undefined : previous.returnState,
             progress: nextProgress,
             error: next.ok ? undefined : { status: next.status },
             completion: next.ok
@@ -627,12 +697,16 @@ function StreamState({
       )}
       {readerUnavailable ? (
         <p role="alert">{m.subject_relation_unavailable({}, options)}</p>
+      ) : castWindowReady ? (
+        <WorkCastWindow
+          items={items}
+          value={value}
+          label={title}
+          creditVisit={currentCreditVisit}
+          navigation={castNavigation}
+        />
       ) : items.length ? (
-        castWindowReady ? (
-          <WorkCastWindow items={items} value={value} label={title} creditVisit={currentCreditVisit} />
-        ) : (
           <CoverList items={items} value={value} label={title} creditVisit={currentCreditVisit} />
-        )
       ) : !visibleError ? (
         <p role={!section.ok ? 'status' : undefined}>
           {section.ok ? m.subject_relation_empty_page({}, options) : failure(section.status, value.locale)}

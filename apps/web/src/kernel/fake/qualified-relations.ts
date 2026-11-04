@@ -54,7 +54,12 @@ const related = {
 
 /** A current native page response: no per-row subject fetch or private response cache. */
 export function qualifiedRelationsPage(
-  options: { continuation?: PageContinuation | undefined; realm?: string | undefined; error?: number | undefined } = {},
+  options: {
+    continuation?: PageContinuation | undefined;
+    realm?: string | undefined;
+    error?: number | undefined;
+    retryCastOnce?: boolean | undefined;
+  } = {},
 ): SubjectPageData {
   const context: SelectedContext = options.realm
     ? { id: options.realm, population: { kind: 'realm', id: options.realm, title: 'Cast community' } }
@@ -161,7 +166,7 @@ export function qualifiedRelationsPage(
       status: 200,
       body: {
         [read.kind === 'links' ? 'links' : 'relations']: rows,
-        next: node === 'characters' || later ? null : `${node}-next`,
+        next: node === 'characters' || later ? null : node === 'cast' && options.retryCastOnce ? 'retry-cast-once' : `${node}-next`,
         freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },
       },
     };
@@ -182,13 +187,21 @@ async function page({ request }: { request: Request }) {
     continuation?: PageContinuation;
   };
   if (body.target?.subject !== qualifiedSubject.id) return;
+  const retryCast = body.target.realm === qualifiedRealm;
+  if (!body.continuation && retryCast) retryCastAttempted = false;
+  if (retryCast && body.continuation?.cursor === 'retry-cast-once' && !retryCastAttempted) {
+    retryCastAttempted = true;
+    throw new TypeError('Network connection lost');
+  }
   return {
     status: 200,
     ...qualifiedRelationsPage({
       continuation: body.continuation,
       realm: body.target.realm,
+      retryCastOnce: retryCast,
       error: body.continuation?.cursor === 'refuse' ? 409 : undefined,
     }),
   };
 }
+let retryCastAttempted = false;
 export const routes: FakeRoute[] = [{ method: 'POST', path: '/v1/pages:read', story: page, fixture: page }];
