@@ -8103,5 +8103,9 @@
   "search_share_oversized": "Esta búsqueda es demasiado grande para un enlace. Sigue editándola para reducirla.",
   "search_share_private": "Esta búsqueda contiene condiciones privadas o no transferibles. Elimínalas explícitamente antes de compartir.",
   "search_share_unavailable": "No se puede compartir ahora. Tu búsqueda se conserva; vuelve a intentarlo.",
-  "search_share_close": "Cerrar vista previa"
+  "search_share_close": "Cerrar vista previa",
+  "sources_actions_unavailable": "La elegibilidad para corregir no está disponible temporalmente. Las pruebas públicas siguen visibles.",
+  "sources_correction_denied": "Tus permisos actuales no permiten proponer correcciones.",
+  "sources_current_reading": "Esta es la lectura seleccionada actual. Una propuesta no selecciona nuevas pruebas.",
+  "sources_scope_unavailable": "La comparación no está disponible porque esta ruta no puede expresar el ámbito editorial del Realm."
 }

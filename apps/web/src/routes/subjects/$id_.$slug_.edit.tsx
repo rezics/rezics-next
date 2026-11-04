@@ -1,3 +1,5 @@
+import { subjectHref } from '../../subject/subject-href';
+import { pageText } from '../../features/pages/shared';
 import { editorRequest } from '../../features/catalogue/editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
@@ -92,7 +94,10 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
       reviewProperty: validExact ? reviewProperty : undefined,
       candidate: validExact ? candidate : undefined,
       context: validExact ? context : undefined,
-      returnTo: input.returnTo === 'queue' || input.returnTo === 'changes' ? input.returnTo : undefined,
+      returnTo:
+        input.returnTo === 'queue' || input.returnTo === 'changes' || input.returnTo === 'sources'
+          ? input.returnTo
+          : undefined,
       reviewInvalid: hasExact && !validExact,
     };
   },
@@ -244,48 +249,58 @@ function CorrectionRoute() {
       />
     );
   return (
-    <StatementEditor
-      key={`${id}:${property}:${statement}:${locale}`}
-      initial={query.data}
-      locale={locale}
-      transport={{
-        read,
-        propose: (data) => submitCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-      }}
-      lifecycle={{
-        change: (data) => changeOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-        read: (data) => rereadOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-      }}
-      onLifecycleClear={async () => {
-        if (!editorWork.live()) return;
-        // Cancel in-flight reads before dropping cached subject/candidate payloads.
-        await queryClient.cancelQueries({ predicate: (query) => query.queryKey.includes(id) });
-        if (!editorWork.live()) return;
-        queryClient.setQueriesData(
-          { predicate: (query) => query.queryKey.includes(id) && query.queryKey[0] === 'statement-editor' },
-          { ok: false, reason: 'unavailable' },
-        );
-        queryClient.removeQueries({
-          predicate: (query) => query.queryKey.includes(id) && query.queryKey[0] !== 'statement-editor',
-        });
-      }}
-      review={(initialSession) => {
-        return {
-          read: async (field, cursor, session = initialSession, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
-            const result = await readCorrectionReview({
-              data: { expectedReader: work.reader, id, property: field, cursor, session },
-              headers: csrfHeaders(),
-            });
-            return result;
-          },
-          confirm: async (command, work) => {
-            if (!work?.live()) return { ok: false, reason: 'denied' };
-            const result = await confirmCorrection({ data: command, headers: csrfHeaders() });
-            return result;
-          },
-        };
-      }}
-    />
+    <div className="space-y-4">
+      {returnTo === 'sources' && query.data.ok && (
+        <a
+          className="inline-flex min-h-11 items-center underline"
+          href={`${subjectHref({ id, label: pageText(query.data.public.subject.labels, locale).text }, locale).href}/sources#subject-sources-heading`}
+        >
+          {m.subject_sources()}
+        </a>
+      )}
+      <StatementEditor
+        key={`${id}:${property}:${statement}:${locale}`}
+        initial={query.data}
+        locale={locale}
+        transport={{
+          read,
+          propose: (data) => submitCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        }}
+        lifecycle={{
+          change: (data) => changeOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          read: (data) => rereadOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        }}
+        onLifecycleClear={async () => {
+          if (!editorWork.live()) return;
+          // Cancel in-flight reads before dropping cached subject/candidate payloads.
+          await queryClient.cancelQueries({ predicate: (query) => query.queryKey.includes(id) });
+          if (!editorWork.live()) return;
+          queryClient.setQueriesData(
+            { predicate: (query) => query.queryKey.includes(id) && query.queryKey[0] === 'statement-editor' },
+            { ok: false, reason: 'unavailable' },
+          );
+          queryClient.removeQueries({
+            predicate: (query) => query.queryKey.includes(id) && query.queryKey[0] !== 'statement-editor',
+          });
+        }}
+        review={(initialSession) => {
+          return {
+            read: async (field, cursor, session = initialSession, work) => {
+              if (!work?.live()) return { ok: false, reason: 'denied' };
+              const result = await readCorrectionReview({
+                data: { expectedReader: work.reader, id, property: field, cursor, session },
+                headers: csrfHeaders(),
+              });
+              return result;
+            },
+            confirm: async (command, work) => {
+              if (!work?.live()) return { ok: false, reason: 'denied' };
+              const result = await confirmCorrection({ data: command, headers: csrfHeaders() });
+              return result;
+            },
+          };
+        }}
+      />
+    </div>
   );
 }

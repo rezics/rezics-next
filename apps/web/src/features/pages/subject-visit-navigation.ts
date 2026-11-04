@@ -52,7 +52,7 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
       url.origin !== 'https://rezics.invalid' ||
       !match ||
       (locale !== undefined && match[1] !== locale) ||
-      (subject?.[2] !== undefined && !isView(subject[2]))
+      (subject?.[2] !== undefined && !isView(subject[2]) && subject[2] !== 'sources')
     )
       return;
     if (copiesPath) {
@@ -83,7 +83,12 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
     )
       return;
     const fragment = url.hash === '' ? '#connections' : url.hash;
-    if (fragment !== '#connections' && fragment !== '#manga-reader') return;
+    if (
+      fragment !== '#connections' &&
+      fragment !== '#manga-reader' &&
+      !(subject?.[2] === 'sources' && fragment === '#subject-sources-heading')
+    )
+      return;
     return `${url.pathname}${url.search}${fragment}`;
   } catch {
     return;

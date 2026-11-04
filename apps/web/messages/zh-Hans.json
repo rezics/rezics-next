@@ -8103,5 +8103,9 @@
   "search_share_oversized": "此搜索过大，无法通过链接分享。请继续编辑以缩小搜索。",
   "search_share_private": "此搜索含有私密或不可移植的条件。分享前请明确移除这些条件。",
   "search_share_unavailable": "暂时无法分享。搜索已保留，请重试。",
-  "search_share_close": "关闭预览"
+  "search_share_close": "关闭预览",
+  "sources_actions_unavailable": "暂时无法获取更正资格信息。公开证据仍然显示。",
+  "sources_correction_denied": "你当前的权限不允许提出更正。",
+  "sources_current_reading": "这是当前选定的内容。提案不会自动选定新证据。",
+  "sources_scope_unavailable": "此路径无法表达 Realm 的编辑范围，因此无法比较。"
 }

@@ -14,6 +14,10 @@ const render = (result: SourcesResult) => renderToString(createElement(SubjectSo
 
 test('Explain the currently selected subject facts and their sources through the existing API and reader with honest failure states', async () => {
   const fixture = catalogueSourcesFixture();
+  fixture.read.viewerActions = {
+    state: 'available',
+    actions: [{ action: 'statement:propose', operations: ['subject.propose'] }],
+  };
   const result = await readSubjectSources(fixture.client, fixture.id, 'en', sourceDefinitions);
   expect(result.kind).toBe('ready');
   if (result.kind !== 'ready') throw new Error('Expected selected public facts');
@@ -24,7 +28,8 @@ test('Explain the currently selected subject facts and their sources through the
   expect(html).toContain('Reviewed bibliography');
   expect(html).toContain('Bibliography contributors');
   expect(html).toContain('CC0-1.0');
-  expect(html).toContain(`href="${result.page.href}/details?candidateField=schema%3AdatePublished#candidate-review"`);
+  expect(result.page.fields[0]?.compareHref).toContain('candidateField=schema%3AdatePublished');
+  expect(html).toContain('returnTo=sources');
   expect(html).toContain(`href="${result.page.href}"`);
   expect(fixture.calls).toEqual([
     { path: `/v1/subjects/${fixture.id}`, authorization: null, session: 'sources-session' },
@@ -142,4 +147,18 @@ test('only selected disclosed values and their reference parts are explained; hi
   expect(html).toContain('Authored text');
   expect(html).toContain('9780156012195');
   expect(html).not.toContain('<img');
+});
+
+test('current native denial and unavailable actions preserve evidence without correction authority', () => {
+  const fixture = catalogueSourcesFixture();
+  for (const actions of [{ state: 'available' as const, actions: [] }, { state: 'unavailable' as const }]) {
+    fixture.read.viewerActions = actions;
+    const page = explainSubjectSources(fixture.read, 'en', sourceDefinitions);
+    const html = render({ kind: 'ready', page });
+    expect(html).toContain(citationUrl);
+    expect(page.fields.every((field) => !field.compareHref && field.facts.every((fact) => !fact.correctionHref))).toBe(
+      true,
+    );
+    expect(html).toContain(actions.state === 'available' ? 'current authority' : 'temporarily unavailable');
+  }
 });

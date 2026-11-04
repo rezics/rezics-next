@@ -8103,5 +8103,9 @@
   "search_share_oversized": "Cette recherche est trop grande pour un lien. Modifiez-la pour la réduire.",
   "search_share_private": "Cette recherche contient des conditions privées ou non transférables. Retirez-les explicitement avant de partager.",
   "search_share_unavailable": "Le partage est indisponible. Votre recherche est conservée ; réessayez.",
-  "search_share_close": "Fermer l’aperçu"
+  "search_share_close": "Fermer l’aperçu",
+  "sources_actions_unavailable": "L’éligibilité à la correction est temporairement indisponible. Les preuves publiques restent visibles.",
+  "sources_correction_denied": "Vos autorisations actuelles ne permettent pas de proposer des corrections.",
+  "sources_current_reading": "Cette lecture reflète la sélection actuelle. Une proposition ne sélectionne pas de nouvelles preuves.",
+  "sources_scope_unavailable": "La comparaison est indisponible : cette route ne peut pas exprimer la portée éditoriale du Realm."
 }

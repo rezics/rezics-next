@@ -1121,3 +1121,21 @@ A direct visit ends at the ordinary Concept reader. A classification-return call
 creator never writes a parent-work classification or grants adoption. Unknown delivery retries the same bytes and key;
 after acknowledgement, recovery reads only the returned UUID. Creating a concept proposes no vocabulary release, source
 licence, provider claim, equivalence mapping, or ballot.
+
+## Sources correction visit
+
+Sources keeps selected evidence, reviewed source-record attribution/licence, authored text rights and cover rights separate.
+Public evidence does not confer editorial authority. Global correction eligibility is hydrated through the private BFF,
+bound to the current reader and the native mounted `subject.propose` action projection. Missing action data is unavailable,
+not denial. A confirmed empty action set refuses correction while retaining evidence. No private action envelope is emitted by SSR.
+
+Decision: scalar selected statements open the existing exact-statement editor; single-statement comparison carries that same address and a validated Sources return, while Realm evidence stays read-only because the mounted destination cannot express its editorial scope.
+The destination rereads admission and selection and commands reauthorize, including retries. Return navigation rereads current
+Sources independently; proposing or accepting a candidate never injects it as selected support. Reader replacement retires
+pending reads, and provider observation inspection retains its independent digest pin and lifetime.
+
+### Inspect selected evidence and current correction entry
+
+- Touches: one bounded selected Subject read, its reviewed metadata and native correction action preparation; comparison uses its existing page cap.
+- Bound: existing evidence/reference budgets, one deduplicated native Global action resource, no per-citation permission reads or remote body fetches.
+- Growth check: unrelated sources, candidate history and authority history must not grow selected evidence bytes or the fixed comparison handoff. Native action preparation includes current authority and disclosure work.

@@ -8103,5 +8103,9 @@
   "search_share_oversized": "此搜尋過大，無法透過連結分享。請繼續編輯以縮小搜尋。",
   "search_share_private": "此搜尋含有私密或不可攜的條件。分享前請明確移除這些條件。",
   "search_share_unavailable": "暫時無法分享。搜尋已保留，請重試。",
-  "search_share_close": "關閉預覽"
+  "search_share_close": "關閉預覽",
+  "sources_actions_unavailable": "暫時無法取得更正資格資訊。公開證據仍然顯示。",
+  "sources_correction_denied": "你目前的權限不允許提出更正。",
+  "sources_current_reading": "這是目前選定的內容。提案不會自動選定新證據。",
+  "sources_scope_unavailable": "此路徑無法表達 Realm 的編輯範圍，因此無法比較。"
 }

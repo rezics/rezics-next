@@ -8103,5 +8103,9 @@
   "search_share_oversized": "この検索はリンクには大きすぎます。編集して短くしてください。",
   "search_share_private": "非公開または移植できない条件があります。共有前に明示的に削除してください。",
   "search_share_unavailable": "共有を利用できません。検索は保持されています。再試行してください。",
-  "search_share_close": "プレビューを閉じる"
+  "search_share_close": "プレビューを閉じる",
+  "sources_actions_unavailable": "訂正の権限情報を現在取得できません。公開の根拠は引き続き表示されます。",
+  "sources_correction_denied": "現在の権限では訂正を提案できません。",
+  "sources_current_reading": "現在選択されている内容です。提案によって新しい根拠が選択されることはありません。",
+  "sources_scope_unavailable": "この経路ではRealmの編集範囲を指定できないため、比較できません。"
 }

@@ -17,11 +17,13 @@ import { subjectHref, subjectViewHref } from '../../subject/subject-href';
 import type { Related } from '../../subject/types';
 
 export type SourceDefinitions = {
-  types: Record<string, { labels?: Record<string, string> }>;
+  types: Record<string, { labels?: Record<string, string>; properties?: readonly string[] }>;
   properties: Record<string, { labels?: Record<string, string>; relation?: { group?: string } }>;
 };
 export type SourcePart = { label: ReturnType<typeof pageText>; snak: Snak };
 export type SourceFact = {
+  statement?: string;
+  correctionHref?: string;
   snak: Snak;
   display?: 'document' | 'media';
   qualifiers: SourcePart[];
@@ -36,6 +38,7 @@ export type SourceField = {
 export type SourcesPageData = {
   realm?: string | undefined;
   context?: import('@rezics/composition').SelectedContext | undefined;
+  viewer?: { account: SubjectRead['account']; actions: NonNullable<SubjectRead['viewerActions']> };
   id: string;
   title: ReturnType<typeof pageText>;
   typeLabel: ReturnType<typeof pageText>;
@@ -114,6 +117,7 @@ export function explainSubjectSources(
       if (!locator && !presentable(statement, related)) return [];
       return [
         {
+          statement: statement.id,
           // Locators and digests do not cross the presentation boundary.
           snak: {
             property: statement.property,
@@ -132,19 +136,34 @@ export function explainSubjectSources(
     if (!facts.length) continue;
     const relation = definitions?.properties[property]?.relation;
     // Reuse the existing descriptive-slot candidate picker. Edge slots need a separate target address.
-    const comparable = definitions?.properties[property] && (!relation || relation.group === 'classification');
+    const comparable =
+      definitions?.types[subject.type]?.properties?.includes(property) &&
+      definitions.properties[property] &&
+      (!relation || relation.group === 'classification');
+    const allowed =
+      read.viewerActions?.state === 'available' &&
+      read.viewerActions.actions.some(
+        (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.propose'),
+      );
+    const returnTo = `${subjectViewHref(identity, locale, 'sources')}#subject-sources-heading`;
+    if (allowed && comparable && !relation && literalTypes.has(selected[0]?.property.data_type ?? ''))
+      for (const fact of facts) {
+        const query = new URLSearchParams({ property, statement: fact.statement!, returnTo: 'sources' });
+        fact.correctionHref = `${subjectHref(identity, locale).href}/edit?${query}`;
+      }
     fields.push({
       property,
       label: labelFor(property),
       facts,
-      ...(comparable
+      ...(comparable && allowed
         ? {
-            compareHref: `${subjectViewHref(identity, locale, 'details')}?candidateField=${encodeURIComponent(property)}#candidate-review`,
+            compareHref: `${subjectViewHref(identity, locale, 'details')}?${new URLSearchParams({ candidateField: property, via: returnTo, ...(facts.length === 1 && facts[0]?.statement ? { sourceStatement: facts[0].statement } : {}) })}#candidate-review`,
           }
         : {}),
     });
   }
   return {
+    viewer: { account: read.account, actions: read.viewerActions ?? { state: 'unavailable' } },
     id: subject.id,
     title,
     typeLabel: pageText(definitions?.types[subject.type]?.labels, locale),
@@ -196,17 +215,22 @@ export async function readSubjectSources(
   id: string,
   locale: string,
   definitions?: SourceDefinitions | Promise<SourceDefinitions | undefined>,
+  includeViewerActions = false,
 ): Promise<SourcesResult> {
   if (!uuid.test(id)) return { kind: 'missing' };
   try {
-    let current = await client.subjects({ id }).get({ fetch: { redirect: 'manual' } });
+    let current = await client
+      .subjects({ id })
+      .get({ query: { includeViewerActions }, fetch: { redirect: 'manual', cache: 'no-store' } });
     let expected = id;
     if (current.status === 308) {
       const body = current.data ?? current.error?.value;
       const moved = body && 'redirect' in body ? body.redirect : undefined;
       if (!moved || moved.from !== id || !uuid.test(moved.to) || moved.to === id) return { kind: 'unavailable' };
       expected = moved.to;
-      current = await client.subjects({ id: expected }).get({ fetch: { redirect: 'manual' } });
+      current = await client
+        .subjects({ id: expected })
+        .get({ query: { includeViewerActions }, fetch: { redirect: 'manual', cache: 'no-store' } });
     }
     if (current.status !== 200 || !current.data) return failure(current.status);
     if (current.data.subject.id !== expected) return { kind: 'unavailable' };

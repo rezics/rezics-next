@@ -8195,5 +8195,9 @@
   "search_share_oversized": "This query is too large for a link. Keep editing to reduce it.",
   "search_share_private": "This query has private or nonportable conditions. Remove them explicitly before sharing.",
   "search_share_unavailable": "Sharing is unavailable. Your query is preserved; try again.",
-  "search_share_close": "Close preview"
+  "search_share_close": "Close preview",
+  "sources_actions_unavailable": "Correction eligibility is temporarily unavailable. Public evidence is still shown.",
+  "sources_correction_denied": "You cannot propose corrections with your current authority.",
+  "sources_current_reading": "This is the current selected reading. A proposal does not select new evidence.",
+  "sources_scope_unavailable": "Comparison is unavailable because this route cannot express the Realm editorial scope."
 }

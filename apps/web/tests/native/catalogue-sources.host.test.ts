@@ -254,6 +254,41 @@ nativeTest(
       expect(firstText).toContain(m.sources_attribution_unknown());
       expect(firstText).toContain(m.sources_cover_unknown());
       expect(await page.locator('[data-candidate-item]').count()).toBe(0);
+      expect(await page.getByRole('link', { name: m.correction_title(), exact: true }).count()).toBe(0);
+
+      const contributor = await (await auth.context('alice')).newPage();
+      contributor.setDefaultTimeout(60_000);
+      await contributor.goto(sourcesUrl, { waitUntil: 'domcontentloaded' });
+      await hydrate(contributor);
+      const cited = contributor
+        .locator('[data-slot="source-property"]')
+        .filter({ hasText: 'https://example.org/catalogue-sources/url-citation' });
+      const compare = cited.getByRole('link', { name: m.sources_compare(), exact: true });
+      await compare.waitFor({ state: 'visible' });
+      const compareAddress = new URL((await compare.getAttribute('href'))!, stack.web);
+      expect(compareAddress.searchParams.get('candidateField')).toBe('schema:url');
+      expect(compareAddress.searchParams.get('sourceStatement')).toBeTruthy();
+      await compare.click();
+      await contributor.getByRole('link', { name: m.correction_title(), exact: true }).click();
+      await contributor
+        .getByLabel(m.correction_url(), { exact: true })
+        .first()
+        .fill('https://example.org/catalogue-sources/proposed');
+      await contributor.getByRole('button', { name: m.correction_submit(), exact: true }).click();
+      await contributor.getByText(m.correction_proposed(), { exact: true }).waitFor({ state: 'visible' });
+      await contributor.getByRole('link', { name: m.subject_sources(), exact: true }).first().click();
+      await hydrate(contributor);
+      await contributor
+        .locator('[data-slot="source-property"]')
+        .filter({ hasText: 'https://example.org/catalogue-sources/url-citation' })
+        .waitFor({ state: 'visible' });
+      expect(
+        await contributor
+          .locator('[data-slot="source-statement"]')
+          .filter({ hasText: 'https://example.org/catalogue-sources/proposed' })
+          .count(),
+      ).toBe(0);
+      await contributor.close();
 
       await stack.refreshKernelRequests();
       const firstReads = requestsForSubject(stack.kernelRequests().slice(firstReadsStart), subject.id);

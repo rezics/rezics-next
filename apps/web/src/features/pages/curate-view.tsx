@@ -1,3 +1,5 @@
+import { subjectVisitReturn } from './subject-visit-navigation';
+import { m } from '../../paraglide/messages.js';
 import { candidateSession } from '../../subject/candidate-lifetime';
 import { useLocation } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -24,34 +26,54 @@ const publicationTransport: PublicationTransport = {
 /** The subject's private curation region shares the existing prepared BFF transport. */
 function SubjectCandidateCurationLive({ id, locale }: { id: string; locale: string }) {
   const { state } = useSession();
-  const field = new URLSearchParams(useLocation().searchStr).get('candidateField') ?? undefined;
+  const location = useLocation();
+  const params = new URLSearchParams(location.searchStr);
+  const field = params.get('candidateField') ?? undefined;
+  const statement = params.get('sourceStatement');
+  const sourceReturn = subjectVisitReturn(params.get('via'), locale);
+  const correction =
+    sourceReturn?.endsWith('/sources#subject-sources-heading') &&
+    statement &&
+    /^[0-9a-f-]{36}$/i.test(statement) &&
+    field
+      ? `${location.pathname.replace(/\/details$/, '/edit')}?${new URLSearchParams({ property: field, statement, returnTo: 'sources' })}`
+      : undefined;
   const initialProperty = field && field.length <= 256 ? field : undefined;
   if (state !== 'signed-in') return null;
   return (
-    <CandidateReview
-      key={`${id}:${locale}:${initialProperty ?? ''}`}
-      initialProperty={initialProperty}
-      id={id}
-      locale={locale}
-      transport={{
-        read: (property, cursor, session, work) =>
-          !work?.live()
-            ? Promise.resolve({ ok: false, reason: 'denied' })
-            : readSubjectCandidates({
-                data: { id, property, cursor, session, expectedReader: work.reader },
-                headers: csrfHeaders(),
-              }),
-        confirm: (data, work) =>
-          !work?.live()
-            ? Promise.resolve({ ok: false, reason: 'denied' })
-            : confirmSubjectCandidate({ data, headers: csrfHeaders() }),
-      }}
-      lifecycle={{
-        change: (command, work) =>
-          changeOwnContribution({ data: editorRequest(command, work), headers: csrfHeaders() }),
-        read: (address, work) => rereadOwnContribution({ data: editorRequest(address, work), headers: csrfHeaders() }),
-      }}
-    />
+    <div className="space-y-4">
+      {correction && (
+        <a className="inline-flex min-h-11 items-center underline" href={correction}>
+          {m.correction_title()}
+        </a>
+      )}
+      <CandidateReview
+        key={`${id}:${locale}:${initialProperty ?? ''}`}
+        initialProperty={initialProperty}
+        {...(sourceReturn ? { returnHref: sourceReturn, returnLabel: m.subject_sources() } : {})}
+        id={id}
+        locale={locale}
+        transport={{
+          read: (property, cursor, session, work) =>
+            !work?.live()
+              ? Promise.resolve({ ok: false, reason: 'denied' })
+              : readSubjectCandidates({
+                  data: { id, property, cursor, session, expectedReader: work.reader },
+                  headers: csrfHeaders(),
+                }),
+          confirm: (data, work) =>
+            !work?.live()
+              ? Promise.resolve({ ok: false, reason: 'denied' })
+              : confirmSubjectCandidate({ data, headers: csrfHeaders() }),
+        }}
+        lifecycle={{
+          change: (command, work) =>
+            changeOwnContribution({ data: editorRequest(command, work), headers: csrfHeaders() }),
+          read: (address, work) =>
+            rereadOwnContribution({ data: editorRequest(address, work), headers: csrfHeaders() }),
+        }}
+      />
+    </div>
   );
 }
 
