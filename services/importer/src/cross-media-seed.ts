@@ -155,6 +155,23 @@ export function collectSelectedReleaseTitles(
     duplicates,
   };
 }
+function positiveLink(row: Row, field: string): number {
+  const value = row[field];
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 1) return value;
+  if (typeof value === 'string' && /^[1-9][0-9]*$/u.test(value)) {
+    const parsed = Number(value);
+    if (Number.isSafeInteger(parsed)) return parsed;
+  }
+  throw new TypeError(`Invalid dump integer: ${field}`);
+}
+function parsePositiveLink(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 1) return value;
+  if (typeof value === 'string' && /^[1-9][0-9]*$/u.test(value)) {
+    const parsed = Number(value);
+    if (Number.isSafeInteger(parsed)) return parsed;
+  }
+  return undefined;
+}
 function fieldsOf(table: string, record: Row): string[] {
   return Object.keys(record)
     .sort()
@@ -1033,9 +1050,8 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     if (vnIds.has(text(row, 'id')))
       gap('vndb', 'vn_anime', row, 'VNDB anime.aid is an AniDB identifier, not a Bangumi or native subject identity');
   const producers = new Set<string>(),
-    animeIds = new Set<string>(),
-    links = new Set<string>();
-  const vnLinks = new Map<string, string>();
+    animeIds = new Set<string>();
+  const workLinkOwners = new Map<number, string[]>();
   for await (const row of input.rows('vndb', 'releases_producers')) {
     if (!releases.has(text(row, 'id'))) continue;
     producers.add(text(row, 'pid'));
@@ -1081,15 +1097,15 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       'Release-to-release supersession is not representable on the shared follows term',
     );
   }
-  for (const [table, ids] of [
-    ['staff_extlinks', staff],
-    ['vn_extlinks', vnIds],
-  ] as const)
-    for await (const row of input.rows('vndb', table)) {
-      if (!ids.has(text(row, 'id'))) continue;
-      links.add(text(row, 'link'));
-      if (table === 'vn_extlinks') vnLinks.set(text(row, 'link'), text(row, 'id'));
-    }
+  for await (const row of input.rows('vndb', 'vn_extlinks')) {
+    const owner = text(row, 'id');
+    if (!vnIds.has(owner)) continue;
+    const link = positiveLink(row, 'link');
+    const owners = workLinkOwners.get(link) ?? [];
+    if (owners.includes(owner)) throw new TypeError('Duplicate selected VNDB work external link join');
+    owners.push(owner);
+    workLinkOwners.set(link, owners);
+  }
   for await (const row of input.rows('vndb', 'staff'))
     if (staff.has(text(row, 'id')) && typeof row.prod === 'string') producers.add(row.prod);
   const producerRows = new Map<string, Row>();
@@ -1227,41 +1243,84 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     gap('vndb', 'producers_relations', { limit: RELATION_CAP }, 'Selected source relation limit exceeded', {
       property: 'wdt:P749',
     });
+
+  const entityJoins = new Map<string, { table: string; joins: { id: string; link: number }[] }>();
+  const dictionaryIds = new Set<number>();
+  const entityJoinKeys = new Set<string>();
+  let entityJoinCount = 0;
+  const collectJoins = async (
+    table: 'staff_extlinks' | 'producers_extlinks' | 'releases_extlinks',
+    owners: Set<string>,
+  ) => {
+    for await (const row of input.rows('vndb', table)) {
+      const owner = text(row, 'id');
+      if (!owners.has(owner)) continue;
+      const link = positiveLink(row, 'link');
+      const associationKey = `${table}\u0000${owner}\u0000${link}`;
+      if (entityJoinKeys.has(associationKey)) throw new TypeError('Duplicate selected external link join');
+      entityJoinKeys.add(associationKey);
+      entityJoinCount += 1;
+      if (entityJoinCount > FAMILY_CAP * 3 * 32) throw new TypeError('Selected external link row limit exceeded');
+      let entry = entityJoins.get(owner);
+      if (!entry) {
+        entry = { table, joins: [] };
+        entityJoins.set(owner, entry);
+      } else if (entry.table !== table) throw new TypeError('Selected VNDB owner keys overlap across entity tables');
+      entry.joins.push({ id: owner, link });
+      dictionaryIds.add(link);
+      if (entry.joins.length > 32) throw new TypeError('Dump row count exceeds source cap');
+    }
+  };
+  await collectJoins('staff_extlinks', staff);
+  await collectJoins('producers_extlinks', producers);
+  await collectJoins('releases_extlinks', releases);
+  const dictionary = new Map<number, { id: number; site: string; value: string }>();
   for await (const row of input.rows('vndb', 'anime'))
     if (animeIds.has(text(row, 'id')))
       gap('vndb', 'anime', row, 'VNDB anime.aid is an AniDB identifier, not a Bangumi or native subject identity');
   for await (const row of input.rows('vndb', 'extlinks')) {
-    if (!links.has(text(row, 'id')) && !links.has(String(row.id))) continue;
-    const value = typeof row.value === 'string' ? row.value : '';
-    const cited = citedProviderBinding(value);
-    const owner = vnLinks.get(text(row, 'id')) ?? vnLinks.get(String(row.id));
-    if (cited?.provider === 'bangumi' && owner && vnIds.has(owner)) {
-      edge({
-        source: 'vndb',
-        alias: crossMediaAliases.vndb,
-        table: 'extlinks',
-        holder: owner,
-        target: cited.key.replace(/^subject:/, ''),
-        property: 'wdt:P5732',
-        url: value,
-        targetKind: 'literal',
-        membership: 'referenced',
-        record: row,
-        fields: fieldsOf('extlinks', row),
-      });
-      continue;
+    const id = parsePositiveLink(row.id);
+    if (id === undefined) continue;
+    const entityLink = dictionaryIds.has(id);
+    const workOwners = workLinkOwners.get(id);
+    if (!entityLink && !workOwners) continue;
+    const site = text(row, 'site');
+    const value = text(row, 'value');
+    if (entityLink) {
+      if (dictionary.has(id)) throw new TypeError('External link group has mismatched or duplicate IDs');
+      dictionary.set(id, { id, site, value });
     }
-    if (cited?.provider === 'bangumi') {
-      gap(
-        'vndb',
-        'extlinks',
-        row,
-        'Cited Bangumi URL is retained as provider provenance; identities are not merged by title',
-      );
-      continue;
+    if (workOwners) {
+      const cited = citedProviderBinding(value);
+      if (cited?.provider === 'bangumi')
+        for (const owner of workOwners)
+          if (vnIds.has(owner))
+            edge({
+              source: 'vndb',
+              alias: crossMediaAliases.vndb,
+              table: 'extlinks',
+              holder: owner,
+              target: cited.key.replace(/^subject:/, ''),
+              property: 'wdt:P5732',
+              url: value,
+              targetKind: 'literal',
+              membership: 'referenced',
+              record: row,
+              fields: fieldsOf('extlinks', row),
+            });
     }
-    if (row.site !== 'website')
+    if (site !== 'website')
       gap('vndb', 'extlinks', row, 'Unsupported external link site; retained as source metadata only');
+  }
+  for (const entity of plan.entities.vndb) {
+    const entry = entityJoins.get(entity.key);
+    if (!entry) continue;
+    const extlinks = entry.joins.map((join) => {
+      const row = dictionary.get(join.link);
+      if (!row) throw new TypeError('External link group has mismatched or duplicate IDs');
+      return row;
+    });
+    entity.payload = { ...(entity.payload as object), [entry.table]: entry.joins, extlinks };
   }
 
   for (const family of Object.keys(patterns) as Franchise[])

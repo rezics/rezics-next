@@ -15,6 +15,7 @@ import {
   latinLanguageTag,
   sourceDigest,
   sourceEnvelope,
+  sourceWebsiteUrl,
   textDocument,
   type ConversionContext,
 } from './support.ts';
@@ -28,7 +29,7 @@ export const vndbReleaseNameLimits = Object.freeze({
   stringBytes: vndbLimits.stringBytes,
   titleChars: 1500,
   recordBytes: vndbLimits.recordBytes,
-  maxCommands: 1 + vndbLimits.maxTitleCandidates + vndbLimits.maxAliases,
+  maxCommands: 1 + vndbLimits.maxTitleCandidates + vndbLimits.maxAliases + vndbLimits.maxLinks,
 });
 const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
 const durationSecond = 'http://www.wikidata.org/entity/Q11574';
@@ -310,6 +311,43 @@ function array(value: unknown, pointer: string): unknown[] {
 function nativeNumber(value: unknown, pointer: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) fail(pointer, 'invalid_identifier');
   return value as number;
+}
+
+function grouped(value: unknown, pointer: string, cap: number, optional = false): unknown[] {
+  if (value === undefined && optional) return [];
+  if (utilTypes.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
+    fail(pointer, 'Expected grouped dump rows');
+  const array = value as unknown[];
+  const length = Object.getOwnPropertyDescriptor(array, 'length')!.value as number;
+  if (length > cap) fail(pointer, 'Dump row count exceeds source cap');
+  const result = [];
+  for (let i = 0; i < length; i++) {
+    const child = own(array as object, String(i), `${pointer}/${i}`);
+    if (child === undefined) fail(pointer, 'Sparse dump rows are unsupported');
+    result.push(child);
+  }
+  return result;
+}
+
+function positiveInteger(value: unknown, pointer: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1)
+    fail(pointer, 'Expected a positive dump integer');
+  return value as number;
+}
+
+function website(value: string, pointer: string): string {
+  try {
+    return sourceWebsiteUrl(value);
+  } catch {
+    return fail(pointer, 'Invalid external website URL');
+  }
+}
+
+function entityLinkTable(kind: EntityKind): 'staff_extlinks' | 'producers_extlinks' | 'releases_extlinks' | undefined {
+  if (kind === 'vndb-staff') return 'staff_extlinks';
+  if (kind === 'vndb-producer') return 'producers_extlinks';
+  if (kind === 'vndb-release') return 'releases_extlinks';
+  return undefined;
 }
 
 function episodeOrdinal(value: unknown): string | undefined {
@@ -737,6 +775,40 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const description = own(raw, 'description', '/description');
     if (description !== undefined) normalized.description = description;
   }
+  const joinTable = entityLinkTable(kind);
+  if (joinTable) {
+    const owner = expected;
+    const joins = grouped(own(raw, joinTable, `/${joinTable}`), `/${joinTable}`, vndbLimits.maxLinks, true).map(
+      (value, i) => {
+        const p = `/${joinTable}/${i}`;
+        const entry = object(value, p);
+        const id = text(own(entry, 'id', `${p}/id`), `${p}/id`, 32);
+        if (id !== owner) fail(`${p}/id`, 'External link child ID does not match entity id');
+        return { id, link: positiveInteger(own(entry, 'link', `${p}/link`), `${p}/link`) };
+      },
+    );
+    const external = grouped(own(raw, 'extlinks', '/extlinks'), '/extlinks', vndbLimits.maxLinks, true).map(
+      (value, i) => {
+        const p = `/extlinks/${i}`;
+        const entry = object(value, p);
+        const key = positiveInteger(own(entry, 'id', `${p}/id`), `${p}/id`);
+        const site = text(own(entry, 'site', `${p}/site`), `${p}/site`, 32);
+        const valueText = text(own(entry, 'value', `${p}/value`), `${p}/value`, 4096);
+        return { id: key, site, value: site === 'website' ? website(valueText, `${p}/value`) : valueText };
+      },
+    );
+    const byId = new Set(external.map((entry) => entry.id));
+    const used = new Set(joins.map((entry) => entry.link));
+    if (
+      byId.size !== external.length ||
+      used.size !== joins.length ||
+      used.size !== byId.size ||
+      joins.some((link) => !byId.has(link.link))
+    )
+      fail(`/${joinTable}`, 'External link group has mismatched or duplicate IDs');
+    normalized[joinTable] = joins;
+    normalized.extlinks = external;
+  }
   if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > 65_536) fail('', 'invalid_record_byte_limit');
   return { normalized, type, labels, identifier: expected };
 }
@@ -824,6 +896,18 @@ function convert(
     ...(projected.alternateNames ?? []).map((name) => fact('schema:alternateName', name)),
   ];
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
+  const extlinks = projected.normalized.extlinks;
+  if (Array.isArray(extlinks)) {
+    for (const [i, link] of extlinks.entries()) {
+      const row = link as { site?: unknown; value?: unknown };
+      if (row.site === 'website' && typeof row.value === 'string') facts.push(fact('schema:url', row.value));
+      else
+        diagnostics.push({
+          pointer: `/extlinks/${i}/site`,
+          code: 'Unsupported external link site; retained as source metadata only',
+        });
+    }
+  }
   let descriptionText: string | undefined;
   if (kind === 'bangumi-episode') {
     const ordinal = episodeOrdinal(projected.normalized.sort);

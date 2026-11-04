@@ -12,9 +12,9 @@ import {
   commandKey,
   inLanguageTag,
   latinLanguageTag,
-  safeSourceUrl,
   sourceDigest,
   sourceEnvelope,
+  sourceWebsiteUrl,
   type ConversionContext,
 } from './support.ts';
 
@@ -141,11 +141,7 @@ function rows(value: unknown, pointer: string, cap: number, optional = false): u
 }
 function website(value: string, pointer: string): string {
   try {
-    const host = new URL(value).hostname;
-    // Public website citations only; these URLs are never fetched by this module.
-    if (value.length > 1500 || !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u.test(host))
-      fail('Invalid external website URL', pointer);
-    return safeSourceUrl(value, [host]);
+    return sourceWebsiteUrl(value);
   } catch {
     return fail('Invalid external website URL', pointer);
   }

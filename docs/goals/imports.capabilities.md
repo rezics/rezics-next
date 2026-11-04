@@ -663,6 +663,19 @@ not additional check requests.
   concept codes are exact dump tag ids (`g…`); positive integer votes 1–3 with ignore/lie false publish exact
   genre and spoiler facts; lie, non-positive or non-integer votes, ignore flags and duplicate associations stay
   review gaps without native ballots or aggregates.
+- `production operator imports authored VNDB staff, producer and release websites through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-entity-websites.test.ts`.
+  Frozen scenario names:
+  `selected staff, producer and release websites become sourced schema:url facts on their native types`;
+  `unsupported sites stay source losses; Bangumi-looking websites stay schema:url; malformed and overflow fail`;
+  `production seed joins selected staff, producer and release websites without reusing vnLinks as uniqueness`;
+  `COPY headers keep integer link keys, overflow fails, and unsupported sites stay diagnostics`;
+  `production operator imports authored VNDB staff, producer and release websites through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: extract the existing
+  website validator as `sourceWebsiteUrl`; inventory `extlinks.value` as proposed `schema:url` (`wdt:P856`) because
+  `schema:Thing` is not a bundled class and one column serves Person, Organization and Release; Bangumi-looking
+  staff/producer/release websites remain `schema:url` and the Bangumi identity bridge stays VN-only.
 - `production operator imports two VNDB staff aliases through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-staff-credits.test.ts`.
   Frozen scenario names:
