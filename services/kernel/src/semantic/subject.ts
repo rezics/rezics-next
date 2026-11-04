@@ -77,7 +77,7 @@ import {
 } from './agents.ts';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import { waitForSubjectLinks } from './link-freshness.ts';
-import { identityEpochStore } from './identity-epoch-store.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
 import { initializeRevisionAuthorship, revisionResource } from './authorship.ts';
 import { creationDeclares } from '../access/index.ts';
 import { readSourceRecords } from './source-records.ts';

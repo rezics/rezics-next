@@ -24,7 +24,7 @@ import {
   IdentityEpochStoreError,
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
-} from '../semantic/identity-epoch-store.ts';
+} from '../semantic/identity-adapters/index.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import {
   isPrepaidIdentitySourceConsumerMaintenance,

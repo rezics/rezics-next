@@ -35,7 +35,7 @@ import {
 import { loanDueBoundary, type LoanDueBoundary } from './loan-date.ts';
 import { readLibraryProfileSource } from './profile-source.ts';
 import { hasCopyStatus } from './profile.ts';
-import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import type { LibraryProfileSource } from './profile-source.ts';
 

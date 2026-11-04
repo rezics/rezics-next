@@ -53,7 +53,7 @@ import { withConnection } from '../database/pool.ts';
 import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-epoch-store.ts';
+import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
 import { IDENTITY_EPOCH_BOOTSTRAP, IDENTITY_EPOCH_PROGRESS, IDENTITY_EPOCH_BOOTSTRAP_SCHEDULED } from './events.ts';
 import type { IdentityNativeReceipt, NativeStepWork } from './identity-epoch-contract.ts';
 import subjects from './identity-epoch-bootstrap-subjects.sql';

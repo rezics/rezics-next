@@ -31,7 +31,7 @@ import {
   verifyIdentitySourceConsumerCustody,
   type IdentitySourceConsumerCustody,
 } from '../semantic/identity-source-consumer-custody.ts';
-import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
+import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
 import {
   agentIdentityCopyRetention,
   prepareAgentIdentityCopyRetention,
@@ -54,7 +54,7 @@ import {
 } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import * as nativeBinding from '../semantic/identity-epoch-binding.ts';
+import * as nativeBinding from '../semantic/identity-adapters/identity-epoch-binding.ts';
 import type {
   IdentityAdmissionInput,
   IdentityIntent,

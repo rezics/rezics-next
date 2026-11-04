@@ -20,7 +20,7 @@ import {
   identityEpochStore,
   IdentityEpochStoreError,
   recordIdentityEpochNativeCommit,
-} from '../semantic/identity-epoch-store.ts';
+} from '../semantic/identity-adapters/index.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import gateSql from './writer-guard-gate.sql';
 import dispatchSql from './writer-guard-dispatch.sql';

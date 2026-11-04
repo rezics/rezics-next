@@ -252,7 +252,8 @@
         "kernel-library",
         "kernel-platform",
         "kernel-search",
-        "kernel-semantic"
+        "kernel-semantic",
+        "kernel-identity-core"
       ],
       "capabilities": ["rating"],
       "postgresPaths": ["services/kernel/src/rating/**"]
@@ -312,7 +313,10 @@
       "kind": "adapter",
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/**", "services/kernel/db/semantic/**"],
-      "publicEntries": ["services/kernel/src/semantic/index.ts"],
+      "publicEntries": [
+        "services/kernel/src/semantic/index.ts",
+        "services/kernel/src/semantic/identity-adapters/index.ts"
+      ],
       "allowedDependencies": [
         "composition",
         "definitions",
@@ -324,10 +328,12 @@
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
-        "kernel-zones"
+        "kernel-zones",
+        "kernel-identity-core"
       ],
-      "capabilities": ["semantic"],
-      "postgresPaths": ["services/kernel/src/semantic/**"]
+      "capabilities": ["semantic", "canonical-identity-native"],
+      "postgresPaths": ["services/kernel/src/semantic/**"],
+      "excludes": ["services/kernel/src/semantic/identity-core/**"]
     },
     {
       "id": "kernel-zones",
@@ -772,6 +778,15 @@
       "publicEntries": ["@rezics/client"],
       "allowedDependencies": ["auth-contract", "composition", "definitions", "document", "filter"],
       "capabilities": ["typed-client"]
+    },
+    {
+      "id": "kernel-identity-core",
+      "kind": "core",
+      "owner": "semantic",
+      "paths": ["services/kernel/src/semantic/identity-core/**"],
+      "publicEntries": ["services/kernel/src/semantic/identity-core/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["canonical-identity-rules"]
     }
   ]
 }

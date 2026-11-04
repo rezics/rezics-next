@@ -8,7 +8,7 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import type { IdentityEpochState } from '../semantic/identity-epoch-contract.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED } from '../semantic/events.ts';
 import type { WorkContext } from '../work/registry.ts';

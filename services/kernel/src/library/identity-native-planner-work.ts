@@ -28,7 +28,7 @@ import account from '../access/account-share.sql';
 import commit from '../semantic/identity-epoch-store-insert-native-commit.sql';
 import savedJob from '../semantic/identity-epoch-store-select-job-4.sql';
 import libraryTransform from '../semantic/identity-epoch-store-library-transform.sql';
-import { identityEpochLibraryInputsSQL } from '../semantic/identity-epoch-store.ts';
+import { identityEpochLibraryInputsSQL } from '../semantic/identity-adapters/index.ts';
 import inputs from '../semantic/identity-epoch-store-select-input.sql';
 import originals from '../semantic/identity-epoch-store-select-original.sql';
 import owners from '../semantic/identity-epoch-read-owners.sql';

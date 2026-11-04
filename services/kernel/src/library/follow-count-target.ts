@@ -1,6 +1,6 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { noEffect, runCommand } from '../command/command.ts';
-import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { partitionOf } from '../route/route.ts';
 import { workStepDeadline } from './command-support.ts';
 import {

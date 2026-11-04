@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { Value } from 'typebox/value';
-import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { SEMANTIC_EVENTS, SUBJECT_MERGED, SUBJECT_REVISED } from '../semantic/events.ts';
 import { COMMUNITY_EVENTS } from '../community/events.ts';
 import { readPartition } from '../partition/partition.ts';

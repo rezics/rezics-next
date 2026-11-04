@@ -2,6 +2,24 @@
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+## Canonical identity boundary
+
+Decision: canonical identity stays local to Semantic; `identity-core/index.ts` is the pure public entry,
+while `identity-adapters/index.ts` is the native public entry of the existing `kernel-semantic` adapter module.
+The adapter remains in that module because its admission, closure and participant mechanisms already share native authority.
+
+The core owns mapping DTOs, bounded evidence classification, exact observation values and immutable merge/unmerge/repoint
+transforms. Evidence, requested source homes and the installed support job arrive explicitly. It imports no SQL, runtime,
+command/access authority, environment, clock, randomness or crypto. Its four states and existing reasons are unchanged;
+pending never implies self. Classification indexes the capped acquired evidence once, then uses bounded per-original
+lookups: O(N) time and space for at most 100 originals, without acquisition or query changes.
+
+Adapters own independent repeatable-read collection, route/home selection, ambient support jobs, SQL, authorization,
+prearm, native receipt hashing, opaque binding proofs, admission and publication. Control home zero remains compatibility
+topology. Compatibility entries retain callers of the former contract/read/store/binding paths. Library keeps originals
+and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps
+lifecycle writes. Native mapping/store/publication/admission and three-scale growth acceptance remain with their owners.
+
 ## Bounded current relation visits
 
 `currentRelationFacts` is the native authority used by forward and inverse relation pages. It resolves only supplied

@@ -38,14 +38,14 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { bindSemanticProducerRoles, recordSemanticSourceCommit } from './erasure-producer.ts';
-import { identityBindingData, lookupIdentityBinding, readAccountIdentityUndo } from './identity-epoch-binding.ts';
+import { identityBindingData, lookupIdentityBinding, readAccountIdentityUndo } from './identity-adapters/identity-epoch-binding.ts';
 import {
   identityEpochStore,
   identityJobPartition,
   identityReceiptKey,
   IdentityEpochStoreError,
   serializeIdentityValue,
-} from './identity-epoch-store.ts';
+} from './identity-adapters/index.ts';
 import { SEMANTIC_ERASURE_PROGRESS } from './account-erasure.ts';
 import claim from './identity-source-consumer-custody-claim.sql';
 import job from './identity-source-consumer-custody-job.sql';
@@ -1065,7 +1065,7 @@ async function verifiedTerminal(
 async function owners() {
   // Only exact original modules are consulted. Missing additive exports fail pending, with
   // their complete native requirements published in the owner contract. No replacement producer.
-  const binding = (await import('./identity-epoch-binding.ts')) as Partial<BindingConsumerOwner>;
+  const binding = (await import('./identity-adapters/identity-epoch-binding.ts')) as Partial<BindingConsumerOwner>;
   const scope = (await import('./identity-scoped-observations.ts')) as Partial<ScopedConsumerOwner>;
   const technical = (await import('../access/agent-verification-identity.ts')) as Partial<TechnicalConsumerOwner>;
   return { binding, scope, technical };

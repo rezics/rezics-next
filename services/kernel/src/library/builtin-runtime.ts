@@ -10,7 +10,7 @@ import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor, AccountActor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
-import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { builtinCollectionId, type BuiltinCollectionKey } from './builtin-identity.ts';
 import { readBuiltinStateReference } from './builtin-reference-store.ts';
 import { readOwnerIndexFrontier, readOwnerOriginalPrefix, readOwnerOriginalTruth } from './owner-index.ts';

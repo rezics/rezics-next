@@ -6,7 +6,7 @@ import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { Fact } from '../search/hits.ts';
 import { routeOf } from '../route/route.ts';
-import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { readListPresentationFacts } from '../semantic/list-presentation.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { activeRelease } from '../semantic/definitions.ts';

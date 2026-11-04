@@ -8,7 +8,7 @@ import { readPartition } from '../partition/partition.ts';
 import { routeOf } from '../route/route.ts';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import type { IdentityJobRef } from './identity-epoch-contract.ts';
-import { identityEpochStore, identityJobPartition } from './identity-epoch-store.ts';
+import { identityEpochStore, identityJobPartition } from './identity-adapters/index.ts';
 import { withIdentitySourceSupportJob } from './identity-source-support-scope.ts';
 import type {
   IdentitySourceSupportReaderFactory,

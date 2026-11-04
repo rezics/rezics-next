@@ -6,7 +6,7 @@ import type { Access, Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import type { Fact } from '../search/hits.ts';
-import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { readListPresentationFacts } from '../semantic/list-presentation.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 

@@ -1,3 +1,4 @@
+import { identityMappingObservationValue } from '../semantic/identity-core/index.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -5,8 +6,8 @@ import { readAccount, type Account } from '../access/account-data.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
-import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
+import type { IdentityMapping } from '../semantic/identity-core/index.ts';
 import { readableSubjects } from '../library/subject-anchor.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -285,26 +286,13 @@ async function readQuestionObservation(
   return questionObservation(row);
 }
 
-function identityValue(mapping: IdentityMapping): readonly unknown[] {
-  switch (mapping.state) {
-    case 'mapped':
-      return ['mapped', mapping.original, mapping.terminal, mapping.epoch.toString()];
-    case 'pending':
-      return ['pending', mapping.original, mapping.job.jobId, mapping.job.epoch.toString()];
-    case 'unavailable':
-      return ['unavailable', mapping.reason];
-    case 'absent':
-      return ['absent'];
-  }
-}
-
 function identityObservationsEqual(left: readonly IdentityMapping[], right: readonly IdentityMapping[]): boolean {
-  return JSON.stringify(left.map(identityValue)) === JSON.stringify(right.map(identityValue));
+  return JSON.stringify(left.map(identityMappingObservationValue)) === JSON.stringify(right.map(identityMappingObservationValue));
 }
 
 function identityFingerprint(mappings: readonly IdentityMapping[]): string {
   return createHash('sha256')
-    .update(JSON.stringify(mappings.map(identityValue)))
+    .update(JSON.stringify(mappings.map(identityMappingObservationValue)))
     .digest('hex');
 }
 

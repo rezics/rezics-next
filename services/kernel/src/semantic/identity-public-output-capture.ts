@@ -30,8 +30,8 @@ import { publicFilterSource } from './public-filter-source.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkAllowance } from '../library/collection-source.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
-import { recordIdentityEpochNativeCommit } from './identity-epoch-store.ts';
-import { readIdentityMappings } from './identity-epoch-read.ts';
+import { recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
+import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityScopeAddress } from './identity-scoped-observations.ts';
 import { withReadTransaction } from './read.ts';
@@ -1402,7 +1402,7 @@ async function receiveOutputPrearm(
         const address = identityScopeAddress(ticket.scope),
           home = address.partition;
         if (cancellation) {
-          const { identityJobPartition } = await import('./identity-epoch-store.ts');
+          const { identityJobPartition } = await import('./identity-adapters/index.ts');
           if (cancellation.partition !== identityJobPartition(ticket.locator.job)) return refuse('provenance');
           const closed = await withReadTransaction(
             pool,

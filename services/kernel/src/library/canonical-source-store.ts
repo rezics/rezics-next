@@ -176,7 +176,7 @@ import { enqueueIntent, runOperationalTransaction, type OperationalTransaction }
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { WorkContext } from '../work/registry.ts';
-import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { createIdentityScopedObservations, identityScopeAddress } from '../semantic/identity-scoped-observations.ts';
 import type {
   IdentityScopeKey,

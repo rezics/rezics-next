@@ -1,7 +1,7 @@
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { identityEpochStore, IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
+import { identityEpochStore, IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
 import { lookupIdentityReceivingEffect, type IdentityReceivingEffect } from '../semantic/identity-receiving-effects.ts';
 
 /** Structural scopes, never per-session/per-copy membership witnesses. */

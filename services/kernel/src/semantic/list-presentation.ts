@@ -28,7 +28,7 @@ import { activeRelease } from './definitions.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { fenceKey, sourceTuple } from './fences.ts';
 import type { IdentityMapping } from './identity-epoch-contract.ts';
-import { readIdentityMappings } from './identity-epoch-read.ts';
+import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
 import { isRelationProperty, type FactRow } from './item.ts';
 import { indexedStatement } from './search-source.ts';
 import { effectiveGlobalSlotFacts } from './slots.ts';

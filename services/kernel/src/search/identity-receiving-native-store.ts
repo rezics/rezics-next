@@ -13,7 +13,7 @@ import {
   identityJobPartition,
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
-} from '../semantic/identity-epoch-store.ts';
+} from '../semantic/identity-adapters/index.ts';
 import { currentReadSnapshot, withReadTransaction } from '../semantic/read.ts';
 import { subjectPartition } from './source.ts';
 import { decodeSearchRepairWriterReceipt, validateSearchRepairWriterEvidence } from './writer-guard.ts';

@@ -3,7 +3,7 @@ import { currentCommand, runCommand, withSingleCommandAttempt, type CommandTrans
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { withReadTransaction } from './read.ts';
-import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-epoch-store.ts';
+import { IdentityEpochStoreError, recordIdentityEpochNativeCommit } from './identity-adapters/index.ts';
 import { reserveIdentityTerminalClosure } from './identity-epoch-mapping.ts';
 import type { IdentityNativeReceipt } from './identity-epoch-contract.ts';
 import { bindSemanticProducerRoles } from './erasure-producer.ts';

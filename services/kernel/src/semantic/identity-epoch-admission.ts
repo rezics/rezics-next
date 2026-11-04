@@ -21,7 +21,7 @@ import {
   acceptIdentityBinding,
   type IdentityReceiptBinding,
   type IdentityAdmissionSource,
-} from './identity-epoch-binding.ts';
+} from './identity-adapters/identity-epoch-binding.ts';
 import { assertIdentityTerminalGroupsOpen } from './identity-terminal-closure.ts';
 import sourcePoints from './identity-epoch-read-sources.sql';
 import handoff from './identity-epoch-admission-handoff.sql';
@@ -74,7 +74,7 @@ import {
   identityReceiptValue,
   serializeIdentityValue as json,
   recordIdentityEpochNativeCommit,
-} from './identity-epoch-store.ts';
+} from './identity-adapters/index.ts';
 import type {
   IdentityIntent,
   IdentityJobRef,
