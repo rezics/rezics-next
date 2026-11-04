@@ -30,18 +30,21 @@ async function readingPage(activity?: unknown, cursor?: string): Promise<ThreadR
       const path = new URL(new Request(input, init).url).pathname;
       if (path.endsWith('/reading-page'))
         return Response.json(
-          Object.assign(authoredReadingPage(
-            thread.thread as ReadingPage['thread'],
-            posts.posts.filter((post) => post.id !== thread.thread.firstPost.id) as ReadingPage['replies']['items'],
-            accounts.accounts
-              .filter((account) => account.state === 'active')
-              .map((account) => ({
-                id: account.id,
-                displayName: 'displayName' in account ? account.displayName : null,
-                handle: 'handle' in account ? account.handle : null,
-                avatar: null,
-              })),
-          ), activity === undefined ? {} : { conversationActivity: activity }),
+          Object.assign(
+            authoredReadingPage(
+              thread.thread as ReadingPage['thread'],
+              posts.posts.filter((post) => post.id !== thread.thread.firstPost.id) as ReadingPage['replies']['items'],
+              accounts.accounts
+                .filter((account) => account.state === 'active')
+                .map((account) => ({
+                  id: account.id,
+                  displayName: 'displayName' in account ? account.displayName : null,
+                  handle: 'handle' in account ? account.handle : null,
+                  avatar: null,
+                })),
+            ),
+            activity === undefined ? {} : { conversationActivity: activity },
+          ),
         );
       if (path.endsWith('/posts')) return Response.json(posts);
       if (path.includes('/boards/')) return Response.json(board);
@@ -242,7 +245,15 @@ test('Default thread reading renders the conversation before secondary history a
 
 test('native page activity stays independent of loaded replies across opening, continuation and return', async () => {
   for (const cursor of [undefined, 'opaque:/+?=&next', undefined]) {
-    const page = await readingPage({ state: 'current', cohort: 'public', count: { kind: 'lower-bound', value: 10_000 }, lastActivityAt: '2026-11-04T00:00:00.000Z' }, cursor);
+    const page = await readingPage(
+      {
+        state: 'current',
+        cohort: 'public',
+        count: { kind: 'lower-bound', value: 10_000 },
+        lastActivityAt: '2026-11-04T00:00:00.000Z',
+      },
+      cursor,
+    );
     const html = await render(page);
     expect(html).toContain('Replies: 10,000+');
     expect(html).toContain('At least 10,000 replies');
@@ -252,7 +263,9 @@ test('native page activity stays independent of loaded replies across opening, c
     page.composed!.viewer = { kind: 'account', id: thread.thread.authorId };
     expect(await render(page)).not.toContain('Replies: 10,000+');
   }
-  const zero = await render(await readingPage({ state: 'current', cohort: 'public', count: { kind: 'exact', value: 0 }, lastActivityAt: null }));
+  const zero = await render(
+    await readingPage({ state: 'current', cohort: 'public', count: { kind: 'exact', value: 0 }, lastActivityAt: null }),
+  );
   expect(zero).toContain('Replies: 0');
   expect(zero).not.toContain(m.board_thread_last_activity({ time: '' }));
   for (const activity of [undefined, { state: 'withheld' }, { state: 'unavailable', retryable: true }]) {
