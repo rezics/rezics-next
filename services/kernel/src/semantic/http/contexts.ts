@@ -191,7 +191,7 @@ function contextRoutes(
           'x-action': 'context:create',
           'x-resource-types': ['semantic.context'],
           'x-authority-resource-types': ['semantic.context'],
-          'x-authority-resource-id': globalContextAnchor.id,
+          'x-authority-resource-id': globalContextAnchor.resource.id,
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
