@@ -3,6 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
 import { pickText } from '@rezics/composition';
 import { AlbumProfile } from '../features/catalogue/album-profile-view';
+import { allowedCreateAuthority, type CreateAuthority } from '../features/catalogue/identity-intake';
 import {
   albumFixture,
   albumId,
@@ -25,7 +26,7 @@ const longAlias = 'Alternative album name 別名 اسم آخر ' + 'UnabridgedAl
 const citation = 'https://artist.example/releases/' + 'original-source-'.repeat(16) + '?language=ja#credits';
 type Fixture = ReturnType<typeof albumFixture>;
 const mounted = new WeakMap<HTMLElement, Fixture>();
-type AdmissionGate = { reads: number; resolve?: (value: { state: 'allowed' }) => void };
+type AdmissionGate = { reads: number; resolve?: (value: CreateAuthority) => void };
 const admissionGates = new WeakMap<Fixture, AdmissionGate>();
 
 function AlbumCreateFamily({
@@ -86,10 +87,10 @@ function AlbumCreateFamily({
                 eligibility: async () => {
                   gate.reads++;
                   if (gate.reads === 2)
-                    return new Promise<{ state: 'allowed' }>((resolve) => {
+                    return new Promise<CreateAuthority>((resolve) => {
                       gate.resolve = resolve;
                     });
-                  return { state: 'allowed' as const };
+                  return allowedCreateAuthority;
                 },
               }
             : {}),
@@ -440,7 +441,7 @@ export const StaleReviewRecovery: Story = {
     await userEvent.type(label, revised);
     const gate = admissionGates.get(fixture)!;
     await expect(gate.resolve).toBeDefined();
-    gate.resolve!({ state: 'allowed' });
+    gate.resolve!(allowedCreateAuthority);
     await expect(await canvas.findByText(m.catalogue_create_review_stale())).toBeVisible();
     await expect(label).toHaveValue(revised);
     await expect(writes(fixture)).toHaveLength(0);
