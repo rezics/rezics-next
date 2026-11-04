@@ -880,10 +880,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       async ({ params, query, actor, admission, job, set, request }) => {
         set.headers['cache-control'] = 'private, no-store';
         const sourceOptions = query.filter !== undefined || query.sort !== undefined ? query : basicQuery(query);
-        const listFactsAttached =
-          query.filter === undefined && query.sort === undefined && query.view === 'FULL';
+        const listFactsAttached = query.filter === undefined && query.sort === undefined && query.view === 'FULL';
         const sourcePage = () =>
-          admission.run('normal', job, () => read().readMembers(actor, params.collectionId, sourceOptions, job.deadline));
+          admission.run('normal', job, () =>
+            read().readMembers(actor, params.collectionId, sourceOptions, job.deadline),
+          );
         let result = await admission.run('normal', job, () =>
           query.filter !== undefined || query.sort !== undefined
             ? read().readMembers(actor, params.collectionId, query, job.deadline)

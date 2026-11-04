@@ -86,12 +86,10 @@ test('shelf route withholds a row whose native Entry changes during viewer overl
   const token = await fixture.credential(editor.actor.scopes);
   const path = '/v1/libraryEntries?view=FULL&orderBy=createdAt&direction=desc&limit=10';
   const read = () =>
-    fixture.kernel.handle(
-      new Request(`http://kernel.test${path}`, { headers: { authorization: `Bearer ${token}` } }),
-    );
+    fixture.kernel.handle(new Request(`http://kernel.test${path}`, { headers: { authorization: `Bearer ${token}` } }));
   const initial = await read();
   expect(initial.status).toBe(200);
-  expect((await initial.json() as { libraryEntries: Array<{ subjectId: string }> }).libraryEntries).toMatchObject([
+  expect(((await initial.json()) as { libraryEntries: Array<{ subjectId: string }> }).libraryEntries).toMatchObject([
     { subjectId: book },
   ]);
 
