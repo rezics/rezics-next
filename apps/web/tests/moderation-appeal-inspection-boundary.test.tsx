@@ -50,14 +50,6 @@ test('1/10/20 installed rows cross the adapter and panel without identity or tar
     expect(page.targets).toEqual([]);
     expect(page.next).toBe('opaque');
     expect(calls).toEqual(['/v1/boards/board/appeals']);
-    const inspect = await readModerationAppealPage(
-      client,
-      { boardId: 'board', inspect: row.id },
-      'Bearer viewer',
-      'viewer',
-    );
-    expect(inspect.unavailableReason).toBe('native-appeal-inspect');
-    expect(calls).toHaveLength(1);
     const markup = renderToStaticMarkup(
       createElement(WorkbenchAppeal, {
         appealId: row.id,
@@ -193,4 +185,40 @@ test('native same-intent retry echoes original opaque session and operands; advi
     fetch: async () => Response.json({ code: 'forbidden' }, { status: 403 }),
   });
   expect(await sendModerationAppealResolution(denied, command, 'Bearer original')).toEqual({ state: 'forbidden' });
+});
+
+
+test('installed board/thread inspection makes one captured request and admits only its exact native selection', async () => {
+  for (const threadId of [undefined, 'thread']) for (const resolved of [false, true]) {
+    const selected = { ...row, source, resolution: resolved ? { outcome: 'upheld', statement: 'Reviewed.', resolvedAt: row.createdAt } : null,
+      resolutionCommand: { operationId: 'moderation_appeal.resolve', method: 'POST', path: '/v1/moderation-appeals/appeal:resolve' } };
+    const wire = { appeals: [], next: 'sparse', selectedAppeal: selected, provenance };
+    let body: unknown = wire;
+    let token = 'opaque-original';
+    const requests: Request[] = [];
+    const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(body, { headers: { 'rezics-session-token': token } });
+    } });
+    const input = { boardId: 'board', threadId, cursor: 'captured', inspect: row.id };
+    const read = () => readModerationAppealPage(client, input, authorization, 'viewer', origin);
+    expect(await read()).toMatchObject({ state: 'ready', selectedAppeal: { id: row.id, resolution: selected.resolution }, nativeSession: token, appeals: [], next: 'sparse' });
+    for (body of [
+      { ...wire, appeals: [selected], selectedAppeal: undefined },
+      { ...wire, provenance: { ...provenance, actorId: 'foreign' } },
+      { ...wire, selectedAppeal: { ...selected, source: { ...source, partition: 1 } } },
+      { ...wire, selectedAppeal: { ...selected, source: { ...source, epoch: 2 } } },
+      { ...wire, selectedAppeal: { ...selected, source: { ...source, position: '13' } } },
+    ]) expect(await read()).toMatchObject({ state: 'unavailable', appeals: [], next: null });
+    body = wire;
+    token = '';
+    expect(await read()).toMatchObject({ state: 'unavailable', appeals: [] });
+    expect(requests).toHaveLength(7);
+    for (const request of requests) {
+      expect(new URL(request.url).pathname).toBe(`/v1/${threadId ? 'threads/thread' : 'boards/board'}/appeals`);
+      expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({ limit: '20', cursor: 'captured', inspect: row.id });
+      expect(request.headers.get('authorization')).toBe(authorization);
+      expect(request.cache).toBe('no-store');
+    }
+  }
 });

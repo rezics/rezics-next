@@ -69,14 +69,12 @@ recovery control or admitted workbench boundary. Pointer input, moved focus, dep
 that handoff. Refresh is explicit and remains disabled until the original resolution settles; uncertain recovery
 continues to use only the original frozen command and sender.
 
-## Remaining generated binding
+## Composed generated binding
 
-The installed generated board/thread Appeals GET still declares only `cursor`, `limit`, `appeals` and `next`.
-The integrated Content producer declares the composed `inspect` request, but its declaration publication cannot
-currently complete against the base compiler errors. Production inspection therefore retains the named
-`native-appeal-inspect` unavailable seam and performs no native request. Pending rows never substitute for inspection.
-The producer contract is in `services/kernel/src/content/appeal-routes.ts` and its final observation semantics are in
-`services/kernel/src/content/appeals.ts`.
+The installed root client exposes board/thread `inspect`, `selectedAppeal` and final page `provenance`.
+Both private appeal readers and the workbench use that installed operation, with the captured cursor and selected ID.
+A successful exact read admits the selection and its opaque response header together; missing or malformed
+selection, token or provenance discards the whole page. No pending row substitutes for selection.
 
 The local composed inspection admission seam checks the selected ID, explicit pending/resolved field, source
 partition/epoch and position against final page provenance, and actor/client/authentication epoch against the same
@@ -90,9 +88,12 @@ original token unchanged. A current resolved observation cannot settle an uncert
 CSRF headers, key, outcome or statement. A changed `canResolve` hint does not prevent that original explicit retry;
 native authorization and idempotency still decide its result.
 
-The selected consumer can carry the opaque token through its existing private reader. Connecting the composed
-admission seam to generated board/thread requests and mounted native producer cases remains continuation work.
-No new native DTO or endpoint is authored by Web.
+Decision: a row from a partition or epoch not covered by final page provenance remains unavailable until the native
+producer publishes final observation coverage for that source through the original generated operation.
+
+The native producer currently projects row source anchors independently from the parent page anchor. Cross-partition
+selections therefore require additive final source coverage from the declaration publisher; Web cannot manufacture
+it or treat the opaque token as inspectable authority. No new native DTO or endpoint is authored by Web.
 
 ## Cost
 
@@ -113,8 +114,8 @@ No new native DTO or endpoint is authored by Web.
   claimed here.
 
 - **Touches:** one board or thread Appeals GET per explicit pending read; no Account, Media or current-target
-  reads. Unsupported production inspection performs zero native calls. When the generated operation is installed,
-  each explicit selected retry must repeat its identical captured read without scanning or refilling. The resolution
+  reads. Each exact inspection and explicit selected retry performs one identical captured composed read without
+  scanning or refilling. The resolution
   adapter echoes the original opaque native session token unchanged, with the original key and operands. Pending or
   uncertain resolution blocks refresh and retry reads.
 - **Bound:** one page of at most 20, one optional exact selection, the native continuation and one original command.

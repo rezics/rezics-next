@@ -204,11 +204,7 @@ function appealResult(result: {
   return boundedAppealPage(result.data);
 }
 
-/**
- * The installed client declares only pending pages. Exact inspection must not silently
- * degrade into page search or an undeclared request. Bind the generated inspect reader
- * here when Content installs its composed response and examples.
- */
+/** One installed composed operation owns both the captured page and exact selection. */
 export async function readModerationAppealPage(
   client: KernelClient,
   input: AppealReadInput,
@@ -222,33 +218,30 @@ export async function readModerationAppealPage(
     readerOrigin: readerOrigin ?? null,
     generation: crypto.randomUUID(),
   };
-  if (input.inspect)
-    return {
-      ...identity,
-      appeals: [],
-      targets: [],
-      next: null,
-      state: 'unavailable',
-      unavailableReason: 'native-appeal-inspect',
-    };
   try {
     const headers = auth(authorization);
     const page = await readModerationAppeals(
       {
-        boardAppeals: async (id, cursor) =>
-          appealResult(
-            await client.boards({ id }).appeals.get({
-              ...headers,
-              query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            }),
-          ),
-        threadAppeals: async (id, cursor) =>
-          appealResult(
-            await client.threads({ id }).appeals.get({
-              ...headers,
-              query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            }),
-          ),
+        boardAppeals: async (id, cursor, inspect) => {
+          const result = await client.boards({ id }).appeals.get({
+            ...headers,
+            query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(inspect ? { inspect } : {}) },
+          });
+          const page = appealResult(result);
+          return inspect
+            ? admitAppealInspection(page, inspect, authorization, viewerId, readerOrigin, new Headers(result.headers).get('rezics-session-token'))
+            : page;
+        },
+        threadAppeals: async (id, cursor, inspect) => {
+          const result = await client.threads({ id }).appeals.get({
+            ...headers,
+            query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(inspect ? { inspect } : {}) },
+          });
+          const page = appealResult(result);
+          return inspect
+            ? admitAppealInspection(page, inspect, authorization, viewerId, readerOrigin, new Headers(result.headers).get('rezics-session-token'))
+            : page;
+        },
       },
       input,
     );
