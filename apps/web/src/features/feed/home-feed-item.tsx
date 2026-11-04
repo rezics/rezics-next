@@ -29,7 +29,10 @@ export function homeFeedItemPresentation(
   const href = homeFeedDestination(item, locale);
   const resume = homeFeedResume(item, locale);
   const summary = item.summary;
-  const activity = item.key.owner === 'content' ? feedConversationActivity(summary) : null;
+  const activity =
+    item.key.owner === 'content' && 'conversationActivity' in summary && summary.conversationActivity !== undefined
+      ? feedConversationActivity(summary)
+      : null;
   const kind = feedCardKind(item);
   const parentContext = 'parentContext' in summary ? summary.parentContext : undefined;
   const parent = parentContext?.kind === 'reply' ? parentContext.parent : undefined;

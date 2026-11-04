@@ -6,10 +6,26 @@ import { homeFeedStoryPage } from '../src/kernel/fake/home-feed-stories';
 
 function card(activity: unknown) {
   const item = homeFeedStoryPage('en', true, 'mixed').feedItems.find((candidate) => candidate.key.owner === 'content')!;
-  Object.assign(item.summary, { conversationActivity: activity });
+  if (activity === undefined) Reflect.deleteProperty(item.summary, 'conversationActivity');
+  else Object.assign(item.summary, { conversationActivity: activity });
   const presentation = homeFeedItemPresentation(item, 'en');
   return { html: renderToStaticMarkup(<>{presentation.metadata}</>), href: homeFeedDestination(item, 'en') };
 }
+
+test('Home keeps absent activity distinct from withheld after a current card', () => {
+  const current = card({
+    state: 'current', cohort: 'public', count: { kind: 'exact', value: 7 },
+    lastActivityAt: '2026-11-04T00:00:00.000Z',
+  });
+  expect(current.html).toContain('Replies: 7');
+  const absent = card(undefined);
+  expect(absent.html).not.toContain('data-slot="conversation-activity"');
+  expect(absent.href).toEqual(current.href);
+  const withheld = card({ state: 'withheld' });
+  expect(withheld.html).toContain('Reply activity is unavailable.');
+  expect(withheld.html).not.toContain('Replies: 7');
+  expect(withheld.html).not.toContain('2026-11-04T00:00:00.000Z');
+});
 
 test('Home distinguishes exact zero, lower-bound activity and withheld retry without losing its conversation target', () => {
   const zero = card({ state: 'current', cohort: 'public', count: { kind: 'exact', value: 0 }, lastActivityAt: null });
