@@ -1174,11 +1174,7 @@ export async function seedCrossMedia(
     }));
     return {
       status:
-        plan.gaps.length ||
-        delivered.gaps.length ||
-        unresolved.length ||
-        credits.gaps.length ||
-        credits.fenced.length
+        plan.gaps.length || delivered.gaps.length || unresolved.length || credits.gaps.length || credits.fenced.length
           ? ('imported-with-gaps' as const)
           : ('imported' as const),
       franchises: plan.franchises,

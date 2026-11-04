@@ -82,9 +82,7 @@ test('three anime/VN franchises elect family membership and retain exact unsuppo
     ),
   ).toBe(true);
   expect(
-    plan.gaps.some(
-      (gap) => gap.fields.includes('person-characters.subject_id') && gap.record.subject_id === 99,
-    ),
+    plan.gaps.some((gap) => gap.fields.includes('person-characters.subject_id') && gap.record.subject_id === 99),
   ).toBe(true);
   expect(
     plan.gaps.some(
