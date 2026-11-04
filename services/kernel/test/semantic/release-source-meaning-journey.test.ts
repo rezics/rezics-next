@@ -29,18 +29,19 @@ function subject(response: HttpResponse): Subject {
 function facts(value: Subject, property: string): Statement[] {
   return value.statements[property] ?? [];
 }
+type AdoptedStatement = Parameters<ReleasedDiscoveryFixture['adopt']>[1];
 const snak = (property: string, content: StatementInput['value']['content']) => ({
   property: { id: property },
   value: { type: 'value' as const, content },
 });
-const unknownDate = (property: string): StatementInput => ({
+const unknownDate = (property: string): AdoptedStatement => ({
   property: { id: property },
   value: { type: 'somevalue' },
   rank: 'preferred',
   references: discoveryStatement('schema:url', 'https://example.org/released-discovery/v1/tba').references,
 });
 
-async function adopted(holder: CreatedSubject, input: StatementInput) {
+async function adopted(holder: CreatedSubject, input: AdoptedStatement) {
   const receipt = await fixture.adopt(holder, input);
   expect(receipt.subject).toBe(holder.id);
   expect(receipt.release).toBe(bundledDigest);
@@ -71,6 +72,7 @@ test('sourced release status, directed release targets and episode kinds keep th
     expect.arrayContaining(['wdt:P155', 'schema:creativeWorkStatus', 'schema:exampleOfWork']),
   );
   expect(definition.properties['wdt:P155']!.targets).toEqual(['schema:CreativeWork', 'wd:Q20631656']);
+  expect(definition.properties['wdt:P155']!.qualifiers).toEqual(['schema:sameAs']);
   expect(definition.properties['schema:exampleOfWork']!.qualifiers).toContain('wdt:P31');
   for (const locale of locales) {
     expect(definition.properties['schema:creativeWorkStatus']!.labels[locale]?.trim().length).toBeGreaterThan(0);
@@ -136,7 +138,9 @@ test('sourced release status, directed release targets and episode kinds keep th
   expect(facts(subject(await fixture.read(work)), 'schema:creativeWorkStatus').map((row) => row.value.content)).toEqual([
     finished.id,
   ]);
-  expect(facts(subject(await fixture.read(prior)), 'schema:datePublished')[0]!.value.type).toBe('somevalue');
+  expect((facts(subject(await fixture.read(prior)), 'schema:datePublished')[0]!.value as { type: string }).type).toBe(
+    'somevalue',
+  );
   expect(facts(subject(await fixture.read(yearOnly)), 'schema:datePublished')[0]!.value.content).toMatchObject({
     precision: 9,
   });
@@ -180,13 +184,13 @@ test('sourced release status, directed release targets and episode kinds keep th
   );
   expect(editorPage.subject).toBe(current.id);
   expect(editorPage.viewer).toEqual({ kind: 'account', account: fixture.personas.alice.accountId });
-  expect(editorPage.actions.propose).toBe('allowed');
+  expect((editorPage.actions as { propose?: string } | undefined)?.propose).toBe('allowed');
   expect(editorPage.reads).toBeDefined();
   const readerPage = ok(
     await fixture.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: current.id } }),
   );
   expect(readerPage.viewer).toEqual({ kind: 'anonymous' });
-  expect(readerPage.actions.propose).toBe('denied');
+  expect((readerPage.actions as { propose?: string } | undefined)?.propose).toBe('denied');
   expect(readerPage.subject).toBe(current.id);
 
   const hidden = await fixture.request(

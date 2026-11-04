@@ -378,7 +378,8 @@ editor admission. An explicit correction review is required after configuration 
 
 Directed release-to-release streams appear only for admitted item properties whose targets are released edition
 types or descendants, including `wdt:P155` once a software-release target is admitted. Work-targeted CreativeWork
-relations stay on the existing relation editor. Unknown source codes stay visible as provenance. Native edition
+relations stay on the existing relation editor. Unknown source codes stay visible as provenance on the
+`schema:sameAs` qualifier of that follow. Native edition
 creation, source mapping and adoption remain with Imports. Missing producer capability is named unavailable; Web
 does not fork native commands. One composed `POST /v1/pages:read` response carries selected facts with independently
 cacheable public reads and private, no-store viewer/actions derived from native Access for the actual caller.

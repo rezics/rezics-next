@@ -58,6 +58,7 @@ test('follows admits software-release targets without treating VideoGameRelease 
     expect.arrayContaining(['wdt:P155', 'schema:creativeWorkStatus', 'schema:exampleOfWork']),
   );
   expect(bundledRelease.properties['wdt:P155']!.targets).toEqual(['schema:CreativeWork', 'wd:Q20631656']);
+  expect(bundledRelease.properties['wdt:P155']!.qualifiers).toEqual(['schema:sameAs']);
   expect(bundledRelease.properties['schema:exampleOfWork']!.qualifiers).toContain('wdt:P31');
   expect(bundledRelease.properties['schema:creativeWorkStatus']).toMatchObject({
     datatype: 'wikibase-item',

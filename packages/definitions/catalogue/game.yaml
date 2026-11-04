@@ -289,6 +289,7 @@ slots:
       inverse: wdt:P156
       relation_order: date
       acyclic: true
+      qualifiers: sameAs
   softwareEngine:
     slot_uri: wdt:P408
     description: >-

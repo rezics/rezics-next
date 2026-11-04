@@ -1488,7 +1488,8 @@ the existing correspondence pattern. Unreviewed provider codes are not published
 Concept classification, never a date and never a CreativeWork-wide property.
 Completeness of a particular software release for its work is `wdt:P31` on
 `schema:exampleOfWork`. `wdt:P155` may target a `VideoGameRelease` as well as a
-`CreativeWork`; `VideoGameRelease` is not a `CreativeWork`.
+`CreativeWork`; `VideoGameRelease` is not a `CreativeWork`. Unresolved follow
+targets keep their source code on the existing `schema:sameAs` qualifier.
 
 ## Versioned catalogue distribution
 

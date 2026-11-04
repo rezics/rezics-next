@@ -317,13 +317,14 @@ export function pageRoutes<App>(
         return result;
       };
       let selected: SelectedPage | undefined;
+      const pageAccess: Access =
+        typeof access === 'function'
+          ? access({ actions: actionCatalogue(routed) })
+          : (access ?? createAccess({ actions: actionCatalogue(routed) }));
       const authority = {
         deps: {
           pool,
-          access:
-            typeof access === 'function'
-              ? access({ actions: actionCatalogue(routed) })
-              : (access ?? createAccess({ actions: actionCatalogue(routed) })),
+          access: pageAccess,
           routeKey,
         },
         actor,
@@ -434,10 +435,6 @@ export function pageRoutes<App>(
           ? Object.keys(initialSubject.subject.statements)
           : [];
       const plannedDocuments = documentRead(resolved.document, subject?.id ?? null, properties, selected?.context.id);
-      const resolvedAccess =
-        typeof access === 'function'
-          ? access({ actions: actionCatalogue(routed) })
-          : (access ?? createAccess({ actions: actionCatalogue(routed) }));
       return pageAnswer({
         release: (await activeRelease(pool))?.release,
         continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
@@ -498,7 +495,7 @@ export function pageRoutes<App>(
         probes,
         budget,
         probeSession,
-        access: resolvedAccess,
+        access: pageAccess,
         actor,
         pool,
         deadline: job.deadline,
