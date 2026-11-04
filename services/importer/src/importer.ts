@@ -1810,6 +1810,7 @@ export class Importer {
         return await this.plan(registration, run, staged, signal, write);
       } catch (error) {
         if (error instanceof Interrupted) throw error;
+        console.error('source record planning failed', staged.row.recordKey, error);
         return 'failed';
       } finally {
         stack.delete(staged.row.recordKey);
