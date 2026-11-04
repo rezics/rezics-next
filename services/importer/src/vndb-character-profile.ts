@@ -449,7 +449,7 @@ async function sendProfilePages(
 }
 
 async function sendMissingProfileCommands(input: {
-  port: Pick<CrossMediaPort, 'batch'>;
+  port: CrossMediaPort;
   journal: ShowcaseJournal;
   commands: readonly VocabularyCommand[];
 }): Promise<VndbCharacterProfileVocabularyIssue[]> {
@@ -534,7 +534,7 @@ function journalProfileReferences(
 /** Stage the source blood-type scheme, then only selected explicit Concepts, through the existing journal. */
 export async function prepareShowcaseVndbCharacterProfileVocabulary(input: {
   plan: CrossMediaPlan;
-  port: Pick<CrossMediaPort, 'batch' | 'readReviewedSubject'>;
+  port: CrossMediaPort;
   journal: ShowcaseJournal;
   stage: 'schemes' | 'concepts';
 }): Promise<{
