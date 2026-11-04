@@ -959,6 +959,8 @@ enumerations:
         value: old,
         term: 'wdt:P1365',
         mapping: 'wdt:P1365',
+        status: omitted,
+        reason: Predecessor claims remain separately unadmitted.,
         meaning: The current producer was formerly known as the selected producer.,
         citations: ['https://www.wikidata.org/wiki/Property:P1365'],
       }
@@ -966,27 +968,33 @@ enumerations:
         value: new,
         term: 'wdt:P1366',
         mapping: 'wdt:P1366',
+        status: omitted,
+        reason: Successor claims remain separately unadmitted.,
         meaning: The selected producer succeeded the current producer.,
         citations: ['https://www.wikidata.org/wiki/Property:P1366'],
       }
     - {
         value: sub,
-        term: 'wdt:P355',
+        term: 'wdt:P749',
         mapping: 'wdt:P355',
-        meaning: The selected producer is a subsidiary of the current producer.,
-        citations: ['https://www.wikidata.org/wiki/Property:P355'],
+        status: existing,
+        meaning: The selected producer is a subsidiary of the current producer. Dictionary P355 is not admitted; this is stored losslessly as pid → current id under released wdt:P749, without fabricating a reciprocal source row.,
+        citations: ['https://www.wikidata.org/wiki/Property:P355', 'https://www.wikidata.org/wiki/Property:P749'],
       }
     - {
         value: par,
         term: 'wdt:P749',
         mapping: 'wdt:P749',
-        meaning: The selected producer is the parent organization of the current producer.,
+        status: existing,
+        meaning: The selected producer is the parent organization of the current producer; emitted as current id → pid under released wdt:P749.,
         citations: ['https://www.wikidata.org/wiki/Property:P749'],
       }
     - {
         value: imp,
         term: 'wdt:P527',
         mapping: 'wdt:P527',
+        status: omitted,
+        reason: Imprint membership is not an admitted producer-parent statement.,
         meaning: The selected producer is an imprint brand used by the same group as the current producer.,
         citations: ['https://www.wikidata.org/wiki/Property:P527'],
       }
@@ -994,6 +1002,8 @@ enumerations:
         value: ipa,
         term: 'wdt:P361',
         mapping: 'wdt:P361',
+        status: omitted,
+        reason: Imprint-parent brand claims remain unadmitted.,
         meaning: The selected producer is the parent brand of the current imprint.,
         citations: *id008,
       }
@@ -1001,6 +1011,8 @@ enumerations:
         value: spa,
         term: 'wdt:P361',
         mapping: 'wdt:P361',
+        status: omitted,
+        reason: Former-member origin claims remain unadmitted.,
         meaning: The selected producer was formed by former members of the current producer; no Wikidata property directly models this origin relation.,
         citations: *id008,
       }
@@ -1008,6 +1020,8 @@ enumerations:
         value: ori,
         term: 'wdt:P361',
         mapping: 'wdt:P361',
+        status: omitted,
+        reason: Former-member origin claims remain unadmitted.,
         meaning: The current producer was formed by former members of the selected producer; no Wikidata property directly models this origin relation.,
         citations: *id008,
       }
@@ -1342,9 +1356,9 @@ table_types:
     meaning: Voice actor assigned to a character.
     citations: &id042 ['https://www.wikidata.org/wiki/Property:725', 'https://www.wikidata.org/wiki/Property:P725']
   wdt:P749:
-    status: proposed
+    status: existing
     mapping: wdt:P749
-    meaning: Parent-organization relationship.
+    meaning: Released parent-organization relationship; VNDB par emits current→pid and sub emits pid→current under this property.
     citations: ['https://www.wikidata.org/wiki/Property:749', 'https://www.wikidata.org/wiki/Property:P749']
   wdt:P156:
     status: existing
@@ -1865,7 +1879,7 @@ tables:
         reason: Related producer key used as the relation target.
       - name: relation
         status: omitted
-        reason: VNDB producers_relations.relation is source-specific technical or organizational metadata with no selected profile statement.
+        reason: The relation code is not an independent statement; par and sub select released wdt:P749 orientation, and other inventoried codes stay omitted.
         values: *id023
   - name: quotes
     type: schema:Quotation

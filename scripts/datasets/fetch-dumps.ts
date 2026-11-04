@@ -27,6 +27,9 @@ const BANGUMI_TABLES = [
   'person-relations.jsonlines',
   'episode.jsonlines',
 ];
+export const VNDB_DUMP_HEADERS: Readonly<Record<string, readonly string[]>> = {
+  producers_relations: ['id', 'pid', 'relation'],
+};
 export const VNDB_DUMP_TABLES = [
   'anime',
   'chars',
@@ -34,6 +37,7 @@ export const VNDB_DUMP_TABLES = [
   'entry_meta',
   'extlinks',
   'producers',
+  'producers_relations',
   'releases',
   'releases_producers',
   'releases_supersedes',
@@ -293,6 +297,9 @@ async function vndbDirectory(root: string): Promise<string | undefined> {
       if (!(await regularFile(file)) || !(await regularFile(header))) return false;
       const columns = (await readFile(header, 'utf8')).trimEnd().split('\t');
       if (!columns.length || columns.some((column) => !column) || new Set(columns).size !== columns.length)
+        return false;
+      const required = VNDB_DUMP_HEADERS[table];
+      if (required && (columns.length !== required.length || required.some((name, index) => columns[index] !== name)))
         return false;
     }
     return true;

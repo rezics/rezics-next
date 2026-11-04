@@ -12,6 +12,7 @@ import {
   liveActionWorkType,
   mapSourceEnumeration,
   type SourceMapping,
+  vndbProducerParentEnds,
   vndbRecordUrl,
 } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
@@ -155,6 +156,26 @@ function countFamily<K>(franchiseOf: Map<K, Franchise>, family: Franchise): numb
   let count = 0;
   for (const value of franchiseOf.values()) if (value === family) count++;
   return count;
+}
+
+function vndbProducerProfile(row: Row): string {
+  const type = row.type;
+  if (type === undefined || type === null) return 'schema:Organization';
+  const mapping = mapSourceEnumeration('vndb', 'producer_type', String(type));
+  return mapping?.term === 'schema:Person' ? 'schema:Person' : 'schema:Organization';
+}
+
+function parentReaches(from: string, to: string, edges: Map<string, Set<string>>): boolean {
+  const seen = new Set<string>();
+  const pending = [from];
+  while (pending.length) {
+    const next = pending.pop()!;
+    if (next === to) return true;
+    if (seen.has(next)) continue;
+    seen.add(next);
+    for (const parent of edges.get(next) ?? []) pending.push(parent);
+  }
+  return false;
 }
 
 /** Select a finite family catalogue; unsupported native rows remain explicit source gaps.
@@ -949,13 +970,141 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     }
   for await (const row of input.rows('vndb', 'staff'))
     if (staff.has(text(row, 'id')) && typeof row.prod === 'string') producers.add(row.prod);
+  const producerRows = new Map<string, Row>();
+  for await (const row of input.rows('vndb', 'producers')) {
+    const id = text(row, 'id');
+    ensure(/^p[1-9][0-9]*$/.test(id), 'Invalid VNDB producer identity');
+    ensure(!producerRows.has(id), 'Duplicate selected VNDB producer');
+    producerRows.set(id, row);
+  }
+  let producerGrew = true;
+  while (producerGrew) {
+    producerGrew = false;
+    for await (const row of input.rows('vndb', 'producers_relations')) {
+      const id = text(row, 'id');
+      const pid = text(row, 'pid');
+      const mapping = mapSourceEnumeration('vndb', 'producer_relation', text(row, 'relation'));
+      if (mapping?.status !== 'existing' || mapping.term !== 'wdt:P749') continue;
+      if (!producers.has(id) && !producers.has(pid)) continue;
+      for (const endpoint of [id, pid]) {
+        if (producers.has(endpoint)) continue;
+        if (producers.size >= FAMILY_CAP) {
+          gap('vndb', 'producers_relations', row, 'Selected source relation limit exceeded', {
+            endpoint,
+            property: 'wdt:P749',
+          });
+          continue;
+        }
+        producers.add(endpoint);
+        producerGrew = true;
+      }
+    }
+  }
   for await (const row of input.rows('vndb', 'vn_anime'))
     if (vnIds.has(text(row, 'id'))) animeIds.add(text(row, 'aid'));
-  for await (const row of input.rows('vndb', 'producers'))
-    if (producers.has(text(row, 'id'))) {
-      plan.entities.vndb.push({ source: 'vndb', key: text(row, 'id'), revision: null, payload: row });
-      member({ source: 'vndb', key: text(row, 'id'), kind: 'organization', membership: 'referenced' });
+  for (const id of producers) {
+    const row = producerRows.get(id);
+    if (!row) continue;
+    plan.entities.vndb.push({ source: 'vndb', key: id, revision: null, payload: row });
+    member({
+      source: 'vndb',
+      key: id,
+      kind: vndbProducerProfile(row) === 'schema:Person' ? 'person' : 'organization',
+      membership: 'referenced',
+    });
+  }
+  const parentAdj = new Map<string, Set<string>>();
+  let parentOverflow = false;
+  let parentCount = 0;
+  for await (const row of input.rows('vndb', 'producers_relations')) {
+    const id = text(row, 'id');
+    const pid = text(row, 'pid');
+    if (!producers.has(id) && !producers.has(pid)) continue;
+    const code = text(row, 'relation');
+    const mapping = mapSourceEnumeration('vndb', 'producer_relation', code);
+    if (parentCount >= RELATION_CAP) {
+      parentOverflow = true;
+      continue;
     }
+    parentCount += 1;
+    if (mapping?.status !== 'existing' || mapping.term !== 'wdt:P749' || (code !== 'par' && code !== 'sub')) {
+      gap(
+        'vndb',
+        'producers_relations',
+        row,
+        mapping?.reason ?? 'No registered native converter for this source relation or entity',
+        { code, property: 'producers_relations.relation' },
+      );
+      continue;
+    }
+    const ends = vndbProducerParentEnds(code, id, pid);
+    if (!ends) continue;
+    if (!producerRows.has(ends.holder) || !producerRows.has(ends.target)) {
+      const missing = producerRows.has(ends.holder) ? ends.target : ends.holder;
+      gap('vndb', 'producers_relations', row, 'Missing target record for this source relation', {
+        code,
+        endpoint: missing,
+        property: 'wdt:P749',
+      });
+      continue;
+    }
+    const holderType = vndbProducerProfile(producerRows.get(ends.holder)!);
+    const targetType = vndbProducerProfile(producerRows.get(ends.target)!);
+    if (holderType !== 'schema:Organization' || targetType !== 'schema:Organization') {
+      gap('vndb', 'producers_relations', row, 'Producer kind is not an organization identity', {
+        code,
+        endpoint: holderType !== 'schema:Organization' ? ends.holder : ends.target,
+        property: 'wdt:P749',
+        requiredProfile: holderType !== 'schema:Organization' ? holderType : targetType,
+      });
+      continue;
+    }
+    if (ends.holder === ends.target || parentReaches(ends.target, ends.holder, parentAdj)) {
+      gap('vndb', 'producers_relations', row, 'Parent organization relation is cyclic', {
+        code,
+        endpoint: ends.target,
+        property: 'wdt:P749',
+      });
+      continue;
+    }
+    const adjacent = parentAdj.get(ends.holder) ?? new Set<string>();
+    adjacent.add(ends.target);
+    parentAdj.set(ends.holder, adjacent);
+    const path = `/producers_relations/${id}/${pid}`;
+    const evidence = [
+      {
+        path,
+        code,
+        sourceSubject: id,
+        sourceEndpoint: pid,
+        digest: sourceDigest(row),
+      },
+    ];
+    edge({
+      source: 'vndb',
+      alias: crossMediaAliases.vndb,
+      table: 'producers_relations',
+      holder: ends.holder,
+      target: ends.target,
+      property: 'wdt:P749',
+      url: vndbRecordUrl(ends.holder),
+      membership: 'referenced',
+      record: row,
+      fields: fieldsOf('producers_relations', row),
+      producerParent: {
+        code,
+        path,
+        sourceSubject: id,
+        sourceEndpoint: pid,
+        mappingRevision: `producer-parent@1:${code}`,
+        evidence,
+      },
+    });
+  }
+  if (parentOverflow)
+    gap('vndb', 'producers_relations', { limit: RELATION_CAP }, 'Selected source relation limit exceeded', {
+      property: 'wdt:P749',
+    });
   for await (const row of input.rows('vndb', 'anime'))
     if (animeIds.has(text(row, 'id')))
       gap('vndb', 'anime', row, 'VNDB anime.aid is an AniDB identifier, not a Bangumi or native subject identity');
@@ -1040,6 +1189,8 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
     const columns = header ? header.toString('utf8').trimEnd().split('\t') : null;
     if (columns) {
       ensure(columns.length > 0 && new Set(columns).size === columns.length, 'Invalid VNDB header');
+      if (table === 'producers_relations')
+        ensure(columns.join('\t') === 'id\tpid\trelation', 'Invalid VNDB producers_relations header');
       const headerKey = `${provider}/${table}.header`,
         hash = createHash('sha256').update(header!).digest('hex');
       ensure(!this.digests.has(headerKey) || this.digests.get(headerKey) === hash, 'Dump changed during selection');
@@ -1130,6 +1281,7 @@ export type CrossMediaSeedExtras = {
   recordConcurrency?: ImporterOptions['recordConcurrency'];
   sourceVocabulary?: SourceVocabularyBindings;
   providers?: readonly Provider[];
+  mediaDeadlineMs?: ImporterOptions['mediaDeadlineMs'];
 };
 
 export async function seedCrossMedia(
@@ -1145,6 +1297,7 @@ export async function seedCrossMedia(
     ...(destination ? { destination } : {}),
     ...(extras?.vocabularyAdmission ? { vocabularyAdmission: extras.vocabularyAdmission } : {}),
     ...(extras?.recordConcurrency === undefined ? {} : { recordConcurrency: extras.recordConcurrency }),
+    ...(extras?.mediaDeadlineMs === undefined ? {} : { mediaDeadlineMs: extras.mediaDeadlineMs }),
     transport: {
       batchWrite: (request) => port.batch(request),
       setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
@@ -1211,13 +1364,16 @@ export async function seedCrossMedia(
     graph.remember(plan.edges);
     const delivered = await graph.deliver({
       claim: (owner) => importer.session.bindings.claim(owner),
-      nativeType: (externalId) => nativeTypes.get(`${crossMediaAliases.bangumi}\u0000${externalId}`),
+      nativeType: (externalId, alias) =>
+        nativeTypes.get(`${alias ?? crossMediaAliases.bangumi}\u0000${externalId}`),
       fence: (input) => port.fence(input),
       batch: (request) => port.batch(request),
       journal: {
         prepare: (command) => {
           const owner = { source: command.source.source, external_id: command.source.external_id };
-          return importer.session.bindings.prepare(owner, sourceDigest([command]), { commands: [command] });
+          const prefix = `${owner.source}:${owner.external_id}:`;
+          const keyed = command.key.startsWith(prefix) ? command : { ...command, key: `${prefix}${command.key}` };
+          return importer.session.bindings.prepare(owner, sourceDigest([keyed]), { commands: [keyed] });
         },
         acknowledge: (command, result) => {
           const owner = { source: command.source.source, external_id: command.source.external_id };
@@ -1296,8 +1452,8 @@ export async function seedCrossMedia(
       gaps: [
         ...plan.gaps,
         ...delivered.gaps.map((gap) => ({
-          source: 'bangumi' as const,
-          fields: fieldsOf('subject-relations', gap.record),
+          source: (gap.table === 'producers_relations' ? 'vndb' : 'bangumi') as Provider,
+          fields: fieldsOf(gap.table ?? 'subject-relations', gap.record),
           record: gap.record,
           reason: gap.reason,
           ...(gap.code === undefined ? {} : { code: gap.code }),

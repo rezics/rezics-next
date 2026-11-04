@@ -2,9 +2,10 @@ import type { Database } from 'bun:sqlite';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { BATCH_LIMIT, checkBatchWrite, type BatchCommand, type BatchWriteResult } from '@rezics/definitions/bulk';
 import { mapBangumiVocabulary, bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
+import { mapVndbVocabulary, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import type { SourceVocabularyGap } from '@rezics/conversion';
 import { commandKey, sourceDigest } from '../../../packages/conversion/src/support.ts';
-import { relationStatement } from '@rezics/conversion/cross-media-entities';
+import { relationStatement, vndbProducerParentEnds } from '@rezics/conversion/cross-media-entities';
 import type { Claim } from './record-bindings.ts';
 
 export type Provider = 'bangumi' | 'vndb';
@@ -32,6 +33,14 @@ export type GraphEdgeDraft = {
     mappingRevision: string;
     evidence: { path: string; code: number; sourceSubject: string; sourceEndpoint: string; digest: string }[];
   };
+  producerParent?: {
+    code: string;
+    path: string;
+    sourceSubject: string;
+    sourceEndpoint: string;
+    mappingRevision: string;
+    evidence: { path: string; code: string; sourceSubject: string; sourceEndpoint: string; digest: string }[];
+  };
 };
 export type UnresolvedEdge = GraphEdgeDraft & { reason: string };
 export type ProposedEdge = { key: string; holder: string; target: string; property: string; subject: string };
@@ -39,6 +48,7 @@ export type GraphMappingGap = SourceVocabularyGap & {
   sourceSubject: string;
   sourceEndpoint: string;
   record: Record<string, unknown>;
+  table?: string;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -52,6 +62,9 @@ export function graphEdgeKey(draft: GraphEdgeDraft): string {
     draft.property,
     sourceDigest(draft.record),
     ...(draft.relation ? [draft.relation.mappingRevision, sourceDigest(draft.relation.evidence)] : []),
+    ...(draft.producerParent
+      ? [draft.producerParent.mappingRevision, sourceDigest(draft.producerParent.evidence)]
+      : []),
   ]);
 }
 
@@ -135,7 +148,7 @@ export class CrossMediaGraph {
 
   async deliver(input: {
     claim(owner: { source: string; external_id: string }): Claim | null;
-    nativeType(externalId: string): string | undefined;
+    nativeType(externalId: string, alias?: string): string | undefined;
     fence(input: {
       source: string;
       externalId: string;
@@ -256,6 +269,7 @@ export class CrossMediaGraph {
             sourceSubject: draft.relation.sourceSubject,
             sourceEndpoint: draft.relation.sourceEndpoint,
             record: draft.record,
+            table: draft.table,
           });
         if (mapped.proposals.length !== 1) {
           mark.run('unresolved', null, graphEdgeKey(draft));
@@ -299,6 +313,136 @@ export class CrossMediaGraph {
         });
         continue;
       }
+      if (draft.producerParent) {
+        let fenced = false;
+        for (const externalId of new Set([draft.producerParent.sourceSubject, draft.producerParent.sourceEndpoint])) {
+          const fence = await input.fence({ source: draft.alias, externalId, fieldGroup: 'facts' });
+          if (fence.fenced) fenced = true;
+        }
+        if (fenced) {
+          unresolved.push({ ...draft, reason: 'fenced_relation_holder' });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+        const sourceClaim = input.claim({ source: draft.alias, external_id: draft.producerParent.sourceSubject });
+        const endpointClaim = input.claim({ source: draft.alias, external_id: draft.producerParent.sourceEndpoint });
+        const sourceType = input.nativeType(draft.producerParent.sourceSubject, draft.alias);
+        const endpointType = input.nativeType(draft.producerParent.sourceEndpoint, draft.alias);
+        if (sourceClaim?.state !== 'bound' || endpointClaim?.state !== 'bound' || !sourceType || !endpointType) {
+          unresolved.push({ ...draft, reason: 'missing_native_endpoint_profile' });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+        const parent = draft.producerParent;
+        const rowDigest = sourceDigest(parent.evidence);
+        const parentUrl = `https://vndb.org/${parent.sourceSubject}`;
+        const mapParent = (ownerExternalId: string) =>
+          mapVndbVocabulary({
+            metadata: {
+              provider: 'vndb',
+              sourceAlias: draft.alias,
+              externalId: ownerExternalId,
+              recordRevision: 'unversioned',
+              digest: rowDigest,
+              converterRevision: `${vndbVocabularyRevision}:${parent.mappingRevision}`,
+              recordUrl: parentUrl,
+              license: 'ODbL-1.0',
+              attribution: 'VNDB (database: ODbL-1.0; permitted metadata contents: DbCL-1.0)',
+            },
+            bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+            rows: [
+              {
+                kind: 'producer-parent',
+                path: parent.path,
+                origin: {
+                  externalId: ownerExternalId,
+                  revision: 'unversioned',
+                  digest: rowDigest,
+                  url: parentUrl,
+                },
+                subject: { id: sourceClaim.subject, type: sourceType, releaseDigest: bundledDigest },
+                endpoint: { id: endpointClaim.subject, type: endpointType, releaseDigest: bundledDigest },
+                endpointCode: parent.sourceEndpoint,
+                code: parent.code,
+              },
+            ],
+          });
+        const orientation = vndbProducerParentEnds(parent.code, parent.sourceSubject, parent.sourceEndpoint);
+        let mapped = mapParent(orientation?.holder ?? parent.sourceSubject);
+        const firstProposal = mapped.proposals[0];
+        if (firstProposal?.op === 'propose') {
+          const ownerExternalId =
+            firstProposal.subject === sourceClaim.subject
+              ? draft.producerParent.sourceSubject
+              : firstProposal.subject === endpointClaim.subject
+                ? draft.producerParent.sourceEndpoint
+                : undefined;
+          if (ownerExternalId === undefined)
+            throw new TypeError('VNDB producer-parent mapper returned an unbound holder');
+          if (firstProposal.source.external_id !== ownerExternalId) mapped = mapParent(ownerExternalId);
+        }
+        for (const gap of mapped.gaps)
+          gaps.push({
+            ...gap,
+            sourceSubject: draft.producerParent.sourceSubject,
+            sourceEndpoint: draft.producerParent.sourceEndpoint,
+            record: draft.record,
+            table: draft.table,
+          });
+        if (mapped.proposals.length !== 1) {
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+        const mappedCommand = mapped.proposals[0]!;
+        if (mappedCommand.op !== 'propose')
+          throw new TypeError('VNDB producer-parent mapper returned a non-proposal command');
+        const command: BatchCommand = mappedCommand;
+        const childExternalId =
+          command.subject === sourceClaim.subject
+            ? draft.producerParent.sourceSubject
+            : command.subject === endpointClaim.subject
+              ? draft.producerParent.sourceEndpoint
+              : undefined;
+        if (!childExternalId)
+          throw new TypeError('VNDB producer-parent mapper returned an unbound holder');
+        const parentExternalId =
+          childExternalId === draft.producerParent.sourceSubject
+            ? draft.producerParent.sourceEndpoint
+            : draft.producerParent.sourceSubject;
+        const actualHolder =
+          childExternalId === draft.producerParent.sourceSubject ? sourceClaim : endpointClaim;
+        const actualTarget =
+          parentExternalId === draft.producerParent.sourceSubject ? sourceClaim : endpointClaim;
+        if (
+          actualHolder.state !== 'bound' ||
+          actualTarget.state !== 'bound' ||
+          command.subject !== actualHolder.subject
+        )
+          throw new TypeError('VNDB producer-parent mapper did not preserve the canonical holder binding');
+        const value = command.statement.value;
+        if (value.type !== 'value' || value.content !== actualTarget.subject)
+          throw new TypeError('VNDB producer-parent mapper did not preserve the canonical endpoint binding');
+        if (checkBatchWrite({ commands: [command] }, bundledRelease).length)
+          throw new TypeError('VNDB producer-parent proposal failed portable validation');
+        const retained = this.database
+          .transaction(() => {
+            const prepared = input.journal?.prepare(command);
+            const exact = prepared ? (JSON.parse(prepared.bytes) as { commands: [BatchCommand] }).commands[0] : command;
+            if (!exact || exact.op !== 'propose') throw new TypeError('Cross-media relation journal is invalid');
+            return this.retainCommand(graphEdgeKey(draft), exact);
+          })
+          .immediate();
+        commands.push({
+          draft,
+          command: JSON.parse(retained.bytes).commands[0] as BatchCommand,
+          subject: actualHolder.subject,
+          target: actualTarget.subject,
+          sourceHolder: childExternalId,
+          sourceTarget: parentExternalId,
+          bytes: retained.bytes,
+        });
+        continue;
+      }
       const qualifiers = (draft.qualifiers ?? []).map((qualifier) => {
         if (typeof qualifier.content !== 'string') return qualifier;
         const bound = input.claim({ source: draft.alias, external_id: qualifier.content });
@@ -335,23 +479,28 @@ export class CrossMediaGraph {
         bytes: retained.bytes,
       });
     }
-    for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
-      const page = commands.slice(offset, offset + BATCH_LIMIT);
+    const groups = [
+      commands.filter((entry) => !entry.draft.producerParent),
+      commands.filter((entry) => Boolean(entry.draft.producerParent)),
+    ];
+    for (const group of groups) {
+      for (let offset = 0; offset < group.length; offset += BATCH_LIMIT) {
+      const page = group.slice(offset, offset + BATCH_LIMIT);
       if (checkBatchWrite({ commands: page.map((entry) => entry.command) }).length)
         throw new TypeError('Cross-media relation proposals failed portable validation');
       const result = await input.batch({ commands: page.map((entry) => entry.command) });
       for (const [index, entry] of page.entries()) {
         const receipt = result.results[index];
         const status = receipt?.status;
+        const journaled = !!(entry.draft.relation || entry.draft.producerParent);
         if (status === 200) {
           unchanged++;
-          if (entry.draft.relation && (!receipt || !('value' in receipt) || !('candidate' in receipt.value)))
+          if (journaled && (!receipt || !('value' in receipt) || !('candidate' in receipt.value)))
             throw new TypeError('Cross-media relation replay omitted its native candidate receipt');
           this.database
             .transaction(() => {
-              if (entry.draft.relation && receipt && 'value' in receipt)
-                input.journal?.acknowledge(entry.command, receipt);
-              if (entry.draft.relation && receipt && 'value' in receipt && 'candidate' in receipt.value)
+              if (journaled && receipt && 'value' in receipt) input.journal?.acknowledge(entry.command, receipt);
+              if (journaled && receipt && 'value' in receipt && 'candidate' in receipt.value)
                 this.database
                   .prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
                   .run('proposed', entry.command.key, receipt.value.candidate, graphEdgeKey(entry.draft));
@@ -360,15 +509,22 @@ export class CrossMediaGraph {
             .immediate();
           continue;
         }
-        if (status !== 201) throw new TypeError(`Cross-media relation write failed: ${status}`);
+        if (status !== 201) {
+          if (entry.draft.producerParent && receipt === undefined) {
+            mark.run('unresolved', entry.command.key, graphEdgeKey(entry.draft));
+            unresolved.push({ ...entry.draft, reason: 'unknown_delivery' });
+            continue;
+          }
+          throw new TypeError(`Cross-media relation write failed: ${status}`);
+        }
         if (!receipt || !('value' in receipt))
           throw new TypeError('Cross-media relation write omitted its native receipt');
-        if (entry.draft.relation && !('candidate' in receipt.value))
+        if (journaled && !('candidate' in receipt.value))
           throw new TypeError('Cross-media relation proposal returned no candidate');
         this.database
           .transaction(() => {
-            if (entry.draft.relation) input.journal?.acknowledge(entry.command, receipt);
-            if (entry.draft.relation && 'candidate' in receipt.value)
+            if (journaled) input.journal?.acknowledge(entry.command, receipt);
+            if (journaled && 'candidate' in receipt.value)
               this.database
                 .prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
                 .run('proposed', entry.command.key, receipt.value.candidate, graphEdgeKey(entry.draft));
@@ -382,6 +538,7 @@ export class CrossMediaGraph {
           property: entry.draft.property,
           subject: entry.subject,
         });
+      }
       }
     }
     if (input.relationSnapshot) {

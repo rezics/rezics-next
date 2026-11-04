@@ -149,6 +149,13 @@ export type VndbVocabularyRow =
       spoiler: number;
       /** Release-scoped appearance context; a present value withholds the appearance. */
       releaseCode?: string | null;
+    })
+  | (RowBase & {
+      kind: 'producer-parent';
+      subject: NativeIdentity;
+      endpoint?: NativeIdentity;
+      endpointCode: string;
+      code: string;
     });
 
 export type SourceVocabularyRow = BangumiVocabularyRow | VndbVocabularyRow;

@@ -1594,6 +1594,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: O((W+T+A) log R) indexed importer work for admitted works W, dictionary tags T≤512 and associations A≤256, with at most 64 vocabulary rows per work and the existing per-record converter, candidate (≤300) and journal budgets. Bindings and admitted associations are re-read on each convert so unchanged VN bytes cannot hide a retracted Concept or a changed spoiler. Positive integer votes 1–3 with `ignore=f`, `lie=f` and applicable tags publish exact `schema:genre` facts; other associations stay review gaps without native ballots or aggregates.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Import authored VNDB producer parent and subsidiary rows
+
+- Touches: one bounded authored family plus `producers`/`producers_relations` COPY tables with the dump header `id pid relation`, referenced parent and subsidiary endpoints reachable under the existing family cap, the production cross-media dump reader and seed caller, and ordinary public batch/fence/candidate commands. Descriptions, language preferences, aliases, predecessor/successor and imprint codes stay omitted.
+- Bound: O((V+P+R) log S) indexed importer work for admitted works V, producers P and parent rows R within the existing relation cap, with sequential identity create-or-resolve then graph delivery. Mapping revision `producer-parent@1` is part of command identity so unchanged producer bytes cannot hide newly admitted endpoints. Local SQLite counts stay separate from native PostgreSQL measurements.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
 ### Import authored VNDB staff aliases and credited roles
 
 - Touches: one bounded authored VN (cap 8) plus at most 64 staff/voice credits, resolved person and character endpoints, the existing seed/importer caller, current native credit-type scheme/concept point reads supplied by the operator, and ordinary public batch/fence/candidate commands. Personal lists, local votes and source aggregates are not written. Alias IDs resolve to staff identities before proposal; credited spelling is the note, otherwise that alias's name.

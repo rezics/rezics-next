@@ -7,6 +7,7 @@ import {
   parseVndbDumpIndex,
   VNDB_ARCHIVE_URL,
   VNDB_DUMP_INDEX_URL,
+  VNDB_DUMP_HEADERS,
   VNDB_DUMP_TABLES,
   vndbDumpManifestPath,
 } from './fetch-dumps.ts';
@@ -31,7 +32,8 @@ async function packVndbArchive(archive: string): Promise<void> {
   await mkdir(join(root, 'db'));
   for (const table of VNDB_DUMP_TABLES) {
     await writeFile(join(root, 'db', table), 'v1\n');
-    await writeFile(join(root, 'db', `${table}.header`), 'id\n');
+    const header = (VNDB_DUMP_HEADERS[table] ?? ['id']).join('\t');
+    await writeFile(join(root, 'db', `${table}.header`), `${header}\n`);
   }
   const proc = Bun.spawn(['tar', '--zstd', '-cf', archive, '-C', root, 'README.txt', 'schema_vndbid.sql', 'db'], {
     stderr: 'pipe',

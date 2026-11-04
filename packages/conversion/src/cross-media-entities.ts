@@ -104,14 +104,35 @@ function loadVndb(): VndbInventory {
 }
 
 function asMapping(entry: InventoryValue): SourceMapping {
-  if (entry.mapping) return entry.mapping;
-  const status = entry.status === 'omitted' ? 'omitted' : entry.term ? 'existing' : 'omitted';
+  if (entry.mapping && typeof entry.mapping === 'object' && !Array.isArray(entry.mapping)) {
+    const mapping = entry.mapping;
+    if (mapping.status === 'existing' || mapping.status === 'proposed' || mapping.status === 'omitted') return mapping;
+  }
+  const status =
+    entry.status === 'omitted' || entry.status === 'existing' || entry.status === 'proposed'
+      ? entry.status
+      : typeof entry.mapping === 'string'
+        ? 'omitted'
+        : entry.term
+          ? 'existing'
+          : 'omitted';
   return {
     status,
     ...(entry.term ? { term: entry.term } : {}),
     ...(entry.inverse ? { inverse: true } : {}),
     ...(entry.reason ? { reason: entry.reason } : {}),
   };
+}
+
+/** par: current id → pid; sub: pid → current id. Dictionary P355 is not emitted. */
+export function vndbProducerParentEnds(
+  code: string,
+  id: string,
+  pid: string,
+): { holder: string; target: string } | undefined {
+  if (code === 'par') return { holder: id, target: pid };
+  if (code === 'sub') return { holder: pid, target: id };
+  return undefined;
 }
 
 /** Exact YAML enumeration lookup; never copies role or relation tables into callers. */

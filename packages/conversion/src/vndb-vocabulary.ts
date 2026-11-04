@@ -1,3 +1,4 @@
+import { vndbProducerParentEnds } from './cross-media-entities.ts';
 import {
   createMappingEnvironment,
   finishMapping,
@@ -431,6 +432,46 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         });
       return;
     }
+    case 'producer-parent': {
+      const code = environment.sourceCode(row.code);
+      if (code !== 'par' && code !== 'sub') {
+        rowGap(environment, row, 'unknown_code', 'producers_relations.relation', code ?? undefined);
+        return;
+      }
+      const endpointCode = environment.sourceCode(row.endpointCode);
+      if (!row.endpoint) {
+        rowGap(environment, row, 'missing_identity', 'wdt:P749', code, endpointCode ?? undefined);
+        return;
+      }
+      const orientation = vndbProducerParentEnds(code, row.subject.id, row.endpoint.id);
+      if (!orientation) {
+        rowGap(environment, row, 'unknown_code', 'producers_relations.relation', code);
+        return;
+      }
+      const child = orientation.holder === row.subject.id ? row.subject : row.endpoint;
+      const parent = orientation.target === row.subject.id ? row.subject : row.endpoint;
+      if (child.type !== 'schema:Organization' || parent.type !== 'schema:Organization') {
+        environment.pushGap({
+          path,
+          code,
+          endpoint: endpointCode ?? undefined,
+          reason: 'incompatible_identity',
+          property: 'wdt:P749',
+          requiredProfile: child.type !== 'schema:Organization' ? child.type : parent.type,
+        });
+        return;
+      }
+      environment.propose({
+        row,
+        subject: child,
+        property: 'wdt:P749',
+        content: '',
+        target: parent,
+        sourceEndpoint: row.endpointCode,
+        mappingRevision: `producer-parent@1:${code}`,
+      });
+      return;
+    }
   }
 }
 
@@ -451,6 +492,7 @@ export function mapVndbVocabulary(input: SourceVocabularyInput): SourceVocabular
     'tag',
     'character-trait',
     'character-appearance',
+    'producer-parent',
   ];
   for (const row of environment.rows) {
     if (!environment.isRow(row, kinds)) {

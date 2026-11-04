@@ -1001,6 +1001,24 @@ bun run --cwd services/kernel check test/imports/bangumi-creator-credits.test.ts
 
 This delivery does not claim that native command passed.
 
+## VNDB producer parent and subsidiary history
+
+Decision: VNDB `par` emits current producer → selected producer under released Organization `wdt:P749`. `sub` uses the same admitted property in the reverse orientation (selected → current) because `wdt:P355` is not admitted; no reciprocal source row is fabricated. Individual (`in`) producers keep the Person identity and withhold the parent statement.
+
+The production cross-media dump reader now requires `producers_relations` with header `id pid relation`, walks bounded parent/subsidiary closure from the selected family, and submits sourced parent proposals through the ordinary bulk API. Mapping revision `producer-parent@1` is part of command identity.
+
+The authored focused scenarios are:
+
+- `par and sub emit released P749 in source orientation without P355` in the conversion workspace.
+- `selected family follows par and sub, keeps Person and omitted codes as source loss` in the importer workspace.
+- `operator imports authored VNDB parent and subsidiary rows through ordinary accept and current reads` in the Kernel workspace. Native execution is deferred to the controller after integration.
+
+```sh
+bun run --cwd services/kernel check test/imports/vndb-producer-parent.test.ts
+```
+
+This delivery does not claim that native command passed.
+
 ## Bangumi character kinds and qualified appearances
 
 Decision: Bangumi character role mappings use exact configured native Concept and ConceptScheme IDs, verify their current adopted source URIs through the public API, and keep missing bindings as review diagnostics; labels never resolve identity.
