@@ -160,37 +160,6 @@ function nativeHome(membership: 'none' | 'pending' | 'member' = 'none'): NativeR
   };
 }
 
-test.each(['accepted', 'refused'] as const)(
-  'native %s completion requires acknowledgement and committed refreshed membership',
-  async (outcome) => {
-    resetFixtures();
-    sendMembership = async () => (outcome === 'accepted' ? { outcome, workflowId: 'native-completion' } : { outcome });
-    const completions: import('../src/community/realm-membership').RealmMembershipCompletion[] = [];
-    const onCompleted = (receipt: import('../src/community/realm-membership').RealmMembershipCompletion) => {
-      expect(surface.host.querySelector('[data-member-state]')?.getAttribute('data-member-state')).toBe('member');
-      expect(surface.hasText(m.realm_membership_command_uncertain())).toBe(false);
-      expect(receipt.current()).toBe(true);
-      completions.push(receipt);
-      return false;
-    };
-    const surface = await makeSurface({ realmId, nativeObservation: nativeHome('none'), onCompleted });
-    try {
-      await surface.until(() => surface.hasText(m.realm_join()), 'native join advice');
-      await click(surface, m.realm_join());
-      await surface.until(() => surface.hasText(m.realm_membership_command_uncertain()), 'native command settlement');
-      expect(completions).toHaveLength(0);
-      await surface.updateConfig({ realmId, nativeObservation: nativeHome('member'), onCompleted });
-      await surface.settle();
-      expect(completions).toHaveLength(outcome === 'accepted' ? 1 : 0);
-      await surface.settle();
-      expect(completions).toHaveLength(outcome === 'accepted' ? 1 : 0);
-    } finally {
-      await surface.dispose();
-      expect(completions.every((receipt) => !receipt.current() && !receipt.focusEligible())).toBe(true);
-    }
-  },
-);
-
 /** A real caller starts the production shared query, then publishes several authority notifications in one effect. */
 function TransitionWhileImportIsQueued({ realm }: { realm: string }) {
   const client = useQueryClient();
@@ -745,3 +714,35 @@ test('native uncertain join retains its original command through A-B-A and remou
     if (remounted) await remounted.dispose();
   }
 });
+
+test.each(['accepted', 'refused'] as const)(
+  'native %s completion requires acknowledgement and committed refreshed membership',
+  async (outcome) => {
+    resetFixtures();
+    sendMembership = async () => (outcome === 'accepted' ? { outcome, workflowId: 'native-completion' } : { outcome });
+    const completions: import('../src/community/realm-membership').RealmMembershipCompletion[] = [];
+    const onCompleted = (receipt: import('../src/community/realm-membership').RealmMembershipCompletion) => {
+      expect(surface.host.querySelector('[data-member-state]')?.getAttribute('data-member-state')).toBe('member');
+      expect(surface.hasText(m.realm_membership_command_uncertain())).toBe(false);
+      expect(receipt.current()).toBe(true);
+      completions.push(receipt);
+      return false;
+    };
+    const surface = await makeSurface({ realmId, nativeObservation: nativeHome('none'), onCompleted });
+    try {
+      await surface.until(() => surface.hasText(m.realm_join()), 'native join advice');
+      await click(surface, m.realm_join());
+      await surface.until(() => surface.hasText(m.realm_membership_command_uncertain()), 'native command settlement');
+      expect(completions).toHaveLength(0);
+      await surface.updateConfig({ realmId, nativeObservation: nativeHome('member'), onCompleted });
+      await act(async () => surface.router.invalidate());
+      await surface.settle();
+      expect(completions).toHaveLength(outcome === 'accepted' ? 1 : 0);
+      await surface.settle();
+      expect(completions).toHaveLength(outcome === 'accepted' ? 1 : 0);
+    } finally {
+      await surface.dispose();
+      expect(completions.every((receipt) => !receipt.current() && !receipt.focusEligible())).toBe(true);
+    }
+  },
+);

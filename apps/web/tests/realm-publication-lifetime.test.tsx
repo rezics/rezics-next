@@ -614,9 +614,9 @@ describe('Complete Realm publication original caller lifetime', () => {
           await tick();
         });
         expect(completions).toHaveLength(['retired', 'unavailable', 'uncertain'].includes(scenario) ? 0 : 1);
-        if (scenario === 'handoff') expect(window.document.activeElement).toBe(sentinel);
+        if (scenario === 'handoff') expect(window.document.activeElement === sentinel).toBe(true);
         if (scenario === 'decline')
-          expect(window.document.activeElement).toBe(host.querySelector('#realm-published-heading'));
+          expect(window.document.activeElement === host.querySelector('#realm-published-heading')).toBe(true);
         await paintShelf();
         expect(completions.length).toBeLessThanOrEqual(1);
         await close();
