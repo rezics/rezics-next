@@ -24,6 +24,7 @@ const visit: CreditVisit = { person: relationActor, node: 'voice', context: fixt
 let metadataResult: DetailRead = { kind: 'unavailable' };
 let metadataRead = () => Promise.resolve(metadataResult);
 const envelopes: any[] = [];
+mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/features/catalogue/credit-inspection/actions', () => ({
   loadCreditRevision: (input: any) => { envelopes.push(input); return metadataRead(); },
 }));
