@@ -101,6 +101,23 @@ test('own-contribution family preserves independent panels, exact recovery and r
     await click(button(dialog(), m.contribution_confirm()));
   };
   const cleared = new Map<string, number>();
+  // Existing command/focus scenarios start with explicit native authority evidence.
+  function useAdmittedTransport(transport: ContributionTransport): ContributionTransport {
+    const [reading] = useState(() => ({ initial: true }));
+    return {
+      change: transport.change,
+      read: async (target) => {
+        if (!reading.initial) return transport.read(target);
+        reading.initial = false;
+        return {
+          subject: 'available',
+          candidate: 'available',
+          selected: false,
+          actions: { state: 'available', operations: ['delete'] },
+        };
+      },
+    };
+  }
   function Panel({
     name,
     address,
@@ -115,25 +132,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
     locale?: string;
   }) {
     const [privateVisible, setPrivateVisible] = useState(true);
-    // These command/focus scenarios begin with an admitted current native observation.
-    // Initial loading and action failures have dedicated coverage below.
-    const [reading] = useState(() => ({ initial: true }));
-    const observed: ContributionTransport = {
-      change: transport.change,
-      read: async (target) => {
-        if (reading.initial) {
-          reading.initial = false;
-          return {
-            subject: 'available',
-            candidate: 'available',
-            selected: false,
-            actions: { state: 'available', operations: ['delete'] },
-          };
-        }
-        const next = await transport.read(target);
-        return next.actions ? next : { ...next, actions: { state: 'available', operations: ['delete', 'restore'] } };
-      },
-    };
+    const observed = useAdmittedTransport(transport);
     return (
       <div data-panel={name}>
         {privateVisible && <p data-private>Original private comparison {name}</p>}
@@ -173,6 +172,59 @@ test('own-contribution family preserves independent panels, exact recovery and r
   );
   try {
     setLocale('en', { reload: false });
+    // Loading has no default operation. Failed action hydration keeps an exact read retry.
+    let releaseInitial!: (value: ContributionAvailability) => void;
+    let initialReads = 0;
+    let initialEffects = 0;
+    const initial: ContributionTransport = {
+      read: () => {
+        initialReads++;
+        return new Promise((resolve) => {
+          releaseInitial = resolve;
+        });
+      },
+      change: async () => {
+        initialEffects++;
+        return { ok: false, reason: 'unavailable' };
+      },
+    };
+    await render(
+      <ContributionLifecycle
+        key="initial"
+        address={first.address}
+        locale="en"
+        transport={initial}
+        onClear={() => {}}
+      />,
+    );
+    await until(() => initialReads === 1);
+    expect(host.textContent).toContain(m.contribution_loading());
+    expect(host.textContent).not.toContain(m.contribution_withdraw());
+    expect(host.textContent).not.toContain(m.contribution_restore());
+    await act(async () =>
+      releaseInitial({
+        subject: 'available',
+        candidate: 'available',
+        selected: true,
+        actions: { state: 'unavailable' },
+      }),
+    );
+    expect(host.textContent).toContain(m.ctxw_actions_unavailable());
+    expect(host.textContent).toContain(m.candidate_selected());
+    expect(host.textContent).not.toContain(m.contribution_withdraw());
+    await click(button(host, m.contribution_refresh()));
+    await until(() => initialReads === 2);
+    await act(async () =>
+      releaseInitial({
+        subject: 'available',
+        candidate: 'available',
+        selected: true,
+        actions: { state: 'available', operations: [] },
+      }),
+    );
+    expect(host.textContent).not.toContain(m.contribution_withdraw());
+    expect(host.textContent).not.toContain(m.ctxw_actions_unavailable());
+    expect(initialEffects).toBe(0);
     await render(pair());
     for (const name of ['first', 'second']) {
       const region = panel(name).querySelector('section')!;
@@ -281,7 +333,6 @@ test('own-contribution family preserves independent panels, exact recovery and r
     expect([...panel('second').querySelectorAll('h3')].map((node) => node.textContent)).toEqual([
       m.contribution_read_unavailable(),
       m.contribution_candidate_unconfirmed(),
-      m.contribution_unselected(),
     ]);
     expect(panel('second').textContent).not.toContain(m.contribution_candidate_available());
     expect(panel('second').querySelector('[data-private]')).toBeNull();
@@ -354,7 +405,12 @@ test('own-contribution family preserves independent panels, exact recovery and r
       await render(<Panel key={candidate} name="recovery" address={first.address} transport={recovery} />);
       await confirm(panel('recovery'));
       // Another action restores, then withdraws; only the current reading chooses the next action.
-      observation = { subject: 'available', candidate: 'available', selected: null };
+      observation = {
+        subject: 'available',
+        candidate: 'available',
+        selected: null,
+        actions: { state: 'available', operations: ['delete'] },
+      };
       await click(button(panel('recovery'), m.contribution_refresh()));
       expect(button(panel('recovery'), m.contribution_withdraw()).disabled).toBe(false);
       for (const copy of [m.contribution_deleted(), m.contribution_restored(), m.contribution_unselected()])
@@ -439,6 +495,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
       };
       function Holder() {
         const [retired, retire] = useState(false);
+        const observed = useAdmittedTransport(transport);
         return retired ? (
           <input aria-label="Replacement draft" />
         ) : (
@@ -578,8 +635,8 @@ test('own-contribution family preserves independent panels, exact recovery and r
       }
       if (scenario === 'expired') {
         await click(button(panel(scenario), m.contribution_refresh()));
-        expect(panel(scenario).textContent).not.toContain(m.contribution_restore());
-        expect(panel(scenario).querySelector('[role="alert"]')?.textContent).toBe(copy);
+        expect(button(panel(scenario), m.contribution_restore()).disabled).toBe(false);
+        expect(panel(scenario).querySelector('[role="alert"]')).toBeNull();
       }
     }
 

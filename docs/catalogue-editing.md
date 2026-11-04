@@ -649,7 +649,8 @@ It offers fresh operations only from current native allowed operations; action d
 available. Unknown command delivery retains its immutable operation, identity and key independently of fresh
 availability. Native 409 conflict is not treated as proof of retention expiry.
 Decision: exact contribution availability returns identity, lifecycle and separately bounded Global selection;
-failed action hydration remains unavailable and suppresses fresh mutations. Native outcome checks and promotion to main remain
+failed action hydration remains unavailable and suppresses fresh mutations. Selection uses only current adoption
+metadata or exact compact assertion metadata, never a deleted statement payload. Native outcome checks and promotion to main remain
 separate; type checking alone does not prove those outcomes.
 
 Web owns the normal next visual review using the unchanged `pages-catalogue-changes--` IDs: `revisions`,

@@ -6,17 +6,20 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { withReadTransaction } from './read.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
-import { slotView } from './slots.ts';
+import { latestAdoption } from './slots.ts';
+import readSlotOperation from './slots-read-operation.sql';
+import readSelection from './contribution-lifecycle-read-selection.sql';
 import { redirectOf } from './merges.ts';
-import { candidateSources, fencedIds } from './fences.ts';
-import { statementAudience } from './statement-disclosure.ts';
+import { fencedIds, type CandidateSource } from './fences.ts';
+import { statementAudience, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { readSemanticLifecycle } from './lifecycle-state.ts';
 import { contributionAuthorResource, ContributionLifecycleNotFoundError } from './contribution-lifecycle.ts';
 import readLocator from './contribution-lifecycle-read-locator.sql';
 import readSubject from './moderation-read-subject.sql';
 import readState from './contribution-lifecycle-read-state.sql';
 import readHidden from './candidates-read-hidden-ids.sql';
-import readOwners from './candidates-read-owners.sql';
+import readOwner from './contribution-lifecycle-read-owner.sql';
+import provenance from './scope-leaf-selection-provenance.sql';
 
 export type ContributionLifecycleView = {
   subject: string;
@@ -42,8 +45,10 @@ export async function readContributionLifecycle(
     propose: () => Promise<(client: PoolClient) => Promise<boolean>>;
   },
 ) {
-  const route = routeOf(input.subject);
-  if (route === null || routeOf(input.candidate) !== route) throw new ContributionLifecycleNotFoundError();
+  const subjectRoute = routeOf(input.subject);
+  if (subjectRoute === null || routeOf(input.candidate) !== subjectRoute)
+    throw new ContributionLifecycleNotFoundError();
+  const route = subjectRoute;
   const parameters = { route, subject_id: input.subject, candidate_id: input.candidate };
   async function observe(client: PoolClient) {
     const subject = await readSubject.run(client, parameters);
@@ -65,26 +70,28 @@ export async function readContributionLifecycle(
       }),
     );
     if (hidden.length) throw new ContributionLifecycleNotFoundError();
-    // Expanded candidates use the ordinary candidate owner witness. Compact assertions keep their original locator.
-    const owners = listed(await readOwners.run(client, { ...parameters, candidate_ids: [input.candidate] }));
-    if (
-      (located.origin === 'proposal' && !owners.length) ||
-      owners.some(
-        (owner) =>
-          owner.principal_kind === 'account' && (owner.account_state !== 'active' || owner.account_fenced !== false),
-      )
-    )
-      throw new ContributionLifecycleNotFoundError();
-    const sources = await candidateSources(client, [
-      { route, subject_id: input.subject, candidate_id: input.candidate },
-    ]);
-    if (
-      (
-        await fencedIds(client, deps.routeKey, [
-          { id: input.candidate, source: sources.get(`${input.subject}\n${input.candidate}`) ?? null },
-        ])
-      ).size
-    )
+    // Both compact and expanded identities retain the original revision's author witness.
+    const owner = await readOwner.run(client, {
+      ...parameters,
+      partition_no: partitionOf(route),
+      revision: located.revision,
+    });
+    if (!owner?.visible) throw new ContributionLifecycleNotFoundError();
+    // Provenance is needed only for source disclosure. Bound it before hydration and
+    // fail closed if it cannot be inspected; withheld provenance is never absent provenance.
+    const sourceParameters = {
+      routes: [route],
+      subjects: [input.subject],
+      candidates: [input.candidate],
+      max_bytes: 16_384,
+    };
+    const sources = await client.query<{ source: CandidateSource | null; source_bytes: number }>(
+      provenance.sql,
+      provenance.params.map((name) => sourceParameters[name as keyof typeof sourceParameters]),
+    );
+    const source = sources.rows[0];
+    if (!source || (source.source_bytes > 0 && source.source === null)) throw new ContributionLifecycleNotFoundError();
+    if ((await fencedIds(client, deps.routeKey, [{ id: input.candidate, source: source.source }])).size)
       throw new ContributionLifecycleNotFoundError();
     const state = await readState.run(client, parameters);
     if (state && !['active', 'deleted'].includes(state.state)) throw new ContributionLifecycleNotFoundError();
@@ -102,7 +109,9 @@ export async function readContributionLifecycle(
           [
             'semantic.revision',
             {
-              readAction: 'statement:delete',
+              // Metadata shares the already validated Subject disclosure floor. Mutation
+              // grants remain independent on the actual original revision resource.
+              readAction: 'subject:read',
               async read(client, ids) {
                 const row = await client.query(
                   "SELECT 1 FROM access.resource_initialization WHERE route=$1 AND resource_id=$2 AND resource_type='semantic.revision'",
@@ -160,6 +169,7 @@ export async function readContributionLifecycle(
   } catch {
     // Dependency failure is distinct from a confirmed empty set of allowed operations.
   }
+  await refreshStatementReaderAuthorization();
   return withReadTransaction(
     deps.pool,
     async (client) => {
@@ -172,14 +182,26 @@ export async function readContributionLifecycle(
         current.state?.security_revision !== first.state?.security_revision
       )
         throw new ContributionLifecycleNotFoundError();
-      const view = await slotView(client, input.subject, input.property, GLOBAL_CONTEXT, {}, current.located.slot_id!);
+      // Read only selection metadata. A tombstone never causes statement payload hydration.
+      let selected = false;
+      if (current.state?.state !== 'deleted') {
+        const slot = current.located.slot_id!;
+        const operation = await readSlotOperation.run(client, { ...parameters, slot_id: slot });
+        if (operation?.operation === 'expand') {
+          const adoption = await latestAdoption(client, input.subject, input.property, GLOBAL_CONTEXT, slot);
+          selected =
+            adoption?.mode === 'replace' && adoption.selection.some((entry) => entry.candidate === input.candidate);
+        } else {
+          selected = (await readSelection.run(client, parameters))?.operation === 'assert';
+        }
+      }
       const result: ContributionLifecycleView = {
         subject: input.subject,
         candidate: input.candidate,
         property: input.property,
         viewer: input.actor.kind === 'account' ? 'account' : 'anonymous',
         state: current.state?.state === 'deleted' ? 'deleted' : 'available',
-        selected: view.facts.some((fact) => fact.statement_id === input.candidate),
+        selected,
         actions,
       };
       return {

@@ -91,6 +91,7 @@ export async function readContributionAvailability(
     result.candidate !== address.candidate ||
     result.property !== address.property ||
     !['available', 'deleted'].includes(result.state) ||
+    !['account', 'anonymous'].includes(result.viewer) ||
     typeof result.selected !== 'boolean' ||
     !result.actions ||
     !['available', 'unavailable'].includes(result.actions.state) ||
