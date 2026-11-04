@@ -174,7 +174,9 @@ test('uncertain removal needs current advice and both captured retry deadlines b
       credentials.push(token);
       return commands.length === 1
         ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded', retryAfter: '5' } }
-        : { kind: 'removed' };
+        : commands.length === 2
+          ? { kind: 'denied', problem: { status: 403, code: 'forbidden', retryAfter: '3' } }
+          : { kind: 'removed' };
     },
   });
   try {
@@ -221,10 +223,36 @@ test('uncertain removal needs current advice and both captured retry deadlines b
     expect(controller.canRetryOriginal()).toBe(true);
     await controller.retryOriginal();
     expect(commands[1]).toBe(original);
-    expect(credentials).toEqual([identity.csrfToken, identity.csrfToken]);
-    expect(controller.snapshot()).toMatchObject({ write: 'removed', command: null });
+    expect(controller.snapshot()).toMatchObject({
+      read: 'denied',
+      rows: [],
+      viewer: null,
+      actions: null,
+      write: 'uncertain',
+      writeProblem: { status: 403, code: 'forbidden' },
+      writeRetryAt: startedAt + 8000,
+      command: original,
+    });
+    expect(controller.canRetryOriginal()).toBe(false);
+
+    current = page([revised(6)], nextCursor);
+    await controller.refresh();
+    expect(controller.snapshot()).toMatchObject({
+      read: 'ready',
+      actions,
+      rows: [revised(6)],
+      write: 'uncertain',
+      command: original,
+    });
+    expect(controller.canRetryOriginal()).toBe(false);
+    now += 3000;
+    expect(controller.canRetryOriginal()).toBe(true);
+    await controller.retryOriginal();
+    expect(commands[2]).toBe(original);
+    expect(credentials).toEqual([identity.csrfToken, identity.csrfToken, identity.csrfToken]);
+    expect(controller.snapshot()).toMatchObject({ write: 'removed_current', command: null, rows: [revised(6)] });
     expect(controller.needsDecision()).toBe(false);
-    expect(cursors).toEqual([null, null, null, null, nextCursor]);
+    expect(cursors).toEqual([null, null, null, null, nextCursor, nextCursor]);
   } finally {
     Date.now = realNow;
     client.clear();
