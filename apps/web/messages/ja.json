@@ -9673,5 +9673,12 @@
   "search_text_leaf_limit": "単語またはフレーズは {maximum} 個までです。検索語を減らしてください。",
   "search_text_phrase_token_limit": "フレーズを {maximum} トークン以内に短くしてください。日中韓の文字は一文字ずつ数え、その他の連続した文字と数字は一語と数えます。",
   "search_text_position": "{position} 文字目（Unicode コードポイントで計算）。",
-  "search_text_grammar": "空白は両方の語、| はいずれかの語、- は直後の語やグループの除外を表します。( ) でグループ化し、二重引用符でフレーズを囲みます。バックスラッシュで \\、\"、|、(、)、- を通常の文字として扱えます。元の検索語を編集し、修正を適用してください。"
+  "search_text_grammar": "空白は両方の語、| はいずれかの語、- は直後の語やグループの除外を表します。( ) でグループ化し、二重引用符でフレーズを囲みます。バックスラッシュで \\、\"、|、(、)、- を通常の文字として扱えます。元の検索語を編集し、修正を適用してください。",
+  "search_window_navigation": "検索結果のページ",
+  "search_window_current": "{number} ページ目",
+  "search_window_address": "現在の検索結果ページ",
+  "search_window_previous": "前のページ",
+  "search_window_first": "最初のページ",
+  "search_window_limit": "読み込んだ直近12ページを保持します。最初のページからやり直せます。",
+  "search_window_repeated": "この続きは前のページと重複しています。最初のページからやり直してください。"
 }

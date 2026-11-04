@@ -176,3 +176,14 @@ A malformed or over-limit native Members page is a 422 failed page before projec
 Search text repair follows [the Search text contract](../../../../services/kernel/src/search/text-query-repair.md):
 localized bounded diagnostics, retained original text, explicit Apply, request-preserving navigation and focus
 limited to a current failing submission. The pure Search text core is shared with native admission.
+Native result-window navigation retains at most 12 admitted opaque cursors for the active complete request, plus its
+first-page address (at most 131,072 characters). Each cursor is at most 4,864 characters. The address list is carried
+only by this visit's browser-history entry, bound to the reader observation and locale; it contains no result DTOs,
+labels, totals, credentials or viewer advice. When the ceiling drops an older window, Previous traverses the retained
+suffix and First window deliberately starts at the first address. A direct cursor link has no invented predecessor
+or absolute window number. An ancestor token cannot become a forward continuation. Return and browser traversal
+re-read one native address with no-store; a restart/refusal never replays the chain or falls back to Global. Opening
+an existing native result route uses normal browser return, which restores only addresses and re-reads current data.
+Query, ordered languages, predicates, scope and rating population remain in every window address. Activated page
+navigation owns one request-keyed focus handoff to surviving navigation/recovery or the named result region; reader,
+locale or request replacement, cancellation, leaving Search and a reader's focus move retire that handoff.

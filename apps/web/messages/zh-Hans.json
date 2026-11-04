@@ -9670,5 +9670,12 @@
   "search_text_leaf_limit": "最多可使用 {maximum} 个词语或短语。请移除一个查询词。",
   "search_text_phrase_token_limit": "请将此短语缩短至最多 {maximum} 个词元：中日韩字符各计一个，其他连续的字母与数字计为一个词。",
   "search_text_position": "位于第 {position} 个字符（按 Unicode 码位计算）。",
-  "search_text_grammar": "空格表示两项都须匹配；| 表示任一项匹配；- 排除后面的词语或分组。用 ( ) 分组，双引号表示完整短语。反斜线可将 \\、\"、|、(、) 和 - 作为普通字符。请编辑原文，再应用修正。"
+  "search_text_grammar": "空格表示两项都须匹配；| 表示任一项匹配；- 排除后面的词语或分组。用 ( ) 分组，双引号表示完整短语。反斜线可将 \\、\"、|、(、) 和 - 作为普通字符。请编辑原文，再应用修正。",
+  "search_window_navigation": "结果页面",
+  "search_window_current": "第 {number} 页",
+  "search_window_address": "当前的结果页面",
+  "search_window_previous": "上一页",
+  "search_window_first": "第一页",
+  "search_window_limit": "仅保留最近 12 个已读取的页面。可选择第一页重新开始。",
+  "search_window_repeated": "此接续位置重复了先前的页面。请从第一页重新开始。"
 }

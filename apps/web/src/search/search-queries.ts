@@ -10,8 +10,8 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
   return queryOptions({
     ...(scoped ? personalRead : publicRead),
     staleTime: 0,
-    gcTime: scoped ? 0 : 60_000,
-    refetchOnMount: false,
+    gcTime: 0,
+    refetchOnMount: scoped ? 'always' : false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: false,

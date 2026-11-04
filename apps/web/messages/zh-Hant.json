@@ -9673,5 +9673,12 @@
   "search_text_leaf_limit": "最多可使用 {maximum} 個詞語或片語。請移除一個查詢詞。",
   "search_text_phrase_token_limit": "請將此片語縮短至最多 {maximum} 個詞元：中日韓字元各計一個，其他連續的字母與數字計為一個詞。",
   "search_text_position": "位於第 {position} 個字元（以 Unicode 碼位計算）。",
-  "search_text_grammar": "空格表示兩項皆須符合；| 表示任一項符合；- 排除後面的詞語或群組。用 ( ) 分組，雙引號表示完整片語。反斜線可將 \\、\"、|、(、) 和 - 視為一般字元。請編輯原文，再套用修正。"
+  "search_text_grammar": "空格表示兩項皆須符合；| 表示任一項符合；- 排除後面的詞語或群組。用 ( ) 分組，雙引號表示完整片語。反斜線可將 \\、\"、|、(、) 和 - 視為一般字元。請編輯原文，再套用修正。",
+  "search_window_navigation": "結果頁面",
+  "search_window_current": "第 {number} 頁",
+  "search_window_address": "目前的結果頁面",
+  "search_window_previous": "上一頁",
+  "search_window_first": "第一頁",
+  "search_window_limit": "僅保留最近 12 個已讀取的頁面。可選擇第一頁重新開始。",
+  "search_window_repeated": "此接續位置重複了先前的頁面。請從第一頁重新開始。"
 }
