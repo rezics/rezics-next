@@ -79,8 +79,8 @@ let activityAt = '';
 let staleThreadIds: string[] = [];
 
 beforeAll(async () => {
-  database = await openGrowthDatabase();
-  base = await createReactionRelayBase(database.url);
+  base = await createReactionRelayBase();
+  database = await openGrowthDatabase(base.system.database.pool.options.connectionString!);
 
   // Keep HTTP, Access and Content on the growth pool so the full route is charged.
   const authenticate = base.system.access.authenticate;
