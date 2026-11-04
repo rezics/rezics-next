@@ -1000,3 +1000,24 @@ bun run --cwd services/kernel check test/imports/bangumi-creator-credits.test.ts
 ```
 
 This delivery does not claim that native command passed.
+
+## Bangumi character kinds and qualified appearances
+
+Decision: Bangumi character role mappings use exact configured native Concept and ConceptScheme IDs, verify their current adopted source URIs through the public API, and keep missing bindings as review diagnostics; labels never resolve identity.
+
+The cross-media seed caller now imports character kinds as `schema:keywords`
+Concept facts and selected appearances as `schema:character` facts with the
+exact role Concept in `wdt:P3831`. It preserves character summaries through the
+existing attributed document proposal and leaves unsupported source ordering as
+a diagnostic when `schema:position` is not admitted on the work property.
+Character/person profile selection and existing work title proposals continue
+through their registered converters.
+
+The authored focused scenarios are:
+
+- `Bangumi character facts retain source identities, concepts, citation, and unsupported order diagnostics` in the importer workspace.
+- `Bangumi character kinds and appearance roles target exact Concepts; unsupported source order stays diagnostic` in the conversion workspace.
+- `authored Bangumi character kinds and qualified appearances are adopted as current native facts` in the Kernel workspace. It covers current public Concepts, source identities, independent reads, adoption, reopen/reimport idempotence, changed roles, missing role bindings and a fenced work tuple.
+
+The Kernel scenario is authored but its native execution is deferred to the
+controller after integration. This entry records no native pass receipt.
