@@ -36,7 +36,7 @@ test('malformed conditions and ranges stay editable and are not omitted from sea
       }),
     );
     expect(html).toContain('<textarea');
-    expect(html).toContain(issue.value);
+    expect(html).toContain(issue.value.replaceAll('"', '&quot;'));
     expect(html).toContain('Apply correction');
     expect(html).toContain('Remove this input');
     expect(html).not.toMatch(/FilterError|SyntaxError|stack/i);
