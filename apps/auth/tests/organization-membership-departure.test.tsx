@@ -122,12 +122,11 @@ afterAll(async () => {
 test('an unsent selected-member command warns; Stay preserves it and Leave discards it', async () => {
   await mount();
   expect(unload()).toBe(false);
-  const changeRole = [...host.querySelectorAll('button')].find((button) => button.textContent === m.auth_members_change_role())!;
   await click(m.auth_members_change_role());
   expect(unload()).toBe(true);
   await navigate('/away');
   await click(m.auth_members_stay());
-  expect(document.activeElement).toBe(changeRole);
+  expect(document.activeElement).toBe(host.querySelector('#membership-confirmation'));
   const saved = membership.readMembershipCommand();
   expect(saved && saved !== 'invalid' ? saved.operation.role : null).toBe('owner');
   await navigate('/away');
