@@ -90,7 +90,11 @@ test('Add-on and expansion editor uses current admitted native fields and actual
   expect(relationRead.fields.find((field) => field.id === 'wdt:P725')?.slotKey).toBe('wdt:P453');
   expect(relationRead.fields.find((field) => field.id === addonBase)?.targets).toEqual(['schema:VideoGame']);
   expect(await fixture.transport.load({ id: addonWorkId })).toEqual({ ok: false, reason: 'invalid' });
-  expect(await fixture.transport.load({ work: addonProfileId })).toEqual({ ok: false, reason: 'invalid' });
+  const suggested = await fixture.transport.load({ work: addonProfileId });
+  expect(suggested).toMatchObject({ ok: true, public: null, workIssue: 'invalid' });
+  if (!suggested.ok) throw new Error('Expected disclosed work suggestion');
+  expect(suggested.work?.subject.id).toBe(addonProfileId);
+  expect(suggested.work?.subject.type).toBe(addonType);
 });
 
 test('changed fields retain independent partial results and current publication is established by the actual reader', async () => {

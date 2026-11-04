@@ -522,9 +522,18 @@ test('add-on creation uses current parent eligibility and keeps a suggested work
     await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
     await input(host.querySelector('input[id="create-label-0"]')!, 'Included expansion');
     const picker = canvas().getByRole('combobox', { name: m.addon_base() });
+    await act(async () => user.click(picker));
     await act(async () => user.type(picker, 'Harbor'));
-    await waitFor(() => expect(canvas().getByRole('option', { name: /Harbor/ }).textContent).toContain('Harbor'));
-    await act(async () => user.click(canvas().getByRole('option', { name: /Harbor/ })));
+    await waitFor(() => expect(window.document.querySelector('[role="listbox"]')).not.toBeNull());
+    const listed = within(window.document.body as unknown as HTMLElement).getByRole('listbox');
+    const harbor = within(listed)
+      .getAllByRole('option')
+      .find((option) => {
+        const text = option.textContent ?? '';
+        return text.includes('Harbor') && !text.includes('Studio') && !text.includes('Northern');
+      });
+    expect(harbor).toBeDefined();
+    await act(async () => user.click(harbor!));
     await waitFor(() => expect(host.textContent).toContain(m.addon_base_draft_note()));
     await act(async () => user.click(submit()));
     await waitFor(() => expect(host.querySelector('[data-addon-create-review]')).not.toBeNull());
