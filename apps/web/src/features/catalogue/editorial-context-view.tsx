@@ -72,6 +72,7 @@ function EditorialContextWorkspaceLive({
   const session = useRef<string | undefined>(undefined);
   const mounted = useRef(true);
   const creationRead = useRef(0);
+  const settingsSource = useRef<EditorialTransport['settings'] | undefined>(undefined);
   const active = reading?.ok ? (reading.context ?? undefined) : undefined;
   const nativeLifecycle = reading?.ok ? reading.lifecycle : null;
   const displayedContext = active ?? (nativeLifecycle?.state === 'deleted' ? nativeLifecycle : undefined);
@@ -143,11 +144,12 @@ function EditorialContextWorkspaceLive({
     // Route/session identity remounts this private workspace. Mutations own subsequent reads.
   }, [id, transport]);
   useEffect(() => {
-    if (!transport.settings || inventory) return;
+    const source = transport.settings;
+    if (!source || settingsSource.current === source) return;
+    settingsSource.current = source;
     let cancelled = false;
     setInventory({ kind: 'loading' });
-    void transport.settings
-      .choices(session.current)
+    void source.choices(session.current)
       .then((latest) => {
         if (!cancelled && mounted.current && lifetime.active()) setInventory(latest);
       })
@@ -157,7 +159,7 @@ function EditorialContextWorkspaceLive({
     return () => {
       cancelled = true;
     };
-  }, [transport, inventory, lifetime]);
+  }, [transport.settings, lifetime]);
   useEffect(() => {
     const digest = active?.settings?.release;
     if (!transport.settings || !digest) return;
