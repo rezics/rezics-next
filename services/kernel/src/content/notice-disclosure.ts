@@ -1,9 +1,5 @@
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { withConnection } from '../database/pool.ts';
-import { readPublicAccount, readPublicIdentities } from '../access/account-data.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ReportId } from './model.ts';
 import { readModerationDecisionForAuthor } from './moderation-decisions.ts';
@@ -30,17 +26,8 @@ export type NoticeCandidate = Readonly<{
   unread: boolean;
 }>;
 
-export type NoticeActor =
-  | Readonly<{
-      state: 'available';
-      accountId: string;
-      displayName: string;
-      handle: string | null;
-      avatarUrl: string | null;
-      automated: boolean;
-    }>
-  | Readonly<{ state: 'withheld'; displayName: 'Former or unavailable account'; handle: null; avatarUrl: null }>
-  | Readonly<{ state: 'system'; displayName: 'Moderation team'; handle: null; avatarUrl: null }>;
+import { readNoticeActors, unavailableNoticeActor, type NoticeActor, type NoticeActorObservationReader } from './notice-actor-context.ts';
+export type { NoticeActor } from './notice-actor-context.ts';
 
 export type NoticeTarget = Readonly<{
   state: 'available' | 'withheld';
@@ -76,6 +63,7 @@ export type NoticeDisclosureDependencies = Readonly<{
   routeKey: Uint8Array;
   actor: Actor;
   deadline: number;
+  noticeActorObservations?: NoticeActorObservationReader;
 }>;
 
 const withheldTarget = (): NoticeTarget => ({
@@ -89,55 +77,6 @@ const withheldTarget = (): NoticeTarget => ({
 
 function contextKey(reference: NoticePostReference): string {
   return `${reference.threadId}/${reference.postId ?? ''}`;
-}
-
-async function currentActors(
-  pool: Pool,
-  ids: readonly string[],
-  deadline: number,
-): Promise<ReadonlyMap<string, NoticeActor>> {
-  const unique = [...new Set(ids.filter((id) => routeOf(id) !== null))];
-  const output = new Map<string, NoticeActor>();
-  if (unique.length === 0) return output;
-  const routes = unique.map((id) => routeOf(id)!);
-  const identities = await within(deadline, () =>
-    withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      const read = async () => {
-        const rows = await readPublicIdentities(client, routes, unique);
-        const byId = new Map(rows.map((identity) => [identity.id, identity]));
-        const result = new Map<string, NoticeActor>();
-        for (const [index, id] of unique.entries()) {
-          const identity = byId.get(id);
-          if (!identity || identity.state !== 'active' || identity.kind !== 'actor') continue;
-          const profile = await readPublicAccount(client, routes[index]!, id);
-          if (!profile || profile.state !== 'active' || profile.kind !== 'actor') continue;
-          result.set(id, {
-            state: 'available',
-            accountId: id,
-            displayName: profile.displayName?.trim() || profile.handle || 'Member',
-            handle: profile.handle,
-            avatarUrl: profile.avatarUrl,
-            automated: identity.automated,
-          });
-        }
-        return result;
-      };
-      const before = await read();
-      const after = await read();
-      const stable = new Map<string, NoticeActor>();
-      for (const [id, current] of after) {
-        if (JSON.stringify(before.get(id)) === JSON.stringify(current)) stable.set(id, current);
-      }
-      return stable;
-    }),
-  );
-  for (const [id, actor] of identities) output.set(id, actor);
-  return output;
-}
-
-function safeActor(): NoticeActor {
-  return { state: 'withheld', displayName: 'Former or unavailable account', handle: null, avatarUrl: null };
 }
 
 function projectionTarget(context: NoticePostContext | undefined): NoticeTarget {
@@ -355,10 +294,10 @@ export async function discloseNoticeCandidates(
   const actors =
     options.includeActors === false
       ? new Map<string, NoticeActor>()
-      : await currentActors(dependencies.pool, actorIds, dependencies.deadline);
+      : await readNoticeActors(dependencies.pool, actorIds, dependencies.deadline, dependencies.noticeActorObservations);
 
   // The first native source and target reads are the baseline. Re-read those same
-  // keys after actor/profile hydration so the presentation round cannot validate
+  // keys after Account/Media composition so the presentation round cannot validate
   // an earlier target, report outcome, or author decision.
   const currentSourceIds = new Set<string>();
   for (const candidate of candidates) {
@@ -474,10 +413,10 @@ export async function discloseNoticeCandidates(
     const board = boardContext ? currentBoardContexts.get(boardContext) : undefined;
     const actor =
       candidate.kind === 'moderation_decision'
-        ? ({ state: 'system', displayName: 'Moderation team', handle: null, avatarUrl: null } as const)
+        ? ({ state: 'system', displayName: 'Moderation team', handle: null, avatar: null, avatarUrl: null } as const)
         : candidate.actor_id
-          ? (actors.get(candidate.actor_id) ?? safeActor())
-          : safeActor();
+          ? (actors.get(candidate.actor_id) ?? unavailableNoticeActor())
+          : unavailableNoticeActor();
     result.set(candidate.notice_id, {
       actor,
       actorId: actor.state === 'available' ? actor.accountId : null,

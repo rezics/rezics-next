@@ -13,6 +13,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { reactionFixture } from './reactions.test.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { readNoticeActors, type NoticeActorObservationReader } from '../../src/content/notice-actor-context.ts';
 
 let fixture: Awaited<ReturnType<typeof reactionFixture>>;
 let inbox: InboxDependencies;
@@ -135,4 +136,52 @@ test('list candidate LIMIT is min(4×page size, 200) at three page sizes for All
     }
   }
   expect(observed).toEqual([4, 80, 200, 4, 80, 200]);
+});
+
+test('notice actor composition admits Media variants independently and retires changed Account observations', async () => {
+  const id = fixture.accountId;
+  const r = routeOf(id)!;
+  const media = newId(r);
+  await fixture.db.admin.query(
+    `INSERT INTO content.media
+      (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,
+       byte_count,actual_byte_count,sha256,state,key,transaction_id,width,height,thumbhash,average_color)
+     VALUES ($1,$2,$3,$3,$2::text,'avatar','image/png',256,256,repeat('a',64),'available',
+             'unused-original-key',$2,64,64,decode('010203','hex'),'#123456')`,
+    [r, media, id],
+  );
+  await fixture.db.admin.query(
+    `INSERT INTO content.media_variant(route,media_id,format,width,height,media_type,byte_count,sha256,key,transaction_id)
+     VALUES ($1,$2,'webp',64,64,'image/webp',100,repeat('b',64),'unused-variant-key',$2)`,
+    [r, media],
+  );
+  const identity = {
+    id, kind: 'actor' as const, state: 'active' as const, displayName: 'Current member', handle: null,
+    automated: false, operatorId: null, avatarMediaId: media, nativeState: 'active' as const, authnFenced: false,
+  };
+  const read = async (after?: NoticeActorObservationReader) => {
+    const requested: string[][] = [];
+    const actors = await readNoticeActors(fixture.db.pool, [id, id], Date.now() + 30_000, async (client, ids) => {
+      requested.push([...ids]);
+      return requested.length === 2 && after ? after(client, ids) : [identity];
+    });
+    expect(requested).toEqual([[id], [id]]);
+    return actors.get(id);
+  };
+  expect(await read()).toMatchObject({
+    state: 'available', displayName: 'Current member', avatarUrl: null,
+    avatar: { media, width: 64, height: 64, variants: [{ format: 'webp', width: 64 }] },
+  });
+  for (const changed of [
+    { ...identity, avatarMediaId: newId(r) },
+    { ...identity, displayName: 'Replacement name' },
+    { ...identity, authnFenced: true },
+    { ...identity, operatorId: newId(r) },
+    { id, kind: 'actor' as const, state: 'deleted' as const },
+  ]) expect(await read(async () => [changed])).toBeUndefined();
+  expect(await read(async () => [])).toBeUndefined();
+  await fixture.db.admin.query('UPDATE content.media SET taken_down=true WHERE route=$1 AND media_id=$2', [r, media]);
+  expect(await read()).toMatchObject({ state: 'available', displayName: 'Current member', avatar: null, avatarUrl: null });
+  const thin = await readNoticeActors(fixture.db.pool, [id], Date.now() + 30_000);
+  expect(thin.get(id)).toMatchObject({ state: 'available', avatar: null, avatarUrl: null });
 });

@@ -148,6 +148,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   content?: ContentRuntime &
     Pick<ContentBoardDependencies, 'cursorNow'> & {
       readConsent?: CurrentConsentReader;
+      /** Accounts' admitted native observations; absent means identity-only notice actors. */
+      noticeActorObservations?: import('../content/notice-actor-context.ts').NoticeActorObservationReader;
       /** Complete-input title observations; absent until Content installs its native producer. */
       shelfTitleInputs?: ContentShelfTitleInputs;
     };
@@ -626,6 +628,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   };
   content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, contentDependencies);
   noticeRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
+    noticeActorObservations: dependencies.content?.noticeActorObservations,
     pool: dependencies.pool,
     tokens,
     routeKey: dependencies.routeKey,
