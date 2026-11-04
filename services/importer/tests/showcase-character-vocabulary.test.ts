@@ -45,6 +45,7 @@ test('default selected-family planning closes only evidenced VNDB character voca
     await copy('traits_parents', 'id\tparent\tmain', 'i73\ti10\tt\ni10\ti7\tt\n');
     const raw = new CrossMediaDumpFiles('', vndb);
     const sourceRows: Record<string, Record<string, unknown>[]> = {
+      'bangumi/subject': [{ id: 1, type: 2, name: 'STEINS;GATE', name_cn: null }],
       'vndb/vn_titles': [
         { id: 'v1', lang: 'en', official: 't', title: 'STEINS;GATE', latin: null },
         { id: 'v2', lang: 'en', official: 't', title: 'An unrelated visual novel', latin: null },
