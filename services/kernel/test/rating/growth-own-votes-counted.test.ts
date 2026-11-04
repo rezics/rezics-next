@@ -15,9 +15,10 @@ for (const axis of countedAxes) test(`counted prepare/read/finish has bounded ph
         bounds: Object.fromEntries([
           'preparePhases', 'readPhases', 'finishPhases', 'accessPreparations', 'accessEvaluations', 'mappingCollections',
           'poolQueries', 'materializedRows', 'materializedBytes', 'retainedBytes', 'serializedBytes', 'cleanupStatements', 'runnerPhases', 'connections',
+          'prepareQueries', 'readQueries', 'finishQueries', 'fixtureQueries',
         ].map(key => [key, 'constant' as const])),
-        limits: { preparePhases: 5, readPhases: 4, finishPhases: 4, cleanupStatements: 2,
-          connections: 1, materializedBytes: 4_194_304, retainedBytes: 1_048_576, serializedBytes: 262_144 },
+        limits: { preparePhases: 5, readPhases: 4, finishPhases: 4, cleanupStatements: 3,
+          connections: 1, materializedBytes: 4_194_304, retainedBytes: 1_048_576, serializedBytes: 33_554_432 },
       },
       grow: (_db, scale, previous) => f.grow(axis, scale, previous),
       operation: () => f.operation(),
@@ -31,7 +32,10 @@ for (const axis of countedAxes) test(`counted prepare/read/finish has bounded ph
     for (const sample of report.samples) {
       expect(sample.counted!.accessPreparations!.value).toBeGreaterThan(0);
       expect(sample.counted!.accessEvaluations!.value).toBeGreaterThan(0);
-      expect(sample.counted!.cleanupStatements!.value).toBe(2);
+      expect(sample.counted!.cleanupStatements!.value).toBe(3);
+      const counted = sample.counted!;
+      expect(counted.poolQueries!.value).toBe(counted.prepareQueries!.value + counted.readQueries!.value
+        + counted.finishQueries!.value + counted.fixtureQueries!.value);
       for (const cost of sample.repetitions) {
         expect(cost.rows).toBeGreaterThan(0);
         expect(cost.controlStatements).toBeGreaterThan(0);
