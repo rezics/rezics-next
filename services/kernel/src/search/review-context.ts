@@ -201,14 +201,24 @@ export async function prepareSearchReviewContexts(
       if (finished) throw new TypeError('Search review context finish only once');
       finished = true;
       // Account presentation is public and never inherited from the Search viewer.
-      const accounts = await readAccountDiscoverySummaries(
-        { ...dependencies, actor: publicContext.actor, deadline: context.deadline },
-        [...new Set([...initial.values()].map((row) => row.authorId))],
-        { languages: context.languages ?? ['en'] },
-      );
+      const authorIds = [...new Set([...initial.values()].map((row) => row.authorId))];
+      const readAuthors = async () => {
+        const summaries = await readAccountDiscoverySummaries(
+          { ...dependencies, actor: publicContext.actor, deadline: context.deadline },
+          authorIds,
+          { languages: context.languages ?? ['en'] },
+        );
+        return new Map([...summaries].map(([id, author]) => [id, author
+          ? { displayName: author.displayName, handle: author.handle }
+          : null] as const));
+      };
+      const accounts = await readAuthors();
       const confirmed = await native();
       const finalThreads = await threads();
       if (!(await semantic.current())) throw restart();
+      // Account deletion or presentation movement during the final foreign reads
+      // invalidates both attribution and any citation that depends on that author.
+      if (JSON.stringify([...accounts]) !== JSON.stringify([...(await readAuthors())])) throw restart();
       const values = new Map<string, PublicReviewDiscoverySummary>();
       let bytes = 0;
       for (const hit of reviews) {

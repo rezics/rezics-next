@@ -138,3 +138,19 @@ test('closed receiving refuses stale target siblings, current-label substitution
   hit.summary.value.subject = { id: ids[1]!, title: 'Old disclosed title' };
   expect(parseDiscoveryPage(wire)).toBeUndefined();
 });
+
+// An unavailable assembly cannot inherit an earlier opening's spoiler state.
+test('unavailable current context suppresses an earlier opening excerpt', () => {
+  const wire = page();
+  const hit = wire.hits[0]!;
+  if (hit.summary.kind !== 'review') throw new Error('Expected review');
+  hit.summary.value.reviewContext = { state: 'unavailable' };
+  wire.hits = [hit];
+  const admitted = parseDiscoveryPage(wire);
+  expect(admitted).toBeDefined();
+  const html = renderToStaticMarkup(createElement(DiscoveryResults, {
+    state: { status: 'ready', page: admitted! }, locale: 'en',
+  }));
+  expect(html).not.toContain('A spoiler observation.');
+  expect(html).not.toContain('0 units');
+});
