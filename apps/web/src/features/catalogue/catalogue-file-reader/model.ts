@@ -37,6 +37,7 @@ export type CatalogueFileAssociation = {
   source: { id: string; label: string; lang?: string };
   target: { id: string; label: string; lang?: string };
   statement: Statement;
+  related: Related;
   readability: 'readable' | 'concealed' | 'unreadable';
   historical: boolean;
 };
@@ -188,6 +189,7 @@ function associations(
       source,
       target,
       statement,
+      related,
       readability,
       historical: historicalStatement(statement, digest),
     });
