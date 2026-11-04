@@ -138,8 +138,8 @@ test('the selected-family seed qualifies staff and voice credits without alias i
             { code: 'scenario', id: scenarioId },
             { code: 'chardesign', id: designId },
           ],
-        mediaDeadlineMs: 0,
         },
+        mediaDeadlineMs: 0,
       },
     );
     const readings = new Map(result.readings.map((reading) => [reading.externalId, reading.subject.subject.id]));
