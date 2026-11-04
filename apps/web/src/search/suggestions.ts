@@ -164,8 +164,9 @@ export async function suggestSubjects(
   const searchParams = new URL(request.url).searchParams;
   const filters = searchParams.getAll('filter');
   if (filters.length > 1) throw problem(400, 'invalid_request', 'Use one complete search filter');
-  const releases = searchParams.getAll('release');
-  if (releases.length > 1) throw problem(400, 'invalid_request', 'Use one condition metadata release');
+  const releases = [...searchParams.getAll('release'), ...searchParams.getAll('digest')];
+  if (releases.length > 1 || (releases.length === 1 && !releases[0]))
+    throw problem(400, 'invalid_request', 'Use one definitions release');
   const languagesParam = searchParams.getAll('language');
   const parameters = validateSuggestQuery({
     q: query,
@@ -268,7 +269,25 @@ export async function suggestionResponse(
     if (carriesSession(request) && !viewerCredential(request))
       throw problem(503, 'dependency_unavailable', 'Session unavailable');
     const searchParams = new URL(request.url).searchParams;
+    const conceptIds = searchParams.getAll('concept');
     const entityIds = searchParams.getAll('id');
+    if (conceptIds.length) {
+      if (
+        conceptIds.length !== 1 ||
+        entityIds.length > 0 ||
+        searchParams.has('q') ||
+        searchParams.has('filter') ||
+        searchParams.has('release')
+      )
+        throw problem(400, 'invalid_request', 'Use one Concept read without a scoped filter');
+      const digests = searchParams.getAll('digest');
+      if (digests.length !== 1 || !digests[0])
+        throw problem(400, 'invalid_request', 'Use one definitions release');
+      const { readConditionConcept } = await import('./condition-concept-read');
+      return Response.json(await readConditionConcept(request, conceptIds[0]!, digests[0]), {
+        headers: { 'cache-control': 'private, no-store' },
+      });
+    }
     if (entityIds.length) {
       if (entityIds.length !== 1 || searchParams.has('q'))
         throw problem(400, 'invalid_request', 'Use one suggestion or entity read');

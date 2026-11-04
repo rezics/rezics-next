@@ -36,6 +36,8 @@ import {
 import { conditionDraftNodeAt, createConditionEditFocus } from './condition-edit-focus';
 import { createRequestResourceConditionExtension } from './resource-condition-editor';
 import type { RequestResourceInput } from './resource-condition-model';
+import { conditionConceptProperty, type ConditionConceptLookup } from './condition-concept-model';
+import { ConditionConceptPicker } from './condition-concept-picker';
 import {
   appendConditionEntity,
   conditionEntityRequestIdentity,
@@ -77,6 +79,7 @@ type EditorContext = {
   canSelectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
   selectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
   extension?: ConditionExtension | undefined;
+  conceptLookup?: ConditionConceptLookup | undefined;
 };
 /** A consumer can compose additional shared grammar leaves without a second tree editor or evaluator. */
 export type ConditionExtension = {
@@ -124,6 +127,7 @@ export function ConditionEditor({
   languages,
   onLanguages,
   extension,
+  conceptLookup,
   requestResources,
   embedded = false,
 }: {
@@ -138,6 +142,7 @@ export function ConditionEditor({
   languages?: string[] | undefined;
   onLanguages?(languages: string[]): void;
   extension?: ConditionExtension;
+  conceptLookup?: ConditionConceptLookup;
   /** Optional native labels for request-only resource IDs; labels are display data and never resolve IDs. */
   requestResources?: RequestResourceInput | false;
   embedded?: boolean;
@@ -161,6 +166,7 @@ export function ConditionEditor({
   const focusOwner = JSON.stringify([
     locale,
     entityLookup ? conditionEntityRequestIdentity('condition-editor', '', [], entityLookup) : null,
+    conceptLookup?.lifetimeKey,
   ]);
   const focusOwnerRef = useRef(focusOwner);
   if (focusOwnerRef.current !== focusOwner) {
@@ -181,6 +187,9 @@ export function ConditionEditor({
   useEffect(() => {
     if (disabled) recovery.current.cancel();
   }, [disabled]);
+  useEffect(() => {
+    recovery.current.cancel();
+  }, [conceptLookup?.lifetimeKey]);
   const publish = (next: FilterDocument | undefined, node: ConditionDraftNode | undefined) => {
     session = { value: next, node };
     setSession(session);
@@ -275,6 +284,7 @@ export function ConditionEditor({
         canSelectSavedFilter,
         selectSavedFilter,
         extension: activeExtension,
+        conceptLookup,
       }
     : undefined;
   return (
@@ -797,23 +807,36 @@ function NodeEditor({
             </>
           ) : (
             'in' in value.statement && (
-              <ValueFields
-                context={context}
-                pointer={`${pointer}/statement/in`}
-                values={value.statement.in}
-                choices={context.values[property ?? '']}
-                entity={
-                  definition?.datatype === 'wikibase-item' && property
-                    ? {
-                        property,
-                        targets: definition.targets ?? [],
-                        occurrence: `${draft.key}:statement`,
-                        nodeKey: draft.key,
-                      }
-                    : undefined
-                }
-                onChange={(selected) => replaceStatement({ in: selected })}
-              />
+              <>
+                <ValueFields
+                  context={context}
+                  pointer={`${pointer}/statement/in`}
+                  values={value.statement.in}
+                  choices={context.values[property ?? '']}
+                  entity={
+                    definition?.datatype === 'wikibase-item' && property
+                      ? {
+                          property,
+                          targets: definition.targets ?? [],
+                          occurrence: `${draft.key}:statement`,
+                          nodeKey: draft.key,
+                        }
+                      : undefined
+                  }
+                  onChange={(selected) => replaceStatement({ in: selected })}
+                />
+                {context.conceptLookup &&
+                  (value.statement.concept || conditionConceptProperty(definition)) && (
+                    <ConditionConceptPicker
+                      key={`${context.conceptLookup.key}:${pointer}:${property}`}
+                      value={value}
+                      lookup={context.conceptLookup}
+                      locale={context.locale}
+                      disabled={context.disabled}
+                      onChange={(next) => onChange(next)}
+                    />
+                  )}
+              </>
             )
           )}
           {value.statement.qualifiers?.map((qualifier, index) => (

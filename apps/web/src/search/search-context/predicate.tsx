@@ -59,7 +59,15 @@ export function PredicateDescription({
         {'in' in statement ? statement.in.map(label).join(', ') : rangeDescription(statement.range)}
         {'inverse' in statement && statement.inverse ? ' ←' : null}
         {'in' in statement && statement.concept
-          ? ` (${statement.concept.scheme}${statement.concept.includeChildren ? ' + ↓' : ''})`
+          ? ` (${m.condition_concept_predicate(
+              {
+                scheme: label(statement.concept.scheme),
+                match: statement.concept.includeChildren
+                  ? m.condition_concept_descendants({}, options)
+                  : m.condition_concept_exact({}, options),
+              },
+              options,
+            )})`
           : null}
         {statement.qualifiers?.map((qualifier, i) => (
           <p key={i}>

@@ -71,12 +71,14 @@ export function conditionMetadata(
           ...(definition.relation ? { relation: { group: definition.relation.group } } : {}),
           ...(definition.qualifiers ? { qualifiers: definition.qualifiers } : {}),
           ...(definition.units ? { units: definition.units } : {}),
+          ...('targets' in definition && Array.isArray(definition.targets) ? { targets: definition.targets } : {}),
           ...(definition.value ? { value: definition.value } : {}),
         },
       ]),
     ),
     ...(release.digest ? { digest: release.digest } : {}),
     ...(release.filters ? { filters } : {}),
+    ...(release.digest ? { digest: release.digest } : {}),
   };
 }
 

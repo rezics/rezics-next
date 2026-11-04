@@ -190,3 +190,5 @@ locale or request replacement, cancellation, leaving Search and a reader's focus
 
 A failed forward read retains its last admitted return address; uncertain authority clears rows and labels, and
 Previous re-reads that address rather than restoring its prior render. Refusal and restart keep explicit recovery.
+
+Decision: Concept tag controls come from current released classification properties targeting `skos:Concept`; suggestion and detail reads stay closed for scoped and reader-bound Search until a matching native scoped loader exists.
