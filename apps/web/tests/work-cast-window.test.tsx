@@ -131,6 +131,7 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
+    scrollTo: () => {},
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);

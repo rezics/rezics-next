@@ -246,12 +246,10 @@ export function WorkCastWindow({
       ...(subjectId !== undefined ? { subject: subjectId } : {}),
       link: ({ href, lang, className, children }: LinkProps) => {
         const id = subjectIdFromHref(href);
-        if (id && disclosedTargets.has(id))
-          return (
-            <TargetLink href={href} lang={lang} className={className}>
-              {children}
-            </TargetLink>
-          );
+        if (id) {
+          if (!disclosedTargets.has(id)) return <span lang={lang} className={className}>{children}</span>;
+          return <TargetLink href={href} lang={lang} className={className}>{children}</TargetLink>;
+        }
         return <CurrentLink href={href} lang={lang} className={className}>{children}</CurrentLink>;
       },
     };
