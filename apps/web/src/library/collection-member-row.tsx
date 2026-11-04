@@ -39,7 +39,7 @@ export function CollectionMemberDetails({
   listPresentations?: CollectionListPresentations | undefined;
   comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
   currentHref?: string | undefined;
-  onReferenceNavigate?: (() => void) | undefined;
+  onReferenceNavigate?: ((anchor: HTMLAnchorElement) => void) | undefined;
 }) {
   if (!member.subject) return null;
   const locale = getLocale();
@@ -69,7 +69,7 @@ export function CollectionMemberDetails({
                       href={collectionComparisonHref(fact.targetId, fact.text, locale, currentHref, member.id)}
                       data-comparison-reference={fact.targetId}
                       className="relative z-10 inline-flex min-h-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                      onClick={onReferenceNavigate}
+                      onClick={(event) => onReferenceNavigate?.(event.currentTarget)}
                     >
                       {fact.text}
                     </a>

@@ -66,6 +66,8 @@ export function collectionComparisonHref(
   const target = subjectHref({ id, label }, locale).href;
   const returnTo =
     currentHref &&
-    (memberId ? collectionMemberReturnAddress(currentHref, memberId) : subjectVisitReturn(currentHref, locale));
+    (memberId
+      ? collectionMemberReturnAddress(currentHref, memberId)
+      : subjectVisitReturn(currentHref.split('#')[0], locale));
   return collectionViewerActionHref(target, returnTo || undefined) ?? target;
 }

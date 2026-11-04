@@ -19,6 +19,8 @@ Reader reference links are separate from subject links and personal controls. Ed
 labels without a departure link that could bypass the existing draft guard. No selection, draft or private action
 is serialized in the return address. Return focus is restricted to the currently loaded occurrence; cursor recovery
 never scans other pages or substitutes the same subject at a different occurrence.
+Decision: each comparison departure or fragment navigation admits one return; native page, reader or address
+replacement retires it, and moving focus elsewhere consumes it even if focus later returns to the document body.
 
 Source evidence: `docs/research/page-needs-api-render-audit.md` (A06 and Collection), `web-component-parity.md`,
 `api-first-platform-coverage.md`, and `seeded-core-page-review.md`; read-only `legacy-final` work-page/credits.tsx

@@ -117,10 +117,20 @@ test('missing, empty, unavailable and concealed context stays truthful without i
     label: { text: '作成者' },
   });
   const filtered = new URL(
-    collectionComparisonHref(id(12), 'Same name', 'en', source, undefined),
+    collectionComparisonHref(id(12), 'Same name', 'en', `${source}#collection-member-${id(4)}`, undefined),
     'https://rezics.test',
   );
   expect(filtered.searchParams.get('via')).toBe(source);
+  const projection = renderToStaticMarkup(
+    createElement(CollectionReadMembers, {
+      members: [{ subject: base.subject, facts: base.facts }],
+      currentHref: source,
+      comparisonDefinitions,
+      onCopy() {},
+    }),
+  );
+  expect(projection).not.toContain('id="collection-member-');
+  expect(projection).not.toContain('#collection-member-');
 });
 
 test('mounted reference returns repeat on the retained page and retire on replacement without taking focus', async () => {
@@ -144,12 +154,15 @@ test('mounted reference returns repeat on the retained page and retire on replac
   const container = window.document.createElement('main');
   window.document.body.append(container);
   const root = createRoot(container);
-  const render = async (rows: CollectionMember[], href = source) =>
+  const render = async (rows: CollectionMember[], href = source, returnSource?: object, readerChanged = false) =>
     act(async () =>
       root.render(
         createElement(CollectionReadMembers, {
+          key: readerChanged ? 'next-reader' : 'reader',
           members: rows,
           currentHref: href,
+          returnSource,
+          admitInitialReturn: !readerChanged,
           listPresentations,
           comparisonDefinitions,
           onCopy() {},
@@ -195,7 +208,12 @@ test('mounted reference returns repeat on the retained page and retire on replac
     depart();
     const replacement = members.map((member) => ({ ...member }));
     await render(replacement);
-    target.blur();
+    links[1]!.blur();
+    await act(async () => returnEvent());
+    expect(window.document.activeElement).toBe(window.document.body);
+    depart();
+    await render(replacement, source, {});
+    links[1]!.blur();
     await act(async () => returnEvent());
     expect(window.document.activeElement).toBe(window.document.body);
     // Reused occurrence fragments cannot replay a departure into another address.
@@ -208,9 +226,17 @@ test('mounted reference returns repeat on the retained page and retire on replac
       await act(async () => returnEvent());
       expect(window.document.activeElement).toBe(window.document.body);
     }
+    window.history.replaceState(null, '', `${source}#collection-member-${id(3)}`);
+    await render(members);
+    depart();
     await render([{ ...members[0]!, id: id(99), facts: {} }]);
     await act(async () => returnEvent());
     expect(window.document.activeElement).toBe(window.document.body);
+    window.history.replaceState(null, '', `${source}#collection-member-${id(3)}`);
+    await render(members, source, undefined, true);
+    await act(async () => returnEvent());
+    expect(window.document.activeElement).toBe(window.document.body);
+    await render([{ ...members[0]!, id: id(99), facts: {} }], source, undefined, true);
     expect(container.querySelector('[data-comparison-reference]')).toBeNull();
     expect(container.querySelector('input,textarea,[role="checkbox"]')).toBeNull();
     expect(container.querySelector(`#collection-member-${id(3)}`)).toBeNull();

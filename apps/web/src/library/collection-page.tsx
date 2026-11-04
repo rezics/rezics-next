@@ -376,8 +376,18 @@ export function CollectionPage(props: CollectionPageProps) {
       (props.isCurrent?.() ?? true)
     );
   }
+  const returnOwner = useRef<string | undefined>(admission.owner);
+  if (returnOwner.current !== admission.owner) returnOwner.current = undefined;
   // Permission renewals retire callbacks; the owning viewer/address alone owns drafts and uncertain keys.
-  return <CollectionPageLifetime key={admission.owner} {...props} current={current} admission={admission} />;
+  return (
+    <CollectionPageLifetime
+      key={admission.owner}
+      {...props}
+      current={current}
+      admission={admission}
+      admitInitialComparisonReturn={returnOwner.current === admission.owner}
+    />
+  );
 }
 
 function CollectionPageLifetime({
@@ -391,7 +401,12 @@ function CollectionPageLifetime({
   isCurrent: sourceCurrent,
   current,
   admission,
-}: CollectionPageProps & { current: (operation?: CollectionOperation) => boolean; admission: CollectionAdmission }) {
+  admitInitialComparisonReturn,
+}: CollectionPageProps & {
+  current: (operation?: CollectionOperation) => boolean;
+  admission: CollectionAdmission;
+  admitInitialComparisonReturn: boolean;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const session = useSession();
@@ -2203,6 +2218,8 @@ function CollectionPageLifetime({
               members={(page.memberState ?? 'ready') !== 'ready' ? [] : (page.filteredMembers ?? page.members)}
               layout={layout}
               currentHref={currentHref}
+              returnSource={page}
+              admitInitialReturn={admitInitialComparisonReturn}
               onReferenceNavigate={() => setSelectedIds(new Set())}
               viewerProjection={viewerProjection}
               viewerActionHref={(member: ReadMember) => {
@@ -2406,6 +2423,8 @@ export function CollectionReadMembers<Member extends ReadMember>({
   listPresentations,
   comparisonDefinitions,
   currentHref,
+  returnSource,
+  admitInitialReturn,
   onReferenceNavigate,
   viewerProjection,
   viewerActionHref,
@@ -2418,13 +2437,15 @@ export function CollectionReadMembers<Member extends ReadMember>({
   listPresentations?: CollectionListPresentations | undefined;
   comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
   currentHref?: string | undefined;
+  returnSource?: object | undefined;
+  admitInitialReturn?: boolean | undefined;
   onReferenceNavigate?: (() => void) | undefined;
   viewerProjection?: CollectionViewerProjection;
   viewerActionHref?: (member: Member) => string | undefined;
   onCopy: (member: Member) => void | Promise<void>;
 }) {
   const locale = getLocale();
-  useCollectionComparisonReturn(members, currentHref);
+  const admitReferenceReturn = useCollectionComparisonReturn(members, currentHref, returnSource, admitInitialReturn);
   const items = members.map((member, index) => {
     const subject = member.subject;
     const key = member.id ?? `${subject?.id ?? 'unavailable'}:${index}`;
@@ -2466,7 +2487,10 @@ export function CollectionReadMembers<Member extends ReadMember>({
           listPresentations={listPresentations}
           comparisonDefinitions={comparisonDefinitions}
           currentHref={currentHref}
-          onReferenceNavigate={onReferenceNavigate}
+          onReferenceNavigate={(anchor) => {
+            admitReferenceReturn(anchor);
+            onReferenceNavigate?.();
+          }}
         />
         {member.note ? (
           <CollectionNoteReader
