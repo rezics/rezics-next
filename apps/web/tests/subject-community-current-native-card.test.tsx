@@ -153,8 +153,8 @@ test('installed native cards render through the generated reader and original ac
     threads: [
       {
         postRevisionId: post.revisionId,
-        card: undefined,
         nativeCard: { author: null, comments: { count: { value: 0 } } },
+        actions: { watch: { state: 'current', watching: false } },
       },
     ],
   });
