@@ -133,16 +133,7 @@ export async function readRealmRulesAuthoringPage(
     try {
       const details = await readExactPublishedRulesForAuthoring(deps, [{ ...referenceKey, realmId }], context);
       const item = details.get(`${realmId}/${referenceKey.postId}/${referenceKey.revisionId}`);
-      if (!item) {
-        current = { state: 'concealed', reference: referenceKey };
-        edit = action('denied');
-      } else if (item.state === 'concealed') {
-        current = { state: 'concealed', reference: referenceKey };
-        edit = action('denied');
-      } else if (item.state === 'erased') {
-        current = { state: 'erased', reference: referenceKey };
-        edit = action('denied');
-      } else {
+      if (item?.state === 'available') {
         current = {
           state: 'available',
           reference: referenceKey,
@@ -159,6 +150,12 @@ export async function readRealmRulesAuthoringPage(
           currentRevision: item.currentRevision,
         };
         edit = item.currentRevision ? action(item.revisionAction) : action('stale');
+      } else if (item?.state === 'erased') {
+        current = { state: 'erased', reference: referenceKey };
+        edit = action('denied');
+      } else if (!item || item.state === 'concealed') {
+        current = { state: 'concealed', reference: referenceKey };
+        edit = action('denied');
       }
     } catch {
       current = { state: 'unavailable', reference: referenceKey };
