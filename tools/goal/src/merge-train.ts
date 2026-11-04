@@ -711,6 +711,7 @@ export function stagePaths(
   paths: Iterable<string>,
   policy = defaultPolicy.merge,
   declaredPaths: readonly string[] = [],
+  briefPolicy = defaultPolicy.brief,
 ): string[] {
   const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
   const all = [...paths];
@@ -727,7 +728,7 @@ export function stagePaths(
       if (ignored.error || ignored.status === null || ignored.status > 1)
         throw new Error(ignored.stderr?.trim() || ignored.error?.message || `Cannot inspect ignored path ${path}`);
       if (ignored.status === 0) {
-        if (matchesPath(path, declaredPaths, policy.brief)) force.push(path);
+        if (matchesPath(path, declaredPaths, briefPolicy)) force.push(path);
         else {
           if (indexed.has(path)) git(cwd, 'reset', '--quiet', 'HEAD', '--', path);
           dropped.push(path);
@@ -1004,9 +1005,9 @@ function acceptAlreadyPresent(result: GateOutcome, commit: string, paths: readon
   result.passed = true;
   result.stage = 'merge';
   result.mergedCommit = commit;
-  result.conflictedFiles = undefined;
-  result.firstFailure = undefined;
-  result.refusal = undefined;
+  delete result.conflictedFiles;
+  delete result.firstFailure;
+  delete result.refusal;
   appendFileSync(
     logPath,
     `Already present on the integration target: ${canonicalConflictPaths(paths).join(', ') || 'no source changes'}\n`,
@@ -4992,7 +4993,13 @@ export class MergeTrain {
     const frozenPaths = changedFrozenFiles(request.worktree, frozen);
     if (frozenPaths.length) return { tip, committed: false, frozenPaths };
     const paths = landingWorkingFiles(request.worktree, request.declaredPaths, this.options.policy?.merge);
-    const dropped = stagePaths(request.worktree, paths, this.options.policy?.merge, request.declaredPaths);
+    const dropped = stagePaths(
+      request.worktree,
+      paths,
+      this.options.policy?.merge,
+      request.declaredPaths,
+      (this.options.policy ?? defaultPolicy).brief,
+    );
     if (dropped.length)
       appendFileSync(logPath, `Ignored paths not declared by the brief were dropped: ${dropped.join(', ')}\n`);
     const staged = mergeGit(request.worktree, ['diff', '--cached', '--quiet', 'HEAD', '--'], this.options.policy?.merge);
