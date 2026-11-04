@@ -142,7 +142,7 @@ async function mount(initial: AccountSessionResult | undefined = session, attemp
   };
   await act(async () => {
     root.render(<OperatorTransferPage initial={initial} />);
-    for (let turn = 0; turn < 12; turn++) await Promise.resolve();
+    for (let turn = 0; turn < 40; turn++) await Promise.resolve();
   });
   return host;
 }
