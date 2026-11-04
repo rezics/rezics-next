@@ -55,13 +55,16 @@ field mapping and currentness checks; storage adapters retain owner-scoped reads
 byte limits and mutation receipts. Native annotation and source-observation commands remain the only write authorities.
 VNDB continues to store metadata in its bounded upload document and preserves its native-admission receipt marker;
 older confirmations without that marker keep their original receipt input. Bangumi keeps its header and per-row review
-records, row locks, cancellation and expiry owner. MAL and AniList use this same coordinator. MAL retains its
-request-scoped deadline, whole-document mutation receipts and 48 MiB encoded JSON limit; AniList retains addressed-row
-load/save, its complete live matching/profile observation and 4 MiB row limit. Their request digests still include
-`{sourceReviewToken,key}`; existing tokens, immutable confirmation inputs and native receipt keys are never rewritten.
-MAL review keeps the mutation outcome wrapper and the HTTP `{id,reviewToken}` result.
-Both adapters prepare live authority outside local transactions and fence the retained source and entry incarnation
-inside each fresh native command. Admission adds no operand to old native receipt inputs.
+records, row locks, cancellation and expiry owner. At its seven-day source deadline, Bangumi scrubs source and
+comparison material and retains only exact confirmation/receipt linkage through the original deadline plus 24 hours.
+Retries in that interval use receipt-only native reads fenced by the current account/client/requester and locked row;
+they cannot start an effect. MAL and AniList use this same coordinator. MAL retains its request-scoped deadline,
+whole-document mutation receipts and 48 MiB encoded JSON limit; AniList retains addressed-row load/save, its complete
+live matching/profile observation and 4 MiB row limit. Their request digests still include `{sourceReviewToken,key}`;
+existing tokens, immutable confirmation inputs and native receipt keys are never rewritten. MAL review keeps the
+mutation outcome wrapper and the HTTP `{id,reviewToken}` result. Both adapters prepare live authority outside local
+transactions and fence the retained source and entry incarnation inside each fresh native command. Admission adds no
+operand to old native receipt inputs. Their existing deadline and digest contracts remain unchanged in this delivery.
 
 Each importer adds a bounded metadata review, read and apply method to its existing upload. Review requires the row's
 current provider review token and an explicit Subject choice. It returns a fresh metadata token; the private read shows
@@ -69,10 +72,13 @@ the current native values and mapped provider values. Confirmation sends that to
 operations (`adopt` or `clear`). `adopt` takes only the exact retained value shown by that review. Priority adoption
 also requires its displayed mapping identifier. No caller-supplied note, priority or provenance value is accepted.
 
-The metadata ledger is stored with the provider's existing upload row and is capped at two reviews per row. It is
-removed by the existing upload deletion, expiry and account-erasure owners. A successful or stale receipt is retained
-through one refresh so an old retry can return its original field results without confirming the new token. Pending
-effects must be retried or resolved before a new review can replace them.
+The metadata ledger is stored with the provider's existing upload row and is capped at two reviews per row. Bangumi's
+source evidence, proposals, operands and ordinary outcomes are scrubbed at seven days; its selected fields, original
+command keys and opaque native receipt digests remain for at most 24 additional hours. Recovery returns applied only
+when the exact original native receipt exists. A started checkpoint alone proves no admission; a missing receipt
+returns unattempted or stale. Final cleanup and account erasure remove this linkage through their existing owners.
+A successful or stale live receipt is retained through one refresh so an old retry can return its original field
+results without confirming the new token. Pending effects must be retried or resolved before a new review can replace them.
 
 Native annotation changes are one revision-guarded command for the selected note and priority fields. Provenance
 changes are one revision-guarded command for the selected source-observation fields. These are separate commands;
@@ -102,9 +108,11 @@ VNDB checks the prospective decision object against its installed 8 MiB constrai
 installed 4 MiB per-row payload limit.
 
 Per review cost is the provider's indexed owner/upload/row read and current profile admission, plus the native personal
-read of one Subject and at most 32 indexed source observations. Per apply cost adds at most two native commands per
-selected row (annotation and provenance), each rechecking owner, account lifecycle and canonical profile. Result retrieval is
-one indexed upload/row read; pruning is the existing bounded upload expiry/removal and account-erasure path. Thus
-`C <= Cfixed-authority + Csource/current-review(R,F) + 2R*Cnative-command + Cresult/cleanup`; unrelated owner,
-account-history and provider-row populations do not add work. Native growth acceptance at 64/512/4096 retained rows
-and shared checks are owned by the controller after integration.
+read of one Subject and at most 32 indexed source observations. Per live apply cost adds at most two native commands
+per selected row (annotation and provenance), each with its owner and source fence. An expired retry makes at most two
+receipt-only native command reads, each checking the exact current owner/session and locking the same root/row before
+the bounded keyed receipt lookup; it reads no evidence or personal comparison. Source scrub and final deletion each
+cover at most 99 row keys per page, at most two pages for the 100-row cap, and one root update/deletion. Thus
+`C <= Cfixed-authority + Csource/current-review(R,F) + 2R*Cnative-command + 2R*Creceipt-only + Cresult/cleanup`;
+unrelated owner, account-history and provider-row populations do not add work. Native growth acceptance at
+64/512/4096 retained rows and shared checks are owned by the controller after integration.

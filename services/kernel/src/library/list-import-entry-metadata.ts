@@ -18,7 +18,11 @@ import type { CommandOutcome } from '../command/command.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { LibraryConflictError } from './entry-errors.ts';
-import { createEntryPersonalCommands } from './entry-personal.ts';
+import {
+  createEntryPersonalCommands,
+  entryPersonalAnnotationRequestInput,
+  entryPersonalSourceObservationRequestInput,
+} from './entry-personal.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 
@@ -59,16 +63,21 @@ export type EntryImportMetadataOutcome = Readonly<{
   fields: readonly EntryImportMetadataFieldOutcome[];
 }>;
 export type EntryImportMetadataConfirmation = {
-  nativeAdmission?: 'vndb-source-v1';
+  nativeAdmission?: 'vndb-source-v1' | 'bangumi-source-v1';
   fields: EntryImportMetadataSelection[];
   selectionDigest: string;
   annotationKey: string;
   provenanceKey: string;
   annotationStarted: boolean;
   provenanceStarted: boolean;
+  sourceExpired?: boolean;
+  annotationReceiptDigest?: string;
+  provenanceReceiptDigest?: string;
+  provenanceKind?: 'admit' | 'correct';
   outcome?: EntryImportMetadataOutcome;
   annotationStatus?: 'applied' | 'stale' | 'unsupported' | 'unattempted';
   provenanceStatus?: 'applied' | 'stale' | 'unsupported' | 'unattempted';
+  fieldOutcomes?: Array<Pick<EntryImportMetadataFieldOutcome, 'field' | 'status'>>;
   annotationInput?: {
     revision: number;
     note: PersonalEntryFieldChange<string>;
@@ -194,6 +203,7 @@ export async function applyEntryImportMetadataCommands(input: {
   isCancelled: () => Promise<boolean>;
   isCurrent?: () => Promise<boolean>;
   admission?: LabelCommandAdmission;
+  readReceipt?: (phase: 'annotation' | 'provenance') => Promise<boolean>;
   signal?: AbortSignal;
 }): Promise<{ outcome: EntryImportMetadataOutcome; complete: boolean }> {
   const { actor, subjectId, provider, recordId, reviewToken, personal, proposals, selections, native, persist } = input;
@@ -215,6 +225,7 @@ export async function applyEntryImportMetadataCommands(input: {
         reviewToken,
         fields: selections.map(({ field }) => ({ field, status: 'stale' })),
       };
+      confirmation.fieldOutcomes = outcome.fields.map(({ field, status }) => ({ field, status }));
       confirmation.outcome = outcome;
       await persist(confirmation);
       return { outcome, complete: true };
@@ -222,6 +233,10 @@ export async function applyEntryImportMetadataCommands(input: {
   }
 
   const result = new Map<EntryImportMetadataField, EntryImportMetadataFieldOutcome>();
+  const persistFields = async () => {
+    confirmation.fieldOutcomes = [...result.values()].map(({ field, status }) => ({ field, status }));
+    await persist(confirmation);
+  };
   const observation = metadataObservation(personal, provider, recordId);
   const annotation = selections.filter((selection) => selection.field === 'note' || selection.field === 'priority');
   const provenance = selections.filter(
@@ -270,6 +285,7 @@ export async function applyEntryImportMetadataCommands(input: {
         reason: proposals[selection.field].reason ?? 'The retained value has no installed native mapping.',
       });
   }
+  if (result.size) await persistFields();
 
   const eligibleAnnotation = annotation.filter((selection) => !result.has(selection.field));
   if (eligibleAnnotation.length) {
@@ -310,17 +326,39 @@ export async function applyEntryImportMetadataCommands(input: {
       await persist(confirmation);
     }
     const annotationInput = confirmation.annotationInput;
+    if (annotationInput.effect && !confirmation.annotationReceiptDigest) {
+      confirmation.annotationReceiptDigest = native.receiptDigest(
+        actor,
+        'library.entry.annotations.put',
+        entryPersonalAnnotationRequestInput(
+          subjectId,
+          { revision: annotationInput.revision, note: annotationInput.note, priority: annotationInput.priority },
+          input.admission?.input,
+        ),
+      );
+      await persist(confirmation);
+    }
     if (confirmation.annotationStatus && confirmation.annotationStatus !== 'unattempted') {
       for (const selection of eligibleAnnotation)
         result.set(selection.field, { field: selection.field, status: confirmation.annotationStatus });
+      await persistFields();
     } else if (!annotationInput.effect) {
       confirmation.annotationStatus = 'applied';
-      await persist(confirmation);
       for (const selection of eligibleAnnotation)
         result.set(selection.field, { field: selection.field, status: 'applied' });
+      await persistFields();
     } else {
       let shouldRun = true;
-      if (!confirmation.annotationStarted) {
+      const cancelledAfterStart = confirmation.annotationStarted && (await input.isCancelled());
+      if (confirmation.annotationStarted && (input.signal?.aborted || cancelledAfterStart)) {
+        const applied = (await input.readReceipt?.('annotation')) === true;
+        confirmation.annotationStatus = applied ? 'applied' : 'unattempted';
+        if (!applied && cancelledAfterStart) permanentlyUnattempted = true;
+        for (const selection of eligibleAnnotation)
+          result.set(selection.field, { field: selection.field, status: confirmation.annotationStatus });
+        await persistFields();
+        shouldRun = false;
+      } else if (!confirmation.annotationStarted) {
         if (input.signal?.aborted) {
           shouldRun = false;
           confirmation.annotationStatus = 'unattempted';
@@ -337,9 +375,9 @@ export async function applyEntryImportMetadataCommands(input: {
         }
       }
       if (!shouldRun) {
-        await persist(confirmation);
         for (const selection of eligibleAnnotation)
           result.set(selection.field, { field: selection.field, status: confirmation.annotationStatus! });
+        await persistFields();
       } else {
         try {
           const command = await native.saveAnnotations(
@@ -351,17 +389,15 @@ export async function applyEntryImportMetadataCommands(input: {
           );
           input.record?.(command as CommandOutcome<unknown>);
           confirmation.annotationStatus = 'applied';
-          await persist(confirmation);
           for (const selection of eligibleAnnotation)
             result.set(selection.field, { field: selection.field, status: 'applied' });
+          await persistFields();
         } catch (error) {
           if (error instanceof GrantDeniedError) throw error;
           const status = staleEffect(error) ? 'stale' : 'failed';
-          if (status === 'stale') {
-            confirmation.annotationStatus = status;
-            await persist(confirmation);
-          }
+          if (status === 'stale') confirmation.annotationStatus = status;
           for (const selection of eligibleAnnotation) result.set(selection.field, { field: selection.field, status });
+          await persistFields();
         }
       }
     }
@@ -410,6 +446,7 @@ export async function applyEntryImportMetadataCommands(input: {
         }
       }
       const actionable = eligibleProvenance.filter((selection) => !result.has(selection.field));
+      if (result.size) await persistFields();
       if (actionable.length && !confirmation.provenanceInput) {
         const change = (selection: EntryImportMetadataSelection | undefined) => {
           if (!selection) return { op: 'unchanged' as const };
@@ -459,6 +496,24 @@ export async function applyEntryImportMetadataCommands(input: {
         await persist(confirmation);
       }
       const provenanceInput = confirmation.provenanceInput;
+      if (provenanceInput?.effect && !confirmation.provenanceReceiptDigest) {
+        confirmation.provenanceKind = provenanceInput.kind;
+        const kind =
+          provenanceInput.kind === 'admit'
+            ? 'library.entry.source-observation.admit'
+            : 'library.entry.source-observation.correct';
+        confirmation.provenanceReceiptDigest = native.receiptDigest(
+          actor,
+          kind,
+          entryPersonalSourceObservationRequestInput(
+            provenanceInput.kind,
+            subjectId,
+            provenanceInput.value,
+            input.admission?.input,
+          ),
+        );
+        await persist(confirmation);
+      }
       if (actionable.length && provenanceInput) {
         const runProvenance = async () => {
           try {
@@ -482,21 +537,27 @@ export async function applyEntryImportMetadataCommands(input: {
                   );
             input.record?.(command as CommandOutcome<unknown>);
             confirmation.provenanceStatus = 'applied';
-            await persist(confirmation);
             for (const selection of actionable)
               result.set(selection.field, { field: selection.field, status: 'applied' });
+            await persistFields();
           } catch (error) {
             if (error instanceof GrantDeniedError) throw error;
             const status = staleEffect(error) ? 'stale' : 'failed';
-            if (status === 'stale') {
-              confirmation.provenanceStatus = status;
-              await persist(confirmation);
-            }
+            if (status === 'stale') confirmation.provenanceStatus = status;
             for (const selection of actionable) result.set(selection.field, { field: selection.field, status });
+            await persistFields();
           }
         };
         if (confirmation.provenanceStarted) {
-          await runProvenance();
+          const cancelledAfterStart = await input.isCancelled();
+          if (input.signal?.aborted || cancelledAfterStart) {
+            const applied = (await input.readReceipt?.('provenance')) === true;
+            confirmation.provenanceStatus = applied ? 'applied' : 'unattempted';
+            if (!applied && cancelledAfterStart) permanentlyUnattempted = true;
+            for (const selection of actionable)
+              result.set(selection.field, { field: selection.field, status: confirmation.provenanceStatus });
+            await persistFields();
+          } else await runProvenance();
         } else if (!provenanceInput.effect) {
           const current = await native.readPersonalEntry(actor, subjectId),
             annotationInput = confirmation.annotationInput;
@@ -506,9 +567,9 @@ export async function applyEntryImportMetadataCommands(input: {
             current.priority === (annotationInput?.expectedPriority ?? personal.priority) &&
             entryImportMetadataDigest(current.sourceObservations) === confirmation.sourceObservationDigest;
           confirmation.provenanceStatus = localMatches ? 'applied' : 'stale';
-          await persist(confirmation);
           for (const selection of actionable)
             result.set(selection.field, { field: selection.field, status: confirmation.provenanceStatus });
+          await persistFields();
         } else {
           let shouldRun = true;
           if (input.signal?.aborted) {
@@ -538,12 +599,13 @@ export async function applyEntryImportMetadataCommands(input: {
             }
           }
           if (!shouldRun) {
-            await persist(confirmation);
             for (const selection of actionable)
               result.set(selection.field, { field: selection.field, status: confirmation.provenanceStatus! });
+            await persistFields();
           } else await runProvenance();
         }
       }
+      confirmation.fieldOutcomes = [...result.values()].map(({ field, status }) => ({ field, status }));
       await persist(confirmation);
     }
   }
@@ -555,10 +617,11 @@ export async function applyEntryImportMetadataCommands(input: {
     !fields.some((field) => field.status === 'failed') &&
     (permanentlyUnattempted || !fields.some((field) => field.status === 'unattempted'));
   const outcome: EntryImportMetadataOutcome = { reviewToken, fields };
+  confirmation.fieldOutcomes = fields.map(({ field, status }) => ({ field, status }));
   if (complete) {
     confirmation.outcome = outcome;
     await persist(confirmation);
-  }
+  } else await persist(confirmation);
   return { outcome, complete };
 }
 

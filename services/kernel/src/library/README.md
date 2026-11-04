@@ -3538,17 +3538,22 @@ Decision: preserve native metadata reservation and immutable-definition recovery
 VNDB, Bangumi, MAL and AniList share `list-import-metadata-coordinator.ts` for review identity, history limits, field selection,
 confirmation phases and uncertain results. Their adapters retain the native storage boundaries: VNDB locks and saves
 its bounded upload document with the same-home source fence, while Bangumi locks its header and addressed row and
-keeps its own cancellation and expiry behavior. All four dispatch through the existing annotation and source-
-observation command owners.
+keeps its own cancellation and expiry behavior. All four dispatch through the existing annotation and source-observation
+command owners. Bangumi metadata admission repeats the live source fence at the native write boundary; the shared
+Library runner's receipt-only mode reads an exact existing native receipt without executing a command body.
 
 The [VNDB owner contract](../../../../docs/library-import-vndb.md) binds each explicit state, metadata, label and
 occurrence-date choice to its retained source review. Refreshed metadata tokens do not follow corrected matches;
 new label operands include the observed match digest. Notes and partial-date raw spelling survive native review.
 
-State, metadata and date reconciliation retries the original native operands and receipts after cancellation or
-expiry. The native source fence rejects fresh effects; private reads independently require retained, unexpired source.
+VNDB state, metadata and date reconciliation retries the original native operands and receipts after cancellation or
+expiry. Its native source fence rejects fresh effects; private reads independently require retained, unexpired source.
+Bangumi metadata confirmation retries use only the original receipt identity after its seven-day evidence deadline.
+The scheduled owner scrubs source evidence, provider values and comparison snapshots at expiry, then removes the
+opaque confirmation/receipt linkage 24 hours after the original deadline. Each started command phase is checked through
+receipt-only authorization while the root and row locks are held; a started checkpoint cannot create a first effect.
 Personal annotation/observation commands reuse the trusted admission preparation/callback protocol after receipt
-lookup, preserving existing callers' digests. Original in-flight VNDB metadata digests remain unchanged.
+lookup, preserving other callers' digests. Original in-flight VNDB metadata digests remain unchanged.
 
 MAL carries its original deadline in a request-scoped coordinator adapter and keeps whole-document mutation receipts
 and the 48 MiB JSON constraint. AniList retains one addressed row, the 4 MiB row constraint and live matching, candidate,

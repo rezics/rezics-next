@@ -86,15 +86,21 @@ Credentials and malformed envelopes are rejected. Native request/command deadlin
 already admitted commands may finish. Cancel stops new row admission; acknowledged effects remain.
 Retries retain the original token, target, state, revision and native command key; failed rows retry that command,
 and a lost acknowledgment replays its receipt. A new review cannot replace a confirmed in-flight command.
-Evidence, reviews, row choices, outcomes and temporary label adoption expire seven days after upload. Expired uploads
-are unavailable to reads, review, application and provider-evidence export; a read never renews the deadline. The
-scheduled expiry owner seeks the due-time index and deletes at most 99 row keys plus one upload root per command.
+Provider evidence remains available for seven days after upload. At that absolute deadline, expired uploads are
+unavailable to reads, review, new application and provider-evidence export; a read never renews the deadline. The
+scheduled owner scrubs provider evidence, comparison data, choices and ordinary outcomes, retaining only the bounded
+confirmation fields, original native keys and opaque native receipt digests for 24 hours after the original deadline.
+An addressed metadata retry during that window reads only this linkage and exact existing native receipts; it never
+reopens provider evidence or admits a new effect. Expiry before native admission returns an unattempted or stale field.
+The indexed scheduled owner scrubs at most 99 row keys per command and then deletes at most 99 row keys plus one
+upload root per command after the recovery window.
 Retired accounts are left to Library's terminal owner graph, whose appended `bangumi_upload` phase also drains at most
 100 keys per page. Explicit deletion and either cleanup path preserve acknowledged native state and labels. Review
 command receipts retain only the opaque review token, not the private review response. Shared command-history erasure
 retains the existing Library pending-custody limitation; this source makes no complete erasure attestation.
-The expiry fence covers fresh state and label admission. An already-started private note, privacy or source-date native
-command crossing expiry still needs receipt-only recovery after source evidence is scrubbed.
+The expiry fence covers fresh state, labels and metadata admission at the native write boundary. Receipt-only recovery
+checks the current account/client/requester, exact original command identity and the locked Bangumi root/row. Terminal
+account erasure uses its existing owner phase to remove the same linkage and never removes acknowledged native facts.
 Examples above are constructed API guidance; focused native test execution is reported separately.
 
 Local verification attempted `bun run --cwd services/kernel typecheck`; it reported, among other diagnostics,
@@ -122,7 +128,7 @@ Own-upload attestation does not verify a Bangumi account. Preview does not mutat
 identity epoch and release; stale means a deliberate new review. Cancellation stops new admission; already admitted
 work may finish. Evidence deletion removes evidence and reviews, not admitted facts.
 
-Decision: retained Bangumi evidence expires seven days after upload; reads, reviews and application never extend that absolute deadline, and expiry never reverses acknowledged native facts.
+Decision: after the seven-day source deadline, keep only bounded Bangumi native receipt linkage for 24 hours; source reads and new effects remain unavailable after the original deadline.
 
 ## Cost
 
@@ -144,11 +150,11 @@ Decision: retained Bangumi evidence expires seven days after upload; reads, revi
   Account/scope, question, Subject/currentness and counting identity guards, component/aggregate work, receipt and
   encoded permitted result; that nested native cost remains unmeasured and cannot be claimed from this provider
   review. `R` retries address the same retained choice and native key.
-- Expiry/background: one due-index keyset read selects one expired upload; each upload uses at most two account-fenced
-  command transactions because there are at most 100 row keys and each transaction deletes at most 99 rows plus its
-  root. Each transaction repeats the current-account fence, upload lock and exact expiry check, then writes one receipt
-  and, when it deletes keys, one bounded event. A worker segment handles at most 100 expired upload roots before a
-  durable continuation; population growth is separate from that fixed caller bound. Terminal erasure continues through
+- Expiry/background: one due-index keyset read selects one source-scrub or final-delete stage. At most 100 addressed row
+  keys take two account-fenced page commands per stage (99 rows then one row); the scrub stage also updates one root,
+  and the final stage deletes one root. Each page repeats the current-account fence, root lock and exact due-time
+  check, and writes one receipt plus a bounded event when it changes rows. A worker segment handles at most 100 due
+  upload roots before a durable continuation; population growth is separate from that fixed caller bound. Terminal erasure continues through
   the existing append-only owner phase, selecting at most 100 row/root keys per command with the account tombstone
   fence and replay receipt.
 - Export: each V4 evidence page fetches at most 17 ordered rows to return at most 16; each selected row reads and
@@ -157,8 +163,9 @@ Decision: retained Bangumi evidence expires seven days after upload; reads, revi
 - Installed caps: `BANGUMI_LIMITS` in `services/kernel/src/library/list-import-bangumi-model.ts`.
 - Growth check: Web focused test `apps/web/tests/personal-bangumi-import.test.tsx` drives 10, 50 and 100 native-shaped
   rows through the same controller and asserts call counts, 10-row reads, 5-row writes and the retained-byte bound.
-  The expiry worker adds one due-index lookup and at most two 100-key cleanup commands per expired upload; a fresh
-  state command adds one locked source-row check. Executed 64/512/4096 caller growth remains with integration. V1/V2/V3
+  Expiry adds one indexed due-key lookup and at most four 99-row page commands over the seven-day source and 24-hour
+  linkage stages. Each started metadata phase costs one exact receipt-only native query at recovery; missing receipts
+  cannot dispatch writes. The existing all-pool 64/512/4096 caller growth remains with integration. V1/V2/V3
   recovery is unchanged and V4 provider evidence remains export-only.
 
 ## Selected retained tag adoption

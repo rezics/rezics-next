@@ -27,6 +27,7 @@ import {
   entryImportMetadataDigest,
   entryPersonalMetadataDigest,
   type EntryImportMetadataProposal,
+  type EntryImportMetadataConfirmation,
   type EntryImportMetadataProposals,
   type EntryImportMetadataView,
 } from './list-import-entry-metadata.ts';
@@ -36,7 +37,9 @@ import {
   createListImportMetadataCoordinator,
   mergeListImportMetadataConfirmation,
   selectListImportMetadataConfirmation,
+  type ListImportMetadataExpiredRecovery,
 } from './list-import-metadata-coordinator.ts';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
   parseBangumiUpload,
@@ -626,8 +629,73 @@ export function createBangumiImport(deps: Dependencies) {
     if (!stored.review || stored.review.token !== saved.value.reviewToken) throw new ProblemError('conflict');
     return { ordinal, review: reviewView(stored.review) };
   }
+  async function metadataReceipt(
+    { actor, id, ordinal }: { actor: Actor; id: string; ordinal: number },
+    recovery: {
+      token: string;
+      sourceReviewToken: string;
+      subjectId: string;
+      clientId: string;
+      requestedBy: string | null;
+      confirmation: EntryImportMetadataConfirmation;
+    },
+    phase: 'annotation' | 'provenance',
+    expiredOnly: boolean,
+  ) {
+    const account = owner(actor),
+      confirmation = recovery.confirmation,
+      annotation = phase === 'annotation',
+      key = annotation ? confirmation.annotationKey : confirmation.provenanceKey,
+      digest = annotation ? confirmation.annotationReceiptDigest : confirmation.provenanceReceiptDigest,
+      started = annotation ? confirmation.annotationStarted : confirmation.provenanceStarted,
+      kind = annotation
+        ? 'library.entry.annotations.put'
+        : confirmation.provenanceKind === 'admit'
+          ? 'library.entry.source-observation.admit'
+          : 'library.entry.source-observation.correct';
+    if (!started || !digest) return false;
+    const command = await personalEntries.readCommandReceipt(actor, {
+      kind,
+      requestKey: key,
+      digest,
+      async authorize(tx) {
+        const linked = await tx.query(
+          `SELECT 1 FROM library.bangumi_upload u
+           JOIN library.bangumi_upload_row r USING(route,account_id,upload_id)
+           CROSS JOIN LATERAL jsonb_array_elements(COALESCE(r.review->'metadata','[]'::jsonb)) m
+           WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3 AND r.ordinal=$4
+             AND r.review->>'token'=$6 AND m->>'token'=$5 AND m->>'sourceReviewToken'=$6
+             AND m->>'subjectId'=$7 AND m->>'clientId'=$8
+             AND m->>'requestedBy' IS NOT DISTINCT FROM $9::text
+             AND m->'confirmation'->>$10='true'
+             AND m->'confirmation'->>$11=$12
+             AND m->'confirmation'->>$13=$14
+             AND m->'confirmation'->>'selectionDigest'=$15
+             AND ($16::text IS NULL OR m->'confirmation'->>'provenanceKind'=$16)
+             AND ${expiredOnly
+               ? "u.expires_at<=clock_timestamp() AND COALESCE(u.recovery_until,u.expires_at+interval '24 hours')>clock_timestamp()"
+               : "(u.expires_at>clock_timestamp() OR COALESCE(u.recovery_until,u.expires_at+interval '24 hours')>clock_timestamp())"}
+           FOR UPDATE OF u,r`,
+          [
+            requireRoute(account.accountId), account.accountId, id, ordinal, recovery.token,
+            recovery.sourceReviewToken,
+            recovery.subjectId, account.clientId, account.requestedBy ?? null,
+            annotation ? 'annotationStarted' : 'provenanceStarted',
+            annotation ? 'annotationKey' : 'provenanceKey', key,
+            annotation ? 'annotationReceiptDigest' : 'provenanceReceiptDigest', digest,
+            confirmation.selectionDigest,
+            annotation ? null : confirmation.provenanceKind ?? null,
+          ],
+        );
+        if (!linked.rowCount) throw new LibraryNotFoundError();
+      },
+    });
+    return command !== null;
+  }
+
   const metadataCoordinator = createListImportMetadataCoordinator({
     provider: 'bangumi',
+    nativeAdmission: 'bangumi-source-v1',
     native: personalEntries,
     async prepareReview({ actor, id, ordinal, sourceReviewToken }) {
       const original = await read(actor, async (tx, a) => {
@@ -689,6 +757,58 @@ export function createBangumiImport(deps: Dependencies) {
         const stored = await row(tx, a, id, ordinal);
         return stored.review?.metadata?.find((item) => item.token === reviewToken) ?? null;
       });
+    },
+    async loadExpiredRecovery({ actor, id, ordinal }, reviewToken) {
+      const account = owner(actor);
+      return read(actor, async (tx, a) => {
+        const found = await tx.query<{ recovery: ListImportMetadataExpiredRecovery | null }>(
+          `SELECT (
+             SELECT jsonb_build_object(
+               'token', m->>'token', 'sourceReviewToken', m->>'sourceReviewToken',
+               'subjectId', m->>'subjectId', 'clientId', m->>'clientId',
+               'requestedBy', m->'requestedBy',
+               'confirmation', CASE WHEN m ? 'confirmation' THEN jsonb_build_object(
+                 'fields', m->'confirmation'->'fields',
+                 'selectionDigest', m->'confirmation'->'selectionDigest',
+                 'annotationKey', m->'confirmation'->'annotationKey',
+                 'provenanceKey', m->'confirmation'->'provenanceKey',
+                 'annotationStarted', m->'confirmation'->'annotationStarted',
+                 'provenanceStarted', m->'confirmation'->'provenanceStarted',
+                 'annotationStatus', m->'confirmation'->'annotationStatus',
+                 'provenanceStatus', m->'confirmation'->'provenanceStatus',
+                 'annotationReceiptDigest', m->'confirmation'->'annotationReceiptDigest',
+                 'provenanceReceiptDigest', m->'confirmation'->'provenanceReceiptDigest',
+                 'provenanceKind', m->'confirmation'->'provenanceKind',
+                 'fieldOutcomes', m->'confirmation'->'fieldOutcomes',
+                 'outcome', CASE WHEN m->'confirmation' ? 'outcome' THEN jsonb_build_object(
+                   'reviewToken', m->'confirmation'->'outcome'->'reviewToken',
+                   'fields', COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                     'field', f->'field', 'status', f->'status'
+                   ) ORDER BY f->>'field') FROM jsonb_array_elements(m->'confirmation'->'outcome'->'fields') f), '[]'::jsonb)
+                 ) END
+               ) END
+             )
+             FROM jsonb_array_elements(COALESCE(r.review->'metadata','[]'::jsonb)) m
+             WHERE m->>'token'=$5 AND m->>'sourceReviewToken'=r.review->>'token'
+               AND m->>'clientId'=$6
+               AND m->>'requestedBy' IS NOT DISTINCT FROM $7::text
+           ) AS recovery
+           FROM library.bangumi_upload u
+           JOIN library.bangumi_upload_row r USING(route,account_id,upload_id)
+           WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3 AND r.ordinal=$4
+             AND u.expires_at<=clock_timestamp()
+             AND COALESCE(u.recovery_until,u.expires_at+interval '24 hours')>clock_timestamp()`,
+          [requireRoute(a.accountId), a.accountId, id, ordinal, reviewToken, account.clientId, account.requestedBy ?? null],
+        );
+        return found.rows[0]?.recovery ?? null;
+      });
+    },
+    async recoverReceipt({ actor, id, ordinal }, recovery, phase) {
+      return metadataReceipt({ actor, id, ordinal }, recovery, phase, true);
+    },
+    async readReceipt({ actor, id, ordinal }, review, phase) {
+      if (!review.confirmation) return false;
+      return metadataReceipt({ actor, id, ordinal }, review as typeof review & { confirmation: EntryImportMetadataConfirmation }, phase, false);
     },
     async readView({ actor, id, ordinal }, reviewToken) {
       const current = await read(actor, async (tx, a) => {
@@ -804,6 +924,55 @@ export function createBangumiImport(deps: Dependencies) {
         profile.incarnationId === latestMetadata.incarnationId &&
         profile.digest === latestMetadata.profileDigest
       );
+    },
+    admission({ actor, id, ordinal }, reviewed, signal): LabelCommandAdmission {
+      const account = owner(actor),
+        selectionDigest = reviewed.confirmation?.selectionDigest;
+      if (!selectionDigest) throw new ProblemError('conflict');
+      const input = reviewed.confirmation?.nativeAdmission === 'bangumi-source-v1' ? {
+        source: 'bangumi-metadata-v1',
+        uploadId: id,
+        ordinal,
+        sourceReviewToken: reviewed.sourceReviewToken,
+        reviewToken: reviewed.token,
+        subjectId: reviewed.subjectId,
+        sourceDigest: reviewed.sourceDigest,
+        profileDigest: reviewed.profileDigest,
+        incarnationId: reviewed.incarnationId,
+        selectionDigest,
+      } : undefined;
+      return {
+        input,
+        async prepare() {
+          return async (tx) => {
+            const current = await tx.query<{ cancelled: boolean; evidence: BangumiRow['evidence']; review: StoredReview | null }>(
+              `SELECT u.cancelled,r.evidence,r.review FROM library.bangumi_upload u
+               JOIN library.bangumi_upload_row r USING(route,account_id,upload_id)
+               WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3 AND r.ordinal=$4
+                 AND u.expires_at>clock_timestamp()
+               FOR UPDATE OF u,r`,
+              [requireRoute(account.accountId), account.accountId, id, ordinal],
+            );
+            if (signal?.aborted) throw new LibraryConflictError();
+            const stored = current.rows[0],
+              metadata = stored?.review?.metadata?.find((item) => item.token === reviewed.token);
+            if (
+              !stored || stored.cancelled || !metadata ||
+              stored.review?.token !== reviewed.sourceReviewToken ||
+              metadata.sourceReviewToken !== reviewed.sourceReviewToken ||
+              metadata.subjectId !== reviewed.subjectId ||
+              metadata.clientId !== account.clientId ||
+              metadata.requestedBy !== (account.requestedBy ?? null) ||
+              metadata.sourceDigest !== reviewed.sourceDigest ||
+              metadata.profileDigest !== reviewed.profileDigest ||
+              metadata.incarnationId !== reviewed.incarnationId ||
+              entryImportMetadataDigest(stored.evidence) !== reviewed.sourceDigest ||
+              metadata.confirmation?.selectionDigest !== selectionDigest
+            )
+              throw new ProblemError('conflict');
+          };
+        },
+      };
     },
     async isCancelled({ actor, id }) {
       try {
