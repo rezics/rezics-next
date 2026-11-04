@@ -2530,3 +2530,13 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   `services/kernel/test/imports/bangumi-character-names.test.ts` exercises the
   default selected payload through same-state importer refresh, common
   publication and an anonymous public read.
+
+### Bangumi TVAnime work evidence
+
+Decision: trim only horizontal template/list-boundary whitespace; `链接` remains a cited `wdt:P973` descriptive page and `官方网站` remains the separate `schema:url` mapping.
+
+Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` are admitted. Descriptive destinations preserve their source spelling and cite the Bangumi subject record; notices remain verbatim `schema:copyrightNotice` values and grant no licence or media permission. Malformed neighbors are bounded, source-free omissions; summary and cover rights remain separate.
+
+- Touches: ordinary `bangumi@10` and selected-family `cross-media-entities@9+bangumi@10` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
+- Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
+- Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.

@@ -66,7 +66,7 @@ import { createImporter, type ImporterOptions, type ImportRunResult } from './im
 import { createMediaResolver } from './media-resolver.ts';
 import type { BangumiCoverSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
-import { createSourceRegistration } from './source-registry.ts';
+import { createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
 import {
@@ -1635,7 +1635,7 @@ export async function planCrossMediaSeed(
   for (const provider of ['bangumi', 'vndb'] as const) {
     const registration = createSourceRegistration(provider, {
       source: crossMediaAliases[provider],
-      converterRevision: entityRevision,
+      converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
     });
     for (const row of [...plan.records[provider], ...plan.entities[provider]])
       registration.convert(
@@ -2008,7 +2008,7 @@ export async function seedCrossMedia(
           ensure(sourceRecord, 'Bangumi cover source record is missing');
           const conversion = createSourceRegistration('bangumi', {
             source: source.sourceAlias,
-            converterRevision: entityRevision,
+            converterRevision: crossMediaBangumiRevision,
           }).convert(
             {
               external_id: sourceRecord.key,
@@ -2087,7 +2087,7 @@ export async function seedCrossMedia(
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
       const registration = createSourceRegistration(provider, {
         source: crossMediaAliases[provider],
-        converterRevision: entityRevision,
+        converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
       });
       for (const record of [...plan.records[provider], ...plan.entities[provider]]) {
         const conversion = registration.convert(
@@ -2360,7 +2360,7 @@ export async function seedCrossMedia(
         if (row) {
           const converted = createSourceRegistration('bangumi', {
             source: source.sourceAlias,
-            converterRevision: entityRevision,
+            converterRevision: crossMediaBangumiRevision,
           }).convert(
             {
               external_id: row.key,

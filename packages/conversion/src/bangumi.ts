@@ -9,8 +9,7 @@ import {
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
-import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
-import { bangumiTelevisionRun } from './bangumi-television-run.ts';
+import { extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
 import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
 import {
   checkCoverIntent,
@@ -24,7 +23,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@9';
+export const converter_revision = 'bangumi@10';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
@@ -183,6 +182,11 @@ function retainedFieldDiagnostics(
   return [...retained, ...nameDiagnostics];
 }
 
+function boundedDiagnostics(items: readonly { pointer: string; code: string }[]): { pointer: string; code: string }[] {
+  if (items.length <= 16) return [...items];
+  return [...items.slice(0, 15), { pointer: '/infobox', code: 'additional_infobox_omissions' }];
+}
+
 /** Pure conversion: one bootstrap, or candidates bound to an actual resolved subject. */
 export function convertBangumi(
   input: ConversionInput,
@@ -272,10 +276,12 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     value: { type: 'value', content },
     references: references(),
   });
-  const extractedNames = extractBangumiSubjectNames(record);
+  const extractedFields = extractBangumiTVAnimeEvidence(record);
+  const television = extractedFields.televisionRun;
   const facts = [
     fact('wdt:P5732', input.external_id),
-    ...extractedNames.names.map((name) => fact(name.property, { language: name.language, text: name.text })),
+    ...extractedFields.names.map((name) => fact(name.property, { language: name.language, text: name.text })),
+    ...extractedFields.workEvidence.map((item) => fact(item.property, item.value)),
   ];
   if (record.meta_tags?.includes('后宫')) {
     const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
@@ -307,7 +313,6 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       invalid('/summary', 'invalid_record_summary_document_limit');
     }
   }
-  const television = bangumiTelevisionRun(record);
   const playerCount = bangumiGamePlayerCount(record);
   const proposals: BatchCommand[] = [];
   const propose = (
@@ -412,15 +417,15 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     normalizedRecord: record,
     // These source-only fields have no declared mapping in this converter. Their
     // values are retained only in normalizedRecord, never invented catalogue slots.
-    diagnostics: [
+    diagnostics: boundedDiagnostics([
       ...retainedFieldDiagnostics(
         record,
-        extractedNames.diagnostics,
+        extractedFields.diagnostics,
         television.handledInfobox || playerCount.handledInfobox,
       ),
       ...television.diagnostics,
       ...playerCount.diagnostics,
-    ],
+    ]),
     coverAssets,
     mediaImportIntents,
     sourceMetadata,
