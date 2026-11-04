@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { hasKernelOrigin, kernelClient, preparePrivatePage } from '../../kernel/client';
 import { prepareExposure } from '../../kernel/exposure';
@@ -9,6 +9,7 @@ import { m } from '../../paraglide/messages.js';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
+import { importLibraryAnchor } from '../../library/showcase-import-return/navigation';
 
 const loadAvailability = createServerFn({ method: 'GET' }).handler(() => {
   preparePrivatePage();
@@ -30,6 +31,7 @@ export const Route = createFileRoute('/library/import-vndb')({
 
 function VndbImportRoute() {
   const { available } = Route.useLoaderData();
+  const libraryReturn = useLocation({ select: (location) => location.hash.replace(/^#/, '') === importLibraryAnchor });
   if (!available) return <VndbUnavailable />;
-  return <PersonalVndbImportPage />;
+  return <PersonalVndbImportPage libraryReturn={libraryReturn} />;
 }
