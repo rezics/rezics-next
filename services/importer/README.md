@@ -1550,14 +1550,14 @@ and height/weight survive this projection together.
 
 The source-specific scheme is
 `https://rezics.com/schemes/vndb/character-blood-types`; each Concept URI adds
-the exact source code. The default seed accepts `--vndb-character-profile-bindings
-<json>` or `.temp/cross-media-seed/vndb-character-profile-bindings.json` with
-`{ "schemeId": "…", "concepts": [{ "code": "a", "id": "…" }] }` and at
-most four code-to-ID rows. These IDs only select bounded current reads: the
-operator verifies the disclosed current scheme and each Concept's exact
-`schema:url` and `skos:inScheme` values before the source registration can
-propose. It never creates Concepts or adopts their candidates. Ordinary
-acceptance and adoption remain separate.
+the exact source code. The default showcase publishes that scheme and only the
+selected explicit Concepts through the existing journal and publishShowcase
+path, then rereads current type, URI and inScheme before proposing. Optional
+`--vndb-character-profile-bindings <json>` is a current-verified hint of at
+most four code-to-ID rows; a missing file does not skip publication, and a
+prior file cannot bypass a retired, mismatched or refused binding. Ordinary
+importer tokens stay proposal-only; local showcase review accept/adopt stays
+on the current commands.
 
 `gender` and `spoil_gender` remain distinct actual and spoiler source variants
 in the digest. The source gender enums have no admitted native qualifier in
@@ -1565,16 +1565,20 @@ this release, so both are withheld; the importer does not turn either into a
 numeric spoiler level or an unqualified fallback. The `sex` fields remain
 outside this mapping.
 
-- Touches: selected VNDB Character rows, one current source ConceptScheme,
-  at most four Concepts, ordinary `wdt:P1853` candidates and exact
-  `/chars/bloodt` citations.
-- Bound: at most 256 selected Characters and five public binding reads; no
-  catalogue scan, per-field permission query, or taxonomy publication.
-- Growth check: `tests/vndb-character-profile.test.ts` covers a COPY-shaped
-  family through the production coordinator. Kernel
-  `test/imports/vndb-character-profile.test.ts` authors independent
-  acceptance/adoption, a wrong-scheme binding and refresh/reopen; native
-  execution remains deferred to integration.
+- Touches: selected VNDB Character rows, journal create/propose of one source
+  ConceptScheme and at most four selected Concepts, current native type/URI/
+  inScheme reads, ordinary `wdt:P1853` candidates and exact `/chars/bloodt`
+  citations, and the common publishShowcase accept/adopt/public-read path.
+- Bound: at most 256 selected Characters and five current binding reads per
+  verification lifetime; preparation stays inside the common vocabulary budget.
+  Deduplicated current reads stay inside their existing freshness lifetime. No
+  catalogue or native-history scan.
+- Growth check: `tests/vndb-character-profile.test.ts` covers default
+  publication without a UUID file, both seed phases, unknown/malformed
+  omission, gender withholding, changed/refused Concepts and sealed UUID
+  recovery. Kernel `test/imports/vndb-character-profile.test.ts` authors
+  independent acceptance/adoption, a wrong-scheme binding and refresh/reopen;
+  native execution remains deferred to integration.
 
 ### Publish admitted VNDB public tag associations
 
@@ -2165,8 +2169,8 @@ sealed command from being replayed with changed statement bytes.
 The selected-family VNDB staff-credit coordinator supplies genuine `vn_staff`
 and `vn_seiyuu` rows to the same mapper after resolving same-owner alias IDs to
 their actual Person UUIDs and retaining exact Character UUIDs. Local review
-publishes only selected credit-type requirements through the existing showcase
-journal and publisher. Native and public current reads must agree on Concept
+publishes selected credit-type and blood-type requirements through the existing
+showcase journal and publisher. Native and public current reads must agree on Concept
 type, URI and scheme membership before a qualified assertion is built; missing
 or unsupported cases remain omissions without an unqualified graph fallback.
 

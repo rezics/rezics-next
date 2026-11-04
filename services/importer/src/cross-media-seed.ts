@@ -57,6 +57,8 @@ import type { VndbCreditVocabularyReadFailure } from './vndb-staff-credits.ts';
 import {
   parseVndbCharacterProfileReferences,
   planVndbCharacterProfile,
+  prepareShowcaseVndbCharacterProfileVocabulary,
+  readShowcaseVndbCharacterProfileVocabulary,
   readVndbCharacterProfileBindings,
   vndbCharacterProfileAdmission,
   type VndbCharacterProfileReferences,
@@ -2894,7 +2896,8 @@ export async function runCrossMediaSeedCli(
     : undefined;
   const defaultProfileBindingsPath = resolve('.temp/cross-media-seed/vndb-character-profile-bindings.json');
   const profileBindingsPath =
-    explicitProfileBindingsPath ?? (existsSync(defaultProfileBindingsPath) ? defaultProfileBindingsPath : undefined);
+    explicitProfileBindingsPath ??
+    (!showcasePath && existsSync(defaultProfileBindingsPath) ? defaultProfileBindingsPath : undefined);
   const explicitReleaseStateBindingsPath = values.has('--vndb-release-state-bindings')
     ? resolve(values.get('--vndb-release-state-bindings')!)
     : undefined;
@@ -2958,11 +2961,14 @@ export async function runCrossMediaSeedCli(
   ensure(!showcasePath || !showcaseConflictPaths.includes(showcasePath), 'Showcase state must not overlap seed files');
   await mkdir(dirname(statePath), { recursive: true });
   const importPort = createImportTransport({ origin: api, tokenProvider });
-  const characterProfileBindings = await readVndbCharacterProfileBindings(importPort, vndbCharacterProfileReferences);
+  let characterProfileBindings = await readVndbCharacterProfileBindings(importPort, vndbCharacterProfileReferences);
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   const publicClient = showcasePath ? createPublicBulkClient({ origin: api }) : undefined;
   let autoVndbCreditReferences: VndbCreditVocabularyReferences | undefined;
+  let vndbCharacterProfileVocabularyRequirements: Awaited<
+    ReturnType<typeof prepareShowcaseVndbCharacterProfileVocabulary>
+  >['requirements'] = [];
   let vndbCreditVocabularyRequirements: Awaited<
     ReturnType<typeof prepareShowcaseVndbCreditVocabulary>
   >['requirements'] = [];
@@ -3327,6 +3333,58 @@ export async function runCrossMediaSeedCli(
           concepts.requirements,
         );
     }
+    if (journal && publicClient && !explicitProfileBindingsPath) {
+      const schemes = await prepareShowcaseVndbCharacterProfileVocabulary({
+        plan: publicationPlan,
+        port,
+        journal,
+        stage: 'schemes',
+      });
+      if (schemes.requirements.length)
+        await publishShowcase({
+          plan: publicationPlan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review: importPort,
+          publicClient,
+          vocabularyRequirements: [
+            ...(result.creditVocabularyRequirements ?? []),
+            ...releaseClassificationRequirements,
+            ...tagVocabularyRequirements,
+            ...vndbCreditVocabularyRequirements,
+            ...schemes.requirements,
+          ],
+        });
+      const concepts = await prepareShowcaseVndbCharacterProfileVocabulary({
+        plan: publicationPlan,
+        port,
+        journal,
+        stage: 'concepts',
+      });
+      vndbCharacterProfileVocabularyRequirements = concepts.requirements;
+      if (concepts.requirements.length)
+        await publishShowcase({
+          plan: publicationPlan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review: importPort,
+          publicClient,
+          vocabularyRequirements: [
+            ...(result.creditVocabularyRequirements ?? []),
+            ...releaseClassificationRequirements,
+            ...tagVocabularyRequirements,
+            ...vndbCreditVocabularyRequirements,
+            ...concepts.requirements,
+          ],
+        });
+      characterProfileBindings = await readShowcaseVndbCharacterProfileVocabulary({
+        plan: publicationPlan,
+        port,
+        journal,
+      });
+    }
     const currentVndbCreditReferences = autoVndbCreditReferences ?? vndbCreditReferences;
     let showcase: ShowcasePublicationResult | undefined;
     let bangumiVocabularyRequirements:
@@ -3391,6 +3449,8 @@ export async function runCrossMediaSeedCli(
           ...(result.creditVocabularyRequirements ?? []),
           ...releaseClassificationRequirements,
           ...tagVocabularyRequirements,
+          ...vndbCreditVocabularyRequirements,
+          ...vndbCharacterProfileVocabularyRequirements,
           ...schemes.requirements,
         ],
       });
@@ -3411,6 +3471,8 @@ export async function runCrossMediaSeedCli(
           ...(result.creditVocabularyRequirements ?? []),
           ...releaseClassificationRequirements,
           ...tagVocabularyRequirements,
+          ...vndbCreditVocabularyRequirements,
+          ...vndbCharacterProfileVocabularyRequirements,
           ...concepts.requirements,
         ],
       });
@@ -3421,7 +3483,12 @@ export async function runCrossMediaSeedCli(
         journal,
       });
       await reseedWithCurrentVocabulary(currentCharacterBindings);
-    } else if (journal && publicClient && autoVndbCreditReferences && characterBindingsPath) {
+    } else if (
+      journal &&
+      publicClient &&
+      characterBindingsPath &&
+      (autoVndbCreditReferences || (!explicitProfileBindingsPath && characterProfileBindings.concepts.length > 0))
+    ) {
       await reseedWithCurrentVocabulary(
         characterBindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
       );
@@ -3482,6 +3549,8 @@ export async function runCrossMediaSeedCli(
               ...releaseClassificationRequirements,
               ...(bangumiVocabularyRequirements ?? []),
               ...tagVocabularyRequirements,
+              ...vndbCreditVocabularyRequirements,
+              ...vndbCharacterProfileVocabularyRequirements,
               ...schemes.requirements,
             ],
           });
@@ -3505,6 +3574,8 @@ export async function runCrossMediaSeedCli(
               ...releaseClassificationRequirements,
               ...(bangumiVocabularyRequirements ?? []),
               ...tagVocabularyRequirements,
+              ...vndbCreditVocabularyRequirements,
+              ...vndbCharacterProfileVocabularyRequirements,
               ...concepts.requirements,
             ],
           });
@@ -3664,6 +3735,7 @@ export async function runCrossMediaSeedCli(
       ...tagVocabularyRequirements,
       ...characterVocabularyRequirements,
       ...vndbCreditVocabularyRequirements,
+      ...vndbCharacterProfileVocabularyRequirements,
     ];
     if (journal && publicClient)
       showcase = await publishShowcase({
