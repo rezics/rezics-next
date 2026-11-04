@@ -110,7 +110,7 @@ test('native selection preserves the source head, independent anchor and distinc
   ]);
   expect(read.anchors).toEqual([anchor]);
   expect(projectCommunityCommentsBatch(['thread-one', 'withheld'], read.items, anonymous)).toEqual(
-    new Map([
+    new Map<string, CommunityComments>([
       [
         'thread-one',
         {
