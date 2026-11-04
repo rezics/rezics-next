@@ -102,5 +102,10 @@ restoration, last-source cleanup, ranked remainder, partial initialization, boun
 is in `reading-insights-routes.ts`; Content owns generated client/declaration/root-export publication. No generator,
 raw-fetch Web adapter or handwritten client delivery is added. Installed client and rendered evidence remain pending.
 
-Validation commands and actual outcomes will be recorded below after the required focused run. Full/frozen
-acceptance, broad native growth, root checks and browser review remain with integration.
+`bun run --cwd services/kernel derived schema` succeeded and regenerated only the Library canonical schema.
+The first typecheck placement returned exit 75; a retry identified a future migration timestamp, which was corrected
+in a committed fix. `bun run --cwd services/kernel typecheck --emit-schema=library` then reached the compiler and
+failed, beginning with `../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module
+'./kernel/rating/own-votes-counted' or its corresponding type declarations.` Full diagnostic comparison and the
+required focused native file run remain to be recorded. Full/frozen acceptance, broad native growth, root checks
+and browser review remain with integration.
