@@ -17,6 +17,7 @@ type LifecycleScenario = {
   closeStarted: Deferred<void>;
   releaseDone: Deferred<void>;
   dispatches: Array<'issue' | 'release'>;
+  blockAdmission: boolean;
   blockHold: boolean;
   releaseQueries: number;
   duplicateReleaseRefused: boolean;
@@ -153,6 +154,12 @@ async function nativeScenario() {
         : typeof input === 'object' && input !== null && 'text' in input && typeof input.text === 'string'
           ? input.text
           : '';
+    const scenario = currentScenario;
+    if (scenario?.blockAdmission && sql.includes('consume_selected_execution')) {
+      scenario.blockAdmission = false;
+      scenario.operationStarted.resolve();
+      return scenario.unblockQuery.promise.then(() => Reflect.apply(poolQuery, db.pool, args as never[]));
+    }
     const result = Reflect.apply(poolQuery, db.pool, args as never[]);
     if (sql.includes('release_selected_execution') && currentScenario) {
       return Promise.resolve(result as Promise<unknown>).then(
@@ -290,7 +297,8 @@ async function nativeScenario() {
       closeStarted: Promise.withResolvers<void>(),
       releaseDone: Promise.withResolvers<void>(),
       dispatches: [],
-      blockHold: true,
+      blockAdmission: mode === 'body-error',
+      blockHold: mode !== 'body-error',
       releaseQueries: 0,
       duplicateReleaseRefused: false,
       issueAfterCloseRefused: false,
@@ -316,7 +324,7 @@ async function nativeScenario() {
       assert.equal(before.rowCount, 1);
       assert.deepEqual(
         { live: before.rows[0]!.live, admission_spent: before.rows[0]!.admission_spent },
-        { live: true, admission_spent: true },
+        { live: true, admission_spent: mode !== 'body-error' },
       );
       if (mode === 'body-error') {
         await scenario.closeStarted.promise;
@@ -337,6 +345,7 @@ async function nativeScenario() {
         [workflowID],
       );
       assert.equal(beforeRelease.rows[0]!.live, true);
+      assert.deepEqual(scenario.dispatches, ['issue']);
       scenario.unblockQuery.resolve();
       await scenario.releaseDone.promise;
       restoreClock?.();

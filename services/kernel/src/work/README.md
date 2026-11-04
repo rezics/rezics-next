@@ -416,7 +416,8 @@ original starts at actual body execution with a fixed five-second deadline. Disp
 multiplicity against that identity; it does not debit a remaining ledger. A selection claim identifies execution
 and does not fund foreign work. No request capability, original deadline or postcommit transfer is reused or
 renewed. In-process operations drain before SDK release, and no private live map or heap committed flag is
-evidence of native COMMIT.
+evidence of native COMMIT. The admission-consume query joins the same drain before it is awaited, so an early
+body failure cannot release while that native operation is pending.
 
 ### Selected local declarations
 

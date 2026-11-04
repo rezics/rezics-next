@@ -294,6 +294,15 @@ async function transaction<T>(
     state.operations.delete(operation);
   }
 }
+function trackOperation<T>(state: Original, operation: Promise<T>): Promise<T> {
+  const settled = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  state.operations.add(settled);
+  void settled.then(() => state.operations.delete(settled));
+  return operation;
+}
 /** Trusted composition only. The genuine client binding is installed solely by createWorkClient. */
 export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRuntime {
   assertSelectedWorkClient(work, pool);
@@ -405,8 +414,12 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
             async select(input) {
               if (state.phase !== 'new') refuse('selected-runtime-repeated-selection');
               scope(state, input);
+              identity(state);
               state.phase = 'selecting';
-              const fresh = await state.work.consumeSelectedExecutionAdmission(claim, state.pool);
+              const fresh = await trackOperation(
+                state,
+                state.work.consumeSelectedExecutionAdmission(claim, state.pool),
+              );
               const episode = await transaction(state, input, 'select', (tx) =>
                 associateSelectedEpisode(tx, identity(state), input, fresh),
               );
