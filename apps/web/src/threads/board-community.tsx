@@ -16,6 +16,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { BoardContext } from './thread-context';
 import { BoardFeed } from './board-feed';
+import type { BoardOpeningReactionOrigin } from './board-opening';
 import type { CommunityBoardPage } from './board-feed-data';
 import type { BoardSort } from './board-sort';
 import { boardReadingRestartHref } from './board-reading';
@@ -29,6 +30,7 @@ export function BoardCommunity({
   start,
   overflow,
   postingInterval,
+  reactionOrigin,
 }: {
   page: CommunityBoardPage;
   sort: BoardSort;
@@ -37,6 +39,7 @@ export function BoardCommunity({
   start?: ReactNode | ((page: CommunityBoardPage) => ReactNode);
   overflow?: ReactNode;
   postingInterval?: ReactNode;
+  reactionOrigin?: BoardOpeningReactionOrigin;
 }) {
   const [replacement, setReplacement] = useState<{
     source: CommunityBoardPage;
@@ -90,6 +93,7 @@ export function BoardCommunity({
           sort={sort}
           page={threads}
           openingCards={page.openingCards}
+          reactionOrigin={reactionOrigin}
           authors={authors}
           now={now}
           actions={typeof start === 'function' ? start(page) : start}

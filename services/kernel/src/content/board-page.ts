@@ -314,7 +314,7 @@ export function projectBoardOpeningReactionCounts(
   source: ReactionCountFreshness | undefined,
 ): BoardOpeningCard['interaction']['counts'] {
   if (!interactionReady || !values || !source) return { state: 'unavailable' };
-  return { state: 'as-of', values, source };
+  return { state: 'as-of', values: { ...values }, source: { ...source } };
 }
 
 type BoardActivityProjection = Readonly<{

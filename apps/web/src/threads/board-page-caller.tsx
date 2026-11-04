@@ -15,6 +15,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { sessionQuery } from '../session/query';
 import type { ReadCredentialMode } from '../kernel/credential';
 import { BoardCommunityStatus } from './board-community';
+import type { BoardOpeningReactionOrigin } from './board-opening';
 import type { CommunityBoardPage } from './board-feed-data';
 import type { BoardPageRead, BoardPageReaderOrigin } from './reads';
 
@@ -457,6 +458,21 @@ export class BoardPageCaller {
     return this.result === result && this.input.id === result.board.id;
   }
 
+  reactionOrigin(result: BoardPageLoadResult): BoardOpeningReactionOrigin {
+    const receipt = result.caller;
+    const reader =
+      receipt.readerOrigin.kind === 'session' &&
+      receipt.expectedReader &&
+      sameReader(receipt.readerOrigin, receipt.expectedReader)
+        ? receipt.expectedReader.subject
+        : null;
+    return {
+      key: `${receipt.id}:${receipt.routeKey}`,
+      reader,
+      isCurrent: () => this.ownsResult(result),
+    };
+  }
+
   captureError(error: unknown) {
     if ((typeof error === 'object' && error !== null) || typeof error === 'function')
       errorOwners.set(error as object, this);
@@ -840,7 +856,7 @@ function BoardPageVisit({
 }: {
   result: BoardPageLoadResult;
   input: BoardPageCallerInput;
-  children: (page: CommunityBoardPage) => ReactNode;
+  children: (page: CommunityBoardPage, reactionOrigin: BoardOpeningReactionOrigin) => ReactNode;
 }) {
   const client = useContext(QueryClientContext);
   const router = useRouter();
@@ -869,10 +885,10 @@ function BoardPageVisit({
     caller.isTransferredResult &&
     caller.ownsReceipt(result)
   )
-    return children(result);
+    return children(result, caller.reactionOrigin(result));
   if (!lifecycle.current || !caller || (!caller.ownsResult(result) && !caller.canDisplayTransferredPublic))
     return createElement(BoardCommunityStatus, { state: 'loading' });
-  return children(result);
+  return children(result, caller.reactionOrigin(result));
 }
 
 /** Admission sits outside the shared renderer and existing participation/start/menu controllers. */
@@ -883,7 +899,7 @@ export function BoardPageCallerHost({
 }: {
   result: BoardPageLoadResult;
   input: BoardPageCallerInput;
-  children: (page: CommunityBoardPage) => ReactNode;
+  children: (page: CommunityBoardPage, reactionOrigin: BoardOpeningReactionOrigin) => ReactNode;
 }) {
   const key = result.caller?.id ?? currentPageKey(input);
   return createElement(BoardPageVisit, { key, result, input, children });

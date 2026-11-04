@@ -92,10 +92,11 @@ function BoardPage() {
         credentialMode: router.options.context.credentialMode,
       }}
     >
-      {(currentPage) => (
+      {(currentPage, reactionOrigin) => (
         <BoardCommunity
           page={currentPage}
           sort={sort ?? 'active'}
+          reactionOrigin={reactionOrigin}
           {...(search.cursor === undefined ? {} : { cursor: search.cursor })}
           participation={(page) => <BoardParticipation community={page.community} returnTo={returnTo} />}
           start={(page) => (

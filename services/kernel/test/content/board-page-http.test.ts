@@ -69,6 +69,18 @@ test('Board comments require a current matching cohort witness and reaction zero
     source: { epoch: 2, position: '10' },
   });
   expect(projectBoardOpeningReactionCounts(true, undefined, undefined)).toEqual({ state: 'unavailable' });
+
+  const selectedValues = { like: 2 };
+  const selectedSource = { epoch: 2, position: '12' };
+  const selectedCounts = projectBoardOpeningReactionCounts(true, selectedValues, selectedSource);
+  Object.assign(selectedValues, { like: 3 });
+  Object.assign(selectedSource, { position: '13' });
+  expect(selectedCounts).toEqual({ state: 'as-of', values: { like: 2 }, source: { epoch: 2, position: '12' } });
+  expect(projectBoardOpeningReactionCounts(true, selectedValues, selectedSource)).toEqual({
+    state: 'as-of',
+    values: { like: 3 },
+    source: { epoch: 2, position: '13' },
+  });
 });
 
 test('Board projects only the producer count and source head while retaining its partition anchor', () => {

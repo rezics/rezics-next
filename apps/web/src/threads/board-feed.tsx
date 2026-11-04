@@ -34,7 +34,11 @@ import {
 } from './board-feed-data';
 import { captureBoardReadingReturn, disclosedBoardAuthorIds } from './board-reading';
 import type { PageAuthors } from '../identity/read';
-import { boardOpeningReaction, type ReceivedBoardOpeningPage } from './board-opening';
+import {
+  boardOpeningReaction,
+  type BoardOpeningReactionOrigin,
+  type ReceivedBoardOpeningPage,
+} from './board-opening';
 import { NativeDocumentImage } from './document-media-image';
 
 const consumedContinuationStates = new WeakSet<object>();
@@ -232,6 +236,7 @@ type BoardFeedProps = {
   sort: BoardSort;
   page: CommunityBoardPage['threads'];
   openingCards?: CommunityBoardPage['openingCards'];
+  reactionOrigin?: BoardOpeningReactionOrigin;
   authors: BoardFeedAuthors;
   now: string;
   actions?: ReactNode;
@@ -287,6 +292,7 @@ function BoardFeedVisit({
   sort,
   page,
   openingCards,
+  reactionOrigin,
   authors: initialAuthors,
   now,
   actions,
@@ -344,7 +350,12 @@ function BoardFeedVisit({
     },
   });
   const ordinary = pins.needsRestart ? { ...ordinarySource, next: null } : ordinarySource;
-  const origin = { key: pinVisitKey, isCurrent: () => visit.observation.snapshot() === visit.revision };
+  const origin: BoardOpeningReactionOrigin = {
+    key: `${pinVisitKey}:${reactionOrigin?.key ?? 'unbound'}`,
+    reader: reactionOrigin?.reader ?? null,
+    isCurrent: () =>
+      visit.observation.snapshot() === visit.revision && (reactionOrigin?.isCurrent() ?? true),
+  };
   const signedIn = !!pins.sender;
   const returnAddress = captureBoardReadingReturn({
     boardId,
