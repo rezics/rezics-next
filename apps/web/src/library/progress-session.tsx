@@ -643,7 +643,11 @@ function SessionEditor({
   };
   const renderToken = {};
   const rendered = useRef(renderToken);
-  rendered.current = renderToken;
+  // An interrupted or no-op render cannot retire handlers belonging to the visible draft.
+  // Only a committed replacement owns the next set of browser events.
+  useLayoutEffect(() => {
+    rendered.current = renderToken;
+  });
   const canHandle = () => rendered.current === renderToken && canEdit();
   function edit(change: () => void) {
     if (canHandle()) change();
