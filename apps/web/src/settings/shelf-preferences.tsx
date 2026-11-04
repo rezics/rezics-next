@@ -1002,9 +1002,7 @@ export function ShelfPreferencesCard({
             ))
           : null}
         {!shelfAdvice ? (
-          <>
-            {shelfReadSummary(state.known.shelf)}
-          </>
+          <>{shelfReadSummary(state.known.shelf)}</>
         ) : (
           <>
             {ownerMayChange ? null : (
@@ -1188,9 +1186,7 @@ export function ShelfPreferencesCard({
                   })}
                 </p>
               ) : null}
-              {!state.current && !state.confirmedWrite ? (
-                <p>{m.settings_shelf_values_unconfirmed()}</p>
-              ) : null}
+              {!state.current && !state.confirmedWrite ? <p>{m.settings_shelf_values_unconfirmed()}</p> : null}
               {responses.map(({ operation, response, retryWaiting, retrySeconds, label }) => {
                 if (!response.reason && !response.failure) return null;
                 return (

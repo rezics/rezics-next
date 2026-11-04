@@ -133,9 +133,7 @@ test('a confirmed write keeps its receipt while a failed current read retries wi
       {
         save: async (input) => {
           commands.push(input);
-          return commands.length === 1
-            ? { ok: false, reason: 'unavailable' }
-            : { ok: true, preferences: receipt };
+          return commands.length === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, preferences: receipt };
         },
         read: async () => {
           reads++;
