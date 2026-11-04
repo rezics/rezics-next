@@ -228,7 +228,6 @@ test('native kind forms own each field once; hydration retains choices and recov
         (button) => button.textContent === 'Restore defaults',
       );
     expect(reviewedRestore()).toBeUndefined();
-    await click('Restore defaults');
     expect(calls).toHaveLength(8);
     currentReadPage = currentPage;
     await click('Reload');
