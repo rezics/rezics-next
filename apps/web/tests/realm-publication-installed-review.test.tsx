@@ -256,6 +256,11 @@ test('mounted selected review renders only current generated disclosure, seals u
         host.querySelector('[data-publication-cover]')?.getAttribute('data-publication-cover') ?? 'available',
       ).toBe(cover);
     }
+    payload.viewer.accountId = terminal;
+    await act(async () => control.inspect());
+    expect(control.preparationState).toBe('denied');
+    expect(host.textContent).not.toContain('Current native label');
+    expect(button(m.realm_publication_publish()).disabled).toBe(true);
     payload = await shape();
     await act(async () => control.inspect());
     await click(m.realm_publication_review_withdraw());

@@ -1,4 +1,7 @@
 import type { PublicationPrepare, PublicationPresentation } from '../community/realm-publication-preparation';
+import { useMemo, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { sessionQuery } from '../session/query';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, within } from 'storybook/test';
 import { RealmShelf, type RealmShelfTransport } from '../community/space-page';
@@ -109,6 +112,25 @@ const prepare: PublicationPrepare = async ({ realmId, subjectId }) => {
     },
   };
 };
+// The generated-shape producer fixture and its explicit private session describe the same viewer.
+function PublicationStory({ children, signedOut = false }: { children: ReactNode; signedOut?: boolean }) {
+  const client = useMemo(() => {
+    const client = new QueryClient();
+    client.setQueryData(
+      sessionQuery.queryKey,
+      signedOut
+        ? { state: 'signed-out', subject: null, csrfToken: null }
+        : { state: 'signed-in', subject: 'story-viewer', csrfToken: 'story-csrf-token' },
+    );
+    return client;
+  }, [signedOut]);
+  return (
+    <PatternStory visitor={signedOut ? 'Signed Out' : 'Signed In'}>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </PatternStory>
+  );
+}
+
 const sendUnavailable = async () => ({ kind: 'unavailable' as const });
 function Example({
   mode = 'ready',
@@ -179,11 +201,11 @@ function Example({
     publicationNext: mode === 'empty' ? null : 'publications-next',
   };
   return (
-    <PatternStory visitor={signedOut ? 'Signed Out' : 'Signed In'}>
+    <PublicationStory signedOut={signedOut}>
       <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
         <RealmShelf realm={realm} transport={transport} />
       </div>
-    </PatternStory>
+    </PublicationStory>
   );
 }
 async function selectWork(canvasElement: HTMLElement) {
@@ -393,19 +415,19 @@ async function chooseLongSelection({ canvasElement }: { canvasElement: HTMLEleme
 
 export const LongSelectedSubject: Story = {
   render: () => (
-    <PatternStory visitor="Signed In">
+    <PublicationStory>
       <LongSelection />
-    </PatternStory>
+    </PublicationStory>
   ),
   play: chooseLongSelection,
 };
 export const LongSelectedSubjectRtl: Story = {
   render: () => (
-    <PatternStory visitor="Signed In">
+    <PublicationStory>
       <div dir="rtl">
         <LongSelection />
       </div>
-    </PatternStory>
+    </PublicationStory>
   ),
   play: chooseLongSelection,
 };

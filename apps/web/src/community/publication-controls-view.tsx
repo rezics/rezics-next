@@ -202,7 +202,7 @@ export function usePublicationControls(
       },
       async (input) => {
         const result = await prepare(input);
-        return result.kind === 'ready' && reader && result.preparation.viewer.accountId !== reader
+        return result.kind === 'ready' && result.preparation.viewer.accountId !== session.subject
           ? { kind: 'denied' }
           : result;
       },
