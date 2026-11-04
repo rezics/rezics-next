@@ -160,8 +160,9 @@ export function decimalParts(amountMinor: unknown, exponent: number): MoneyResul
 }
 
 function knownValue(value: RecordedMoneyValue): MoneyResult<RecordedMoneyValue> {
-  if (value.unit.kind !== 'known') return error('unknown-unit');
-  if (!isUnitDescriptor(value.unit.unit)) return error('unknown-unit');
+  const unit = value.unit;
+  if (unit.kind !== 'known') return error('unknown-unit');
+  if (!isUnitDescriptor(unit.unit)) return error('unknown-unit');
   if (!isSafeMinorAmount(value.amountMinor)) return error('unsafe-integer');
   return Object.freeze({ ok: true, value });
 }
