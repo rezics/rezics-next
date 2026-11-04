@@ -92,7 +92,7 @@ export async function readRealmRulesAuthoringPage(
       { ...deps, tokens: deps.tokens },
       realmId,
       context,
-      { cursor: input.cursor, limit: 20 },
+      { ...(input.cursor ? { cursor: input.cursor } : {}), limit: 20 },
     );
     const candidates = page.items.filter((board) => board.purpose === 'discussion' && board.availability === 'available');
     const items = await Promise.all(candidates.map(async (board) => {
@@ -133,7 +133,10 @@ export async function readRealmRulesAuthoringPage(
     try {
       const details = await readExactPublishedRulesForAuthoring(deps, [{ ...referenceKey, realmId }], context);
       const item = details.get(`${realmId}/${referenceKey.postId}/${referenceKey.revisionId}`);
-      if (!item || item.state === 'concealed') {
+      if (!item) {
+        current = { state: 'concealed', reference: referenceKey };
+        edit = action('denied');
+      } else if (item.state === 'concealed') {
         current = { state: 'concealed', reference: referenceKey };
         edit = action('denied');
       } else if (item.state === 'erased') {
