@@ -9,6 +9,7 @@ import {
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
 import { admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthReport } from '../../support/growth.ts';
+import { configureTestReceiptKeys } from '../../support/receipt-keys.ts';
 import { createCopyArchive } from '../../../src/library/copy-archive.ts';
 import { exportSectionsV2, LIBRARY_EXPORT_FORMAT } from '../../../src/library/library-export-format.ts';
 import { createSessionCommands } from '../../../src/library/sessions.ts';
@@ -157,6 +158,7 @@ export function expectNoGrownScans(report: GrowthReport) {
 
 export async function createCopyArchiveProgressGrowthFixture() {
   const db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   let now = Date.now();
   const clock = () => new Date(now);
   const routeKey = testRouteKey();
