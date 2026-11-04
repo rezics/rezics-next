@@ -1485,11 +1485,34 @@ tables:
         meaning: Platform mechanism for disclosing the spoiler level of a gender value; no standard property represents this qualifier.
         citations: *id015
       - name: main
-        status: omitted
-        reason: Related-character key used to mark a main-character relation; the source relation is not a standalone profile field.
+        status: existing
+        term: rezics:relatedCharacterIdentity
+        'on': wd:Q95074
+        mapping: rezics:relatedCharacterIdentity
+        meaning: >-
+          Directed identity association to another Character endpoint identified by this source key; not a merge,
+          redirect, class instance, combined biography or the appearance role code main.
+        citations:
+          [
+            'https://vndb.org/d14#3',
+            'https://api.vndb.org/kana#post-character',
+          ]
+        qualifiers:
+          - status: existing
+            'on': wd:Q95074
+            term: rezics:spoilerLevel
+            mapping: wdt:P1552
+            source_column: main_spoil
+            meaning: Spoiler disclosure qualifier on the identity association.
+            citations: *id015
       - name: main_spoil
-        status: omitted
-        reason: Spoiler qualifier for the source main-character relation; omit with that unmodeled source relation.
+        status: existing
+        term: rezics:spoilerLevel
+        'on': wd:Q95074
+        qualifies: rezics:relatedCharacterIdentity
+        mapping: wdt:P1552
+        meaning: Platform mechanism for disclosing the spoiler level of this identity association; no standard property represents this qualifier.
+        citations: *id015
       - name: s_bust
         status: omitted
         reason: Source-specific bust measurement has no selected profile property.
@@ -1528,7 +1551,9 @@ tables:
           ]
       - name: age
         status: omitted
-        reason: Age is source-specific fictional-character metadata without a stable date of birth.
+        reason: >-
+          Source-wide character age has no work scope in this dump; it must not become the appearance-age qualifier
+          on schema:character. Work-scoped age uses wdt:P3629 on an actual appearance statement.
       - name: description
         status: omitted
         reason: Character description is creative text with separate source conditions and is not included in the profile.

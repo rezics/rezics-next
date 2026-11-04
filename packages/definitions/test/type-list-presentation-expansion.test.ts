@@ -213,6 +213,10 @@ test('ten and one hundred complete manifests retain inheritance clearing profile
     expect(withoutHints(release)).toEqual(withoutHints(plain));
     expect(Object.keys(release.types)).toHaveLength(Object.keys(bundledRelease.types).length + count * 3);
     expect(Object.keys(release.properties)).toHaveLength(Object.keys(bundledRelease.properties).length + count * 12);
+    expect(release.properties['rezics:relatedCharacterIdentity']).toEqual(
+      bundledRelease.properties['rezics:relatedCharacterIdentity'],
+    );
+    expect(release.properties['wdt:P3629']).toEqual(bundledRelease.properties['wdt:P3629']);
     let charged = 0;
     for (const [id, type] of Object.entries(release.types)) {
       if (type.listPresentation)

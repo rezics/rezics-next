@@ -6,9 +6,19 @@ properties:
   schema:weight: weight
   wdt:P1853: blood type
   wdt:P6296: bgm.tv character ID
+  rezics:relatedCharacterIdentity: related character identity
+  wdt:P26: spouse
+  wdt:P3373: sibling
+  wdt:P22: father
+  wdt:P25: mother
+  wdt:P451: partner
+  rezics:characterRival: rival
 inverseProperties:
   schema:gender: 'Subjects with this gender'
   wdt:P1853: 'Subjects with this blood type'
+  rezics:relatedCharacterIdentity: related identity of
+  wdt:P22: father of
+  wdt:P25: mother of
 typeDescriptions:
   wd:Q95074: 'An independently identifiable fictional character, including a fictional machine, ship or organization; appearances and voice credits belong on works.'
 propertyDescriptions:
@@ -17,3 +27,10 @@ propertyDescriptions:
   schema:weight: "The character's stated mass as a nonnegative quantity in kilograms (wd:Q11570) or grams (wd:Q41803), preserving its unit."
   wdt:P1853: 'The explicitly stated blood type as a Concept, such as A; unknown remains unknown.'
   wdt:P6296: 'The positive numeric Bangumi character identifier; not a subject or person ID and not a page URL.'
+  rezics:relatedCharacterIdentity: 'Another Character this identity is associated with; not a merge, redirect, class instance, combined biography or the appearance role main.'
+  wdt:P26: 'Another Character stated as this character’s spouse, with optional spoiler qualification.'
+  wdt:P3373: 'Another Character stated as this character’s sibling, with optional spoiler qualification.'
+  wdt:P22: 'The Character stated as this character’s father, with optional spoiler qualification.'
+  wdt:P25: 'The Character stated as this character’s mother, with optional spoiler qualification.'
+  wdt:P451: 'Another Character stated as this character’s unmarried partner or lover, with optional spoiler qualification.'
+  rezics:characterRival: 'Another Character stated as this character’s rival or enemy; not a work appearance role.'
