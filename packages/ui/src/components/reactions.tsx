@@ -88,6 +88,8 @@ export interface ReactionsProps {
   disabled?: boolean;
   /** Keep aggregate counts unchanged until the caller reconciles an authoritative read. */
   optimistic?: boolean;
+  /** Render each admitted kind as an inline control, including known zero counts, without a picker. */
+  inlineKinds?: boolean;
   /** The same one-slot queue, presented as up / score / down. Other admitted kinds keep their chips and picker. */
   presentation?: 'chips' | 'vote' | 'vote-plain';
 }
@@ -438,12 +440,27 @@ export const Reactions = (props: ReactionsProps) => {
       {kinds.map((kind) => {
         if (votes && (kind === 'upvote' || kind === 'downvote')) return null;
         const count = shown.counts[kind] ?? 0;
-        if (count <= 0) return null;
+        if (count <= 0 && !props.inlineKinds) return null;
         const pressed = shown.value === kind;
         const formatted = formatCount(props.locale, count);
         const Icon = reactionIcons[kind];
         const name = `${labels[kind]} ${formatAccessibleCount(props.locale, count)}`;
         if (signedOut) {
+          if (props.inlineKinds) {
+            return (
+              <a
+                aria-label={name}
+                className={cn(chipClass, pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
+                data-pressed={pressed ? 'true' : 'false'}
+                data-slot="reaction-chip"
+                href={signInHref}
+                key={kind}
+              >
+                <Icon aria-hidden className={cn(pressed && 'fill-current')} />
+                <span className="tabular-nums">{formatted}</span>
+              </a>
+            );
+          }
           return (
             <span
               aria-label={name}
@@ -479,7 +496,7 @@ export const Reactions = (props: ReactionsProps) => {
           </Button>
         );
       })}
-      {signedOut ? (
+      {props.inlineKinds ? null : signedOut ? (
         <a className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), pickerClass)} href={signInHref}>
           {pickerLabel}
         </a>
