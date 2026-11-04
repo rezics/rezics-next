@@ -105,11 +105,13 @@ export function extractBangumiSubjectNames(record: {
   const infobox = record.infobox;
   const iterator = sourceLines(infobox);
   let header: { line: string; number: number } | undefined;
-  for (const row of iterator) {
-    if (row.line.trim()) {
-      header = row;
+  let candidate = iterator.next();
+  while (!candidate.done) {
+    if (candidate.value.line.trim()) {
+      header = candidate.value;
       break;
     }
+    candidate = iterator.next();
   }
   if (!header || !isBangumiTVAnimeTemplateHead(header.line)) {
     omit('/infobox', 'unsupported_infobox_template');
@@ -136,7 +138,8 @@ export function extractBangumiSubjectNames(record: {
     }
   };
 
-  for (const row of iterator) {
+  for (let next = iterator.next(); !next.done; next = iterator.next()) {
+    const row = next.value;
     const line = cleanHorizontal(row.line);
     if (!line) continue;
     if (line === '}}') {
