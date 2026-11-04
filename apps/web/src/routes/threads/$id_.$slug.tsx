@@ -19,7 +19,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { PostReadingFrame } from '../../threads/post-reading-frame';
 import { ThreadPostReadingBody } from '../../threads/post-reading-body';
-import type { DocumentMentions } from '../../document-body';
+import type { ThreadDocumentMentionPage } from '../../threads/thread-document-mentions';
 import type { ThreadDocumentMedia } from '../../threads/document-media-read';
 import { ContentActions } from '@rezics/ui/content-actions';
 import { useSession } from '../../session/query';
@@ -34,7 +34,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { QueryClientContext, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { QueryClientContext, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { threadPageQuery, threadPersonalQuery } from '../../threads/thread-queries';
@@ -620,6 +620,9 @@ export function ThreadReadingPost({
   readAuthority,
   authors,
   mentions,
+  pageIndex,
+  pageQueryKey,
+  mentionPageCurrent,
   documentMedia,
   now,
   viewerId,
@@ -649,7 +652,10 @@ export function ThreadReadingPost({
   reactionViewerAvailable?: boolean;
   readAuthority?: object | undefined;
   authors: PageAuthors;
-  mentions: DocumentMentions;
+  mentions: ThreadDocumentMentionPage | null;
+  pageIndex: number;
+  pageQueryKey?: QueryKey | undefined;
+  mentionPageCurrent?: boolean | undefined;
   documentMedia?: ThreadDocumentMedia | undefined;
   now: string;
   viewerId: string | undefined;
@@ -1155,6 +1161,10 @@ export function ThreadReadingPost({
             post={post}
             documentMedia={documentMedia}
             mentions={mentions}
+            pageIndex={pageIndex}
+            pageQueryKey={pageQueryKey}
+            mentionPageCurrent={mentionPageCurrent}
+            onMentionRetry={onPageRefresh}
             readerIdentity={lifetime}
             isReaderCurrent={() => current()}
           />

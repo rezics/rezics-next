@@ -1,4 +1,6 @@
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { QueryClientContext, type QueryKey } from '@tanstack/react-query';
+import { useContext, useSyncExternalStore } from 'react';
 import { DocumentBody, type DocumentMentions } from '../document-body';
 import { getLocale } from '../paraglide/runtime.js';
 import { NativeDocumentImage } from './document-media';
@@ -9,6 +11,11 @@ import { PostReadingOutlineView } from './post-reading-outline-view';
 import { PostReadingPosition } from './post-reading-position';
 import { PostReferenceView } from './post-reference-view';
 import { WideDocumentReading } from './wide-document-inspector';
+import {
+  ThreadDocumentMentionLease,
+  type ThreadDocumentMentionPage,
+} from './thread-document-mentions';
+import { ThreadDocumentMentionsNotice } from './thread-document-mentions';
 import './post-reading.css';
 
 type ReadingProps = ComponentProps<typeof DocumentBody> & {
@@ -178,32 +185,78 @@ export function ThreadPostReadingBody({
   post,
   documentMedia,
   mentions,
+  pageIndex,
+  pageQueryKey,
+  mentionPageCurrent = true,
+  onMentionRetry,
   locale = getLocale(),
   readerIdentity,
   isReaderCurrent,
 }: {
   post: ThreadPost;
   documentMedia?: ThreadDocumentMedia | undefined;
-  mentions: DocumentMentions;
+  mentions: ThreadDocumentMentionPage | null;
+  pageIndex: number;
+  pageQueryKey?: QueryKey;
+  mentionPageCurrent?: boolean;
+  onMentionRetry?: () => Promise<unknown>;
   locale?: string;
   readerIdentity?: unknown;
   isReaderCurrent?: () => boolean;
 }) {
+  const client = useContext(QueryClientContext);
+  const currentReader = useRef(isReaderCurrent);
+  currentReader.current = isReaderCurrent;
+  const pageKey = JSON.stringify(pageQueryKey ?? []);
+  const lease = useMemo(
+    () =>
+      new ThreadDocumentMentionLease(
+        mentionPageCurrent ? mentions : null,
+        pageQueryKey,
+        () => mentionPageCurrent && (currentReader.current?.() ?? true),
+      ),
+    [mentions, mentionPageCurrent, pageIndex, pageKey, post.id, post.threadId, post.revisionId, post.sha256, readerIdentity],
+  );
+  useSyncExternalStore(lease.subscribe, lease.getSnapshot, lease.getServerSnapshot);
+  useLayoutEffect(() => (client ? lease.connect(client) : lease.retire), [client, lease]);
+  const mentionView = lease.project(post, pageIndex, mentionPageCurrent);
   const images = useMemo(() => documentImagesForPost(documentMedia, post), [documentMedia, post]);
   if (post.availability !== 'available') return null;
+  const noticeIdentity = JSON.stringify([
+    mentions?.target.threadId ?? null,
+    mentions?.viewer ?? null,
+    mentions?.query.cursor ?? null,
+    mentions?.selectedPostId ?? null,
+    post.id,
+    post.threadId,
+    post.revisionId,
+    post.sha256,
+    pageIndex,
+    mentionView.notice,
+    mentionView.overflow,
+  ]);
   return (
-    <PostReadingBody
-      // An exact replacement revision is a fresh spoiler/image visit, even when its text is equal.
-      key={`${post.id}:${post.revisionId}:${post.sha256}`}
-      readerIdentity={readerIdentity}
-      {...(isReaderCurrent ? { isReaderCurrent } : {})}
-      wideVisitKey={`current:${post.threadId}:${post.id}:${post.revisionId}:${post.sha256}`}
-      document={post.body}
-      mentions={mentions}
-      locale={locale}
-      renderImage={({ mediaId, alt }) => (
-        <NativeDocumentImage image={images.get(mediaId) ?? null} alt={alt} locale={locale} />
-      )}
-    />
+    <>
+      <ThreadDocumentMentionsNotice
+        identity={noticeIdentity}
+        notice={mentionView.notice}
+        overflow={mentionView.overflow}
+        retryable={mentionView.retryable}
+        onRetry={onMentionRetry}
+      />
+      <PostReadingBody
+        // An exact replacement revision is a fresh spoiler/image visit, even when its text is equal.
+        key={`${post.id}:${post.revisionId}:${post.sha256}`}
+        readerIdentity={readerIdentity}
+        {...(isReaderCurrent ? { isReaderCurrent } : {})}
+        wideVisitKey={`current:${post.threadId}:${post.id}:${post.revisionId}:${post.sha256}`}
+        document={post.body}
+        mentions={mentionView.mentions}
+        locale={locale}
+        renderImage={({ mediaId, alt }) => (
+          <NativeDocumentImage image={images.get(mediaId) ?? null} alt={alt} locale={locale} />
+        )}
+      />
+    </>
   );
 }

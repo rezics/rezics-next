@@ -1,9 +1,7 @@
 import { ThreadPageCursorError } from './thread-page-errors';
 export { isThreadPageCursorError } from './thread-page-errors';
 import type { KernelClient, ReadingPageResponse } from '@rezics/client';
-import type { DocumentMentions } from '@rezics/ui/document-body';
 import { boardProblemCode } from './board-reading';
-import { readDocumentMentions } from '../kernel/mentions';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
@@ -13,6 +11,7 @@ import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 import { sameThreadSlug, threadTitle } from './thread-href';
 import { readThreadDocumentMedia, type ThreadDocumentMedia } from './document-media-read';
 import { readingConversationActivity, type ConversationActivityDisplay } from './activity';
+import { threadDocumentMentionPage, type ThreadDocumentMentionPage } from './thread-document-mentions';
 
 type ThreadResource = ReturnType<KernelClient['threads']>;
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -41,7 +40,7 @@ export type LoadedThreadPage = {
   composed?: ThreadPageObservation;
   conversationActivity?: ConversationActivityDisplay;
   authors: import('../identity/read').PageAuthors;
-  mentions: DocumentMentions;
+  mentions: ThreadDocumentMentionPage | null;
   documentMedia?: ThreadDocumentMedia;
   viewerId?: string;
   verification: VerificationConfig;
@@ -177,14 +176,14 @@ export async function loadThreadPage(
     !posts.posts.some((post) => post.id === data.post && post.availability === 'available')
   )
     linkedPostUnavailable = true;
-  const [mentions, documentMedia] = await Promise.all([
-    readDocumentMentions(
-      client,
-      posts.posts.map((post) => post.body),
-    ),
-    readThreadDocumentMedia(client, posts.posts, authorization),
-  ]);
+  const documentMedia = await readThreadDocumentMedia(client, posts.posts, authorization);
   signal.throwIfAborted();
+  const selectedPostId =
+    data.post !== undefined &&
+    !linkedPostUnavailable &&
+    posts.posts.some((post) => post.id === data.post && post.availability === 'available')
+      ? data.post
+      : undefined;
   // Only identities named by readable posts can enter this page's byline map.
   const disclosed = new Set(posts.posts.flatMap((post) => (post.availability === 'available' ? [post.authorId] : [])));
   const authors =
@@ -198,7 +197,7 @@ export async function loadThreadPage(
     authors,
     composed: { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf },
     conversationActivity: readingConversationActivity(readingPage),
-    mentions,
+    mentions: threadDocumentMentionPage(readingPage, selectedPostId),
     documentMedia,
     thread,
     ...context,

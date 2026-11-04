@@ -149,7 +149,7 @@ function redactThreadReadingPage(page: ThreadReadingPage): ThreadReadingPage {
     ...safePage,
     thread: safeThread,
     posts: { ...page.posts, posts: safePosts },
-    mentions: {},
+    mentions: null,
     authors: {},
     subjects: [],
     provenanceSubjects: [],
@@ -216,7 +216,7 @@ export function ThreadReading({
     authors,
     provenanceSubjects,
     verification,
-    mentions: currentMentions,
+    mentions: currentMentionPage,
     now,
     documentMedia,
   } = page;
@@ -251,6 +251,7 @@ export function ThreadReading({
   // Private data is consumed only while the session still says signed in.
   const observationMatches =
     !page.composed || threadPageViewerMatches(page.composed, session === 'signed-in' ? personal?.viewerId : null);
+  const currentMentions = pageCurrent && observationMatches ? currentMentionPage : null;
   const replyAvailable =
     !page.composed ||
     (observationMatches &&
@@ -458,6 +459,9 @@ export function ThreadReading({
                       }
                       reactionViewerAvailable={reactionViewerAvailable}
                       mentions={currentMentions}
+                      pageIndex={row.index}
+                      pageQueryKey={activityQueryKey}
+                      mentionPageCurrent={pageCurrent && observationMatches}
                       documentMedia={documentMedia}
                       now={now}
                       viewerId={commandViewerId ?? undefined}
