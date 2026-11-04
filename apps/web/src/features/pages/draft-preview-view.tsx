@@ -592,7 +592,7 @@ export function DraftPreviewPanel({
                 target={active.input.target}
                 locale={active.input.locale}
                 options={options}
-                page={result?.ok ? result.page : undefined}
+                {...(result?.ok ? { page: result.page } : {})}
               />
               {candidateChanged && (
                 <div role="status" className="space-y-2 rounded-md border border-border p-3 text-sm">

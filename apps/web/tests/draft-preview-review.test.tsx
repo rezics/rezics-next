@@ -6,6 +6,7 @@ import {
   platformRegistry,
   PROFILE_FORMAT,
   profileDigest,
+  resolveView,
   type CompositionDocument,
   type PresentationProfile,
 } from '@rezics/composition';
@@ -40,7 +41,8 @@ const lease = {
 function pageFor(input: DraftPreviewInput) {
   const digest = profileDigest(input.profile);
   const selectedView = 'view' in input.target ? (input.target.view ?? 'overview') : 'overview';
-  const document = input.profile.generic.views?.[selectedView] ?? documentFor('Captured profile');
+  const witness = 'route' in input.target ? { route: input.target.route } : {};
+  const document = resolveView(input.profile, witness, selectedView)?.document ?? documentFor('Captured profile');
   const reads = Object.fromEntries(
     Object.keys(planReads(platformRegistry, document, { subject: subjectId }).reads).map((key) => [
       key,
