@@ -1,6 +1,15 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Value } from 'typebox/value';
 import { continuePageSchema } from '../../src/library/transport-contract.ts';
+
+const source = resolve(import.meta.dir, '../../src');
+const transpiler = new Bun.Transpiler({ loader: 'ts', target: 'bun' });
+
+function runtimeImports(file: string): string[] {
+  return transpiler.scanImports(readFileSync(resolve(source, file), 'utf8')).map(({ path }) => path);
+}
 
 const page = {
   subjects: [
@@ -42,4 +51,10 @@ test('Continue response keeps BASIC closed and permits only the nullable native 
       subjects: [{ ...page.subjects[0], subject: { ...header, privatePins: [] } }],
     }),
   ).toBe(false);
+});
+
+test('Continue and Feed transport contracts do not depend on route handlers for schemas', () => {
+  expect(runtimeImports('library/continue-routes.ts')).not.toContain('./progress-routes.ts');
+  expect(runtimeImports('content/feed-contract.ts')).not.toContain('../library/continue-routes.ts');
+  expect(runtimeImports('library/transport-contract.ts')).not.toContain('./progress-routes.ts');
 });
