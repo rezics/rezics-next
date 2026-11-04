@@ -3,9 +3,14 @@ import type { Pool, PoolClient } from 'pg';
 type QueryInput = string | { text?: string };
 
 function isPoolClient(client: unknown): client is PoolClient {
-  return typeof client === 'object' && client !== null &&
-    'query' in client && typeof client.query === 'function' &&
-    'release' in client && typeof client.release === 'function';
+  return (
+    typeof client === 'object' &&
+    client !== null &&
+    'query' in client &&
+    typeof client.query === 'function' &&
+    'release' in client &&
+    typeof client.release === 'function'
+  );
 }
 
 /** Runs a native transition after the first current bounded public-identity read in an Inbox request. */
@@ -35,7 +40,10 @@ export async function afterInboxActorProfile<T>(
                 const input = queryArgs[0] as QueryInput;
                 const text = typeof input === 'string' ? input : (input?.text ?? '');
                 const actorProfile =
-                  !transitioned && text.includes('WITH ORDINALITY') && text.includes('FROM access.account') && text.includes('operatorId');
+                  !transitioned &&
+                  text.includes('WITH ORDINALITY') &&
+                  text.includes('FROM access.account') &&
+                  text.includes('operatorId');
                 const result = Reflect.apply(target.query, target, queryArgs);
                 if (!actorProfile || queryArgs.some((value) => typeof value === 'function')) return result;
                 return Promise.resolve(result).then(async (value) => {

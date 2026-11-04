@@ -82,7 +82,13 @@ const item = t.Object({
       { additionalProperties: false },
     ),
     t.Object(
-      { state: t.Literal('system'), displayName: t.Literal('Moderation team'), handle: t.Null(), avatar: t.Null(), avatarUrl: t.Null() },
+      {
+        state: t.Literal('system'),
+        displayName: t.Literal('Moderation team'),
+        handle: t.Null(),
+        avatar: t.Null(),
+        avatarUrl: t.Null(),
+      },
       { additionalProperties: false },
     ),
   ]),

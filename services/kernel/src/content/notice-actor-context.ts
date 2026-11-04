@@ -28,7 +28,13 @@ export type NoticeActor =
   | Readonly<{ state: 'system'; displayName: 'Moderation team'; handle: null; avatar: null; avatarUrl: null }>;
 
 export function unavailableNoticeActor(): NoticeActor {
-  return { state: 'withheld', displayName: 'Former or unavailable account', handle: null, avatar: null, avatarUrl: null };
+  return {
+    state: 'withheld',
+    displayName: 'Former or unavailable account',
+    handle: null,
+    avatar: null,
+    avatarUrl: null,
+  };
 }
 
 function unchanged(before: PublicIdentityObservation | undefined, after: PublicIdentityObservation) {
@@ -39,9 +45,13 @@ function unchanged(before: PublicIdentityObservation | undefined, after: PublicI
     before.displayName !== after.displayName ||
     before.automated !== after.automated ||
     before.operatorId !== after.operatorId
-  ) return false;
-  return before.avatarMediaId === after.avatarMediaId &&
-    before.nativeState === after.nativeState && before.authnFenced === after.authnFenced;
+  )
+    return false;
+  return (
+    before.avatarMediaId === after.avatarMediaId &&
+    before.nativeState === after.nativeState &&
+    before.authnFenced === after.authnFenced
+  );
 }
 
 /** Two identical bounded Account observations surround Content's admitted Media read. */
@@ -53,30 +63,48 @@ export async function readNoticeActors(
   if (ids.length > 50) throw new RangeError('At most 50 notice identities');
   const unique = [...new Set(ids.filter((id) => routeOf(id) !== null))];
   if (!unique.length) return new Map();
-  return within(deadline, () => withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    const read = () => readPublicIdentityObservations(client, unique);
-    const before = new Map((await read()).map((row) => [row.id, row]));
-    const mediaIds = [...new Set([...before.values()].flatMap((row) =>
-      row.state === 'active' && row.kind === 'actor' &&
-      row.nativeState === 'active' && !row.authnFenced && row.avatarMediaId
-        ? [row.avatarMediaId] : [],
-    ))];
-    const avatars = mediaIds.length ? await readAvatarSummaries(client, mediaIds) : new Map<string, AvatarSummary | null>();
-    const after = new Map((await read()).map((row) => [row.id, row]));
-    const result = new Map<string, NoticeActor>();
-    for (const id of unique) {
-      const current = after.get(id);
-      if (!current || current.state !== 'active' || current.kind !== 'actor' || !unchanged(before.get(id), current)) continue;
-      const avatar = current.nativeState === 'active' &&
-        !current.authnFenced && current.avatarMediaId ? avatars.get(current.avatarMediaId) ?? null : null;
-      result.set(id, {
-        state: 'available', accountId: id,
-        displayName: current.displayName?.trim() || current.handle || 'Member',
-        handle: current.handle, automated: current.automated,
-        avatar: avatar ? { ...avatar, variants: [...avatar.variants] } : null, avatarUrl: null,
-      });
-    }
-    return result;
-  }));
+  return within(deadline, () =>
+    withConnection(pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      const read = () => readPublicIdentityObservations(client, unique);
+      const before = new Map((await read()).map((row) => [row.id, row]));
+      const mediaIds = [
+        ...new Set(
+          [...before.values()].flatMap((row) =>
+            row.state === 'active' &&
+            row.kind === 'actor' &&
+            row.nativeState === 'active' &&
+            !row.authnFenced &&
+            row.avatarMediaId
+              ? [row.avatarMediaId]
+              : [],
+          ),
+        ),
+      ];
+      const avatars = mediaIds.length
+        ? await readAvatarSummaries(client, mediaIds)
+        : new Map<string, AvatarSummary | null>();
+      const after = new Map((await read()).map((row) => [row.id, row]));
+      const result = new Map<string, NoticeActor>();
+      for (const id of unique) {
+        const current = after.get(id);
+        if (!current || current.state !== 'active' || current.kind !== 'actor' || !unchanged(before.get(id), current))
+          continue;
+        const avatar =
+          current.nativeState === 'active' && !current.authnFenced && current.avatarMediaId
+            ? (avatars.get(current.avatarMediaId) ?? null)
+            : null;
+        result.set(id, {
+          state: 'available',
+          accountId: id,
+          displayName: current.displayName?.trim() || current.handle || 'Member',
+          handle: current.handle,
+          automated: current.automated,
+          avatar: avatar ? { ...avatar, variants: [...avatar.variants] } : null,
+          avatarUrl: null,
+        });
+      }
+      return result;
+    }),
+  );
 }

@@ -290,7 +290,9 @@ export async function discloseNoticeCandidates(
   });
   const actorIds = eligible
     .slice(0, actorLimit)
-    .flatMap((candidate) => (candidate.kind !== 'moderation_decision' && candidate.actor_id ? [candidate.actor_id] : []));
+    .flatMap((candidate) =>
+      candidate.kind !== 'moderation_decision' && candidate.actor_id ? [candidate.actor_id] : [],
+    );
   const actors =
     options.includeActors === false
       ? new Map<string, NoticeActor>()

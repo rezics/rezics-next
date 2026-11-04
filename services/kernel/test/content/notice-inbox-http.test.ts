@@ -138,7 +138,11 @@ test('the Inbox and unread summary omit notices without a current disclosed sour
 test('mounted list and exact notice independently admit native actor avatars and the original target', async () => {
   await seed(0);
   const target = await fixture.target();
-  for (const [id, action] of [[target.board, 'board:read'], [target.thread, 'thread:read'], [target.post, 'post:read']])
+  for (const [id, action] of [
+    [target.board, 'board:read'],
+    [target.thread, 'thread:read'],
+    [target.post, 'post:read'],
+  ])
     await fixture.grant(id!, [action!]);
   const actor = fixture.managerId;
   const actorRoute = routeOf(actor)!;
@@ -148,9 +152,14 @@ test('mounted list and exact notice independently admit native actor avatars and
       (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,
        byte_count,actual_byte_count,sha256,state,key,transaction_id,width,height,thumbhash,average_color)
      VALUES ($1,$2,$3,$3,$2::text,'avatar','image/png',256,256,repeat('a',64),'available',
-             'unused-original-key',$2,64,64,decode('010203','hex'),'#123456')`, [actorRoute, media, actor],
+             'unused-original-key',$2,64,64,decode('010203','hex'),'#123456')`,
+    [actorRoute, media, actor],
   );
-  await db.admin.query('UPDATE access.account SET avatar=$3 WHERE route=$1 AND account_id=$2', [actorRoute, actor, media]);
+  await db.admin.query('UPDATE access.account SET avatar=$3 WHERE route=$1 AND account_id=$2', [
+    actorRoute,
+    actor,
+    media,
+  ]);
   const base = `/v1/accounts/${fixture.accountId}/notifications`;
   const ids = Array.from({ length: 4 }, () => newId(routeOf(fixture.accountId)!));
   await db.admin.query(
@@ -166,20 +175,35 @@ test('mounted list and exact notice independently admit native actor avatars and
     const expected = {
       actor: { state: 'available', accountId: actor, avatar: { media, width: 64, height: 64 }, avatarUrl: null },
       target: { state: 'available', threadId: target.thread, postId: target.post, boardId: target.board },
-      actions: { open: { kind: 'thread_post', threadId: target.thread, postId: target.post } }, unread: true,
+      actions: { open: { kind: 'thread_post', threadId: target.thread, postId: target.post } },
+      unread: true,
     };
     for (const item of page.value.items) expect(item).toMatchObject(expected);
     const exact = await call(`${base}/${ids[0]}`);
     expect(exact.response.status).toBe(200);
     expect(exact.value).toMatchObject({ viewer: { state: 'current' }, notice: expected });
-    await db.admin.query('UPDATE content.media SET taken_down=true WHERE route=$1 AND media_id=$2', [actorRoute, media]);
-    expect((await call(`${base}/${ids[0]}`)).value.notice).toMatchObject({ ...expected, actor: { state: 'available', avatar: null } });
-    await db.admin.query("UPDATE access.account SET state='pending' WHERE route=$1 AND account_id=$2", [actorRoute, actor]);
+    await db.admin.query('UPDATE content.media SET taken_down=true WHERE route=$1 AND media_id=$2', [
+      actorRoute,
+      media,
+    ]);
     expect((await call(`${base}/${ids[0]}`)).value.notice).toMatchObject({
-      ...expected, actorId: null, actor: { state: 'withheld', displayName: 'Former or unavailable account', avatar: null },
+      ...expected,
+      actor: { state: 'available', avatar: null },
+    });
+    await db.admin.query("UPDATE access.account SET state='pending' WHERE route=$1 AND account_id=$2", [
+      actorRoute,
+      actor,
+    ]);
+    expect((await call(`${base}/${ids[0]}`)).value.notice).toMatchObject({
+      ...expected,
+      actorId: null,
+      actor: { state: 'withheld', displayName: 'Former or unavailable account', avatar: null },
     });
   } finally {
-    await db.admin.query("UPDATE access.account SET state='active',avatar=NULL WHERE route=$1 AND account_id=$2", [actorRoute, actor]);
+    await db.admin.query("UPDATE access.account SET state='active',avatar=NULL WHERE route=$1 AND account_id=$2", [
+      actorRoute,
+      actor,
+    ]);
   }
 });
 
@@ -369,7 +393,10 @@ test('native inbox keeps readable public notices, hides a revoked protected noti
     }>;
     const publicNotice = restoredItems.find((item) => item.currentTarget.postId === publicReply.id)!;
     expect(publicNotice.currentActor).toMatchObject({
-      state: 'available', accountId: people.replier.id, avatar: null, avatarUrl: null,
+      state: 'available',
+      accountId: people.replier.id,
+      avatar: null,
+      avatarUrl: null,
     });
     expect(publicNotice.currentActor.displayName.length).toBeGreaterThan(0);
     expect(publicNotice.currentTarget).toMatchObject({
