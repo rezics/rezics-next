@@ -291,9 +291,7 @@ test('Actual server exports certify only the exact native preparation, preserve 
     expect(viewerCredential(currentRequest)).toBe('Bearer credential-A');
     expect(calls).toHaveLength(count);
     preparation = 'unavailable';
-    await expect(actions.readCopiesCurrent({ data: {} })).rejects.toMatchObject({
-      code: 'session_unavailable',
-    });
+    await expect(actions.readCopiesCurrent({ data: {} })).rejects.toThrow('session_unavailable');
     expect(await actions.readCopyDetailCurrent({ data: { id: id(1) } })).toMatchObject({
       sessionSubject: null,
       result: { ok: false, reason: 'unavailable' },
@@ -525,6 +523,8 @@ test('The actual Copies route retires retained private rows and editor state on 
     )![1] as { onClick: () => void };
     await click(m.library_copy_edit());
     const oldDetail = details.at(-1)!;
+    await refetch();
+    await tick();
     const oldList = lists.at(-1)!;
     await show(viewer('B'));
     absent('A');
