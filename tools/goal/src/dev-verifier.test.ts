@@ -34,7 +34,7 @@ const repositoryPackageManager = (JSON.parse(readFileSync(join(repositoryRoot, '
   packageManager: string;
 }).packageManager;
 const repositoryBunPackage = join(repositoryRoot, 'node_modules/bun');
-const repositoryBunBinary = join(repositoryBunPackage, 'bin/bun.exe');
+const fixturePackageManager = `bun@${Bun.version}`;
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -57,14 +57,14 @@ function repo() {
   mkdirSync(join(root, 'toolchain/bin'), { recursive: true });
   writeFileSync(
     join(root, 'toolchain/package.json'),
-    JSON.stringify({ name: 'bun', version: repositoryPackageManager.slice('bun@'.length), bin: { bun: 'bin/bun.exe' } }),
+    JSON.stringify({ name: 'bun', version: Bun.version, bin: { bun: 'bin/bun.exe' } }),
   );
-  writeFileSync(join(root, 'toolchain/bin/bun.exe'), `#!/bin/sh\nexec '${repositoryBunBinary}' "$@"\n`, { mode: 0o755 });
+  writeFileSync(join(root, 'toolchain/bin/bun.exe'), `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
   writeFileSync(
     join(root, 'package.json'),
     JSON.stringify({
       name: 'verifier-fixture',
-      packageManager: repositoryPackageManager,
+      packageManager: fixturePackageManager,
       dependencies: { bun: 'file:./toolchain' },
     }),
   );
