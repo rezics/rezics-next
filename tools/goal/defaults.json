@@ -151,7 +151,8 @@
       "wallMs": 43200000
     },
     "termspacesCommand": "termspaces",
-    "devPrelandingTypecheck": false
+    "devPrelandingTypecheck": false,
+    "devLandingBootCheck": false
   },
   "codex": {
     "serviceTier": "default",

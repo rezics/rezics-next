@@ -1606,6 +1606,10 @@ export class MergeTrain {
         appendFileSync(logPath, 'Root typecheck infrastructure failure; retrying once on the same candidate\n');
       }
     }
+    if (this.options.integration?.devLandingBootCheck !== true) {
+      appendFileSync(logPath, 'Landing boot check is off\n');
+      return { ...passed, ...(typecheckDisposition ? { typecheckDisposition } : {}) };
+    }
     const boot = this.configuredLandingBoot();
     const bootCommand = landingBootCommand(changed, boot, policy.brief);
     if (!boot || !bootCommand) return { ...passed, ...(typecheckDisposition ? { typecheckDisposition } : {}) };

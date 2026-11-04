@@ -9,6 +9,7 @@ const kernelFile = 'services/kernel/src/entry.ts';
 const docsFile = 'docs/note.md';
 
 test('the landing boot paths and command come from policy', () => {
+  expect(defaults.integration.devLandingBootCheck).toBe(false);
   expect(boot).toEqual({
     paths: ['services/kernel/**', 'services/auth/**', 'packages/**'],
     command: ['bun', 'test', 'services/kernel/test/boot'],
@@ -27,6 +28,7 @@ test('a kernel batch runs the policy boot check after typecheck on the combined 
     h.ensureDev();
     h.settings.integration.batchSize = 2;
     h.settings.integration.devPrelandingTypecheck = true;
+    h.settings.integration.devLandingBootCheck = true;
     Object.assign(h.settings, {
       devLandingBoot: { paths: ['services/kernel/**'], command: ['boot-fixture'] },
     });
@@ -58,6 +60,7 @@ test('a failing boot check leaves dev unchanged and returns the error to the res
   try {
     h.ensureDev();
     h.settings.integration.batchSize = 2;
+    h.settings.integration.devLandingBootCheck = true;
     Object.assign(h.settings, {
       devLandingBoot: { paths: ['services/kernel/**'], command: ['boot-fixture'] },
     });
@@ -96,6 +99,7 @@ test('a candidate may keep or reduce boot failures already present on its dev ba
     try {
       h.ensureDev();
       h.settings.integration.batchSize = 2;
+      h.settings.integration.devLandingBootCheck = true;
       Object.assign(h.settings, {
         devLandingBoot: { paths: ['services/kernel/**'], command: ['boot-fixture'] },
       });
@@ -131,6 +135,7 @@ test('a batch that touches none of the policy boot paths does not run it', async
   try {
     h.ensureDev();
     h.settings.integration.batchSize = 2;
+    h.settings.integration.devLandingBootCheck = true;
     Object.assign(h.settings, {
       devLandingBoot: { paths: [...boot.paths], command: ['boot-fixture'] },
     });
@@ -145,6 +150,32 @@ test('a batch that touches none of the policy boot paths does not run it', async
     });
     expect(commands.some((command) => command[0] === 'boot-fixture')).toBe(false);
     expect(h.outcomes.map(({ passed }) => passed)).toEqual([true, true]);
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
+
+test('the landing boot check is off by default and skips its command and baseline', async () => {
+  const h = integrationHarness();
+  try {
+    h.ensureDev();
+    h.settings.integration.batchSize = 2;
+    expect(h.settings.integration.devLandingBootCheck).toBe(false);
+    Object.assign(h.settings, {
+      devLandingBoot: { paths: ['services/kernel/**'], command: ['boot-fixture'] },
+    });
+    const kernel = h.dispatch(kernelFile);
+    const docs = h.dispatch(docsFile);
+    await h.start(kernel);
+    await h.start(docs);
+    const commands: string[][] = [];
+    await h.train(async (command) => {
+      commands.push([...command]);
+      return { passed: true, output: '', timedOut: false };
+    });
+    expect(commands.filter((command) => command[0] === 'boot-fixture')).toEqual([]);
+    const log = readFileSync(h.outcomes.find(({ taskId }) => taskId === kernel.id)!.logPath, 'utf8');
+    expect(log).toContain('Landing boot check is off');
   } finally {
     h.dispose();
   }

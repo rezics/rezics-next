@@ -132,6 +132,7 @@ export type Settings = {
     batchAcceptanceConcurrency: number;
     devLandingChecks: boolean;
     devPrelandingTypecheck?: boolean;
+    devLandingBootCheck?: boolean;
     gateConcurrency: number;
     gateTimeoutMs: number;
     managerDirectory: string;

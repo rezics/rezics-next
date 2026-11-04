@@ -91,8 +91,10 @@ endpoints as MCP servers on fresh launches and resumes. The account's own MCP se
 Playwright, stay enabled; consultations still ignore the account configuration.
 
 The dev landing train runs the root typecheck on each final candidate only when `integration.devPrelandingTypecheck`
-is true, then the policy boot check when changed paths match `devLandingBoot.paths`: once for a combined batch or once
-for an individual landing. With the setting off, each candidate logs `Prelanding typecheck skipped`; the independent
+is true, then the policy boot check only when `integration.devLandingBootCheck` is true and changed paths match
+`devLandingBoot.paths`: once for a combined batch or once for an individual landing. Both settings default to false;
+the boot check stays off because its suite took 300–320 seconds on 2026-11-04, above its two-minute budget. The
+supermanager enables it once the suite fits that budget. Each candidate logs when the boot check is off; the independent
 verifier runs the root typecheck after integration. The train does not run affected, sibling, acceptance, native,
 import or page-story checks before dev advances. Promotion runs the full gate on the candidate before advancing
 `main`.
@@ -288,9 +290,11 @@ protection and controller commits; undeclared risk areas remain closed.
 When a worker finishes, the train captures the workspace branch head and merges it with dev in the train's own
 worktree. Before advancing dev, it runs one direct root typecheck on the final combined candidate only when
 `integration.devPrelandingTypecheck` is true, including any conflict resolution and formatting, then the
-`devLandingBoot` command when those changed paths match its trigger patterns. `TYPECHECK_CHANGED` contains the actual
-paths from the batch base to that candidate. The selected boot guard remains mandatory for single, shared-workspace
-and batched landings, including when `integration.devLandingChecks` is false. A product compiler failure or a new boot
+`devLandingBoot` command only when `integration.devLandingBootCheck` is true and those changed paths match its trigger
+patterns. `TYPECHECK_CHANGED` contains the actual paths from the batch base to that candidate. The boot guard defaults
+off because the measured suite takes 300–320 seconds, longer than its two-minute budget; the supermanager enables it
+once the suite fits. When enabled, it applies to single, shared-workspace and batched landings, including when
+`integration.devLandingChecks` is false. A product compiler failure or a new boot
 failure leaves dev unchanged and returns its first failing entry to the affected task; unrelated batch members remain
 queued. The train compares normalized boot error fingerprints with the current dev
 base, caches that base result per command, and allows landing when candidate failures are a subset of existing base
@@ -501,8 +505,9 @@ protocol or representation meaning; they are not operator limits.
 | `integration.managerLimits.turnsWithoutDecision`      | `10`                                 | Manager turns allowed without a decision.                                                                                                                                                   |
 | `integration.managerLimits.wallMs`                    | `43200000`                           | Manager session wall deadline (ms).                                                                                                                                                         |
 | `integration.devPrelandingTypecheck`                  | `false`                              | Run the dev compiler guard before landing.                                                                                                                                                  |
+| `integration.devLandingBootCheck`                     | `false`                              | Run the landing boot guard; enable after its suite fits the two-minute budget.                                                                                                              |
 | `devLandingBoot.paths`                                | kernel, auth, packages               | Changed-path patterns that select the landing boot check.                                                                                                                                   |
-| `devLandingBoot.command`                              | `bun test services/kernel/test/boot` | Start-up and readiness command run after the root typecheck on the combined candidate.                                                                                                      |
+| `devLandingBoot.command`                              | `bun test services/kernel/test/boot` | Start-up and readiness command run on the combined candidate when the guard is enabled.                                                                                                    |
 | `codex.compactTokens.sol`                             | `160000`                             | Sol context compaction token threshold.                                                                                                                                                     |
 | `codex.compactTokens.luna`                            | `200000`                             | Luna context compaction token threshold.                                                                                                                                                    |
 | `codex.solContextWindow`                              | `500000`                             | Sol context window tokens.                                                                                                                                                                  |
@@ -1313,8 +1318,10 @@ created 69,426 `node_modules` entries per private install (median 4.956 s) versu
 
 Workers run their task acceptance command once after their last relevant edit. Each single, shared-workspace or batch
 dev landing runs the root typecheck on its final candidate when `integration.devPrelandingTypecheck` is true, then
-`devLandingBoot.command` when changed paths match `devLandingBoot.paths`. Conflict resolution and
-formatting are included in the checked tree. With the typecheck setting off, the train logs the skip and the
+`devLandingBoot.command` only when `integration.devLandingBootCheck` is true and changed paths match
+`devLandingBoot.paths`. The boot guard defaults to off because the measured suite takes 300–320 seconds, longer than
+its two-minute budget; the supermanager enables it once the suite fits. Conflict resolution and formatting are included
+in the checked tree. With the typecheck setting off, the train logs the skip and the
 independent verifier runs the root typecheck after integration. A missing local `.sql` declaration followed by
 unchanged-file TS18046/TS7006 cascades is recorded as infrastructure and does not fail the task. No affected, sibling,
 acceptance, native, import, or page-story validation runs before the dev ref advances. Other infrastructure failures
