@@ -126,15 +126,15 @@ export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale 
         ? { viewer: 'signed-in', actions: { state: 'unavailable' } }
         : active === 'action-denied'
           ? { viewer: 'signed-in', actions: { state: 'ready', actions: [] } }
-        : active === 'signed-out'
-          ? { viewer: 'signed-out', actions: { state: 'ready', actions: [] } }
-          : {
-              viewer: 'signed-in',
-              actions: {
-                state: 'ready',
-                actions: [{ action: 'statement:propose', operations: ['subject.terms'] }],
+          : active === 'signed-out'
+            ? { viewer: 'signed-out', actions: { state: 'ready', actions: [] } }
+            : {
+                viewer: 'signed-in',
+                actions: {
+                  state: 'ready',
+                  actions: [{ action: 'statement:propose', operations: ['subject.terms'] }],
+                },
               },
-            },
     submit: (command: TermsCommand) => patchSubjectTerms(client, request(), {}, command, locale),
   };
   return {

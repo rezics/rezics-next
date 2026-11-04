@@ -49,13 +49,7 @@ export const loadCatalogueTerms = createServerFn({ method: 'GET', strict: false 
       if (data.expectedReader === null && data.session) return { state: 'denied' };
       const client = kernelClient();
       const authorization = data.expectedReader === null ? undefined : (viewerCredential(request) ?? undefined);
-      const read = await readSubjectTerms(
-        client,
-        data.id,
-        requestLocale() ?? 'en',
-        authorization,
-        data.session,
-      );
+      const read = await readSubjectTerms(client, data.id, requestLocale() ?? 'en', authorization, data.session);
       return read;
     } catch {
       return { state: 'unavailable' };

@@ -16,7 +16,11 @@ import {
   partitionTermChanges,
   resolutionKey,
 } from '../src/features/catalogue/subject-terms-resolution';
-import { patchSubjectTerms, readSubjectTerms, readTermsPageAuthority } from '../src/features/catalogue/subject-terms-request';
+import {
+  patchSubjectTerms,
+  readSubjectTerms,
+  readTermsPageAuthority,
+} from '../src/features/catalogue/subject-terms-request';
 import type { SessionEnv } from '../src/session/client';
 
 function ready(read: TermsRead) {

@@ -37,13 +37,5 @@ export const SubjectTermsSession = candidateSession(function SubjectTermsSession
     }),
     [csrfToken, work],
   );
-  return (
-    <SubjectTermsPage
-      id={id}
-      locale={locale}
-      session={state}
-      typeLabels={typeLabels}
-      transport={transport}
-    />
-  );
+  return <SubjectTermsPage id={id} locale={locale} session={state} typeLabels={typeLabels} transport={transport} />;
 });

@@ -216,7 +216,10 @@ test('Multilingual terms show actionable field-specific corrections without chan
         const fiberKey = keys.find((key) => key.startsWith('__reactFiber$'));
         const fiber = fiberKey
           ? (Reflect.get(element, fiberKey) as
-              | { memoizedProps?: { onChange?: (event: unknown) => unknown }; pendingProps?: { onChange?: (event: unknown) => unknown } }
+              | {
+                  memoizedProps?: { onChange?: (event: unknown) => unknown };
+                  pendingProps?: { onChange?: (event: unknown) => unknown };
+                }
               | undefined)
           : undefined;
         const onChange = props?.onChange ?? fiber?.memoizedProps?.onChange ?? fiber?.pendingProps?.onChange;

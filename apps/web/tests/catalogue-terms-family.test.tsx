@@ -166,7 +166,9 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     await select(nameA, m.catalogue_terms_action(), 'set');
     await select(nameB, m.catalogue_terms_action(), 'set');
     await settle(
-      () => !button(a, m.catalogue_terms_save()).disabled && (b.textContent?.includes(m.catalogue_terms_action_unavailable()) ?? false),
+      () =>
+        !button(a, m.catalogue_terms_save()).disabled &&
+        (b.textContent?.includes(m.catalogue_terms_action_unavailable()) ?? false),
     );
     await replace(nameB, m.catalogue_create_label(), 'Draft during access outage');
     expect(button(b, m.catalogue_terms_save()).disabled).toBe(true);

@@ -275,8 +275,7 @@ function SubjectTermsPageLive({
       etag: authoritySnapshot!.etag,
       authority: transport.readAuthority ? await transport.readAuthority() : unavailableTermsAuthority,
     }),
-    enabled:
-      typeof window !== 'undefined' && !!authoritySnapshot && !saved && !authoritySnapshot.profileHref,
+    enabled: typeof window !== 'undefined' && !!authoritySnapshot && !saved && !authoritySnapshot.profileHref,
     retry: false,
     staleTime: Infinity,
     gcTime: 0,
@@ -449,7 +448,8 @@ function SubjectTermsPageLive({
       failure?.reason !== 'conflict' &&
       !(failure?.reason === 'unavailable' && pending.current),
   };
-  const uncertain = (unknownPending && pending.current !== null) || (failure?.reason === 'unavailable' && pending.current !== null);
+  const uncertain =
+    (unknownPending && pending.current !== null) || (failure?.reason === 'unavailable' && pending.current !== null);
   const authority = authoritySnapshot ? authorityFor(authoritySnapshot) : unavailableTermsAuthority;
   const correctionAllowed = !!authoritySnapshot && termsCorrectionAllowed(authority, authoritySnapshot);
   const isCurrentDecision = (decision: LocalTermsDecision) => {
@@ -835,12 +835,7 @@ function SubjectTermsPageLive({
       if (!stale) setComparison(undefined);
       setFailure(undefined);
       const result = await transport.submit(command);
-      if (
-        !lifetime.active() ||
-        currentVisit.current !== visit ||
-        currentReadScope.current !== readScope
-      )
-        return;
+      if (!lifetime.active() || currentVisit.current !== visit || currentReadScope.current !== readScope) return;
       if (result.ok) {
         setSavedState({ transportKey, result });
         pending.current = null;
@@ -870,14 +865,8 @@ function SubjectTermsPageLive({
         }
         if (result.reason === 'denied' || result.reason === 'signed-out' || result.reason === 'concealed') {
           try {
-            const refreshed = transport.readAuthority
-              ? await transport.readAuthority()
-              : unavailableTermsAuthority;
-            if (
-              lifetime.active() &&
-              currentVisit.current === visit &&
-              currentReadScope.current === readScope
-            )
+            const refreshed = transport.readAuthority ? await transport.readAuthority() : unavailableTermsAuthority;
+            if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
               setAuthorityOverride({ visit, transportKey, snapshot, authority: refreshed });
           } catch {
             if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
@@ -886,12 +875,7 @@ function SubjectTermsPageLive({
         }
       }
     } catch {
-      if (
-        !lifetime.active() ||
-        currentVisit.current !== visit ||
-        currentReadScope.current !== readScope
-      )
-        return;
+      if (!lifetime.active() || currentVisit.current !== visit || currentReadScope.current !== readScope) return;
       setFailure({ ok: false, reason: 'unavailable' });
       unknownPendingRef.current = true;
       setUnknownPending(true);
@@ -1145,10 +1129,7 @@ function SubjectTermsPageLive({
           {!saved && session === 'signed-in' && authority.viewer === 'signed-out' && !base.profileHref && (
             <p role="status">
               {m.catalogue_terms_sign_in({}, options)}{' '}
-              <a
-                className={linkClassName}
-                href={`/auth/sign-in?return_to=${encodeURIComponent(`${base.href}/terms`)}`}
-              >
+              <a className={linkClassName} href={`/auth/sign-in?return_to=${encodeURIComponent(`${base.href}/terms`)}`}>
                 {m.account_sign_in({}, options)}
               </a>
             </p>
@@ -1161,7 +1142,9 @@ function SubjectTermsPageLive({
               </a>
             </p>
           )}
-          {!saved && !base.profileHref && session === 'signed-in' &&
+          {!saved &&
+            !base.profileHref &&
+            session === 'signed-in' &&
             (authority.viewer === 'unavailable' || authority.actions.state === 'unavailable') && (
               <section role="status" className="flex min-w-0 flex-wrap items-center gap-2">
                 <p>{m.catalogue_terms_action_unavailable({}, options)}</p>
@@ -1178,7 +1161,9 @@ function SubjectTermsPageLive({
                 </Button>
               </section>
             )}
-          {!saved && !base.profileHref && session === 'signed-in' &&
+          {!saved &&
+            !base.profileHref &&
+            session === 'signed-in' &&
             authority.viewer === 'signed-in' &&
             authority.actions.state === 'ready' &&
             !correctionAllowed && (

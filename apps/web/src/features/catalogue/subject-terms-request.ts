@@ -25,16 +25,14 @@ export async function readTermsPageAuthority(
   authorization?: string,
 ): Promise<TermsPageAuthority> {
   if (viewer === 'signed-out') return { viewer, actions: { state: 'ready', actions: [] } };
-  if (viewer !== 'signed-in' || !authorization)
-    return { viewer: 'unavailable', actions: { state: 'unavailable' } };
+  if (viewer !== 'signed-in' || !authorization) return { viewer: 'unavailable', actions: { state: 'unavailable' } };
   try {
     const result = await client.viewerActions.post(
       { resources: [{ type: 'semantic.context', id: PAGE_GLOBAL_CONTEXT }] },
       { headers: { authorization }, fetch: { cache: 'no-store', redirect: 'manual' } },
     );
     if (result.status === 401) return { viewer: 'signed-out', actions: { state: 'ready', actions: [] } };
-    if (result.error || result.status !== 200)
-      return { viewer, actions: { state: 'unavailable' } };
+    if (result.error || result.status !== 200) return { viewer, actions: { state: 'unavailable' } };
     const resources = result.data?.resources;
     if (!Array.isArray(resources) || resources.length !== 1) return { viewer, actions: { state: 'unavailable' } };
     const resource = resources[0];
