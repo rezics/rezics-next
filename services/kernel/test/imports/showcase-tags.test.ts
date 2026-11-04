@@ -7,10 +7,7 @@ import { bundledDigest } from '@rezics/definitions/bundled';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../../packages/conversion/src/support.ts';
 import { parseAuthoredVndbCopy } from '../../../importer/src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from '../../../importer/src/vndb-tables.ts';
-import {
-  importShowcaseTags,
-  showcaseTagWeightProperty,
-} from '../../../importer/src/showcase-tags.ts';
+import { importShowcaseTags, showcaseTagWeightProperty } from '../../../importer/src/showcase-tags.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
@@ -36,7 +33,8 @@ function tables(associations = baseAssociations) {
     async *rows(provider: 'bangumi' | 'vndb', table: string) {
       if (provider !== 'vndb') return;
       if (table === 'vn') yield { id: 'v410', olang: 'en' };
-      if (table === 'vn_titles') yield { id: 'v410', lang: 'en', official: 't', title: 'Selected public tag work', latin: null };
+      if (table === 'vn_titles')
+        yield { id: 'v410', lang: 'en', official: 't', title: 'Selected public tag work', latin: null };
       if (table === 'entry_meta') yield { id: 'v410', revision: 7, lastmod: '2026-10-24' };
       if (table === 'tags') yield* parseAuthoredVndbCopy('tags', tagsHeader, tagsCopy);
       if (table === 'tags_vn') yield* parseAuthoredVndbCopy('tags_vn', associationHeader, associations);
@@ -191,7 +189,10 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
                 parts: [
                   {
                     property: { id: 'schema:url' },
-                    value: { type: 'value' as const, content: 'https://rezics.com/schemes/vndb/public-tags/other/g311' },
+                    value: {
+                      type: 'value' as const,
+                      content: 'https://rezics.com/schemes/vndb/public-tags/other/g311',
+                    },
                   },
                 ],
               },
@@ -211,7 +212,10 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
                 parts: [
                   {
                     property: { id: 'schema:url' },
-                    value: { type: 'value' as const, content: 'https://rezics.com/schemes/vndb/public-tags/other/g311' },
+                    value: {
+                      type: 'value' as const,
+                      content: 'https://rezics.com/schemes/vndb/public-tags/other/g311',
+                    },
                   },
                 ],
               },
@@ -332,7 +336,9 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
     expect(refreshedWork).toBe(workId);
     await acceptAdopt(workId!, 'schema:genre');
     const afterChange = await candidates(workId!, 'schema:genre');
-    expect(afterChange.candidates.map((item) => item.id).sort()).not.toEqual(original.candidates.map((item) => item.id).sort());
+    expect(afterChange.candidates.map((item) => item.id).sort()).not.toEqual(
+      original.candidates.map((item) => item.id).sort(),
+    );
     const eroUrl = (await candidates(eroId, 'schema:url')).candidates.find((item) => item.source)!;
     const retracted = await editor.http(`/v1/statements/${eroUrl.id}/retract`, {});
     expect(retracted.status).toBe(200);
@@ -358,7 +364,9 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
     });
     expect(wrong.bindings.concepts).toEqual([]);
     const restored = await candidates(workId!, 'schema:genre');
-    expect(restored.candidates.filter((item) => !item.retracted && item.statement.value.content === wrongId)).toEqual([]);
+    expect(restored.candidates.filter((item) => !item.retracted && item.statement.value.content === wrongId)).toEqual(
+      [],
+    );
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

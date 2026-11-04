@@ -197,7 +197,12 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     expect(first.converterRevision).toBe(converter_revision);
     expect(first.weightGap?.property).toBe(showcaseTagWeightProperty);
     expect(first.bindings.concepts.map((item) => item.code).sort()).toEqual(['g311', 'g44']);
-    expect(recorded.filter((item) => item.state === 'adopted').map((item) => item.uri).sort()).toEqual(
+    expect(
+      recorded
+        .filter((item) => item.state === 'adopted')
+        .map((item) => item.uri)
+        .sort(),
+    ).toEqual(
       [
         vndbPublicTagScheme('cont'),
         vndbPublicTagScheme('ero'),

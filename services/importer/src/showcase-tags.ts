@@ -133,11 +133,17 @@ export function parseShowcaseTagKnownBindings(value: unknown): VndbPublicTagKnow
   });
   const seen = new Set<string>();
   const concepts = conceptsValue.map((item) => {
-    ensure(item !== null && typeof item === 'object' && !Array.isArray(item), 'Invalid VNDB public tag concept binding');
+    ensure(
+      item !== null && typeof item === 'object' && !Array.isArray(item),
+      'Invalid VNDB public tag concept binding',
+    );
     const category = Reflect.get(item, 'category');
     const code = Reflect.get(item, 'code');
     const id = Reflect.get(item, 'id');
-    ensure(category === 'cont' || category === 'ero' || category === 'tech', 'Invalid VNDB public tag concept category');
+    ensure(
+      category === 'cont' || category === 'ero' || category === 'tech',
+      'Invalid VNDB public tag concept category',
+    );
     ensure(typeof code === 'string' && tagId.test(code), 'Invalid VNDB public tag concept code');
     ensure(typeof id === 'string' && uuid.test(id), 'Invalid VNDB public tag concept identity');
     const key = `${category}\0${code}`;
@@ -164,7 +170,12 @@ function selectedWorkIds(values: readonly string[]): Set<string> {
 export async function projectShowcaseTagTables(
   input: CrossMediaTables,
   selectedVids: readonly string[],
-): Promise<{ tables: CrossMediaTables; gaps: CrossMediaGap[]; truncated: boolean; dictionary: Map<string, VndbPublicTagDictionaryRow> }> {
+): Promise<{
+  tables: CrossMediaTables;
+  gaps: CrossMediaGap[];
+  truncated: boolean;
+  dictionary: Map<string, VndbPublicTagDictionaryRow>;
+}> {
   const selected = selectedWorkIds(selectedVids);
   const gaps: CrossMediaGap[] = [];
   const truncated = { value: false };
