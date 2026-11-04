@@ -75,7 +75,7 @@ export const Route = createFileRoute('/boards/$id')({
 
 function BoardPage() {
   const page = Route.useLoaderData() as BoardPageLoadResult;
-  const { state: session } = useSession();
+  const session = useSession();
   const location = useLocation();
   const router = useRouter();
   const id = Route.useParams().id;
