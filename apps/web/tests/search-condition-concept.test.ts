@@ -7,6 +7,7 @@ import {
   conditionConceptSelection,
   conditionConceptSuggestionFilter,
   conditionConceptReferenceFor,
+  conditionConceptReferenceForRequest,
   parseConditionConceptReference,
 } from '../src/search/condition-concept-model';
 import { changeStatementProperty } from '../src/search/condition-property-edit';
@@ -118,6 +119,12 @@ describe('Search Concept conditions', () => {
   it('does not reuse a label or identity after a reader or current Concept replacement', () => {
     const stale = { status: 'ready' as const, id: 'concept-old', label: 'Old label', schemes: [{ id: 'scheme-a' }] };
     expect(conditionConceptReferenceFor('concept-new', stale)).toBeUndefined();
+    expect(
+      conditionConceptReferenceForRequest('reader-new:concept-old', 'concept-old', {
+        owner: 'reader-old:concept-old',
+        value: stale,
+      }),
+    ).toBeUndefined();
     expect(parseConditionConceptReference(stale, 'concept-new')).toEqual({
       status: 'unavailable',
       id: 'concept-new',

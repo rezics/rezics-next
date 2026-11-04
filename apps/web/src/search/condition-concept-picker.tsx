@@ -6,7 +6,10 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { Field, FieldLabel, FieldSet } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
-import { conditionConceptSelection } from './condition-concept-model';
+import {
+  conditionConceptReferenceForRequest,
+  conditionConceptSelection,
+} from './condition-concept-model';
 import {
   readConditionConceptReference,
   searchConditionConcepts,
@@ -76,7 +79,7 @@ function ConceptPicker({
   }>();
   const targetId = choice?.id ?? existingId;
   const targetOwner = `${lookup.key}:${targetId ?? ''}`;
-  const reference = referenceState?.owner === targetOwner ? referenceState.value : undefined;
+  const reference = conditionConceptReferenceForRequest(targetOwner, targetId ?? '', referenceState);
   const readyReference = reference?.status === 'ready' ? reference : undefined;
   const selectedScheme = readyReference?.schemes.find((entry) => entry.id === scheme);
   const currentMeaning = statement.concept;

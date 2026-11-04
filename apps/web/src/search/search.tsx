@@ -688,6 +688,7 @@ export function SearchPage({
     enabled: !!conceptFilter && !!data?.conditionMetadata?.digest && !conceptRequiresReader,
     ...(conceptFilter ? { filter: conceptFilter } : {}),
     ...(data?.conditionMetadata?.digest ? { releaseDigest: data.conditionMetadata.digest } : {}),
+    lifetimeKey: JSON.stringify([locale, session, data?.conditionMetadata?.digest, committedState]),
     key: JSON.stringify([
       locale,
       session,

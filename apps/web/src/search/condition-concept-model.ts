@@ -17,10 +17,15 @@ export type ConditionConceptLookup = Readonly<{
   filter?: string | undefined;
   releaseDigest?: string | undefined;
   key: string;
+  lifetimeKey?: string | undefined;
   blocked?: 'scope' | 'private' | 'metadata' | undefined;
 }>;
 
 export type ConditionConceptChoice = Readonly<{ id: string; label: string }>;
+export type ConditionConceptReferenceState = Readonly<{
+  owner: string;
+  value: ConditionConceptReference;
+}>;
 
 export function conditionTypeExtends(
   types: Readonly<Record<string, { bases?: readonly string[] | undefined }>>,
@@ -80,6 +85,16 @@ export function conditionConceptReferenceFor(
   reference: ConditionConceptReference | undefined,
 ): ConditionConceptReference | undefined {
   return reference?.id === requested ? reference : undefined;
+}
+
+/** A matching Concept ID from a retired request still cannot supply this request's labels. */
+export function conditionConceptReferenceForRequest(
+  owner: string,
+  requested: string,
+  state: ConditionConceptReferenceState | undefined,
+): ConditionConceptReference | undefined {
+  if (!state || state.owner !== owner) return undefined;
+  return conditionConceptReferenceFor(requested, state.value);
 }
 
 export function parseConditionConceptReference(input: unknown, requested: string): ConditionConceptReference {
