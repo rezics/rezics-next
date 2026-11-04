@@ -443,6 +443,7 @@ const typed = [
   'PUT /v1/subjects/:id/reaction',
   'DELETE /v1/subjects/:id/reaction',
   'POST /v1/realms/:realmId/rating-questions',
+  'GET /v1/realms/:realmId/rating-questions/management',
   'POST /v1/rating-questions/:questionId/$retire',
   'POST /v1/rating-questions/:questionId/$restore',
   'PUT /v1/rating-questions/:questionId/label',
