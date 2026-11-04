@@ -2,17 +2,18 @@ import { expect, test, mock } from 'bun:test';
 import { act, createElement as h } from 'react';
 import { createRequire } from 'node:module';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { musicContextCreateTypes } from '../src/features/catalogue/music-context-create';
-import { catalogueFileCreateTypes } from '../src/features/catalogue/catalogue-file-create';
-import { conceptCreateTypes } from '../src/features/catalogue/concept-create';
-import { useCreationHost, type CreationRead } from '../src/features/catalogue/creation-host/use-creation-host';
-import { CandidateReaderBoundary } from '../src/subject/candidate-lifetime';
-import { StatementSummary } from '../src/features/catalogue/statement-summary';
+import type { CreationRead } from '../src/features/catalogue/creation-host/use-creation-host';
 import type { StatementInput } from '../src/features/catalogue/statement-editor';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 test('all three creation profiles retain populated type drafts through withdrawal, failure, recovery and reader retirement', async () => {
+  const { musicContextCreateTypes } = await import('../src/features/catalogue/music-context-create');
+  const { catalogueFileCreateTypes } = await import('../src/features/catalogue/catalogue-file-create');
+  const { conceptCreateTypes } = await import('../src/features/catalogue/concept-create');
+  const { useCreationHost } = await import('../src/features/catalogue/creation-host/use-creation-host');
+  const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+  const { StatementSummary } = await import('../src/features/catalogue/statement-summary');
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window();
