@@ -18,7 +18,7 @@ const [{ SubjectPage }, { catalogueFileReaderDefinitionsKey }] = await Promise.a
   import('../src/features/catalogue/catalogue-file-reader/reader'),
 ]);
 
-function ordinaryPage(publicRead: SubjectRead, relationRows: readonly unknown[] = []): SubjectPageData {
+function ordinaryPage(publicRead: SubjectRead): SubjectPageData {
   const document: SubjectPageData['document'] = {
     root: { props: {} },
     content: [
@@ -50,13 +50,13 @@ function ordinaryPage(publicRead: SubjectRead, relationRows: readonly unknown[] 
   });
   for (const [key, read] of Object.entries(plan.reads)) {
     if (read.kind === 'subject') page.reads[key] = { status: 200, body: publicRead };
-    else if (read.kind === 'relations' && read.property === 'schema:encodesCreativeWork')
-      page.reads[key] = { status: 200, body: { relations: relationRows, next: null } };
+    else if (read.kind === 'relations') page.reads[key] = { status: 200, body: { relations: [], next: null } };
+    else if (read.kind === 'links') page.reads[key] = { status: 200, body: { links: [], next: null } };
   }
   return page;
 }
 
-function renderSubject(page: SubjectPageData, read: SubjectRead, release: Release, digest: string) {
+function renderSubject(page: SubjectPageData, read: SubjectRead, release: Release, digest: string, fileSource?: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(catalogueFileReaderDefinitionsKey(read, page, 'en'), { ok: true, release, digest });
   return renderToStaticMarkup(
@@ -67,6 +67,7 @@ function renderSubject(page: SubjectPageData, read: SubjectRead, release: Releas
         page,
         locale: 'en',
         messages: subjectPageMessages(),
+        fileSource,
         renderJsonLd: false,
       }),
     ),
@@ -76,15 +77,7 @@ function renderSubject(page: SubjectPageData, read: SubjectRead, release: Releas
 test('ordinary Subject separates file facts from its directed episode relation and returns to its reader anchor', async () => {
   const result = await catalogueFileProfileFixture('ready').read('forward:schema:encodesCreativeWork');
   if (!result.ok || !result.stream) throw new Error('Expected the admitted file read');
-  const row = result.rows.find((item) => item.summary?.id === catalogueEpisode);
-  if (!row?.statement || !row.summary) throw new Error('Expected the disclosed episode relation');
-  const relation = {
-    property: result.stream.property,
-    statement: row.statement,
-    summary: row.summary,
-    related: row.related,
-  };
-  const page = ordinaryPage(result.public, [relation]);
+  const page = ordinaryPage(result.public);
   const html = renderSubject(page, result.public, result.release, result.digest);
   const destination = catalogueFileDestinationHref(
     `/en/subjects/${catalogueEpisode}/episode-1`,
@@ -100,22 +93,23 @@ test('ordinary Subject separates file facts from its directed episode relation a
   expect(html).not.toContain('data-slot="catalogue-file-reader-ownership"');
 });
 
-test('retired relations cannot add a destination return, and unsupported file types keep ordinary facts', async () => {
+test('retired associations cannot add a destination return, and unsupported file types keep ordinary facts', async () => {
   const current = await catalogueFileProfileFixture('ready').read('forward:schema:encodesCreativeWork');
-  if (!current.ok || !current.stream || !current.rows[0]?.statement) throw new Error('Expected the current file read');
-  const retiredStatement = {
-    ...current.rows[0].statement,
-    rezics: { ...current.rows[0].statement.rezics, release: 'sha256:retired' },
-  };
-  const retiredRow = { ...current.rows[0], statement: retiredStatement, property: current.stream.property };
-  const retiredPage = ordinaryPage(current.public, [retiredRow]);
-  const retiredHtml = renderSubject(retiredPage, current.public, current.release, current.digest);
+  if (!current.ok) throw new Error('Expected the current file read');
+  const retiredRead = structuredClone(current.public);
+  const assertion = retiredRead.subject.statements['schema:encodesCreativeWork']?.[0];
+  if (!assertion) throw new Error('Expected the current file association');
+  retiredRead.subject.statements['schema:encodesCreativeWork'] = [{
+    ...assertion,
+    rezics: { ...assertion.rezics, release: 'sha256:retired' },
+  }];
+  const retiredHtml = renderSubject(ordinaryPage(retiredRead), retiredRead, current.release, current.digest);
   expect(retiredHtml).not.toContain(`/subjects/${catalogueEpisode}/episode-1?fileSource=`);
 
   const missing = await catalogueFileProfileFixture('unreleased').read();
   if (!missing.ok) throw new Error('Expected generic facts without file definitions');
   const unsupportedRead = structuredClone(missing.public);
-  unsupportedRead.subject.type = 'schema:MediaObject';
+  unsupportedRead.subject.type = 'schema:Person';
   const source = current.public.subject.statements['schema:sha256']?.[0];
   if (!source) throw new Error('Expected a generic fact example');
   unsupportedRead.subject.statements['schema:name'] = [{
@@ -126,7 +120,7 @@ test('retired relations cannot add a destination return, and unsupported file ty
     rezics: { ...source.rezics, release: missing.digest },
   }];
   const unsupportedPage = ordinaryPage(unsupportedRead);
-  const unsupportedHtml = renderSubject(unsupportedPage, unsupportedRead, missing.release, missing.digest);
+  const unsupportedHtml = renderSubject(unsupportedPage, unsupportedRead, missing.release, missing.digest, unsupportedRead.subject.id);
   expect(unsupportedHtml).toContain('not admitted as a catalogue file or release group');
   expect(unsupportedHtml).toContain('Generic file title');
   expect(unsupportedHtml).not.toContain('/file');

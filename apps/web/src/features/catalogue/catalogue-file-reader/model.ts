@@ -151,10 +151,55 @@ function associations(
   const result: CatalogueFileAssociation[] = [];
   const title = pickText(publicRead.subject.labels, locale);
   const streamByKey = new Map(streams.map((stream) => [`${stream.direction}:${stream.property}`, stream]));
+  const seen = new Set<string>();
+  const append = (stream: FileStream, statement: Statement, relatedId: string, related: Related) => {
+    const info = relatedInfo(related[relatedId], relatedId);
+    if (!info) return;
+    if (stream.direction === 'forward') {
+      if (relatedTarget(statement) !== relatedId) return;
+      const allowedTargets = release.properties[stream.property]?.targets ?? [];
+      if (!allowedTargets.some((target) => info.type === target || isA(release, info.type, target))) return;
+    } else if (relatedTarget(statement) !== publicRead.subject.id) return;
+    const kind = associationKind(release, info.type);
+    if (!kind) return;
+    const key = `${stream.direction}:${stream.property}:${relatedId}:${statement.id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const readability = relatedReadable(related, relatedId);
+    const relatedLabel = pickText(info.labels, locale);
+    const source = stream.direction === 'forward'
+      ? { id: publicRead.subject.id, label: title.text, ...(title.lang ? { lang: title.lang } : {}) }
+      : { id: relatedId, label: relatedLabel.text, ...(relatedLabel.lang ? { lang: relatedLabel.lang } : {}) };
+    const target = stream.direction === 'forward'
+      ? { id: relatedId, label: relatedLabel.text, ...(relatedLabel.lang ? { lang: relatedLabel.lang } : {}) }
+      : { id: publicRead.subject.id, label: title.text, ...(title.lang ? { lang: title.lang } : {}) };
+    result.push({
+      key,
+      property: stream.property,
+      direction: stream.direction,
+      label: stream.label,
+      kind,
+      source,
+      target,
+      statement,
+      readability,
+      historical: historicalStatement(statement, digest),
+    });
+  };
+
+  // Item assertions and their exact related identities are already part of the typed subject read.
+  for (const stream of streams) {
+    if (stream.direction !== 'forward') continue;
+    for (const statement of selectedStatements(publicRead.subject.statements[stream.property])) {
+      const relatedId = relatedTarget(statement);
+      if (relatedId) append(stream, statement, relatedId, publicRead.related);
+    }
+  }
+
   for (const page of pages) {
     const stream = streamByKey.get(`${page.direction}:${page.property}`);
     if (!stream) continue;
-    for (const [index, rawRow] of page.rows.entries()) {
+    for (const rawRow of page.rows) {
       if (!isRecord(rawRow)) continue;
       const rowSummary = summaryOf(rawRow.summary);
       const related = relationRelated(rawRow);
@@ -170,33 +215,7 @@ function associations(
       if (page.direction === 'inverse' && relatedTarget(statement) !== publicRead.subject.id) continue;
       const info = relatedInfo(related[relatedId], relatedId);
       if (!info || rowSummary.type !== info.type) continue;
-      const kind = associationKind(release, info.type);
-      if (!kind) continue;
-      if (page.direction === 'forward') {
-        const allowedTargets = release.properties[page.property]?.targets ?? [];
-        if (!allowedTargets.some((target) => info.type === target || isA(release, info.type, target))) continue;
-      }
-      const readability = relatedReadable(related, relatedId);
-      const relatedLabel = pickText(info.labels, locale);
-      const historical = historicalStatement(statement, digest);
-      const source = page.direction === 'forward'
-        ? { id: publicRead.subject.id, label: title.text, ...(title.lang ? { lang: title.lang } : {}) }
-        : { id: relatedId, label: relatedLabel.text, ...(relatedLabel.lang ? { lang: relatedLabel.lang } : {}) };
-      const target = page.direction === 'forward'
-        ? { id: relatedId, label: relatedLabel.text, ...(relatedLabel.lang ? { lang: relatedLabel.lang } : {}) }
-        : { id: publicRead.subject.id, label: title.text, ...(title.lang ? { lang: title.lang } : {}) };
-      result.push({
-        key: `${page.direction}:${page.property}:${relatedId}:${statement?.id ?? index}`,
-        property: page.property,
-        direction: page.direction,
-        label: stream.label,
-        kind,
-        source,
-        target,
-        statement,
-        readability,
-        historical,
-      });
+      append(stream, statement, relatedId, related);
     }
   }
   return result;
