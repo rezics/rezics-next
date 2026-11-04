@@ -215,10 +215,19 @@ reads offer Reload, ended sessions offer sign-in, and return never replays a cre
 
 Connected-application reviews acquire that same boundary until cancellation or a determinate result; uncertain reductions keep all security writes blocked without replay, while independent owned-client navigation remains available and consent navigation cannot discard a review.
 
-Password changes accept 8 to 128 characters and use one random key for the staged credential effect: stage, approve,
-then apply. A failed network request retries only its step with the same key, and a replayed apply receipt counts as
-success. A `step_up_required` response sends the person to `/step-up?return_to=%2Fsecurity` and clears the password
-field; no password is put in the URL. Step-up brings the person back to `/security`.
+Password changes use the current native Auth password limits, shown locally with Unicode character counts and kept
+within Auth's storage bounds, and require matching new-password confirmation. Before dispatch, the person reviews the
+current account and the native session consequences. Replacing an existing password retires all sessions, including
+the current one; adding the first password leaves existing sessions active. The Security page does not disclose
+whether a password row exists. Decision: the review explains both native outcomes because Security advice does not disclose whether a password row exists: replacing one retires all sessions, while setting the first password keeps them active.
+
+One random operation key and its exact stage, approval and apply bindings stay in mounted page memory. A transport
+failure, timeout or malformed response is phase-specific uncertainty. No phase is retried automatically. An explicit
+retry reuses that exact phase payload only while current Security advice allows it; native authorization remains final.
+Only a validated apply receipt confirms completion. A refusal or expired approval after an unknown apply does not
+resolve that earlier result. A confirmed apply retires the session and the page offers sign-in with the new password;
+if that does not work, the existing account-recovery path remains available. When current advice requires step-up, the
+page goes to `/step-up?return_to=%2Fsecurity` before sending any credential-effect request. No password is put in a URL.
 
 Sessions are a list of outlined items spaced by the list's gap, with no separators between them. A local browser and system map formats recognized user agents as a device;
 unrecognized values show a localized unknown-device label, and user agents are never sent elsewhere. The muted

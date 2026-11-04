@@ -62,12 +62,21 @@ test.each(['password', 'prompt'])('departure retires %s and reloads private revi
     },
   });
   const { host, calls, reads, inventories } = await mount();
-  await flush(() => {
-    fill(host.querySelector('#security-new-password')!, 'a secure password');
-    host.querySelectorAll('form')[kind === 'password' ? 0 : 1]!.requestSubmit();
-    button(host, m.auth_inventory_remove_named({ name: 'Reading companion' }))!.click();
-  });
-  expect(calls).toHaveLength(1);
+  if (kind === 'password') {
+    await flush(() => {
+      fill(host.querySelector('#security-new-password')!, 'a secure password');
+      fill(host.querySelector('#security-confirm-password')!, 'a secure password');
+      host.querySelectorAll('form')[0]!.requestSubmit();
+    });
+    await flush(() => {
+      button(host, m.auth_inventory_remove_named({ name: 'Reading companion' }))!.click();
+    });
+    await flush(() => {
+      button(host, m.auth_security_password_confirm())!.click();
+    });
+  } else {
+    await flush(() => host.querySelectorAll('form')[1]!.requestSubmit());
+  }
   if (kind === 'prompt')
     await flush(() =>
       calls[0]!.resolve(
@@ -89,7 +98,7 @@ test.each(['password', 'prompt'])('departure retires %s and reloads private revi
   await flush(() => {
     if (kind === 'password')
       calls[0]!.resolve(
-        Response.json({ ...calls[0]!.body, effectRef: 'effect', purpose: 'set-password', digest: 'digest' }),
+        Response.json({ ...calls[0]!.body, effectRef: 'effect', purpose: 'set-password', digest: 'a'.repeat(64) }),
       );
     else
       prompt.resolve({

@@ -36,6 +36,7 @@ const flush = (action: () => void) => act(async () => action());
 const deferred = <T,>() => Promise.withResolvers<T>();
 let host: HTMLDivElement, root: Root;
 let calls: unknown[];
+let requestBodies: unknown[];
 let response: ReturnType<typeof deferred<Response>>, prompt: ReturnType<typeof deferred<Credential | null>>;
 let action: ReturnType<typeof deferred<SecurityActionResult>>, read: ReturnType<typeof deferred<SecurityReadback>>;
 const source = {
@@ -69,12 +70,14 @@ async function mount() {
   document.body.append(host);
   root = createRoot(host);
   calls = [];
+  requestBodies = [];
   action = deferred();
   read = deferred();
   response = deferred();
   prompt = deferred();
   Object.defineProperty(navigator, 'credentials', { configurable: true, value: { create: () => prompt.promise } });
-  globalThis.fetch = (async (path) => {
+  window.confirm = () => true;
+  globalThis.fetch = (async (path, init) => {
     calls.push(String(path));
     if (path === '/passkeys/register/options')
       return Response.json({
@@ -83,28 +86,65 @@ async function mount() {
         user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       });
+    if (String(path).startsWith('/credential-effects/'))
+      requestBodies.push(JSON.parse(String(init?.body)));
     return response.promise;
   }) as typeof fetch;
   await render();
-  await flush(() => fill(host.querySelector('#security-new-password')!, 'a secure password'));
 }
 
-test.each(['password', 'prompt'])('%s blocks every credential/session write until it finishes', async (kind) => {
+test('a reviewed password change blocks competing writes and duplicate confirmation starts one attempt', async () => {
   await mount();
   await flush(() => {
-    submit(kind === 'password' ? 0 : 1);
-    // Same-turn form submissions must obey the boundary before disabled controls render.
+    fill(host.querySelector('#security-new-password')!, 'a secure password');
+    fill(host.querySelector('#security-confirm-password')!, 'a secure password');
     submit(0);
-    submit(1);
+  });
+  expect(calls).toHaveLength(0);
+  expect(writes().every((control) => control.disabled)).toBe(true);
+  await flush(() => {
+    const confirm = button(host, m.auth_security_password_confirm())!;
+    confirm.click();
+    confirm.click();
   });
   expect(writes().every((control) => control.disabled)).toBe(true);
   expect(calls).toHaveLength(1);
-  await flush(() => {
-    if (kind === 'password') response.resolve(Response.json({ error: 'credential_effect_denied' }, { status: 409 }));
-    else prompt.reject(Object.assign(new Error('dismissed'), { name: 'NotAllowedError' }));
-  });
+  expect(calls[0]).toBe('/credential-effects/stage');
+  await flush(() =>
+    response.resolve(Response.json({ error: 'credential_effect_denied', effect_status: 'not_applied' }, { status: 409 })),
+  );
   expect(writes().every((control) => !control.disabled)).toBe(true);
-  if (kind === 'prompt') expect(host.querySelector('[role="alert"]')).toBeNull();
+});
+
+test('a passkey prompt holds the boundary while password review and duplicate prompt submissions are ignored', async () => {
+  await mount();
+  await flush(() => {
+    fill(host.querySelector('#security-new-password')!, 'a secure password');
+    fill(host.querySelector('#security-confirm-password')!, 'a secure password');
+    submit(1);
+    submit(1);
+    submit(0);
+  });
+  expect(writes().every((control) => control.disabled)).toBe(true);
+  expect(calls).toEqual(['/passkeys/register/options']);
+  await flush(() =>
+    response.resolve(
+      Response.json({
+        challenge: 'Y2hhbGxlbmdl',
+        rp: { id: 'auth.test', name: 'REZICS' },
+        user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      }),
+    ),
+  );
+  await flush(() => {
+    submit(1);
+    submit(0);
+  });
+  expect(calls).toHaveLength(1);
+  await flush(() => prompt.reject(Object.assign(new Error('dismissed'), { name: 'NotAllowedError' })));
+  expect(writes().every((control) => !control.disabled)).toBe(true);
+  expect(host.querySelector('[role="alert"]')).toBeNull();
 });
 
 test('uncertain revocation holds the exact target through readback and retry, then returns to idle', async () => {
@@ -147,4 +187,32 @@ test('a late action result cannot restore private state after authority changes'
   await flush(() => action.resolve({ kind: 'unknown' }));
   expect(host.querySelector('form')).toBeNull();
   expect(button(host, m.auth_security_check_current())).toBeUndefined();
+});
+
+test('a late password stage reply from the previous account cannot advance or publish completion', async () => {
+  await mount();
+  await flush(() => {
+    fill(host.querySelector('#security-new-password')!, 'a secure password');
+    fill(host.querySelector('#security-confirm-password')!, 'a secure password');
+    submit(0);
+  });
+  await flush(() => click(m.auth_security_password_confirm()));
+  expect(calls).toEqual(['/credential-effects/stage']);
+  const stage = requestBodies[0] as { key: string; subjectId: string };
+  await render({ kind: 'signed-out' });
+  await flush(() =>
+    response.resolve(
+      Response.json({
+        effectRef: 'effect-ref',
+        key: stage.key,
+        subjectId: stage.subjectId,
+        purpose: 'set-password',
+        digest: 'a'.repeat(64),
+      }),
+    ),
+  );
+  expect(calls).toEqual(['/credential-effects/stage']);
+  expect(host.querySelector('form')).toBeNull();
+  expect(host.textContent).not.toContain(m.auth_security_password_changed());
+  expect(host.querySelector('a[href="/login"]')).not.toBeNull();
 });

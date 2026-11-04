@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { privateAuthRead } from './private-auth-read';
-import { authPost, failureMessage, type AuthPostResult } from './api';
+import { authPost, failureMessage } from './api';
 import { m } from './paraglide/messages.js';
 import {
   issuerSecurityRequest,
@@ -9,6 +9,13 @@ import {
   type SecurityAdvice,
 } from './security-inventory';
 import { parseSecurityPasskeys, performSecurityAction } from './security-reconciliation';
+import {
+  classifyPasswordChangeReply,
+  passwordChangeRequest,
+  type PasswordChangeAttempt,
+  type PasswordChangeLimits,
+  type PasswordChangeReplyResult,
+} from './password-change-attempt';
 
 export type SecuritySession = {
   id: string;
@@ -42,6 +49,7 @@ export type SecurityLoadResult =
       sessions: SecuritySession[];
       passkeys: PasskeysLoad;
       page?: SecurityPageEnvelope;
+      passwordLimits?: PasswordChangeLimits | null;
     }
   | { kind: 'signed-out' }
   | { kind: 'failure'; message: string };
@@ -51,6 +59,40 @@ export type PasskeyRegistrationReview =
   | { kind: 'signed-out' }
   | { kind: 'denied' }
   | { kind: 'unavailable' };
+
+const passwordChangeLimitsRead = createServerFn({ method: 'POST' }).handler(async (): Promise<PasswordChangeLimits | null> => {
+  try {
+    const response = await issuerSecurityRequest('/registration-page');
+    if (response.status !== 200) return null;
+    const body: unknown = await response.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !('requirements' in body)) return null;
+    const requirements = body.requirements;
+    if (!requirements || typeof requirements !== 'object' || Array.isArray(requirements) || !('password' in requirements))
+      return null;
+    const password = requirements.password;
+    if (!password || typeof password !== 'object' || Array.isArray(password)) return null;
+    if (
+      !('minLength' in password) ||
+      !('maxLength' in password) ||
+      !Number.isSafeInteger(password.minLength) ||
+      !Number.isSafeInteger(password.maxLength) ||
+      Number(password.minLength) < 1 ||
+      Number(password.maxLength) < Number(password.minLength)
+    )
+      return null;
+    return { minLength: Number(password.minLength), maxLength: Number(password.maxLength) };
+  } catch {
+    return null;
+  }
+});
+
+export async function loadPasswordChangeLimits(signal?: AbortSignal): Promise<PasswordChangeLimits | null> {
+  try {
+    return await privateAuthRead((readSignal) => passwordChangeLimitsRead({ signal: readSignal }), signal);
+  } catch {
+    return null;
+  }
+}
 
 const registrationReview = createServerFn({ method: 'POST' })
   .validator((accountId: string) => {
@@ -96,17 +138,8 @@ export async function reviewPasskeyRegistration(
   }
 }
 
-type EffectStage = {
-  effectRef: string;
-  key: string;
-  subjectId: string;
-  purpose: string;
-  digest: string;
-};
-type EffectApproval = { reference: string; expiresAt: string };
-
 export async function loadSecurity(_withPasskeys: boolean, signal?: AbortSignal): Promise<SecurityLoadResult> {
-  const result = await loadSecurityPage(signal);
+  const [result, passwordLimits] = await Promise.all([loadSecurityPage(signal), loadPasswordChangeLimits(signal)]);
   if (result.kind === 'signed-out') return { kind: 'signed-out' };
   if (result.kind !== 'ready') return { kind: 'failure', message: failureMessage(503, 'unavailable', null) };
   const { page } = result;
@@ -114,6 +147,7 @@ export async function loadSecurity(_withPasskeys: boolean, signal?: AbortSignal)
     kind: 'ready',
     accountId: page.viewer.account_id,
     page,
+    passwordLimits,
     sessions: page.sessions.kind === 'ready' ? page.sessions.rows : [],
     passkeys:
       page.passkeys.kind === 'ready'
@@ -122,104 +156,15 @@ export async function loadSecurity(_withPasskeys: boolean, signal?: AbortSignal)
   };
 }
 
-async function postEffect<Body>(path: string, body: unknown, signal?: AbortSignal): Promise<AuthPostResult<Body>> {
-  if (signal?.aborted) return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
-  const result = await authPost<Body>(path, body);
-  if (!signal?.aborted && !result.ok && result.status === 503 && result.code === 'unavailable')
-    return authPost<Body>(path, body);
-  return result;
-}
-
-function hasEffectDenial(status: number, code: string): boolean {
-  return code === 'credential_effect_denied' && [400, 401, 403, 409, 413, 415, 503].includes(status);
-}
-
-export type PasswordChangeResult = { ok: true } | { ok: false; reason: 'step-up' | 'failure'; message?: string };
-
-export async function changePassword(
-  subjectId: string,
-  password: string,
+export async function dispatchPasswordChangePhase(
+  attempt: PasswordChangeAttempt,
   signal?: AbortSignal,
-): Promise<PasswordChangeResult> {
-  const key = crypto.randomUUID();
-  const staged = await postEffect<EffectStage>(
-    '/credential-effects/stage',
-    {
-      key,
-      subjectId,
-      credential: { kind: 'password', password },
-    },
-    signal,
-  );
-  if (!staged.ok) {
-    if (staged.status === 401 && staged.code === 'step_up_required') return { ok: false, reason: 'step-up' };
-    return {
-      ok: false,
-      reason: 'failure',
-      message: hasEffectDenial(staged.status, staged.code)
-        ? m.auth_security_password_failed()
-        : failureMessage(staged.status, staged.code, staged.retryAfter),
-    };
-  }
-  if (
-    typeof staged.body.effectRef !== 'string' ||
-    !staged.body.effectRef ||
-    staged.body.key !== key ||
-    staged.body.subjectId !== subjectId ||
-    typeof staged.body.purpose !== 'string' ||
-    typeof staged.body.digest !== 'string'
-  )
-    return { ok: false, reason: 'failure', message: failureMessage(503, 'unavailable', null) };
-
-  const approved = await postEffect<EffectApproval>(
-    '/credential-effects/approve',
-    {
-      key,
-      subjectId,
-      effectRef: staged.body.effectRef,
-    },
-    signal,
-  );
-  if (!approved.ok) {
-    if (approved.status === 401 && approved.code === 'step_up_required') return { ok: false, reason: 'step-up' };
-    return {
-      ok: false,
-      reason: 'failure',
-      message: hasEffectDenial(approved.status, approved.code)
-        ? m.auth_security_password_failed()
-        : failureMessage(approved.status, approved.code, approved.retryAfter),
-    };
-  }
-  if (
-    typeof approved.body.reference !== 'string' ||
-    !approved.body.reference ||
-    typeof approved.body.expiresAt !== 'string'
-  )
-    return { ok: false, reason: 'failure', message: failureMessage(503, 'unavailable', null) };
-
-  const applied = await postEffect<{ receiptId: string; replayed: boolean }>(
-    '/credential-effects/apply',
-    {
-      key,
-      subjectId,
-      effectRef: staged.body.effectRef,
-      reference: approved.body.reference,
-    },
-    signal,
-  );
-  if (!applied.ok) {
-    if (applied.status === 401 && applied.code === 'step_up_required') return { ok: false, reason: 'step-up' };
-    return {
-      ok: false,
-      reason: 'failure',
-      message: hasEffectDenial(applied.status, applied.code)
-        ? m.auth_security_password_failed()
-        : failureMessage(applied.status, applied.code, applied.retryAfter),
-    };
-  }
-  if (typeof applied.body.receiptId !== 'string' || typeof applied.body.replayed !== 'boolean')
-    return { ok: false, reason: 'failure', message: failureMessage(503, 'unavailable', null) };
-  return { ok: true };
+): Promise<PasswordChangeReplyResult> {
+  if (signal?.aborted) return { kind: 'cancelled', attempt };
+  const { path, body } = passwordChangeRequest(attempt);
+  const result = await authPost(path, body);
+  if (signal?.aborted) return { kind: 'unknown', attempt: { ...attempt, uncertain: true } };
+  return classifyPasswordChangeReply(attempt, result);
 }
 
 export async function revokeSession(sessionId: string, accountId: string) {

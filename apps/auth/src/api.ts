@@ -6,7 +6,7 @@ export const AUTH_POST_TIMEOUT_MS = 5000;
 
 export type AuthPostResult<Body = unknown> =
   | { ok: true; body: Body }
-  | { ok: false; status: number; code: string; retryAfter: string | null };
+  | { ok: false; status: number; code: string; retryAfter: string | null; effectStatus?: 'not_applied' };
 
 export async function authPost<Body = unknown>(path: string, body: unknown): Promise<AuthPostResult<Body>> {
   const controller = new AbortController();
@@ -47,12 +47,20 @@ async function post<Body>(path: string, body: unknown, signal: AbortSignal): Pro
             ? errorBody.error
             : ''
         : '';
+    const effectStatus =
+      errorBody &&
+      typeof errorBody === 'object' &&
+      'effect_status' in errorBody &&
+      errorBody.effect_status === 'not_applied'
+        ? 'not_applied'
+        : undefined;
     const header = response.headers.get('Retry-After');
     return {
       ok: false,
       status: response.status,
       code: errorCode,
       retryAfter: header && /^\d+$/.test(header) ? header : null,
+      ...(effectStatus ? { effectStatus } : {}),
     };
   } catch {
     return { ok: false, status: 503, code: 'unavailable', retryAfter: null };

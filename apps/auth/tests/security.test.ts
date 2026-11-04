@@ -44,6 +44,10 @@ const sessions: Session[] = [
 let signedOut = false;
 let stepUpRequired = false;
 let inventoryUnavailable = false;
+let refuseNextStage = false;
+let refuseNextApply = false;
+let approvalLifetimeMs = 60_000;
+const acceptedApplyKeys = new Set<string>();
 let beforeSessions: (() => Promise<void>) | undefined;
 
 // Copied from apps/auth/tests/recovery.test.ts's fake Auth HTTP server.
@@ -79,6 +83,22 @@ const fake = Bun.serve({
       if (signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
       return Response.json({ account_id: accountId }, { headers });
     }
+    if (url.pathname === '/registration-page' && request.method === 'GET')
+      return Response.json(
+        {
+          kind: 'already-signed-in',
+          viewer: { account_id: accountId },
+          requirements: {
+            handle: { minLength: 3, maxLength: 64 },
+            email: { maxLength: 254 },
+            password: { minLength: 8, maxLength: 128 },
+            verification: { provider: 'turnstile', required: true },
+          },
+          verification: { configured: false },
+          actions: { register: false, continue: true },
+        },
+        { headers },
+      );
 
     if (url.pathname === '/sessions' && request.method === 'GET') {
       await beforeSessions?.();
@@ -88,25 +108,44 @@ const fake = Bun.serve({
     }
 
     if (url.pathname.startsWith('/credential-effects/') && request.method === 'POST') {
-      if (stepUpRequired) return Response.json({ error: 'step_up_required' }, { status: 401, headers });
+      if (stepUpRequired)
+        return Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401, headers });
+      if (url.pathname === '/credential-effects/stage' && refuseNextStage) {
+        refuseNextStage = false;
+        return Response.json(
+          { error: 'credential_effect_denied', effect_status: 'not_applied' },
+          { status: 409, headers },
+        );
+      }
       if (url.pathname === '/credential-effects/stage')
         return Response.json(
           {
             effectRef: 'effect-ref',
             key: JSON.parse(call.body).key,
             subjectId: accountId,
-            purpose: 'password',
-            digest: 'digest',
+            purpose: 'set-password',
+            digest: 'a'.repeat(64),
           },
           { headers },
         );
       if (url.pathname === '/credential-effects/approve')
         return Response.json(
-          { reference: 'approval-reference', expiresAt: new Date(now + 60_000).toISOString() },
+          { reference: 'approval-reference', expiresAt: new Date(Date.now() + approvalLifetimeMs).toISOString() },
           { headers },
         );
-      if (url.pathname === '/credential-effects/apply')
-        return Response.json({ receiptId: 'receipt-id', replayed: true }, { headers });
+      if (url.pathname === '/credential-effects/apply' && refuseNextApply) {
+        refuseNextApply = false;
+        return Response.json(
+          { error: 'credential_effect_denied', effect_status: 'not_applied' },
+          { status: 409, headers },
+        );
+      }
+      if (url.pathname === '/credential-effects/apply') {
+        const key = String(JSON.parse(call.body).key);
+        const replayed = acceptedApplyKeys.has(key);
+        acceptedApplyKeys.add(key);
+        return Response.json({ receiptId: 'receipt-id', replayed }, { headers });
+      }
     }
 
     if (url.pathname === '/sessions/revoke' && request.method === 'POST') {
@@ -186,7 +225,7 @@ async function open(
   path = '/security',
   options: BrowserContextOptions = {},
   withSessionCookie = true,
-  failFirstApply = false,
+  applyFailure: false | 'before' | 'after' = false,
 ) {
   const origin = await site();
   browser ??= await chromium.launch();
@@ -205,22 +244,31 @@ async function open(
   page.setDefaultTimeout(10_000);
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
-  if (failFirstApply)
-    await page.addInitScript(() => {
+  if (applyFailure)
+    await page.addInitScript((mode) => {
+      const attempts: { path: string; body: unknown }[] = [];
+      Object.defineProperty(window, '__passwordChangeAttempts', { value: attempts });
       const nativeFetch = window.fetch;
       let failed = false;
       window.fetch = function (input, init) {
         const requestUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-        if (!failed && new URL(requestUrl, location.href).pathname === '/credential-effects/apply') {
+        const path = new URL(requestUrl, location.href).pathname;
+        if (path === '/credential-effects/apply')
+          attempts.push({ path, body: typeof init?.body === 'string' ? JSON.parse(init.body) : null });
+        if (!failed && path === '/credential-effects/apply' && mode === 'before') {
           failed = true;
-          window.sessionStorage.setItem('security-apply-network-failure', '1');
           return Promise.reject(new TypeError('Failed to fetch'));
         }
-        return nativeFetch.call(this, input, init);
+        const response = nativeFetch.call(this, input, init);
+        if (!failed && path === '/credential-effects/apply' && mode === 'after') {
+          failed = true;
+          return response.then(() => Promise.reject(new TypeError('Failed to fetch')));
+        }
+        return response;
       };
-    });
+    }, applyFailure);
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
     return { page, origin, urls };
@@ -248,7 +296,12 @@ async function passwordForm(page: Page) {
   const input = page.getByLabel('New password', { exact: true });
   await input.waitFor({ state: 'visible' });
   expect(await input.count(), 'security settings has one labelled new password field').toBe(1);
-  return { input, submit: page.getByRole('button', { name: 'Update password', exact: true }) };
+  return {
+    input,
+    confirmation: page.getByLabel('Confirm password', { exact: true }),
+    review: page.getByRole('button', { name: 'Review password change', exact: true }),
+    confirm: page.getByRole('button', { name: 'Confirm password change', exact: true }),
+  };
 }
 
 function authCalls(path: string) {
@@ -264,22 +317,38 @@ function postBody(path: string, index = -1) {
 }
 
 test(
-  'a signed-in person changes their password through the staged credential effect',
+  'a signed-in person reviews the exact target and native effects before changing their password',
   async () => {
     signedOut = false;
     stepUpRequired = false;
+    inventoryUnavailable = false;
+    approvalLifetimeMs = 60_000;
+    refuseNextStage = false;
+    refuseNextApply = false;
+    acceptedApplyKeys.clear();
     calls.length = 0;
     revoked.clear();
-    const { page, urls } = await open('/security', { timezoneId: 'America/Los_Angeles' }, true, true);
+    const { page, urls } = await open('/security', { timezoneId: 'America/Los_Angeles' });
     try {
       const form = await passwordForm(page);
       expect(await form.input.getAttribute('autocomplete')).toBe('new-password');
-      expect(await form.input.getAttribute('maxlength')).toBeNull();
-      expect(await page.getByRole('button', { name: 'Show password', exact: true }).count()).toBe(1);
+      expect(authCalls('/registration-page')).toHaveLength(1);
+      expect(await form.input.getAttribute('maxlength'), await page.locator('#security-password-help').innerText()).toBe(
+        '128',
+      );
+      expect(await form.confirmation.getAttribute('autocomplete')).toBe('new-password');
+      expect(await page.getByRole('button', { name: 'Show password', exact: true }).count()).toBe(2);
       await form.input.fill(password);
+      await form.confirmation.fill(password);
+      await form.review.click();
+      await page.getByRole('heading', { name: 'Review this password change' }).waitFor();
+      expect(await page.locator('body').innerText()).toContain(accountId);
+      expect(await page.locator('body').innerText()).toContain('Auth signs out all sessions, including this one.');
+      expect(await page.locator('body').innerText()).not.toContain(password);
+      expect(authCalls('/credential-effects/stage')).toHaveLength(0);
       await Promise.all([
         page.waitForResponse((response) => new URL(response.url()).pathname === '/credential-effects/apply'),
-        form.submit.click(),
+        form.confirm.click(),
       ]);
       expect(await page.getByRole('status').innerText()).toContain('Password changed');
 
@@ -291,17 +360,27 @@ test(
         subjectId: accountId,
         credential: { kind: 'password', password },
       });
-      expect(approve).toEqual({ key: stage.key, subjectId: accountId, effectRef: 'effect-ref' });
+      expect(approve).toEqual({
+        key: stage.key,
+        subjectId: accountId,
+        effectRef: 'effect-ref',
+        purpose: 'set-password',
+        digest: 'a'.repeat(64),
+      });
       expect(apply).toEqual({
         key: stage.key,
         subjectId: accountId,
         effectRef: 'effect-ref',
+        purpose: 'set-password',
+        digest: 'a'.repeat(64),
         reference: 'approval-reference',
       });
+      expect(stage).not.toHaveProperty('confirmation');
       expect(authCalls('/credential-effects/stage').length).toBe(1);
       expect(authCalls('/credential-effects/approve').length).toBe(1);
       expect(authCalls('/credential-effects/apply').length).toBe(1);
-      expect(await page.evaluate(() => window.sessionStorage.getItem('security-apply-network-failure'))).toBe('1');
+      expect(await page.context().cookies()).not.toContainEqual(expect.objectContaining({ value: password }));
+      expect(await page.evaluate(() => [window.localStorage.length, window.sessionStorage.length])).toEqual([0, 0]);
       for (const url of [...urls, page.url(), ...calls.map((call) => call.url)]) {
         expect(url).not.toContain(password);
         expect(decodeURIComponent(url.replace(/\+/g, ' '))).not.toContain(password);
@@ -312,6 +391,7 @@ test(
       expect(
         calls.filter((call) => call.method === 'GET').map((call) => new URL(call.url, fake.url).pathname),
       ).not.toContain('/sessions');
+      expect(await page.getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')).toBe('/login');
     } finally {
       await page.context().close();
     }
@@ -324,23 +404,137 @@ test(
   async () => {
     signedOut = false;
     stepUpRequired = true;
+    acceptedApplyKeys.clear();
     calls.length = 0;
     revoked.clear();
     const { page, origin } = await open();
     try {
       const form = await passwordForm(page);
       await form.input.fill(password);
-      await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), form.submit.click()]);
+      await form.confirmation.fill(password);
+      await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), form.review.click()]);
       const stepUpUrl = new URL(page.url());
       expect(stepUpUrl.searchParams.get('return_to')).toBe('/security');
       expect(page.url()).not.toContain(password);
-      expect(authCalls('/credential-effects/stage')).toHaveLength(1);
+      expect(authCalls('/credential-effects/stage')).toHaveLength(0);
 
       stepUpRequired = false;
       await page.goto(`${origin}/security`, { waitUntil: 'networkidle' });
       expect(await page.getByRole('heading', { name: 'Account security' }).count()).toBe(1);
       expect(await page.getByLabel('New password', { exact: true }).inputValue()).toBe('');
     } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'an allowed review handles a later native refusal as definitive without step-up navigation',
+  async () => {
+    signedOut = false;
+    stepUpRequired = false;
+    refuseNextStage = false;
+    refuseNextApply = false;
+    calls.length = 0;
+    acceptedApplyKeys.clear();
+    const { page, origin } = await open();
+    try {
+      const form = await passwordForm(page);
+      await form.input.fill(password);
+      await form.confirmation.fill(password);
+      refuseNextStage = true;
+      await form.review.click();
+      await Promise.all([
+        page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === '/credential-effects/stage' && response.status() === 409,
+        ),
+        form.confirm.click(),
+      ]);
+      await page.getByText('Auth refused this step and reported that it was not applied.', { exact: false }).waitFor();
+      expect(new URL(page.url()).pathname).toBe('/security');
+      expect(page.url()).toContain(origin);
+      expect(authCalls('/credential-effects/stage')).toHaveLength(1);
+      expect(authCalls('/credential-effects/approve')).toHaveLength(0);
+      expect(authCalls('/credential-effects/apply')).toHaveLength(0);
+    } finally {
+      refuseNextStage = false;
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test.each(['before', 'after'] as const)(
+  'lost apply acknowledgement (%s dispatch) stays unknown until a deliberate exact retry',
+  async (loss) => {
+    signedOut = false;
+    stepUpRequired = false;
+    refuseNextStage = false;
+    refuseNextApply = false;
+    calls.length = 0;
+    acceptedApplyKeys.clear();
+    approvalLifetimeMs = loss === 'after' ? 500 : 60_000;
+    const { page } = await open('/security', {}, true, loss);
+    try {
+      const form = await passwordForm(page);
+      await form.input.fill(password);
+      await form.confirmation.fill(password);
+      await form.review.click();
+      await form.confirm.click();
+      await page.getByText('Auth did not confirm whether the password changed.', { exact: false }).waitFor();
+      await page.waitForTimeout(100);
+      expect(
+        await page.evaluate(
+          () => (window as Window & { __passwordChangeAttempts?: Array<{ body: unknown }> }).__passwordChangeAttempts,
+        ),
+      ).toHaveLength(1);
+      expect(authCalls('/credential-effects/apply')).toHaveLength(loss === 'after' ? 1 : 0);
+      const original = await page.evaluate(
+        () => (window as Window & { __passwordChangeAttempts?: Array<{ body: unknown }> }).__passwordChangeAttempts?.[0]?.body,
+      );
+
+      if (loss === 'before') {
+        await Promise.all([
+          page.waitForResponse((response) => new URL(response.url()).pathname === '/credential-effects/apply'),
+          page.getByRole('button', { name: 'Retry original attempt', exact: true }).click(),
+        ]);
+        expect(await page.getByRole('status').innerText()).toContain('Password changed');
+        expect(authCalls('/credential-effects/apply')).toHaveLength(1);
+      } else {
+        await page.waitForTimeout(550);
+        refuseNextApply = true;
+        await Promise.all([
+          page.waitForResponse(
+            (response) =>
+              new URL(response.url()).pathname === '/credential-effects/apply' && response.status() === 409,
+          ),
+          page.getByRole('button', { name: 'Retry original attempt', exact: true }).click(),
+        ]);
+        await page.getByText('A refusal now cannot tell whether an earlier apply changed the password.', { exact: false }).waitFor();
+        await page
+          .getByRole('status')
+          .filter({ hasText: 'Auth did not confirm whether the password changed.' })
+          .waitFor();
+        expect(
+          await page.getByRole('status').filter({ hasText: 'Auth did not confirm whether the password changed.' }).count(),
+        ).toBe(1);
+        expect(authCalls('/credential-effects/apply')).toHaveLength(2);
+      }
+
+      const attempts = await page.evaluate(
+        () => (window as Window & { __passwordChangeAttempts?: Array<{ body: unknown }> }).__passwordChangeAttempts,
+      );
+      expect(attempts).toHaveLength(2);
+      expect(attempts?.[0]?.body).toEqual(original);
+      expect(attempts?.[1]?.body).toEqual(original);
+      for (const call of authCalls('/credential-effects/apply'))
+        expect(JSON.parse(call.body)).toEqual(original);
+      if (loss === 'after') expect(acceptedApplyKeys.has((original as { key: string }).key)).toBe(true);
+    } finally {
+      refuseNextApply = false;
+      approvalLifetimeMs = 60_000;
       await page.context().close();
     }
   },

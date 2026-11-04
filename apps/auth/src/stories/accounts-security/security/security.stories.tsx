@@ -14,6 +14,7 @@ import {
   deniedInventory,
   preparingInventory,
   button,
+  fill,
   waitFor,
 } from '../../accounts-operations/story';
 
@@ -82,6 +83,24 @@ export const Owner = {
     const next = await waitFor(() => button(canvasElement, m.auth_inventory_next()));
     next.click();
     await waitFor(() => button(canvasElement, m.auth_inventory_previous()));
+  },
+};
+export const PasswordReview = {
+  render: () => (
+    <AuthStory>
+      <SecurityPage identitySource={identitySource} initial={initial} inventorySource={populatedInventory} />
+    </AuthStory>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const next = canvasElement.querySelector<HTMLInputElement>('#security-new-password');
+    const confirmation = canvasElement.querySelector<HTMLInputElement>('#security-confirm-password');
+    if (!next || !confirmation) throw new Error('Password review fields are unavailable');
+    fill(next, 'story-review-only-secret');
+    fill(confirmation, 'story-review-only-secret');
+    button(canvasElement, m.auth_security_password_review())!.click();
+    await waitFor(() => button(canvasElement, m.auth_security_password_confirm()));
+    if (canvasElement.textContent?.includes('story-review-only-secret'))
+      throw new Error('Password review must not show the entered password');
   },
 };
 export const Empty = {

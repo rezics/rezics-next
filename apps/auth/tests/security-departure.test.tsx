@@ -2,6 +2,7 @@ import { afterAll, afterEach, expect, test } from 'bun:test';
 import { creationFixture, dom, flush, open } from './creation-page-fixture';
 import type { SecurityActionResult } from '../src/security-reconciliation';
 import type { SecuritySource } from '../src/security-reconciliation';
+import { m } from '../src/paraglide/messages.js';
 
 creationFixture();
 const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
@@ -63,9 +64,11 @@ async function startNavigation(router: ReturnType<typeof createRouter>, to: '/se
 }
 async function setPassword(host: HTMLElement, value: string) {
   await flush(() => {
-    const input = host.querySelector<HTMLInputElement>('#security-new-password')!;
-    Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
-    input.dispatchEvent(new dom.Event('input', { bubbles: true }));
+    for (const selector of ['#security-new-password', '#security-confirm-password']) {
+      const input = host.querySelector<HTMLInputElement>(selector)!;
+      Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new dom.Event('input', { bubbles: true }));
+    }
   });
 }
 
@@ -106,6 +109,41 @@ test('clean pages leave freely; Stay keeps a masked password and Leave clears it
   await flush(() => ui.router.navigate({ to: '/security' } as never));
   await tick();
   expect(ui.host.querySelector<HTMLInputElement>('#security-new-password')!.value).toBe('');
+  expect(ui.host.querySelector<HTMLInputElement>('#security-confirm-password')!.value).toBe('');
+});
+
+test('Stay preserves an unknown password attempt; Leave discards it without replay on return', async () => {
+  const ui = await mount({ read: async () => ({ kind: 'unavailable' }), act: async () => ({ kind: 'denied' }) });
+  await setPassword(ui.host, 'a new private password');
+  await flush(() => ui.host.querySelector<HTMLFormElement>('form')!.requestSubmit());
+  await flush(() =>
+    [...ui.host.querySelectorAll<HTMLButtonElement>('button')]
+      .find((candidate) => candidate.textContent?.includes(m.auth_security_password_confirm()))
+      ?.click(),
+  );
+  expect(ui.calls).toHaveLength(1);
+  const submitted = ui.calls[0]!.body;
+  await flush(() => ui.calls[0]!.resolve(Response.json({ malformed: true })));
+  expect(ui.host.textContent).toContain(m.auth_security_password_stage_unknown());
+
+  const { navigation: stayed } = await startNavigation(ui.router, '/next');
+  const dialog = ui.host.querySelector<HTMLElement>('[role="alertdialog"]')!;
+  await flush(() => dialog.querySelector<HTMLButtonElement>('[data-stay]')!.click());
+  await tick();
+  expect(ui.host.textContent).toContain(m.auth_security_password_stage_unknown());
+  expect(document.activeElement).toBe(ui.host.querySelector('#security-password-recovery'));
+  expect(ui.calls).toHaveLength(1);
+  void stayed;
+
+  const { navigation: leaving } = await startNavigation(ui.router, '/next');
+  await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
+  await flush(() => leaving);
+  await flush(() => ui.router.navigate({ to: '/security' } as never));
+  await tick();
+  expect(ui.calls).toHaveLength(1);
+  expect(ui.calls[0]!.body).toEqual(submitted);
+  expect(ui.host.textContent).not.toContain(m.auth_security_password_stage_unknown());
+  expect(ui.host.querySelector<HTMLInputElement>('#security-new-password')!.value).toBe('');
 });
 
 test('Leave retires an unresolved operation without replaying it after return', async () => {
@@ -118,9 +156,9 @@ test('Leave retires an unresolved operation without replaying it after return', 
       return action.promise;
     },
   });
-  const button = ui.host
-    .querySelector<HTMLButtonElement>('#security-sessions-heading')
-    ?.parentElement?.querySelector('li button');
+  const button = [...ui.host.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+    candidate.textContent?.includes(m.auth_security_passkey_remove()),
+  );
   expect(button).not.toBeNull();
   await flush(() => button!.click());
   await flush(() => ui.host.querySelector<HTMLButtonElement>('[role="dialog"] button:last-child')!.click());
