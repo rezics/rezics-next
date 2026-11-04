@@ -4,7 +4,11 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ConversionError } from '@rezics/conversion';
-import { converter_revision, convertCrossMediaEntity, vndbStaffNameLimit } from '@rezics/conversion/cross-media-entities';
+import {
+  converter_revision,
+  convertCrossMediaEntity,
+  vndbStaffNameLimit,
+} from '@rezics/conversion/cross-media-entities';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import {
   CrossMediaDumpFiles,
@@ -115,9 +119,13 @@ test('operator plans preferred-not-last aliases and imports every admitted sourc
       { id: 's4', aid: '10', name: 'Preferred Alias', latin: null },
     ]),
   );
-  expect(convertCrossMediaEntity({ external_id: 's4', record_revision: null, record: shuffled.entities.vndb.find((row) => row.key === 's4')!.payload }).digest).toBe(
-    convertCrossMediaEntity({ external_id: 's4', record_revision: null, record: staff.payload }).digest,
-  );
+  expect(
+    convertCrossMediaEntity({
+      external_id: 's4',
+      record_revision: null,
+      record: shuffled.entities.vndb.find((row) => row.key === 's4')!.payload,
+    }).digest,
+  ).toBe(convertCrossMediaEntity({ external_id: 's4', record_revision: null, record: staff.payload }).digest);
   const outsider = await planCrossMediaSeed(
     families(undefined, {
       'vndb/staff_alias': [
@@ -132,14 +140,12 @@ test('operator plans preferred-not-last aliases and imports every admitted sourc
     }),
   );
   expect(outsider.entities.vndb.map((row) => row.key)).toEqual(['s4']);
-  expect((outsider.entities.vndb[0]!.payload as { aliases: { id: string }[] }).aliases.every((alias) => alias.id === 's4')).toBe(
-    true,
-  );
+  expect(
+    (outsider.entities.vndb[0]!.payload as { aliases: { id: string }[] }).aliases.every((alias) => alias.id === 's4'),
+  ).toBe(true);
   const foreignPreferred = await planCrossMediaSeed(
     families(undefined, {
-      'vndb/vn_staff': [
-        { id: 'v1', aid: '20', role: 'scenario', note: 'Writer Alias' },
-      ],
+      'vndb/vn_staff': [{ id: 'v1', aid: '20', role: 'scenario', note: 'Writer Alias' }],
       'vndb/staff_alias': [
         { id: 's4', aid: '10', name: 'Preferred Alias', latin: null },
         { id: 's4', aid: '20', name: 'Later Alias', latin: null },
@@ -151,9 +157,9 @@ test('operator plans preferred-not-last aliases and imports every admitted sourc
       ],
     }),
   );
-  expect(foreignPreferred.gaps.some((gap) => gap.reason.includes('Preferred staff alias belongs to another owner'))).toBe(
-    true,
-  );
+  expect(
+    foreignPreferred.gaps.some((gap) => gap.reason.includes('Preferred staff alias belongs to another owner')),
+  ).toBe(true);
   expect(
     convertCrossMediaEntity({
       external_id: 's4',
@@ -168,7 +174,10 @@ test('operator plans preferred-not-last aliases and imports every admitted sourc
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
     expect(
       commands.some(
-        (command) => command.op === 'propose' && command.source.external_id === 's4' && command.source.converter_revision === converter_revision,
+        (command) =>
+          command.op === 'propose' &&
+          command.source.external_id === 's4' &&
+          command.source.converter_revision === converter_revision,
       ),
     ).toBe(true);
     expect(staffNames(commands)).toEqual(
@@ -180,7 +189,9 @@ test('operator plans preferred-not-last aliases and imports every admitted sourc
     const keys = commands
       .filter(
         (command) =>
-          command.op === 'propose' && command.source.external_id === 's4' && command.statement.property.id === 'schema:name',
+          command.op === 'propose' &&
+          command.source.external_id === 's4' &&
+          command.statement.property.id === 'schema:name',
       )
       .map((command) => command.key);
     const count = commands.length;
@@ -190,7 +201,9 @@ test('operator plans preferred-not-last aliases and imports every admitted sourc
       commands
         .filter(
           (command) =>
-            command.op === 'propose' && command.source.external_id === 's4' && command.statement.property.id === 'schema:name',
+            command.op === 'propose' &&
+            command.source.external_id === 's4' &&
+            command.statement.property.id === 'schema:name',
         )
         .map((command) => command.key),
     ).toEqual(expect.arrayContaining(keys));
@@ -263,13 +276,15 @@ test('authored COPY headers feed the dump reader and sealed reopen keeps name co
       await writeFile(join(vndb, `${name}.header`), `${header}\n`);
       await writeFile(join(vndb, name), body ? `${body}\n` : '');
     }
-    await expect(Array.fromAsync(new CrossMediaDumpFiles(bangumi, join(directory, 'vndb')).rows('vndb', 'staff_alias'))).resolves.toEqual([
+    await expect(
+      Array.fromAsync(new CrossMediaDumpFiles(bangumi, join(directory, 'vndb')).rows('vndb', 'staff_alias')),
+    ).resolves.toEqual([
       { id: 's4', aid: '10', name: 'Preferred Alias', latin: null },
       { id: 's4', aid: '20', name: 'Later Alias', latin: null },
     ]);
-    await expect(Array.fromAsync(new CrossMediaDumpFiles(bangumi, join(directory, 'vndb')).rows('vndb', 'staff'))).resolves.toEqual([
-      { id: 's4', gender: null, lang: 'ja', main: '10', description: '', prod: null },
-    ]);
+    await expect(
+      Array.fromAsync(new CrossMediaDumpFiles(bangumi, join(directory, 'vndb')).rows('vndb', 'staff')),
+    ).resolves.toEqual([{ id: 's4', gender: null, lang: 'ja', main: '10', description: '', prod: null }]);
     const plan = await planCrossMediaSeed(new CrossMediaDumpFiles(bangumi, join(directory, 'vndb')));
     const first = await seedCrossMedia(plan, join(directory, 'state.sqlite'), port(commands), undefined, vndbSeed);
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
@@ -282,7 +297,9 @@ test('authored COPY headers feed the dump reader and sealed reopen keeps name co
     const keys = commands
       .filter(
         (command) =>
-          command.op === 'propose' && command.source.external_id === 's4' && command.statement.property.id === 'schema:name',
+          command.op === 'propose' &&
+          command.source.external_id === 's4' &&
+          command.statement.property.id === 'schema:name',
       )
       .map((command) => command.key);
     const count = commands.length;
@@ -292,7 +309,9 @@ test('authored COPY headers feed the dump reader and sealed reopen keeps name co
       commands
         .filter(
           (command) =>
-            command.op === 'propose' && command.source.external_id === 's4' && command.statement.property.id === 'schema:name',
+            command.op === 'propose' &&
+            command.source.external_id === 's4' &&
+            command.statement.property.id === 'schema:name',
         )
         .map((command) => command.key),
     ).toEqual(expect.arrayContaining(keys));

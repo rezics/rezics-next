@@ -20,7 +20,7 @@ The [package exports](package.json) are only these entry points:
 | `@rezics/conversion/source-vocabulary`    | Released binding, identity, row, gap and result types                                                                                      |
 | `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                                                        |
 | `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                                                            |
-| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `vndbStaffNameLimit`, `CrossMediaEntityConversion`                 |
+| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `vndbStaffNameLimit`, `CrossMediaEntityConversion`                |
 
 Each converter takes an input, an optional context, and optional registered
 converter options. The option is `converterRevision`; import the matching

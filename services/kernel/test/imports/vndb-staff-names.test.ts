@@ -110,7 +110,10 @@ test('production operator imports VNDB staff preferred and additional source nam
         property: 'schema:name',
         mode: 'replace',
         expected_head: listing.adoption?.head ?? null,
-        selection: sourced.map((candidate) => ({ candidate: candidate.id, rank: candidate.statement.rank ?? 'normal' })),
+        selection: sourced.map((candidate) => ({
+          candidate: candidate.id,
+          rank: candidate.statement.rank ?? 'normal',
+        })),
       });
       expect(adopted.status).toBe(200);
     }
@@ -159,7 +162,10 @@ test('production operator imports VNDB staff preferred and additional source nam
         subject: {
           type: string;
           labels?: Record<string, string>;
-          statements: Record<string, { value: { content: unknown }; qualifiers?: { property: { id: string }; value: { content: unknown } }[] }[]>;
+          statements: Record<
+            string,
+            { value: { content: unknown }; qualifiers?: { property: { id: string }; value: { content: unknown } }[] }[]
+          >;
         };
       };
     };
@@ -181,7 +187,9 @@ test('production operator imports VNDB staff preferred and additional source nam
     expect(
       named.every((item) =>
         item.statement.references?.some((reference) =>
-          reference.parts.some((part) => part.property.id === 'schema:url' && part.value.content === 'https://vndb.org/s4'),
+          reference.parts.some(
+            (part) => part.property.id === 'schema:url' && part.value.content === 'https://vndb.org/s4',
+          ),
         ),
       ),
     ).toBe(true);
@@ -225,7 +233,9 @@ test('production operator imports VNDB staff preferred and additional source nam
       { origin: 'https://kernel.import.test' },
       extras,
     );
-    expect(outsider.readings.filter((row) => row.externalId.startsWith('s')).map((row) => row.externalId)).toEqual(['s4']);
+    expect(outsider.readings.filter((row) => row.externalId.startsWith('s')).map((row) => row.externalId)).toEqual([
+      's4',
+    ]);
     await seedCrossMedia(
       await planCrossMediaSeed(
         tables([

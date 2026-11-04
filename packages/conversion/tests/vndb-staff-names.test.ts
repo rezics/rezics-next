@@ -1,11 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { ConversionError } from '../src/index.ts';
-import {
-  converter_revision,
-  convertCrossMediaEntity,
-  vndbStaffNameLimit,
-} from '../src/cross-media-entities.ts';
+import { converter_revision, convertCrossMediaEntity, vndbStaffNameLimit } from '../src/cross-media-entities.ts';
 import { createSourceRegistration } from '../../../services/importer/src/source-registry.ts';
 
 const subjectId = '00000000-0000-4000-8000-000000000004';
@@ -14,7 +10,15 @@ const additional = { id: 's4', aid: '20', name: 'Later Alias' };
 const third = { id: 's4', aid: '30', name: 'Zeta Alias' };
 
 function record(aliases: { id: string; aid: string; name: string }[], main: string | undefined = '10') {
-  return { id: 's4', gender: null, lang: 'ja', ...(main === undefined ? {} : { main }), description: '', prod: null, aliases };
+  return {
+    id: 's4',
+    gender: null,
+    lang: 'ja',
+    ...(main === undefined ? {} : { main }),
+    description: '',
+    prod: null,
+    aliases,
+  };
 }
 
 function convert(body: object, bound = true) {
@@ -27,7 +31,9 @@ function convert(body: object, bound = true) {
 
 function names(result: { proposals: readonly BatchCommand[] }) {
   return result.proposals.flatMap((command) =>
-    command.op === 'propose' && command.statement.property.id === 'schema:name' && command.statement.value.type === 'value'
+    command.op === 'propose' &&
+    command.statement.property.id === 'schema:name' &&
+    command.statement.value.type === 'value'
       ? [command.statement.value.content]
       : [],
   );
@@ -136,7 +142,15 @@ test('malformed, duplicate and oversized aliases are rejected projections', () =
     expect((error as ConversionError).pointer).toBe('/aliases/0');
   }
   expect(() =>
-    convert({ id: 's4', main: '10', aliases: Array.from({ length: vndbStaffNameLimit + 1 }, (_, i) => ({ id: 's4', aid: String(i + 1), name: `N${i}` })) }),
+    convert({
+      id: 's4',
+      main: '10',
+      aliases: Array.from({ length: vndbStaffNameLimit + 1 }, (_, i) => ({
+        id: 's4',
+        aid: String(i + 1),
+        name: `N${i}`,
+      })),
+    }),
   ).toThrow(ConversionError);
   try {
     convert({ id: 's4', main: '10', aliases: [{ ...preferred, name: 'x'.repeat(501) }] });
