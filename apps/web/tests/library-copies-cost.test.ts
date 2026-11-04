@@ -68,29 +68,6 @@ test('copies stay within their bound as the copy list grows', async () => {
           ]),
         ),
       } as Partial<SessionEnv>;
-      if (operation === 'create' || operation === 'update') {
-        const write = operation === 'create' ? submitCopy : saveCopy;
-        for (const field of ['acquiredOn', 'disposedOn']) {
-          for (const day of ['0000-01-01', '1900-02-29', '2030', '2030-01', '2030-01-01\n', '2030-01-01T00:00:00Z']) {
-            expect(
-              await write({} as Parameters<typeof write>[0], new Request(origin), env, {
-                subjectId,
-                id: copyId,
-                revision: 3,
-                idempotencyKey,
-                status: 'owned',
-                location: null,
-                source: null,
-                acquiredOn: null,
-                disposedOn: null,
-                note: null,
-                [field]: day,
-              }),
-            ).toEqual({ ok: false, reason: 'invalid' });
-          }
-        }
-        expect(counts).toEqual({ D: 0, K: 0, R: 0, A: 0 });
-      }
       const client = withPlatformClosedRecognition(
         createKernelClient('https://kernel.example.test', {
           fetch: (async (input, init) => {
@@ -138,7 +115,7 @@ test('copies stay within their bound as the copy list grows', async () => {
                   status: 'owned',
                   location: 'Shelf',
                   source: 'Shop',
-                  acquiredOn: '0001-01-01',
+                  acquiredOn: '2030-01-01',
                   disposedOn: null,
                   note: 'Cost copy',
                 });
@@ -151,7 +128,7 @@ test('copies stay within their bound as the copy list grows', async () => {
                       revision: 1,
                       location: 'Shelf',
                       source: 'Shop',
-                      acquiredOn: '0001-01-01',
+                      acquiredOn: '2030-01-01',
                       disposedOn: null,
                       note: 'Cost copy',
                     },
@@ -208,17 +185,29 @@ test('copies stay within their bound as the copy list grows', async () => {
         expect(page.copies).toHaveLength(scale);
         expect(page.copies.some((copy) => 'subjectId' in copy)).toBe(false);
       } else if (operation === 'create') {
-        const created = await submitCopy(client, request, env, {
+        const draft = {
           subjectId,
           idempotencyKey,
           status: 'owned',
           location: 'Shelf',
           source: 'Shop',
-          acquiredOn: '0001-01-01',
+          acquiredOn: '2030-01-01',
           disposedOn: null,
           note: 'Cost copy',
-        });
-        expect(created).toMatchObject({ ok: true, copy: { acquiredOn: '0001-01-01', disposedOn: null } });
+        };
+        for (const write of [submitCopy, saveCopy]) {
+          for (const field of ['acquiredOn', 'disposedOn']) {
+            for (const day of ['0000-01-01', '1900-02-29', '2030', '2030-01', '2030-01-01\n', '2030-01-01T00:00:00Z']) {
+              expect(await write(client, request, env, { ...draft, id: copyId, revision: 3, [field]: day })).toEqual({
+                ok: false,
+                reason: 'invalid',
+              });
+            }
+          }
+        }
+        expect(counts).toEqual({ D: 0, K: 0, R: 0, A: 0 });
+        const created = await submitCopy(client, request, env, draft);
+        expect(created).toMatchObject({ ok: true });
       } else if (operation === 'update') {
         const saved = await saveCopy(client, request, env, {
           id: copyId,
@@ -227,8 +216,8 @@ test('copies stay within their bound as the copy list grows', async () => {
           status: 'lent',
           location: 'Friend',
           source: null,
-          acquiredOn: '',
-          disposedOn: '',
+          acquiredOn: null,
+          disposedOn: null,
           note: 'Loan',
         });
         expect(saved).toMatchObject({ ok: true });

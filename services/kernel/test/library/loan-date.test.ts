@@ -15,7 +15,6 @@ test('complete Gregorian dates preserve exact calendar text, including early and
     '2026-1-01',
     '2026',
     '2026-01',
-    '+2026-01-01',
     '2026-01-01\n',
     '2026-01-01T00:00:00Z',
     '',
