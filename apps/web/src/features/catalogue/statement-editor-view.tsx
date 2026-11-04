@@ -478,7 +478,7 @@ function ScalarControl({
                     {value === gregorian ? m.time_calendar_gregorian({}, o) : m.time_calendar_julian({}, o)}
                   </NativeSelectOption>
                 ))}
-                {typeof record.calendarmodel === 'string' && !supportedCalendars.includes(record.calendarmodel) && (
+                {typeof record.calendarmodel === 'string' && !supportedCalendars.some((calendar) => calendar === record.calendarmodel) && (
                   <NativeSelectOption value={record.calendarmodel}>
                     {m.time_unsupported_calendar({ calendar: record.calendarmodel }, o)}
                   </NativeSelectOption>
