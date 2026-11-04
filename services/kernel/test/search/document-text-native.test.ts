@@ -51,7 +51,7 @@ test('the native adapter forwards the pre-materialization byte cap and preserves
   expect(currentChecks).toBe(2);
   expect(projected).toMatchObject({
     coverage: 'complete',
-    documents: [{ text: '静かな飛行士の物語', language: 'ja' }],
+    documents: [{ text: '静かな飛行士の物語', reference: { language: 'ja' } }],
   });
 });
 
