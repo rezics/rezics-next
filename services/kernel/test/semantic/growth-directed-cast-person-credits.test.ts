@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createKernel } from '../../src/http/kernel.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { labelOrderKey } from '../../src/semantic/link-keys.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
@@ -58,7 +59,7 @@ beforeAll(async () => {
   });
   actor = await create('schema:Person', 'Fixed voice actor');
   character = await create('wd:Q95074', 'Fixed character');
-  await create('schema:Movie', 'Fixed voice work', {
+  const work = await create('schema:Movie', 'Fixed voice work', {
     'wdt:P725': [
       {
         property: { id: 'wdt:P725' },
@@ -70,6 +71,8 @@ beforeAll(async () => {
       },
     ],
   });
+  // Materialize the fixed native fixture before measuring reads; obsolete rows remain in the measured partition.
+  expect((await linkProjection(db.pool).run(partitionOf(routeOf(work)!))).status).not.toBe('busy');
 }, 120_000);
 afterAll(async () => {
   await db?.close();
