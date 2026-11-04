@@ -114,7 +114,15 @@ function quotationFixture(state: State): Extract<QuotationRead, { ok: true }> {
 
 function Example({ state = 'sourced' }: { state?: State }) {
   const locale = getLocale();
-  const initial = useMemo<QuotationRead>(() => state === 'recovery' ? { ok: false, reason: 'unavailable' } : state === 'stale' ? { ok: false, reason: 'stale' } : { ...quotationFixture(state), next: state === 'later' ? 'fixture-page-two' : null }, [state]);
+  const initial = useMemo<QuotationRead>(
+    () =>
+      state === 'recovery'
+        ? { ok: false, reason: 'unavailable' }
+        : state === 'stale'
+          ? { ok: false, reason: 'stale' }
+          : { ...quotationFixture(state), next: state === 'later' ? 'fixture-page-two' : null },
+    [state],
+  );
   const client = useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), []);
   const returnTo = `/${locale}/subjects/work/steins-gate/relations`;
   return (
@@ -126,14 +134,16 @@ function Example({ state = 'sourced' }: { state?: State }) {
               id={workId}
               locale={locale}
               returnTo={returnTo}
-              transport={{ read: async (input) => {
-                const result = quotationFixture('sourced');
-                if (state === 'later' && input.cursor && result.selected) {
-                  result.selected.id = laterQuoteId;
-                  result.selected.observation = 'later native quotation observation';
-                }
-                return result;
-              } }}
+              transport={{
+                read: async (input) => {
+                  const result = quotationFixture('sourced');
+                  if (state === 'later' && input.cursor && result.selected) {
+                    result.selected.id = laterQuoteId;
+                    result.selected.observation = 'later native quotation observation';
+                  }
+                  return result;
+                },
+              }}
               initial={initial}
             />
           </main>
@@ -188,7 +198,9 @@ export const LaterPageSelection: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.quotation_more() }));
     await userEvent.click(canvas.getByRole('button', { name: m.quotation_open({ number: 1 }) }));
-    await expect(canvasElement.querySelector('[data-quotation-id]')?.getAttribute('data-quotation-id')).toBe(laterQuoteId);
+    await expect(canvasElement.querySelector('[data-quotation-id]')?.getAttribute('data-quotation-id')).toBe(
+      laterQuoteId,
+    );
   },
 };
 export const ExplicitFailureRecovery: Story = {
