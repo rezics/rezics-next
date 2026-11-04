@@ -750,9 +750,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         reactionsAsOf = undefined;
       }
       const subjectLanes = new Set(
-        feedItems
-          .filter((item) => item.destination.kind === 'subject')
-          .map((item) => item.source as Lane),
+        feedItems.filter((item) => item.destination.kind === 'subject').map((item) => item.source as Lane),
       );
       if (subjectLanes.size) {
         try {

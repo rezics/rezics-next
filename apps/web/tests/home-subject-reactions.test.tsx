@@ -235,9 +235,9 @@ test('unknown Home Subject coverage disables reactions and retries through the p
   await paint(unavailable, true, () => retries++);
   expect(host.querySelectorAll('[data-slot="subject-reaction-unavailable"] button[aria-label*="—"]')).toHaveLength(5);
   expect(
-    [...host.querySelectorAll<HTMLButtonElement>('[data-slot="subject-reaction-unavailable"] button[aria-label*="—"]')].every(
-      (button) => button.disabled,
-    ),
+    [
+      ...host.querySelectorAll<HTMLButtonElement>('[data-slot="subject-reaction-unavailable"] button[aria-label*="—"]'),
+    ].every((button) => button.disabled),
   ).toBe(true);
   expect(host.querySelectorAll('[data-slot="subject-reaction-unavailable"] button[aria-label*="—"]')).toHaveLength(5);
   const retry = [...host.querySelectorAll<HTMLButtonElement>('button')].find(

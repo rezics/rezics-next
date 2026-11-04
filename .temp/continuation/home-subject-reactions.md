@@ -1,39 +1,32 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/content/feed-subject-reactions.ts",
-    "services/kernel/src/content/feed-contract.ts",
-    "services/kernel/test/content/feed-subject-reactions-growth.test.ts",
-    "services/kernel/test/content/feed.test.ts",
-    "services/kernel/test/content/feed-contract.test.ts",
-    "docs/feeds.md",
-    "apps/web/src/stories/home-subject-reactions.stories.tsx",
-    "apps/web/src/kernel/recorded/"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "waiting": [],
-  "after": [],
-  "estimate": {
-    "lines": 900,
-    "files": 8
-  },
-  "criticalPath": false,
-  "acceptance": [
-    "Emit the mounted feed-local Subject reaction schema through the existing sole publisher and use its generated Web alias without hand-editing generated outputs.",
-    "Complete mounted GET /v1/feedItems coverage for discovery, Following and Continue with native accounts, Subjects, Access and registered reaction delivery, including withheld or failed lanes and cursor behavior.",
-    "Add feed-subject-reactions-growth.test.ts at fixed S/H/limits/admitted bytes and scales 256/1024/4096; capture plans, rows/blocks, SQL/control and pool/runner phases, retained bytes and serialized UTF-8 bytes across empty, stale, denied and retry cases.",
-    "Use recorded mounted native responses for the three Home stories and review the 390 and 1280 widths under the active launcher policy.",
-    "Complete the retained native, generated typing, rendered and growth acceptance after integration under the controller verification policy."
-  ]
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/content/feed-subject-reactions.ts',
+      'services/kernel/src/content/feed-contract.ts',
+      'services/kernel/test/content/feed-subject-reactions-growth.test.ts',
+      'services/kernel/test/content/feed.test.ts',
+      'services/kernel/test/content/feed-contract.test.ts',
+      'docs/feeds.md',
+      'apps/web/src/stories/home-subject-reactions.stories.tsx',
+      'apps/web/src/kernel/recorded/',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'waiting': [],
+  'after': [],
+  'estimate': { 'lines': 900, 'files': 8 },
+  'criticalPath': false,
+  'acceptance':
+    [
+      'Emit the mounted feed-local Subject reaction schema through the existing sole publisher and use its generated Web alias without hand-editing generated outputs.',
+      'Complete mounted GET /v1/feedItems coverage for discovery, Following and Continue with native accounts, Subjects, Access and registered reaction delivery, including withheld or failed lanes and cursor behavior.',
+      'Add feed-subject-reactions-growth.test.ts at fixed S/H/limits/admitted bytes and scales 256/1024/4096; capture plans, rows/blocks, SQL/control and pool/runner phases, retained bytes and serialized UTF-8 bytes across empty, stale, denied and retry cases.',
+      'Use recorded mounted native responses for the three Home stories and review the 390 and 1280 widths under the active launcher policy.',
+      'Complete the retained native, generated typing, rendered and growth acceptance after integration under the controller verification policy.',
+    ],
 }
 ---
 
