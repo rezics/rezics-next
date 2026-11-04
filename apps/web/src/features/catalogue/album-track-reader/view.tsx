@@ -171,11 +171,14 @@ export function AlbumTrackWindow({
       }
       acceptedAddress.current = nextAddress;
       hasAcceptedAddress.current = true;
+      pending.current = nextAddress;
+      pendingIsPrevious.current = false;
       setPreviousCount(priorAddresses.current.length);
       setStreams(result.streams);
       setSelectedStream(result.stream?.key);
       selectionOpener.current = null;
       keyboardSelection.current = false;
+      origin.current = null;
       setSelectedKey(null);
       setPage(result);
       if (
@@ -189,6 +192,7 @@ export function AlbumTrackWindow({
       if (result.reason !== 'unavailable') {
         selectionOpener.current = null;
         keyboardSelection.current = false;
+        origin.current = null;
         setSelectedKey(null);
         setPage(undefined);
       }
