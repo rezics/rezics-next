@@ -312,8 +312,9 @@ test('cursor and equal-response replacement reject the old refresh completion', 
     await act(async () => old.promise);
     expect(view.host.textContent).not.toContain('The same original question and Subject pair');
 
+    const nextIndex = reads.length;
     await view.perform(() => view.router.navigate({ to: '/library/ratings', search: { cursor: 'next/+sealed=' } }));
-    const next = await waitForRead(reads.length);
+    const next = await waitForRead(nextIndex);
     expect(next.cursor).toBe('next/+sealed=');
     for (const call of reads) if (call !== next) ready(call);
     ready(next);

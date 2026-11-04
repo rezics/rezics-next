@@ -88,6 +88,7 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
   const focusVersion = useRef(0);
 
   const publish = useCallback((next: OwnVotesReturnReceipt | null) => {
+    console.log('[own-votes-return]', receiptRef.current?.phase ?? 'none', '=>', next?.phase ?? 'none');
     receiptRef.current = next;
     setReceipt(next);
   }, []);
@@ -306,11 +307,13 @@ export function useOwnVotesReturn({
     };
     try {
       const result = await refresh();
-      if (!ownsRequest()) {
+      const ownsAfterRead = ownsRequest();
+      const read = ownsAfterRead ? requestOwner.validateResult(result) : null;
+      console.log('[own-votes-return]', 'read', ownsAfterRead, read?.state ?? 'rejected');
+      if (!ownsAfterRead) {
         state.clear(returnReceipt.id);
         return;
       }
-      const read = requestOwner.validateResult(result);
       if (!read || read.state === 'unavailable') {
         state.fail(returnReceipt.id);
         return;
