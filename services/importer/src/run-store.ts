@@ -343,7 +343,8 @@ function sourceVocabularyOriginMatches(
     if (
       !origin ||
       origin.externalId !== recordKey ||
-      origin.revision !== recordRevision ||
+      (origin.revision !== null && origin.revision !== recordRevision) ||
+      command.source.record_revision !== (origin.revision ?? 'unversioned') ||
       typeof origin.digest !== 'string' ||
       !/^[0-9a-f]{64}$/u.test(origin.digest) ||
       command.source.digest !== origin.digest ||

@@ -2398,18 +2398,9 @@ export async function seedCrossMedia(
         }
       }
       const run = await importer.runRecords(registration, records());
-      const active = importer.session.store.peekActive(crossMediaAliases[provider]);
-      const unresolvedAggregates = active
-        ? importer.session.store.pageUnresolvedAggregates(active.run, { limit: 20 }).operations.map((operation) => ({
-            recordKey: operation.recordKey,
-            kind: operation.kind,
-            status: operation.status,
-            intended: operation.intended,
-          }))
-        : [];
       ensure(
         run.status === 'committed' || onlyPendingBangumiCovers(provider, run),
-        `Cross-media ${provider} import failed: ${run.status}${run.diagnostic ? ` (${run.diagnostic})` : ''}; unresolved=${JSON.stringify(unresolvedAggregates)}`,
+        `Cross-media ${provider} import failed: ${run.status}${run.diagnostic ? ` (${run.diagnostic})` : ''}`,
       );
       runs[provider] = run;
     }
