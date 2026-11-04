@@ -317,7 +317,7 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
       expect(controls().queryByText('Draft companion sibling')).toBeNull();
       expect(window.document.activeElement).toBe(focused);
       await capture();
-      expect(calls[2]!.input.profile.types).toHaveLength(1);
+      expect(calls[2]!.input.profile.types).toHaveLength(2);
       await click(controls().getByRole('button', { name: m.draft_preview_interrupt({}, { locale }) }));
       await settle(2, success(2));
       expect(controls().getByText(m.draft_preview_interrupted({}, { locale }))).toBeTruthy();
