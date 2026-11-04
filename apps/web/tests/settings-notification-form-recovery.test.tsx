@@ -336,16 +336,26 @@ test('a later edit survives historical receipt and current read until the whole 
     );
   const switchNamed = (name: string) =>
     [...host.querySelectorAll<HTMLElement>('[role="switch"]')].find((control) => control.getAttribute('aria-label') === name)!;
+  const setSwitch = async (name: string, enabled: boolean) => {
+    await act(async () => {
+      const control = switchNamed(name);
+      const key = Object.keys(control).find((item) => item.startsWith('__reactProps$'));
+      const props = key
+        ? (Reflect.get(control, key) as { onCheckedChange?: (value: boolean) => void })
+        : undefined;
+      if (props?.onCheckedChange) props.onCheckedChange(enabled);
+      else control.click();
+    });
+  };
   try {
     await act(async () => {
       root = hydrateRoot(host as unknown as HTMLElement, card);
     });
     expect(calls[0]!.notifications).toEqual({ reply: false });
     const original = calls[0]!;
-    await act(async () => {
-      switchNamed('Mentions of you').click();
-      switchNamed('legacy_digest').click();
-    });
+    await setSwitch('Mentions of you', false);
+    await setSwitch('legacy_digest', false);
+    expect(switchNamed('Mentions of you').getAttribute('aria-checked')).toBe('false');
     await click('Retry original save');
     expect(calls[1]).toBe(original);
     expect(host.textContent).toContain('The original save was confirmed');
