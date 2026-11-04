@@ -201,7 +201,7 @@ export function RealmMembersPage({
           </h2>
           {actionableSelected && read.kind === 'ready' ? (
             <MemberAddition
-              key={`${selection.address.accountId}:${selection.address.authority}:${selection.address.membershipInterval ?? 'entered'}:${selected.membershipEpisode}`}
+              key={`${selection.address.accountId}:${selection.address.authority}:${selection.address.membershipInterval ?? 'entered'}:${actionableSelected.membershipEpisode}`}
               realmLabel={read.page.realm.label}
               selected={actionableSelected}
               address={selection.address}
