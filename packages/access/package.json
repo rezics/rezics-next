@@ -1,0 +1,17 @@
+{
+  "name": "@rezics/access",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "typecheck": "bun check --no-script -p tsconfig.json"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false,
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "@types/node": "26.6.6"
+  }
+}

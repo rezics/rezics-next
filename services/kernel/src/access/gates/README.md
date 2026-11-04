@@ -3,6 +3,18 @@
 Every mounted route declares `x-exposure` as `public` or `gate:<group>`. Group names match
 `^[a-z][a-z_]{0,62}$`; `any`, `open`, and `close` are reserved. The kernel validates declarations when it is composed.
 
+Decision: mounted route declarations keep the underscore-only group grammar, while native opening and gate-action
+inputs keep the existing underscore-or-hyphen grammar; neither profile changes its admitted set.
+
+`@rezics/access` is the pure public policy surface for normalized declarations, the installed exposure catalogue and
+the shared public/open/closed combining rule. Kernel's `declaration.ts` adapter reads trusted mounted metadata and
+passes only the explicit `x-exposure` value to the package. `visibility.ts` adapts the installed operation
+descriptor, including `x-action`, then discovery and management compile the same immutable catalogue through the
+public entry. Admission and discovery use the same exact `gate:<group>` / `gate:any` action alternatives and
+decision function. The package has no router or runtime imports. Opening changes exposure only; resource permission,
+native authority, currentness and audit remain with their existing Kernel owners. Unavailable opening or authority
+reads continue to fail unavailable rather than becoming closed state.
+
 A gate is closed when `access.exposure_opening` has no row for its group containing the request's T. A closed route
 first checks the actor's authentication, then checks `gate:<group>` or `gate:any` on the Global Context for both the
 actor and any authenticated principal. The check uses the route's `x-action` scope and happens before the route's own
@@ -74,6 +86,12 @@ open/close actions. Native management remains usable when optional discovery is 
 ## Cost
 
 `G` is the fixed mounted group count. `M` is the fixed mounted route count, `K <= 1,000` the Access formula's admitted-key cap, and `E` the exposure-opening index size. Gate checks reuse the Access formula bound: O(log E + (1 + K) log G) with constant rows and statements for a fixed request.
+
+The complete Kernel call remains bounded: admission performs one temporal opening point read and, for a closed
+in-scope account, one native formula over exact Global gate actions. Discovery performs one open-groups read and at
+most one such formula per in-scope closed group while projecting the fixed M mounted operations. Management keeps
+one immutable deployment catalogue, pages at most 100 groups by signed keyset, reads each selected current opening
+once, and retains its fixed before/after authority checks. The pure package adds no database work or request cache.
 
 | Operation                                  | Touches                                                                                                                                                                                                                                                                                                                              | Bound                                                                                                                                                                         | Growth check                                                                                                                                                                                                                    |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

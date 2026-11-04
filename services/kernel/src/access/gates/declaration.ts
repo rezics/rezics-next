@@ -1,7 +1,6 @@
-export type Exposure = { kind: 'public' } | { kind: 'gate'; group: string };
+import { parseExposureDeclaration, type Exposure } from '@rezics/access';
 
-const GROUP_PATTERN = /^[a-z][a-z_]{0,62}$/;
-const RESERVED_GROUPS = new Set(['any', 'open', 'close']);
+export type { Exposure } from '@rezics/access';
 
 /** Parse trusted route metadata once, when the production kernel is composed. */
 export function parseExposure(detail: unknown): Exposure {
@@ -9,13 +8,10 @@ export function parseExposure(detail: unknown): Exposure {
     typeof detail === 'object' && detail !== null && !Array.isArray(detail)
       ? (detail as Record<string, unknown>)
       : undefined;
-  const value = metadata?.['x-exposure'];
-  if (value === 'public') return { kind: 'public' };
-  if (typeof value === 'string' && value.startsWith('gate:')) {
-    const group = value.slice(5);
-    if (GROUP_PATTERN.exec(group)?.[0] === group && !RESERVED_GROUPS.has(group)) return { kind: 'gate', group };
+  try {
+    return parseExposureDeclaration(metadata?.['x-exposure']);
+  } catch {
+    const route = typeof metadata?.operationId === 'string' ? metadata.operationId : '<unnamed route>';
+    throw new Error(`${route}: routes declare x-exposure as public or gate:<group> with a valid, non-reserved group`);
   }
-
-  const route = typeof metadata?.operationId === 'string' ? metadata.operationId : '<unnamed route>';
-  throw new Error(`${route}: routes declare x-exposure as public or gate:<group> with a valid, non-reserved group`);
 }

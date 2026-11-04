@@ -110,6 +110,14 @@
         "wrangler": "4.156.0",
       },
     },
+    "packages/access": {
+      "name": "@rezics/access",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "1.4.4",
+        "@types/node": "26.6.6",
+      },
+    },
     "packages/auth-contract": {
       "name": "@rezics/auth-contract",
       "devDependencies": {
@@ -302,6 +310,7 @@
         "@dbos-inc/dbos-sdk": "5.5.3-preview",
         "@elysia/openapi": "2.0.0-rc.0",
         "@reylosql/postgres": "0.6.0",
+        "@rezics/access": "workspace:*",
         "@rezics/auth": "workspace:*",
         "@rezics/auth-contract": "workspace:*",
         "@rezics/composition": "workspace:*",
@@ -1020,6 +1029,8 @@
     "@resvg/resvg-wasm": ["@resvg/resvg-wasm@2.6.2", "", {}, "sha512-FqALmHI8D4o6lk/LRWDnhw95z5eO+eAa6ORjVg09YRR7BkcM6oPHU9uyC0gtQG5vpFLvgpeU4+zEAz2H8APHNw=="],
 
     "@reylosql/postgres": ["@reylosql/postgres@0.6.0", "", {}, "sha512-Y4BV7iloJapUvsUs6kCEmU4TVB7qPBuAECzW7yLjMByhDHmsH9lS/oyNZ0UfZp36AghXQfzdv7C71S0BKM5D0Q=="],
+
+    "@rezics/access": ["@rezics/access@workspace:packages/access"],
 
     "@rezics/auth": ["@rezics/auth@workspace:services/auth"],
 

@@ -15,6 +15,7 @@ import { withConnection, discardConnection } from '../../database/pool.ts';
 import { deadlineClient, within } from '../authenticate.ts';
 import type { AccountActor, AccessContext, Resource } from '../../request/access.ts';
 import { partitionOf } from '../../route/route.ts';
+import { isExposureGroup } from '@rezics/access';
 import openingClose from './opening-close.sql';
 import openingOpen from './opening-open.sql';
 import openingRead from './opening-read.sql';
@@ -26,12 +27,7 @@ export const GLOBAL_CONTEXT: Resource = Object.freeze({
   id: '00000000-0000-8000-8000-000000000000',
 });
 
-const GROUP_PATTERN = /^[a-z][a-z_-]{0,62}$/;
-const RESERVED_GROUPS = new Set(['any', 'open', 'close']);
-
-export function isExposureGroup(value: string): boolean {
-  return GROUP_PATTERN.exec(value)?.[0] === value && !RESERVED_GROUPS.has(value);
-}
+export { isExposureGroup };
 
 export type ExposureState = { open: boolean; at: string };
 

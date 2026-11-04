@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
+import type { ExposureCatalogue } from '@rezics/access';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../../command/command.ts';
 import { withConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem.ts';
@@ -10,7 +11,7 @@ import type { KeyRing } from '../../tokens/seal.ts';
 import { deadlineClient, within } from '../authenticate.ts';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../unavailable.ts';
 import { GLOBAL_CONTEXT, readExposure } from './catalogue.ts';
-import { classifyExposureRoutes } from './visibility.ts';
+import { mountedExposureCatalogue } from './visibility.ts';
 
 export type ExposureManagementDependencies = {
   pool: Pool;
@@ -61,22 +62,16 @@ function isInstalledCommand(routes: readonly MountedRoute[], action: ExposureAct
 function catalogueOf(routes: readonly MountedRoute[]): Catalogue {
   let catalogue = catalogues.get(routes);
   if (catalogue) return catalogue;
-  const operations = classifyExposureRoutes(routes);
-  const groups = Object.freeze(
-    [...new Set(operations.flatMap((op) => (op.exposure.kind === 'gate' ? [op.exposure.group] : [])))].sort(),
-  );
-  const declarations = operations
-    .map((op) => JSON.stringify([op.method, op.path, op.operationId, op.action, op.exposure]))
-    .sort();
+  const exposureCatalogue: ExposureCatalogue = mountedExposureCatalogue(routes);
   const actions = Object.freeze({
     open: isInstalledCommand(routes, 'open'),
     close: isInstalledCommand(routes, 'close'),
   });
   catalogue = Object.freeze({
-    groups,
+    groups: exposureCatalogue.groups,
     actions,
     digest: createHash('sha256')
-      .update(JSON.stringify([declarations, actions]))
+      .update(JSON.stringify([exposureCatalogue.digestEntries, actions]))
       .digest('hex'),
   });
   catalogues.set(routes, catalogue);

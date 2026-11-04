@@ -2,6 +2,7 @@ import { readNativeAccessTime } from '../authenticate.ts';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../../command/command.ts';
 import type { AccessWorkAccounting } from '../work.ts';
 import type { Pool } from 'pg';
+import { decideExposure, exposureAuthorityActions } from '@rezics/access';
 import { authorizePlatformGate } from '../index.ts';
 import type { Access, Actor } from '../../request/access.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
@@ -36,23 +37,34 @@ export async function admitGroup(input: {
     const time = input.work ? (input.time ?? (ownedTime = await readNativeAccessTime(input, input.clock))) : undefined;
     const at = time ? new Date(authoritativeTimeValue(time)) : input.clock();
     const state = await readExposure(input.pool, input.group, at, input.deadline, input.work, time);
-    if (state.open) return;
-    if (input.actor.kind !== 'account') throw new PlatformClosedError();
-    const allowed = await authorizePlatformGate(
-      input.access(),
-      input.actor,
-      [`gate:${input.group}`, 'gate:any'],
-      input.clientAction,
-      GLOBAL_CONTEXT,
-      {
-        pool: input.pool,
-        deadline: input.deadline,
-        ...(input.work ? { work: input.work } : {}),
-        ...(time ? { time } : {}),
-      },
-      state.at,
-    );
-    if (!allowed) throw new PlatformClosedError();
+    const clientScope = input.actor.kind === 'account' && input.actor.scopes.includes(input.clientAction);
+    const gateAuthority =
+      !state.open && input.actor.kind === 'account' && clientScope
+        ? await authorizePlatformGate(
+            input.access(),
+            input.actor,
+            exposureAuthorityActions(input.group),
+            input.clientAction,
+            GLOBAL_CONTEXT,
+            {
+              pool: input.pool,
+              deadline: input.deadline,
+              ...(input.work ? { work: input.work } : {}),
+              ...(time ? { time } : {}),
+            },
+            state.at,
+          )
+        : false;
+    if (
+      !decideExposure({
+        exposure: { kind: 'gate', group: input.group },
+        open: state.open,
+        actor: input.actor.kind,
+        clientScope,
+        gateAuthority,
+      }).allowed
+    )
+      throw new PlatformClosedError();
   } catch (error) {
     // An ordinary closed decision keeps its successful receipt usable.
     if (!(error instanceof PlatformClosedError)) input.work?.fail(error);
