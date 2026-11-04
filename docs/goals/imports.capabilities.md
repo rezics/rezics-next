@@ -940,6 +940,7 @@ statement`; `production graph journals immutable relation commands and retries w
 `live-action adaptation uses the admitted Movie profile and keeps a one-sided row`; `reciprocal parent-story evidence
 selects its canonical relation and changes the proposal key`; `unknown, unreviewed music, missing endpoint, and
 unavailable profile remain bounded gaps`; and `production operator imports reciprocal and one-sided work relations
-for independent native adoption`. None ran in this attempt. The native accept/adopt, current-read, reimport and
-changed-reciprocal journey is registered, but its execution is deferred to integration; no capability promotion is
-claimed.
+for independent native adoption`. The focused conversion and importer scenario files passed. The Bangumi inventory
+file test remains red at its unchanged episode `schema:keywords` mapping, which lacks a `wikidata` value. The native
+accept/adopt, current-read, reimport and changed-reciprocal journey is registered, but execution is deferred to
+integration; no capability promotion is claimed.
