@@ -8,7 +8,11 @@ test('page reads send only a stage, bound responses and keep outages explicitly 
   try {
     expect((await loadRecoveryPage('complete')).kind).toBe('ready');
     expect(request.mock.calls[0]?.[0]).toBe('/recovery/page');
-    expect(request.mock.calls[0]?.[1]).toMatchObject({ body: '{"stage":"complete"}', cache: 'no-store', redirect: 'error' });
+    expect(request.mock.calls[0]?.[1]).toMatchObject({
+      body: '{"stage":"complete"}',
+      cache: 'no-store',
+      redirect: 'error',
+    });
     request.mockResolvedValueOnce(new Response('', { status: 503 }));
     expect(await loadRecoveryPage('step-up')).toEqual({ kind: 'unavailable' });
     request.mockResolvedValueOnce(new Response(' '.repeat(4097)));
@@ -18,7 +22,9 @@ test('page reads send only a stage, bound responses and keep outages explicitly 
     const pending = loadRecoveryPage('step-up', caller.signal);
     caller.abort();
     expect(await pending).toEqual({ kind: 'unavailable' });
-  } finally { request.mockRestore(); }
+  } finally {
+    request.mockRestore();
+  }
 });
 
 test('stage actions cannot validate a credential or restore another stage’s account advice', () => {
@@ -29,5 +35,7 @@ test('stage actions cannot validate a credential or restore another stage’s ac
   expect(anonymous.viewer).toEqual({ kind: 'signed-out' });
   expect(parseRecoveryPage({ ...anonymous, viewer }, 'complete')).toBeNull();
   expect(parseRecoveryPage({ ...anonymous, token_valid: true }, 'complete')).toBeNull();
-  expect(parseRecoveryPage({ ...anonymous, actions: { start: true, complete: true, authenticate: false } }, 'complete')).toBeNull();
+  expect(
+    parseRecoveryPage({ ...anonymous, actions: { start: true, complete: true, authenticate: false } }, 'complete'),
+  ).toBeNull();
 });

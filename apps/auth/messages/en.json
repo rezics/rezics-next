@@ -465,5 +465,6 @@
   "auth_recovery_retry_exact": "Retry original submission",
   "auth_step_up_continuation_changed": "Authentication succeeded, but the saved request changed or was removed. Return to the action and review it again. No action was sent.",
   "auth_recovery_consequences": "A completed reset ends your existing sessions. Sign in again with your new password.",
-  "auth_step_up_review_required": "After authentication, review the pending action and confirm it again. Authentication does not send the action."
+  "auth_step_up_review_required": "After authentication, review the pending action and confirm it again. Authentication does not send the action.",
+  "auth_step_up_account_changed": "Authentication finished, but the required account session is no longer current. Return to the action and restart verification."
 }

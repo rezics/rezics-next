@@ -465,5 +465,6 @@
   "auth_recovery_retry_exact": "重试原先提交的内容",
   "auth_step_up_continuation_changed": "身份验证成功，但保存的请求已更改或移除。请返回原先的操作并重新确认。尚未发送任何操作。",
   "auth_recovery_consequences": "重置完成后，现有会话将结束。请使用新密码重新登录。",
-  "auth_step_up_review_required": "验证身份后，请重新检查并确认待处理的操作。身份验证不会发送操作。"
+  "auth_step_up_review_required": "验证身份后，请重新检查并确认待处理的操作。身份验证不会发送操作。",
+  "auth_step_up_account_changed": "身份验证已完成，但所需账号的会话已不是当前会话。请返回原先的操作并重新验证。"
 }

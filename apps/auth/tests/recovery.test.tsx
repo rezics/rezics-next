@@ -57,8 +57,10 @@ async function open(fragment = '') {
   let closed = false;
   let release!: (response: Response) => void;
   globalThis.fetch = (async (_path, init) => {
-    if (_path === '/recovery/page') return Response.json(recoveryPage(JSON.parse(String(init?.body)).stage,
-      { minPasswordLength: 8, maxPasswordLength: 128 }));
+    if (_path === '/recovery/page')
+      return Response.json(
+        recoveryPage(JSON.parse(String(init?.body)).stage, { minPasswordLength: 8, maxPasswordLength: 128 }),
+      );
     calls.push(JSON.parse(String(init?.body)));
     return new Promise<Response>((resolve) => {
       release = resolve;

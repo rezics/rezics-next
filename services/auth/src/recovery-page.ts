@@ -35,8 +35,7 @@ export function recoveryPage(
     continuation: stage === 'step-up' ? 'authenticate-before-review' : 'sign-in',
     actions: { start: stage === 'start', complete: stage === 'complete', authenticate: stage === 'step-up' },
   };
-  if (new TextEncoder().encode(JSON.stringify(page)).byteLength > 4096)
-    throw new Error('Recovery page unavailable');
+  if (new TextEncoder().encode(JSON.stringify(page)).byteLength > 4096) throw new Error('Recovery page unavailable');
   return page;
 }
 
@@ -46,8 +45,13 @@ export function recoveryPage(
 export async function observeRecoveryViewer<T>(read: () => Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([read(), new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('Recovery page unavailable')), 3000);
-    })]);
-  } finally { clearTimeout(timer); }
+    return await Promise.race([
+      read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Recovery page unavailable')), 3000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

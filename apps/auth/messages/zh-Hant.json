@@ -465,5 +465,6 @@
   "auth_recovery_retry_exact": "重試原本的提交內容",
   "auth_step_up_continuation_changed": "身分驗證成功，但儲存的要求已變更或移除。請回到原本的操作並重新確認。尚未送出任何操作。",
   "auth_recovery_consequences": "重設完成後，現有的工作階段將結束。請使用新密碼重新登入。",
-  "auth_step_up_review_required": "驗證身分後，請重新檢視並確認待處理的操作。身分驗證不會送出操作。"
+  "auth_step_up_review_required": "驗證身分後，請重新檢視並確認待處理的操作。身分驗證不會送出操作。",
+  "auth_step_up_account_changed": "身分驗證已完成，但所需帳號的工作階段已不是目前的工作階段。請回到原本的操作並重新驗證。"
 }

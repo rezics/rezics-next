@@ -465,5 +465,6 @@
   "auth_recovery_retry_exact": "Reintentar el envío original",
   "auth_step_up_continuation_changed": "La autenticación se completó, pero la solicitud guardada cambió o se eliminó. Vuelve a la acción y revísala de nuevo. No se envió ninguna acción.",
   "auth_recovery_consequences": "Al completarse el restablecimiento se cierran tus sesiones actuales. Inicia sesión de nuevo con tu nueva contraseña.",
-  "auth_step_up_review_required": "Tras autenticarte, revisa la acción pendiente y vuelve a confirmarla. La autenticación no envía la acción."
+  "auth_step_up_review_required": "Tras autenticarte, revisa la acción pendiente y vuelve a confirmarla. La autenticación no envía la acción.",
+  "auth_step_up_account_changed": "La autenticación terminó, pero la sesión de la cuenta requerida ya no es la actual. Vuelve a la acción e inicia de nuevo la verificación."
 }

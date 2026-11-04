@@ -465,5 +465,6 @@
   "auth_recovery_retry_exact": "처음 제출한 내용으로 재시도",
   "auth_step_up_continuation_changed": "인증은 성공했지만 저장된 요청이 변경되거나 삭제되었습니다. 원래 작업으로 돌아가 다시 검토하세요. 작업은 전송되지 않았습니다.",
   "auth_recovery_consequences": "재설정이 완료되면 기존 세션이 종료됩니다. 새 비밀번호로 다시 로그인하세요.",
-  "auth_step_up_review_required": "인증 후 보류 중인 작업을 검토하고 다시 확인하세요. 인증만으로 작업이 전송되지는 않습니다."
+  "auth_step_up_review_required": "인증 후 보류 중인 작업을 검토하고 다시 확인하세요. 인증만으로 작업이 전송되지는 않습니다.",
+  "auth_step_up_account_changed": "인증은 완료되었지만 필요한 계정의 세션이 더 이상 현재 세션이 아닙니다. 원래 작업으로 돌아가 인증을 다시 시작하세요."
 }

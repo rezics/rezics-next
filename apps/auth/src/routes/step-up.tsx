@@ -276,11 +276,17 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
     <AuthPage heading={m.auth_step_up_heading()}>
       <>
         {advice.state.kind === 'loading' ? <p role="status">{m.auth_inventory_loading()}</p> : null}
-        {advice.state.kind === 'unavailable' ? <>
-          <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
-          <Button type="button" onClick={advice.retry}>{m.auth_login_retry()}</Button>
-        </> : null}
-        {page?.viewer.kind === 'signed-in' ? <p>{m.auth_login_current_account({ account: page.viewer.email ?? page.viewer.account_id })}</p> : null}
+        {advice.state.kind === 'unavailable' ? (
+          <>
+            <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
+            <Button type="button" onClick={advice.retry}>
+              {m.auth_login_retry()}
+            </Button>
+          </>
+        ) : null}
+        {page?.viewer.kind === 'signed-in' ? (
+          <p>{m.auth_login_current_account({ account: page.viewer.email ?? page.viewer.account_id })}</p>
+        ) : null}
         <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
           <p>{m.auth_step_up_explanation()}</p>
           <p>{m.auth_step_up_review_required()}</p>
@@ -329,7 +335,11 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
               {message}
             </ErrorAlert>
           ) : null}
-          <Button type="submit" disabled={(pending && !passkeyPending) || !page?.actions.authenticate || !page.methods.password} aria-busy={pending && !passkeyPending}>
+          <Button
+            type="submit"
+            disabled={(pending && !passkeyPending) || !page?.actions.authenticate || !page.methods.password}
+            aria-busy={pending && !passkeyPending}
+          >
             {m.auth_step_up_heading()}
           </Button>
           {passkeys && page?.methods.passkey && page.actions.authenticate ? (

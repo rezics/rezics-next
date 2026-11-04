@@ -1,10 +1,14 @@
 import { authPost, failureMessage } from './api';
 import {
-  selectOrganizationDeleteStepUp, organizationDeleteSessionMatches, organizationDeletePendingMatches,
+  selectOrganizationDeleteStepUp,
+  organizationDeleteSessionMatches,
+  organizationDeletePendingMatches,
 } from './organization-delete-step-up';
 import { loadAccountSession } from './account-operations';
 import {
-  accountOperationSessionMatches, selectAccountOperationStepUp, pendingAccountOperationMatches,
+  accountOperationSessionMatches,
+  selectAccountOperationStepUp,
+  pendingAccountOperationMatches,
 } from './account-operation-step-up';
 import { passkeySignInFailure, signInWithPasskey } from './passkeys';
 import { signIn, signInForAccountOperation, signInTarget, signInResult, type SignInResult } from './sign-in';
@@ -44,28 +48,48 @@ function retainedSelectionMatches(query: string, selection: RetainedSelection): 
   // targets cannot become ordinary navigation after authentication succeeds.
   const current = selectStepUp(query);
   if (selection.kind === 'organization-delete') {
-    return current.kind === 'organization-delete' &&
+    return (
+      current.kind === 'organization-delete' &&
       current.pending.operation === selection.pending.operation &&
       current.pending.returnTo === selection.pending.returnTo &&
-      organizationDeletePendingMatches(current.pending, selection.pending.humanAccountId,
-        selection.pending.organizationId, selection.pending.operationKey);
+      organizationDeletePendingMatches(
+        current.pending,
+        selection.pending.humanAccountId,
+        selection.pending.organizationId,
+        selection.pending.operationKey,
+      )
+    );
   }
-  return current.kind === 'operation' && current.pending.returnTo === selection.pending.returnTo &&
-    pendingAccountOperationMatches(current.pending, selection.pending.accountId,
-      selection.pending.operationKey, selection.pending.operation);
+  return (
+    current.kind === 'operation' &&
+    current.pending.returnTo === selection.pending.returnTo &&
+    pendingAccountOperationMatches(
+      current.pending,
+      selection.pending.accountId,
+      selection.pending.operationKey,
+      selection.pending.operation,
+    )
+  );
 }
 
 async function retainedReturn(
-  query: string, selection: RetainedSelection, origin: string, isCurrent: () => boolean,
+  query: string,
+  selection: RetainedSelection,
+  origin: string,
+  isCurrent: () => boolean,
 ): Promise<StepUpOutcome> {
   const failure = () => ({ ok: false as const, message: m.auth_step_up_continuation_changed() });
   if (!isCurrent() || !retainedSelectionMatches(query, selection)) return failure();
   const session = await loadAccountSession();
   if (!isCurrent() || !retainedSelectionMatches(query, selection)) return failure();
-  if (session.kind !== 'ready' || !(selection.kind === 'organization-delete'
-    ? organizationDeleteSessionMatches(session, selection.pending)
-    : accountOperationSessionMatches(session, selection.pending)))
-    return { ok: false, message: m.auth_account_operation_failure() };
+  if (session.kind === 'failure') return { ok: false, message: m.auth_failure_unavailable() };
+  if (
+    session.kind !== 'ready' ||
+    !(selection.kind === 'organization-delete'
+      ? organizationDeleteSessionMatches(session, selection.pending)
+      : accountOperationSessionMatches(session, selection.pending))
+  )
+    return { ok: false, message: m.auth_step_up_account_changed() };
   return { ok: true, target: new URL(selection.pending.returnTo, origin).href };
 }
 

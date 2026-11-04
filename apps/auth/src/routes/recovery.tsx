@@ -174,7 +174,10 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     event.preventDefault();
     if (!attempt.available || !page?.actions.complete || !page.methods.password) return;
     const passwordLength = password.length;
-    if (!submission.current && (passwordLength < page.requirements.password_min_length || passwordLength > page.requirements.password_max_length)) {
+    if (
+      !submission.current &&
+      (passwordLength < page.requirements.password_min_length || passwordLength > page.requirements.password_max_length)
+    ) {
       const error = password ? m.auth_recovery_password_invalid() : m.auth_form_required();
       setPasswordFieldError(error);
       setMessage(error);
@@ -227,11 +230,17 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
 
   if (hasFragment === null) return <AuthPage heading={m.auth_recovery_heading()} />;
 
-  const readAdvice = advice.state.kind === 'loading' ? <p role="status">{m.auth_inventory_loading()}</p>
-    : advice.state.kind === 'unavailable' ? <>
-      <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
-      <Button type="button" onClick={advice.retry}>{m.auth_login_retry()}</Button>
-    </> : null;
+  const readAdvice =
+    advice.state.kind === 'loading' ? (
+      <p role="status">{m.auth_inventory_loading()}</p>
+    ) : advice.state.kind === 'unavailable' ? (
+      <>
+        <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
+        <Button type="button" onClick={advice.retry}>
+          {m.auth_login_retry()}
+        </Button>
+      </>
+    ) : null;
 
   if (hasFragment && !credentials) {
     return (
@@ -290,7 +299,11 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
           {unknown || message === failureMessage(401, 'invalid_recovery', null) ? (
             <a href="/recovery">{m.auth_recovery_new_link()}</a>
           ) : null}
-          <Button type="submit" disabled={pending || !page?.actions.complete || !page.methods.password} aria-busy={pending}>
+          <Button
+            type="submit"
+            disabled={pending || !page?.actions.complete || !page.methods.password}
+            aria-busy={pending}
+          >
             {unknown ? m.auth_recovery_retry_exact() : m.auth_recovery_complete_submit()}
           </Button>
         </form>

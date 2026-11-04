@@ -465,5 +465,6 @@
   "auth_recovery_retry_exact": "Réessayer les données initiales",
   "auth_step_up_continuation_changed": "L’authentification a réussi, mais la demande enregistrée a changé ou a été supprimée. Revenez à l’action pour la vérifier à nouveau. Aucune action n’a été envoyée.",
   "auth_recovery_consequences": "Une réinitialisation terminée ferme vos sessions existantes. Reconnectez-vous avec votre nouveau mot de passe.",
-  "auth_step_up_review_required": "Après l’authentification, vérifiez l’action en attente et confirmez-la à nouveau. L’authentification n’envoie pas l’action."
+  "auth_step_up_review_required": "Après l’authentification, vérifiez l’action en attente et confirmez-la à nouveau. L’authentification n’envoie pas l’action.",
+  "auth_step_up_account_changed": "L’authentification est terminée, mais la session du compte requis n’est plus actuelle. Revenez à l’action et recommencez la vérification."
 }

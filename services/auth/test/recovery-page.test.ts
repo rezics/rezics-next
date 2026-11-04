@@ -20,5 +20,9 @@ test('step-up exposes only its authorized viewer and installed methods, with rev
   expect(page.methods).toEqual({ email: true, password: true, passkey: true });
   expect(page.continuation).toBe('authenticate-before-review');
   expect(page.actions).toEqual({ start: false, complete: false, authenticate: true });
-  await expect(observeRecoveryViewer(async () => { throw new Error('Unavailable'); })).rejects.toThrow('Unavailable');
+  await expect(
+    observeRecoveryViewer(async () => {
+      throw new Error('Unavailable');
+    }),
+  ).rejects.toThrow('Unavailable');
 });

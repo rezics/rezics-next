@@ -2068,9 +2068,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             if (!(error instanceof Denied) || error.status !== 401) throw error;
             viewer = { kind: 'signed-out' };
           }
-          const page = recoveryPageRead && isRecoveryPageStage(stage)
-            ? recoveryPage(stage, (await getContext()).password.config, viewer)
-            : signInPage(body.query as string, options.issuer, viewer);
+          const page =
+            recoveryPageRead && isRecoveryPageStage(stage)
+              ? recoveryPage(stage, (await getContext()).password.config, viewer)
+              : signInPage(body.query as string, options.issuer, viewer);
           if (!page) throw new Denied(400);
           return respond(page);
         }

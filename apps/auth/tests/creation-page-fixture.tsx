@@ -61,8 +61,12 @@ export function creationFixture() {
 export async function open(page: ReactNode, sessionBody: object) {
   const calls: { path: string; body: any; resolve: (response: Response) => void }[] = [];
   globalThis.fetch = ((path, init) => {
-    if (path === '/recovery/page') return Promise.resolve(Response.json(recoveryPage(JSON.parse(String(init?.body)).stage,
-      { minPasswordLength: 8, maxPasswordLength: 128 })));
+    if (path === '/recovery/page')
+      return Promise.resolve(
+        Response.json(
+          recoveryPage(JSON.parse(String(init?.body)).stage, { minPasswordLength: 8, maxPasswordLength: 128 }),
+        ),
+      );
     if (['/session', '/account-management/deletion-page'].includes(String(path)))
       return Promise.resolve(Response.json(sessionBody));
     const request = Promise.withResolvers<Response>();

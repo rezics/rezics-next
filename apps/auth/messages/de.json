@@ -465,5 +465,6 @@
   "auth_recovery_retry_exact": "Ursprüngliche Übermittlung wiederholen",
   "auth_step_up_continuation_changed": "Die Anmeldung war erfolgreich, aber die gespeicherte Anfrage wurde geändert oder entfernt. Kehre zur Aktion zurück und prüfe sie erneut. Es wurde keine Aktion gesendet.",
   "auth_recovery_consequences": "Ein abgeschlossener Reset beendet deine bestehenden Sitzungen. Melde dich mit deinem neuen Passwort erneut an.",
-  "auth_step_up_review_required": "Prüfe nach der Anmeldung die ausstehende Aktion und bestätige sie erneut. Die Anmeldung sendet die Aktion nicht."
+  "auth_step_up_review_required": "Prüfe nach der Anmeldung die ausstehende Aktion und bestätige sie erneut. Die Anmeldung sendet die Aktion nicht.",
+  "auth_step_up_account_changed": "Die Anmeldung ist abgeschlossen, aber die Sitzung des benötigten Kontos ist nicht mehr aktuell. Kehre zur Aktion zurück und beginne die Prüfung erneut."
 }

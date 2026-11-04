@@ -19,8 +19,13 @@ export function definitiveRecoveryRefusal(result: Exclude<AuthPostResult, { ok: 
 export function recoveryFailure(result: Exclude<AuthPostResult, { ok: true }>): string {
   // The real native handler uses authentication_denied for both validation
   // refusals; the browser HTTP fixtures also exercise the more specific codes.
-  const code = result.code === 'authentication_denied'
-    ? result.status === 400 ? 'invalid_password' : result.status === 401 ? 'invalid_recovery' : result.code
-    : result.code;
+  const code =
+    result.code === 'authentication_denied'
+      ? result.status === 400
+        ? 'invalid_password'
+        : result.status === 401
+          ? 'invalid_recovery'
+          : result.code
+      : result.code;
   return failureMessage(result.status, code, result.retryAfter);
 }
