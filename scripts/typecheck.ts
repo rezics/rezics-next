@@ -70,8 +70,15 @@ function compilerStateFingerprint(root: string): string {
   return hash.digest('hex').slice(0, 24);
 }
 
-function prepareCompilerState(root: string, workspaces: readonly Workspace[], env: NodeJS.ProcessEnv): CompilerState | undefined {
-  if (!isLocalTypecheckLanding(env) || !workspaces.some((workspace) => relative(root, workspace.directory) === 'services/kernel'))
+function prepareCompilerState(
+  root: string,
+  workspaces: readonly Workspace[],
+  env: NodeJS.ProcessEnv,
+): CompilerState | undefined {
+  if (
+    !isLocalTypecheckLanding(env) ||
+    !workspaces.some((workspace) => relative(root, workspace.directory) === 'services/kernel')
+  )
     return undefined;
 
   const base = env.TYPECHECK_DEV_COMMIT!;
@@ -341,7 +348,9 @@ function blockFor(
   forcedOutcome?: WorkspaceOutcome,
 ): WorkspaceResult {
   const output = code === 0 ? '' : [stdout.trimEnd(), stderr.trimEnd()].filter(Boolean).join('\n');
-  const hasDiagnostics = /(?:^|\n)[^\n]*\.(?:[cm]?[jt]sx?)(?:\(\d+,\d+\)|:\d+:\d+)\s*(?::|\s+-)?\s*error\b/m.test(output);
+  const hasDiagnostics = /(?:^|\n)[^\n]*\.(?:[cm]?[jt]sx?)(?:\(\d+,\d+\)|:\d+:\d+)\s*(?::|\s+-)?\s*error\b/m.test(
+    output,
+  );
   const outcome: WorkspaceOutcome =
     forcedOutcome ??
     (code === 0
@@ -439,7 +448,10 @@ async function withStartedDatabase(
     database = await startDatabase();
   } catch (error) {
     state?.discard();
-    return infrastructure('root typecheck', `compiler database setup could not be proven: ${error instanceof Error ? error.message : String(error)}`);
+    return infrastructure(
+      'root typecheck',
+      `compiler database setup could not be proven: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
   let removed = false;
   const remove = async (): Promise<void> => {
@@ -448,20 +460,28 @@ async function withStartedDatabase(
     await database.remove();
   };
   const onSigint = (): void => {
-    void remove().catch((error) => {
-      console.error(`root typecheck infrastructure failure: compiler database cleanup could not be proven: ${error instanceof Error ? error.message : String(error)}`);
-    }).finally(() => {
-      state?.discard();
-      process.exit(130);
-    });
+    void remove()
+      .catch((error) => {
+        console.error(
+          `root typecheck infrastructure failure: compiler database cleanup could not be proven: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      })
+      .finally(() => {
+        state?.discard();
+        process.exit(130);
+      });
   };
   const onSigterm = (): void => {
-    void remove().catch((error) => {
-      console.error(`root typecheck infrastructure failure: compiler database cleanup could not be proven: ${error instanceof Error ? error.message : String(error)}`);
-    }).finally(() => {
-      state?.discard();
-      process.exit(143);
-    });
+    void remove()
+      .catch((error) => {
+        console.error(
+          `root typecheck infrastructure failure: compiler database cleanup could not be proven: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      })
+      .finally(() => {
+        state?.discard();
+        process.exit(143);
+      });
   };
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
@@ -494,7 +514,10 @@ async function withStartedDatabase(
       state.publish();
     } catch (error) {
       state.discard();
-      return infrastructure('root typecheck', `incremental compiler state could not be committed: ${error instanceof Error ? error.message : String(error)}`);
+      return infrastructure(
+        'root typecheck',
+        `incremental compiler state could not be committed: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   state?.discard();
@@ -516,7 +539,10 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
   try {
     all = await loadWorkspaces(root);
   } catch (error) {
-    return infrastructure('root typecheck', `workspace discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+    return infrastructure(
+      'root typecheck',
+      `workspace discovery failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
   const workspaces = affectedWorkspaces(root, all, changed);
   const localLanding = env.TYPECHECK_LOCAL === '1';
@@ -525,7 +551,9 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
   const finish = async (result: Promise<number>): Promise<number> => {
     const code = await result;
     const size = changed === undefined ? 'unscoped changes' : `${changed.length} changed paths`;
-    write(`Typecheck batch completed in ${((performance.now() - startedAt) / 1000).toFixed(2)}s (${size}; ${workspaces.length} workspaces).\n`);
+    write(
+      `Typecheck batch completed in ${((performance.now() - startedAt) / 1000).toFixed(2)}s (${size}; ${workspaces.length} workspaces).\n`,
+    );
     return code;
   };
   if (workspaces.length < all.length)
@@ -537,7 +565,10 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
   try {
     state = prepareCompilerState(root, workspaces, env);
   } catch (error) {
-    return infrastructure('root typecheck', `incremental compiler state could not be prepared: ${error instanceof Error ? error.message : String(error)}`);
+    return infrastructure(
+      'root typecheck',
+      `incremental compiler state could not be prepared: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
   if (state)
     write(
@@ -551,7 +582,10 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
         state.publish();
       } catch (error) {
         state.discard();
-        return infrastructure('root typecheck', `incremental compiler state could not be committed: ${error instanceof Error ? error.message : String(error)}`);
+        return infrastructure(
+          'root typecheck',
+          `incremental compiler state could not be committed: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
     state?.discard();
@@ -589,11 +623,20 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
       options,
     );
   } catch (error) {
-    return finish(Promise.resolve(infrastructure('root typecheck', `check-host execution could not be established: ${error instanceof Error ? error.message : String(error)}`)));
+    return finish(
+      Promise.resolve(
+        infrastructure(
+          'root typecheck',
+          `check-host execution could not be established: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      ),
+    );
   }
   if (placed !== null) {
     if ([75, 124, 130, 143].includes(placed))
-      return finish(Promise.resolve(infrastructure('root typecheck', `check-host execution ended with status ${placed}`)));
+      return finish(
+        Promise.resolve(infrastructure('root typecheck', `check-host execution ended with status ${placed}`)),
+      );
     return finish(Promise.resolve(placed));
   }
   if (env.DATABASE_URL) return finish(run(env));

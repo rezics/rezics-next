@@ -169,17 +169,17 @@ export async function runKernelTypecheck(
   const placed = isLocalTypecheckLanding(env)
     ? null
     : await placeCompilerRun(
-    {
-      label: 'kernel typecheck',
-      root: repository,
-      cwd: directory,
-      command: remoteCommand,
-      keepsFiles: emitClient || emitOpenApi || emitSchema !== undefined || returns === undefined,
-      ...(returns === undefined ? {} : { returns }),
-    },
-    directory,
-    env,
-    dependencies,
+        {
+          label: 'kernel typecheck',
+          root: repository,
+          cwd: directory,
+          command: remoteCommand,
+          keepsFiles: emitClient || emitOpenApi || emitSchema !== undefined || returns === undefined,
+          ...(returns === undefined ? {} : { returns }),
+        },
+        directory,
+        env,
+        dependencies,
       );
   if (placed !== null) return placed;
   writeCommandObservation('kernel typecheck', commandObservation(remoteCommand, repository, env), env);

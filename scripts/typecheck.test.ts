@@ -385,10 +385,17 @@ test('compiler cleanup and no-diagnostic compiler failures are infrastructure, n
       changedFiles: ['services/kernel/src/file.ts'],
       env: local,
       stdout: collector().stdout,
-      startDatabase: async () => ({ url: 'postgres://fixture/shared', remove() { throw new Error('volume remains'); } }),
+      startDatabase: async () => ({
+        url: 'postgres://fixture/shared',
+        remove() {
+          throw new Error('volume remains');
+        },
+      }),
     });
     expect(cleanupCode).toBe(75);
-    expect(error).toHaveBeenCalledWith('root typecheck infrastructure failure: compiler database cleanup could not be proven: volume remains');
+    expect(error).toHaveBeenCalledWith(
+      'root typecheck infrastructure failure: compiler database cleanup could not be proven: volume remains',
+    );
   } finally {
     error.mockRestore();
     databaseFixture.remove();
@@ -400,7 +407,11 @@ test('compiler cleanup and no-diagnostic compiler failures are infrastructure, n
       'fail.ts': 'process.exit(2)\n',
     });
     const output = collector();
-    const code = await typecheck({ root: commandFixture.root, changedFiles: ['packages/failing/fail.ts'], stdout: output.stdout });
+    const code = await typecheck({
+      root: commandFixture.root,
+      changedFiles: ['packages/failing/fail.ts'],
+      stdout: output.stdout,
+    });
     expect(code).toBe(75);
     expect(output.text()).toContain('infrastructure after');
     expect(output.text()).not.toContain('type-errors after');
