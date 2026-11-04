@@ -79,6 +79,9 @@ test('owner restore expires at thirty days and cannot reverse current moderation
   status(await call('DELETE', path(expired), 'owner'), 200);
   setNow(new Date(clock().getTime() + 30 * day));
   status(await call('POST', `${path(expired)}:restoreDeleted`, 'owner', {}), 409);
+  const expiry = await call('GET', `${path(expired)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(expiry, 200);
+  expect(expiry.body).toMatchObject({ state: 'deleted', actions: { state: 'available', operations: [] } });
 });
 
 const initializedAnchors = new Map<string, string[]>();
@@ -245,6 +248,9 @@ test('real author role revocation denies fresh deletion and restoration and both
     }),
     200,
   );
+  const revoked = await call('GET', `${path(record)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(revoked, 200);
+  expect(revoked.body.actions).toEqual({ state: 'available', operations: [] });
   status(await call('DELETE', path(record), 'owner'), 403);
   status(await call('DELETE', path(record), 'owner', undefined, deletion), 403);
   status(await call('POST', `${path(record)}:restoreDeleted`, 'owner', {}), 403);

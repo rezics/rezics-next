@@ -68,7 +68,7 @@ export function contributionFixture(scenario: ContributionScenario = 'ready', lo
             ? { state: 'unavailable' }
             : {
                 state: 'available',
-                operations: scenario === 'denied' || scenario === 'expired' ? [] : [deleted ? 'restore' : 'delete'],
+                operations: scenario === 'denied' ? [] : [deleted ? 'restore' : 'delete'],
               },
       });
     }
