@@ -15,8 +15,15 @@ creationFixture();
 const human = '11111111-1111-4111-8111-111111111111';
 const operator = '22222222-2222-4222-8222-222222222222';
 const subject = '33333333-3333-4333-8333-333333333333';
-const identity = (id: string) => ({ id, kind: 'actor' as const, handle: null, displayName: null });
-const metadata = { kind: 'ready' as const, metadata: { subject: identity(subject), operator: identity(operator) } };
+const metadata = {
+  kind: 'ready' as const,
+  metadata: {
+    viewer: { accountId: human, publicLabel: null },
+    subject: { id: subject, kind: 'actor' as const, publicLabel: null },
+    operator: { id: operator, kind: 'actor' as const, publicLabel: null },
+    relation: { reservationId: '44444444-4444-4444-8444-444444444444', version: '7' },
+  },
+};
 let read: ReturnType<typeof spyOn<typeof opening, 'loadOpeningMetadata'>>;
 let history: ReturnType<typeof createBrowserHistory>;
 afterEach(() => {

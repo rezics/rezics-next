@@ -15,6 +15,7 @@ import { AuthButton as Button } from '../button';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { loadManagementSession, managementSessionMatches, type ManagementSession } from '../management-operations';
 import {
   managementOperationStepUpUrl,
@@ -26,6 +27,7 @@ import {
   isOpeningInput,
   loadOpeningMetadata,
   readOpenedSession,
+  sameOpeningPage,
   submitOperatorOpening,
   type OpeningInput,
   type OpeningMetadata,
@@ -36,6 +38,10 @@ export const Route = createFileRoute('/automated/open')({
   head: () => ({ meta: [{ title: `${m.auth_opening_heading()} · REZICS` }] }),
   component: OperatorSessionOpeningPage,
 });
+const websiteOrigin = 'https://rezics.com';
+function websiteHref(path: '/' | '/accounts') {
+  return new URL(`/${getLocale()}${path === '/' ? '/' : path}`, websiteOrigin).toString();
+}
 function message(kind: string) {
   if (kind === 'step-up') return m.auth_opening_step_up();
   if (kind === 'refused') return m.auth_opening_refused();
@@ -198,7 +204,11 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
     if (!isCurrent() || !owner || submitted()) return;
     const caller = await loadManagementSession();
     if (!isCurrent() || authority.current !== owner || submitted()) return;
-    if (
+    if (caller.kind === 'unavailable') {
+      setMetadata(null);
+      setConfirmed(false);
+      setStatus('unavailable');
+    } else if (
       caller.kind === 'signed-out' ||
       (caller.kind === 'ready' &&
         (caller.accountId !== owner.accountId ||
@@ -284,7 +294,8 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
         const read = await loadOpeningMetadata(saved);
         if (!isCurrent()) return;
         if (read.kind === 'ready') setMetadata(read.metadata);
-        else setStatus('unavailable');
+        else if (read.kind === 'refused') retire();
+        else setStatus(read.kind);
         return;
       }
       const human = await loadManagementSession();
@@ -349,8 +360,28 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
     setConfirmed(false);
     setStatus('');
     try {
+      const reviewed = metadata;
+      const current = await loadOpeningMetadata(attempt);
+      if (!isCurrent()) return;
+      if (current.kind === 'refused') {
+        retire();
+        return;
+      }
+      if (current.kind !== 'ready') {
+        setMetadata(null);
+        setStatus(current.kind);
+        return;
+      }
+      if (!sameOpeningPage(reviewed, current.metadata)) {
+        retire();
+        return;
+      }
       const result = await submitOperatorOpening(attempt, isCurrent);
       if (!isCurrent()) return;
+      if (result.kind === 'refused') {
+        retire();
+        return;
+      }
       const state = pendingManagementOperationStepUpState();
       setTerminal(state.kind === 'pending' && state.value.phase === 'submitted');
       setOutcome(result);
@@ -381,9 +412,14 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
           </ErrorAlert>
         ) : null}
         {status === 'unavailable' && !metadata && !terminal ? (
-          <Button variant="outline" disabled={busy} onClick={() => void restore(attempt)}>
-            {m.auth_account_identity_retry()}
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="outline" disabled={busy} onClick={() => void restore(attempt)}>
+              {m.auth_account_identity_retry()}
+            </Button>
+            <a className="underline underline-offset-4" href={websiteHref('/accounts')}>
+              {m.auth_opening_account_management()}
+            </a>
+          </div>
         ) : null}
         {!attempt ? (
           <form className="auth-login-form" method="post" action="/automated/open" onSubmit={review}>
@@ -417,14 +453,37 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
             <h2 ref={confirmation} tabIndex={-1}>
               {m.auth_opening_confirmation()}
             </h2>
+            <section aria-labelledby="opening-consequences">
+              <h3 id="opening-consequences">{m.auth_opening_consequences_heading()}</h3>
+              <p>{m.auth_opening_consequences()}</p>
+            </section>
             <dl>
+              <dt>{m.auth_opening_human()}</dt>
+              <dd>
+                {m.auth_opening_identity_undisclosed()}
+                <br />
+                <small>
+                  {m.auth_opening_account_id()}: <code className="break-all">{metadata.viewer.accountId}</code>
+                </small>
+              </dd>
               <dt>{m.auth_opening_subject()}</dt>
               <dd>
-                {metadata.subject.displayName} {metadata.subject.handle} ({metadata.subject.id})
+                {m.auth_opening_identity_undisclosed()}
+                <br />
+                <small>
+                  {m.auth_opening_account_id()}: <code className="break-all">{metadata.subject.id}</code>
+                </small>
               </dd>
               <dt>{m.auth_opening_operator()}</dt>
               <dd>
-                {metadata.operator.displayName} {metadata.operator.handle} ({metadata.operator.id})
+                {m.auth_opening_identity_undisclosed()} ·{' '}
+                {metadata.operator.kind === 'organization'
+                  ? m.auth_opening_operator_organization()
+                  : m.auth_opening_operator_actor()}
+                <br />
+                <small>
+                  {m.auth_opening_account_id()}: <code className="break-all">{metadata.operator.id}</code>
+                </small>
               </dd>
             </dl>
             <Field>
@@ -477,16 +536,21 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
           </>
         ) : null}
         {outcome?.kind === 'opened' ? (
-          <div role="status">
-            <h2>{m.auth_opening_current()}</h2>
-            <dl>
-              <dt>{m.auth_opening_subject()}</dt>
-              <dd>{outcome.session.account_id}</dd>
-              <dt>{m.auth_opening_method()}</dt>
-              <dd>{outcome.session.amr.join(', ')}</dd>
-              <dt>{m.auth_opening_scopes()}</dt>
-              <dd>{outcome.session.scope.join(', ') || m.auth_opening_no_scopes()}</dd>
-            </dl>
+          <div role="status" className="space-y-3">
+            <div>
+              <h2>{m.auth_opening_current()}</h2>
+              <dl>
+                <dt>{m.auth_opening_subject()}</dt>
+                <dd>{outcome.session.account_id}</dd>
+                <dt>{m.auth_opening_method()}</dt>
+                <dd>{outcome.session.amr.join(', ')}</dd>
+                <dt>{m.auth_opening_scopes()}</dt>
+                <dd>{outcome.session.scope.join(', ') || m.auth_opening_no_scopes()}</dd>
+              </dl>
+            </div>
+            <a className="underline underline-offset-4" href={websiteHref('/')}>
+              {m.auth_opening_continue()}
+            </a>
           </div>
         ) : null}
       </div>

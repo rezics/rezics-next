@@ -41,7 +41,6 @@ async function page(subjectAccountId: string, operatorAccountId: string, headers
 }
 test('the installed host observes exact native management without creating approval or credential effects', async () => {
   const human = await person();
-  const stranger = await person();
   const subject = await f.automated(key(), human);
   const headers = await login(human);
   const counts = async () =>
@@ -65,7 +64,32 @@ test('the installed host observes exact native management without creating appro
   expect(observed.relation.reservationId).toBeString();
   expect(Object.keys(observed.subject).sort()).toEqual(['id', 'kind']);
   expect(await counts()).toEqual(before);
-  expect((await page(subject.accountId, stranger.accountId, headers)).status).toBe(403);
+});
+
+test('changed operators, missing reservations and replaced viewers cannot open an obsolete page', async () => {
+  const human = await person();
+  const stranger = await person();
+  const subject = await f.automated(key(), human);
+  const headers = await login(human);
+  const changedOperator = await page(subject.accountId, stranger.accountId, headers);
+  expect(changedOperator.status).toBe(403);
+  expect(await changedOperator.json()).toEqual({ stage: 'refused' });
+  const missingReservation = await page(human.accountId, human.accountId, headers);
+  expect(missingReservation.status).toBe(403);
+  expect(await missingReservation.json()).toEqual({ stage: 'refused' });
   expect((await page(subject.accountId, human.accountId, await login(stranger))).status).toBe(403);
-  expect((await page(human.accountId, human.accountId, headers)).status).toBe(403);
+});
+
+test('opening advice requires fresh authentication from the same human', async () => {
+  const human = await person();
+  const subject = await f.automated(key(), human);
+  const headers = await login(human);
+  await f.authPool.query('UPDATE session SET "authTime"=$1 WHERE "userId"=$2', [
+    Math.floor(Date.now() / 1000) - 601,
+    human.accountId,
+  ]);
+
+  const response = await page(subject.accountId, human.accountId, headers);
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({ stage: 'step-up' });
 });

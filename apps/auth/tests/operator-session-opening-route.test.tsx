@@ -43,8 +43,10 @@ const proof = (automated = false) => ({
 const metadata = {
   kind: 'ready' as const,
   metadata: {
-    subject: { id: subject, kind: 'actor' as const, handle: 'subject', displayName: 'Subject' },
-    operator: { id: operator, kind: 'organization' as const, handle: 'operator', displayName: 'Operator' },
+    viewer: { accountId: human, publicLabel: null },
+    subject: { id: subject, kind: 'actor' as const, publicLabel: null },
+    operator: { id: operator, kind: 'organization' as const, publicLabel: null },
+    relation: { reservationId: '44444444-4444-4444-8444-444444444444', version: '7' },
   },
 };
 const flush = (action: () => unknown) =>
@@ -116,6 +118,7 @@ test('failed initial and review reads recover the exact identity and key through
   const p = await open();
   try {
     await p.respond(0, new Response(null, { status: 503 }));
+    expect(p.host.querySelector('a[href="https://rezics.com/en/accounts"]')).not.toBeNull();
     await p.click('Retry account identity');
     await p.respond(1);
     p.read.mockResolvedValueOnce({ kind: 'unavailable' });
@@ -127,6 +130,10 @@ test('failed initial and review reads recover the exact identity and key through
     expect(selected).toMatchObject({ accountId: human, operation });
     expect(p.host.textContent).toContain(subject);
     expect(p.host.textContent).toContain(operator);
+    expect(p.host.textContent).toContain(human);
+    expect(p.host.textContent).toContain('Public identity label not disclosed');
+    expect(p.host.textContent).toContain('Organization');
+    expect(p.host.textContent).toContain('What this opening changes');
     expect(button(p.host, 'Approve and open session')!.disabled).toBe(true);
     await p.confirm();
     await p.submit();
@@ -139,7 +146,29 @@ test('failed initial and review reads recover the exact identity and key through
     await p.click('Check current session');
     await p.respond(7, Response.json(proof(true)));
     expect(p.host.querySelector('[role=status]')!.textContent).toContain(subject);
+    expect(p.host.querySelector('a[href="https://rezics.com/en/"]')).not.toBeNull();
     expect(p.requests.filter((r) => r.path === '/operator-sessions/open')).toHaveLength(1);
+  } finally {
+    await p.close();
+  }
+});
+
+test('a changed installed relation retires the confirmed review before approval', async () => {
+  const p = await open();
+  try {
+    await p.respond(0);
+    await p.review();
+    await p.confirm();
+    p.read.mockResolvedValueOnce({
+      kind: 'ready',
+      metadata: { ...metadata.metadata, relation: { reservationId: metadata.metadata.relation.reservationId, version: '8' } },
+    });
+    await p.submit();
+    expect(p.host.querySelector('#opening-confirm')).toBeNull();
+    expect(p.host.textContent).toContain('Opening refused');
+    expect(p.requests.some((request) => request.path.includes('/approve') || request.path === '/operator-sessions/open')).toBe(
+      false,
+    );
   } finally {
     await p.close();
   }
