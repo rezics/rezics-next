@@ -62,7 +62,9 @@ export function createReporterHistoryFocus() {
     arriveStatus(root: HTMLElement, reportId: string, current: () => boolean) {
       const activation = request;
       if (!activation) return;
-      if (activation.operands !== `status:${reportId}` || !activation.current() || !current()) return cancel();
+      // A retiring status render must leave the ticket for its history destination alone.
+      if (activation.operands !== `status:${reportId}`) return;
+      if (!activation.current() || !current()) return cancel();
       const document = root.ownerDocument;
       if (document.activeElement !== activation.source && document.activeElement !== document.body) return cancel();
       cancel();
@@ -74,8 +76,8 @@ export function createReporterHistoryFocus() {
     arrive(root: HTMLElement, query: ReporterHistoryQuery, current: () => boolean) {
       const activation = request;
       if (!activation) return;
-      if (activation.operands !== `history:${operandsKey(query)}` || !activation.current() || !current())
-        return cancel();
+      if (activation.operands !== `history:${operandsKey(query)}`) return;
+      if (!activation.current() || !current()) return cancel();
       const document = root.ownerDocument;
       if (document.activeElement !== activation.source && document.activeElement !== document.body) return cancel();
       // Exact native selection may accompany a bounded page. Only its actual selected control receives focus.
