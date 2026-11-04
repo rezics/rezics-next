@@ -55,10 +55,7 @@ function pageSubject(page: { reads: Record<string, { status: number; body: any }
   return entry!.body as { subject: any; documents?: Record<string, { availability?: string }> };
 }
 
-function correctionState(
-  page: { actions?: { action: string; operationId: string; state: string }[] },
-  action: string,
-) {
+function correctionState(page: { actions?: { action: string; operationId: string; state: string }[] }, action: string) {
   return page.actions?.find((entry) => entry.action === action);
 }
 
