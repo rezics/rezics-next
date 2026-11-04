@@ -160,29 +160,44 @@ export const QuestionManagementResponseSchema = t.Object(
   {
     viewer: t.Object({ accountId: id }, closed),
     realmId: id,
-    directory: t.Object({
-      ratingQuestions: t.Array(managementQuestion, { maxItems: 20 }),
-      next: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
-    }, closed),
-    actions: t.Object({
-      create: t.Union([t.Object({ method: t.Literal('POST'), href: managementHref }, closed), t.Null()]),
-    }, closed),
+    directory: t.Object(
+      {
+        ratingQuestions: t.Array(managementQuestion, { maxItems: 20 }),
+        next: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
+      },
+      closed,
+    ),
+    actions: t.Object(
+      {
+        create: t.Union([t.Object({ method: t.Literal('POST'), href: managementHref }, closed), t.Null()]),
+      },
+      closed,
+    ),
     selected: t.Union([
-      t.Object({
-        question: managementQuestion,
-        readback: managementHref,
-        history: managementHref,
-        actions: t.Object({
-          caption: t.Union([
-            t.Object({ method: t.Literal('PUT'), href: managementHref, expectedLabelRevision: revision }, closed),
-            t.Null(),
-          ]),
-          lifecycle: t.Union([
-            t.Object({ method: t.Literal('POST'), href: managementHref, expectedLifecycleRevision: revision }, closed),
-            t.Null(),
-          ]),
-        }, closed),
-      }, closed),
+      t.Object(
+        {
+          question: managementQuestion,
+          readback: managementHref,
+          history: managementHref,
+          actions: t.Object(
+            {
+              caption: t.Union([
+                t.Object({ method: t.Literal('PUT'), href: managementHref, expectedLabelRevision: revision }, closed),
+                t.Null(),
+              ]),
+              lifecycle: t.Union([
+                t.Object(
+                  { method: t.Literal('POST'), href: managementHref, expectedLifecycleRevision: revision },
+                  closed,
+                ),
+                t.Null(),
+              ]),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
       t.Null(),
     ]),
   },

@@ -5,7 +5,11 @@ import { routeOf } from '../../src/route/route.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { readQuestionManagementPage } from '../../src/rating/question-management.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
-import { closeCommunityDrivers, communityFixtureRuntime, createCommunityDriver } from '../community/community-driver.ts';
+import {
+  closeCommunityDrivers,
+  communityFixtureRuntime,
+  createCommunityDriver,
+} from '../community/community-driver.ts';
 
 const definition = {
   meaning: 'Judge translation accuracy independently of enjoyment of the original work.',
@@ -24,11 +28,23 @@ test('Realm management advice composes native immutable creation, caption CAS an
       if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
       return response.json();
     };
-    const space = (await json(await call('POST', '/v1/spaces', fixture.owner, { title: 'Question management' }), 201)).space;
-    const realmId: string = (await json(await call('POST', '/v1/realms', fixture.owner, {
-      spaceId: space.spaceId, title: 'Translation questions', visibility: 'protected', contextId: fixture.contextId,
-    }), 201)).realm.realmId;
-    await json(await call('POST', `/v1/realms/${realmId}/members`, fixture.owner, { accountId: fixture.member.id }), 202);
+    const space = (await json(await call('POST', '/v1/spaces', fixture.owner, { title: 'Question management' }), 201))
+      .space;
+    const realmId: string = (
+      await json(
+        await call('POST', '/v1/realms', fixture.owner, {
+          spaceId: space.spaceId,
+          title: 'Translation questions',
+          visibility: 'protected',
+          contextId: fixture.contextId,
+        }),
+        201,
+      )
+    ).realm.realmId;
+    await json(
+      await call('POST', `/v1/realms/${realmId}/members`, fixture.owner, { accountId: fixture.member.id }),
+      202,
+    );
     await driver.settle();
     const management = `/v1/realms/${realmId}/rating-questions/management`;
     const empty = await json(await call('GET', management, fixture.owner));
@@ -40,33 +56,58 @@ test('Realm management advice composes native immutable creation, caption CAS an
     expect((await call('POST', create.href, fixture.member, definition)).status).toBe(403);
     expect((await call('GET', management, fixture.outsider)).status).toBe(404);
     expect((await call('GET', management, null)).status).toBe(401);
-    expect((await call('GET', `/v1/realms/${fixture.unknown.realm}/rating-questions/management`, fixture.owner)).status).toBe(404);
-    expect((await call('POST', create.href, fixture.owner, { ...definition, scale: { min: 0, max: 20, displayStep: 3 } })).status).toBe(400);
+    expect(
+      (await call('GET', `/v1/realms/${fixture.unknown.realm}/rating-questions/management`, fixture.owner)).status,
+    ).toBe(404);
+    expect(
+      (await call('POST', create.href, fixture.owner, { ...definition, scale: { min: 0, max: 20, displayStep: 3 } }))
+        .status,
+    ).toBe(400);
 
     const grant = {
-      resource: { route: routeOf(realmId), id: realmId }, subject: { kind: 'account', id: fixture.member.id },
-      actions: ['realm:manage'], valid: '(,)',
+      resource: { route: routeOf(realmId), id: realmId },
+      subject: { kind: 'account', id: fixture.member.id },
+      actions: ['realm:manage'],
+      valid: '(,)',
     };
     await json(await call('POST', '/v1/grants', fixture.owner, grant), 201);
     // A lost acknowledgement is retried with the original body and key.
     const key = randomUUID();
     const created = await json(await call('POST', create.href, fixture.member, definition, key), 201);
     expect(await json(await call('POST', create.href, fixture.member, definition, key), 201)).toEqual(created);
-    expect((await call('POST', create.href, fixture.member, { ...definition, meaning: 'Changed meaning' }, key)).status).toBe(422);
+    expect(
+      (await call('POST', create.href, fixture.member, { ...definition, meaning: 'Changed meaning' }, key)).status,
+    ).toBe(422);
     const selectedPath = `${management}?selectedQuestionId=${created.id}`;
     const selected = (await json(await call('GET', selectedPath, fixture.member))).selected;
     expect(selected.question).toEqual(created);
     const caption = selected.actions.caption;
-    expect(caption).toEqual({ method: 'PUT', href: `/v1/rating-questions/${created.id}/label`, expectedLabelRevision: 1 });
-    expect(selected.actions.lifecycle).toEqual({
-      method: 'POST', href: `/v1/rating-questions/${created.id}/$retire`, expectedLifecycleRevision: 1,
+    expect(caption).toEqual({
+      method: 'PUT',
+      href: `/v1/rating-questions/${created.id}/label`,
+      expectedLabelRevision: 1,
     });
-    expect((await call('PUT', caption.href, fixture.member, { expectedLabelRevision: 1, label: 'Corrected caption', meaning: 'Rewritten' })).status).toBe(400);
+    expect(selected.actions.lifecycle).toEqual({
+      method: 'POST',
+      href: `/v1/rating-questions/${created.id}/$retire`,
+      expectedLifecycleRevision: 1,
+    });
+    expect(
+      (
+        await call('PUT', caption.href, fixture.member, {
+          expectedLabelRevision: 1,
+          label: 'Corrected caption',
+          meaning: 'Rewritten',
+        })
+      ).status,
+    ).toBe(400);
     const labelBody = { expectedLabelRevision: caption.expectedLabelRevision, label: 'Corrected caption' };
     const labelKey = randomUUID();
     const renamed = await json(await call('PUT', caption.href, fixture.member, labelBody, labelKey));
     expect(await json(await call('PUT', caption.href, fixture.member, labelBody, labelKey))).toEqual(renamed);
-    expect((await call('PUT', caption.href, fixture.member, { ...labelBody, label: 'Concurrent stale edit' })).status).toBe(409);
+    expect(
+      (await call('PUT', caption.href, fixture.member, { ...labelBody, label: 'Concurrent stale edit' })).status,
+    ).toBe(409);
     const retire = selected.actions.lifecycle;
     const lifecycleBody = { expectedLifecycleRevision: retire.expectedLifecycleRevision };
     const lifecycleKey = randomUUID();
@@ -74,42 +115,81 @@ test('Realm management advice composes native immutable creation, caption CAS an
     expect(await json(await call('POST', retire.href, fixture.member, lifecycleBody, lifecycleKey))).toEqual(retired);
     const after = await json(await call('GET', selectedPath, fixture.member));
     expect(after.directory.ratingQuestions).toEqual([]);
-    expect(after.selected.question).toEqual({ ...created, label: labelBody.label, labelRevision: 2, lifecycle: { state: 'retired', revision: 2 } });
+    expect(after.selected.question).toEqual({
+      ...created,
+      label: labelBody.label,
+      labelRevision: 2,
+      lifecycle: { state: 'retired', revision: 2 },
+    });
     expect(after.selected.actions.caption.expectedLabelRevision).toBe(2);
     expect(after.selected.actions.lifecycle).toEqual({
-      method: 'POST', href: `/v1/rating-questions/${created.id}/$restore`, expectedLifecycleRevision: 2,
+      method: 'POST',
+      href: `/v1/rating-questions/${created.id}/$restore`,
+      expectedLifecycleRevision: 2,
     });
     const history = await json(await call('GET', after.selected.history, fixture.member));
     expect(history.labels.map((label: { labelRevision: number }) => label.labelRevision)).toEqual([1, 2]);
     expect(await json(await call('GET', `${after.selected.history}/1`, fixture.member))).toMatchObject({
-      label: definition.label, at: null, author: { id: fixture.member.id, state: 'active' },
+      label: definition.label,
+      at: null,
+      author: { id: fixture.member.id, state: 'active' },
     });
-    await json(await call('POST', after.selected.actions.lifecycle.href, fixture.member, { expectedLifecycleRevision: 2 }));
+    await json(
+      await call('POST', after.selected.actions.lifecycle.href, fixture.member, { expectedLifecycleRevision: 2 }),
+    );
     expect((await call('POST', retire.href, fixture.member, lifecycleBody, lifecycleKey)).status).toBe(409);
     const { system } = communityFixtureRuntime();
-    const actor = await system.access.authenticate(fixture.member.bearer, { pool: system.database.pool, deadline: Date.now() + 30_000 });
+    const actor = await system.access.authenticate(fixture.member.bearer, {
+      pool: system.database.pool,
+      deadline: Date.now() + 30_000,
+    });
     const input = Object.freeze({ realmId, selectedQuestionId: created.id });
     const native = { pool: system.database.pool, access: system.access, tokens: system.tokenKeys };
-    await expect(readQuestionManagementPage({ ...native, access: {
-      ...system.access,
-      async prepare(caller, action, resource, context) {
-        if (action === 'realm:manage') throw new AccessUnavailableError('overloaded');
-        return system.access.prepare?.(caller, action, resource, context);
-      },
-    } }, actor, input, Date.now() + 30_000)).rejects.toMatchObject({ reason: 'overloaded' });
+    await expect(
+      readQuestionManagementPage(
+        {
+          ...native,
+          access: {
+            ...system.access,
+            async prepare(caller, action, resource, context) {
+              if (action === 'realm:manage') throw new AccessUnavailableError('overloaded');
+              return system.access.prepare?.(caller, action, resource, context);
+            },
+          },
+        },
+        actor,
+        input,
+        Date.now() + 30_000,
+      ),
+    ).rejects.toMatchObject({ reason: 'overloaded' });
     // A caption change during foreign advice preparation requires fresh selected inspection.
     let changed = false;
-    await expect(readQuestionManagementPage({ ...native, access: {
-      ...system.access,
-      async prepare(caller, action, resource, context) {
-        const evidence = await system.access.prepare?.(caller, action, resource, context);
-        if (action === 'realm:manage' && !changed) {
-          changed = true;
-          await json(await call('PUT', caption.href, fixture.member, { expectedLabelRevision: 2, label: 'Latest caption' }));
-        }
-        return evidence;
-      },
-    } }, actor, input, Date.now() + 30_000)).rejects.toMatchObject({ code: 'conflict' });
+    await expect(
+      readQuestionManagementPage(
+        {
+          ...native,
+          access: {
+            ...system.access,
+            async prepare(caller, action, resource, context) {
+              const evidence = await system.access.prepare?.(caller, action, resource, context);
+              if (action === 'realm:manage' && !changed) {
+                changed = true;
+                await json(
+                  await call('PUT', caption.href, fixture.member, {
+                    expectedLabelRevision: 2,
+                    label: 'Latest caption',
+                  }),
+                );
+              }
+              return evidence;
+            },
+          },
+        },
+        actor,
+        input,
+        Date.now() + 30_000,
+      ),
+    ).rejects.toMatchObject({ code: 'conflict' });
     await json(await call('POST', '/v1/grants:revoke', fixture.owner, grant));
     const readonly = (await json(await call('GET', selectedPath, fixture.member))).selected;
     expect(readonly.actions).toEqual({ caption: null, lifecycle: null });
@@ -118,7 +198,9 @@ test('Realm management advice composes native immutable creation, caption CAS an
     expect((await call('PUT', caption.href, fixture.member, labelBody, labelKey)).status).toBe(403);
     await driver.suspend(fixture.member);
     expect((await call('GET', selectedPath, fixture.member)).status).toBe(403);
-    expect((await call('GET', `${management}?selectedQuestionId=${STANDARD_QUESTION_ID}`, fixture.owner)).status).toBe(404);
+    expect((await call('GET', `${management}?selectedQuestionId=${STANDARD_QUESTION_ID}`, fixture.owner)).status).toBe(
+      404,
+    );
 
     // Raw continuation remains bounded and bound to authority, selection and native lifecycle generation.
     for (let index = 0; index < 20; index++)
@@ -132,11 +214,21 @@ test('Realm management advice composes native immutable creation, caption CAS an
     expect(next.directory.ratingQuestions).toHaveLength(1);
     expect(next.directory.next).toBeNull();
     expect(await json(await call('GET', frontier, fixture.owner))).toEqual(next);
-    expect((await call('GET', `${management}?cursor=${encodeURIComponent(first.directory.next)}`, fixture.owner)).status).toBe(400);
+    expect(
+      (await call('GET', `${management}?cursor=${encodeURIComponent(first.directory.next)}`, fixture.owner)).status,
+    ).toBe(400);
     await json(await call('POST', retire.href, fixture.owner, { expectedLifecycleRevision: 3 }));
     expect((await call('GET', frontier, fixture.owner)).status).toBe(400);
     expect((await call('GET', `${management}?cursor=${'x'.repeat(4097)}`, fixture.owner)).status).toBe(400);
-    expect((await call('GET', `${management}?selectedQuestionId=${created.id}&selectedQuestionId=${created.id}`, fixture.owner)).status).toBe(400);
+    expect(
+      (
+        await call(
+          'GET',
+          `${management}?selectedQuestionId=${created.id}&selectedQuestionId=${created.id}`,
+          fixture.owner,
+        )
+      ).status,
+    ).toBe(400);
   } finally {
     await driver.close();
     await closeCommunityDrivers();

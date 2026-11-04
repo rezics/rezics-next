@@ -599,7 +599,10 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () =>
           readQuestionManagementPage(
-            { ...config(), tokens: dependencies.tokens }, actor, { ...query, realmId: params.realmId }, job.deadline,
+            { ...config(), tokens: dependencies.tokens },
+            actor,
+            { ...query, realmId: params.realmId },
+            job.deadline,
           ),
         );
       },

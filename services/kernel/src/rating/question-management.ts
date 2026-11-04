@@ -31,9 +31,13 @@ const MAX_REVISION = 2_147_483_647;
 
 function managementQuestion(view: RatingQuestionView) {
   if (
-    view.realmId === undefined || view.meaning === undefined || view.canonicalLabel === undefined ||
-    view.labelRevision === undefined || view.lifecycle === undefined
-  ) throw new AccessUnavailableError('overloaded');
+    view.realmId === undefined ||
+    view.meaning === undefined ||
+    view.canonicalLabel === undefined ||
+    view.labelRevision === undefined ||
+    view.lifecycle === undefined
+  )
+    throw new AccessUnavailableError('overloaded');
   return {
     ...view,
     realmId: view.realmId,
@@ -105,10 +109,15 @@ export async function readQuestionManagementPage(
     lifecycleGeneration = decoded.after[1];
   }
   const directory = await readSelectedQuestionDirectory(
-    deps, actor, {
-      realmId, after, limit: PAGE_SIZE,
+    deps,
+    actor,
+    {
+      realmId,
+      after,
+      limit: PAGE_SIZE,
       ...(lifecycleGeneration === undefined ? {} : { lifecycleGeneration }),
-    }, deadline,
+    },
+    deadline,
   );
   let selected: QuestionMetadata | null = null;
   if (selectedQuestionId !== undefined) {
@@ -132,9 +141,10 @@ export async function readQuestionManagementPage(
   });
   const question = selected === null ? null : managementQuestion(ratingQuestionView(selected));
   const selectedBase = question === null ? null : `/v1/rating-questions/${question.id}`;
-  const next = directory.hasMore && directory.after !== null
-    ? encodeCursor(deps.tokens, binding, { epoch: 2, after: [directory.after, directory.lifecycleGeneration] }, now())
-    : null;
+  const next =
+    directory.hasMore && directory.after !== null
+      ? encodeCursor(deps.tokens, binding, { epoch: 2, after: [directory.after, directory.lifecycleGeneration] }, now())
+      : null;
   const page = {
     viewer: { accountId: actor.accountId },
     realmId,
@@ -142,23 +152,32 @@ export async function readQuestionManagementPage(
     actions: {
       create: canManage ? { method: 'POST' as const, href: `/v1/realms/${realmId}/rating-questions` } : null,
     },
-    selected: question === null ? null : {
-      question,
-      readback: selectedBase!,
-      history: `${selectedBase}/labels`,
-      actions: {
-        caption: canManage && question.labelRevision! < MAX_REVISION ? {
-          method: 'PUT' as const,
-          href: `${selectedBase}/label`,
-          expectedLabelRevision: question.labelRevision!,
-        } : null,
-        lifecycle: canManage && question.lifecycle!.revision < MAX_REVISION ? {
-          method: 'POST' as const,
-          href: `${selectedBase}/$${question.lifecycle!.state === 'active' ? 'retire' : 'restore'}`,
-          expectedLifecycleRevision: question.lifecycle!.revision,
-        } : null,
-      },
-    },
+    selected:
+      question === null
+        ? null
+        : {
+            question,
+            readback: selectedBase!,
+            history: `${selectedBase}/labels`,
+            actions: {
+              caption:
+                canManage && question.labelRevision! < MAX_REVISION
+                  ? {
+                      method: 'PUT' as const,
+                      href: `${selectedBase}/label`,
+                      expectedLabelRevision: question.labelRevision!,
+                    }
+                  : null,
+              lifecycle:
+                canManage && question.lifecycle!.revision < MAX_REVISION
+                  ? {
+                      method: 'POST' as const,
+                      href: `${selectedBase}/$${question.lifecycle!.state === 'active' ? 'retire' : 'restore'}`,
+                      expectedLifecycleRevision: question.lifecycle!.revision,
+                    }
+                  : null,
+            },
+          },
   };
   // The closed source bounds every field before this copy: one indexed raw page
   // and one exact row, with no votes or revision-history materialized here.
