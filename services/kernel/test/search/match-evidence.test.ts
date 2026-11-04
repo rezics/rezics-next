@@ -37,11 +37,11 @@ test('evidence adds zero-score field probes without changing positive phrase and
 test('projects only uniquely mapped current engine excerpts with their actual language and revision', () => {
   const plan = compileMatchEvidence(compileText(parseText('harbor'), { field: 'search_text', prefix: 't' }));
   const engineEvidence = readEngineMatchEvidence(
-    ['e_names_t0', 't0', 'f0'],
+    ['e_n_t0', 't0', 'f0'],
     { names: ['<em>Harbor</em> of Silence'] },
     plan,
   );
-  expect(engineEvidence.matched).toEqual(['e_names_t0']);
+  expect(engineEvidence.matched).toEqual(['e_n_t0']);
   const alias = projectMatchEvidence(subject(), engineEvidence, plan);
   expect(alias).toEqual({
     state: 'current',
@@ -52,7 +52,7 @@ test('projects only uniquely mapped current engine excerpts with their actual la
 
   const description = projectMatchEvidence(
     subject(),
-    { matched: ['e_descriptions_t0'], highlight: { descriptions: ['A story beneath a <em>blue</em> hour sky'] } },
+    { matched: ['e_d_t0'], highlight: { descriptions: ['A story beneath a <em>blue</em> hour sky'] } },
     compileMatchEvidence(compileText(parseText('blue'), { field: 'search_text', prefix: 't' })),
   );
   expect(description).toMatchObject({ state: 'current', reasons: [{ field: 'description', language: 'ja' }] });
@@ -61,12 +61,12 @@ test('projects only uniquely mapped current engine excerpts with their actual la
 test('negative matches, ambiguous sources, missing engine excerpts and missing plans never invent evidence', () => {
   const plan = compileMatchEvidence(compileText(parseText('harbor -rubble'), { field: 'search_text', prefix: 't' }));
   expect(
-    projectMatchEvidence(subject(), { matched: ['e_names_t1'], highlight: { names: ['<em>Harbor</em>'] } }, plan),
+    projectMatchEvidence(subject(), { matched: ['e_n_t1'], highlight: { names: ['<em>Harbor</em>'] } }, plan),
   ).toEqual({ state: 'unavailable' });
   expect(
     projectMatchEvidence(
       subject({ labels: [{ language: 'en', value: 'Harbor of Silence' }] }),
-      { matched: ['e_names_t0'], highlight: { names: ['<em>Harbor</em> of Silence'] } },
+      { matched: ['e_n_t0'], highlight: { names: ['<em>Harbor</em> of Silence'] } },
       plan,
     ),
   ).toEqual({ state: 'unavailable' });
