@@ -130,6 +130,20 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     await click(m.settings_watches_stop());
     expect(host.textContent).toContain(m.settings_watches_uncertain_text());
     expect(host.textContent).not.toContain(m.settings_watches_removed());
+    fail = true;
+    await click(m.settings_watches_refresh());
+    const retryButton = () =>
+      [...host.querySelectorAll('button')].find((item) => item.textContent === m.settings_watches_retry_original())!;
+    expect(host.textContent).toContain(m.settings_watches_failed_text());
+    expect(retryButton().disabled).toBe(true);
+    fail = false;
+    response = { kind: 'page', page: { ...envelope, actions: { remove: 'denied' }, watches: [], next: null } };
+    await click(m.settings_retry());
+    expect(host.textContent).toContain(m.settings_watches_remove_denied());
+    expect(retryButton().disabled).toBe(true);
+    response = { kind: 'page', page: { ...envelope, watches: [], next: null } };
+    await click(m.settings_watches_refresh());
+    expect(retryButton().disabled).toBe(false);
     await click(m.settings_watches_retry_original());
     expect(host.textContent).toContain(m.settings_watches_removed());
     expect(host.textContent).not.toContain(m.settings_watches_access_lost());

@@ -130,7 +130,7 @@
   "settings_watches_removed": "訂閱已取消。將不再傳送此訂閱的新通知。",
   "settings_watches_rejected": "訂閱未取消。請先重新整理訂閱清單再重試。",
   "settings_watches_uncertain_title": "訂閱取消了嗎？",
-  "settings_watches_uncertain_text": "結果未知。重新整理清單無法確定原請求的結果。請重試同一請求以確認結果。",
+  "settings_watches_uncertain_text": "結果未知。請重新整理目前清單以檢查是否允許取消。如果允許，請重試同一請求以確認結果。",
   "settings_watches_retry_original": "重試原取消請求",
   "settings_watches_refresh": "重新整理此頁",
   "settings_watches_next": "下一頁訂閱",

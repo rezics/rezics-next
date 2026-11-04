@@ -130,7 +130,7 @@
   "settings_watches_removed": "Seguimiento detenido. No recibirás futuras notificaciones de esta suscripción.",
   "settings_watches_rejected": "El seguimiento no se detuvo. Actualiza la lista antes de volver a intentarlo.",
   "settings_watches_uncertain_title": "¿Se detuvo el seguimiento?",
-  "settings_watches_uncertain_text": "El resultado es desconocido. Actualizar la lista no resuelve la solicitud original. Reintenta esa misma solicitud para confirmar su resultado.",
+  "settings_watches_uncertain_text": "El resultado es desconocido. Actualiza la lista para comprobar si se permite cancelar. Si es así, vuelve a intentar la misma solicitud para confirmar el resultado.",
   "settings_watches_retry_original": "Reintentar la solicitud original",
   "settings_watches_refresh": "Actualizar esta página",
   "settings_watches_next": "Siguientes seguimientos",
