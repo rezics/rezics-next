@@ -133,6 +133,7 @@ test('mounted release visit labels an invalid date with evidence and keeps chron
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: () => {},
     matchMedia: window.matchMedia.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
@@ -142,6 +143,7 @@ test('mounted release visit labels an invalid date with evidence and keeps chron
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { waitFor } = await import('@testing-library/dom');
   const { ReleaseFidelityPage } = await import('../src/features/catalogue/release-fidelity/view');
   const fixture = releaseFidelityFixture('ready');
   const result = await fixture.read();
@@ -188,13 +190,14 @@ test('mounted release visit labels an invalid date with evidence and keeps chron
   });
   const { m } = await import('../src/paraglide/messages.js');
   try {
+    await act(async () => router.load());
     await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
           <RouterProvider router={router} />
         </QueryClientProvider>,
       );
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await waitFor(() => expect(host.textContent).toContain(m.release_fidelity_date_invalid({}, { locale: 'en' })));
     });
     expect(host.textContent).toContain(m.release_fidelity_date_invalid({}, { locale: 'en' }));
     expect(host.querySelector('[data-slot="release-date"] details')).not.toBeNull();
