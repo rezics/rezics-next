@@ -22,7 +22,7 @@ import {
 } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
 import { subjectSlug } from '@rezics/definitions/slug';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
+import { sourceDigest, sourceWebsiteUrl } from '../../../packages/conversion/src/support.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { CrossMediaGraph, graphEdgeKey, type GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
@@ -1453,6 +1453,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   await collectJoins('releases_extlinks', releases);
   const dictionary = new Map<number, { id: number; site: string; value: string; raw: Row }>();
   const duplicateDictionaryIds = new Set<number>();
+  const invalidWebsites = new Set<number>();
   for await (const row of input.rows('vndb', 'anime'))
     if (animeIds.has(text(row, 'id')))
       gap('vndb', 'anime', row, 'VNDB anime.aid is an AniDB identifier, not a Bangumi or native subject identity');
@@ -1470,6 +1471,14 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     const site = text(row, 'site');
     const value = text(row, 'value');
     dictionary.set(id, { id, site, value, raw: row });
+    if (site === 'website') {
+      try {
+        sourceWebsiteUrl(value);
+      } catch {
+        invalidWebsites.add(id);
+        gap('vndb', 'extlinks', { id, site }, 'Invalid external website URL; omitted from native facts');
+      }
+    }
     if (site !== 'website')
       gap(
         'vndb',
@@ -1487,7 +1496,9 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const workProjection = attachShowcaseWorkLinks({
     alias: crossMediaAliases.vndb,
     records: plan.records.vndb,
-    joins: workJoins,
+    joins: new Map(
+      [...workJoins].map(([owner, joins]) => [owner, joins.filter((join) => !invalidWebsites.has(join.join.link))]),
+    ),
     dictionary: workDictionary,
   });
   plan.records.vndb = workProjection.records;
@@ -1497,7 +1508,8 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   for (const entity of plan.entities.vndb) {
     const entry = entityJoins.get(entity.key);
     if (!entry) continue;
-    const missing = entry.joins.filter((join) => !dictionary.has(join.link));
+    const joins = entry.joins.filter((join) => !invalidWebsites.has(join.link));
+    const missing = joins.filter((join) => !dictionary.has(join.link));
     if (missing.length) {
       for (const join of missing)
         gap(
@@ -1508,12 +1520,12 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
         );
       continue;
     }
-    const extlinks = entry.joins.map((join) => {
+    const extlinks = joins.map((join) => {
       const row = dictionary.get(join.link);
       ensure(row, 'Selected VNDB external-link dictionary row disappeared during projection');
       return { id: row.id, site: row.site, value: row.value };
     });
-    entity.payload = { ...(entity.payload as object), [entry.table]: entry.joins, extlinks };
+    entity.payload = { ...(entity.payload as object), [entry.table]: joins, extlinks };
   }
 
   for (const family of Object.keys(patterns) as Franchise[])

@@ -1036,6 +1036,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   }
   if (kind === 'vndb-staff') {
     const names = projectStaffNames(raw, expected);
+    projectEntityLinks(kind, raw, expected, names.normalized);
     if (Buffer.byteLength(JSON.stringify(names.normalized), 'utf8') > vndbStaffNameLimits.recordBytes)
       fail('', 'invalid_record_byte_limit');
     return {
@@ -1044,7 +1045,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       labels: names.labels,
       identifier: expected,
       ...(names.nameFacts ? { nameFacts: names.nameFacts } : {}),
-      maxCommands: vndbStaffNameLimits.maxCommands,
+      maxCommands: vndbStaffNameLimits.maxCommands + vndbLimits.maxLinks,
       diagnostics: names.diagnostics,
     };
   }
