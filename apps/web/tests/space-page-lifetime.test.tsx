@@ -1,6 +1,6 @@
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, type ReactNode } from 'react';
+import { act, StrictMode, useState, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import type { Root } from 'react-dom/client';
 import * as start from '../.storybook/react-start';
@@ -12,6 +12,10 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/spaces/atlas-member' });
+const canonical = window.document.createElement('link');
+canonical.rel = 'canonical';
+canonical.href = window.location.href;
+window.document.head.append(canonical);
 const globals = {
   window,
   document: window.document,
@@ -30,6 +34,7 @@ const globals = {
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   matchMedia: window.matchMedia.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previousGlobals = new Map(
@@ -352,8 +357,14 @@ async function loadSessionSpace(queryClient: QueryClient, routeAddress = address
   return { page: result.page, admission: result.admission };
 }
 
+let replaceView: ((node: ReactNode) => void) | undefined;
+function PageTestView() {
+  const [rendered, setRendered] = useState(() => view);
+  replaceView = (node) => setRendered(() => node);
+  return rendered;
+}
 function makeRouter(queryClient: QueryClient) {
-  const rootRoute = createRootRoute({ component: () => view });
+  const rootRoute = createRootRoute({ component: PageTestView });
   const nextRouter = createRouter({
     routeTree: rootRoute,
     history: createMemoryHistory({ initialEntries: ['/'] }),
@@ -412,6 +423,7 @@ async function repaint(node: ReactNode) {
     <RouterProvider router={router!} />
   );
   await act(async () => {
+    replaceView?.(node);
     root!.render(<QueryClientProvider client={client!}>{contents}</QueryClientProvider>);
     await tick();
   });
@@ -428,6 +440,7 @@ async function close(clearClient = true) {
   if (clearClient) client?.clear();
   client = undefined;
   router = undefined;
+  replaceView = undefined;
   strictMode = false;
   host.textContent = '';
   latestShelfProbe = undefined;
@@ -1187,16 +1200,16 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     nextClient.setQueryData(sessionQuery.queryKey, signedOut());
     pageReader = async (input) => pageFor(input.address, true, input.credentialMode);
     const loaded = await loadSpaceRoute(nextClient);
+    await mount(<PageFrame page={loaded.page} admission={loaded.admission} />, {
+      queryClient: nextClient,
+      strict: true,
+    });
     boardReader = async () => ({ kind: 'page', items: [board(id(70), 'Current board')], next: null, unavailable: 0 });
     publicationReader = async () => ({
       kind: 'page',
       items: [publication(id(71), 'Current publication')],
       next: null,
       unavailable: 0,
-    });
-    await mount(<PageFrame page={loaded.page} admission={loaded.admission} />, {
-      queryClient: nextClient,
-      strict: true,
     });
     click(m.realm_boards_more());
     click(m.realm_publications_more());
