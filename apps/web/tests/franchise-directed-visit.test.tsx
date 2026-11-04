@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { act, createElement } from 'react';
 import { dirname } from 'node:path';
 import { createKernelClient } from '@rezics/client';
+import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import definitions from '../../../packages/definitions/release/rezics.json';
 import { qualifiedRelationsPage } from '../src/kernel/fake/qualified-relations';
 import type { GuideRelease } from '../src/features/catalogue/definition-guide';
@@ -34,8 +35,9 @@ function pageFor(subject = id(1), type = 'wd:Q689445') {
   const reading = subjectBody(page)!;
   page.subject = subject;
   Object.assign(reading.subject, { id: subject, type, labels: { en: 'Source work' } });
-  for (const entry of Object.values(page.reads)) if (entry.status === 200 && entry.body && typeof entry.body === 'object' && 'subject' in entry.body)
-    entry.body = reading;
+  page.document = { root: { props: {} }, content: [{ type: 'SubjectHeader', props: { id: 'identity' } }] };
+  const plan = planReads(platformRegistry, page.document as CompositionDocument, { subject, context: page.context });
+  page.reads = Object.fromEntries(Object.entries(plan.reads).map(([key]) => [key, { status: 200, body: reading }]));
   return page;
 }
 const stream = (direction: 'in' | 'out' = 'out') => connectionStreams(release, 'schema:Book', id(1), 'en').find((s) => s.property === property && s.direction === direction)!;
