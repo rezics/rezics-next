@@ -153,9 +153,11 @@ export function agentCommands(output: string, adapter?: AgentAdapter): string[] 
   });
 }
 
-/** The historical brief model pin selects its original adapter; routing policy remains compatible. */
+/** A brief model pin selects the adapter that owns that provider's model identifiers. */
 export function pinnedModelProfile(model: string, effort: string | undefined, route: Profile): Profile {
-  const pin = agentAdapter('codex').pinProfile ?? codexAdapter.pinProfile!;
+  const cli = model.startsWith('claude-') ? 'claude' : 'codex';
+  const selected = agentAdapter(cli);
+  const pin = selected.pinProfile ?? (cli === 'codex' ? codexAdapter.pinProfile! : claudeAdapter.pinProfile!);
   return pin(model, effort, route);
 }
 

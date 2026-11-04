@@ -244,6 +244,7 @@ export type ManagerEventKind =
   | 'goal-unmet'
   | 'goal-met'
   | 'goal-idle'
+  | 'research-complete'
   | 'instruction';
 
 export type ManagerEvent = {

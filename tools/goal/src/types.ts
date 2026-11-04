@@ -189,9 +189,15 @@ export type Brief = {
    * with `main` or `stabilize` is released through the main proof lane; without a target it lands on dev.
    */
   target?: 'stabilize' | 'main';
-  /** A Codex model (and effort) this task runs on instead of its class route, such as deep research on Sol max. */
+  /** A provider model (and effort) this task runs on instead of its class route. */
   model?: string;
   effort?: string;
+  /** Models fanned out as independent tasks by the backlog; only valid on research briefs. */
+  researchers?: string[];
+  /** Controller-owned identity shared by the tasks in one research fan-out. */
+  researchGroup?: string;
+  /** Report path assigned to one researcher task. */
+  researchReport?: string;
 };
 export type PoolReading = {
   pool: string;

@@ -1223,8 +1223,18 @@ reference repositories in the main checkout's `.reference/` (ignored by Git and 
 reused when present. They read them as untrusted data without installing, building or running anything, and land the report with sources, licences,
 the patterns the sources share and a recommendation. Any project's source may be read to learn how it solves the
 problem; the work then implements the design for this repository's stack itself rather than copying files or long
-passages. A report is evidence: once the manager adopts a recommendation, the
-decision goes into the owning document.
+passages. A report is evidence: once the manager adopts a recommendation, the decision goes into the owning document.
+
+Research briefs may set `researchers: [gpt-6-astra, claude-opus-5-5]`. The backlog creates one independent task per
+model, pins `gpt-*` to Codex and `claude-*` to the Claude adapter in the `claude-worker` pool, and gives each task a
+separate `docs/research/<slug>-<model>.md` report path. The slug comes from the brief's existing research report
+path, falling back to its first heading and then its backlog filename; a one-model list is valid. Claude's worker
+pool uses the same allowance and reserve checks as other routed work. When every researcher task ends, the manager
+receives one `research-complete` inbox event listing the report paths and failed researchers. A brief with one
+`model:` line keeps its existing single-task routing.
+
+Decision: derive dual-research report slugs from the existing report path, then the first heading, then the backlog
+filename; allow a one-model `researchers` list so the fan-out can grow without another contract change.
 
 A hard question whose decision is costly to reverse (an architecture or contract choice, a domain the repository has
 no evidence on) gets two researchers: dispatch the same question twice with different report paths, both on the
