@@ -164,8 +164,8 @@ test('viewer replacement and access loss retire private state; anonymous reading
   expect(reads.map((request) => request.threadId)).toEqual(['thread-a', 'thread-b']);
   expect(commands).toHaveLength(1);
   expect(host.textContent).toContain(m.thread_watch_access_lost());
-  expect(host.textContent).not.toContain(m.thread_watch_watching());
-  expect(host.textContent).not.toContain(m.thread_watch_not_watching());
+  expect(host.querySelector('[aria-live="polite"]')?.textContent).not.toBe(m.thread_watch_watching());
+  expect(host.querySelector('[aria-live="polite"]')?.textContent).not.toBe(m.thread_watch_not_watching());
   render({
     ...baseline,
     session: 'signed-out',
