@@ -136,6 +136,8 @@ async function mount(initialUrl: string) {
   failNextHistoryCursor = undefined;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
+  const { historicalReaderSource } = await import('../src/threads/historical-reader-provenance');
+  expect(historicalReaderSource(client).read()).toMatchObject({ state: 'signed-out', healthy: true });
   const rootRoute = createRootRouteWithContext<{
     queryClient: InstanceType<typeof QueryClient>;
     credentialMode: 'anonymous' | 'session';
