@@ -39,8 +39,6 @@ export function recordingStatementFromHref(
   if (!currentHref) return;
   const url = currentRecordingAddress(currentHref, subjectId, locale);
   if (!url) return;
-  const match = /^#recording-statement-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
-    url.hash,
-  );
+  const match = /^#recording-statement-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(url.hash);
   return match?.[1];
 }

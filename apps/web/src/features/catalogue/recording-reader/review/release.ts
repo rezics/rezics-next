@@ -57,7 +57,9 @@ export function useRecordingRelease({
   const sourceEpoch = sourceVersion.current.value;
   const contextKey = JSON.stringify(context ?? null);
   const browserIdentity =
-    browser.state === 'signed-in' ? `signed-in:${browser.observation.subject}:${browser.observation.id}` : browser.state;
+    browser.state === 'signed-in'
+      ? `signed-in:${browser.observation.subject}:${browser.observation.id}`
+      : browser.state;
   const work = useCatalogueLifetime(
     JSON.stringify([
       source.id,
@@ -153,12 +155,7 @@ export function useRecordingRelease({
 
   const retry = useCallback(
     async (onCurrentSuccess?: () => void) => {
-      if (
-        !work.active() ||
-        retrying ||
-        query.isFetching ||
-        operationRef.current?.scope === work.generation
-      )
+      if (!work.active() || retrying || query.isFetching || operationRef.current?.scope === work.generation)
         return false;
       const operation = { scope: work.generation, token: ++nextOperation.current };
       operationRef.current = operation;

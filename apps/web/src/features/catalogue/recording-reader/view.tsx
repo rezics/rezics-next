@@ -94,11 +94,7 @@ function valueContent({
     const id = fact.value.content;
     const target = typeof id === 'string' ? targetOf(read, id, locale) : undefined;
     value = target ? (
-      <Link
-        className={actionClass}
-        href={relationTargetHref(target, locale, context)}
-        lang={target.language}
-      >
+      <Link className={actionClass} href={relationTargetHref(target, locale, context)} lang={target.language}>
         {target.label}
       </Link>
     ) : (
@@ -269,7 +265,9 @@ function FactInspection({
         <dt className="font-semibold">{m.recording_reader_direction_label({}, options(locale))}</dt>
         <dd className="min-w-0 [overflow-wrap:anywhere]">
           <span lang={pickText(read.subject.labels, locale).lang ?? undefined}>{subjectTitle}</span>
-          <span aria-hidden="true" className="px-2">→</span>
+          <span aria-hidden="true" className="px-2">
+            →
+          </span>
           {valueContent({
             field,
             fact,
@@ -352,16 +350,8 @@ export function RecordingReader({
     loading: visit.state === 'loading',
   });
   const selectedFact = selection.selectedStatement ? selected(selection.selectedStatement) : undefined;
-  const details = subjectViewHref(
-    { id: read.subject.id, label: subjectTitle },
-    locale,
-    'details',
-  );
-  const relations = subjectViewHref(
-    { id: read.subject.id, label: subjectTitle },
-    locale,
-    'relations',
-  );
+  const details = subjectViewHref({ id: read.subject.id, label: subjectTitle }, locale, 'details');
+  const relations = subjectViewHref({ id: read.subject.id, label: subjectTitle }, locale, 'relations');
   const stateCopy =
     visit.state === 'loading'
       ? m.candidate_loading({}, options(locale))
@@ -371,7 +361,7 @@ export function RecordingReader({
           ? m.recording_reader_empty({}, options(locale))
           : visit.state === 'invalid'
             ? m.recording_reader_invalid({}, options(locale))
-          : m.recording_reader_unavailable({}, options(locale));
+            : m.recording_reader_unavailable({}, options(locale));
   const incomplete = visit.bounds.flatMap((bound) => {
     const field = [...visit.groups.details, ...visit.groups.contributions, ...visit.groups.associations].find(
       (candidate) => candidate.property === bound.property,
@@ -386,12 +376,7 @@ export function RecordingReader({
     if (!retryAvailable || retrying || !onRetry || !active()) return;
     const ownsFocus = typeof document !== 'undefined' && document.activeElement === retryRef.current;
     void onRetry(() => {
-      if (
-        ownsFocus &&
-        active() &&
-        typeof document !== 'undefined' &&
-        document.activeElement === retryRef.current
-      )
+      if (ownsFocus && active() && typeof document !== 'undefined' && document.activeElement === retryRef.current)
         headingRef.current?.focus();
     });
   };
@@ -415,13 +400,7 @@ export function RecordingReader({
       {showRecovery ? (
         <div className="space-y-2" aria-live="polite">
           {retrying ? <p role="status">{m.recording_reader_retrying({}, options(locale))}</p> : null}
-          <button
-            ref={retryRef}
-            type="button"
-            aria-disabled={retrying}
-            className={actionClass}
-            onClick={handleRetry}
-          >
+          <button ref={retryRef} type="button" aria-disabled={retrying} className={actionClass} onClick={handleRetry}>
             {m.recording_reader_retry({}, options(locale))}
           </button>
         </div>
@@ -511,10 +490,16 @@ export function RecordingReader({
       ) : null}
 
       <nav aria-label={m.recording_reader_navigation({}, options(locale))} className="flex flex-wrap gap-x-4 gap-y-2">
-        <Link className={`${linkClass} ${linkColor} ${actionClass}`} href={withSubjectVisitReturn(details, currentAddress ?? '', locale)}>
+        <Link
+          className={`${linkClass} ${linkColor} ${actionClass}`}
+          href={withSubjectVisitReturn(details, currentAddress ?? '', locale)}
+        >
           {m.subject_details({}, options(locale))}
         </Link>
-        <Link className={`${linkClass} ${linkColor} ${actionClass}`} href={withSubjectVisitReturn(relations, currentAddress ?? '', locale)}>
+        <Link
+          className={`${linkClass} ${linkColor} ${actionClass}`}
+          href={withSubjectVisitReturn(relations, currentAddress ?? '', locale)}
+        >
           {m.subject_relations({}, options(locale))}
         </Link>
       </nav>

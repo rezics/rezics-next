@@ -30,7 +30,9 @@ function fixtureFor(locale: string) {
   if (ensemble)
     ensemble.labels = {
       ...ensemble.labels,
-      en: `${ensemble.labels.en ?? 'The Harbour Ensemble'} — international recording archive, restoration collective, and performance catalogue — `.repeat(2),
+      en: `${ensemble.labels.en ?? 'The Harbour Ensemble'} — international recording archive, restoration collective, and performance catalogue — `.repeat(
+        2,
+      ),
     };
   return value;
 }

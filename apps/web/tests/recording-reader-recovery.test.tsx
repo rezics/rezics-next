@@ -14,7 +14,9 @@ import { sessionQueryKey } from '../src/session/browser-state';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: `https://rezics.test/en/subjects/${albumId}/harbour-recording` });
 const globals = {
   window,
@@ -91,14 +93,12 @@ function currentAddress(returnTo: string) {
   return `/en/subjects/${albumId}/harbour-recording?realm=${realmId}&via=${encodeURIComponent(returnTo)}`;
 }
 
-async function mount(
-  initial: {
-    read: SubjectRead;
-    currentHref: string;
-    returnTo: string;
-    loadRelease: RecordingReleaseLoader;
-  },
-) {
+async function mount(initial: {
+  read: SubjectRead;
+  currentHref: string;
+  returnTo: string;
+  loadRelease: RecordingReleaseLoader;
+}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: Infinity } } });
   const host = window.document.createElement('main');
   window.document.body.append(host);

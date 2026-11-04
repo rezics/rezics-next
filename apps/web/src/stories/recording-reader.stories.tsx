@@ -105,7 +105,9 @@ async function inspectQualifiedFact({ canvasElement }: { canvasElement: HTMLElem
   await userEvent.keyboard('{Enter}');
   const heading = await canvas.findByRole('heading', { name: m.recording_reader_fact_inspection() });
   await expect(document.activeElement).toBe(heading);
-  await expect(canvas.getByRole('region', { name: m.recording_reader_fact_inspection() })).toHaveTextContent('Performer');
+  await expect(canvas.getByRole('region', { name: m.recording_reader_fact_inspection() })).toHaveTextContent(
+    'Performer',
+  );
   await expect(canvas.getByRole('region', { name: m.recording_reader_fact_inspection() })).toHaveTextContent(
     'The Harbour Ensemble',
   );
