@@ -203,7 +203,7 @@ test('patterns must be safe and releases are bounded', () => {
 
 test('the bundled catalogue admits exact file hashes, byte size and directed file associations', () => {
   const { types, properties } = bundledRelease;
-  expect(bundledRelease.catalogue.version).toBe('1.0.5');
+  expect(bundledRelease.catalogue.version).toBe('1.0.6');
   expect(types['schema:Quotation']).toMatchObject({
     iri: 'http://schema.org/Quotation',
     bases: ['schema:Thing'],
