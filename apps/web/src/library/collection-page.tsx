@@ -2580,3 +2580,312 @@ function CollectionPageLifetime({
             {...(activeSave && !activeSave.transfer && rebaseIssue
               ? { onDiscardUnavailable: discardUnavailableDraftOperation }
               : {})}
+          />
+        ) : null}
+        {!editing && ownerCurrent && saveRunView?.complete ? (
+          <CollectionEditReview
+            plan={saveRunView.plan}
+            initial={saveRunView.initial}
+            desired={saveRunView.desired}
+            types={page.presentationTypes}
+            outcomes={saveRunView.outcomes}
+            complete
+            recoverCurrent={false}
+          />
+        ) : null}
+        {editing && ownerCurrent ? (
+          <div
+            className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-sm"
+            data-collection-save
+          >
+            <Button
+              type="submit"
+              form="collection-edit-form"
+              disabled={!hydrated || pending || conflict || transfer !== null}
+            >
+              {writing ? m.library_collection_save_pending() : m.library_collection_save()}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending || conflict || draftFrozen}
+              onClick={cancelEditing}
+            >
+              {m.library_collection_cancel()}
+            </Button>
+            {!saveConfirmed && (memberDraftChanged || transfer) ? (
+              <span role="status" className="text-sm text-muted-foreground">
+                {m.library_collection_unsaved_members()}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+        {page.next && !editing ? (
+          <nav aria-label={m.library_collection_members()}>
+            <a href={collectionViewAddress(page.id, layout, page.next, search)} className={buttonClass}>
+              {m.library_collection_more()}
+            </a>
+          </nav>
+        ) : null}
+        {!editing ? (
+          <CollectionExport
+            page={page}
+            context={{ origin: publicOrigin(), locale: getLocale() }}
+            laterPage={cursor !== undefined}
+          />
+        ) : null}
+      </article>
+    </div>
+  );
+}
+
+/** Current product actions only; missing Collection social producers never become pin/follow writes. */
+export function CollectionReadActions({
+  onShare,
+  entries = [],
+  primaryShare = true,
+}: {
+  primaryShare?: boolean;
+  onShare: () => void | Promise<void>;
+  entries?: MenuEntry[];
+}) {
+  return (
+    <>
+      {primaryShare ? (
+        <Button type="button" variant="outline" onClick={onShare}>
+          <Share2Icon aria-hidden="true" />
+          {m.library_collection_share()}
+        </Button>
+      ) : null}
+      {entries.length || !primaryShare ? (
+        <Menu
+          title={m.library_collection_actions()}
+          backLabel={m.library_collection_cancel()}
+          trigger={
+            <Button type="button" aria-label={m.library_collection_actions()} size="icon-sm" variant="ghost">
+              <EllipsisIcon aria-hidden="true" />
+            </Button>
+          }
+          entries={
+            primaryShare
+              ? entries
+              : [{ type: 'item', label: m.library_collection_share(), onSelect: onShare }, ...entries]
+          }
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** Read presentation is separate from the occurrence editor and performs no enrichment reads. */
+export function CollectionReadMembers<Member extends CollectionReadMember>({
+  members,
+  layout = 'list',
+  pageReady = true,
+  pageKey: suppliedPageKey,
+  positionScope: suppliedPositionScope,
+  presentationKind,
+  typeRatios,
+  listPresentations,
+  comparisonDefinitions,
+  currentHref,
+  returnSource,
+  admitInitialReturn,
+  onReferenceNavigate,
+  viewerProjection,
+  viewerActionHref,
+  onCopy,
+}: {
+  members: readonly Member[];
+  layout?: 'grid' | 'list';
+  pageReady?: boolean;
+  pageKey?: string;
+  positionScope?: CollectionPositionScope;
+  presentationKind?: string | null | undefined;
+  typeRatios?: Readonly<Record<string, string>> | undefined;
+  listPresentations?: CollectionListPresentations | undefined;
+  comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
+  currentHref?: string | undefined;
+  returnSource?: object | undefined;
+  admitInitialReturn?: boolean | undefined;
+  onReferenceNavigate?: (() => void) | undefined;
+  viewerProjection?: CollectionViewerProjection;
+  viewerActionHref?: (member: Member) => string | undefined;
+  onCopy: (member: Member) => void | Promise<void>;
+}) {
+  const locale = getLocale();
+  const pageKey = suppliedPageKey ?? collectionReadingPageKey(currentHref, currentHref ?? '/', 0, members);
+  const positionScope = suppliedPositionScope ?? collectionPositionScopeFromAddress(currentHref);
+  const { admitReferenceReturn, missingOccurrence } = useCollectionComparisonReturn(
+    members,
+    currentHref,
+    returnSource,
+    admitInitialReturn,
+    pageReady,
+  );
+  const [noteExpansion, setNoteExpansion] = useState<{ pageKey: string; values: Readonly<Record<string, boolean>> }>({
+    pageKey,
+    values: {},
+  });
+  const expandedNotes = noteExpansion.pageKey === pageKey ? noteExpansion.values : {};
+  useEffect(() => {
+    setNoteExpansion((previous) => (previous.pageKey === pageKey ? previous : { pageKey, values: {} }));
+  }, [pageKey]);
+  function updateNoteExpansion(noteKey: string, expanded: boolean) {
+    setNoteExpansion((previous) => ({
+      pageKey,
+      values: { ...(previous.pageKey === pageKey ? previous.values : {}), [noteKey]: expanded },
+    }));
+  }
+
+  const items = members.map((member, index) => {
+    const subject = member.subject;
+    // Render-only keys keep unidentified rows separate without creating an occurrence identity for actions.
+    const key = member.id ? `occurrence:${member.id}` : `display-only:${index}`;
+    const noteKey = member.id ? `occurrence:${member.id}` : `display-only:${index}`;
+    const titleValue = subject?.label ? pageText(libraryTitleValue(subject.label), locale) : undefined;
+    const title = titleValue?.text || (subject ? m.subject_value_unlabelled() : m.library_subject_unavailable());
+    const actionHref = viewerActionHref?.(member);
+    const details = (
+      <CollectionMemberOccurrenceDetails
+        member={member}
+        position={index + 1}
+        scope={positionScope}
+        pageKey={pageKey}
+        noteStateKey={noteKey}
+        noteExpanded={expandedNotes[noteKey] ?? false}
+        onNoteExpandedChange={(expanded) => updateNoteExpansion(noteKey, expanded)}
+        currentHref={currentHref}
+        listPresentations={listPresentations}
+        comparisonDefinitions={comparisonDefinitions}
+        onReferenceNavigate={(anchor) => {
+          admitReferenceReturn(anchor);
+          onReferenceNavigate?.();
+        }}
+        {...(viewerProjection ? { viewerProjection } : {})}
+        {...(actionHref ? { actionHref } : {})}
+      />
+    );
+
+    if (!subject) {
+      return layout === 'grid' ? (
+        <div key={key} role="listitem" data-slot="collection-member-card" className="min-w-0 py-4 text-sm">
+          {details}
+        </div>
+      ) : (
+        <ListRow key={key} className="py-4 text-muted-foreground">
+          {details}
+        </ListRow>
+      );
+    }
+
+    const presentation = listPresentations?.[subject.type];
+    const menu = (
+      <Menu
+        title={m.library_collection_actions()}
+        backLabel={m.library_collection_cancel()}
+        trigger={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-lg"
+            aria-label={`${m.library_collection_actions()}: ${title}`}
+          >
+            <EllipsisIcon aria-hidden="true" />
+          </Button>
+        }
+        entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: () => void onCopy(member) }]}
+      />
+    );
+
+    if (layout === 'grid')
+      return (
+        <div key={key} role="listitem" data-slot="collection-member-card" className="min-w-0">
+          <CoverCard
+            href={collectionComparisonHref(subject.id, title, locale, currentHref, member.id)}
+            title={title}
+            {...(titleValue?.lang ? { titleLang: titleValue.lang } : {})}
+            cover={{
+              subject: { id: subject.id, title, types: [subject.type] },
+              cover: subject.cover,
+              src: coverSrc,
+              ratio: collectionMemberRatio(subject, typeRatios, listPresentations),
+              ...(presentation ? { listPresentation: presentation } : {}),
+            }}
+            state={details}
+            menuTrigger={menu}
+          />
+        </div>
+      );
+
+    return (
+      <MemberListRow
+        key={key}
+        href={collectionComparisonHref(subject.id, title, locale, currentHref, member.id)}
+        subject={{ id: subject.id, title, types: [subject.type] }}
+        cover={subject.cover}
+        src={coverSrc}
+        title={title}
+        {...(titleValue?.lang ? { titleLang: titleValue.lang } : {})}
+        ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
+        {...(presentation ? { listPresentation: presentation } : {})}
+        trailing={menu}
+      >
+        {details}
+      </MemberListRow>
+    );
+  });
+
+  const onReadNavigate = (event: MouseEvent<HTMLElement>) => {
+    const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
+    if (anchor && new URL(anchor.href).searchParams.has('via')) {
+      // The UI row owns its stretched link; its disclosed details own the occurrence anchor.
+      const row = anchor.closest('[data-slot="list-row"], [data-slot="collection-member-card"]');
+      const occurrence = row?.querySelector<HTMLElement>('[data-collection-member-id]')?.dataset.collectionMemberId;
+      if (occurrence && row instanceof HTMLElement) row.dataset.collectionMemberId = occurrence;
+      admitReferenceReturn(anchor);
+      onReferenceNavigate?.();
+    }
+  };
+
+  return (
+    <section aria-label={m.library_collection_members()} data-slot="collection-reading-region" className="space-y-3">
+      {missingOccurrence ? (
+        <p role="status" data-collection-return="missing-occurrence" className="text-sm text-muted-foreground">
+          {m.library_collection_return_missing_occurrence()}
+        </p>
+      ) : null}
+      <p data-slot="collection-reading-position-scope" className="text-sm text-muted-foreground">
+        {collectionPositionScopeMessage(positionScope)}
+      </p>
+      {layout === 'grid' ? (
+        <div
+          role="list"
+          className="min-w-0"
+          data-collection-members
+          data-collection-layout={layout}
+          onClickCapture={onReadNavigate}
+        >
+          <CoverGrid
+            ratio={collectionMemberRatio(
+              presentationKind ? { type: presentationKind } : null,
+              typeRatios,
+              listPresentations,
+            )}
+          >
+            {items}
+          </CoverGrid>
+        </div>
+      ) : (
+        <ul
+          className="min-w-0 space-y-3"
+          data-collection-members
+          data-collection-layout={layout}
+          onClickCapture={onReadNavigate}
+        >
+          {items}
+        </ul>
+      )}
+    </section>
+  );
+}
