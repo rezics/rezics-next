@@ -132,18 +132,22 @@ inspection request. Catalogue appeals have no native list. Source preparation an
 native execution. Native commands remain authoritative and retain their original sender, credentials, key and
 operands.
 
-## Own reporter inventory consumer seam
+## Own reporter inventory
 
-`reporter-history/model.ts`, `read.ts` and `server.ts` implement the named minimal local consumer seam
-`report.own_history` against mounted `GET /v1/reports/me`. This is a public wire validator, not installed generated
-client typing. The server prepares the current session once and accepts only cursor and exact report selection;
-there is no browser account selector. A response must carry an opaque native session header, hashed independently
-of the prepared reader origin. Closed viewer/action advice, exact safe native destinations, selection and original
-retry frontier are checked before rows are retained. Concealed targets remain independent from readable reports.
+`reporter-history/model.ts` derives the query and response from the installed `@rezics/client` declaration for
+`GET /v1/reports/me`. `read.ts` uses that generated callable with private no-store transport and validates native
+ownership, disclosure advice, exact safe destinations, selection and the original retry frontier before retaining
+rows. The server prepares the signed-in session once and accepts only cursor and exact report selection; there is no
+browser account selector. A native session header fingerprint remains independent from the prepared reader origin.
 Preparing, denial, cursor expiry and dependency failure remain distinct from an empty ready page.
 
-Decision: while shared declarations are pending, use an explicit public-wire own-history seam and keep a missing
-configured native origin unavailable, including development; never present fixture data as a delivered inventory.
+My reports is a localized, signed-in Library destination backed by public native exposure. Web admits a visit through
+the current session incarnation and native account authorization; it does not require a private-control operation
+grant. The served route uses one replacement page, exact selected-report confirmation and the fixed local status
+return carrying its opaque cursor and selected report ID. Session, credential, exposure, locale, source and
+navigation replacement retire the visit.
+
+Decision: a missing configured native origin remains unavailable, including development; never present fixture data as a delivered inventory.
 
 ### Cost: own-history consumer read
 
@@ -161,4 +165,4 @@ Decision: an own-history visit retains one replacement page and exact selection;
 
 Decision: My reports opens at `/moderation/reports`; its status return uses a fixed local destination carrying the exact cursor and selected report ID.
 
-`reporter-history/journey.ts` owns prepared browser admission and page replacement through the shared private-reader lifetime. It does not mount the inventory route.
+`reporter-history/journey.ts` owns prepared browser admission and page replacement through the shared private-reader lifetime; the localized Reports route mounts it through `view.tsx`.

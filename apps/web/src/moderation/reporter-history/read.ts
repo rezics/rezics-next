@@ -1,3 +1,5 @@
+import type { KernelClient } from '@rezics/client';
+import { SESSION_HEADER } from '@rezics/client';
 import {
   reporterHistoryPage,
   reporterHistoryQuery,
@@ -8,49 +10,35 @@ export type ReporterHistoryResult =
   | { state: 'loaded'; page: ReporterHistoryPage; nativeSourceFingerprint: string }
   | { state: 'denied' | 'expired' | 'unavailable' };
 
-/** Named minimal local consumer seam: one mounted own read, no account selector,
- * target hydration, moderator endpoint, fabricated provenance or installed typing claim. */
+/** One mounted generated-client own read, with no account selector, target hydration or moderator endpoint. */
 export async function loadReporterHistory(
-  origin: string,
-  authorization: string,
+  client: Pick<KernelClient, 'reports'>,
   operands: ReporterHistoryQuery,
-  send: typeof fetch = fetch,
   signal?: AbortSignal,
 ): Promise<ReporterHistoryResult> {
   const query = reporterHistoryQuery(operands);
-  const url = new URL('/v1/reports/me', origin);
-  if (query.cursor !== undefined) url.searchParams.set('cursor', query.cursor);
-  if (query.reportId !== undefined) url.searchParams.set('reportId', query.reportId);
   try {
     signal?.throwIfAborted();
-    const response = await send(url, {
-      method: 'GET',
-      headers: { authorization },
-      cache: 'no-store',
-      ...(signal ? { signal } : {}),
+    const response = await client.reports.me.get({
+      query,
+      fetch: { cache: 'no-store', ...(signal ? { signal } : {}) },
     });
-    if ([401, 403, 404].includes(response.status)) {
-      await response.body?.cancel();
-      return { state: 'denied' };
-    }
-    if (!response.ok) {
-      const problem: unknown = await response.json();
+    if (response.error) {
+      if ([401, 403, 404].includes(response.status))
+        return { state: 'denied' };
+      const value: unknown = response.error.value;
+      const code = value && typeof value === 'object' && 'code' in value ? value.code : undefined;
       if (
         (response.status === 400 || response.status === 409) &&
-        problem &&
-        typeof problem === 'object' &&
-        'code' in problem &&
-        (problem.code === 'invalid_cursor' || problem.code === 'stale_cursor')
+        (code === 'invalid_cursor' || code === 'stale_cursor')
       )
         return { state: 'expired' };
       return { state: 'unavailable' };
     }
-    const nativeSession = response.headers.get('rezics-session-token');
-    if (!nativeSession) {
-      await response.body?.cancel();
-      return { state: 'unavailable' };
-    }
-    const page = reporterHistoryPage(await response.json(), query);
+    if (!response.data) return { state: 'unavailable' };
+    const nativeSession = response.response.headers.get(SESSION_HEADER);
+    if (!nativeSession) return { state: 'unavailable' };
+    const page = reporterHistoryPage(response.data, query);
     const digest = await crypto.subtle.digest(
       'SHA-256',
       new TextEncoder().encode(JSON.stringify(['reporter-history-source', nativeSession])),

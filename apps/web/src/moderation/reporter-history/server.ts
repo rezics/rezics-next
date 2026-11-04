@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { hasKernelOrigin, kernelClient } from '../../kernel/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
 import { preparedPrivateReaderOrigin } from '../private-reader-origin';
@@ -20,9 +21,8 @@ export const readReporterHistory = createServerFn({ method: 'GET' })
       const authorization = viewerCredential(request);
       const readerOrigin = await preparedPrivateReaderOrigin(request, authorization);
       if (!authorization || !readerOrigin) return { readerOrigin: null, result: { state: 'denied' } };
-      const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
-      if (!origin) return { readerOrigin, result: { state: 'unavailable' } };
-      return { readerOrigin, result: await loadReporterHistory(origin, authorization, data) };
+      if (!hasKernelOrigin()) return { readerOrigin, result: { state: 'unavailable' } };
+      return { readerOrigin, result: await loadReporterHistory(kernelClient(undefined, authorization), data, request.signal) };
     } catch {
       return { readerOrigin: null, result: { state: 'unavailable' } };
     }

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { operationIsAdmitted } from '../src/kernel/exposure';
+import { operationGroups } from '../src/kernel/exposure';
 import { ReporterHistoryCurrent, ReporterHistoryPage } from '../src/moderation/reporter-history/view';
 import { reporterHistoryReturnHref, reporterHistoryStatusHref } from '../src/moderation/reporter-history/navigation';
 import { prepareReporterHistoryVisit, type ReporterHistoryReader } from '../src/moderation/reporter-history/journey';
@@ -59,20 +59,19 @@ function page(
   };
 }
 
-test('My reports is a signed-in Library destination filtered by its native operation and provides only a fixed local return', () => {
+test('My reports is a signed-in Library destination without a private operation gate and provides a fixed local return', () => {
   const destinations = libraryNavigation.filter((item) => item.id === 'library.own-reports');
   expect(destinations).toHaveLength(1);
   expect(destinations[0]).toMatchObject({
     href: '/moderation/reports',
     group: 'personal',
     signedIn: true,
-    operation: 'report.own_history',
   });
+  expect(destinations[0]).not.toHaveProperty('operation');
+  expect(Object.hasOwn(operationGroups, 'report.own_history')).toBe(false);
   const label = destinations[0]!.label;
   if (typeof label !== 'function') throw new Error('My reports must use a localized label');
   for (const locale of locales) expect(label({ locale, pathname: '/moderation/reports' })).toBeTruthy();
-  expect(operationIsAdmitted('report.own_history', ['report.own_history'])).toBe(true);
-  expect(operationIsAdmitted('report.own_history', [])).toBe(false);
 
   const cursor = 'opaque/+%2F cursor';
   const back = reporterHistoryReturnHref(
@@ -129,7 +128,7 @@ test('localized page states distinguish preparation, completion, denial, continu
   }
 });
 
-test('mounted history replaces one page, retries the exact cursor, opens the selected status and retires on account change', async () => {
+test('mounted history replaces one page, retries the exact cursor, opens selected status and retires on exposure replacement', async () => {
   const { dirname } = await import('node:path');
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -164,7 +163,7 @@ test('mounted history replaces one page, retries the exact cursor, opens the sel
   if (admission.state !== 'signed-in') throw new Error('The mounted test needs its prepared browser account');
   cache.setQueryData(viewerExposureQuery(admission.observation).queryKey, {
     subject: 'reporter-account',
-    admitted: ['report.own_history'],
+    admitted: [],
   });
   const origin = {
     subject: 'reporter-account',
@@ -256,7 +255,10 @@ test('mounted history replaces one page, retries the exact cursor, opens the sel
     expect(statusUrl.searchParams.get('historyReportId')).toBe(secondReportId);
 
     await act(async () => {
-      cache.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null, subject: null });
+      cache.setQueryData(viewerExposureQuery(admission.observation).queryKey, {
+        subject: 'reporter-account',
+        admitted: ['personal_library'],
+      });
       await Promise.resolve();
     });
     expect(container.textContent).not.toContain('Selected private report');
