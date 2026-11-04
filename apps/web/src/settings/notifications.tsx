@@ -99,7 +99,11 @@ export function NotificationsCard({
   const needsReload = !readFailed && (state.phase === 'conflict' || state.phase === 'failed');
   const localEdit = !!state.pending || readFailed || ['conflict', 'review', 'reloading'].includes(state.phase);
   const canEdit = state.currentAdvice ? preferencePageAllows(state.currentAdvice, 'edit') : false;
-  const canDraft = localEdit && preferencePageAllows(state.known.page, 'edit');
+  const canDraft = localEdit && !state.currentAdvice && preferencePageAllows(state.known.page, 'edit');
+  const canSubmitReview =
+    state.intent !== undefined &&
+    !!state.currentAdvice &&
+    preferencePageAllows(state.currentAdvice, state.intent === null ? 'reset' : 'edit');
   const canRetryOriginal = notificationOriginalAllowed(state.pending?.input ?? null, state.currentAdvice);
   const rowDisabled = disabled || (commandWaiting && !localEdit) || (!canEdit && !canDraft);
   const restoreDisabled =
@@ -273,6 +277,7 @@ export function NotificationsCard({
             >
               <AlertTitle>{m.settings_notifications_read_failed()}</AlertTitle>
               <AlertDescription className="space-y-3">
+                {state.confirmedReceipt ? <p>{m.settings_notifications_confirmed_text()}</p> : null}
                 <p>
                   {state.readReason === 'closed'
                     ? m.settings_notifications_read_closed()
@@ -437,15 +442,19 @@ export function NotificationsCard({
                   ))}
                 </ul>
                 <div className="flex min-w-0 flex-wrap gap-2">
-                  <Button
-                    className={preferenceActionClassName}
-                    type="button"
-                    disabled={commandWaiting || disabled}
-                    aria-describedby={waitDescription}
-                    onClick={() => void editor.submit(version)}
-                  >
-                    {state.intent === null ? m.settings_notifications_restore() : m.settings_notifications_save_draft()}
-                  </Button>
+                  {canSubmitReview ? (
+                    <Button
+                      className={preferenceActionClassName}
+                      type="button"
+                      disabled={commandWaiting || disabled}
+                      aria-describedby={waitDescription}
+                      onClick={() => void editor.submit(version)}
+                    >
+                      {state.intent === null
+                        ? m.settings_notifications_restore()
+                        : m.settings_notifications_save_draft()}
+                    </Button>
+                  ) : null}
                   {!state.pending ? (
                     <Button
                       className={preferenceActionClassName}

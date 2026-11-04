@@ -2361,6 +2361,7 @@
   "settings_notifications_use_current": "使用目前值",
   "settings_notifications_reading": "正在載入目前的通知設定…",
   "settings_notifications_read_failed": "無法載入目前的通知設定",
+  "settings_notifications_confirmed_text": "原始儲存已確認，但目前通知設定仍無法使用。請重新載入以檢視最新值。",
   "settings_notifications_read_unavailable": "通知設定暫時無法使用，請重新載入。",
   "settings_notifications_read_denied": "目前的登入身分無權讀取通知設定。請確認帳號存取權限後再試一次。",
   "settings_notifications_read_closed": "目前無法載入通知設定。請稍後重新載入，以查看目前設定。",

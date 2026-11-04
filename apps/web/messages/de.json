@@ -2361,6 +2361,7 @@
   "settings_notifications_use_current": "Aktuelle Werte übernehmen",
   "settings_notifications_reading": "Aktuelle Benachrichtigungseinstellungen werden geladen …",
   "settings_notifications_read_failed": "Die aktuellen Benachrichtigungseinstellungen konnten nicht geladen werden",
+  "settings_notifications_confirmed_text": "Der ursprüngliche Speichervorgang wurde bestätigt, aber die aktuellen Benachrichtigungseinstellungen sind weiterhin nicht verfügbar. Lade die neuesten Werte erneut, um sie zu prüfen.",
   "settings_notifications_read_unavailable": "Die Benachrichtigungseinstellungen sind vorübergehend nicht verfügbar. Versuche, sie erneut zu laden.",
   "settings_notifications_read_denied": "Mit dieser Anmeldung kannst du die Benachrichtigungseinstellungen nicht lesen. Prüfe deinen Kontozugriff, bevor du es erneut versuchst.",
   "settings_notifications_read_closed": "Die Benachrichtigungseinstellungen können derzeit nicht geladen werden. Lade sie später erneut, um den aktuellen Stand zu prüfen.",

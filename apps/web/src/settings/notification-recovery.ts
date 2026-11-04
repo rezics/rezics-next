@@ -11,7 +11,12 @@ import { optionalNotifications, preferencePageAllows } from './preferences';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 
 type Snapshot = { notifications: NotificationPreferences; version: number; page: PreferencePage };
-type Attempt = Readonly<{ input: NotificationChange; draft: Readonly<NotificationPreferences> }>;
+type Attempt = Readonly<{
+  input: NotificationChange;
+  draft: Readonly<NotificationPreferences>;
+  intent: NotificationPatch | undefined;
+}>;
+type ConfirmedReceipt = Readonly<{ attempt: Attempt; receipt: Snapshot }>;
 type ReadOrigin = 'refresh' | 'review' | 'replay' | 'reacquire';
 export type NotificationEditorState = {
   known: Snapshot;
@@ -19,6 +24,8 @@ export type NotificationEditorState = {
   currentAdvice: PreferencePage | null;
   draft: NotificationPreferences;
   pending: Attempt | null;
+  /** A replay receipt proves command completion, but grants no authority until a current read succeeds. */
+  confirmedReceipt: ConfirmedReceipt | null;
   /** Only deliberate choices belong to a recovery write; null retains Restore defaults. */
   intent: NotificationPatch | undefined;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'review' | 'reloading' | 'failed';
@@ -39,6 +46,17 @@ export type NotificationEditorIO = {
 
 export function sameNotifications(a: NotificationPreferences, b: NotificationPreferences): boolean {
   return Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([key, value]) => b[key] === value);
+}
+
+function intentSince(
+  before: NotificationPatch | undefined,
+  after: NotificationPatch | undefined,
+): NotificationPatch | undefined {
+  if (after === undefined || (after === null && before === null)) return undefined;
+  if (after === null) return null;
+  const previous = before !== undefined && before !== null ? before : {};
+  const later = Object.fromEntries(Object.entries(after).filter(([kind, enabled]) => previous[kind] !== enabled));
+  return Object.keys(later).length ? later : undefined;
 }
 
 export function admittedOptionalKind(page: PreferencePage, kind: string): boolean {
@@ -83,6 +101,7 @@ function snapshotFrom(page: PreferencePage): Snapshot {
 
 export function notificationsNeedNavigationDecision(state: NotificationEditorState): boolean {
   return (
+    state.confirmedReceipt !== null ||
     state.pending !== null || state.intent !== undefined || !sameNotifications(state.known.notifications, state.draft)
   );
 }
@@ -101,6 +120,7 @@ export class NotificationEditor {
       currentAdvice: null,
       draft: {},
       pending: null,
+      confirmedReceipt: null,
       intent: undefined,
       phase: 'failed',
       readOrigin: null,
@@ -131,6 +151,7 @@ export class NotificationEditor {
       currentAdvice: initialFailed ? null : initial,
       draft: { ...known.notifications },
       pending: null,
+      confirmedReceipt: null,
       intent: undefined,
       phase: initialFailed ? 'failed' : 'idle',
       readOrigin: null,
@@ -161,7 +182,7 @@ export class NotificationEditor {
     return this.versionFloor;
   }
   private confirm(known: Snapshot) {
-    this.update({ known, currentAdvice: known.page });
+    this.update({ known, currentAdvice: known.page, confirmedReceipt: null });
     if (this.live()) this.io.confirmed?.(known.version);
   }
   private adoptPage(page: PreferencePage, preserveDraft: boolean, phase: NotificationEditorState['phase']) {
@@ -211,6 +232,28 @@ export class NotificationEditor {
       readReason: undefined,
       readFailure: undefined,
       readRetryAt: 0,
+    });
+  }
+  private reviewConfirmed(page: PreferencePage, confirmation: ConfirmedReceipt) {
+    const known = snapshotFrom(page);
+    const laterIntent = intentSince(confirmation.attempt.intent, this.state.intent);
+    const intent = admittedNotificationPatch(laterIntent, page);
+    const draft = { ...known.notifications, ...(intent && intent !== null ? intent : {}) };
+    const newer = known.version > confirmation.receipt.version;
+    this.confirm(known);
+    this.update({
+      confirmedReceipt: null,
+      pending: null,
+      draft,
+      intent,
+      phase: newer || intent !== undefined ? 'review' : 'saved',
+      readOrigin: null,
+      readReason: undefined,
+      readFailure: undefined,
+      readRetryAt: 0,
+      commandReason: undefined,
+      commandFailure: undefined,
+      commandRetryAt: 0,
     });
   }
   async edit(kind: string, enabled: boolean, version: number) {
@@ -287,8 +330,14 @@ export class NotificationEditor {
       notifications: admitted === null ? null : Object.freeze({ ...admitted }),
       idempotencyKey: crypto.randomUUID(),
     });
+    const intent =
+      this.state.intent === null
+        ? null
+        : this.state.intent === undefined
+          ? undefined
+          : Object.freeze({ ...this.state.intent });
     this.update({
-      pending: Object.freeze({ input, draft: Object.freeze({ ...this.state.draft }) }),
+      pending: Object.freeze({ input, draft: Object.freeze({ ...this.state.draft }), intent }),
       phase: 'saving',
       commandReason: undefined,
       commandFailure: undefined,
@@ -387,28 +436,38 @@ export class NotificationEditor {
       });
       return;
     }
-    // A replay is a historical receipt. Only an uncached native GET can establish the current values.
-    this.update({ phase: 'reloading', readOrigin: 'replay' });
+    // A replay receipt completes the command, but only an uncached native GET establishes current values.
+    const confirmation = Object.freeze({ attempt, receipt });
+    this.minimumVersion(receipt.version);
+    this.update({
+      confirmedReceipt: confirmation,
+      pending: null,
+      phase: 'reloading',
+      readOrigin: 'replay',
+      commandReason: undefined,
+      commandFailure: undefined,
+      commandRetryAt: 0,
+    });
     const current = await this.readCurrent();
     if (!this.live()) return;
     if (!current || current.version < this.minimumVersion()) {
-      this.update({
-        phase: 'uncertain',
-        ...(!current ? {} : { currentAdvice: null, readReason: 'unavailable', readFailure: undefined }),
-      });
+      this.update({ phase: 'failed', ...(!current ? {} : { currentAdvice: null, readReason: 'unavailable', readFailure: undefined }) });
       return;
     }
     if (
       current.version < receipt.version ||
       (current.version === receipt.version && !sameNotifications(current.notifications, receipt.notifications))
     ) {
-      this.update({ phase: 'uncertain', currentAdvice: null, readReason: 'unavailable', readFailure: undefined });
+      this.update({
+        phase: 'failed',
+        currentAdvice: null,
+        readReason: 'unavailable',
+        readFailure: undefined,
+        readRetryAt: 0,
+      });
       return;
     }
-    const edited = !sameNotifications(this.state.draft, attempt.draft);
-    const matches =
-      current.version === receipt.version && sameNotifications(current.notifications, receipt.notifications);
-    this.adoptPage(current.page, edited, matches && !edited ? 'saved' : 'review');
+    this.reviewConfirmed(current.page, confirmation);
   }
   private async readCurrent(): Promise<Snapshot | null> {
     if (!this.live()) return null;
@@ -451,8 +510,10 @@ export class NotificationEditor {
     if (!this.live()) return;
     if (this.waitingForRead() || this.state.phase === 'saving' || this.state.phase === 'reloading') return;
     const pending = this.state.pending;
+    const confirmation = this.state.confirmedReceipt;
     const preserve =
       pending !== null ||
+      confirmation !== null ||
       this.state.intent !== undefined ||
       !sameNotifications(this.state.draft, this.state.known.notifications) ||
       this.state.phase === 'conflict' ||
@@ -461,7 +522,7 @@ export class NotificationEditor {
     const draftAtRead = this.state.draft;
     this.update({
       phase: 'reloading',
-      readOrigin: pending ? 'reacquire' : preserve ? 'review' : 'refresh',
+      readOrigin: pending ? 'reacquire' : confirmation ? 'replay' : preserve ? 'review' : 'refresh',
       readReason: undefined,
       readFailure: undefined,
     });
@@ -476,6 +537,24 @@ export class NotificationEditor {
     }
     if (pending) {
       this.reviewPending(current.page);
+      return;
+    }
+    if (confirmation) {
+      if (
+        current.version < confirmation.receipt.version ||
+        (current.version === confirmation.receipt.version &&
+          !sameNotifications(current.notifications, confirmation.receipt.notifications))
+      ) {
+        this.update({
+          phase: 'failed',
+          currentAdvice: null,
+          readReason: 'unavailable',
+          readFailure: undefined,
+          readRetryAt: 0,
+        });
+        return;
+      }
+      this.reviewConfirmed(current.page, confirmation);
       return;
     }
     this.adoptPage(current.page, preserve || this.state.draft !== draftAtRead, 'idle');
