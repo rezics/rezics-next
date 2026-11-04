@@ -2017,7 +2017,7 @@ export class Importer {
           command.source.converter_revision === prior.source.converter_revision &&
           command.source.field_group === candidate.field_group &&
           command.subject === candidate.subject &&
-          JSON.stringify(command.statement) === JSON.stringify(prior.statement) &&
+          isDeepStrictEqual(JSON.parse(JSON.stringify(command.statement)), prior.statement) &&
           !retainedProposals.has(command),
       );
       if (unchanged) {

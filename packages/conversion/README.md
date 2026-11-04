@@ -1056,16 +1056,16 @@ identity; the connected native acceptance is
 
 ## Bangumi book grain
 
-The current `bangumi@10` converter dispatches type 1 Book versus BookSeries from
+The current `bangumi@11` converter dispatches type 1 Book versus BookSeries from
 the source series flag, novel platform and wiki template. Comic/manga stays
 generic Book so a novel family is never filled with manga. Type 1 cites a
 parseable `date` as `schema:datePublished` on Book or BookSeries. ISBN,
 publisher and pages stay off the work as withheld edition assertions; volume
 counts stay counts.
-Decision: type 1 Book/BookSeries dispatch remains in `bangumi@10`, preserving
-TVAnime names, Book-template names, original-run and Game player-count while the
-same honest revision adds TVAnime work evidence. One Bangumi subject stays one
-identity; ISBN does not create a `bf:Instance`.
+Decision: type 1 Book/BookSeries dispatch remains in `bangumi@11`, preserving
+TVAnime names, Book-template names, original-run, Game player-count and TVAnime
+work evidence alongside Game names. One Bangumi subject stays one identity;
+ISBN does not create a `bf:Instance`.
 
 ## Bangumi TVAnime work evidence
 
@@ -1089,8 +1089,8 @@ diagnostics. The exact selected TVSeries schema bounds both URLs and notices to
 descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
-- Touches: ordinary `bangumi@10` and selected-family
-  `cross-media-entities@11+bangumi@10` publication for one TVAnime source record,
+- Touches: ordinary `bangumi@11` and selected-family
+  `cross-media-entities@11+bangumi@11` publication for one TVAnime source record,
   its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights
@@ -1100,3 +1100,26 @@ Values are rejected on overflow; none are truncated or canonicalized.
   repair. Kernel `test/imports/bangumi-work-evidence.test.ts` authors ordinary
   independent acceptance/adoption, reopen/current reads and facts-fence behavior;
   neither fixture claims a real-dump walkthrough.
+
+## Bangumi Game-template names
+
+Decision: scalar Game `中文名` supplies `zh`; scalar or single-level bullet `别名` stays `und`.
+Type-4 `schema:VideoGame` names come only from the exact `{{Infobox Game` head.
+Top-level `name` and `name_cn` keep their existing meanings. The complete
+bounded infobox stays in the normalized source projection and digest. Exact
+property/language/text tuples deduplicate; nested markup, truncation and
+unsupported forms do not become names. This mapping does not infer language,
+translate aliases, assign preferred labels, resolve identity by title or change
+platform, genre, player-count, summary or cover ownership.
+
+- Touches: ordinary and selected-family conversion for one source-selected Game,
+  at most 24 distinct names and 16 omission diagnostics, with exact Bangumi
+  subject citations.
+- Bound: the existing 65,536-character infobox and record bounds, 64 visited
+  field occurrences and existing native batch limits; source prose stays out of
+  diagnostics.
+- Growth check: `services/importer/tests/bangumi-game-names.test.ts` covers
+  source extraction, conversion, provenance, malformed occurrences and selected
+  neighbor exclusion. The native journey is
+  `services/kernel/test/imports/bangumi-game-names.test.ts`; execution remains
+  controller-owned.

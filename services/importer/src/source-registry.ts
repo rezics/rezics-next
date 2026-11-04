@@ -92,7 +92,7 @@ const nativeSources: Readonly<Record<SourceId, NativeSource>> = {
   },
 };
 
-/** Selected Bangumi work conversions include both the entity path and its native TVAnime mapping. */
+/** Selected Bangumi work conversions include entity and native subject mappings. */
 export const crossMediaBangumiRevision = `${crossMediaRevision}+${bangumiRevision}`;
 const isCrossMediaBangumiRevision = (value: string) => /^cross-media-entities@\d+\+bangumi@\d+$/u.test(value);
 

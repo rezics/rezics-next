@@ -4,6 +4,7 @@ import { liveActionWorkType } from './cross-media-entities.ts';
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 export const bangumiTVAnimeTemplateHead = '{{Infobox animanga/TVAnime';
 export const bangumiBookTemplateHead = '{{Infobox animanga/Book';
+export const bangumiGameTemplateHead = '{{Infobox Game';
 
 export const bangumiTVAnimeWorkEvidenceFields = {
   descriptiveLink: '链接',
@@ -25,6 +26,10 @@ export function isBangumiTVAnimeTemplateHead(line: string): boolean {
 
 export function isBangumiBookTemplateHead(line: string): boolean {
   return line.trim() === bangumiBookTemplateHead;
+}
+
+export function isBangumiGameTemplateHead(line: string): boolean {
+  return line.trim() === bangumiGameTemplateHead;
 }
 
 /** Existing 1/2/4 class bindings. Type 1 defers to book grain when series/platform evidence exists. Type 2 stays TVSeries even when the platform names a film. */
