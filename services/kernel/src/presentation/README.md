@@ -328,3 +328,23 @@ distinct behavior; private continuation queries use no browser cache retention.
 
 Relative Zone routes never become Global route continuation targets. Their source-dependent reads remain
 at the native Zone readiness boundary until its owner supplies node continuation support.
+
+## Captured unpublished preview
+
+Decision: `POST /v1/pages:previewDraft` accepts one detached publication-valid `profile` with the closed native
+`target`, optional `languages` and optional `continuation`; it executes through the same resolver, planner and
+executor as `pages:read`, as an anonymous public reader after curator publish and caller/public read admission.
+The operation requires an authenticated curator under the existing `presentation:publish` policy. It does not
+publish, activate, persist a profile, create a receipt or change the active head. Unknown route keys are unsupported,
+not generic fallbacks. All response bodies are private/no-store. Successful bodies add `draft: { digest, target,
+advice: 'allowed' }`; the ordinary `profile` digest names the captured candidate, never an activation acknowledgement.
+Advice describes this operation only and does not replace independent publish/activate advice or command admission.
+
+Cost: capture uses the publication canonicalization, registry, one MiB UTF-8 cap and template/structural bounds.
+Admission adds fixed Global Context publish/caller-read/public-read decisions and one current release lookup;
+these use existing point/indexed authority reads, independent of unrelated profile and subject populations.
+There is no preview-profile storage or cache lookup. After selection all indexed seeks, raw examined rows, nested
+producer work, per-leaf bytes and final disclosure remain the aggregate Cost above: at most 16 reads and 128 summed
+slots, with each producer's independent examined-input and byte bounds. Output LIMIT is not the upstream bound.
+Focused HTTP coverage is `test/presentation/draft-preview.test.ts`; mounted receiver and 256/1024/4096 growth
+acceptance remain deferred to the editor continuation and integration acceptance.

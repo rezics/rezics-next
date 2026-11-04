@@ -3,6 +3,8 @@ import { withHeaders } from '@elysia/openapi';
 import canonicalize from 'canonicalize';
 import {
   planReads,
+  profileDigest,
+  validateProfileFilters,
   validateDocumentFilters,
   documentRead,
   readCost,
@@ -23,7 +25,7 @@ import {
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import { readPublicAccountByAgent } from '../../access/account-data.ts';
-import { PageResponseSchema } from './page-contract.ts';
+import { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
 import { deadlineClient } from '../../access/authenticate.ts';
 import { AccessUnavailableError } from '../../access/unavailable.ts';
 import { readItemTypes } from '../../semantic/subject.ts';
@@ -41,6 +43,7 @@ import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
+import { profileSnapshot, ProfileInputError } from '../profile-cache.ts';
 import { cataloguePageMetadata, pageViewerActions, semanticPageView } from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
@@ -53,6 +56,9 @@ const profileRoute = new RegExp(PROFILE_ROUTE_PATTERN, 'u');
 const handlePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const pageResponse = PageResponseSchema;
+const draftResponse = extendPageResponseSchema({
+  draft: t.Object({ digest: t.String(), target: t.Any(), advice: t.Literal('allowed') }, closed),
+});
 const pageRedirect = t.Object({ redirect: t.Object({ from: t.String(), to: t.String() }, closed) }, closed);
 
 type ReadResult = { status: number; body: unknown };
@@ -228,7 +234,7 @@ function respond(status: number, body: unknown, session: string | null, cache: b
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-export function pageRoutes<App>(
+function nativePageRoute<App>(
   app: App,
   {
     pool,
@@ -243,31 +249,63 @@ export function pageRoutes<App>(
     tokens: KeyRing;
     dispatch: (request: Request) => Promise<Response>;
   },
+  draftPreview: boolean,
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
   const routed = (app as ReturnType<typeof createApp>).post(
-    customMethod('/v1/pages', 'read'),
+    customMethod('/v1/pages', draftPreview ? 'previewDraft' : 'read'),
     {
       body: t.Any(),
       query: t.Object({ target: t.Optional(t.String()) }),
       response: {
-        200: withHeaders(pageResponse, { 'cache-control': t.String() }),
+        200: withHeaders(draftPreview ? draftResponse : pageResponse, { 'cache-control': t.String() }),
         308: withHeaders(pageRedirect, { location: t.String() }),
         400: problemSchema('invalid_request'),
         401: unauthorized,
+        403: problemSchema('forbidden'),
         404: problemSchema('not_found'),
         503: problemSchema('presentation_not_ready', 'dependency_unavailable', 'overloaded', 'deadline_exceeded'),
       },
       detail: {
-        operationId: 'pages.read',
+        operationId: draftPreview ? 'pages.preview_draft' : 'pages.read',
         'x-exposure': 'public',
-        'x-action': 'presentation:read',
-        security: [{ bearerAuth: [] }, {}],
+        'x-action': draftPreview ? 'presentation:publish' : 'presentation:read',
+        security: draftPreview ? [{ bearerAuth: [] }] : [{ bearerAuth: [] }, {}],
       },
     },
-    async ({ body, request, authorize, admission, job, actor, session: requestSession, set }) => {
+    async ({ body: envelope, request: callerRequest, authorize, admission, job, actor: caller, session: requestSession, set }) => {
       set.headers['cache-control'] = 'private, no-store';
+      // Preview authorization belongs to the caller; execution belongs to an anonymous reader.
+      // No caller credentials, session token or prepared capability reaches a native source.
+      const headers = new Headers(callerRequest.headers);
+      if (draftPreview) {
+        headers.delete('authorization');
+        headers.delete('cookie');
+        headers.delete(SESSION_HEADER);
+      }
+      const request = new Request(callerRequest.url, { headers, signal: callerRequest.signal });
+      const actor = draftPreview ? ({ kind: 'anonymous' } as const) : caller;
+      const previewComponents: SessionComponent[] = [];
+      let captured: ReturnType<typeof profileSnapshot> | undefined;
+      let body = envelope;
+      if (draftPreview) {
+        if (caller.kind !== 'account') throw new ProblemError('forbidden');
+        if (!isRecord(envelope)) reject([{ pointer: '', code: 'invalid_type' }]);
+        const { profile, ...page } = envelope;
+        body = page;
+        try {
+          // Detach before the first await, using exactly the publication validator and byte cap.
+          captured = profileSnapshot(profile);
+        } catch (error) {
+          if (!(error instanceof ProfileInputError)) throw error;
+          reject(error.violations.map(({ pointer, code }) => ({
+            pointer: `/profile${pointer}`,
+            code: code === 'limit' ? 'out_of_range' : 'invalid_format',
+          })));
+        }
+      }
+
       // A 308 preserves the POST body; its Location supplies the replacement page target.
       const encodedTarget = new URL(request.url).searchParams.get('target');
       let redirectedTarget: unknown;
@@ -285,12 +323,38 @@ export function pageRoutes<App>(
       const continuation = continuationOf(body);
       const check = await authorize({
         ...resource,
-        ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
+        ...(!draftPreview && includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
       });
+      const pageAccess: Access =
+        typeof access === 'function'
+          ? access({ actions: actionCatalogue(routed) })
+          : (access ?? createAccess({ actions: actionCatalogue(routed) }));
       // The slot ends before any sub-read. Each sub-read takes its own slot.
       const active = await admission.run('normal', job, async () => {
-        if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
-        return activeProfile(pool);
+        if (!(await withConnection(pool, (client) => check(client))))
+          throw new ProblemError(draftPreview ? 'forbidden' : 'not_found');
+        if (!captured) return activeProfile(pool);
+        const readResource = {
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
+        };
+        // Validity does not confer authority. Both the curator and public reader must be admitted.
+        for (const reader of [caller, actor]) {
+          const readCheck = await accessCheck(pageAccess, reader, 'presentation:read', readResource, {
+            pool, deadline: job.deadline,
+          });
+          if (!(await withConnection(pool, (client) => readCheck(client)))) throw new ProblemError('forbidden');
+        }
+        const release = await activeRelease(pool);
+        const violations = validateProfileFilters(
+          platformRegistry, captured, release?.release ?? { types: {}, properties: {} },
+        );
+        if (violations.length) reject(violations.map(({ pointer, code }) => ({
+          pointer: `/profile${pointer}`, code: code === 'limit' ? 'out_of_range' : 'unsupported',
+        })));
+        if ('route' in target && !captured.routes.some((entry) => entry.route === target.route))
+          reject([{ pointer: '/target/route', code: 'unsupported' }]);
+        return { digest: profileDigest(captured), profile: captured };
       });
       if (!active) throw new ProblemError('presentation_not_ready', { headers: { 'retry-after': '1' } });
 
@@ -318,10 +382,6 @@ export function pageRoutes<App>(
         return result;
       };
       let selected: SelectedPage | undefined;
-      const pageAccess: Access =
-        typeof access === 'function'
-          ? access({ actions: actionCatalogue(routed) })
-          : (access ?? createAccess({ actions: actionCatalogue(routed) }));
       const authority = {
         deps: {
           pool,
@@ -331,7 +391,10 @@ export function pageRoutes<App>(
         actor,
         deadline: job.deadline,
         run: <T>(work: () => Promise<T>) => admission.run('normal', job, work),
-        record: (component: SessionComponent) => requestSession.record(component),
+        record: (component: SessionComponent) => {
+          if (draftPreview) previewComponents.push(component);
+          else requestSession.record(component);
+        },
       };
       const subjectProbe = async (id: string) => {
         const context = selected ? { context: selected.context.id } : {};
@@ -375,7 +438,7 @@ export function pageRoutes<App>(
           }
         } else {
           const result = await probe({ kind: 'account', handle: target.account });
-          if (result.status !== 200) return respond(result.status, result.body, probeSession, false);
+          if (result.status !== 200) return respond(result.status, result.body, probeSession, draftPreview);
           const found = accountOf(result.body);
           if (found === null || found.state !== 'active') throw new ProblemError('not_found');
           account = { id: found.id, handle: target.account, automated: found.automated, operatorId: found.operatorId };
@@ -385,7 +448,7 @@ export function pageRoutes<App>(
         }
         if (subjectTarget !== null) {
           const probed = await subjectProbe(subjectTarget);
-          if ('failed' in probed) return respond(probed.failed.status, probed.failed.body, probeSession, false);
+          if ('failed' in probed) return respond(probed.failed.status, probed.failed.body, probeSession, draftPreview);
           subject = probed.subject;
           if ('subject' in target) {
             const [agent] = await admission.run('normal', job, () => readPublicAccountByAgent(pool, probed.subject.id));
@@ -425,7 +488,7 @@ export function pageRoutes<App>(
         tokens,
         scope,
         probeSession,
-        encodeSession(tokens, scope, requestSession.components),
+        encodeSession(tokens, scope, draftPreview ? previewComponents : requestSession.components),
       );
       const initialSubjectDescriptor = subject
         ? { kind: 'subject' as const, id: subject.id, ...(selected ? { context: selected.context.id } : {}) }
@@ -506,7 +569,7 @@ export function pageRoutes<App>(
                   tokens,
                   scope,
                   current.session,
-                  encodeSession(tokens, scope, requestSession.components),
+                  encodeSession(tokens, scope, draftPreview ? previewComponents : requestSession.components),
                 );
               },
             }
@@ -520,6 +583,7 @@ export function pageRoutes<App>(
         request,
         session,
         digest: active.digest,
+        ...(draftPreview ? { draft: { digest: active.digest, target, advice: 'allowed' as const } } : {}),
         ...(pageCatalogue ? { catalogue: pageCatalogue } : {}),
         ...(pageViewer ? { viewer: pageViewer } : {}),
         resolved,
@@ -537,6 +601,14 @@ export function pageRoutes<App>(
   return routed as typeof routed & App;
 }
 
+/** Two transports select a profile; both use the same native target resolver, planner and executor. */
+export function pageRoutes<App>(
+  app: App,
+  dependencies: Parameters<typeof nativePageRoute>[1],
+) {
+  return nativePageRoute(nativePageRoute(app, dependencies, false), dependencies, true);
+}
+
 async function pageAnswer(input: {
   release: import('@rezics/filter').FilterRelease | undefined;
   continuationOnlyLists: boolean;
@@ -544,6 +616,7 @@ async function pageAnswer(input: {
   request: Request;
   session: { ring: KeyRing; scope: string };
   digest: string;
+  draft?: { digest: string; target: PageTarget; advice: 'allowed' };
   resolved: ResolvedTemplate;
   views: View[] | null;
   subject: string | null;
@@ -753,6 +826,7 @@ async function pageAnswer(input: {
       ...(input.context ? { context: input.context } : {}),
       ...(input.continuation ? { continuation: input.continuation } : {}),
       profile: input.digest,
+      ...(input.draft ? { draft: input.draft } : {}),
       template: { scope: input.resolved.scope, key: input.resolved.key },
       document: input.resolved.document,
       ...(input.views === null ? {} : { views: input.views }),
