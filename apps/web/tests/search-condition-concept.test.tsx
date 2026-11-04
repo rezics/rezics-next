@@ -25,13 +25,16 @@ const metadata: ConditionMetadata = {
       datatype: 'wikibase-item',
       relation: { group: 'classification' },
       targets: ['skos:Concept'],
+      qualifiers: ['rezics:spoilerLevel'],
     },
     'schema:keywords': {
       datatype: 'wikibase-item',
       relation: { group: 'classification' },
       targets: ['skos:Concept'],
+      qualifiers: ['rezics:spoilerLevel'],
     },
     'schema:name': { datatype: 'string' },
+    'rezics:spoilerLevel': { datatype: 'quantity' },
   },
 };
 
@@ -42,6 +45,8 @@ const lookup = {
   key: 'current-reader-locale-request',
 };
 type ConceptDocument = { statement: Extract<FilterStatement, { in: readonly string[] }> };
+const conceptId = '00000000-0000-4000-8000-000000000001';
+const schemeId = '00000000-0000-4000-8000-000000000002';
 
 describe('Search Concept conditions', () => {
   it('admits only released Concept classification properties and derives suggestion types from inheritance', () => {
@@ -60,21 +65,21 @@ describe('Search Concept conditions', () => {
         qualifiers: [{ property: 'rezics:spoilerLevel', in: ['1'] }],
       },
     };
-    const exact = conditionConceptSelection(original, 'concept-new', 'scheme-a', false);
-    const descendants = conditionConceptSelection(original, 'concept-new', 'scheme-a', true);
+    const exact = conditionConceptSelection(original, conceptId, schemeId, false);
+    const descendants = conditionConceptSelection(original, conceptId, schemeId, true);
     expect(exact).toEqual({
       statement: {
         property: 'schema:genre',
-        in: ['concept-new'],
-        concept: { scheme: 'scheme-a', includeChildren: false },
+        in: [conceptId],
+        concept: { scheme: schemeId, includeChildren: false },
         qualifiers: [{ property: 'rezics:spoilerLevel', in: ['1'] }],
       },
     });
     expect(descendants).toEqual({
       statement: {
         property: 'schema:genre',
-        in: ['concept-new'],
-        concept: { scheme: 'scheme-a', includeChildren: true },
+        in: [conceptId],
+        concept: { scheme: schemeId, includeChildren: true },
         qualifiers: [{ property: 'rezics:spoilerLevel', in: ['1'] }],
       },
     });
@@ -90,9 +95,10 @@ describe('Search Concept conditions', () => {
         qualifiers: [{ property: 'rezics:spoilerLevel', in: ['2'] }],
       },
     };
-    expect(changeStatementProperty(existing, 'schema:keywords', metadata.properties)).toMatchObject({
-      requiresConfirmation: false,
-      next: existing,
+    const retained = changeStatementProperty(existing, 'schema:keywords', metadata.properties);
+    expect(retained.requiresConfirmation).toBe(false);
+    expect(retained.next).toEqual({
+      statement: { ...existing.statement, property: 'schema:keywords' },
     });
     expect(changeStatementProperty(existing, 'schema:name', metadata.properties).requiresConfirmation).toBe(true);
   });
