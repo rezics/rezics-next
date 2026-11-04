@@ -132,20 +132,24 @@ export async function readVndbCharacterVocabularyBindings(
   },
 ): Promise<SourceVocabularyBindings> {
   const empty: SourceVocabularyBindings = { releaseDigest: bundledDigest, schemes: [], concepts: [] };
-  const traits = known.traits ? await readSchemeConcepts(port, {
-    taxonomy: characterTraitTaxonomy,
-    schemeUri: characterTraitSchemeUri,
-    schemeId: known.traits.schemeId,
-    conceptUri: characterTraitConceptUri,
-    concepts: known.traits.concepts,
-  }) : empty;
-  const roles = known.roles ? await readSchemeConcepts(port, {
-    taxonomy: appearanceRoleTaxonomy,
-    schemeUri: appearanceRoleSchemeUri,
-    schemeId: known.roles.schemeId,
-    conceptUri: appearanceRoleConceptUri,
-    concepts: known.roles.concepts,
-  }) : empty;
+  const traits = known.traits
+    ? await readSchemeConcepts(port, {
+        taxonomy: characterTraitTaxonomy,
+        schemeUri: characterTraitSchemeUri,
+        schemeId: known.traits.schemeId,
+        conceptUri: characterTraitConceptUri,
+        concepts: known.traits.concepts,
+      })
+    : empty;
+  const roles = known.roles
+    ? await readSchemeConcepts(port, {
+        taxonomy: appearanceRoleTaxonomy,
+        schemeUri: appearanceRoleSchemeUri,
+        schemeId: known.roles.schemeId,
+        conceptUri: appearanceRoleConceptUri,
+        concepts: known.roles.concepts,
+      })
+    : empty;
   return {
     releaseDigest: bundledDigest,
     schemes: [...traits.schemes, ...roles.schemes],
@@ -169,16 +173,29 @@ export async function planVndbCharacterTraits(
 ): Promise<VndbCharacterTraitPlan> {
   const plan = emptyPlan();
   const selectedWorks =
-    selection.selectedWorkIds === undefined ? undefined : new Set(selection.selectedWorkIds.filter((id) => workId.test(id)));
-  ensure(selectedWorks === undefined || selectedWorks.size <= MEMBER_CAP, 'Selected VNDB works exceed the character vocabulary cap');
+    selection.selectedWorkIds === undefined
+      ? undefined
+      : new Set(selection.selectedWorkIds.filter((id) => workId.test(id)));
+  ensure(
+    selectedWorks === undefined || selectedWorks.size <= MEMBER_CAP,
+    'Selected VNDB works exceed the character vocabulary cap',
+  );
   let gapOverflow = false;
   const gap = (table: string, record: Row, reason: string) => {
     if (plan.gaps.length < GAP_CAP) {
       const safe: Row = {};
       for (const [field, value] of Object.entries(record)) {
-        if (['id', 'vid', 'tid', 'rid', 'main'].includes(field) && typeof value === 'string' && /^(?:[cvir])[1-9][0-9]*$/u.test(value))
+        if (
+          ['id', 'vid', 'tid', 'rid', 'main'].includes(field) &&
+          typeof value === 'string' &&
+          /^(?:[cvir])[1-9][0-9]*$/u.test(value)
+        )
           safe[field] = value;
-        else if (field === 'role' && typeof value === 'string' && vndbAppearanceRoleCodes.includes(value as (typeof vndbAppearanceRoleCodes)[number]))
+        else if (
+          field === 'role' &&
+          typeof value === 'string' &&
+          vndbAppearanceRoleCodes.includes(value as (typeof vndbAppearanceRoleCodes)[number])
+        )
           safe[field] = value;
         else if (field === 'lie') {
           const parsed = copyFlag(value);
@@ -225,7 +242,11 @@ export async function planVndbCharacterTraits(
       const lie = copyFlag(row.lie);
       if (lie === undefined) gap('chars_traits', row, 'Missing or invalid chars_traits.lie qualifier');
       if (lie === true)
-        gap('chars_traits', row, 'chars_traits.lie is a false-positive association; it is not published as a trait fact');
+        gap(
+          'chars_traits',
+          row,
+          'chars_traits.lie is a false-positive association; it is not published as a trait fact',
+        );
       const traitSpoiler = copyInteger(row.spoil);
       if (traitSpoiler === undefined || traitSpoiler > 2)
         gap('chars_traits', row, 'Missing or invalid chars_traits.spoil qualifier');
@@ -258,7 +279,10 @@ export async function planVndbCharacterTraits(
         row,
         'chars_vns.rid is release-scoped appearance context; no release-scoped appearance term is selected',
       );
-    if (typeof row.role !== 'string' || !vndbAppearanceRoleCodes.includes(row.role as (typeof vndbAppearanceRoleCodes)[number]))
+    if (
+      typeof row.role !== 'string' ||
+      !vndbAppearanceRoleCodes.includes(row.role as (typeof vndbAppearanceRoleCodes)[number])
+    )
       gap('chars_vns', row, 'Missing or unsupported chars_vns.role qualifier');
     const appearanceSpoiler = copyInteger(row.spoil);
     if (appearanceSpoiler === undefined || appearanceSpoiler > 2)
@@ -398,7 +422,8 @@ function appearanceRows(
   for (const record of plan.appearances) {
     if (record.vid !== owner.external_id) continue;
     const spoiler = copyInteger(record.spoil);
-    if (spoiler === undefined || spoiler > 2 || typeof record.role !== 'string' || typeof record.id !== 'string') continue;
+    if (spoiler === undefined || spoiler > 2 || typeof record.role !== 'string' || typeof record.id !== 'string')
+      continue;
     const releaseCode = record.rid === null || record.rid === undefined ? null : copyId(record.rid, releaseId);
     const character = identities.get(record.id);
     const row: VndbVocabularyRow = {

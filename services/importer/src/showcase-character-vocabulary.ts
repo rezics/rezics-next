@@ -83,15 +83,26 @@ function flag(value: unknown): boolean | undefined {
 
 function conceptIds(value: unknown, role: boolean): { code: string; id: string }[] {
   const input = record(value);
-  ensure(input && Array.isArray(input.concepts) && typeof input.schemeId === 'string' && UUID.test(input.schemeId), 'Invalid VNDB vocabulary profile');
+  ensure(
+    input && Array.isArray(input.concepts) && typeof input.schemeId === 'string' && UUID.test(input.schemeId),
+    'Invalid VNDB vocabulary profile',
+  );
   ensure(input.concepts.length <= 512, 'VNDB vocabulary profile exceeds its concept cap');
   const seen = new Set<string>();
   const concepts: { code: string; id: string }[] = [];
   for (const item of input.concepts) {
     const entry = record(item);
-    ensure(entry && typeof entry.code === 'string' && typeof entry.id === 'string', 'Invalid VNDB vocabulary profile concept');
-    const codeValid = role ? (vndbAppearanceRoleCodes as readonly string[]).includes(entry.code) : CODE.test(entry.code);
-    ensure(codeValid && UUID.test(entry.id) && !seen.has(entry.code), 'Invalid or duplicate VNDB vocabulary profile concept');
+    ensure(
+      entry && typeof entry.code === 'string' && typeof entry.id === 'string',
+      'Invalid VNDB vocabulary profile concept',
+    );
+    const codeValid = role
+      ? (vndbAppearanceRoleCodes as readonly string[]).includes(entry.code)
+      : CODE.test(entry.code);
+    ensure(
+      codeValid && UUID.test(entry.id) && !seen.has(entry.code),
+      'Invalid or duplicate VNDB vocabulary profile concept',
+    );
     seen.add(entry.code);
     concepts.push({ code: entry.code, id: entry.id });
   }
@@ -180,7 +191,12 @@ export async function planShowcaseCharacterVocabulary(
     if (parentOverflow) break;
   }
   if (parentOverflow || frontier.size)
-    addGap(plan, ['traits_parents.id', 'traits_parents.parent'], {}, 'VNDB trait parent closure exceeded its bounded cap');
+    addGap(
+      plan,
+      ['traits_parents.id', 'traits_parents.parent'],
+      {},
+      'VNDB trait parent closure exceeded its bounded cap',
+    );
 
   if (needed.size)
     for await (const row of tables.rows('vndb', 'traits')) {
@@ -205,7 +221,12 @@ export async function planShowcaseCharacterVocabulary(
   for (const code of [...needed].sort()) {
     const source = traits.get(code);
     if (!source) {
-      addGap(plan, [...VNDB_CHARACTER_TRAIT_DICTIONARY_COLUMNS.map((column) => `traits.${column}`)], { id: code }, 'Missing selected VNDB trait label');
+      addGap(
+        plan,
+        [...VNDB_CHARACTER_TRAIT_DICTIONARY_COLUMNS.map((column) => `traits.${column}`)],
+        { id: code },
+        'Missing selected VNDB trait label',
+      );
       continue;
     }
     terms.push({
@@ -244,14 +265,26 @@ export async function composeVndbCharacterVocabularyBindings(
   const traits = new Set(
     requirements.terms.filter((term) => term.taxonomy === characterTraitTaxonomy).map((term) => term.code),
   );
-  const roles = new Set(requirements.terms.filter((term) => term.taxonomy === appearanceRoleTaxonomy).map((term) => term.code));
+  const roles = new Set(
+    requirements.terms.filter((term) => term.taxonomy === appearanceRoleTaxonomy).map((term) => term.code),
+  );
   if (!traits.size && !roles.size) return { releaseDigest: bundledDigest, schemes: [], concepts: [] };
   return readVndbCharacterVocabularyBindings(port, {
     ...(traits.size
-      ? { traits: { schemeId: profile.traits.schemeId, concepts: profile.traits.concepts.filter((item) => traits.has(item.code)) } }
+      ? {
+          traits: {
+            schemeId: profile.traits.schemeId,
+            concepts: profile.traits.concepts.filter((item) => traits.has(item.code)),
+          },
+        }
       : {}),
     ...(roles.size
-      ? { roles: { schemeId: profile.roles.schemeId, concepts: profile.roles.concepts.filter((item) => roles.has(item.code)) } }
+      ? {
+          roles: {
+            schemeId: profile.roles.schemeId,
+            concepts: profile.roles.concepts.filter((item) => roles.has(item.code)),
+          },
+        }
       : {}),
   });
 }

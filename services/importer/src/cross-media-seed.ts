@@ -2053,9 +2053,7 @@ export async function runCrossMediaSeedCli(
   ]);
   for (const extra of seedFiles) {
     ensure(
-      extra !== resultPath &&
-        extra !== statePath &&
-        ![statePath + '-wal', statePath + '-shm'].includes(extra),
+      extra !== resultPath && extra !== statePath && ![statePath + '-wal', statePath + '-shm'].includes(extra),
       'Seed binding files must not overlap importer state or result',
     );
   }
@@ -2166,9 +2164,7 @@ export async function runCrossMediaSeedCli(
       },
       characterVocabulary: {
         requirements: characterVocabulary.requirements,
-        admittedConceptCodes: vndbBindings.concepts
-          .map((concept) => concept.taxonomy + ':' + concept.code)
-          .sort(),
+        admittedConceptCodes: vndbBindings.concepts.map((concept) => concept.taxonomy + ':' + concept.code).sort(),
         withheldConceptCodes: characterVocabulary.requirements.terms
           .filter(
             (term) =>
@@ -2199,7 +2195,8 @@ export async function runCrossMediaSeedCli(
           facts: {
             works: Object.fromEntries(result.facts.works),
             releases: Object.fromEntries(result.facts.releases),
-          },          ...(showcase ? { showcase } : {}),
+          },
+          ...(showcase ? { showcase } : {}),
           sourceDigests: Object.fromEntries(input.digests),
         },
         null,
@@ -2227,7 +2224,8 @@ export async function runCrossMediaSeedCli(
               publicTags.gaps.length) +
             ' review gaps. Result: ' +
             resultPath +
-            '\n',    );
+            '\n',
+    );
     ensure(
       !showcase || showcase.status === 'published',
       'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps',
