@@ -9,6 +9,7 @@ import { collectionComparisonReturnState } from '../src/library/collection-compa
 import {
   collectionPageIsFiltered,
   collectionPositionScope,
+  collectionPositionScopeFromAddress,
   collectionReadingPageKey,
 } from '../src/library/collection-public-reading/position';
 
@@ -265,6 +266,10 @@ test('mixed reading keeps occurrence positions and notes independent and returns
   expect(collectionPositionScope({ firstPage: false }, false)).toBe('continued');
   expect(collectionPositionScope({ firstPage: true }, true)).toBe('filtered-first');
   expect(collectionPositionScope({ firstPage: false }, true)).toBe('filtered-continued');
+  expect(collectionPositionScopeFromAddress('/en/collections/reading-shelf?layout=grid')).toBe('first');
+  expect(
+    collectionPositionScopeFromAddress('/en/collections/reading-shelf?f.schema%3Agenre=novel&cursor=next'),
+  ).toBe('filtered-continued');
   expect(collectionPageIsFiltered(exactPage, search.filters)).toBe(true);
   const listKey = collectionReadingPageKey(
     collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, 'list'),

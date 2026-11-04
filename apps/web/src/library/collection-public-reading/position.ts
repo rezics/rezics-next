@@ -25,6 +25,23 @@ export function collectionPositionScope(
   return filtered ? (first ? 'filtered-first' : 'filtered-continued') : first ? 'first' : 'continued';
 }
 
+/** Direct readers such as filtered Collection views can disclose scope from the current address alone. */
+export function collectionPositionScopeFromAddress(address: string | undefined): CollectionPositionScope {
+  if (!address) return 'first';
+  try {
+    const url = new URL(address, 'https://rezics.invalid');
+    const filters = Object.fromEntries(
+      [...url.searchParams]
+        .filter(([key]) => key === 'type' || /^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key))
+        .map(([key, value]) => [key, value]),
+    );
+    const firstPage = !url.searchParams.has('cursor');
+    return collectionPositionScope({ firstPage }, collectionPageIsFiltered({ firstPage }, filters));
+  } catch {
+    return 'first';
+  }
+}
+
 type PageKeyMember = { id?: string; subjectId?: string; subject?: { id: string } | null };
 
 /** Layout is a view choice; note expansion belongs to the admitted page, filter and cursor. */
