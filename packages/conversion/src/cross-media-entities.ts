@@ -870,7 +870,6 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       };
     type = live;
   }
-  const diagnostics: ConversionDiagnostic[] = [];
   if (kind === 'vndb-release') {
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
