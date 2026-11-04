@@ -85,6 +85,10 @@ test('a type command keeps its payload and key through unknown readback; clean s
   await draft.retry();
   expect(commands[2]).toBe(commands[0]);
   expect(draft.snapshot().phase).toBe('review');
+  expect(draft.snapshot().comparison?.input).toBe(commands[0]);
+  expect(Object.isFrozen(commands[0])).toBe(true);
+  expect(Object.isFrozen(commands[0]?.shelf)).toBe(true);
+  expect(draft.snapshot().pending).toBeNull();
   expect(draft.snapshot().draft.gridSize).toBe('small');
   expect(draft.snapshot().draft.layouts[movie]).toBe('list');
   expect(draft.snapshot().draft.layouts[book]).toBe('table');
