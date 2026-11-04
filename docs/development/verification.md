@@ -135,6 +135,16 @@ has at most 12 explicit test files; each file and its statically imported relati
 commands, full Kernel checks, browser work, database/container work and commands the classifier cannot prove local
 go to a performance-approved check host. Package-script, `--cwd` and ordinary `env` prefixes use the same classification.
 
+Kernel typecheck and kernel check command phases are `database-image`, `migrations`, `sql-schema`, `compiler` and
+`cleanup`, written to `REZICS_CHECK_PHASES`. Slot wait and rsync remain transport-owned and must not be folded into
+those durations. Compare like command/source classes using command phases plus admission `inactive_file` / IO pressure;
+do not treat wrapper wall time as compiler work. Cache-aware admission counts reclaimable file cache as headroom
+(`3afee00d49` / `b1841e43808feae3d6f1c1f8617bc8ffdde2512f`). The earlier 10–25 minute Kernel typecheck on host b with
+slice file cache full and IO full around 40% is that admission limit, not duplicate Kernel schema or compiler
+preparation. A later receipt is still required after that producer is what the host actually runs; a dev commit is not
+deployed behavior. The one-run Kernel compiler database uses a labelled volume in the run slice, matching kernel check
+storage.
+
 `worker-check`, `stack-run`, `check-run` and `remote-check` derive the performance pool from hosts explicitly marked
 `"performance": true` in the private hosts file. Missing or false flags exclude a host, including a or b; there is no
 name-based placement allowlist. Host names use letters, digits and hyphens, with a letter or digit first

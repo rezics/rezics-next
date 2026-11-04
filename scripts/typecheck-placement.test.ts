@@ -702,11 +702,16 @@ await assert.rejects(withThrowawayDatabase(async () => {
 }), error => error === failure);
 assert.equal(process.env.DATABASE_URL, inherited.url);
 assert.equal(process.env.KERNEL_DATABASE_CONTAINER, inherited.container);
-// These PostgreSQL helpers write only their tmpfs, never a root-owned bind-mounted checkout.
+// Disposable labelled volumes keep PostgreSQL off the checkout and off unreserved slice cache.
 assert.equal(starts.length, 2);
 for (const args of starts) {
-  assert.equal(args.includes('--tmpfs'), true);
-  for (const flag of ['-v', '--volume', '--mount', '--user']) assert.equal(args.includes(flag), false);
+  assert.equal(args.includes('--mount'), true);
+  assert.equal(
+    args.includes(`type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=${process.pid}`),
+    true,
+  );
+  assert.equal(args.includes('--tmpfs'), false);
+  for (const flag of ['-v', '--volume', '--user']) assert.equal(args.includes(flag), false);
 }
 `,
   );
