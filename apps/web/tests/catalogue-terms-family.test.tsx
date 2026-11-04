@@ -759,8 +759,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     await click(page(), m.catalogue_create_retry());
     await settle(() => commands.length === 2);
     await act(async () => deliver({ ok: false, reason: 'denied' }));
-    await settle(() => initial('#create-label-0')?.disabled ?? false);
-    expect(initial('#create-label-0').disabled).toBe(true);
+    expect(initial('#create-label-0').closest('fieldset')?.disabled).toBe(true);
     await click(page(), m.catalogue_create_retry());
     await settle(() => commands.length === 3);
     expect(commands[1]).toEqual(commands[0]);
