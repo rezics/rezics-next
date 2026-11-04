@@ -253,7 +253,8 @@ test('inverse stream starts without another frontier, corrects its exact holder,
     const correction = Array.from(inspection.querySelectorAll('a')).find(
       (node) => node.textContent === m.album_tracks_correction(),
     )!;
-    expect(correction.href).toContain(`${recordingId}/${recordingId}/relation-edit`);
+    expect(correction.href).toContain(`/en/subjects/${recordingId}/`);
+    expect(correction.href).toEndWith('/relation-edit');
     expect(inspection.querySelector('[data-occurrence]')?.getAttribute('data-occurrence')).toStartWith(recordingId);
     await mounted.click(m.work_parts_restart());
     expect(addresses.at(-1)).toEqual({ ...musicAddress, stream: 'inverse:wdt:P361' });
@@ -409,6 +410,19 @@ test('a replacement during failed or retired recovery cannot silently admit the 
     expect(addresses).toEqual([]);
     expect(mounted.host.textContent).toContain(m.music_release_recovery_failed());
     expect(mounted.host.querySelector('[data-slot="music-release-inspection"]')).toBeNull();
+    await mounted.click(m.music_release_recover());
+    expect(attempts).toBe(2);
+    await mounted.render({ ...props, realm: 'changed-during-recovery' });
+    await mounted.render(props);
+    const recoveryButton = Array.from(mounted.host.querySelectorAll('button')).find(
+      (node) => node.textContent === m.music_release_recover(),
+    )!;
+    expect(recoveryButton.disabled).toBe(false);
+    await act(async () => {
+      finish();
+    });
+    expect(addresses).toEqual([]);
+    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(0);
     props = {
       ...props,
       recoverCurrentPage: async () => {
