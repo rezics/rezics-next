@@ -130,27 +130,11 @@ test('a source replacement during the final Accounts observation is retryable on
     gate = observer.hold({ statement: views.sql, occurrence: 2 }, 'after');
     const pending = f.call('GET', path);
     await gate.entered;
-    const vote = await f.call('PUT', `/v1/subjects/${f.subjectId}/ratings/${STANDARD_QUESTION_ID}/vote`, {
-      bearer: f.author.bearer,
-      body: { units: 8 },
-    });
-    const citation = {
-      questionId: STANDARD_QUESTION_ID,
-      units: vote.value.units as number,
-      revision: vote.value.revision as number,
-    };
-    const revision = await f.call('POST', `/v1/posts/${review.openingId}/revisions`, {
-      bearer: f.author.bearer,
-      ifMatch: review.revisionId,
-      body: {
-        body: fromPlainText('Replacement body after context assembly'),
-        licence: 'CC0-1.0',
-        subjectIds: [f.subjectId],
-        boardId: f.boardId,
-        voteCitation: citation,
-      },
-    });
-    expect(revision.response.status).toBe(200);
+    await f.admin.query('UPDATE content.thread SET title=$3 WHERE route=$1 AND thread_id=$2', [
+      routeOf(review.threadId),
+      review.threadId,
+      'Replacement title after context assembly',
+    ]);
     gate.release();
     const stale = await pending;
     expect(stale.response.status).toBe(503);
@@ -160,7 +144,8 @@ test('a source replacement during the final Accounts observation is retryable on
     expect(retry.response.status).toBe(200);
     expect(retry.value.threads[0]).toMatchObject({
       id: review.threadId,
-      firstPost: { revisionId: revision.value.post.revisionId, voteCitation: citation },
+      title: 'Replacement title after context assembly',
+      firstPost: { revisionId: review.revisionId, voteCitation: review.citation },
     });
   } finally {
     gate?.release();
