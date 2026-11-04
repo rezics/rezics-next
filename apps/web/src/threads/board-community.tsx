@@ -28,6 +28,7 @@ export function BoardCommunity({
   cursor,
   participation,
   start,
+  watch,
   overflow,
   postingInterval,
   reactionOrigin,
@@ -37,6 +38,7 @@ export function BoardCommunity({
   cursor?: string;
   participation?: ReactNode | ((page: CommunityBoardPage) => ReactNode);
   start?: ReactNode | ((page: CommunityBoardPage) => ReactNode);
+  watch?: ReactNode;
   overflow?: ReactNode;
   postingInterval?: ReactNode;
   reactionOrigin?: BoardOpeningReactionOrigin;
@@ -69,6 +71,7 @@ export function BoardCommunity({
             <CommunityAvatar avatar={avatar} name={name} realmId={community?.realmId ?? board.realmId} />
             <div className="flex max-w-full flex-wrap items-center gap-2 pt-3">
               {typeof participation === 'function' ? participation(page) : participation}
+              {watch}
               {overflow ?? <BoardCommunityMenu boardId={board.id} />}
             </div>
           </div>

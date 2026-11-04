@@ -8417,5 +8417,21 @@
   "concept_explore_role_evidence": "Rôle source inconnu : conservé tel que fourni ; il ne donne aucun droit sur les concepts ou les corrections.",
   "concept_explore_scheme_withheld": "Destination du schéma masquée",
   "concept_explore_retained_page": "La page de hiérarchie conservée {page} de cette révision est affichée. La requête échouée ne l’a pas remplacée.",
-  "concept_explore_hierarchy_navigation": "Pages de hiérarchie"
+  "concept_explore_hierarchy_navigation": "Pages de hiérarchie",
+  "board_watch_start": "Suivre les nouvelles discussions",
+  "board_watch_stop": "Arrêter le suivi",
+  "board_watch_sign_in": "Connectez-vous pour suivre les nouvelles discussions",
+  "board_watch_checking": "Vérification du suivi du forum…",
+  "board_watch_current_watching": "Vous suivez les nouvelles discussions",
+  "board_watch_current_not_watching": "Vous ne suivez pas ce forum",
+  "board_watch_command_acknowledged": "Modification du suivi confirmée. Vérification de l’état actuel.",
+  "board_watch_outcome_unknown": "Nous ne pouvons pas confirmer la modification du suivi.",
+  "board_watch_conflict": "Le suivi a changé. Vérifiez son état actuel avant de réessayer.",
+  "board_watch_access_lost": "Les commandes de suivi ne sont plus disponibles pour ce forum.",
+  "board_watch_unavailable": "L’état du suivi est momentanément indisponible.",
+  "board_watch_read_only": "Vous pouvez consulter ce forum, mais pas modifier son suivi.",
+  "board_watch_retry_exact": "Réessayer exactement cette modification",
+  "board_watch_check_again": "Vérifier l’état actuel",
+  "board_watch_inspect_conflict": "Vérifiez l’état actuel avant toute autre modification.",
+  "board_watch_sending": "Envoi de la modification du suivi…"
 }

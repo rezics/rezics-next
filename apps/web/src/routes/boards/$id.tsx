@@ -9,6 +9,7 @@ import { boardPageQuery } from '../../threads/thread-queries';
 import { boardSortFromSearch } from '../../threads/board-sort';
 import { BoardCommunity, BoardCommunityMenu, BoardCommunityStatus } from '../../threads/board-community';
 import { BoardParticipation, BoardStartThread } from '../../threads/board-community-actions';
+import { BoardWatchControl } from '../../threads/board-watch/control';
 import { SlowModeSetting } from '../../threads/slow-mode';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { isBoardPageCursorError } from '../../threads/board-reading';
@@ -99,6 +100,14 @@ function BoardPage() {
           reactionOrigin={reactionOrigin}
           {...(search.cursor === undefined ? {} : { cursor: search.cursor })}
           participation={(page) => <BoardParticipation community={page.community} returnTo={returnTo} />}
+          watch={
+            <BoardWatchControl
+              boardId={id}
+              returnTo={returnTo}
+              session={session}
+              authority={reactionOrigin}
+            />
+          }
           start={(page) => (
             <BoardStartThread board={page.board} advice={page.actions.createThread} returnTo={returnTo} />
           )}

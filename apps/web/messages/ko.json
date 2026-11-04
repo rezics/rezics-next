@@ -8417,5 +8417,21 @@
   "concept_explore_role_evidence": "알 수 없는 출처 역할입니다. 전달된 값을 그대로 보존하며 개념 승인이나 수정 권한을 부여하지 않습니다.",
   "concept_explore_scheme_withheld": "체계 대상 비공개",
   "concept_explore_retained_page": "이 출처 리비전의 보존된 계층 페이지 {page}을 표시합니다. 실패한 요청은 이 페이지를 대체하지 않았습니다.",
-  "concept_explore_hierarchy_navigation": "계층 페이지"
+  "concept_explore_hierarchy_navigation": "계층 페이지",
+  "board_watch_start": "새 토론 구독",
+  "board_watch_stop": "구독 중지",
+  "board_watch_sign_in": "새 토론을 구독하려면 로그인하세요",
+  "board_watch_checking": "게시판 구독 상태 확인 중…",
+  "board_watch_current_watching": "새 토론을 구독 중입니다",
+  "board_watch_current_not_watching": "이 게시판을 구독하지 않습니다",
+  "board_watch_command_acknowledged": "구독 변경을 확인했습니다. 현재 상태를 확인하는 중입니다.",
+  "board_watch_outcome_unknown": "구독 변경을 확인할 수 없습니다.",
+  "board_watch_conflict": "구독 설정이 변경되었습니다. 다시 시도하기 전에 현재 상태를 확인하세요.",
+  "board_watch_access_lost": "이 게시판의 구독 제어를 더 이상 사용할 수 없습니다.",
+  "board_watch_unavailable": "지금은 구독 상태를 사용할 수 없습니다.",
+  "board_watch_read_only": "게시판은 볼 수 있지만 구독 설정을 변경할 수 없습니다.",
+  "board_watch_retry_exact": "같은 변경 다시 시도",
+  "board_watch_check_again": "현재 상태 확인",
+  "board_watch_inspect_conflict": "다른 변경을 하기 전에 현재 상태를 확인하세요.",
+  "board_watch_sending": "구독 변경 전송 중…"
 }

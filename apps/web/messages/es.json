@@ -8417,5 +8417,21 @@
   "concept_explore_role_evidence": "Rol de fuente desconocido: se conserva exactamente como se recibió; no otorga autoridad sobre conceptos ni correcciones.",
   "concept_explore_scheme_withheld": "Destino del esquema oculto",
   "concept_explore_retained_page": "Se muestra la página de jerarquía conservada {page} de esta revisión. La solicitud fallida no la ha sustituido.",
-  "concept_explore_hierarchy_navigation": "Páginas de jerarquía"
+  "concept_explore_hierarchy_navigation": "Páginas de jerarquía",
+  "board_watch_start": "Seguir nuevas conversaciones",
+  "board_watch_stop": "Dejar de seguir",
+  "board_watch_sign_in": "Inicia sesión para seguir nuevas conversaciones",
+  "board_watch_checking": "Comprobando el seguimiento del foro…",
+  "board_watch_current_watching": "Sigues las nuevas conversaciones",
+  "board_watch_current_not_watching": "No sigues este foro",
+  "board_watch_command_acknowledged": "Cambio de seguimiento confirmado. Comprobando el estado actual.",
+  "board_watch_outcome_unknown": "No pudimos confirmar el cambio de seguimiento.",
+  "board_watch_conflict": "El seguimiento ha cambiado. Comprueba el estado actual antes de volver a intentarlo.",
+  "board_watch_access_lost": "Los controles de seguimiento ya no están disponibles para este foro.",
+  "board_watch_unavailable": "El estado de seguimiento no está disponible ahora.",
+  "board_watch_read_only": "Puedes ver este foro, pero no cambiar su seguimiento.",
+  "board_watch_retry_exact": "Reintentar exactamente este cambio",
+  "board_watch_check_again": "Comprobar el estado actual",
+  "board_watch_inspect_conflict": "Revisa el estado actual antes de hacer otro cambio.",
+  "board_watch_sending": "Enviando el cambio de seguimiento…"
 }

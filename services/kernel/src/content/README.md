@@ -3603,8 +3603,9 @@ dependency work or changed observations never become an unwatched revision-zero 
 and original Board/Realm disclosure twice. Revision or readable source changes return 409; concealed or
 unknown Boards return 404. Authentication and dependency errors retain their native status. Only an
 admitted missing exact key returns false/0. A current read never acknowledges an earlier PUT.
-This mounted producer is ready for the shared publication owner; installed declarations and the Board
-control consumer remain pending. The existing watch GET/PUT and management ABI are unchanged.
+This mounted producer is consumed by the Board page through a small local adapter while the shared publication
+owner's installed declarations are pending. The adapter uses this DTO and OpenAPI operation directly; it does not
+generate a second client. The existing watch GET/PUT and management ABI are unchanged.
 
 ### Cost: private Board watch companion
 
@@ -3615,9 +3616,10 @@ control consumer remain pending. The existing watch GET/PUT and management ABI a
 - **Bound:** two selected watch rows at most, no inventory or publication scan, two bounded native
   Board presentations and a constant-sized DTO (IDs, boolean, integer revision, three closed advice
   values and source position). Existing native account and Board bounds apply to nested work.
-- **Growth check:** pending continuation coverage at independent 256/1024/4096 unrelated account
-  watches, Board subscribers, tombstones/rewatches, publications and Access/Accounts populations;
-  this source bound alone does not establish measured physical index work.
+- **Growth check:** `board-watch-page-journey.test.ts` independently grows unrelated account watches, Board
+  subscribers, tombstones/rewatches, publications and Access/Accounts history at 256/1024/4096. It asserts the
+  initial/final Board and selected-watch reads, nested Access preparations/evaluations, retained DTO, copy and
+  serialized bytes, and indexed physical work. Its measured result is deferred to integrated acceptance.
 
 Decision: board watch PUT sets an explicit `watching` boolean with `expectedRevision`; management requires
 `kind=thread|board`, and an unavailable row retains only its personal removal identity and subscription metadata.
