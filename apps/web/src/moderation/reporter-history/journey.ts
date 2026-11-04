@@ -56,7 +56,7 @@ export function createReporterHistoryJourney(
   const { locale, query: originalQuery, readerOrigin, readerBinding } = initial;
   const owner = createPrivateReaderLifetime(
     cache,
-    { readerOrigin, readerBinding },
+    { ...(readerOrigin === undefined ? {} : { readerOrigin }), ...(readerBinding ? { readerBinding } : {}) },
     key(originalQuery, locale),
     navigation,
   );
