@@ -25,6 +25,7 @@ export function SubjectCommunityInteractions({
   reactionsAsOf,
   preparedTransport,
   preparedWatch,
+  refreshAdvice,
   verification,
 }: {
   thread: CommunityThread;
@@ -37,6 +38,7 @@ export function SubjectCommunityInteractions({
   reactionsAsOf: CommunityReactionFreshness;
   preparedTransport?: ThreadReactionsProps['preparedTransport'];
   preparedWatch?: ThreadWatchProps['native'];
+  refreshAdvice?: ThreadWatchProps['refreshAdvice'];
   verification?: VerificationConfig;
 }) {
   const client = useContext(QueryClientContext);
