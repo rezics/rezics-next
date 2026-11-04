@@ -781,7 +781,7 @@ uses five metadata-only native envelopes and the ordinary account-key CLI: an ex
 subject, then live action, then returns as a revised Book under the same native key. Complete membership
 stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
 receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
-`bangumi@8` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
+`bangumi@9` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
 five-record launch checks. Its earlier ignored-type native child is superseded by typed 3/6 conversion.
 [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
 log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
@@ -1426,7 +1426,7 @@ bounds belong to the linked owners; conversion itself has no purge work.
 ### Import authored Bangumi television original-run and episode count
 
 - Touches: one admitted type-2 TVAnime infobox on the ordinary Bangumi JSON-lines
-  registration, the shared `bangumi@8` converter, and ordinary public
+  registration, the shared `bangumi@9` converter, and ordinary public
   batch/fence/candidate paths on that TVSeries. Selected-family seed reuses the
   same registration; this adds no publisher.
 - Bound: at most 64 infobox keys and three run facts inside the existing 64 KiB
@@ -1636,7 +1636,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB character names and qualified aliases
 
 - Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
-- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@8` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@9` makes newly supported rows available on refresh even when source bytes are unchanged.
 - Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
@@ -2119,7 +2119,7 @@ revision bump.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
-selected release payload and convert them through `cross-media-entities@8`.
+selected release payload and convert them through `cross-media-entities@9`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
@@ -2192,7 +2192,7 @@ for these source Concepts.
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@8` revision while the ordinary caller uses `bangumi@8`.
+`cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2213,7 +2213,7 @@ revision exists, the normalized digest and the acknowledged native UUID.
 ### Bangumi television original run
 
 Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@8`, advancing the
+`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@9`, advancing the
 `bangumi@7` name extraction. Selected-family seed uses that same converter; this
 journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
 schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
@@ -2342,7 +2342,7 @@ The result carries provider and native type bindings, source keys, source and co
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@7` revision while the ordinary caller uses `bangumi@6`.
+`cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2359,3 +2359,32 @@ revision exists, the normalized digest and the acknowledged native UUID.
   exact citations and omissions. The connected ordinary caller is
   `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
   remains controller-owned.
+
+### Bangumi Book-template subject names
+
+Ordinary Bangumi registration and the selected-family importer share one pure
+extractor for Book title fields. It requires the selected native profile
+`schema:Book` and the exact pinned `{{Infobox animanga/Book` header. The
+source-defined `Novel`, `Manga`, `PhotoBook` and `BookSeries` templates do not
+inherit this mapping. Both Book `中文名` and `别名` become additional
+`schema:name` candidates; explicit Chinese names use `zh`, and unqualified
+aliases use `und`. A malformed field is withheld as a whole while independent
+source names and summary proposals remain available.
+
+The ordinary importer remains proposal-only. The default selected-family path
+uses its existing `cross-media-entities@9` registration, record bindings,
+finite showcase manifest and publication journal. Local review accepts and
+adopts current candidates through separate native commands; corrected source
+names create new proposals on the acknowledged Book UUID, and ordinary refresh
+does not rewrite adopted names. Record citations, the unversioned marker,
+source digest and field-pointer command identity remain attached.
+
+- Touches: one selected Book record, at most 24 distinct name values and 16
+  shared omission diagnostics.
+- Bound: the 65,536-byte projection/infobox caps, 64 visited field occurrences,
+  existing source journal and native batch limits; no catalogue scan is added.
+- Growth check: `services/importer/tests/bangumi-book-names.test.ts` covers
+  ordinary/default conversion, atomic malformed-field handling, same-UUID
+  refresh and same-title source identity separation. The native publication and
+  public-read scenario is `services/kernel/test/imports/bangumi-book-names.test.ts`;
+  its execution remains controller-owned.
