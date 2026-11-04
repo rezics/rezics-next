@@ -1,4 +1,27 @@
 types:
   schema:MusicAlbum: Album
+  schema:MusicRelease: Musikveröffentlichung
+  schema:MusicRecording: Aufnahme
+properties:
+  schema:releaseOf: Veröffentlichung von
+  schema:catalogNumber: Katalognummer
+  schema:recordLabel: Plattenlabel
+  schema:track: Titel
+  schema:byArtist: Interpret
+  wdt:P642: von
+inverseProperties:
+  schema:releaseOf: Albumveröffentlichungen
+  schema:recordLabel: Veröffentlichungen dieses Labels
+  schema:track: Veröffentlichungen mit dieser Aufnahme
+  schema:byArtist: Aufnahmen dieses Interpreten
 typeDescriptions:
   schema:MusicAlbum: 'Ein Musikalbum als Werk mit zusammengehörigen Titeln, unabhängig von einem bestimmten Exemplar oder einer vertriebenen Ausgabe.'
+  schema:MusicRelease: 'Eine bestimmte veröffentlichte Ausgabe eines Musikalbums mit Katalognummer, Format, Datum und geordneten Aufnahmen. Getrennt vom Albumwerk, persönlichem Exemplar, Wiedergabedatei und einzelner Aufnahme.'
+  schema:MusicRecording: 'Eine identifizierte aufgenommene Darbietung eines Musikwerks, etwa ein Song-Take. Getrennt von Albumgruppierung, veröffentlichter Ausgabe, Wiedergabedatei und persönlichem Exemplar.'
+propertyDescriptions:
+  schema:releaseOf: 'Das Musikalbum-Werk, das diese veröffentlichte Ausgabe realisiert; die Ausgabe ist kein neuer Name für das Album.'
+  schema:catalogNumber: 'Die vom herausgebenden Label vergebene Katalognummer dieser Ausgabe, als Quelltext gespeichert.'
+  schema:recordLabel: 'Die Organisation, die als Plattenlabel dieser Ausgabe genannt wird.'
+  schema:track: 'Eine identifizierte Aufnahme auf dieser Ausgabe. Position, Namensnennung, Rolle, Datum und Listenvorkommen trennen wiederholte Nutzungen derselben Aufnahme.'
+  schema:byArtist: 'Eine Person oder Organisation, die als Interpret dieser Aufnahme genannt wird, mit Namensnennung, Reihenfolge und genauer Rolle.'
+  wdt:P642: 'Das Listenvorkommen-Konzept, das zwei Zuordnungen zur selben Aufnahme in getrennten Slots hält. Es ist kein veröffentlichtes Tonträger- oder Seitenschema.'

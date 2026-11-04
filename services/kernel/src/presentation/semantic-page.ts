@@ -13,6 +13,57 @@ import statesRead from '../semantic/subject-summary-states.sql';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 import { activeProfile } from './profiles.ts';
 
+export type PageViewerActions =
+  | { status: 'ready'; viewerActions: { action: string; operations: string[] }[] }
+  | { status: 'withheld' }
+  | { status: 'unavailable' }
+  | { status: 'denied' };
+
+/** Map the existing viewer-actions owner result onto the composed page envelope. */
+export function pageViewerActions(
+  type: string,
+  id: string,
+  result: { status: number; body: unknown },
+): { viewer: { type: string; id: string }; actions: PageViewerActions } {
+  const viewer = { type, id };
+  if (result.status === 401 || result.status === 403) return { viewer, actions: { status: 'denied' } };
+  if (result.status !== 200 || typeof result.body !== 'object' || result.body === null || Array.isArray(result.body))
+    return { viewer, actions: { status: 'unavailable' } };
+  const resources = (result.body as { resources?: unknown }).resources;
+  const row = Array.isArray(resources)
+    ? resources.find(
+        (entry) =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          (entry as { type?: unknown }).type === type &&
+          (entry as { id?: unknown }).id === id,
+      )
+    : undefined;
+  if (!row || typeof row !== 'object') return { viewer, actions: { status: 'unavailable' } };
+  if ((row as { error?: unknown }).error === 'not_found') return { viewer, actions: { status: 'withheld' } };
+  const viewerActions = (row as { viewerActions?: unknown }).viewerActions;
+  if (!Array.isArray(viewerActions)) return { viewer, actions: { status: 'unavailable' } };
+  return {
+    viewer,
+    actions: {
+      status: 'ready',
+      viewerActions: viewerActions.flatMap((entry) => {
+        if (typeof entry !== 'object' || entry === null) return [];
+        const action = (entry as { action?: unknown }).action;
+        const operations = (entry as { operations?: unknown }).operations;
+        if (
+          typeof action !== 'string' ||
+          !Array.isArray(operations) ||
+          operations.length === 0 ||
+          operations.some((item) => typeof item !== 'string')
+        )
+          return [];
+        return [{ action, operations: [...new Set(operations as string[])] }];
+      }),
+    },
+  };
+}
+
 /** The ordinary native page's template order and offered views, shared with pages.read. */
 export function semanticPageView(
   profile: PresentationProfile,
