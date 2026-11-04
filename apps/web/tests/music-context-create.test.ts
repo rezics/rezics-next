@@ -64,11 +64,8 @@ mock.module('../src/features/catalogue/music-context-create-actions', () => ({
 mock.module('../src/features/catalogue/relation-editor-search', () => ({ relationTargetSearch: async () => [] }));
 
 test('music-context creation exposes only real released grains and emitted fields', async () => {
-  const {
-    musicContextCreateDraft,
-    musicContextCreateFields,
-    musicContextCreateTypes,
-  } = await import('../src/features/catalogue/music-context-create');
+  const { musicContextCreateDraft, musicContextCreateFields, musicContextCreateTypes } =
+    await import('../src/features/catalogue/music-context-create');
   const { musicContextKind } = await import('../src/features/catalogue/music-context-profile');
   expect(musicContextCreateTypes(bundledRelease, 'en')).toEqual([]);
   const offered = musicContextCreateTypes(release, 'en');
@@ -189,11 +186,7 @@ async function musicContextSession(locale = 'en') {
   };
 }
 
-async function chooseTypeAndName(
-  page: Awaited<ReturnType<typeof musicContextSession>>,
-  type: string,
-  label: string,
-) {
+async function chooseTypeAndName(page: Awaited<ReturnType<typeof musicContextSession>>, type: string, label: string) {
   await act(async () =>
     page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() }), type),
   );
@@ -272,7 +265,10 @@ test('an admitted music-context Type creates once after a current eligibility re
     expect(dirty.defaultPrevented).toBe(true);
     if (page.urlFact) {
       await act(async () =>
-        page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.music_context_create_add_fact() }), page.urlFact!),
+        page.user.selectOptions(
+          page.canvas.getByRole('combobox', { name: page.m.music_context_create_add_fact() }),
+          page.urlFact!,
+        ),
       );
       const button = page.canvas
         .getAllByRole('button', { name: page.m.correction_add() })

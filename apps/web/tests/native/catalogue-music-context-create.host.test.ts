@@ -95,8 +95,7 @@ test('an admitted music-context Type is created once and independently readable 
   }>(await stack.kernel(`/v1/subjects/${createdId}`), 'read created music context');
   expect(native.subject.id).toBe(createdId);
   expect(native.subject.type).toBe(selected);
-  if (fact)
-    expect(native.subject.statements?.[fact]?.[0]?.value?.content).toBe(`https://example.org/place/${token}`);
+  if (fact) expect(native.subject.statements?.[fact]?.[0]?.value?.content).toBe(`https://example.org/place/${token}`);
 });
 
 test('guest, unavailable observation, revoked grant, and a stale sealed command stay distinct', async () => {
