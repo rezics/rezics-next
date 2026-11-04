@@ -393,8 +393,7 @@ function CharacterProfileCreateLive({
   const [busy, setBusy] = useState(false);
   const pending = useRef<CharacterCommand | null>(null);
   const running = useRef(false);
-  const eligibilityBlocksNewCreate =
-    observesCreate && !pending.current && !isAllowedCreateAuthority(observedAuthority);
+  const eligibilityBlocksNewCreate = observesCreate && !pending.current && !isAllowedCreateAuthority(observedAuthority);
   const [review, setReview] = useState<{ status: 'closed' | 'current' | 'stale'; fingerprint?: string }>({
     status: 'closed',
   });
