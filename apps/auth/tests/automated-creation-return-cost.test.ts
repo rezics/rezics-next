@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { act } from 'react';
+import { act, createElement } from 'react';
 import { creationFixture, dom, flush, button } from './creation-page-fixture';
 import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
 creationFixture();
@@ -42,7 +42,7 @@ test('entry, persisted return and visible Retry charge bounded reads and issue n
   const host = document.body.appendChild(document.createElement('div'));
   const root = createRoot(host);
   try {
-    await flush(() => root.render(<AutomatedAccountCreatePage />));
+    await flush(() => root.render(createElement(AutomatedAccountCreatePage)));
     expect(requests.filter((path) => path === '/session')).toHaveLength(4);
     expect(requests.filter((path) => path === '/account-management/automated/operator')).toHaveLength(1);
 
