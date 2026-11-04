@@ -96,6 +96,7 @@ export type BangumiVocabularyRow =
       family: 1 | 2 | 3 | 4 | 6;
       code: number;
       reciprocalCode?: number | null;
+      order?: number;
     });
 
 export type VndbVocabularyRow =

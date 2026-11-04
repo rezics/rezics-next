@@ -614,6 +614,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
           sourceSubject: String(sid),
           sourceEndpoint: String(rid),
           mappingRevision,
+          ...(typeof row.order === 'number' && Number.isSafeInteger(row.order) ? { order: row.order } : {}),
           evidence,
         },
       };
@@ -1815,14 +1816,15 @@ export async function seedCrossMedia(
       runs[provider] = run;
     }
     const hasBangumiInput = plan.records.bangumi.length > 0 || plan.entities.bangumi.length > 0;
+    const appearances = plan.characterAppearances ?? [];
     const fidelity =
-      providers.includes('bangumi') && hasBangumiInput
+      providers.includes('bangumi') && hasBangumiInput && appearances.length
         ? await runBangumiCharacterFidelity({
             importer,
             port,
             sourceAlias: crossMediaAliases.bangumi,
             records: [...plan.records.bangumi, ...plan.entities.bangumi],
-            appearances: plan.characterAppearances ?? [],
+            appearances,
             ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
           })
         : undefined;
@@ -2124,6 +2126,13 @@ export async function runCrossMediaSeedCli(
       known: knownTagBindings,
       destination: { origin: api },
     });
+    const { importShowcaseBooks } = await import('./showcase-books.ts');
+    const books = await importShowcaseBooks({
+      tables: input,
+      path: statePath,
+      port,
+      destination: { origin: api },
+    });
     const showcase = journal
       ? await publishShowcase({
           plan,
@@ -2155,6 +2164,14 @@ export async function runCrossMediaSeedCli(
             adoptedConcepts: publicTags.bindings.concepts.map((item) => item.code),
             gaps: publicTags.gaps,
           },
+          books: {
+            family: books.family,
+            selected: books.selected,
+            conversions: books.conversions,
+            identities: books.identities,
+            gaps: books.gaps,
+            creditGaps: books.creditGaps,
+          },
           sourceDigests: Object.fromEntries(input.digests),
         },
         null,
@@ -2163,8 +2180,8 @@ export async function runCrossMediaSeedCli(
     );
     process.stdout.write(
       showcase
-        ? `Imported ${result.readings.length} records; publication ${showcase.status}; ${showcase.omissions.length} bounded omissions. Result: ${resultPath}\n`
-        : `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + result.vndbCreditDiagnostics.length + result.episodeDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
+        ? `Imported ${result.readings.length + books.readings.length} records; publication ${showcase.status}; ${showcase.omissions.length} bounded omissions. Result: ${resultPath}\n`
+        : `Imported ${result.readings.length + books.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + result.vndbCreditDiagnostics.length + result.episodeDiagnostics.length + publicTags.gaps.length + books.gaps.length} review gaps. Result: ${resultPath}\n`,
     );
     ensure(
       !showcase || showcase.status === 'published',

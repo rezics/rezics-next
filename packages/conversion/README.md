@@ -200,7 +200,7 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 
 | Source       | Accepted record and mapping                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Rights and exclusions                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bangumi      | A subject whose `type` is `1` (book), `2` (anime, mapped to TV series), `3` (music, mapped to MusicAlbum), `4` (video game), or `6` (live action: movie platform to Movie, pinned TV-template platforms to TVSeries). Archive integer platform ids stringify; public type/type_cn/alias strings are accepted. Grain uses `liveActionWorkType` plus infobox templates. The external id maps to `wdt:P5732`; names are candidates. A non-empty summary becomes a literal Text-profile `schema:abstract` snapshot, with the serialized snapshot capped at 32 KiB. Types `3` and `6` also cite a parseable `date` as `schema:datePublished`.                                                                                                                    | The summary proposal carries CC-BY-SA-3.0 attribution and ShareAlike obligations. A cover has separate unknown rights. The executable converter currently retains other accepted fields such as tags, platform, infobox, and NSFW status only in sanitized source data or diagnostics; it does not emit catalogue facts for them. Existing permitted omissions of opaque infobox and image keys remain in force. Types `1`, `2`, and `4` still retain `date` as a diagnostic. |
+| Bangumi      | A subject whose `type` is `1` (book), `2` (anime, mapped to TV series), `3` (music, mapped to MusicAlbum), `4` (video game), or `6` (live action: movie platform to Movie, pinned TV-template platforms to TVSeries). Archive integer platform ids stringify; public type/type_cn/alias strings are accepted. Grain uses `liveActionWorkType` plus infobox templates. The external id maps to `wdt:P5732`; names are candidates. A non-empty summary becomes a literal Text-profile `schema:abstract` snapshot, with the serialized snapshot capped at 32 KiB. Types `1`, `3` and `6` also cite a parseable `date` as `schema:datePublished`.                                                                                                                    | The summary proposal carries CC-BY-SA-3.0 attribution and ShareAlike obligations. A cover has separate unknown rights. The executable converter currently retains other accepted fields such as tags, platform, infobox, and NSFW status only in sanitized source data or diagnostics; it does not emit catalogue facts for them. Existing permitted omissions of opaque infobox and image keys remain in force. Type `1` cites a parseable `date` as `schema:datePublished` on Book or BookSeries; types `2` and `4` still retain `date` as a diagnostic. ISBN, publisher and page counts stay off Book/BookSeries rather than inventing an edition. |
 | VNDB         | Grouped metadata from real COPY `.header` tables: `vn`, `vn_titles`, and `entry_meta`. The converter also accepts grouped `vn_extlinks` and `extlinks` data. The projection uses VN identity, native `entry_meta.revision`, titles, and supported external links. Titles become names; only supported website links become URL facts. The `cross-media-entities@4` entity converter admits the same website interpretation on selected staff, producer and release identities through `staff_extlinks` / `producers_extlinks` / `releases_extlinks` plus `extlinks`; one dictionary row may serve several owners. Decision: `schema:url` is a source-listed website, not an official-site, sameAs, or fetch claim; unsupported site codes stay diagnostics. | Source metadata identifies ODbL-1.0 database permission and `LicenseRef-DbCL-1.0` contents permission for the permitted metadata projection. Descriptions, covers, posts, and other creative content are not proposed. These source permissions do not license all VNDB contents or set the output database's license. Entity website URLs emit no facts licence or description.                                                                                              |
 | Open Library | The JSON payload carried by the native TSV row, for `/type/work` or `/type/edition`. A work bootstraps as `schema:Book`; an edition as `bf:Instance`. The native revision is cited as `schema:version`, and `last_modified` is cited as a day-precision `schema:dateModified`. For editions, valid ISBN-10 values are checksum-validated and converted to ISBN-13; only ISBN-13 is proposed. An unresolved author or work relation has value `somevalue` and keeps its Open Library identifier as a `wdt:P648` qualifier; a real native resolution may be supplied in `resolvedReferences`.                                                                                                                                                                 | `CC0-1.0` describes the permitted bibliographic metadata source. Unknown-licensed descriptions are kept as metadata and never proposed as summary text. Links and publishers are metadata-only. Covers have separate unknown rights. This permission does not claim all dataset contents share the metadata license or set the output database's license.                                                                                                                     |
 | Wikidata     | A real Q entity with `type: 'item'`. Bundled exact type mappings plus the reviewed source bindings below control supported types. Bundled properties control claims, datatypes, ranks, qualifiers and time/quantity handling. Labels and descriptions become bootstrap terms; names and supported claims become bound proposals.                                                                                                                                                                                                                                                                                                                                                                                                                            | Labels, descriptions and claims cite CC0-1.0 structured data. Unknown properties, instruction text, `P18` and Commons images are excluded. No image assets or user/talk-page content are imported. CC0 source data does not set the output database's license.                                                                                                                                                                                                                |
@@ -242,8 +242,8 @@ citation. No subjects or resolutions are invented. The CC0 boundary covers label
 descriptions and claims; `P18`, media and document mappings are excluded, including
 Commons images with separate file licences and all preparation instructions.
 
-Bangumi revision `bangumi@5` converts types `3` (music) and `6` (live action)
-through the same bootstrap and bound proposal path as types `1`, `2`, and `4`.
+Bangumi revision `bangumi@6` keeps types `3` (music) and `6` (live action)
+on the same bootstrap and bound proposal path as types `1`, `2`, and `4`.
 Music uses admitted `schema:MusicAlbum` as Semantic's documented fallback;
 tracks, recordings and releases are not invented from titles or disc labels.
 Live action selects `schema:Movie` or `schema:TVSeries` from pinned platform
@@ -252,9 +252,9 @@ with an exact `/platform` diagnostic and a full sanitized projection. A prior
 identity-only `{id, type}` projection for types `3` and `6` remains ignored so
 an interrupted `bangumi@4` baseline can be reconverted, then a named payload
 refreshes under this revision. Unknown or invalid types still fail with
-`unsupported_type`. Types `1`, `2`, and `4` keep their previous class bindings
-and retry keys. Platform and community tools use this same pure module;
-importer skipped-count accounting is separate.
+`unsupported_type`. Types `2` and `4` keep their previous class bindings and
+retry keys. Platform and community tools use this same pure module; importer
+skipped-count accounting is separate.
 
 Cross-media entity revision `cross-media-entities@6` retains an admitted
 Bangumi `person.summary` for the source-selected `schema:Person` or
@@ -680,7 +680,7 @@ cannot retract an earlier candidate from source data alone.
 - Bound: constant identity/type dispatch and at most 32 UTF-8 JSON bytes for
   an identity-only ignored record, with zero commands, assets, or intents.
   Supported records retain the 64 KiB projection, 500-character title,
-  64-tag plus 64-public-meta-tag (each 200 characters), 32 KiB summary snapshot, eight-command and one-cover-intent caps.
+  64-tag plus 64-public-meta-tag (each 200 characters), 32 KiB summary snapshot, nine-command and one-cover-intent caps.
   No skipped-ID set, kernel call, SQL, network, or source-wide work is added.
 - Growth check: `bangumi-scope.test.ts` covers launch/ignored outcomes,
   repeat conversion, privacy and named I/O guards; `bangumi-growth.test.ts`
@@ -794,7 +794,7 @@ modules linked above. No design proposal replaces those executable contracts.
 
 ## Reviewed Bangumi public tags
 
-`bangumi@5` retains the ordered public `meta_tags` projection (at most 64 own
+`bangumi@6` retains the ordered public `meta_tags` projection (at most 64 own
 data strings of 200 characters, within the existing 64 KiB projection). Exact
 `后宫` uses only the raw dictionary key
 `v1:["https://rezics.com/schemes/bangumi/public-tags","后宫"]`. With a trusted current
@@ -808,7 +808,7 @@ The caller owns current native trust; dictionary syntax is no proof of authority
 The production Importer/CLI obtains the dictionary through its existing
 `identifierLookup`, after explicit reviewed seeding. Normalization and digesting
 remain pure; the source-only digest includes the ordered metadata tags and excludes
-bindings. Supported records visit twelve top-level fields and produce at most eight
+bindings. Supported records visit thirteen top-level fields and produce at most nine
 commands and one cover intent; byte caps remain unchanged. The new keyword adds one bounded citation and one qualifier.
 
 ## Bangumi TVAnime subject names
@@ -829,3 +829,14 @@ omissions, with no source prose copied into diagnostics. Parsing scans at most 6
 field occurrences, retains at most 24 distinct name values, and emits at most 16
 omission diagnostics. Each field occurrence is staged until its complete scalar
 or bullet-list form is known; malformed or mixed occurrences contribute no names.
+
+## Bangumi book grain
+
+`bangumi@8` dispatches type 1 Book versus BookSeries from the source series
+flag, novel platform and wiki template. Comic/manga stays generic Book so a
+novel family is never filled with manga. Type 1 cites a parseable `date` as
+`schema:datePublished` on Book or BookSeries. ISBN, publisher and pages stay
+off the work as withheld edition assertions; volume counts stay counts.
+Decision: type 1 Book/BookSeries dispatch advances the converter from `@7` to
+`@8`, preserving TVAnime names. One Bangumi subject stays one identity; ISBN
+does not create a `bf:Instance`.

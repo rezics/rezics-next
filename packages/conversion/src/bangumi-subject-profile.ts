@@ -1,3 +1,4 @@
+import { selectBangumiBookProfile } from './bangumi-book-profile.ts';
 import { liveActionWorkType } from './cross-media-entities.ts';
 
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
@@ -7,7 +8,7 @@ export function isBangumiTVAnimeTemplateHead(line: string): boolean {
   return line.trim() === bangumiTVAnimeTemplateHead;
 }
 
-/** Existing 1/2/4 class bindings. Type 2 stays TVSeries even when the platform names a film. */
+/** Existing 1/2/4 class bindings. Type 1 defers to book grain when series/platform evidence exists. */
 export const bangumiLaunchTypes = {
   1: 'schema:Book',
   2: 'schema:TVSeries',
@@ -26,10 +27,17 @@ export type ProfileSelection =
 export function selectBangumiProfile(input: {
   readonly type: 1 | 2 | 3 | 4 | 6;
   readonly platform?: string;
+  readonly series?: boolean;
   readonly infobox?: string;
 }): ProfileSelection {
-  if (input.type === 1 || input.type === 2 || input.type === 4)
-    return { outcome: 'selected', type: bangumiLaunchTypes[input.type] };
+  if (input.type === 1)
+    return selectBangumiBookProfile({
+      type: 1,
+      ...(input.platform === undefined ? {} : { platform: input.platform }),
+      ...(input.series === undefined ? {} : { series: input.series }),
+      ...(input.infobox === undefined ? {} : { infobox: input.infobox }),
+    });
+  if (input.type === 2 || input.type === 4) return { outcome: 'selected', type: bangumiLaunchTypes[input.type] };
   if (input.type === 3) return { outcome: 'selected', type: 'schema:MusicAlbum' };
   const live = liveActionWorkType(input.platform);
   if (live) return { outcome: 'selected', type: live };

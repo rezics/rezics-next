@@ -34,6 +34,7 @@ export type GraphEdgeDraft = {
     sourceSubject: string;
     sourceEndpoint: string;
     mappingRevision: string;
+    order?: number;
     evidence: { path: string; code: number; sourceSubject: string; sourceEndpoint: string; digest: string }[];
   };
   producerParent?: {
@@ -258,6 +259,7 @@ export class CrossMediaGraph {
                 ...(draft.relation!.reciprocalCode === undefined
                   ? {}
                   : { reciprocalCode: draft.relation!.reciprocalCode }),
+                ...(draft.relation!.order === undefined ? {} : { order: draft.relation!.order }),
               },
             ],
           });

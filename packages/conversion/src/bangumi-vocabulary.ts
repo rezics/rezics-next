@@ -411,6 +411,15 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
       const canonicalKey = relationIdentityKey(canonicalSubjectId, property, canonicalEndpointId);
       if (seenRelations.has(canonicalKey)) return;
       seenRelations.add(canonicalKey);
+      const qualifiers: { property: string; content: unknown }[] = [];
+      if (row.order !== undefined) {
+        if (!Number.isSafeInteger(row.order) || row.order < 0) {
+          environment.pushGap({ path, code, reason: 'invalid_source_value', property: 'schema:position' });
+          return;
+        }
+        if (environment.qualifierAllowed(subject, property, 'schema:position'))
+          qualifiers.push({ property: 'schema:position', content: String(row.order + 1) });
+      }
       environment.propose({
         row,
         subject,
@@ -418,6 +427,7 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         content: '',
         target: endpoint,
         sourceEndpoint: row.endpointCode,
+        ...(qualifiers.length ? { qualifiers } : {}),
         mappingRevision: `relation-${family}@2${reciprocalCode === undefined ? ':one-sided' : `:reverse-${reciprocalCode}`}`,
       });
       return;
