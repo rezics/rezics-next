@@ -13,6 +13,11 @@ import { castWindow } from './model';
 
 type Presentation = 'character' | 'credit-order';
 type WorkCastReturn = NonNullable<ReturnType<typeof workCastVisitReturn>>;
+type WorkCastValue = RowValue & {
+  subject?: string | null | undefined;
+  subjectLabel?: string | undefined;
+  realm?: string | undefined;
+};
 
 export type WorkCastNavigation = {
   view?: string;
@@ -46,7 +51,7 @@ function castAddressAt(baseHref: string, address: WorkCastReturn): string {
 }
 
 function returnAddress(
-  value: RowValue & { subject?: string | null | undefined; subjectLabel?: string | undefined; realm?: string | undefined },
+  value: WorkCastValue,
   navigation: WorkCastNavigation | undefined,
   presentation: Presentation,
   focus: { statement: string; character?: string },
@@ -75,7 +80,7 @@ function returnAddress(
 }
 
 function restartAddress(
-  value: RowValue & { subject?: string | null | undefined; subjectLabel?: string | undefined; realm?: string | undefined },
+  value: WorkCastValue,
   navigation: WorkCastNavigation | undefined,
 ): string | undefined {
   if (!value.subject) return;
@@ -114,7 +119,7 @@ function OriginalCredit({
   returnTo,
 }: {
   item: Item;
-  value: RowValue;
+  value: WorkCastValue;
   returnTo: string | undefined;
 }) {
   const options = { locale: value.locale as never };
@@ -144,11 +149,7 @@ export function WorkCastWindow({
   navigation,
 }: {
   items: Item[];
-  value: RowValue & {
-    subject?: string | null | undefined;
-    subjectLabel?: string | undefined;
-    realm?: string | undefined;
-  };
+  value: WorkCastValue;
   creditVisit?: CreditVisit | undefined;
   label: string;
   navigation?: WorkCastNavigation | undefined;
