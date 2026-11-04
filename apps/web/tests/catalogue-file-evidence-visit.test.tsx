@@ -93,7 +93,11 @@ test('ordinary item, qualifier, reference and association visits return to the e
   const { visit } = await fixture();
   await mounted(async (host, render) => {
     for (const kind of ['item', 'qualifier', 'reference', 'association']) {
-      const current = visit();
+      const locale = kind === 'qualifier' ? 'zh-Hant' : kind === 'reference' ? 'ja' : 'en';
+      const origin = sourceHref
+        .replace('/en/', `/${locale}/`)
+        .replace('episode-1-file-a', encodeURIComponent('証拠'.repeat(30)));
+      const current = { ...visit(), locale };
       await render(
         createElement(CatalogueFileReader, { key: `source-${kind}`, visit: current, currentHref: sourceHref }),
       );
@@ -107,21 +111,21 @@ test('ordinary item, qualifier, reference and association visits return to the e
             ? '[data-property="schema:encodesCreativeWork"] a'
             : `[data-slot="catalogue-file-inspection-${kind === 'qualifier' ? 'qualifiers' : 'references'}"] a`;
       const destination = link(host, selector);
-      const receipt = fileEvidenceAt(destination, 'en')!;
+      const receipt = fileEvidenceAt(destination, locale)!;
       expect(receipt.context).toBe(current.public.subject.context);
       expect(receipt.realm).toBe(realm);
       expect(receipt.kind).toBe(kind === 'association' ? 'association' : 'assertion');
       expect(receipt.part).toBe(kind === 'qualifier' ? 'q:1' : kind === 'reference' ? 'r:0:0' : 'value');
       expect(new URL(destination, 'https://site.test').searchParams.get('fileSource')).toBe(catalogueFile);
       expect(destination).not.toContain('/file?');
-      await render(
-        createElement(CatalogueFileReturnLink, { id: catalogueFile, locale: 'en', currentHref: destination }),
-      );
+      await render(createElement(CatalogueFileReturnLink, { id: catalogueFile, locale, currentHref: destination }));
       const back = link(host, 'a');
-      expect(back.split('#')[0]).toBe(sourceHref);
+      expect(back.split('#')[0]).toBe(origin);
       expect(back).not.toContain('via=');
       // The route supplies a new current composition; the receipt cannot supply a response body.
-      await render(createElement(CatalogueFileReader, { key: `return-${kind}`, visit: visit(), currentHref: back }));
+      await render(
+        createElement(CatalogueFileReader, { key: `return-${kind}`, visit: { ...visit(), locale }, currentHref: back }),
+      );
       const panel = host.querySelector<HTMLElement>('[data-slot="catalogue-file-inspection"]')!;
       expect(panel).not.toBeNull();
       expect(host.ownerDocument.activeElement).toBe(
@@ -208,6 +212,12 @@ test('concealed and spoiler evidence has no href, identifier or inspection fallb
     const panel = host.querySelector('[data-slot="catalogue-file-inspection"]')!;
     expect(panel.textContent).not.toContain('Concealed evidence');
     expect(panel.innerHTML).not.toContain(catalogueEpisode);
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('[data-property="schema:encodesCreativeWork"] button')!.click(),
+    );
+    expect(host.querySelector('[data-slot="catalogue-file-inspection"]')!.textContent).not.toContain(
+      'Concealed evidence',
+    );
     association.readability = 'readable';
     association.statement.qualifiers.push({
       property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
