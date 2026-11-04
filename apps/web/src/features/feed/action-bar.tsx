@@ -138,6 +138,7 @@ export function HomeFeedActions({
           ? {
               control: (
                 <HomeWorkLibraryAction
+                  rowKey={item.id}
                   subjectId={workId}
                   href={`${href}?slot=collections`}
                   locale={locale}

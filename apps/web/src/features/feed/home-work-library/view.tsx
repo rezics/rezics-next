@@ -1,5 +1,7 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { LibraryBigIcon } from 'lucide-react';
+import { QueryClientContext } from '@tanstack/react-query';
+import { observeReactionSession } from '../../../threads/thread-reactions';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
 import {
@@ -34,6 +36,10 @@ export function HomeWorkLibraryProvider({
     () => false,
   );
   const lease = projection?.lease;
+  const client = useContext(QueryClientContext);
+  const observation = useMemo(() => observeReactionSession(client), [client]);
+  const readerRevision = useSyncExternalStore(observation.subscribe, observation.snapshot, observation.serverSnapshot);
+  const admittedRevision = useMemo(() => observation.snapshot(), [observation, projection]);
   const subscribe = useMemo(
     () => (lease ? (listener: () => void) => lease.subscribe(listener) : subscribeNothing),
     [lease],
@@ -42,7 +48,14 @@ export function HomeWorkLibraryProvider({
   const revision = useSyncExternalStore(subscribe, snapshot, snapshotNothing);
   const current =
     hydrated &&
+    enabled &&
+    signedIn &&
     projection &&
+    (!client ||
+      (readerRevision === admittedRevision &&
+        observation.healthy() &&
+        observation.read()?.state === 'signed-in' &&
+        observation.read()?.subject === projection.scope.reader)) &&
     revision >= 0 &&
     projection.lease.isCurrent() &&
     sameHomeWorkLibraryScope(expectedScope, projection.scope) &&
@@ -58,11 +71,14 @@ export function HomeWorkLibraryProvider({
 
 /** One existing Library destination plus only controls backed by a current, admitted work row. */
 export function HomeWorkLibraryAction({
+  rowKey,
   subjectId,
   href,
   locale,
   signedIn: signedInProp,
 }: {
+  /** Omitted for catalogue navigation: a Subject ID never substitutes for a native occurrence. */
+  rowKey?: string;
   subjectId: string;
   href: string;
   locale: string;
@@ -71,16 +87,32 @@ export function HomeWorkLibraryAction({
   const context = useContext(HomeWorkLibraryContext);
   const projection = context.projection;
   const signedIn = signedInProp ?? context.signedIn;
-  const row = homeWorkLibraryRow(projection, subjectId);
+  const row = signedIn ? homeWorkLibraryRow(projection, rowKey, subjectId) : undefined;
   const options = { locale: locale as Locale };
   const signIn = `/${encodeURIComponent(locale)}/auth/sign-in?return_to=${encodeURIComponent(href)}`;
-  const entry = row?.entry.state !== 'unavailable' && row?.entryControl ? row.entryControl(row.entry) : null;
-  const score = row?.score.state !== 'unavailable' && row?.scoreControl ? row.scoreControl(row.score) : null;
+  const entry =
+    row?.entry.state === 'present'
+      ? `${m.library_subject_entry({}, options)}: ${m.library_other({}, options)}`
+      : row?.entry.state === 'absent'
+        ? m.library_empty_title({}, options)
+        : null;
+  const score =
+    row?.score.state === 'present' && row.score.value.kind === 'ready'
+      ? row.score.value.units === null
+        ? m.subject_rating_control_unrated({}, options)
+        : `${new Intl.NumberFormat(locale).format(row.score.value.units / 2)} / 10`
+      : row?.score.state === 'absent'
+        ? m.subject_rating_control_unrated({}, options)
+        : null;
   const entryUnavailable = signedIn && entry === null;
   const scoreUnavailable = signedIn && score === null;
   return (
     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1" data-slot="home-work-library-action">
-      {signedIn && entry !== null ? entry : null}
+      {entry !== null ? (
+        <span className="text-xs" data-slot="home-work-library-entry">
+          {entry}
+        </span>
+      ) : null}
       {entryUnavailable ? (
         <span
           className="text-xs text-muted-foreground"
@@ -91,7 +123,15 @@ export function HomeWorkLibraryAction({
           {m.library_subject_unavailable({}, options)}
         </span>
       ) : null}
-      {signedIn && score !== null ? score : null}
+      {score !== null ? (
+        <span
+          className="text-xs"
+          aria-label={m.subject_rating_control_label({}, options)}
+          data-slot="home-work-library-score"
+        >
+          {score}
+        </span>
+      ) : null}
       {scoreUnavailable ? (
         <span
           className="text-xs text-muted-foreground"
@@ -100,6 +140,11 @@ export function HomeWorkLibraryAction({
           data-slot="home-work-library-score-unavailable"
         >
           {m.library_subject_unavailable({}, options)}
+        </span>
+      ) : null}
+      {signedIn && row?.actions.state === 'unavailable' ? (
+        <span role="status" className="text-xs text-muted-foreground" data-slot="home-work-library-actions-unavailable">
+          {m.feed_action_unavailable({}, options)}
         </span>
       ) : null}
       <a
