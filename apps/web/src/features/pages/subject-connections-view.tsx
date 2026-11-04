@@ -23,9 +23,15 @@ import {
   type ConnectionAddress,
   type ConnectionGraph,
   type ConnectionGroup,
+  type ConnectionSection,
   type ConnectionStream,
 } from './subject-connections';
-import { createConnectionWindow, type ConnectionRead } from './subject-connections-window';
+import {
+  createConnectionWindow,
+  type ConnectionPageState,
+  type ConnectionRead,
+  type ConnectionWindowResume,
+} from './subject-connections-window';
 import { loadSubjectConnections } from './subject-connections-query';
 import {
   connectionReturnHref,
@@ -118,12 +124,21 @@ export function SubjectConnections({
         : {}),
       ...(viewer.state === 'signed-in' && viewer.subject ? { viewer: viewer.subject } : {}),
     };
+    const windowResume: ConnectionWindowResume | undefined =
+      resume?.history && resume.index !== undefined
+        ? {
+            group: connectionReturnGroup(resume),
+            stream: resume.stream,
+            history: resume.history,
+            index: resume.index,
+          }
+        : undefined;
     incarnation.current = {
       serial: ++sequence.current,
       page,
       reader,
       read,
-      window: createConnectionWindow(address, read),
+      window: createConnectionWindow(address, read, windowResume),
       ...(resume ? { resume } : {}),
     };
   }
@@ -138,6 +153,33 @@ export function SubjectConnections({
       resume={incarnation.current!.resume}
     />
   );
+}
+
+function connectionReturn(
+  current: ConnectionSection,
+  page: ConnectionPageState | undefined,
+  focus?: string,
+  holder?: string,
+): ConnectionReturnWindow | undefined {
+  if (!current.reading) return;
+  const cursor = current.section.ok && 'cursor' in current.section.read ? current.section.read.cursor : undefined;
+  const history =
+    page?.stream === current.stream.key &&
+    page.index >= 0 &&
+    page.index < page.history.length &&
+    page.history.length > 0 &&
+    page.history.every((entry) => entry.page !== undefined && Number.isSafeInteger(entry.page)) &&
+    page.history[page.index]?.reading === current.reading &&
+    page.history[page.index]?.cursor === cursor
+      ? page.history.map((entry) => ({ cursor: entry.cursor, reading: entry.reading, page: entry.page! }))
+      : undefined;
+  return {
+    stream: current.stream.key,
+    reading: current.reading,
+    ...(cursor ? { cursor } : {}),
+    ...(focus && holder ? { focus, holder } : {}),
+    ...(history ? { history, index: page.index } : {}),
+  };
 }
 
 function ConnectionsReading({
@@ -382,6 +424,17 @@ function ConnectionsReading({
                   ))}
                 </NativeSelect>
               </label>
+              {snapshot.pages?.[group] ? (
+                snapshot.pages[group]!.page !== undefined ? (
+                  <p role="status">
+                    {m.subject_connections_page_status({ page: snapshot.pages[group]!.page! }, o)}
+                  </p>
+                ) : (
+                  <p role="status">{m.subject_connections_current_page({}, o)}</p>
+                )
+              ) : current && !busy ? (
+                <p role="status">{m.subject_connections_current_page({}, o)}</p>
+              ) : null}
               {busy ? (
                 <p role="status">{m.subject_relation_loading({}, o)}</p>
               ) : listed ? (
@@ -404,7 +457,12 @@ function ConnectionsReading({
                   ) : listed.items.length ? (
                     <div className="min-w-0 space-y-4" key={`${group}:${current?.stream.key}`}>
                       {characterKind && current && section?.ok && (
-                        <CharacterWorkRows current={current} value={rowValue} kind={characterKind} />
+                        <CharacterWorkRows
+                          current={current}
+                          value={rowValue}
+                          kind={characterKind}
+                          returnWindow={connectionReturn(current, snapshot.pages?.[group])}
+                        />
                       )}
                       {works.map((work) => {
                         const item = listed.items.find(
@@ -416,17 +474,12 @@ function ConnectionsReading({
                           value.subjectLabel ?? value.unlabelled,
                           value.locale,
                           value.realm,
-                          current.reading
-                            ? {
-                                stream: current.stream.key,
-                                reading: current.reading,
-                                ...(section?.ok && 'cursor' in section.read && section.read.cursor
-                                  ? { cursor: section.read.cursor }
-                                  : {}),
-                                focus: work.statement.id,
-                                holder: work.holder,
-                              }
-                            : undefined,
+                          connectionReturn(
+                            current,
+                            snapshot.pages?.[group],
+                            work.statement.id,
+                            work.holder,
+                          ),
                         );
                         const WorkLink: typeof PlainLink = (props) => (
                           <Link {...props} href={withSubjectVisitReturn(props.href, returnHref, value.locale)} />
@@ -467,16 +520,40 @@ function ConnectionsReading({
                     </p>
                   )}
                   {characterKind && <p className="text-sm text-muted-foreground">{m.character_work_window({}, o)}</p>}
+                  {snapshot.pages?.[group] && snapshot.pages[group]!.index > 0 && (
+                    <Button
+                      variant="outline"
+                      className={actionClass}
+                      disabled={busy}
+                      onClick={(event) => act(event, () => window.previous(group))}
+                    >
+                      {m.subject_connections_previous({}, o)}
+                    </Button>
+                  )}
+                  {snapshot.pages?.[group]?.index === 0 &&
+                    (snapshot.pages[group]!.page === undefined
+                      ? Boolean(snapshot.pages[group]!.history[0]?.cursor)
+                      : snapshot.pages[group]!.page! > 1) && (
+                      <div className="space-y-2">
+                        <p role="status">{m.subject_connections_history_boundary({}, o)}</p>
+                        <Button
+                          variant="outline"
+                          className={actionClass}
+                          disabled={busy}
+                          onClick={(event) => act(event, () => window.restartGroup(group))}
+                        >
+                          {m.subject_relation_restart({}, o)}
+                        </Button>
+                      </div>
+                    )}
                   {next && current && (
                     <Button
                       variant="outline"
                       className={actionClass}
-                      aria-disabled={busy}
-                      onClick={(event) =>
-                        act(event, () => window.load(group, { stream: current.stream.key, cursor: next }))
-                      }
+                      disabled={busy}
+                      onClick={(event) => act(event, () => window.next(group))}
                     >
-                      {m.subject_relations_more({}, o)}
+                      {m.subject_connections_next({}, o)}
                     </Button>
                   )}
                 </>

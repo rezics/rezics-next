@@ -91,6 +91,8 @@ export type ConnectionReturnWindow = {
   reading?: string;
   focus?: string;
   holder?: string;
+  history?: { cursor?: string; reading: string; page: number }[];
+  index?: number;
 };
 
 /** The released Character streams keep their existing native section owner on return. */
@@ -213,14 +215,65 @@ export function connectionReturnWindow(hash: string): ConnectionReturnWindow | u
   const keys = [...params.keys()];
   if (
     new Set(keys).size !== keys.length ||
-    keys.some((key) => !['stream', 'cursor', 'reading', 'focus', 'holder'].includes(key))
+    keys.some((key) => !['stream', 'cursor', 'reading', 'focus', 'holder', 'history', 'index'].includes(key))
   )
     return;
   const stream = params.get('stream');
-  const reading = params.get('reading');
-  const cursor = params.get('cursor');
+  let reading = params.get('reading');
+  let cursor = params.get('cursor');
   const focus = params.get('focus');
   const holder = params.get('holder');
+  const rawHistory = params.get('history');
+  const rawIndex = params.get('index');
+  let history: ConnectionReturnWindow['history'];
+  let index: number | undefined;
+  if (rawHistory !== null || rawIndex !== null) {
+    if (rawHistory === null || rawIndex === null || !/^(0|[1-9]\d*)$/.test(rawIndex)) return;
+    try {
+      const entries: unknown = JSON.parse(rawHistory);
+      index = Number(rawIndex);
+      if (
+        !Array.isArray(entries) ||
+        entries.length < 1 ||
+        entries.length > 8 ||
+        !Number.isSafeInteger(index) ||
+        index < 0 ||
+        index >= entries.length
+      )
+        return;
+      history = [];
+      for (const entry of entries) {
+        if (!entry || typeof entry !== 'object') return;
+        const address = entry as Record<string, unknown>;
+        if (
+          Object.keys(address).some((key) => !['cursor', 'reading', 'page'].includes(key)) ||
+          typeof address.reading !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(address.reading) ||
+          !Number.isSafeInteger(address.page) ||
+          Number(address.page) < 1 ||
+          (address.cursor !== undefined &&
+            (typeof address.cursor !== 'string' ||
+              !address.cursor ||
+              address.cursor.length > 8192 ||
+              /[\u0000-\u001f\u007f]/u.test(address.cursor)))
+        )
+          return;
+        history.push({
+          ...(address.cursor ? { cursor: address.cursor } : {}),
+          reading: address.reading,
+          page: Number(address.page),
+        });
+      }
+      if (history.some((entry, entryIndex) => entryIndex > 0 && entry.page !== history![entryIndex - 1]!.page + 1))
+        return;
+      const current = history[index]!;
+      if ((reading !== null && reading !== current.reading) || (cursor !== null && cursor !== current.cursor)) return;
+      reading = current.reading;
+      cursor = current.cursor ?? null;
+    } catch {
+      return;
+    }
+  } else if (rawIndex !== null) return;
   if (
     !stream ||
     !/^(in|out):[^\s\u0000-\u001f\u007f]{1,256}$/u.test(stream) ||
@@ -237,18 +290,39 @@ export function connectionReturnWindow(hash: string): ConnectionReturnWindow | u
     ...(reading ? { reading } : {}),
     ...(cursor ? { cursor } : {}),
     ...(focus ? { focus, holder: holder! } : {}),
+    ...(history ? { history, index } : {}),
   };
 }
 
 export function connectionWindowFragment(window: ConnectionReturnWindow): string {
-  const params = new URLSearchParams({ stream: window.stream });
-  if (window.reading) params.set('reading', window.reading);
-  if (window.cursor) params.set('cursor', window.cursor);
-  if (window.focus && window.holder) {
-    params.set('focus', window.focus);
-    params.set('holder', window.holder);
+  const fragment = (history?: ConnectionReturnWindow['history'], index?: number) => {
+    const params = new URLSearchParams({ stream: window.stream });
+    if (history && index !== undefined) {
+      params.set('history', JSON.stringify(history));
+      params.set('index', String(index));
+    } else {
+      if (window.reading) params.set('reading', window.reading);
+      if (window.cursor) params.set('cursor', window.cursor);
+    }
+    if (window.focus && window.holder) {
+      params.set('focus', window.focus);
+      params.set('holder', window.holder);
+    }
+    return `#connections?${params}`;
+  };
+  let history = window.history?.filter((entry) => Number.isSafeInteger(entry.page) && entry.page > 0).map((entry) => ({ ...entry }));
+  let index = window.index;
+  while (history && history.length && index !== undefined) {
+    const hash = fragment(history, index);
+    if (connectionReturnWindow(hash)) return hash;
+    if (history.length <= 1) break;
+    if (index < history.length - 1) history.pop();
+    else {
+      history.shift();
+      index--;
+    }
   }
-  const hash = `#connections?${params}`;
+  const hash = fragment();
   return connectionReturnWindow(hash) ? hash : '#connections';
 }
 
