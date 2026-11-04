@@ -111,11 +111,14 @@ async function mounted(
         'Node',
         'Document',
         'DocumentFragment',
+        'ShadowRoot',
         'MutationObserver',
         'ResizeObserver',
       ].map((key) => [key, window[key]]),
     ),
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
