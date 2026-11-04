@@ -1855,9 +1855,9 @@ in `works.yaml` with `schema:spokenByCharacter`, so labels stay in the eight wor
 Decision: the ordinary overview includes admitted `schema:text` in the existing document composition; `Summary` still
 hydrates only `schema:abstract`. Catalogue file and release-group pages keep viewer
 `{ state, context, statementPropose }`; admitted quotation pages keep `{ kind }` plus correction `actions`.
-Decision: quotation correction actions use the same native `accessCheck` as catalogue file viewers on Global Context; a
-hidden speaker stays omitted from statements and related, matching ordinary subject disclosure, while `somevalue`
-remains the withheld unknown speaker.
+Decision: quotation correction actions use one native `prepareReadDecisions` batch on Global Context; journey tests run
+native link projection so GET waits on actual outbound relations. A hidden speaker stays omitted from statements and
+related, matching ordinary subject disclosure, while `somevalue` remains the withheld unknown speaker.
 
 The `/quotations` companion follows only relation targets whose released type extends `schema:Quotation`. A quote's
 text comes from the first released `schema:text` or `schema:abstract` property on that type and one unambiguous
