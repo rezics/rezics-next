@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
+import { vndbLimits } from '@rezics/conversion/vndb';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { SourceVocabularyGap } from '@rezics/conversion';
 import {
@@ -21,7 +22,16 @@ import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabul
 import { subjectSlug } from '@rezics/definitions/slug';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
-import { CrossMediaGraph, citedProviderBinding, graphEdgeKey, type GraphEdgeDraft } from './cross-media-bindings.ts';
+import { CrossMediaGraph, graphEdgeKey, type GraphEdgeDraft } from './cross-media-bindings.ts';
+import {
+  attachShowcaseWorkLinks,
+  resolveShowcaseWorkLinkHandoffs,
+  type CurrentWorkRead,
+  type SelectedVndbWorkDictionaryRow,
+  type SelectedVndbWorkJoin,
+  type ShowcaseWorkLink,
+  type ShowcaseWorkLinkHandoff,
+} from './showcase-work-links.ts';
 import {
   deliverBangumiCreatorCredits,
   type BangumiCreatorCreditDraft,
@@ -84,6 +94,7 @@ export type CrossMediaPlan = {
   records: Record<Provider, SourceRecord[]>;
   entities: Record<Provider, SourceRecord[]>;
   edges: GraphEdgeDraft[];
+  workLinks: ShowcaseWorkLink[];
   credits: BangumiCreatorCreditDraft[];
   franchises: Record<Franchise, { bangumi: string[]; vndb: string[] }>;
   members: CrossMediaMember[];
@@ -191,6 +202,7 @@ export function emptyCrossMediaPlan(): CrossMediaPlan {
     records: { bangumi: [], vndb: [] },
     entities: { bangumi: [], vndb: [] },
     edges: [],
+    workLinks: [],
     credits: [],
     franchises: emptyFranchises(),
     members: [],
@@ -675,6 +687,10 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     if (!family) continue;
     const id = text(row, 'id');
     ensure(/^v[1-9][0-9]*$/.test(id), 'Invalid VNDB work identity');
+    if (!vnFamily.has(id) && countFamily(vnFamily, family) >= FAMILY_CAP) {
+      gap('vndb', 'vn_titles', { id }, 'Selected VNDB family exceeds the bounded work limit');
+      continue;
+    }
     vnIds.add(id);
     vnFamily.set(id, family);
     if (!plan.franchises[family].vndb.includes(id)) plan.franchises[family].vndb.push(id);
@@ -1052,7 +1068,8 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       gap('vndb', 'vn_anime', row, 'VNDB anime.aid is an AniDB identifier, not a Bangumi or native subject identity');
   const producers = new Set<string>(),
     animeIds = new Set<string>();
-  const workLinkOwners = new Map<number, string[]>();
+  const workJoins = new Map<string, SelectedVndbWorkJoin[]>();
+  const invalidWorkOwners = new Set<string>();
   for await (const row of input.rows('vndb', 'releases_producers')) {
     if (!releases.has(text(row, 'id'))) continue;
     producers.add(text(row, 'pid'));
@@ -1101,12 +1118,42 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   for await (const row of input.rows('vndb', 'vn_extlinks')) {
     const owner = text(row, 'id');
     if (!vnIds.has(owner)) continue;
-    const link = positiveLink(row, 'link');
-    const owners = workLinkOwners.get(link) ?? [];
-    if (owners.includes(owner)) throw new TypeError('Duplicate selected VNDB work external link join');
-    owners.push(owner);
-    workLinkOwners.set(link, owners);
+    if (invalidWorkOwners.has(owner)) continue;
+    const link = parsePositiveLink(row.link);
+    if (link === undefined) {
+      invalidWorkOwners.add(owner);
+      gap(
+        'vndb',
+        'vn_extlinks',
+        { id: owner, link: null },
+        'Invalid selected VNDB work external-link identifier',
+      );
+      continue;
+    }
+    const joins = workJoins.get(owner) ?? [];
+    if (joins.some((entry) => entry.join.link === link)) {
+      invalidWorkOwners.add(owner);
+      workJoins.delete(owner);
+      gap('vndb', 'vn_extlinks', { id: owner, link }, 'Duplicate selected VNDB work external link join');
+      continue;
+    }
+    if (joins.length >= vndbLimits.maxLinks) {
+      invalidWorkOwners.add(owner);
+      workJoins.delete(owner);
+      gap(
+        'vndb',
+        'vn_extlinks',
+        { id: owner, link },
+        'Selected VNDB work external links exceed the converter limit',
+      );
+      continue;
+    }
+    joins.push({ join: { id: owner, link }, raw: { id: row.id, link: row.link } });
+    workJoins.set(owner, joins);
   }
+  for (const owner of invalidWorkOwners) workJoins.delete(owner);
+  const workLinkIds = new Set<number>();
+  for (const joins of workJoins.values()) for (const entry of joins) workLinkIds.add(entry.join.link);
   for await (const row of input.rows('vndb', 'staff'))
     if (staff.has(text(row, 'id')) && typeof row.prod === 'string') producers.add(row.prod);
   const producerRows = new Map<string, Row>();
@@ -1246,7 +1293,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     });
 
   const entityJoins = new Map<string, { table: string; joins: { id: string; link: number }[] }>();
-  const dictionaryIds = new Set<number>();
+  const dictionaryIds = new Set<number>(workLinkIds);
   const entityJoinKeys = new Set<string>();
   let entityJoinCount = 0;
   const collectJoins = async (
@@ -1275,51 +1322,63 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   await collectJoins('staff_extlinks', staff);
   await collectJoins('producers_extlinks', producers);
   await collectJoins('releases_extlinks', releases);
-  const dictionary = new Map<number, { id: number; site: string; value: string }>();
+  const dictionary = new Map<number, { id: number; site: string; value: string; raw: Row }>();
+  const duplicateDictionaryIds = new Set<number>();
   for await (const row of input.rows('vndb', 'anime'))
     if (animeIds.has(text(row, 'id')))
       gap('vndb', 'anime', row, 'VNDB anime.aid is an AniDB identifier, not a Bangumi or native subject identity');
   for await (const row of input.rows('vndb', 'extlinks')) {
     const id = parsePositiveLink(row.id);
     if (id === undefined) continue;
-    const entityLink = dictionaryIds.has(id);
-    const workOwners = workLinkOwners.get(id);
-    if (!entityLink && !workOwners) continue;
+    if (!dictionaryIds.has(id)) continue;
+    if (duplicateDictionaryIds.has(id)) continue;
+    if (dictionary.has(id)) {
+      dictionary.delete(id);
+      duplicateDictionaryIds.add(id);
+      gap('vndb', 'extlinks', { id }, 'Duplicate selected VNDB external-link dictionary row');
+      continue;
+    }
     const site = text(row, 'site');
     const value = text(row, 'value');
-    if (entityLink) {
-      if (dictionary.has(id)) throw new TypeError('External link group has mismatched or duplicate IDs');
-      dictionary.set(id, { id, site, value });
-    }
-    if (workOwners) {
-      const cited = citedProviderBinding(value);
-      if (cited?.provider === 'bangumi')
-        for (const owner of workOwners)
-          if (vnIds.has(owner))
-            edge({
-              source: 'vndb',
-              alias: crossMediaAliases.vndb,
-              table: 'extlinks',
-              holder: owner,
-              target: cited.key.replace(/^subject:/, ''),
-              property: 'wdt:P5732',
-              url: value,
-              targetKind: 'literal',
-              membership: 'referenced',
-              record: row,
-              fields: fieldsOf('extlinks', row),
-            });
-    }
+    dictionary.set(id, { id, site, value, raw: row });
     if (site !== 'website')
-      gap('vndb', 'extlinks', row, 'Unsupported external link site; retained as source metadata only');
+      gap(
+        'vndb',
+        'extlinks',
+        {
+          id,
+          site: typeof row.site === 'string' && /^[a-z][a-z0-9_-]{0,31}$/iu.test(row.site) ? row.site : '<invalid>',
+        },
+        'Unsupported external link site; retained as source metadata only',
+      );
   }
+  const workDictionary = new Map<number, SelectedVndbWorkDictionaryRow>();
+  for (const [id, row] of dictionary)
+    workDictionary.set(id, { value: { id, site: row.site, value: row.value }, raw: row.raw });
+  const workProjection = attachShowcaseWorkLinks({
+    alias: crossMediaAliases.vndb,
+    records: plan.records.vndb,
+    joins: workJoins,
+    dictionary: workDictionary,
+  });
+  plan.records.vndb = workProjection.records;
+  plan.workLinks = workProjection.links;
+  plan.edges.push(...workProjection.edges);
+  for (const missing of workProjection.gaps)
+    gap('vndb', 'vn_extlinks', missing.record, missing.reason);
   for (const entity of plan.entities.vndb) {
     const entry = entityJoins.get(entity.key);
     if (!entry) continue;
+    const missing = entry.joins.filter((join) => !dictionary.has(join.link));
+    if (missing.length) {
+      for (const join of missing)
+        gap('vndb', entry.table, { id: join.id, link: join.link }, 'Missing selected VNDB external-link dictionary row');
+      continue;
+    }
     const extlinks = entry.joins.map((join) => {
       const row = dictionary.get(join.link);
-      if (!row) throw new TypeError('External link group has mismatched or duplicate IDs');
-      return row;
+      ensure(row, 'Selected VNDB external-link dictionary row disappeared during projection');
+      return { id: row.id, site: row.site, value: row.value };
     });
     entity.payload = { ...(entity.payload as object), [entry.table]: entry.joins, extlinks };
   }
@@ -1367,10 +1426,24 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
   async *rows(provider: Provider, table: string): AsyncGenerator<Row> {
     ensure(/^[a-z][a-z_-]*$/.test(table), 'Invalid dump table name');
     const file = provider === 'bangumi' ? join(this.bangumi, `${table}.jsonlines`) : join(this.vndb, 'db', table);
-    const header = provider === 'vndb' ? await readFile(`${file}.header`) : null;
+    const requiredLinkTable = provider === 'vndb' && (table === 'vn_extlinks' || table === 'extlinks');
+    let header: Buffer | null = null;
+    if (provider === 'vndb') {
+      try {
+        header = await readFile(`${file}.header`);
+      } catch (error) {
+        if (requiredLinkTable && (error as { code?: unknown }).code === 'ENOENT')
+          throw new TypeError('Required VNDB external-link table header is missing: ' + table);
+        throw error;
+      }
+    }
     const columns = header ? header.toString('utf8').trimEnd().split('\t') : null;
     if (columns) {
       ensure(columns.length > 0 && new Set(columns).size === columns.length, 'Invalid VNDB header');
+      if (table === 'vn_extlinks')
+        ensure(columns.join('\t') === 'id\tlink', 'Invalid VNDB vn_extlinks header');
+      if (table === 'extlinks')
+        ensure(columns.join('\t') === 'id\tsite\tvalue', 'Invalid VNDB extlinks header');
       if (table === 'producers_relations')
         ensure(columns.join('\t') === 'id\tpid\trelation', 'Invalid VNDB producers_relations header');
       if (table === 'tags' || table === 'tags_parents' || table === 'tags_vn')
@@ -1413,6 +1486,12 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
           yield row as Row;
         }
       }
+    } catch (error) {
+      if (requiredLinkTable && (error as { code?: unknown }).code === 'ENOENT')
+        throw new TypeError('Required VNDB external-link table is missing: ' + table);
+      if (requiredLinkTable && error instanceof TypeError)
+        throw new TypeError('Invalid VNDB external-link table: ' + table, { cause: error });
+      throw error;
     } finally {
       stream.destroy();
     }
@@ -1445,6 +1524,7 @@ export type CrossMediaSeedResult = {
   members: CrossMediaMember[];
   runs: Partial<Record<Provider, ImportRunResult>> & { bangumiCharacterFidelity?: ImportRunResult };
   readings: CrossMediaReading[];
+  workLinks: ShowcaseWorkLinkHandoff[];
   gaps: CrossMediaGap[];
   creditGaps: BangumiCreatorCreditGap[];
   characterDiagnostics: SourceVocabularyGap[];
@@ -1457,6 +1537,16 @@ function subjectRoute(read: ReviewedSubjectRead): string {
   const labels = subject?.labels ?? {};
   const label = labels.und ?? labels.en ?? labels.ja ?? labels.zh ?? Object.values(labels)[0] ?? 'subject';
   return id ? `/subjects/${id}/${subjectSlug(label)}` : '/subjects';
+}
+
+function currentWorkRead(read: ReviewedSubjectRead): CurrentWorkRead | undefined {
+  const subjectId = (read as { subject?: { id?: unknown } }).subject?.id;
+  if (
+    typeof subjectId !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(subjectId)
+  )
+    return undefined;
+  return { subjectId, route: subjectRoute(read) };
 }
 
 export type CrossMediaSeedExtras = {
@@ -1597,21 +1687,47 @@ export async function seedCrossMedia(
         };
       },
     });
-    const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
-    for (const record of keys) {
+    const selected = [
+      ...plan.records.bangumi,
+      ...plan.entities.bangumi,
+      ...plan.records.vndb,
+      ...plan.entities.vndb,
+    ];
+    const lookupKeys = new Map<string, { provider: Provider; externalId: string; selected: boolean }>();
+    for (const record of selected) {
       const provider: Provider = record.source === 'vndb' ? 'vndb' : 'bangumi';
-      const alias = crossMediaAliases[provider];
-      const claim = importer.session.bindings.claim({ source: alias, external_id: record.key });
-      if (claim?.state !== 'bound') continue;
-      const subject = await port.readReviewedSubject(claim.subject);
-      readings.push({
-        source: provider,
-        externalId: record.key,
-        subject,
-        route: subjectRoute(subject),
-        selection: 'selected',
-      });
+      const key = provider + '\u0000' + record.key;
+      lookupKeys.set(key, { provider, externalId: record.key, selected: true });
     }
+    for (const link of plan.workLinks) {
+      if (link.bangumiExternalId === undefined) continue;
+      const key = 'bangumi\u0000' + link.bangumiExternalId;
+      if (!lookupKeys.has(key))
+        lookupKeys.set(key, { provider: 'bangumi', externalId: link.bangumiExternalId, selected: false });
+    }
+    const currentReads = new Map<string, CurrentWorkRead>();
+    const subjectsById = new Map<string, ReviewedSubjectRead>();
+    for (const [key, lookup] of lookupKeys) {
+      const alias = crossMediaAliases[lookup.provider];
+      const claim = importer.session.bindings.claim({ source: alias, external_id: lookup.externalId });
+      if (claim?.state !== 'bound') continue;
+      let subject = subjectsById.get(claim.subject);
+      if (!subject) {
+        subject = await port.readReviewedSubject(claim.subject);
+        subjectsById.set(claim.subject, subject);
+      }
+      const current = currentWorkRead(subject);
+      if (current) currentReads.set(key, current);
+      if (lookup.selected)
+        readings.push({
+          source: lookup.provider,
+          externalId: lookup.externalId,
+          subject,
+          route: subjectRoute(subject),
+          selection: 'selected',
+        });
+    }
+    const workLinks = resolveShowcaseWorkLinkHandoffs(plan.workLinks, currentReads);
     const unresolved = delivered.unresolved.map((edge) => ({
       holder: edge.holder,
       target: edge.target,
@@ -1632,6 +1748,7 @@ export async function seedCrossMedia(
       members: plan.members,
       runs,
       readings,
+      workLinks,
       gaps: [
         ...plan.gaps,
         ...delivered.gaps.map((gap) => ({
