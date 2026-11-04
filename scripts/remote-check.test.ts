@@ -587,6 +587,7 @@ if (script.includes('/proc/loadavg')) {
     load,
     tmpBytes: config.tmpBytes ?? 16 * 2 ** 30,
     tmpInodes: config.tmpInodes ?? 1_000_000,
+    diskFree: config.diskFree ?? 512 * 2 ** 30,
     memoryCurrent,
     memoryMaximum,
     memoryHeadroom,
@@ -620,6 +621,7 @@ if (script.includes('/proc/loadavg')) {
   console.log('AVAILABLE ' + available);
   if (!config.omitTmpBytes) console.log('TMP_BYTES ' + (config.tmpBytes ?? 16 * 2 ** 30));
   if (!config.omitTmpInodes) console.log('TMP_INODES ' + (config.tmpInodes ?? 1_000_000));
+  if (!config.omitDiskFree) console.log('DISK_FREE ' + (config.diskFree ?? 512 * 2 ** 30));
   console.log('ORDINARY_SLOTS_USED ' + ordinarySlotsUsed);
   console.log('EXPRESS_SLOT_USED ' + (expressSlotUsed ? 1 : 0));
   console.log('GATE_WAITING ' + (gateWaiting ? 1 : 0));
@@ -1119,6 +1121,10 @@ type HostConfig = {
   tmpInodes?: number;
   omitTmpBytes?: boolean;
   omitTmpInodes?: boolean;
+  diskFree?: number;
+  omitDiskFree?: boolean;
+  freeDiskFloorBytes?: number;
+  dependencyArtifactBudgetBytes?: number;
   memoryCurrent?: number;
   memoryMax?: number;
   memoryHeadroom?: number;
@@ -1307,6 +1313,12 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
         slots: hosts[name]!.slots ?? 2,
         ...(hosts[name]!.fallback ? { fallback: true } : {}),
         ...(hosts[name]!.processorsPerSlot === undefined ? {} : { processorsPerSlot: hosts[name]!.processorsPerSlot }),
+        ...(hosts[name]!.freeDiskFloorBytes === undefined
+          ? {}
+          : { freeDiskFloorBytes: hosts[name]!.freeDiskFloorBytes }),
+        ...(hosts[name]!.dependencyArtifactBudgetBytes === undefined
+          ? {}
+          : { dependencyArtifactBudgetBytes: hosts[name]!.dependencyArtifactBudgetBytes }),
       })),
     }),
   );
@@ -2647,6 +2659,27 @@ test('a non-positive or non-finite processorsPerSlot fails host loading with the
   }
 });
 
+test('optional artifact budget and free-disk floor must be positive safe integers', () => {
+  const { env } = scenario({ namedHost: {} });
+  const hostsFile = env.KERNEL_CHECK_REMOTE!;
+  const contents = readFileSync(hostsFile, 'utf8');
+  for (const [field, invalid] of [
+    ['dependencyArtifactBudgetBytes', '0'],
+    ['dependencyArtifactBudgetBytes', '-1'],
+    ['dependencyArtifactBudgetBytes', '1.5'],
+    ['freeDiskFloorBytes', '0'],
+    ['freeDiskFloorBytes', 'null'],
+  ] as const) {
+    writeFileSync(hostsFile, contents.replace('"slots":2', `"slots":2,"${field}":${invalid}`));
+    expect(() => readHosts(hostsFile)).toThrow(`host namedHost: bad ${field}`);
+  }
+  writeFileSync(
+    hostsFile,
+    contents.replace('"slots":2', '"slots":2,"dependencyArtifactBudgetBytes":2048,"freeDiskFloorBytes":4096'),
+  );
+  expect(readHosts(hostsFile)[0]).toMatchObject({ dependencyArtifactBudgetBytes: 2048, freeDiskFloorBytes: 4096 });
+});
+
 test('a request above half the smallest answering host capacity is refused before waiting', async () => {
   const { env, events } = scenario({
     a: { slots: 4, memoryMax: 16 * 2 ** 30, memoryHeadroom: 16 * 2 ** 30, cpuQuotaPercent: 800 },
@@ -2702,7 +2735,7 @@ test('a remote slot wait is appended to GOAL_CHECK_WAIT_FILE while it is still w
   expect(code).toBe(0);
   const slotWaitLines = stderr.split('\n').filter((line) => line.includes('every check slot is busy'));
   expect(slotWaitLines.length).toBeGreaterThanOrEqual(2);
-  expect(slotWaitLines.every((line) => /a \d+\/\d+ free/.test(line))).toBe(true);
+  expect(slotWaitLines.every((line) => /a \d+\/\d+ free, disk \d+ bytes free/.test(line))).toBe(true);
   const lines = readFileSync(waitFile, 'utf8').trim().split('\n');
   expect(lines.length).toBeGreaterThan(0);
   expect(lines.every((line) => /^\d+$/.test(line) && Number(line) > 0 && Number(line) <= 60_000)).toBe(true);
@@ -2894,6 +2927,28 @@ test('tmp floor: a host under the free inode floor is skipped even with enough f
   expect(result.stderr).toContain(
     `skipped a: /tmp ${freeInodes} free inodes is under ${CHECK_HOST_MIN_TMP_INODES} required inodes`,
   );
+  expect(
+    events()
+      .filter((event) => event.kind === 'slot')
+      .map((event) => event.address),
+  ).not.toContain('ops@a.test');
+});
+
+test('a host below the free-disk floor after eviction is skipped for a ready host', async () => {
+  const floor = 8 * 2 ** 30;
+  const free = floor - 1;
+  const { env, events } = scenario({
+    a: { available: 16 * 2 ** 30, diskFree: free, freeDiskFloorBytes: floor },
+    b: { available: 16 * 2 ** 30 },
+  });
+  const result = await remote(env, workspace(), ['true']);
+
+  expect(result.code).toBe(0);
+  expect(events().find((event) => event.kind === 'run')?.address).toBe('ops@b.test');
+  const probe = events().find((event) => event.kind === 'probe' && event.address === 'ops@a.test')!.script as string;
+  expect(probe).toContain('df -P -B1 /srv/rezics-check');
+  expect(probe).toContain('cache-maintenance.py admit');
+  expect(result.stderr).toContain(`skipped a: free disk ${free} bytes is under ${floor} bytes`);
   expect(
     events()
       .filter((event) => event.kind === 'slot')
@@ -7330,6 +7385,57 @@ function sweepArtifacts(directory: string, program = dependencyPreparationProgra
 
 const smallCacheDisk = "shutil.disk_usage = lambda _: type('Disk', (), {'total': 3000000, 'free': 3000000})()";
 
+function writeBudgetEntry(cache: string, name: string, bytes: number, mtime: number) {
+  const entry = join(cache, name);
+  mkdirSync(entry, { recursive: true });
+  writeFileSync(join(entry, 'payload'), 'x');
+  writeFileSync(join(entry, '.cache-bytes'), String(bytes));
+  utimesSync(entry, mtime, mtime);
+}
+
+test('unlocked least-recently-used artifacts are evicted until a new artifact fits the byte budget', () => {
+  const cache = join(mkdtempSync(join(root, 'artifact-budget-')), 'dependency-artifacts');
+  mkdirSync(join(cache, 'native'), { recursive: true });
+  writeBudgetEntry(cache, 'a'.repeat(64), 1000, 1);
+  writeBudgetEntry(join(cache, 'native'), 'b'.repeat(64), 1000, 2);
+  writeBudgetEntry(cache, 'c'.repeat(64), 1000, 3);
+  const result = spawnSync('python3', ['-c', dependencyPreparationProgram, 'admit', cache, '2500', '1000'], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  expect(result.status, result.stderr).toBe(0);
+  expect(existsSync(join(cache, 'a'.repeat(64)))).toBe(false);
+  expect(existsSync(join(cache, 'native', 'b'.repeat(64)))).toBe(false);
+  expect(existsSync(join(cache, 'c'.repeat(64)))).toBe(true);
+});
+
+test('an artifact held by a running check is never evicted', async () => {
+  const cache = join(mkdtempSync(join(root, 'artifact-lock-')), 'dependency-artifacts');
+  mkdirSync(cache);
+  writeBudgetEntry(cache, 'a'.repeat(64), 1000, 1);
+  writeBudgetEntry(cache, 'b'.repeat(64), 1000, 2);
+  writeBudgetEntry(cache, 'c'.repeat(64), 1000, 3);
+  const holder = Bun.spawn(['flock', join(cache, `${'a'.repeat(64)}.lock`), 'sh', '-c', 'echo LOCKED; cat'], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  try {
+    await waitForOutput(holder, 'LOCKED\n');
+    const result = spawnSync('python3', ['-c', dependencyPreparationProgram, 'admit', cache, '2500', '1000'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(join(cache, 'a'.repeat(64)))).toBe(true);
+    expect(existsSync(join(cache, 'b'.repeat(64)))).toBe(false);
+    expect(existsSync(join(cache, 'c'.repeat(64)))).toBe(false);
+  } finally {
+    await holder.stdin.end();
+    expect(await holder.exited).toBe(0);
+  }
+});
+
 test('legacy cache backlog and its global lock cannot delay source/native publication or change the command result', async () => {
   const fixture = preparationFixture();
   const cache = join(fixture.directory, 'dependency-artifacts');
@@ -7504,7 +7610,7 @@ def install():`,
     const warm = fixture.create();
     expect(warm.execute().status).toBe(0);
     expect(warm.artifacts().cache).toBe('hit');
-    const publisher = fixture.create({ source: 'published during slow maintenance' });
+    const publisher = fixture.create({ lock: 'changed-during-slow-maintenance' });
     expect(publisher.execute().status).toBe(0);
     expect(publisher.artifacts().cache).toBe('miss');
     child.kill('SIGKILL');
@@ -7949,27 +8055,20 @@ test('native preparation certifies both workerd versions and pinned Bun revision
   );
 });
 
-test('fresh source edits reuse verified native packages while source-dependent lifecycle outputs regenerate', () => {
+test('two runs with the same dependency inputs reuse one artifact; a lockfile change does not', () => {
   const fixture = preparationFixture();
-  const cold = fixture.create({ mode: 'native', version: '1.20261023.1', source: 'first source' });
+  const cold = fixture.create({ source: 'first source' });
   expect(cold.execute().status).toBe(0);
-  // Older verified publications recorded checks in filesystem traversal order. Order does not change identity.
-  const nativeCache = join(fixture.directory, 'dependency-artifacts/native');
-  const nativeEntry = readdirSync(nativeCache).find((name) => !name.endsWith('.lock'))!;
-  const manifestFile = join(nativeCache, nativeEntry, 'manifest.json');
-  const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
-  manifest.nativeChecks.reverse();
-  writeFileSync(manifestFile, JSON.stringify(manifest));
-  utimesSync(join(nativeCache, nativeEntry), 1, 1);
-  const edited = fixture.create({ mode: 'native', version: '1.20261023.1', source: 'unrelated prose edit' });
-  const result = edited.execute();
-  expect(result.status, result.stderr).toBe(0);
-  expect(edited.artifacts()).toMatchObject({ cache: 'miss', nativeCache: 'hit' });
-  expect(statSync(join(nativeCache, nativeEntry)).mtimeMs).toBeGreaterThan(1000);
-  expect(readFileSync(join(edited.run, 'generated/source.txt'), 'utf8')).toBe('unrelated prose edit');
-  expect(fixture.events().filter((event) => event.startsWith('install:'))).toHaveLength(2);
-  expect(fixture.events().filter((event) => event === 'download:1.20261023.1')).toHaveLength(1);
-  expect(fixture.events().filter((event) => event.startsWith('download:bun@'))).toHaveLength(1);
+  const edited = fixture.create({ source: 'unrelated prose edit' });
+  const reused = edited.execute();
+  expect(reused.status, reused.stderr).toBe(0);
+  expect(edited.artifacts()).toMatchObject({ cache: 'hit', key: cold.artifacts().key });
+  expect(fixture.events().filter((event) => event.startsWith('install:'))).toHaveLength(1);
+  const changed = fixture.create({ lock: 'changed-frozen-lock' });
+  const missed = changed.execute();
+  expect(missed.status, missed.stderr).toBe(0);
+  expect(changed.artifacts().cache).toBe('miss');
+  expect(changed.artifacts().key).not.toBe(cold.artifacts().key);
 });
 
 test('owned physical resource samples cover preparation and command with native counters and bounded identity', () => {

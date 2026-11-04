@@ -69,7 +69,8 @@ actually running.
 
 Admit heavy checks through shared resource controls. Slice admission counts inactive file pages as headroom and may
 reclaim them once through `memory.reclaim` before treating a host as full; a missing or unwritable reclaim file keeps
-the previous probe and does not fail the run. A check waiting for a slot is queued; let it run. Park workers until completion or meaningful output instead of
+the previous probe and does not fail the run. After dependency-artifact eviction, a host below its configured free-disk
+floor takes no new run; the slot-wait status reports that free space and the run is placed on another host. A check waiting for a slot is queued; let it run. Park workers until completion or meaningful output instead of
 waking the model for “still running”. Worker admission and heavy-check admission are separate controls.
 Remote-check stderr splits Git snapshot staging, GitHub fetch and rsync; overlay rsync after a successful fetch is
 the expected upload. Remaining command-time cost is `bun install` and the admitted command.

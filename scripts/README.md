@@ -331,7 +331,9 @@ exits 0 for started/replayed, 1 for durable refusal and 2 for unknown custody.
       "memoryMaxGiB": 10,
       "cpuQuotaPercent": 800,
       "slots": 4,
-      "processorsPerSlot": 2
+      "processorsPerSlot": 2,
+      "dependencyArtifactBudgetBytes": 200000000000,
+      "freeDiskFloorBytes": 34359738368
     }
   ]
 }
@@ -346,6 +348,8 @@ exits 0 for started/replayed, 1 for durable refusal and 2 for unknown custody.
 | `cpuQuotaPercent`   | Positive CPU quota; 100 means one processor. This is the admission fallback when slice `cpu.max` is unreadable or unlimited. Provision the matching quota.                                                       |
 | `slots`             | Positive integer ceiling on concurrent slot units, including the express slot. Slot counts in the hosts file are a processor bound and do not change systemd limits.                                             |
 | `processorsPerSlot` | Positive finite processor count required per slot. Defaults to 2.                                                                                                                                                |
+| `dependencyArtifactBudgetBytes` | Optional positive integer. Source and native artifacts together stay within this many allocated bytes. Omitted: 20% of the filesystem. Before writing a new artifact, unlocked least-recently-used entries are evicted until it fits. A running check's held lock prevents eviction. |
+| `freeDiskFloorBytes` | Optional positive integer. After that eviction, a host whose `/srv/rezics-check` free bytes are below this takes no new run. The slot-wait status reports the free space. Omitted: 32 GiB. |
 | `fallback`          | Optional boolean. Non-gate checks prefer hosts without this field or with `false` whenever one can start now. A `true` host is selected when no other host can start the run; gate placement ignores this field. |
 
 Editing JSON alone does not resize the slice. Provisioning takes memory and CPU values as arguments.
@@ -366,9 +370,11 @@ G = max(0, O - 1)        gate capacity
 Slice processors are the quota divided by the period in `cpu.max`.
 Slice memory is `memory.max`; configured values supply the fallbacks above.
 Admission also needs the requested reservation of current memory headroom for each requested slot. A host is skipped when its 1-minute
-load exceeds 1.5 times its slice processors, its machine `MemAvailable` is below 4 GiB, `/tmp` has less than 4 GiB
+load exceeds 1.5 times its slice processors, its machine `MemAvailable` is below 4 GiB, `/srv/rezics-check` has less
+free disk than the host's free-disk floor after artifact eviction, `/tmp` has less than 4 GiB
 free, or `/tmp` has fewer than 65,536 free inodes. These thresholds apply to gates and multi-slot runs too; skipped
-hosts are logged and the check waits for capacity. Because check-host `/tmp` is tmpfs, the byte floor protects the
+hosts are logged and the check waits for capacity. The slot-wait line reports each answering host's free disk.
+Because check-host `/tmp` is tmpfs, the byte floor protects the
 same RAM needed by checks, while the inode floor catches exhaustion before the byte limit is reached.
 
 Under the host reservation lock, each held slot contributes its recorded per-slot reservation. A new request for
@@ -497,9 +503,10 @@ Admission retries races against other callers. The default probe interval is fiv
    `RemoteCheck.preparationTimeoutMs` or `REMOTE_CHECK_PREPARATION_TIMEOUT_MS` for finite fixtures.
    A cold artifact miss runs `bun install --frozen-lockfile`, preserving every lifecycle script. The shared
    `BUN_INSTALL_CACHE_DIR=/srv/rezics-check/bun-cache` remains a download cache; it does not substitute for lifecycle outputs.
-   Verified installation artifacts live in `/srv/rezics-check/dependency-artifacts`. The key includes the complete uploaded
-   workspace inputs (including manifests, lockfile, patch and lifecycle sources), Linux platform/architecture/libc,
-   runtime build and exact pinned Bun revision. Successful installation's changed/generated files, symlinks and deletions
+   Verified installation artifacts live in `/srv/rezics-check/dependency-artifacts`. The key covers only the inputs that
+   change `node_modules`: every `package.json`, `bun.lock`, `bun.lockb`, `bunfig.toml` and `patches/`, plus Linux
+   platform/architecture/libc, runtime build and exact pinned Bun revision. Two runs with those same inputs on one host
+   reuse one artifact. Successful installation's changed/generated files, symlinks and deletions
    are recorded, including native binaries and workspace lifecycle outputs. Disposable compile caches are excluded.
    Cold publication also verifies each installed workerd binary's exact dated version and each Bun package binary's
    pinned revision, since workerd's own installer can swallow binary execution errors. These subprocesses remain under
@@ -507,13 +514,17 @@ Admission retries races against other callers. The default probe interval is fiv
    `node_modules` inodes. A per-key kernel lock serializes publishers; its wait is part of the deadline. Publication is
    a verified atomic directory rename. Failed/aborted publishers leave no consumable partial entry, and a timed-out waiter
    cannot delete another publisher's cache. Changed inputs/platform/revision or a damaged entry rebuilds it.
-   A second immutable native-artifact layer is keyed by lockfiles, workspace manifests, patches, platform/libc, runtime build and exact Bun revision. It contains only installed workerd/Bun and their platform packages, verified binaries and links. On an unrelated source edit these artifacts seed a private install while frozen installation still runs all lifecycle scripts to regenerate source-dependent outputs. The complete source cache remains independently invalidated. Native identities compare by package name and version, so a verified older publication with a different traversal order remains reusable. Both layers use bounded per-key locking and verified atomic publication; a tarball cache alone is insufficient.
-   Source and native artifacts share an eventual LRU maintenance target capped at 10% of filesystem capacity and
-   reduced to preserve 10% free space. Capacity includes attached and detached allocated storage. Foreground preparation
-   never traverses the cache backlog or waits for eviction. ENOSPC and other optional publication I/O failures skip
-   caching without a sweep or retry; native validation and the command result still apply. Partial staging remains
-   private inside the owned run for normal cleanup. Corrupt source/native replacements skip publication and mark the
-   existing entry invalid for background retirement, even when capacity is below target.
+   A second immutable native-artifact layer uses that same key and contains only installed workerd/Bun and their platform packages, verified binaries and links. When the complete source artifact is absent, these entries seed a private install while frozen installation still runs all lifecycle scripts. Native identities compare by package name and version, so a verified older publication with a different traversal order remains reusable. Both layers use bounded per-key locking and verified atomic publication; a tarball cache alone is insufficient.
+   Source and native artifacts share a per-host byte budget from the hosts file (20% of the filesystem when omitted).
+   Before writing a new artifact, unlocked least-recently-used entries are evicted until it fits; an artifact whose
+   lock a running check holds is never evicted. Foreground eviction reads `.cache-bytes` and per-key locks and does
+   not walk payloads or wait on a held lock. Unmeasured legacy entries stay for background maintenance. ENOSPC and
+   other optional publication I/O failures skip caching without a retry; native validation and the command result
+   still apply. Partial staging remains private inside the owned run for normal cleanup. Corrupt source/native
+   replacements skip publication and mark the existing entry invalid for background retirement, even when capacity is
+   below target.
+   Decision: omitted budget is 20% of the filesystem and omitted free-disk floor is 32 GiB; the source key matches the
+   native-layer inputs so unrelated source edits reuse the complete artifact.
    After result classification and reaping the run tree, a bounded one-second `systemd-run --no-block` registration
    starts `rezics-check-cache-registration.service`. The independent reconciler stops the legacy timer, checks the
    captured program's digest, replaces stale maintenance services and starts stopped current services. A stable
