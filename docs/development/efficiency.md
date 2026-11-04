@@ -43,6 +43,14 @@ Audit every pipeline step from dispatch to promotion daily. Justify each step by
 against its cost. Move, merge or remove steps with low catches and high cost. For example, dev landings re-ran every
 check even though dev is the unstable branch; those checks moved to post-merge verification.
 
+Trust agents. In the delivery workflow, efficiency outranks defensive safety: REZICS is a community product, and a
+mistake on dev is caught and returned after integration. A guard that distrusts agent work is defensive programming
+against the agents, and it must earn its cost. Such guards refuse, reject, fail an attempt, forbid a check or
+re-verify trusted work. A guard is kept only when its measured catches of real defects outweigh the attempts, hours
+and tokens it costs, and when no agent could repair the problem in place. Money movement is the exception, and keeps
+its guards: payments, payouts and balances. The efficiency review covers guards like any other step. A new guard
+states the defect it prevents and is measured from its first firing.
+
 Make one structural change per day aimed at the current bottleneck stage: identify it, exploit its capacity,
 subordinate other stages to it, then elevate it where needed. Measure before and after on comparable work and
 record the effect, including when it is not yet observable.
