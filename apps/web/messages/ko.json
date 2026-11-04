@@ -7842,5 +7842,15 @@
   "album_tracks_kind": "항목 유형",
   "album_tracks_complete": "이 스트림에 대한 이어보기가 반환되지 않았습니다.",
   "album_tracks_membership": "소속 관계 서술",
-  "album_tracks_target": "대상 식별 정보"
+  "album_tracks_target": "대상 식별 정보",
+  "discovery_personal_state": "{title}의 라이브러리 상태",
+  "discovery_personal_pending": "저장 중…",
+  "discovery_personal_rejected": "변경이 거부되었습니다. 이전 상태가 유지됩니다.",
+  "discovery_personal_uncertain": "결과를 확인할 수 없습니다. 현재 상태를 새로 불러오는 중…",
+  "discovery_personal_successful": "저장했습니다. 현재 상태를 새로 불러오는 중…",
+  "discovery_personal_retired": "이 작업은 만료되었습니다. 계속하려면 현재 검색 결과를 불러오세요.",
+  "discovery_personal_unknown": "사용 가능한 라이브러리 작업을 확인하는 중…",
+  "discovery_personal_unsupported": "이 대상은 라이브러리 항목 작업을 지원하지 않습니다.",
+  "discovery_personal_concealed": "이 사용자에게는 라이브러리 항목 작업이 공개되지 않았습니다.",
+  "discovery_personal_unavailable": "라이브러리 항목 작업을 사용할 수 없습니다."
 }

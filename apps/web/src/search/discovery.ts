@@ -452,13 +452,14 @@ type Response = { status: number; data?: unknown; error?: unknown };
 export type DiscoverySender = (request: DiscoveryRequest) => Promise<Response>;
 
 /** One mixed query. Retain the explicit legacy rating restart without broadening other 409s. */
-export async function readDiscovery(
+async function readDiscoveryPage(
   request: DiscoveryRequest,
   send: DiscoverySender,
+  restartRating: boolean,
 ): Promise<{ discovery: DiscoveryState; restarted: boolean }> {
   try {
     const { response, restarted } =
-      request.sort === 'rating'
+      restartRating && request.sort === 'rating'
         ? await readSearchPage(request, send)
         : { response: await send(request), restarted: false };
     if (response.error || response.status !== 200)
@@ -469,6 +470,22 @@ export async function readDiscovery(
     if (error instanceof Error && error.name === 'AbortError') throw error;
     return { discovery: { status: isPlatformClosedError(error) ? 'closed' : 'unavailable' }, restarted: false };
   }
+}
+
+export function readDiscovery(request: DiscoveryRequest, send: DiscoverySender) {
+  return readDiscoveryPage(request, send, true);
+}
+
+/** Mutation reconciliation reads exactly one complete native page. A retired cut requires an explicit restart. */
+export async function readDiscoveryMutationPage(
+  request: DiscoveryRequest,
+  send: (request: DiscoveryRequest, signal: AbortSignal) => ReturnType<DiscoverySender>,
+  signal: AbortSignal,
+): Promise<DiscoveryState> {
+  signal.throwIfAborted();
+  const result = await readDiscoveryPage(request, (body) => send(body, signal), false);
+  signal.throwIfAborted();
+  return result.discovery;
 }
 
 export type DiscoveryKindsState = Failure | { status: 'ready'; kinds: DiscoveryKinds };

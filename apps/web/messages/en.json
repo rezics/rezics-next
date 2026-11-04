@@ -7917,5 +7917,15 @@
   "album_tracks_kind": "Subject type",
   "album_tracks_complete": "No continuation was returned for this stream.",
   "album_tracks_membership": "Membership statement",
-  "album_tracks_target": "Target identity"
+  "album_tracks_target": "Target identity",
+  "discovery_personal_state": "Library state for {title}",
+  "discovery_personal_pending": "Saving…",
+  "discovery_personal_rejected": "The change was rejected. Your previous state is retained.",
+  "discovery_personal_uncertain": "The result is uncertain. Refreshing current state…",
+  "discovery_personal_successful": "Saved. Refreshing current state…",
+  "discovery_personal_retired": "These actions have expired. Read current results to continue.",
+  "discovery_personal_unknown": "Checking available Library actions…",
+  "discovery_personal_unsupported": "This Subject does not support Library entry actions.",
+  "discovery_personal_concealed": "Library entry actions are not exposed to this reader.",
+  "discovery_personal_unavailable": "Library entry actions are unavailable."
 }

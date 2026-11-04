@@ -7842,5 +7842,15 @@
   "album_tracks_kind": "Tipo de entidad",
   "album_tracks_complete": "No se recibió una continuación para este flujo.",
   "album_tracks_membership": "Declaración de pertenencia",
-  "album_tracks_target": "Identidad de destino"
+  "album_tracks_target": "Identidad de destino",
+  "discovery_personal_state": "Estado en la biblioteca de {title}",
+  "discovery_personal_pending": "Guardando…",
+  "discovery_personal_rejected": "Se rechazó el cambio. Se conserva el estado anterior.",
+  "discovery_personal_uncertain": "El resultado es incierto. Actualizando el estado actual…",
+  "discovery_personal_successful": "Guardado. Actualizando el estado actual…",
+  "discovery_personal_retired": "Estas acciones han caducado. Consulta los resultados actuales para continuar.",
+  "discovery_personal_unknown": "Comprobando las acciones disponibles de la biblioteca…",
+  "discovery_personal_unsupported": "Este elemento no admite acciones de entrada en la biblioteca.",
+  "discovery_personal_concealed": "Este lector no tiene acceso a las acciones de entrada en la biblioteca.",
+  "discovery_personal_unavailable": "Las acciones de entrada en la biblioteca no están disponibles."
 }

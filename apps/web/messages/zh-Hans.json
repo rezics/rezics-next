@@ -7842,5 +7842,15 @@
   "album_tracks_kind": "条目类型",
   "album_tracks_complete": "此数据流未返回后续窗口。",
   "album_tracks_membership": "成员关系陈述",
-  "album_tracks_target": "目标身份"
+  "album_tracks_target": "目标身份",
+  "discovery_personal_state": "{title}的书库状态",
+  "discovery_personal_pending": "正在保存…",
+  "discovery_personal_rejected": "更改被拒绝，保留此前的状态。",
+  "discovery_personal_uncertain": "结果尚不确定，正在重新读取当前状态…",
+  "discovery_personal_successful": "已保存，正在重新读取当前状态…",
+  "discovery_personal_retired": "这些操作已失效。请读取当前搜索结果后继续。",
+  "discovery_personal_unknown": "正在检查可用的书库操作…",
+  "discovery_personal_unsupported": "此对象不支持书库条目操作。",
+  "discovery_personal_concealed": "此读者无法访问书库条目操作。",
+  "discovery_personal_unavailable": "书库条目操作暂不可用。"
 }

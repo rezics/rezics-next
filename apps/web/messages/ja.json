@@ -7842,5 +7842,15 @@
   "album_tracks_kind": "項目の種類",
   "album_tracks_complete": "このストリームには続きが返されませんでした。",
   "album_tracks_membership": "所属関係の記述",
-  "album_tracks_target": "対象の識別情報"
+  "album_tracks_target": "対象の識別情報",
+  "discovery_personal_state": "{title}のライブラリ状態",
+  "discovery_personal_pending": "保存中…",
+  "discovery_personal_rejected": "変更が拒否されました。以前の状態を保持しています。",
+  "discovery_personal_uncertain": "結果を確認できません。現在の状態を再取得しています…",
+  "discovery_personal_successful": "保存しました。現在の状態を再取得しています…",
+  "discovery_personal_retired": "これらの操作は期限切れです。続行するには現在の検索結果を読み込んでください。",
+  "discovery_personal_unknown": "利用可能なライブラリ操作を確認しています…",
+  "discovery_personal_unsupported": "この対象はライブラリの登録操作に対応していません。",
+  "discovery_personal_concealed": "この閲覧者にはライブラリの登録操作が公開されていません。",
+  "discovery_personal_unavailable": "ライブラリの登録操作を利用できません。"
 }

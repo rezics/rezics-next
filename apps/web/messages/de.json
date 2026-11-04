@@ -7842,5 +7842,15 @@
   "album_tracks_kind": "Objekttyp",
   "album_tracks_complete": "Für diesen Datenstrom wurde keine Fortsetzung zurückgegeben.",
   "album_tracks_membership": "Zugehörigkeitsaussage",
-  "album_tracks_target": "Zielidentität"
+  "album_tracks_target": "Zielidentität",
+  "discovery_personal_state": "Bibliotheksstatus für {title}",
+  "discovery_personal_pending": "Wird gespeichert…",
+  "discovery_personal_rejected": "Die Änderung wurde abgelehnt. Der vorherige Status bleibt erhalten.",
+  "discovery_personal_uncertain": "Das Ergebnis ist ungewiss. Der aktuelle Status wird geladen…",
+  "discovery_personal_successful": "Gespeichert. Der aktuelle Status wird geladen…",
+  "discovery_personal_retired": "Diese Aktionen sind abgelaufen. Lade aktuelle Ergebnisse, um fortzufahren.",
+  "discovery_personal_unknown": "Verfügbare Bibliotheksaktionen werden geprüft…",
+  "discovery_personal_unsupported": "Dieses Subjekt unterstützt keine Bibliothekseinträge.",
+  "discovery_personal_concealed": "Aktionen für Bibliothekseinträge sind für dieses Konto nicht freigegeben.",
+  "discovery_personal_unavailable": "Aktionen für Bibliothekseinträge sind nicht verfügbar."
 }
