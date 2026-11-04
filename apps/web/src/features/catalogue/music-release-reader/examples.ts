@@ -24,7 +24,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
       ['schema:exampleOfWork', 'schema:datePublished', 'wdt:P437', 'schema:contentLocation', 'bf:hasPart'],
     ],
     ['rezics:MusicMedium', 'Music medium', ['wdt:P361']],
-    ['schema:MusicRecording', 'Recording', ['wdt:P361]],
+    ['schema:MusicRecording', 'Recording', ['wdt:P361']],
     ['schema:Place', 'Place', []],
   ] as const)
     release.types[id] = {
