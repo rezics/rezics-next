@@ -8813,5 +8813,22 @@
   "music_location_previous": "上一個已接受位址",
   "music_location_start": "所選關係的起點",
   "music_location_boundary": "這是保留的最早位址。使用起點按鈕可從頭讀取此關係。",
-  "music_location_time_evidence": "原始時間證據"
+  "music_location_time_evidence": "原始時間證據",
+  "people_facts_scope": "這些是本次資料讀取提供的目前事實，不代表完整的目錄、候選集或來源清單。",
+  "people_facts_filter": "篩選此本機視窗中顯示的文字",
+  "people_facts_reset": "重設視窗篩選",
+  "people_facts_empty": "此視窗沒有符合的已顯示事實。重設篩選可回到原來的列。",
+  "people_facts_window": "本機事實視窗",
+  "people_facts_previous": "上一組事實",
+  "people_facts_next": "下一組事實",
+  "people_facts_collapse": "收合事實",
+  "people_facts_browse": "瀏覽提供的事實",
+  "people_facts_overflow": "目前僅顯示第一個本機視窗。瀏覽提供的事實以繼續。",
+  "people_facts_unavailable": "本次讀取無法提供本機事實詳情。獨立的資料事實仍可閱讀。",
+  "people_facts_return": "返回此資料事實",
+  "people_facts_changed": "此事實已變更或不再被選取。返回欄位並重新整理資料。",
+  "people_facts_route_return": "更正與來源使用既有頁面。離開此頁面後無法還原詳細位置；請返回此資料的事實欄位。",
+  "people_facts_unsupported": "此欄位的資料類型不受支援。",
+  "people_facts_suppressed": "此欄位在目前語境中已被抑制。",
+  "people_facts_unresolved": "此欄位在目前語境中尚未解決。"
 }

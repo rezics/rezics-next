@@ -3,7 +3,7 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { CandidateValue } from '../pages/data';
 import { ViewHeading } from '../pages/subject-frame';
-import type { Snak } from '../pages/shared';
+import { PlainLink, type PageLink, type Snak } from '../pages/shared';
 import { candidateContext } from '../../subject/candidates';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { m } from '../../paraglide/messages.js';
@@ -41,7 +41,11 @@ export function ValueExplanationPage({
   actionResult,
   reading,
   isCurrent = () => true,
+  embedded,
+  link: Link = PlainLink,
 }: {
+  embedded?: boolean | undefined;
+  link?: PageLink | undefined;
   result?: ValueRead | undefined;
   locale: string;
   busy?: boolean;
@@ -164,7 +168,7 @@ export function ValueExplanationPage({
       aria-busy={busy}
       data-slot="value-explanation"
     >
-      {page && (
+      {page && !embedded && (
         <div className="space-y-2 border-b border-border pb-5">
           <a
             href={page.href}
@@ -180,12 +184,22 @@ export function ValueExplanationPage({
           )}
         </div>
       )}
-      <ViewHeading
-        label={m.value_why({}, o)}
-        headingRef={explanationHeading}
-        headingTabIndex={actionResult ? -1 : undefined}
-        headingClassName="font-sans focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      />
+      {embedded ? (
+        <h3
+          ref={explanationHeading}
+          tabIndex={-1}
+          className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          {m.value_why({}, o)}
+        </h3>
+      ) : (
+        <ViewHeading
+          label={m.value_why({}, o)}
+          headingRef={explanationHeading}
+          headingTabIndex={actionResult ? -1 : undefined}
+          headingClassName="font-sans focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        />
+      )}
       {!result ? (
         <p role="status">{m.candidate_loading({}, o)}</p>
       ) : result.kind !== 'ready' ? (
@@ -205,10 +219,10 @@ export function ValueExplanationPage({
             aria-label={m.value_why({}, o)}
             className="flex min-w-0 flex-wrap gap-x-5 gap-y-3 text-sm text-primary [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:underline [&_a]:underline-offset-4 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
           >
-            <a href={page.href}>{m.changes_current({}, o)}</a>
-            <a href={`${page.href}/sources`}>{m.subject_sources({}, o)}</a>
-            <a href={`${page.href}/changes`}>{m.changes_title({}, o)}</a>
-            {page.reviewHref && <a href={page.reviewHref}>{m.sources_compare({}, o)}</a>}
+            <Link href={page.href}>{m.changes_current({}, o)}</Link>
+            <Link href={`${page.href}/sources`}>{m.subject_sources({}, o)}</Link>
+            <Link href={`${page.href}/changes`}>{m.changes_title({}, o)}</Link>
+            {page.reviewHref && <Link href={page.reviewHref}>{m.sources_compare({}, o)}</Link>}
           </nav>
           {statement ? (
             <>
@@ -435,6 +449,8 @@ export function ValueExplanationPage({
 }
 
 type ReadingInputs = {
+  embedded?: boolean | undefined;
+  link?: PageLink | undefined;
   transport: ValueTransport;
   locale: string;
   initial?: ValueRead;
@@ -450,7 +466,7 @@ function unavailable(result: ValueRead | undefined) {
 }
 
 /** Replaced readings and viewer/session epochs discard every held page and recovery request. */
-export function ValueExplanation({ transport, locale, initial, episode = initial }: ReadingInputs) {
+export function ValueExplanation({ transport, locale, initial, episode = initial, embedded, link }: ReadingInputs) {
   const [reading, setReading] = useState({ transport, locale, initial, episode, seed: initial, version: 0 });
   if (
     reading.transport !== transport ||
@@ -469,7 +485,7 @@ export function ValueExplanation({ transport, locale, initial, episode = initial
     });
   }
   const work = useCatalogueLifetime(JSON.stringify(['value-explanation', locale, reading.version]));
-  return <ValueEpisode key={work.generation} {...{ transport, locale, initial: reading.seed, work }} />;
+  return <ValueEpisode key={work.generation} {...{ transport, locale, initial: reading.seed, work, embedded, link }} />;
 }
 
 /** Reads hide the old explanation; only an unavailable read retains its exact recovery request. */
@@ -478,7 +494,11 @@ function ValueEpisode({
   locale,
   initial,
   work,
+  embedded,
+  link,
 }: {
+  embedded?: boolean | undefined;
+  link?: PageLink | undefined;
   transport: ValueTransport;
   locale: string;
   initial?: ValueRead | undefined;
@@ -534,6 +554,8 @@ function ValueEpisode({
   const offered = generation.current;
   return (
     <ValueExplanationPage
+      embedded={embedded}
+      link={link}
       result={work.active() ? result : undefined}
       locale={locale}
       busy={busy}

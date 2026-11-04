@@ -8813,5 +8813,22 @@
   "music_location_previous": "前に受け入れたアドレス",
   "music_location_start": "選択した関係の先頭",
   "music_location_boundary": "これが保持されている最も古いアドレスです。先頭に戻ると、この関係を最初から読み取れます。",
-  "music_location_time_evidence": "元の日時の証拠"
+  "music_location_time_evidence": "元の日時の証拠",
+  "people_facts_scope": "このプロフィールの読み取りで提供された現在の事実です。全カタログ、候補集合、出典一覧の完全性を示すものではありません。",
+  "people_facts_filter": "このウィンドウの表示テキストを絞り込む",
+  "people_facts_reset": "絞り込みを解除",
+  "people_facts_empty": "一致する表示項目がありません。絞り込みを解除すると元の行に戻ります。",
+  "people_facts_window": "事実のローカルウィンドウ",
+  "people_facts_previous": "前の事実",
+  "people_facts_next": "次の事実",
+  "people_facts_collapse": "事実を折りたたむ",
+  "people_facts_browse": "提供された事実を見る",
+  "people_facts_overflow": "最初のウィンドウのみ表示しています。続きを見るには提供された事実を開いてください。",
+  "people_facts_unavailable": "この読み取りでは事実の詳細表示を利用できません。プロフィールの他の事実は読めます。",
+  "people_facts_return": "このプロフィールの事実に戻る",
+  "people_facts_changed": "この事実は変更されたか、現在選択されていません。項目に戻りプロフィールを更新してください。",
+  "people_facts_route_return": "修正と出典は既存のページで開きます。このページを離れると詳細な位置は復元できません。このプロフィールの項目に戻ってください。",
+  "people_facts_unsupported": "この項目のデータ型は未対応です。",
+  "people_facts_suppressed": "現在のコンテキストではこの項目は非表示に設定されています。",
+  "people_facts_unresolved": "現在のコンテキストではこの項目は未解決です。"
 }
