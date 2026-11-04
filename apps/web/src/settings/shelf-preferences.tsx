@@ -275,7 +275,24 @@ export class ShelfPreferenceDraftRecovery {
       return;
     }
     const receipt = result.preferences;
-    if (receipt.version < pending.input.expectedVersion) {
+    const requested = pending.input.shelf;
+    const written = receipt.shelf ?? {};
+    const matches =
+      requested === null
+        ? !Object.keys(written).length
+        : (!requested?.layouts ||
+            Object.entries(requested.layouts).every(([scope, layout]) =>
+              layout === null ? written.layouts?.[scope] === undefined : written.layouts?.[scope] === layout,
+            )) &&
+          (!requested?.sorts ||
+            Object.entries(requested.sorts).every(([tab, sort]) =>
+              sort === null
+                ? written.sorts?.[tab as ShelfPreferenceTab] === undefined
+                : same(written.sorts?.[tab as ShelfPreferenceTab], sort),
+            )) &&
+          (requested?.gridSize === undefined || written.gridSize === requested.gridSize) &&
+          (requested?.tableColumns === undefined || same(written.tableColumns, requested.tableColumns));
+    if (!matches || receipt.version < pending.input.expectedVersion) {
       this.update({ phase: 'uncertain', reason: 'unavailable', pending });
       return;
     }
@@ -304,9 +321,25 @@ export class ShelfPreferenceDraftRecovery {
     }
     if (!this.owner.canWrite()) return;
     const shelf = current.shelf ?? {};
-    const changedWhileSaving = !same(this.state.draft, pending.draft);
-    const remainingDirty =
-      changedWhileSaving || (pending.reset && pending.dirty.size > 0) ? this.state.dirty : new Set<string>();
+    const remainingDirty = new Set(
+      [...this.state.dirty].filter((key) => {
+        if (pending.reset && pending.dirty.size > 0) return true;
+        if (key.startsWith('layout:')) {
+          const scope = key.slice(7);
+          return this.state.draft.layouts[scope] !== pending.draft.layouts[scope];
+        }
+        if (key.startsWith('sort:')) {
+          const tab = key.slice(5) as ShelfPreferenceTab;
+          return this.state.draft.sorts[tab] !== pending.draft.sorts[tab];
+        }
+        return key === 'layout'
+          ? this.state.draft.layout !== pending.draft.layout
+          : key === 'gridSize'
+            ? this.state.draft.gridSize !== pending.draft.gridSize
+            : key === 'columns' && !same(this.state.draft.columns, pending.draft.columns);
+      }),
+    );
+    const changedWhileSaving = remainingDirty.size > 0;
     const resetDraft = rebaseDraft(shelf, this.state.draft, remainingDirty);
     this.update({
       known: { shelf, version: current.version },

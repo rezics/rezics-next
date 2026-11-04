@@ -51,17 +51,24 @@ test('a type command keeps its payload and key through unknown readback; clean s
   expect(draft.snapshot().phase).toBe('uncertain'); // Stale readback is never a confirmed save.
   expect(commands[1]).toBe(commands[0]);
   expect(commands[0]?.shelf).toEqual({ layouts: { [book]: null } });
-  readback = { ...receipt, version: 3, shelf: { ...receipt.shelf, gridSize: 'small' } };
+  readback = {
+    ...receipt,
+    version: 3,
+    shelf: { ...receipt.shelf, layouts: { ...receipt.shelf?.layouts, [book]: 'table' }, gridSize: 'small' },
+  };
   await draft.retry();
   expect(commands[2]).toBe(commands[0]);
   expect(draft.snapshot().phase).toBe('review');
   expect(draft.snapshot().draft.gridSize).toBe('small');
   expect(draft.snapshot().draft.layouts[movie]).toBe('list');
-  expect(draft.snapshot().draft.layouts[book]).toBeUndefined();
+  expect(draft.snapshot().draft.layouts[book]).toBe('table');
   expect(version).toBe(3);
+  await draft.submit();
+  expect(commands[3]?.shelf).toEqual({ layouts: { [movie]: 'list' } });
+  expect(commands[3]?.idempotencyKey).not.toBe(commands[0]?.idempotencyKey);
   current = false;
   await draft.submit();
-  expect(commands).toHaveLength(3);
+  expect(commands).toHaveLength(4);
 });
 
 test('the native merged map bound includes preserved scopes, while removing one scope releases capacity', async () => {
