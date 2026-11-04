@@ -71,7 +71,13 @@ export class VerificationSubjectSearch {
     this.cancel();
     const query = value.slice(0, 100).replace(/[\uD800-\uDBFF]$/u, '');
     if (retryAt !== undefined) {
-      this.update({ query, phase: 'failed', subjects: [], failure, retryAt });
+      this.update({
+        query,
+        phase: 'failed',
+        subjects: [],
+        ...(failure === undefined ? {} : { failure }),
+        retryAt,
+      });
       return;
     }
     this.update({ query, phase: !this.composing && query.trim() ? 'pending' : 'idle', subjects: [] });
