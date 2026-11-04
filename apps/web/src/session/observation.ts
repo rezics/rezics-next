@@ -30,7 +30,10 @@ class BrowserObservation {
   subscribeCache = (listener: () => void): (() => void) => {
     this.cacheListeners.add(listener);
     const stop = this.subscribe(() => {});
-    return () => { this.cacheListeners.delete(listener); stop(); };
+    return () => {
+      this.cacheListeners.delete(listener);
+      stop();
+    };
   };
 
   getServerSnapshot = (): BrowserObservationSnapshot => closedObservation;
@@ -64,8 +67,8 @@ class BrowserObservation {
 
     if (data.state === 'signed-out') {
       this.lastData = state.data;
-    this.lastQuery = this.client.getQueryCache().find({ queryKey: sessionQueryKey, exact: true });
-    this.lastCount = state.dataUpdateCount;
+      this.lastQuery = this.client.getQueryCache().find({ queryKey: sessionQueryKey, exact: true });
+      this.lastCount = state.dataUpdateCount;
       this.lastCsrfToken = data.csrfToken;
       this.lastUpdatedAt = state.dataUpdatedAt;
       this.transition({ state: 'signed-out' });

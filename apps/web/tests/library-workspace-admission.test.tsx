@@ -377,7 +377,7 @@ test('Actual navigation and pin controls retain exact uncertain intent through h
     await act(async () => select(m.library_pin_move_down()).onSelect());
     expect(writes).toHaveLength(2);
     expect(writes[1]!.input.data).toEqual(exact);
-    expect(new Headers(writes[1]!.input.headers).get('x-csrf-token')).toBe('rotated-A');
+    expect(new Headers(writes[1]!.input.headers).get('x-csrf-token')).toBe('csrf-A');
     await act(async () => writes[0]!.work.resolve({ ok: true, revision: 8 }));
     await tick();
     expect(control.pending).toBe(true);
@@ -739,6 +739,7 @@ test('Copies and Labels keep authorized tokenless reads, exact addresses and ord
 
 // One real client hosts catalogue work, History reading and Ratings without feature-owned session observers.
 test('catalogue, History and My ratings share retirement while read admission survives missing CSRF', async () => {
+  mock.module('../src/ratings/own-votes/actions', () => ({ readOwnVotesForViewer: async () => { throw new Error('Unexpected Ratings read'); } }));
   const { candidateSession, useCandidateWork } = await import('../src/subject/candidate-lifetime');
   const { catalogueEditor, useEditorLifetime } = await import('../src/features/catalogue/editor-lifetime');
   const { MyLogsCurrentViewer } = await import('../src/library/my-logs-page');
