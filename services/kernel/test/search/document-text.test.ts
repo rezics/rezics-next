@@ -87,8 +87,7 @@ test('recipe instructions use the presentation selector and retain exact Japanes
 
 test('missing producer, unsupported blocks and dependency failure are not complete empty results', async () => {
   expect((await projectDocumentText(selection)).coverage).toBe('unavailable');
-  const document = value();
-  document.body!.profile = 'blocks';
+  const document = { ...value(), body: fromPlainText('block', 'blocks') };
   expect((await projectDocumentText(selection, owner(document).source)).coverage).toBe('unsupported');
   const { source } = owner();
   source.read = async () => {
