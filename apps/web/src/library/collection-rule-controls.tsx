@@ -12,6 +12,7 @@ export function CollectionRuleControls({
   savedId,
   collectionId,
   resultsHref,
+  navigateAfterSave = false,
   refresh,
 }: {
   creating: boolean;
@@ -21,6 +22,7 @@ export function CollectionRuleControls({
   savedId: string | null;
   collectionId: string | null;
   resultsHref?: string | undefined;
+  navigateAfterSave?: boolean;
   refresh(): void;
 }) {
   const id = savedId ?? collectionId;
@@ -32,8 +34,12 @@ export function CollectionRuleControls({
           {pending
             ? m.library_collection_save_pending()
             : creating
-              ? m.library_collection_create()
-              : m.library_collection_save()}
+              ? navigateAfterSave
+                ? m.library_rule_create_and_view_results()
+                : m.library_collection_create()
+              : navigateAfterSave
+                ? m.library_rule_save_and_view_results()
+                : m.library_collection_save()}
         </Button>
         {creating && savedId ? (
           <a
@@ -44,7 +50,7 @@ export function CollectionRuleControls({
           </a>
         ) : (
           <Button type="button" variant="outline" disabled={pending} onClick={refresh}>
-            {m.library_collection_reload()}
+            {conflict ? m.library_rule_review_current_read() : m.library_collection_reload()}
           </Button>
         )}
       </div>

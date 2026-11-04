@@ -16,8 +16,14 @@ export type SavedRule = {
   sourceGeneration: string;
 };
 export type ChoiceState = 'ready' | 'preparing' | 'unavailable';
+export type RuleMeaning = {
+  state: ChoiceState;
+  digest: string;
+  metadata?: ConditionMetadata;
+  profiles: LibraryProfile[];
+};
 export type RuleChoices = {
-  release: { state: ChoiceState; metadata?: ConditionMetadata; profiles: LibraryProfile[] };
+  release: { state: ChoiceState; digest?: string; metadata?: ConditionMetadata; profiles: LibraryProfile[] };
   labels: { state: ChoiceState; values: { id: string; name: string }[]; next: string | null };
 };
 export type RulePage =
@@ -29,6 +35,7 @@ export type RulePage =
       id: string;
       title: string;
       rule: SavedRule;
+      accepted?: RuleMeaning;
       choices: RuleChoices;
       intent: string;
     }
@@ -44,6 +51,35 @@ export const unavailableRuleChoices = (): RuleChoices => ({
   release: { state: 'unavailable', profiles: [] },
   labels: { state: 'unavailable', values: [], next: null },
 });
+
+async function loadRuleMeaning(
+  client: KernelClient,
+  authorization: string,
+  digest: string,
+  choices: RuleChoices,
+): Promise<RuleMeaning> {
+  if (choices.release.state === 'ready' && choices.release.digest === digest)
+    return {
+      state: 'ready',
+      digest,
+      ...(choices.release.metadata ? { metadata: choices.release.metadata } : {}),
+      profiles: choices.release.profiles,
+    };
+  try {
+    const response = await client.definitions.releases({ digest }).get({ headers: { authorization } });
+    if (response.error || !response.data)
+      return { state: preparing(response.error?.value), digest, profiles: [] };
+    const release = response.data.release as Release;
+    return {
+      state: 'ready',
+      digest,
+      metadata: conditionMetadata(release),
+      profiles: Object.values(release.libraryProfiles ?? {}),
+    };
+  } catch {
+    return { state: 'unavailable', digest, profiles: [] };
+  }
+}
 
 /** Current native choices, one release and one bounded label page. Never an execution/permission preflight. */
 export async function loadRuleChoices(
@@ -70,6 +106,7 @@ export async function loadRuleChoices(
         const release = response.data.release as Release;
         result.release = {
           state: 'ready',
+          digest: active.data.digest,
           metadata: conditionMetadata(release),
           profiles: Object.values(release.libraryProfiles ?? {}),
         };
@@ -126,6 +163,7 @@ export async function loadCollectionRule(
     const rule = response.data.rule;
     const collection = await client.collections({ collectionId: id }).get({ headers: { authorization } });
     if (collection.error || !collection.data) return { state: 'unavailable' };
+    const choices = await loadRuleChoices(client, authorization);
     return {
       state: 'ready',
       viewerId,
@@ -133,7 +171,8 @@ export async function loadCollectionRule(
       id,
       title: collection.data.collection.title ?? id,
       rule: { ...rule, filter: parseFilter(rule.filter) },
-      choices: await loadRuleChoices(client, authorization),
+      accepted: await loadRuleMeaning(client, authorization, rule.releaseDigest, choices),
+      choices,
       intent: crypto.randomUUID(),
     };
   } catch {
