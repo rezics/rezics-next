@@ -1608,8 +1608,7 @@ export class MergeTrain {
     }
     const boot = this.configuredLandingBoot();
     const bootCommand = landingBootCommand(changed, boot, policy.brief);
-    if (!boot || !bootCommand)
-      return { ...passed, ...(typecheckDisposition ? { typecheckDisposition } : {}) };
+    if (!boot || !bootCommand) return { ...passed, ...(typecheckDisposition ? { typecheckDisposition } : {}) };
     const timeout = policy.integration.bootCheckTimeoutMs;
     const runBoot =
       this.options.runBootCheck ??
@@ -2355,7 +2354,8 @@ export class MergeTrain {
         } = await this.checkDevCandidate(trainTree, base, finalCandidate, batchLog);
         for (const member of prepared) {
           if (member.entry.id !== prepared[0]!.entry.id) {
-            if (typecheckDisposition === 'skipped') appendFileSync(member.result.logPath, `${prelandingTypecheckSkip}\n`);
+            if (typecheckDisposition === 'skipped')
+              appendFileSync(member.result.logPath, `${prelandingTypecheckSkip}\n`);
             if (typecheckDisposition === 'infrastructure')
               appendFileSync(member.result.logPath, `${prelandingTypecheckInfrastructure}\n`);
           }
@@ -3646,10 +3646,7 @@ export class MergeTrain {
               changedFiles(trainTree, base, this.options.policy?.merge),
             );
           if (typecheckInfrastructureFailure)
-            appendFileSync(
-              logPath,
-              `${prelandingTypecheckInfrastructure}\n${integrationResult.output}\n`,
-            );
+            appendFileSync(logPath, `${prelandingTypecheckInfrastructure}\n${integrationResult.output}\n`);
           const checked = typecheckInfrastructureFailure
             ? { ...integrationResult, passed: true, output: '' }
             : integrationResult;
