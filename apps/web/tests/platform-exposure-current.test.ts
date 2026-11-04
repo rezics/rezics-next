@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -7,6 +7,7 @@ import {
   loadExposure,
   parseExposureQuery,
   parseIntent,
+  readExposureBound,
   readCurrentExposure,
   type CurrentExposure,
   type Page,
@@ -205,59 +206,29 @@ test('production reader envelope binds the actual same prepared request and keep
       next: null,
     },
   };
-  mock.module('@tanstack/react-start', () => ({
-    createServerFn: (_options: unknown) => {
-      let validate = (value: unknown) => value;
-      const chain = {
-        validator(next: (value: unknown) => unknown) {
-          validate = next;
-          return chain;
-        },
-        handler<T extends (input: { data: unknown }) => unknown>(handler: T) {
-          return (input: { data: unknown }) => Promise.resolve(handler({ ...input, data: validate(input.data) }));
-        },
-      };
-      return chain;
+  const result = await readExposureBound({ limit: 1 }, {
+    prepare: async () => {
+      observed.prepared = request;
+      return request;
     },
-  }));
-  mock.module('@tanstack/react-start/server', () => ({
-    getRequest: () => request,
-    setResponseHeader: () => undefined,
-  }));
-  mock.module('cloudflare:workers', () => ({ env: { KERNEL_ORIGIN: 'https://kernel.example.test' } }));
-  mock.module('../src/session/request', () => ({
-    prepareSession: async (prepared: Request) => {
-      observed.prepared = prepared;
-      return false;
-    },
-    viewerCredential: (prepared: Request) => {
+    credential: (prepared) => {
       observed.credential = prepared;
       return (observed.authorization = 'Bearer actual-reader');
     },
-    sessionSubject: (prepared: Request) => {
+    subject: (prepared) => {
       observed.subject = prepared;
       return 'actual-reader-subject';
     },
-  }));
-  const kernel = createKernelClient('https://kernel.example.test', {
-    fetch: (async (input, init) => {
-      const path = new URL(new Request(input, init).url).pathname;
-      if (path === '/v1/openapi.json') return Response.json(document);
-      if (path === '/v1/platform/exposure/management') return Response.json(page.current);
-      throw new Error(`Unexpected request: ${path}`);
-    }) as typeof fetch,
+    configured: true,
+    read: async (authorization, query) => {
+      expect(authorization).toBe('Bearer actual-reader');
+      expect(query).toEqual({ limit: 1 });
+      return page;
+    },
   });
-  mock.module('../src/kernel/client', () => ({ kernelClient: () => kernel }));
-
-  try {
-    const { readPlatformExposureBound } = await import('../src/platform/exposure/actions');
-    const result = await readPlatformExposureBound({ data: { limit: 1 } });
-    expect(result).toEqual({ page, sessionSubject: 'actual-reader-subject' });
-    expect(observed.prepared).toBe(request);
-    expect(observed.credential).toBe(request);
-    expect(observed.subject).toBe(request);
-    expect(observed.authorization).toBe('Bearer actual-reader');
-  } finally {
-    mock.restore();
-  }
+  expect(result).toEqual({ page, sessionSubject: 'actual-reader-subject' });
+  expect(observed.prepared).toBe(request);
+  expect(observed.credential).toBe(request);
+  expect(observed.subject).toBe(request);
+  expect(observed.authorization).toBe('Bearer actual-reader');
 });

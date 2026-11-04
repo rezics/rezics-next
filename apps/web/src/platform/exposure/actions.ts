@@ -8,6 +8,7 @@ import { recordPageReadCacheControl } from '../../security/page-cache';
 import {
   commandExposure,
   loadExposure,
+  readExposureBound,
   parseIntent,
   parseExposureQuery,
   object,
@@ -42,14 +43,13 @@ export const readPlatformExposure = createServerFn({ method: 'GET' })
 export const readPlatformExposureBound = createServerFn({ method: 'GET' })
   .validator(parseExposureQuery)
   .handler(async ({ data }): Promise<ExposureReaderEnvelope> => {
-    const request = await prepareViewerRequest();
-    const authorization = viewerCredential(request);
-    const actualSubject = sessionSubject(request) ?? null;
-    if (!authorization)
-      return { page: { status: 'signed-out', discovery: { status: 'unavailable' } }, sessionSubject: actualSubject };
-    if (!configured())
-      return { page: { status: 'unavailable', discovery: { status: 'unavailable' } }, sessionSubject: actualSubject };
-    return { page: await loadExposure(kernelClient(), authorization, data), sessionSubject: actualSubject };
+    return readExposureBound(data, {
+      prepare: prepareViewerRequest,
+      credential: viewerCredential,
+      subject: sessionSubject,
+      configured: configured(),
+      read: (authorization, query) => loadExposure(kernelClient(), authorization, query),
+    });
   });
 export const changePlatformExposure = createServerFn({ method: 'POST' })
   .validator((value: unknown) => {
