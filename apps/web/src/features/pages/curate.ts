@@ -17,6 +17,7 @@ export type Template = { scope: 'generic'; key: null } | { scope: 'base' | 'type
 /** The failed stage remains visible even when the server returned a typed rejection. */
 export type CurationFailure = { ok: false; phase?: 'publish' | 'activate' } & (
   | { reason: 'stale' }
+  | { reason: 'missing-profile' }
   | { reason: 'forbidden'; admissionChanged?: boolean }
   | { reason: 'unavailable'; outcome?: 'unknown' }
   | { reason: 'invalid'; errors: { pointer: string; code: string }[] }
@@ -28,6 +29,8 @@ export type PublishInput = {
   keys: { publish: string; activate: string };
 };
 export type PublishResult = { ok: true; digest: string; head: number } | CurationFailure;
+export type PublishReceipt = { ok: true; digest: string } | CurationFailure;
+export type ActivationInput = { digest: string; expectedHead: number; key: string };
 
 export function profileTemplates(profile: PresentationProfile): Template[] {
   return [
@@ -285,6 +288,49 @@ export async function publishProfile(
     if (activated.status >= 400)
       return { ...curationFailure(activated.status, activated.error?.value, activated.headers), phase };
     const admitted = admittedActivationResult(activated.data, digest);
+    return admitted ? { ok: true, digest: admitted.digest, head: admitted.head } : unknown();
+  } catch {
+    return unknown();
+  }
+}
+
+/** The immutable profile receipt is a separate command from changing the active head. */
+export async function publishProfileOnly(
+  client: KernelClient,
+  { profile, keys, authorization }: PublishInput & { authorization: string },
+): Promise<PublishReceipt> {
+  const digest = profileDigest(profile);
+  try {
+    const result = await client.presentation.profiles.post(
+      { profile },
+      { headers: { authorization, 'idempotency-key': keys.publish } as { 'idempotency-key': string } },
+    );
+    if (result.status >= 400)
+      return { ...curationFailure(result.status, result.error?.value, result.headers), phase: 'publish' };
+    return admittedPublishDigest(result.data, digest)
+      ? { ok: true, digest }
+      : { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
+  } catch {
+    return { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
+  }
+}
+
+/** Retry the original activation receipt without resubmitting an already published profile. */
+export async function activatePublishedProfile(
+  client: KernelClient,
+  { digest, expectedHead, key, authorization }: ActivationInput & { authorization: string },
+): Promise<PublishResult> {
+  const unknown = (): PublishResult => ({ ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'activate' });
+  try {
+    const result = await client.presentation
+      .profiles({ digest })
+      .$activate.post(
+        { expected_head: expectedHead },
+        { headers: { authorization, 'idempotency-key': key } as { 'idempotency-key': string } },
+      );
+    if (result.status >= 400)
+      return { ...curationFailure(result.status, result.error?.value, result.headers), phase: 'activate' };
+    const admitted = admittedActivationResult(result.data, digest);
     return admitted ? { ok: true, digest: admitted.digest, head: admitted.head } : unknown();
   } catch {
     return unknown();

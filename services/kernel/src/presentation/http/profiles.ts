@@ -1,5 +1,6 @@
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import type { PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
@@ -22,11 +23,27 @@ import {
   StaleProfileHeadError,
 } from '../profiles.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
+import { readCurationOpening } from '../curation-advice.ts';
 
 const resource = { route: 0, id: GLOBAL_CONTEXT };
 const digestResponse = t.Object({ digest: t.String() }, { additionalProperties: false });
 const activeResponse = t.Object({ digest: t.String(), head: t.Integer() }, { additionalProperties: false });
 const profileObject = t.Record(t.String(), t.Any());
+const actionState = t.Union([t.Literal('allowed'), t.Literal('denied'), t.Literal('unavailable')]);
+const curationOpeningResponse = t.Union([
+  t.Object({ state: t.Literal('missing') }, { additionalProperties: false }),
+  t.Object(
+    {
+      state: t.Literal('active'),
+      viewer: t.Union([t.Literal('anonymous'), t.Literal('account')]),
+      digest: t.String(),
+      head: t.Integer({ minimum: 0 }),
+      profile: profileObject,
+      advice: t.Object({ publish: actionState, activate: actionState }, { additionalProperties: false }),
+    },
+    { additionalProperties: false },
+  ),
+]);
 const writeHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const unavailable = problemSchema(
@@ -81,6 +98,8 @@ export function profileRoutes(
           operationId: 'presentation.publish',
           'x-exposure': 'public',
           'x-action': 'presentation:publish',
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': GLOBAL_CONTEXT,
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
@@ -173,6 +192,59 @@ export function profileRoutes(
         return { digest: active.digest, head: active.head };
       },
     )
+    .get(
+      '/v1/presentation/curation',
+      {
+        response: {
+          200: withHeaders(curationOpeningResponse, { 'cache-control': t.String() }),
+          401: unauthorized,
+          404: problemSchema('not_found'),
+          409: problemSchema('stale_editorial_head'),
+          503: problemSchema('overloaded', 'deadline_exceeded', 'dependency_unavailable'),
+        },
+        detail: {
+          operationId: 'presentation.read_curation',
+          'x-exposure': 'public',
+          'x-action': 'presentation:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ actor, authorize, admission, job, headers, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        const check = await authorize({
+          ...resource,
+          ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
+        });
+        return admission.run('normal', job, async () => {
+          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          const opening = await readCurationOpening({
+            viewer: actor.kind,
+            readActive: () => activeProfile(pool),
+            readProfile: async (digest) => {
+              const profile = await readProfile(pool, digest);
+              if (!profile) throw new ProblemError('dependency_unavailable');
+              return profile as PresentationProfile;
+            },
+            readViewerActions: async () => {
+              const actionHeaders = new Headers({ 'content-type': 'application/json' });
+              if (headers.authorization) actionHeaders.set('authorization', headers.authorization);
+              const response = await app.handle(
+                new Request('http://kernel.local/v1/viewerActions', {
+                  method: 'POST',
+                  headers: actionHeaders,
+                  body: JSON.stringify({ resources: [{ type: 'semantic.context', id: GLOBAL_CONTEXT }] }),
+                }),
+              );
+              if (!response.ok) throw new Error(`Viewer action read returned ${response.status}`);
+              return response.json();
+            },
+          });
+          if (opening.state === 'stale') throw new ProblemError('stale_editorial_head');
+          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          return opening;
+        });
+      },
+    )
     .post(
       customMethod('/v1/presentation/profiles/:digest', 'activate'),
       {
@@ -196,6 +268,8 @@ export function profileRoutes(
           operationId: 'presentation.activate',
           'x-exposure': 'public',
           'x-action': 'presentation:activate',
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': GLOBAL_CONTEXT,
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },

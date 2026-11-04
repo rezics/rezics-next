@@ -1,13 +1,23 @@
 import { expectedCandidateReader } from '../../subject/candidate-admission';
-import { platformRegistry, validateProfile, type PresentationProfile } from '@rezics/composition';
+import { platformRegistry, profileDigest, validateProfile, type PresentationProfile } from '@rezics/composition';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
-import { publishProfile, type CurationFailure, type PublishInput, type PublishResult } from './curate';
+import {
+  activatePublishedProfile,
+  publishProfile,
+  publishProfileOnly,
+  type ActivationInput,
+  type CurationFailure,
+  type PublishInput,
+  type PublishReceipt,
+  type PublishResult,
+} from './curate';
 import { admitCurationReads } from './curation-read-response';
+import { admitCurationOpening, type CurationAdvice } from './curation-advice';
 import { pickText } from '@rezics/composition';
 import { readRelease } from '../../subject/definitions';
 import {
@@ -30,12 +40,13 @@ import {
 } from '../../subject/candidates';
 
 export type CurationRead =
-  | { ok: true; reader: string; digest: string; head: number; profile: PresentationProfile }
+  | { ok: true; reader: string; digest: string; head: number; profile: PresentationProfile; advice: CurationAdvice }
   | { ok: false; reason: 'signed-out' }
   | CurationFailure;
 
 type CurationReadInput = { expectedReader?: string } | undefined;
 type PublicationRequest = { expectedReader: string; intent: PublishInput | CurationFailure };
+type ActivationRequest = PublicationRequest & { digest: string };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![\s\S])/i;
 
@@ -98,6 +109,22 @@ function validatePublicationRequest(input: unknown): PublicationRequest {
   return { expectedReader: input.expectedReader, intent };
 }
 
+function validateActivationRequest(input: unknown): ActivationRequest {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    !('digest' in input) ||
+    typeof input.digest !== 'string' ||
+    !/^sha256:[0-9a-f]{64}$/.test(input.digest)
+  )
+    throw new Error('Invalid curation activation');
+  const publication = validatePublicationRequest(input);
+  if ('ok' in publication.intent || profileDigest(publication.intent.profile) !== input.digest)
+    throw new Error('Invalid curation activation');
+  return { ...publication, digest: input.digest };
+}
+
 async function sessionBearer() {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
@@ -126,13 +153,29 @@ export const readCuration = createServerFn({ method: 'POST', strict: false })
     if (!reader || (data?.expectedReader !== undefined && data.expectedReader !== reader))
       return { ok: false, reason: 'forbidden', admissionChanged: true };
     try {
+      const result = await kernelClient().presentation.curation.get({ headers: { authorization } });
+      return admitCurationOpening(reader, result);
+    } catch {
+      return { ok: false, reason: 'unavailable' };
+    }
+  });
+
+/** Publication recovery observes active state only; action advice never acknowledges its invocation. */
+export const readCurationActive = createServerFn({ method: 'POST', strict: false })
+  .validator(expectedReaderInput)
+  .handler(async ({ data }) => {
+    const { authorization, reader } = await curationAdmission();
+    if (!authorization) return { ok: false as const, reason: 'signed-out' as const };
+    if (!reader || (data?.expectedReader !== undefined && data.expectedReader !== reader))
+      return { ok: false as const, reason: 'forbidden' as const, admissionChanged: true };
+    try {
       const client = kernelClient();
       const active = await client.presentation.active.get({ headers: { authorization } });
       return await admitCurationReads(reader, active, (digest) =>
         client.presentation.profiles({ digest }).get({ headers: { authorization } }),
       );
     } catch {
-      return { ok: false, reason: 'unavailable' };
+      return { ok: false as const, reason: 'unavailable' as const };
     }
   });
 
@@ -144,6 +187,29 @@ export const publishCuration = createServerFn({ method: 'POST' })
     if (!reader || reader !== data.expectedReader) return { ok: false, reason: 'forbidden', admissionChanged: true };
     if ('ok' in data.intent) return data.intent;
     return publishProfile(kernelClient(), { ...data.intent, authorization });
+  });
+
+/** Publish and activation have distinct native receipts; this call never attempts activation. */
+export const publishCurationOnly = createServerFn({ method: 'POST' })
+  .validator(validatePublicationRequest)
+  .handler(async ({ data }): Promise<PublishReceipt> => {
+    const { authorization, reader } = await curationAdmission();
+    if (!authorization) return { ok: false, reason: 'forbidden', admissionChanged: true };
+    if (!reader || reader !== data.expectedReader) return { ok: false, reason: 'forbidden', admissionChanged: true };
+    if ('ok' in data.intent) return data.intent;
+    return publishProfileOnly(kernelClient(), { ...data.intent, authorization });
+  });
+
+/** Activate the exact immutable profile whose publish receipt is already held by the editor. */
+export const activateCuration = createServerFn({ method: 'POST' })
+  .validator(validateActivationRequest)
+  .handler(async ({ data }): Promise<PublishResult> => {
+    const { authorization, reader } = await curationAdmission();
+    if (!authorization) return { ok: false, reason: 'forbidden', admissionChanged: true };
+    if (!reader || reader !== data.expectedReader) return { ok: false, reason: 'forbidden', admissionChanged: true };
+    const intent = data.intent as PublishInput;
+    const input: ActivationInput = { digest: data.digest, expectedHead: intent.expectedHead, key: intent.keys.activate };
+    return activatePublishedProfile(kernelClient(), { ...input, authorization });
   });
 
 /** Inspection uses the current session only at the BFF; every native read is explicitly anonymous. */

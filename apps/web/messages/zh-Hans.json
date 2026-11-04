@@ -8311,5 +8311,20 @@
   "search_match_description": "匹配的描述",
   "search_match_explanation": "更多匹配详情",
   "search_match_unavailable": "匹配详情暂不可用。",
-  "search_match_unsupported": "此结果不支持匹配详情。"
+  "search_match_unsupported": "此结果不支持匹配详情。",
+  "curation_advice_heading": "当前操作权限",
+  "curation_advice_publish_label": "发布",
+  "curation_advice_activate_label": "启用",
+  "curation_advice_allowed": "允许",
+  "curation_advice_denied": "不允许",
+  "curation_advice_unavailable": "暂不可用",
+  "curation_advice_help": "此提示依据当前账户和已启用的全局展示。提交每条命令时都会重新检查访问权限。",
+  "curation_advice_publish_only": "现在可以发布不可变的配置。启用操作不可用；草稿和发布回执会保留。",
+  "curation_advice_activate_only": "可以启用之前发布的配置。当前无法发布新配置。",
+  "curation_advice_refresh": "刷新操作权限",
+  "curation_advice_checking": "正在刷新操作权限…",
+  "curation_no_active_profile": "当前没有可用的已启用展示配置。",
+  "curation_published_waiting": "已发布不可变配置：{digest}。启用仍在等待中。",
+  "curation_retry_activation_help": "使用保留的配置和原命令密钥重试启用。不会发布新配置。",
+  "curation_retry_activation": "重试启用"
 }

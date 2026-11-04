@@ -8311,5 +8311,20 @@
   "search_match_description": "설명 일치",
   "search_match_explanation": "일치 세부 정보 더 보기",
   "search_match_unavailable": "일치 정보를 사용할 수 없습니다.",
-  "search_match_unsupported": "이 검색 결과는 일치 정보를 지원하지 않습니다."
+  "search_match_unsupported": "이 검색 결과는 일치 정보를 지원하지 않습니다.",
+  "curation_advice_heading": "현재 작업 권한",
+  "curation_advice_publish_label": "게시",
+  "curation_advice_activate_label": "활성화",
+  "curation_advice_allowed": "허용됨",
+  "curation_advice_denied": "허용되지 않음",
+  "curation_advice_unavailable": "사용할 수 없음",
+  "curation_advice_help": "이 안내는 현재 계정과 활성 Global 표시를 기준으로 합니다. 각 명령은 제출할 때 접근 권한을 다시 확인합니다.",
+  "curation_advice_publish_only": "지금 변경할 수 없는 프로필을 게시할 수 있습니다. 활성화는 사용할 수 없지만 초안과 게시 영수증은 보존됩니다.",
+  "curation_advice_activate_only": "이전에 게시한 프로필을 활성화할 수 있습니다. 새 프로필 게시 권한은 사용할 수 없습니다.",
+  "curation_advice_refresh": "작업 권한 새로고침",
+  "curation_advice_checking": "작업 권한 새로고침 중…",
+  "curation_no_active_profile": "활성 표시 프로필이 없습니다.",
+  "curation_published_waiting": "변경할 수 없는 프로필을 게시했습니다: {digest}. 활성화가 대기 중입니다.",
+  "curation_retry_activation_help": "보존된 프로필과 원래 명령 키로 활성화를 다시 시도합니다. 새 프로필은 게시되지 않습니다.",
+  "curation_retry_activation": "활성화 다시 시도"
 }

@@ -8311,5 +8311,20 @@
   "search_match_description": "Coincidencia en la descripción",
   "search_match_explanation": "Más detalles de la coincidencia",
   "search_match_unavailable": "Los detalles de la coincidencia no están disponibles.",
-  "search_match_unsupported": "Este resultado no admite detalles de coincidencia."
+  "search_match_unsupported": "Este resultado no admite detalles de coincidencia.",
+  "curation_advice_heading": "Permisos actuales de las acciones",
+  "curation_advice_publish_label": "Publicar",
+  "curation_advice_activate_label": "Activar",
+  "curation_advice_allowed": "Permitido",
+  "curation_advice_denied": "No permitido",
+  "curation_advice_unavailable": "No disponible",
+  "curation_advice_help": "Los permisos reflejan tu cuenta actual y la presentación Global activa. Cada acción vuelve a comprobar el acceso al enviarse.",
+  "curation_advice_publish_only": "Ahora puedes publicar un perfil inmutable. La activación no está disponible; se conservan el borrador y el comprobante de publicación.",
+  "curation_advice_activate_only": "Puedes activar un perfil publicado anteriormente. No está disponible publicar un perfil nuevo.",
+  "curation_advice_refresh": "Actualizar permisos de acciones",
+  "curation_advice_checking": "Actualizando permisos de acciones…",
+  "curation_no_active_profile": "No hay un perfil de presentación activo disponible.",
+  "curation_published_waiting": "Perfil inmutable publicado: {digest}. La activación sigue pendiente.",
+  "curation_retry_activation_help": "Vuelve a intentar la activación con el perfil conservado y la clave de acción original. No se publicará otro perfil.",
+  "curation_retry_activation": "Reintentar activación"
 }

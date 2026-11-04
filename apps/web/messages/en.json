@@ -8423,5 +8423,20 @@
   "search_match_description": "Matched description",
   "search_match_explanation": "More match details",
   "search_match_unavailable": "Match details are unavailable.",
-  "search_match_unsupported": "Match details are not supported for this result."
+  "search_match_unsupported": "Match details are not supported for this result.",
+  "curation_advice_heading": "Current command advice",
+  "curation_advice_publish_label": "Publish",
+  "curation_advice_activate_label": "Activate",
+  "curation_advice_allowed": "Allowed",
+  "curation_advice_denied": "Not allowed",
+  "curation_advice_unavailable": "Unavailable",
+  "curation_advice_help": "Advice reflects your current account and the active Global presentation. Each command checks access again when you submit it.",
+  "curation_advice_publish_only": "You can publish an immutable profile now. Activation is unavailable; your draft and publication receipt are retained.",
+  "curation_advice_activate_only": "You can activate a previously published profile. Publishing a new profile is unavailable.",
+  "curation_advice_refresh": "Refresh command advice",
+  "curation_advice_checking": "Refreshing command advice…",
+  "curation_no_active_profile": "No active presentation profile is available.",
+  "curation_published_waiting": "Published immutable profile {digest}. Activation is still pending.",
+  "curation_retry_activation_help": "Retry activation with the retained profile and original command key. No new profile will be published.",
+  "curation_retry_activation": "Retry activation"
 }

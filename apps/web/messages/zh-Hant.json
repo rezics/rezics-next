@@ -8311,5 +8311,20 @@
   "search_match_description": "符合的描述",
   "search_match_explanation": "更多符合詳細資料",
   "search_match_unavailable": "符合詳細資料目前無法使用。",
-  "search_match_unsupported": "此結果不支援符合詳細資料。"
+  "search_match_unsupported": "此結果不支援符合詳細資料。",
+  "curation_advice_heading": "目前操作權限",
+  "curation_advice_publish_label": "發佈",
+  "curation_advice_activate_label": "啟用",
+  "curation_advice_allowed": "允許",
+  "curation_advice_denied": "不允許",
+  "curation_advice_unavailable": "暫時無法使用",
+  "curation_advice_help": "此提示依據目前帳戶與已啟用的全域呈現。送出每項命令時都會重新檢查存取權限。",
+  "curation_advice_publish_only": "現在可以發佈不可變的設定。啟用操作目前無法使用；草稿與發佈收據會保留。",
+  "curation_advice_activate_only": "可以啟用先前發佈的設定。目前無法發佈新設定。",
+  "curation_advice_refresh": "重新整理操作權限",
+  "curation_advice_checking": "正在重新整理操作權限…",
+  "curation_no_active_profile": "目前沒有可用的已啟用呈現設定。",
+  "curation_published_waiting": "已發佈不可變設定：{digest}。啟用仍在等待中。",
+  "curation_retry_activation_help": "使用保留的設定與原命令金鑰重試啟用。不會發佈新設定。",
+  "curation_retry_activation": "重試啟用"
 }
