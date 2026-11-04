@@ -725,6 +725,13 @@
       "state": "open"
     },
     {
+      "path": "docs/research/gpt-defensive-programming-opus-5-5.md",
+      "topic": "gpt-defensive-programming",
+      "researcher": "claude-opus-5-5",
+      "state": "adopted",
+      "decision": "docs/development/efficiency.md#daily-improvement"
+    },
+    {
       "path": "docs/research/growth-bare-vacuum-sites.md",
       "topic": "growth-bare-vacuum-sites",
       "researcher": "unknown",

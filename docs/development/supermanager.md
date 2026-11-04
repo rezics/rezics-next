@@ -5,6 +5,17 @@ maintainer, the allowance runway, critical grants and deadlocks between owners. 
 themselves when the supermanager is unreachable ([delivery](delivery.md)). A token-free watchdog supervises the
 supermanager and raises the alarm when it is stuck.
 
+## Writing briefs
+
+Trust model for briefs. Agents and internal callers are trusted; REZICS is a community product, and a mistake on dev
+is caught and returned after integration. When an incident shows a wrong result, brief the repair that produces the
+right result where the problem appears (resolve, merge, regenerate, normalize), so the pipeline continues. Do not
+brief a new refusal, rejection, stop or failed attempt unless no agent could produce the correct result there; if you
+still need one, state the defect it prevents and the attempts and hours it will cost. Ask for validation only at
+system boundaries: HTTP input, imported records, external files and third-party responses. Acceptance covers the
+behaviour asked for; ask for refusal tests only for boundary input and authorization rules. Money movement
+(payments, payouts, balances) keeps strict guards.
+
 ## Environment incidents
 
 When the same failure line ends three or more tasks within 20 minutes, it is one shared incident. The supermanager is

@@ -67,7 +67,10 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 - Leave out history. Prohibitions must not outweigh instructions.
 - On a retry, rewrite the brief with the new fact; never append. After two attempts end on the same failure, change
   the approach or split the work; do not resend an equivalent brief.
-- Do not freeze a test that the brief's own behaviour change contradicts.
+- Do not freeze a test that the brief's own behaviour change contradicts. Freeze files only for cross-Goal contract
+  cases.
+- Price every guard. A requirement that refuses, rejects, stops or fails work names the defect it prevents, where
+  untrusted input enters, and why no agent could repair it in place. Without that, brief the repair.
 
 ## Research
 

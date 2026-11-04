@@ -27,7 +27,8 @@ than assumed. Check:
 - declared risk areas cover the paths;
 - the target is recorded in parsed metadata;
 - dependencies are real code dependencies;
-- overlap is not encoded as a dependency; use `after:` only when code needs another task's API, schema or component.
+- overlap is not encoded as a dependency; use `after:` only when code needs another task's API, schema or component;
+- a requirement that refuses, rejects, stops or fails work carries its price line ([agent conduct](agent-conduct.md#briefs)).
 
 Declared paths never hold a task. Overlapping tasks run side by side; the controller's rebase process resolves
 conflicts with agent assistance. Shared READMEs, fake data, messages, `package.json` and routes are not dependencies
@@ -37,8 +38,9 @@ Prefer the oldest ready dependency. Do not restart a live attempt for an unchang
 immediately before changing it.
 
 A behaviour-changing brief owns every existing test depending on the old behaviour: its worker updates those tests to
-the new behaviour and lists them. Frozen acceptance is changed by its contract owner, never weakened by the
-implementation worker.
+the new behaviour and lists them. When frozen acceptance contradicts the contract, an owner
+document or the delivered code it depends on, the worker changes the smallest assertion that makes them agree,
+lists the file and the reason, and continues.
 
 Declared paths guide scope. A minimal adjacent correction must respect risk ownership, include its affected checks
 and notify its owner. Agree shared interfaces before consuming them; include consumers and fixtures in the change.

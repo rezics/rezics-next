@@ -58,6 +58,12 @@ and tokens it costs, and when no agent could repair the problem in place. Money 
 its guards: payments, payouts and balances. The efficiency review covers guards like any other step. A new guard
 states the defect it prevents and is measured from its first firing.
 
+Guards are written into briefs before they are written into code: most control-plane refusals were specified by
+brief writers after one incident, and workers built exactly what they were asked. Prohibitions in briefs and prompts
+turn mismatches into stopped attempts. The evidence is in the
+[defensive programming research](../research/gpt-defensive-programming-opus-5-5.md). The efficiency owner prices
+every guard from the guard ledger each day.
+
 Make one structural change per day aimed at the current bottleneck stage: identify it, exploit its capacity,
 subordinate other stages to it, then elevate it where needed. Measure before and after on comparable work and
 record the effect, including when it is not yet observable.
@@ -133,8 +139,10 @@ and `failure.json`. Name the class of each cause: for example, shared-file holds
 checks, unnoticed long attempts, unvalidated integration configuration, or branch and propagation gaps. Distinguish
 observations from hypotheses; do not invent missing timing or claim a fix without evidence.
 
-Repair each class in tools or workflow: a control-plane change, a gate or a brief rule must prevent recurrence beyond
-the individual task. Tell every manager the adopted rule and its owner link. Verify its effect in the next hourly
+Repair each class where it appears: give the problem to an agent at that point (resolver, same-session fix,
+regeneration), so the pipeline continues. Add a check that refuses or ends work only when no agent can repair the
+problem in place. Register that check in the guard ledger with the defect it prevents, and price it from its first
+firing. Tell every manager the adopted rule and its owner link. Verify its effect in the next hourly
 report using comparable evidence; if the effect is not yet observable, record that limit and the next observation.
 Use the [worked incident procedure](../../.agents/skills/rezics-workflow/references/efficiency.md#incident-analysis)
 when preparing the cause-to-fix record.

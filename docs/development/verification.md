@@ -2,8 +2,9 @@
 
 Verify the promised outcome through the real boundary that owns it.
 
-API acceptance covers the relevant personas, each permission operand, invalid and hidden resources, lifecycle changes,
-replay and dependency unavailability. Use native Access and production contracts. A permissive stub cannot prove
+API acceptance covers the personas and permission rules the outcome changes, through the real boundary. Test
+rejection of invalid input where outside input enters, and lifecycle, replay or dependency failure only where the
+outcome promises behaviour for them. Use native Access and production contracts. A permissive stub cannot prove
 authorization or disclosure.
 
 Keep specified, implemented, exposed, tested and promoted distinct. Report unavailable evidence as unavailable.
