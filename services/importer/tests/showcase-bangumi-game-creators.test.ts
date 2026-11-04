@@ -16,6 +16,11 @@ test('selected Game planning preserves type-4 staff occurrences and excludes Gam
         yield { id: 101, name: 'STEINS;GATE', type: 4 };
         yield { id: 104, name: 'STEINS;GATE', type: 2 };
       }
+      if (provider === 'vndb' && table === 'vn_titles')
+        yield { id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
+      if (provider === 'vndb' && table === 'vn') yield { id: 'v1', olang: 'ja', alias: null };
+      if (provider === 'vndb' && table === 'entry_meta')
+        yield { id: 'v1', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
       if (provider === 'bangumi' && table === 'subject-persons') yield* rows;
       if (provider === 'bangumi' && table === 'person-characters')
         yield { subject_id: 101, person_id: 12, character_id: 21, summary: 'Voice association' };
