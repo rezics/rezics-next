@@ -79,11 +79,13 @@ const fake = Bun.serve({
       );
     const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
     if (url.pathname === '/registration-page' && request.method === 'GET')
-      return json(await readRegistrationPage({
-        readSession: async () => Response.json({ account_id: sessionAccountId }),
-        passwordLimits: async () => ({ minLength: 8, maxLength: 128 }),
-        verificationConfigured: true,
-      }));
+      return json(
+        await readRegistrationPage({
+          readSession: async () => Response.json({ account_id: sessionAccountId }),
+          passwordLimits: async () => ({ minLength: 8, maxLength: 128 }),
+          verificationConfigured: true,
+        }),
+      );
     const stepUp = () => json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
     const issueSession = (profile: { client_id?: unknown; scope?: unknown }) => {
       const scopes = profile.scope;
@@ -119,7 +121,13 @@ const fake = Bun.serve({
     if (url.pathname === '/signin/page' && request.method === 'POST')
       return json(signInPage(JSON.parse(call.body).query, url.origin, { kind: 'signed-out' }));
     if (url.pathname === '/account-management/deletion-page' && request.method === 'POST')
-      return json({ kind: 'review', accountId: sessionAccountId, email, action: 'available', policy: 'personal-deletion' });
+      return json({
+        kind: 'review',
+        accountId: sessionAccountId,
+        email,
+        action: 'available',
+        policy: 'personal-deletion',
+      });
     if (url.pathname === '/security-page' && request.method === 'GET')
       return json(securityEnvelope(sessionAccountId, [currentSecuritySession()], passkeys, fresh));
     if (url.pathname === '/session' && request.method === 'GET')
@@ -594,7 +602,10 @@ test(
         await row.waitFor({ state: 'visible' });
         await row.getByRole('button').click();
         expect(authCalls('/passkeys/remove')).toHaveLength(0);
-        await page.getByRole('dialog').getByRole('button', { name: /^Confirm/ }).click();
+        await page
+          .getByRole('dialog')
+          .getByRole('button', { name: /^Confirm/ })
+          .click();
         const alert = page.getByRole('alert').filter({ hasText: message });
         await alert.waitFor({ state: 'visible' });
         expect(await alert.innerText()).toContain(message);

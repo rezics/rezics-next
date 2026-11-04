@@ -419,7 +419,10 @@ test(
         await page.evaluate(() => (window as unknown as { recoveryHashAtRequest?: string }).recoveryHashAtRequest),
       ).toBe('');
       expect(page.url()).toBe(`${origin}/login`);
-      await page.getByRole('status').filter({ hasText: /password (?:has been )?changed|reset/i }).waitFor();
+      await page
+        .getByRole('status')
+        .filter({ hasText: /password (?:has been )?changed|reset/i })
+        .waitFor();
       expect(await page.getByRole('status').innerText()).toMatch(/password (?:has been )?changed|reset/i);
       expect(recoveryCalls('complete')).toHaveLength(1);
       const completion = recoveryCalls('complete')[0]!;
