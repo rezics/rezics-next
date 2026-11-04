@@ -133,6 +133,16 @@ mock.module('../src/community/space-actions', () => ({
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
+const controls = await import('../src/community/publication-controls-view');
+const realUsePublicationControls = controls.usePublicationControls;
+let shelfControl: ReturnType<typeof realUsePublicationControls>;
+mock.module('../src/community/publication-controls-view', () => ({
+  ...controls,
+  usePublicationControls: (...args: Parameters<typeof realUsePublicationControls>) => {
+    shelfControl = realUsePublicationControls(...args);
+    return shelfControl;
+  },
+}));
 const { usePublicationControls } = await import('../src/community/publication-controls-view');
 const { publicationSubjectSearch } = await import('../src/community/publication-subject-picker');
 const { RealmShelf } = await import('../src/community/space-page');
@@ -575,8 +585,7 @@ describe('Complete Realm publication original caller lifetime', () => {
     const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')].find((node) =>
       node.textContent?.includes(hostSubject.title),
     );
-    if (!option)
-      throw new Error(`Missing publication option; input=${input!.value}; rendered=${window.document.body.innerHTML.slice(-7000)}`);
+    expect(option).toBeDefined();
     await act(async () => {
       option!.click();
       await tick();
@@ -610,7 +619,15 @@ describe('Complete Realm publication original caller lifetime', () => {
       };
       try {
         await paintShelf();
-        await shelfPublish(true);
+        // Preparation uses the real control; picker interaction has its own unchanged acceptance below.
+        await act(async () => shelfControl.choose(target()));
+        await act(async () => shelfButton(m.realm_publication_curate()).click());
+        await act(async () => {
+          const button = shelfButton(m.realm_publication_publish());
+          button.focus();
+          button.click();
+          await tick();
+        });
         await settleHost(0, scenario === 'uncertain' ? { kind: 'unavailable' } : { kind: 'saved', head: nextHead });
         expect(completions).toHaveLength(0);
         if (scenario === 'pointer') window.document.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
