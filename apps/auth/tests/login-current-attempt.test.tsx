@@ -136,7 +136,7 @@ async function open(path = '/login') {
   };
 }
 
-test('replacement and destination changes keep old password, prompt and autofill results out of the current form', async () => {
+test('replacement and destination changes keep old password and autofill results out of the current form', async () => {
   const page = await open();
   try {
     await page.password();

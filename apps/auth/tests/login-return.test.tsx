@@ -73,6 +73,10 @@ async function setup(autofill = false) {
 
 test('retained password dispatch clears private DOM synchronously, ignores late success, and reads current advice only', async () => {
   const p = await setup();
+  const storage = spyOn(window.sessionStorage, 'getItem').mockImplementation(() => {
+    throw new Error('Storage disabled');
+  });
+  cleanup.push(() => storage.mockRestore());
   await p.enter();
   await flush(() => send(p.host));
   const command = p.calls.at(-1)!;
@@ -89,7 +93,7 @@ test('retained password dispatch clears private DOM synchronously, ignores late 
   expect(p.host.textContent).toContain('outcome could not be confirmed');
   expect(p.host.querySelector<HTMLInputElement>('#login-password')?.value).toBeUndefined();
   await p.click('Continue');
-  expect(p.assign).toHaveBeenCalledWith('https://auth.test/security');
+  expect(p.assign).toHaveBeenCalledWith('/security');
   expect(p.calls).toHaveLength(3);
 });
 
@@ -101,11 +105,11 @@ test('unknown survives repeated read failure, replacement viewer, and a later cr
   await p.hide();
   await p.restore();
   await p.reply({ error: 'unavailable' }, 503);
-  await p.click('Retry');
+  await p.click('Try loading sign-in again');
   await p.reply({ error: 'unavailable' }, 503);
-  await p.click('Retry');
+  await p.click('Try loading sign-in again');
   await p.reply(advice('other'));
-  await p.click('Use another account');
+  await p.click('Use a different account');
   await p.enter();
   await flush(() => send(p.host));
   await p.reply({ error: 'authentication_denied' }, 401);

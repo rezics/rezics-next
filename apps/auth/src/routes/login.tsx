@@ -57,6 +57,9 @@ export const Route = createFileRoute('/login')({
 function LoginPage() {
   const { journey, records, dismiss } = useLoginJourney();
   const current = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!journey) current.current?.focus();
+  }, [journey]);
   return (
     <AuthPage heading={m.auth_login_heading()}>
       <LoginReturnView
