@@ -475,5 +475,21 @@
   "auth_account_delete_retention_limits": "Required retained records follow their adopted retention exceptions. Backup expiry and external copies are separate; this page cannot confirm their erasure.",
   "auth_organization_delete_authentication_required": "Authenticate to review this selection. The selected ID is unverified; the organization’s identity, your permission and deletion requirements are available only after authorization.",
   "auth_organization_delete_authenticate": "Authenticate to review",
-  "auth_organization_delete_advice": "This review observes current permission; it does not grant deletion or verify that all requirements are satisfied. Confirmation checks fresh authentication and current requirements again."
+  "auth_organization_delete_advice": "This review observes current permission; it does not grant deletion or verify that all requirements are satisfied. Confirmation checks fresh authentication and current requirements again.",
+  "auth_security_review_session": "Review session sign-out",
+  "auth_security_review_passkey": "Review passkey removal",
+  "auth_security_confirm_session": "Confirm session sign-out",
+  "auth_security_confirm_passkey": "Confirm passkey removal",
+  "auth_security_current_consequence": "This is your current device. Revoking this session signs you out here and requires sign-in again.",
+  "auth_security_session_consequence": "Revoking this session signs that device out.",
+  "auth_security_passkey_removal_rule": "Auth refuses removal if this is your last sign-in credential.",
+  "auth_security_retry_explanation": "This confirmation sends a new command for this exact item. Current presence does not resolve the earlier outcome.",
+  "auth_security_target_checking": "Checking current status. No removal command is sent.",
+  "auth_security_target_incomplete": "This item is missing from a limited inventory window. Its absence cannot be verified. Check current status again explicitly.",
+  "auth_security_session_unknown": "The session sign-out result is unknown. Check current status before reviewing another attempt.",
+  "auth_security_passkey_unknown": "The passkey removal result is unknown. Check current status before reviewing another attempt.",
+  "auth_security_session_present": "This session is currently present. Review its current advice before another attempt.",
+  "auth_security_passkey_present": "This passkey is currently present. Review its current advice before another attempt.",
+  "auth_security_session_absent": "This session is absent from the complete current inventory. This does not establish what the earlier command did.",
+  "auth_security_passkey_absent": "This passkey is absent from the complete current inventory. This does not establish what the earlier command did."
 }

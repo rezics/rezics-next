@@ -475,5 +475,21 @@
   "auth_account_delete_retention_limits": "必須保留的紀錄依已採納的保留例外處理。備份到期及外部副本另行處理；本頁無法確認它們已清除。",
   "auth_organization_delete_authentication_required": "請先驗證身分，再檢視此選擇。所選 ID 尚未核實；組織身分、你的刪除權限及刪除先決條件只有在授權後才可查看。",
   "auth_organization_delete_authenticate": "驗證身分並檢視",
-  "auth_organization_delete_advice": "此檢視僅反映目前權限，不授予刪除權限，也不表示所有先決條件已滿足。確認時仍會重新檢查近期身分驗證及目前先決條件。"
+  "auth_organization_delete_advice": "此檢視僅反映目前權限，不授予刪除權限，也不表示所有先決條件已滿足。確認時仍會重新檢查近期身分驗證及目前先決條件。",
+  "auth_security_review_session": "檢視工作階段登出操作",
+  "auth_security_review_passkey": "檢視通行金鑰移除操作",
+  "auth_security_confirm_session": "確認登出此工作階段",
+  "auth_security_confirm_passkey": "確認移除此通行金鑰",
+  "auth_security_current_consequence": "這是你目前使用的裝置。撤銷此工作階段會在此處登出，你需要重新登入。",
+  "auth_security_session_consequence": "撤銷此工作階段會使該裝置登出。",
+  "auth_security_passkey_removal_rule": "如果這是你最後一種登入憑證，Auth 會拒絕移除。",
+  "auth_security_retry_explanation": "此次確認會針對這個確切項目傳送新命令。目前仍然存在並不能確定先前的操作結果。",
+  "auth_security_target_checking": "正在檢查目前狀態，不會傳送移除命令。",
+  "auth_security_target_incomplete": "此項目未出現在有數量限制的清單中，無法確認它不存在。請主動重新檢查目前狀態。",
+  "auth_security_session_unknown": "工作階段登出結果未知。再次檢視操作並嘗試之前，請先檢查目前狀態。",
+  "auth_security_passkey_unknown": "通行金鑰移除結果未知。再次檢視操作並嘗試之前，請先檢查目前狀態。",
+  "auth_security_session_present": "此工作階段目前仍然存在。再次嘗試前，請檢視目前操作提示。",
+  "auth_security_passkey_present": "此通行金鑰目前仍然存在。再次嘗試前，請檢視目前操作提示。",
+  "auth_security_session_absent": "目前完整清單中沒有此工作階段。這不能證明先前命令產生了什麼結果。",
+  "auth_security_passkey_absent": "目前完整清單中沒有此通行金鑰。這不能證明先前命令產生了什麼結果。"
 }

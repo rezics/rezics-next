@@ -74,7 +74,6 @@ async function mount() {
   response = deferred();
   prompt = deferred();
   Object.defineProperty(navigator, 'credentials', { configurable: true, value: { create: () => prompt.promise } });
-  window.confirm = () => true;
   globalThis.fetch = (async (path) => {
     calls.push(String(path));
     if (path === '/passkeys/register/options')
@@ -111,6 +110,7 @@ test.each(['password', 'prompt'])('%s blocks every credential/session write unti
 test('uncertain revocation holds the exact target through readback and retry, then returns to idle', async () => {
   await mount();
   await flush(() => click(m.auth_security_sign_out()));
+  await flush(() => click(m.auth_security_confirm_session()));
   await flush(() => action.resolve({ kind: 'unknown' }));
   await flush(() => {
     submit(0);
@@ -124,6 +124,7 @@ test('uncertain revocation holds the exact target through readback and retry, th
   action = deferred();
   read = deferred();
   await flush(() => click(m.auth_security_retry_action()));
+  await flush(() => click(m.auth_security_confirm_session()));
   expect(calls[1]).toEqual(calls[0]);
   await flush(() => action.resolve({ kind: 'unknown' }));
   expect(button(host, m.auth_security_retry_action())).toBeUndefined();
@@ -132,6 +133,7 @@ test('uncertain revocation holds the exact target through readback and retry, th
   expect(writes().every((control) => !control.disabled)).toBe(true);
   action = deferred();
   await flush(() => click(m.auth_security_passkey_remove()));
+  await flush(() => click(m.auth_security_confirm_passkey()));
   await flush(() => action.resolve({ kind: 'accepted' }));
   expect(host.querySelector('form')).toBeNull();
   expect(host.textContent).toContain(m.auth_security_sign_in_required());
@@ -140,6 +142,7 @@ test('uncertain revocation holds the exact target through readback and retry, th
 test('a late action result cannot restore private state after authority changes', async () => {
   await mount();
   await flush(() => click(m.auth_security_passkey_remove()));
+  await flush(() => click(m.auth_security_confirm_passkey()));
   await render({ kind: 'signed-out' });
   await flush(() => action.resolve({ kind: 'unknown' }));
   expect(host.querySelector('form')).toBeNull();

@@ -192,6 +192,19 @@ through current-target readback; a present target permits only its confirmed ret
 to idle. A determinate failure permits another operation. Account/session changes clear the boundary and private state,
 and results from the previous page authority cannot restore them.
 
+Exact session and passkey reviews show only native row fields and current advice, with Cancel focused first,
+Escape to cancel and focus returned to the row or its section. Unsent review holds the same operation boundary.
+A current-device review explicitly warns of local sign-out; passkey removal explains all-session retirement and
+native last-credential refusal. Readback never repeats a removal. A complete current inventory proves only current
+absence; a truncated missing row cannot prove absence. Only a currently present target permits a newly reviewed
+exact-target command. Recovery descriptions come only from a fresh present row, never historical row metadata.
+
+Decision: the browser action wait is twelve seconds: the existing sequential five-second native account check and
+five-second command, plus two seconds for browser/BFF delivery. Expiry, abort, thrown transport or malformed
+acknowledgement after invocation becomes unknown. One invocation sends at most one command; cancellation cannot
+undo native work. Target reads use the five-second private-read deadline even if an injected source or browser
+transport ignores abort. Retired waits cannot publish or release another operation.
+
 Security departure is protected by any nonempty new password, a nonblank passkey name, or an unresolved operation;
 Stay keeps the in-memory review and focus, while Leave clears local authority and drafts without claiming to cancel an
 operation already underway. Reload or close warns while protected. Cached-page return reloads the account,
@@ -461,8 +474,8 @@ Sign-up makes no kernel reads. A successful submit is one browser `POST /signup`
 
 ### Removing a passkey
 
-- **Touches:** current `GET /session`, then the existing exact-key `POST /passkeys/remove`; explicit recovery reads current `/session`, `/sessions`, `/passkeys`, then `/session` again
-- **Bound:** 2 Auth requests for dispatch and 0 kernel reads; an explicit recovery check makes at most 4 current native reads
+- **Touches:** current `GET /session`, then the existing exact-key `POST /passkeys/remove`; explicit recovery reads one current `GET /security-page` with its native viewer, inventories and advice
+- **Bound:** 2 Auth requests for dispatch and 0 kernel reads; an explicit recovery check makes 1 native Security page read and 0 kernel reads
 - **Growth check:** the original `tests/passkeys-cost.test.ts` oracle remains unchanged; `test/security-reconciliation.test.ts` covers the focused recovery behavior
 
 ## Visual check

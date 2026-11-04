@@ -475,5 +475,21 @@
   "auth_account_delete_retention_limits": "必须保留的记录遵循已采纳的保留例外。备份到期和外部副本另行处理；本页无法确认它们已被清除。",
   "auth_organization_delete_authentication_required": "请先验证身份，再审阅此选择。所选 ID 尚未核实；组织身份、你的删除权限和删除前提条件只有在授权后才可查看。",
   "auth_organization_delete_authenticate": "验证身份并审阅",
-  "auth_organization_delete_advice": "此审阅仅反映当前权限，不授予删除权限，也不表示所有前提条件已满足。确认时仍会重新检查近期身份验证及当前前提条件。"
+  "auth_organization_delete_advice": "此审阅仅反映当前权限，不授予删除权限，也不表示所有前提条件已满足。确认时仍会重新检查近期身份验证及当前前提条件。",
+  "auth_security_review_session": "检查会话退出操作",
+  "auth_security_review_passkey": "检查通行密钥移除操作",
+  "auth_security_confirm_session": "确认退出此会话",
+  "auth_security_confirm_passkey": "确认移除此通行密钥",
+  "auth_security_current_consequence": "这是你当前使用的设备。撤销此会话会在此处退出登录，你需要重新登录。",
+  "auth_security_session_consequence": "撤销此会话会使该设备退出登录。",
+  "auth_security_passkey_removal_rule": "如果这是你最后一种登录凭据，Auth 会拒绝移除。",
+  "auth_security_retry_explanation": "此次确认会针对这个确切项目发送一条新命令。目前仍然存在并不能确定之前的操作结果。",
+  "auth_security_target_checking": "正在检查当前状态，不会发送移除命令。",
+  "auth_security_target_incomplete": "此项目未出现在有数量限制的列表中，无法确认它不存在。请主动重新检查当前状态。",
+  "auth_security_session_unknown": "会话退出结果未知。再次检查操作并尝试之前，请先检查当前状态。",
+  "auth_security_passkey_unknown": "通行密钥移除结果未知。再次检查操作并尝试之前，请先检查当前状态。",
+  "auth_security_session_present": "此会话目前仍然存在。再次尝试前，请检查当前操作提示。",
+  "auth_security_passkey_present": "此通行密钥目前仍然存在。再次尝试前，请检查当前操作提示。",
+  "auth_security_session_absent": "当前完整列表中没有此会话。这不能证明之前的命令产生了什么结果。",
+  "auth_security_passkey_absent": "当前完整列表中没有此通行密钥。这不能证明之前的命令产生了什么结果。"
 }

@@ -155,16 +155,10 @@ export const LastCredential = {
         `button[aria-label="${m.auth_security_passkey_remove_named({ name: 'Security key' })}"]`,
       ),
     );
-    const confirm = window.confirm;
-    try {
-      window.confirm = () => true;
-      remove.click();
-      await waitFor(() => canvasElement.textContent?.includes(m.auth_security_passkey_last_credential()));
-      if (!canvasElement.textContent?.includes('Security key'))
-        throw new Error('Last credential must remain available');
-    } finally {
-      window.confirm = confirm;
-    }
+    remove.click();
+    (await waitFor(() => button(canvasElement, m.auth_security_confirm_passkey()))).click();
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_security_passkey_last_credential()));
+    if (!canvasElement.textContent?.includes('Security key')) throw new Error('Last credential must remain available');
   },
 };
 
@@ -199,20 +193,15 @@ function recoveryStory(unavailable: boolean) {
           `button[aria-label="${m.auth_security_passkey_remove_named({ name: 'Security key' })}"]`,
         ),
       );
-      const confirm = window.confirm;
-      try {
-        window.confirm = () => true;
-        remove.click();
-        await waitFor(() => canvasElement.textContent?.includes(m.auth_security_action_unknown()));
-        (await waitFor(() => button(canvasElement, m.auth_security_check_current()))).click();
-        await waitFor(() =>
-          canvasElement.textContent?.includes(
-            unavailable ? m.auth_security_readback_unavailable() : m.auth_security_target_absent(),
-          ),
-        );
-      } finally {
-        window.confirm = confirm;
-      }
+      remove.click();
+      (await waitFor(() => button(canvasElement, m.auth_security_confirm_passkey()))).click();
+      await waitFor(() => canvasElement.textContent?.includes(m.auth_security_passkey_unknown()));
+      (await waitFor(() => button(canvasElement, m.auth_security_check_current()))).click();
+      await waitFor(() =>
+        canvasElement.textContent?.includes(
+          unavailable ? m.auth_security_readback_unavailable() : m.auth_security_passkey_absent(),
+        ),
+      );
     },
   };
 }
@@ -228,5 +217,62 @@ export const IdentityUnavailable = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await waitFor(() => button(canvasElement, m.auth_account_identity_retry()));
     await waitFor(() => canvasElement.textContent?.includes(m.auth_security_change_password()));
+  },
+};
+
+function targetState(phase: 'review' | 'busy' | 'unknown' | 'present' | 'truncated') {
+  const source: SecuritySource = {
+    act: () => (phase === 'busy' ? new Promise(() => {}) : Promise.resolve({ kind: 'unknown' })),
+    read: async () => ({
+      kind: 'ready',
+      sessions: initial.kind === 'ready' ? initial.sessions : [],
+      passkeys: initial.kind === 'ready' && initial.passkeys.kind === 'ready' ? initial.passkeys.passkeys : [],
+      presence: phase === 'truncated' ? 'unknown' : 'present',
+    }),
+  };
+  return {
+    render: () => (
+      <AuthStory>
+        <SecurityPage
+          identitySource={identitySource}
+          initial={initial}
+          inventorySource={emptyInventory}
+          securitySource={source}
+        />
+      </AuthStory>
+    ),
+    play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+      (await waitFor(() => button(canvasElement, m.auth_security_passkey_remove()))).click();
+      if (phase === 'review') {
+        await waitFor(() => canvasElement.querySelector('[role="dialog"]'));
+        return;
+      }
+      (await waitFor(() => button(canvasElement, m.auth_security_confirm_passkey()))).click();
+      if (phase === 'busy') return;
+      await waitFor(() => canvasElement.textContent?.includes(m.auth_security_passkey_unknown()));
+      if (phase === 'unknown') return;
+      (await waitFor(() => button(canvasElement, m.auth_security_check_current()))).click();
+      await waitFor(() =>
+        canvasElement.textContent?.includes(
+          phase === 'present' ? m.auth_security_passkey_present() : m.auth_security_target_incomplete(),
+        ),
+      );
+    },
+  };
+}
+export const PasskeyReview = targetState('review');
+export const RemovalBusy = targetState('busy');
+export const RemovalUnknown = targetState('unknown');
+export const CurrentTargetPresent = targetState('present');
+export const TruncatedTargetMissing = targetState('truncated');
+export const CurrentSessionReview = {
+  render: () => (
+    <AuthStory>
+      <SecurityPage identitySource={identitySource} initial={initial} inventorySource={emptyInventory} />
+    </AuthStory>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    (await waitFor(() => button(canvasElement, m.auth_security_sign_out()))).click();
+    await waitFor(() => canvasElement.querySelector('[role="dialog"]'));
   },
 };

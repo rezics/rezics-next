@@ -475,5 +475,21 @@
   "auth_account_delete_retention_limits": "Les données conservées suivent les exceptions de conservation adoptées. Les sauvegardes et copies externes sont distinctes ; cette page ne confirme pas leur effacement.",
   "auth_organization_delete_authentication_required": "Authentifiez-vous pour examiner cette sélection. L’identifiant sélectionné n’est pas vérifié ; l’identité de l’organisation, votre autorisation et les conditions de suppression ne seront disponibles qu’après autorisation.",
   "auth_organization_delete_authenticate": "S’authentifier pour examiner",
-  "auth_organization_delete_advice": "Cet examen observe l’autorisation actuelle ; il n’accorde pas le droit de supprimer et ne vérifie pas toutes les conditions. La confirmation vérifie à nouveau l’authentification récente et les conditions actuelles."
+  "auth_organization_delete_advice": "Cet examen observe l’autorisation actuelle ; il n’accorde pas le droit de supprimer et ne vérifie pas toutes les conditions. La confirmation vérifie à nouveau l’authentification récente et les conditions actuelles.",
+  "auth_security_review_session": "Vérifier la déconnexion de la session",
+  "auth_security_review_passkey": "Vérifier la suppression de la clé d’accès",
+  "auth_security_confirm_session": "Confirmer la déconnexion de la session",
+  "auth_security_confirm_passkey": "Confirmer la suppression de la clé d’accès",
+  "auth_security_current_consequence": "Il s’agit de votre appareil actuel. Révoquer cette session vous déconnecte ici et impose une nouvelle connexion.",
+  "auth_security_session_consequence": "Révoquer cette session déconnecte cet appareil.",
+  "auth_security_passkey_removal_rule": "Auth refuse la suppression s’il s’agit de votre dernier moyen de connexion.",
+  "auth_security_retry_explanation": "Cette confirmation envoie une nouvelle commande pour cet élément précis. Sa présence actuelle ne résout pas le résultat précédent.",
+  "auth_security_target_checking": "Vérification de l’état actuel. Aucune commande de suppression n’est envoyée.",
+  "auth_security_target_incomplete": "Cet élément est absent d’une fenêtre limitée. Son absence ne peut pas être confirmée. Vérifiez à nouveau explicitement l’état actuel.",
+  "auth_security_session_unknown": "Le résultat de la déconnexion de la session est inconnu. Vérifiez l’état actuel avant d’examiner une nouvelle tentative.",
+  "auth_security_passkey_unknown": "Le résultat de la suppression de la clé d’accès est inconnu. Vérifiez l’état actuel avant d’examiner une nouvelle tentative.",
+  "auth_security_session_present": "Cette session est actuellement présente. Examinez les indications actuelles avant une nouvelle tentative.",
+  "auth_security_passkey_present": "Cette clé d’accès est actuellement présente. Examinez les indications actuelles avant une nouvelle tentative.",
+  "auth_security_session_absent": "Cette session est absente de l’inventaire actuel complet. Cela ne prouve pas l’effet de la commande précédente.",
+  "auth_security_passkey_absent": "Cette clé d’accès est absente de l’inventaire actuel complet. Cela ne prouve pas l’effet de la commande précédente."
 }

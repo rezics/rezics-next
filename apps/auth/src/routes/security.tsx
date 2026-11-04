@@ -17,9 +17,19 @@ import { failureMessage } from '../api';
 import { ErrorAlert } from '../alert';
 import { SecurityInventory, type InventorySource } from '../security-inventory-view';
 import type { SecurityPageEnvelope, SecurityAdvice, ConsentReviewOperation } from '../security-inventory';
-import { addPasskey, passkeysSupported, removePasskey } from '../passkeys';
+import { privateAuthRead } from '../private-auth-read';
+import { waitForSecurityAction } from '../security-target-operation';
+import {
+  SecurityTargetReview,
+  SecurityTargetRecovery,
+  securityTargetRow,
+  targetAdvice,
+  type TargetRecoveryPhase,
+} from '../security-target-review';
+import { addPasskey, passkeysSupported } from '../passkeys';
 import {
   readSecurityTarget,
+  performSecurityAction,
   type SecurityTarget,
   type SecurityActionResult,
   type SecuritySource,
@@ -29,7 +39,6 @@ import {
   formatSecurityDate,
   loadSecurity,
   reviewPasskeyRegistration,
-  revokeSession,
   securityDevice,
   type PasskeysLoad,
   type SecurityPasskey,
@@ -46,8 +55,9 @@ type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 type SecurityOperation =
   | { kind: 'password' | 'passkey-add' | 'consent' }
   | { kind: 'registration-review'; accountId: string; phase: 'unknown' | 'reviewed'; reading: boolean }
+  | { kind: 'review'; target: SecurityTarget; generation: number; advice: number; retry: boolean }
   | { kind: 'target'; target: SecurityTarget }
-  | { kind: 'recovery'; target: SecurityTarget; phase: 'unknown' | 'accepted' | 'present'; reading: boolean };
+  | { kind: 'recovery'; target: SecurityTarget; phase: TargetRecoveryPhase; reading: boolean };
 
 type DepartureState = { protected: boolean; allow: boolean };
 type DepartureBlocker =
@@ -135,6 +145,7 @@ function SecurityPageView({
   const sessionPending = operation?.kind === 'target' && operation.target.kind === 'session' ? operation.target.id : '';
   const passkeyRemoving =
     operation?.kind === 'target' && operation.target.kind === 'passkey' ? operation.target.id : '';
+  const targetReview = operation?.kind === 'review' ? operation : null;
   const recovery = operation?.kind === 'recovery' ? operation : null;
   const registrationRecovery = operation?.kind === 'registration-review' ? operation : null;
   const reading = recovery?.reading ?? false;
@@ -149,6 +160,8 @@ function SecurityPageView({
   const renderAdviceGeneration = adviceGeneration.current;
   const lifetime = useRef(new AbortController());
   const retryLoad = useRef<(() => void) | null>(null);
+  const targetOrigin = useRef<HTMLElement | null>(null);
+  const returnTargetFocus = useRef<'session' | 'passkey' | null>(null);
   const recoveryStatus = useRef<HTMLDivElement>(null);
   const sessionStatus = useRef<HTMLDivElement>(null);
   const passwordInput = useRef<HTMLInputElement>(null);
@@ -243,9 +256,19 @@ function SecurityPageView({
   }, [passwordFieldError, passwordError]);
 
   useLayoutEffect(() => {
-    if (recovery || registrationRecovery) recoveryStatus.current?.focus();
+    if (returnTargetFocus.current && !operation) {
+      const kind = returnTargetFocus.current;
+      returnTargetFocus.current = null;
+      const origin = targetOrigin.current;
+      targetOrigin.current = null;
+      if (origin?.isConnected && !origin.hasAttribute('disabled')) origin.focus();
+      else
+        document
+          .getElementById(kind === 'session' ? 'security-sessions-heading' : 'security-passkeys-heading')
+          ?.focus();
+    } else if (recovery || registrationRecovery) recoveryStatus.current?.focus();
     else if (sessionNotice) sessionStatus.current?.focus();
-  }, [recovery, registrationRecovery, sessionNotice]);
+  }, [operation, recovery, registrationRecovery, sessionNotice]);
 
   useLayoutEffect(() => {
     if (!blocker || !departure) return;
@@ -298,6 +321,8 @@ function SecurityPageView({
     lifetime.current.abort();
     lifetime.current = new AbortController();
     activeAccount.current = '';
+    targetOrigin.current = null;
+    returnTargetFocus.current = null;
     updateOperation(null);
     setAccountId('');
     setPage(null);
@@ -336,19 +361,23 @@ function SecurityPageView({
     const held = activeOperation.current;
     if (held?.kind !== 'recovery' || held.reading) return;
     adviceGeneration.current++;
-    updateOperation({ ...held, reading: true });
+    const attempt: SecurityOperation = { ...held, reading: true };
+    updateOperation(attempt);
     const { target } = held;
     const generation = authorityGeneration.current;
-    const result = await (securitySource?.read(target) ?? readSecurityTarget(target));
-    if (authorityGeneration.current !== generation) return;
+    const result = await privateAuthRead(
+      (signal) => (securitySource?.read ?? readSecurityTarget)(target, signal),
+      lifetime.current.signal,
+    ).catch(() => ({ kind: 'unavailable' as const }));
+    if (authorityGeneration.current !== generation || activeOperation.current !== attempt) return;
     if (activeAccount.current !== target.accountId) return;
     if (result.kind === 'signed-out' || result.kind === 'denied') {
       clearPrivateData(result.kind === 'signed-out' ? 'signed-out' : 'failure', m.auth_security_action_unverified());
       return;
     }
     if (result.kind === 'unavailable') {
-      updateOperation({ kind: 'recovery', target, phase: 'unknown', reading: false });
-      setSessionError(m.auth_security_readback_unavailable());
+      updateOperation({ kind: 'recovery', target, phase: 'unavailable', reading: false });
+      setSessionError('');
       return;
     }
     setSessionError('');
@@ -356,16 +385,16 @@ function SecurityPageView({
     setSessions(result.sessions);
     if (result.passkeys) setPasskeys(result.passkeys);
     if (result.presence === 'absent') {
+      returnTargetFocus.current = target.kind;
       updateOperation(null);
-      setSessionNotice(m.auth_security_target_absent());
+      setSessionNotice(target.kind === 'session' ? m.auth_security_session_absent() : m.auth_security_passkey_absent());
     } else {
       updateOperation({
         kind: 'recovery',
         target,
-        phase: result.presence === 'present' ? 'present' : 'unknown',
+        phase: result.presence === 'present' ? 'present' : 'truncated',
         reading: false,
       });
-      if (result.presence === 'unknown') setSessionError(m.auth_security_readback_unavailable());
     }
   }
 
@@ -389,6 +418,7 @@ function SecurityPageView({
       if (result.kind === 'accepted') void recoverTarget();
       return;
     }
+    returnTargetFocus.current = target.kind;
     updateOperation(null);
     if (target.kind === 'passkey')
       setPasskeyError(
@@ -399,7 +429,7 @@ function SecurityPageView({
     else setSessionError(m.auth_security_sessions_failed());
   }
 
-  async function runAction(target: SecurityTarget, current = false, retry = false) {
+  function reviewTarget(target: SecurityTarget, retry = false) {
     if (renderGeneration !== authorityGeneration.current || renderAdviceGeneration !== adviceGeneration.current) return;
     const held = activeOperation.current;
     const retryAllowed =
@@ -411,44 +441,68 @@ function SecurityPageView({
       held.target.kind === target.kind &&
       held.target.id === target.id;
     if ((held && !retryAllowed) || activeAccount.current !== target.accountId || !target.accountId) return;
-    const selected =
-      target.kind === 'session'
-        ? sessions.find((row) => row.id === target.id)
-        : passkeys.find((row) => row.id === target.id);
-    const advice =
-      target.kind === 'session'
-        ? (selected as SecuritySession | undefined)?.revoke
-        : (selected as SecurityPasskey | undefined)?.remove;
-    if (!selected || !canAct(advice)) return;
+    const selected = securityTargetRow(target, sessions, passkeys);
+    if (!selected || !canAct(targetAdvice(selected))) return;
+    targetOrigin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    updateOperation({
+      kind: 'review',
+      target,
+      generation: authorityGeneration.current,
+      advice: adviceGeneration.current,
+      retry,
+    });
+  }
+
+  function cancelTargetReview() {
+    const held = activeOperation.current;
+    if (held?.kind !== 'review') return;
+    if (held.retry) updateOperation({ kind: 'recovery', target: held.target, phase: 'present', reading: false });
+    else {
+      returnTargetFocus.current = held.target.kind;
+      updateOperation(null);
+    }
+  }
+
+  async function confirmTarget() {
+    const held = activeOperation.current;
+    if (held?.kind !== 'review') return;
+    const { target, generation } = held;
+    if (
+      generation !== authorityGeneration.current ||
+      held.advice !== adviceGeneration.current ||
+      renderGeneration !== generation ||
+      renderAdviceGeneration !== held.advice ||
+      activeAccount.current !== target.accountId
+    )
+      return;
+    const selected = securityTargetRow(target, sessions, passkeys);
+    const advice = targetAdvice(selected);
+    if (!selected || !canAct(advice)) {
+      cancelTargetReview();
+      return;
+    }
     if (advice === 'step-up-required') {
       clearPrivateData('signed-out');
       window.location.assign(STEP_UP_URL);
       return;
     }
-    const generation = authorityGeneration.current;
-    if (
-      !window.confirm(
-        target.kind === 'session'
-          ? m.auth_security_revoke_confirmation()
-          : m.auth_security_passkey_remove_confirmation(),
-      )
-    )
-      return;
-    // A browser confirmation may have outlived the document's authority.
-    if (authorityGeneration.current !== generation || activeAccount.current !== target.accountId) return;
-    updateOperation({ kind: 'target', target });
+    const current = selected.kind === 'session' && selected.row.current;
+    const dispatch: SecurityOperation = { kind: 'target', target };
+    updateOperation(dispatch);
     setSessionNotice('');
     setSessionError('');
     setPasskeyNotice('');
     setPasskeyError('');
-    const result = securitySource
-      ? await securitySource.act(target)
-      : target.kind === 'session'
-        ? await revokeSession(target.id, target.accountId)
-        : await removePasskey(target.id, target.accountId);
-    if (authorityGeneration.current !== generation) return;
-    if (activeAccount.current !== target.accountId) return;
-    // A retry consumes the observation; finishAction keeps any new uncertainty inside the boundary.
+    const result = await waitForSecurityAction(
+      (signal) => (securitySource ? securitySource.act(target, signal) : performSecurityAction(target, signal)),
+      lifetime.current.signal,
+    );
+    if (
+      authorityGeneration.current !== generation ||
+      activeOperation.current !== dispatch ||
+      activeAccount.current !== target.accountId
+    )
+      return;
     finishAction(target, result, current);
   }
 
@@ -586,11 +640,11 @@ function SecurityPageView({
   }
 
   async function removeOnePasskey(passkey: SecurityPasskey) {
-    await runAction({ kind: 'passkey', id: passkey.id, accountId });
+    reviewTarget({ kind: 'passkey', id: passkey.id, accountId });
   }
 
   async function revoke(session: SecuritySession) {
-    await runAction({ kind: 'session', id: session.id, accountId }, session.current);
+    reviewTarget({ kind: 'session', id: session.id, accountId });
   }
 
   if (loadState === 'signed-out')
@@ -639,41 +693,28 @@ function SecurityPageView({
             <p role="status">{m.auth_inventory_loading()}</p>
           ) : (
             <>
+              {targetReview && securityTargetRow(targetReview.target, sessions, passkeys) ? (
+                <SecurityTargetReview
+                  selected={securityTargetRow(targetReview.target, sessions, passkeys)!}
+                  locale={locale}
+                  retry={targetReview.retry}
+                  confirm={() => void confirmTarget()}
+                  cancel={cancelTargetReview}
+                />
+              ) : null}
+              {operation?.kind === 'target' ? <p role="status">{m.auth_inventory_loading()}</p> : null}
               {recovery ? (
-                <div className="auth-login-form" aria-busy={reading}>
-                  <div ref={recoveryStatus} tabIndex={-1} role="status">
-                    {recovery.phase === 'accepted'
-                      ? m.auth_security_action_accepted()
-                      : recovery.phase === 'present'
-                        ? m.auth_security_target_present()
-                        : m.auth_security_action_unknown()}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void recoverTarget()}
-                    disabled={reading}
-                    aria-busy={reading}
-                  >
-                    {m.auth_security_check_current()}
-                  </Button>
-                  {recovery.phase === 'present' ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={reading}
-                      onClick={() =>
-                        void runAction(
-                          recovery.target,
-                          sessions.some((row) => row.id === recovery.target.id && row.current),
-                          true,
-                        )
-                      }
-                    >
-                      {m.auth_security_retry_action()}
-                    </Button>
-                  ) : null}
-                </div>
+                <SecurityTargetRecovery
+                  target={recovery.target}
+                  phase={recovery.phase}
+                  reading={reading}
+                  selected={securityTargetRow(recovery.target, sessions, passkeys)}
+                  locale={locale}
+                  retryAllowed={canAct(targetAdvice(securityTargetRow(recovery.target, sessions, passkeys)))}
+                  statusRef={recoveryStatus}
+                  check={() => void recoverTarget()}
+                  review={() => reviewTarget(recovery.target, true)}
+                />
               ) : null}
               {registrationRecovery ? (
                 <div className="auth-login-form" aria-busy={registrationRecovery.reading}>
@@ -757,7 +798,9 @@ function SecurityPageView({
 
               {passkeysLoad.kind === 'hidden' ? null : (
                 <section aria-labelledby="security-passkeys-heading">
-                  <h2 id="security-passkeys-heading">{m.auth_security_passkeys_heading()}</h2>
+                  <h2 id="security-passkeys-heading" tabIndex={-1}>
+                    {m.auth_security_passkeys_heading()}
+                  </h2>
                   {passkeysLoad.kind === 'failure' ? (
                     <>
                       <ErrorAlert>{passkeysLoad.message}</ErrorAlert>
@@ -864,7 +907,9 @@ function SecurityPageView({
               )}
 
               <section aria-labelledby="security-sessions-heading">
-                <h2 id="security-sessions-heading">{m.auth_security_sessions_heading()}</h2>
+                <h2 id="security-sessions-heading" tabIndex={-1}>
+                  {m.auth_security_sessions_heading()}
+                </h2>
                 {sessionNotice ? (
                   <div className="auth-login-alert" role="status" tabIndex={-1} ref={sessionStatus}>
                     {sessionNotice}

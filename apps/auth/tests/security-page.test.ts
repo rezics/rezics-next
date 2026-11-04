@@ -77,13 +77,14 @@ test('a selected session reconciles native advice and old targets retire on refr
     }),
   };
   const view = await open(createElement(SecurityPage, { ...props, initial: ready(page), securitySource: source }), {});
-  window.confirm = () => true;
   const oldButton = view.host.querySelectorAll<HTMLButtonElement>('li button')[2]!;
   await flush(() => oldButton.click());
+  if (button(view.host, m.auth_security_confirm_session()))
+    await flush(() => button(view.host, m.auth_security_confirm_session())!.click());
   expect(actions).toEqual(['other']);
   await flush(() => oldButton.click());
   expect(actions).toEqual(['other']);
-  expect(view.host.textContent).toContain(m.auth_security_target_absent());
+  expect(view.host.textContent).toContain(m.auth_security_session_absent());
   expect(view.host.querySelector('[aria-labelledby="security-sessions-heading"]')!.querySelectorAll('li')).toHaveLength(
     1,
   );

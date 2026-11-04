@@ -1,5 +1,12 @@
+import { privateAuthRead } from './private-auth-read';
+import { waitForSecurityAction } from './security-target-operation';
 import { createServerFn } from '@tanstack/react-start';
-import { issuerSecurityRequest, readNativeSecurityPage, type SecurityPageEnvelope } from './security-inventory';
+import {
+  parseSecurityPage,
+  issuerSecurityRequest,
+  readNativeSecurityPage,
+  type SecurityPageEnvelope,
+} from './security-inventory';
 import type { SecurityLoadResult, SecurityPasskey, SecuritySession } from './security';
 
 // Only this exact target is retained, in page memory. No cookie, proof, nonce or row metadata.
@@ -23,8 +30,8 @@ export type SecurityReadback =
 // A fixed, typed presentation seam matching the existing inventory source pattern.
 export type SecuritySource = {
   load?: (withPasskeys: boolean) => Promise<SecurityLoadResult>;
-  read: (target: SecurityTarget) => Promise<SecurityReadback>;
-  act: (target: SecurityTarget) => Promise<SecurityActionResult>;
+  read: (target: SecurityTarget, signal?: AbortSignal) => Promise<SecurityReadback>;
+  act: (target: SecurityTarget, signal?: AbortSignal) => Promise<SecurityActionResult>;
 };
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -155,7 +162,7 @@ const act = createServerFn({ method: 'POST' })
   .validator(target)
   .handler(async ({ data }): Promise<SecurityActionResult> => {
     try {
-      const authority = await currentAccount(data.accountId);
+      const authority = await currentAccount(data.accountId).catch(() => 'unavailable' as const);
       if (authority !== 'current') return { kind: authority === 'unavailable' ? 'failure' : authority };
       const response = await issuerSecurityRequest(
         data.kind === 'session' ? '/sessions/revoke' : '/passkeys/remove',
@@ -182,17 +189,42 @@ const act = createServerFn({ method: 'POST' })
     }
   });
 
-export async function readSecurityTarget(value: SecurityTarget): Promise<SecurityReadback> {
+// The browser boundary is kept separate from source injection: both callers
+// still use the same finite wait, cancellation and acknowledgement handling.
+export const securityTargetBrowserTransport = {
+  read: (value: SecurityTarget, signal: AbortSignal) => readback({ data: value, signal }),
+  act: (value: SecurityTarget, signal: AbortSignal) => act({ data: value, signal }),
+};
+
+export async function readSecurityTarget(value: SecurityTarget, signal?: AbortSignal): Promise<SecurityReadback> {
   try {
-    return await readback({ data: value });
+    const result = await privateAuthRead((signal) => securityTargetBrowserTransport.read(value, signal), signal);
+    if (!result || typeof result !== 'object') return { kind: 'unavailable' };
+    if (result.kind !== 'ready')
+      return ['signed-out', 'denied', 'unavailable'].includes(result.kind) ? result : { kind: 'unavailable' };
+    const page = parseSecurityPage(result.page);
+    if (!page) return { kind: 'unavailable' };
+    if (page.viewer.account_id !== value.accountId) return { kind: 'denied' };
+    const inventory = value.kind === 'session' ? page.sessions : page.passkeys;
+    if (inventory.kind !== 'ready' || page.sessions.kind !== 'ready') return { kind: 'unavailable' };
+    return {
+      kind: 'ready',
+      page,
+      sessions: page.sessions.rows,
+      passkeys: page.passkeys.kind === 'ready' ? page.passkeys.rows : null,
+      presence: inventory.rows.some((row) => row.id === value.id)
+        ? 'present'
+        : inventory.truncated
+          ? 'unknown'
+          : 'absent',
+    };
   } catch {
     return { kind: 'unavailable' };
   }
 }
-export async function performSecurityAction(value: SecurityTarget): Promise<SecurityActionResult> {
-  try {
-    return await act({ data: value });
-  } catch {
-    return { kind: 'unknown' };
-  }
+export async function performSecurityAction(
+  value: SecurityTarget,
+  signal?: AbortSignal,
+): Promise<SecurityActionResult> {
+  return waitForSecurityAction((signal) => securityTargetBrowserTransport.act(value, signal), signal);
 }

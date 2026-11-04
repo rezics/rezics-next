@@ -124,8 +124,17 @@ async function open() {
   return page;
 }
 async function confirm(page: Page, accept = true) {
-  page.once('dialog', (dialog) => (accept ? dialog.accept() : dialog.dismiss()));
   await page.getByRole('button', { name: 'Sign out Unknown device', exact: true }).last().click();
+  await decide(page, accept);
+}
+async function decide(page: Page, accept = true, passkey = false) {
+  const dialog = page.getByRole('dialog');
+  await dialog
+    .getByRole('button', {
+      name: accept ? (passkey ? 'Confirm passkey removal' : 'Confirm session sign-out') : 'Cancel',
+      exact: true,
+    })
+    .click();
 }
 const check = (page: Page) => page.getByRole('button', { name: 'Check current security settings', exact: true });
 const retry = (page: Page) => page.getByRole('button', { name: 'Try this action again', exact: true });
@@ -150,7 +159,12 @@ test('Recover uncertain credential and session actions with current native readb
     expect(await retry(page).count()).toBe(0);
     unavailable = false;
     await check(page).click();
-    await page.getByText('The selected item is absent from the current security inventory.', { exact: true }).waitFor();
+    await page
+      .getByText(
+        'This session is absent from the complete current inventory. This does not establish what the earlier command did.',
+        { exact: true },
+      )
+      .waitFor();
     expect(await page.getByRole('button', { name: 'Sign out Unknown device', exact: true }).count()).toBe(1);
     expect(writes).toHaveLength(1);
   } finally {
@@ -165,13 +179,18 @@ test('unchanged readback allows only an explicitly confirmed exact-target retry;
     await confirm(page);
     await check(page).click();
     await retry(page).waitFor();
-    page.once('dialog', (dialog) => dialog.dismiss());
     await retry(page).click();
+    await decide(page, false);
     expect(writes).toHaveLength(1);
     mode = 'accepted';
-    page.once('dialog', (dialog) => dialog.accept());
     await retry(page).click();
-    await page.getByText('The selected item is absent from the current security inventory.', { exact: true }).waitFor();
+    await decide(page);
+    await page
+      .getByText(
+        'This session is absent from the complete current inventory. This does not establish what the earlier command did.',
+        { exact: true },
+      )
+      .waitFor();
     expect(writes).toHaveLength(2);
     expect(writes[1]!.body).toEqual({ session_id: 'other' });
     expect(await page.getByRole('button', { name: 'Sign out Unknown device', exact: true }).count()).toBe(1);
@@ -205,8 +224,8 @@ test('current account switch and denied readback clear private data without disp
 test('lost passkey removal and current-session loss require sign-in without inventing removal success', async () => {
   const page = await open();
   try {
-    page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Remove passkey Security key', exact: true }).click();
+    await decide(page, true, true);
     await check(page).waitFor();
     await check(page).click();
     await page.getByText('The action result has not been verified.', { exact: false }).waitFor();
@@ -216,6 +235,46 @@ test('lost passkey removal and current-session loss require sign-in without inve
     expect(writes[0]!.body).toEqual({ id: 'key' });
     expect(await page.getByRole('link', { name: 'Sign in', exact: true }).count()).toBe(1);
   } finally {
+    await page.context().close();
+  }
+}, 180_000);
+
+test('actual browser BFF waiting is finite and a late acknowledgement cannot repeat or overwrite recovery', async () => {
+  const page = await open();
+  const release = Promise.withResolvers<void>();
+  try {
+    mode = 'accepted';
+    let requests = 0;
+    await page.route('**/_serverFn/**', async (route) => {
+      requests++;
+      // The native writer completes while browser delivery remains withheld.
+      const response = await route.fetch();
+      await release.promise;
+      await route.fulfill({ response }).catch(() => {});
+    });
+    await confirm(page);
+    await page.getByText('The session sign-out result is unknown.', { exact: false }).waitFor();
+    expect(requests).toBe(1);
+    expect(writes.map(({ body }) => body)).toEqual([{ session_id: 'other' }]);
+    await page.unroute('**/_serverFn/**');
+    const readRelease = Promise.withResolvers<void>();
+    await page.route('**/_serverFn/**', async (route) => {
+      const response = await route.fetch();
+      await readRelease.promise;
+      await route.fulfill({ response }).catch(() => {});
+    });
+    await check(page).click();
+    await page.getByText('Current security settings could not be verified.', { exact: false }).waitFor();
+    expect(await retry(page).count()).toBe(0);
+    release.resolve();
+    readRelease.resolve();
+    await page.unroute('**/_serverFn/**');
+    await check(page).click();
+    await page.getByText('This session is absent from the complete current inventory.', { exact: false }).waitFor();
+    expect(writes).toHaveLength(1);
+    expect(await retry(page).count()).toBe(0);
+  } finally {
+    release.resolve();
     await page.context().close();
   }
 }, 180_000);

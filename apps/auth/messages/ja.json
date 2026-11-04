@@ -475,5 +475,21 @@
   "auth_account_delete_retention_limits": "保持が必要な記録には採用済みの保持例外が適用されます。バックアップの期限と外部コピーは別に扱われ、この画面ではその消去を確認できません。",
   "auth_organization_delete_authentication_required": "この選択を確認するには認証してください。選択した ID は未確認です。組織の情報、削除権限、削除の前提条件は、認可後にのみ確認できます。",
   "auth_organization_delete_authenticate": "認証して確認する",
-  "auth_organization_delete_advice": "この確認画面は現在の権限を示すもので、削除を許可したり、すべての前提条件の充足を保証したりするものではありません。確定時に新しい認証と現在の前提条件が再確認されます。"
+  "auth_organization_delete_advice": "この確認画面は現在の権限を示すもので、削除を許可したり、すべての前提条件の充足を保証したりするものではありません。確定時に新しい認証と現在の前提条件が再確認されます。",
+  "auth_security_review_session": "セッションのログアウトを確認",
+  "auth_security_review_passkey": "パスキーの削除を確認",
+  "auth_security_confirm_session": "セッションのログアウトを確定",
+  "auth_security_confirm_passkey": "パスキーの削除を確定",
+  "auth_security_current_consequence": "これは現在のデバイスです。このセッションを失効させると、ここからログアウトされ、再ログインが必要になります。",
+  "auth_security_session_consequence": "このセッションを失効させると、そのデバイスからログアウトされます。",
+  "auth_security_passkey_removal_rule": "最後のログイン手段である場合、Auth は削除を拒否します。",
+  "auth_security_retry_explanation": "この確認では、この項目に対する新しいコマンドを送信します。現在存在することから、以前の処理結果は判断できません。",
+  "auth_security_target_checking": "現在の状態を確認中です。削除コマンドは送信しません。",
+  "auth_security_target_incomplete": "この項目は件数制限のある一覧に見つかりません。存在しないとは確認できません。明示的に現在の状態を再確認してください。",
+  "auth_security_session_unknown": "セッションのログアウト結果は不明です。再試行を確認する前に現在の状態を確認してください。",
+  "auth_security_passkey_unknown": "パスキーの削除結果は不明です。再試行を確認する前に現在の状態を確認してください。",
+  "auth_security_session_present": "このセッションは現在存在します。再試行の前に現在の操作条件を確認してください。",
+  "auth_security_passkey_present": "このパスキーは現在存在します。再試行の前に現在の操作条件を確認してください。",
+  "auth_security_session_absent": "現在の完全な一覧にこのセッションはありません。以前のコマンドの結果を証明するものではありません。",
+  "auth_security_passkey_absent": "現在の完全な一覧にこのパスキーはありません。以前のコマンドの結果を証明するものではありません。"
 }

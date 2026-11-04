@@ -475,5 +475,21 @@
   "auth_account_delete_retention_limits": "Los registros que deban conservarse siguen las excepciones de retención adoptadas. Los respaldos y las copias externas son independientes; esta página no confirma su borrado.",
   "auth_organization_delete_authentication_required": "Autentícate para revisar esta selección. El ID seleccionado no está verificado; la identidad de la organización, tu permiso y los requisitos de eliminación solo estarán disponibles tras la autorización.",
   "auth_organization_delete_authenticate": "Autenticarse para revisar",
-  "auth_organization_delete_advice": "Esta revisión observa el permiso actual; no autoriza la eliminación ni verifica todos los requisitos. Al confirmar, se comprueban de nuevo la autenticación reciente y los requisitos actuales."
+  "auth_organization_delete_advice": "Esta revisión observa el permiso actual; no autoriza la eliminación ni verifica todos los requisitos. Al confirmar, se comprueban de nuevo la autenticación reciente y los requisitos actuales.",
+  "auth_security_review_session": "Revisar el cierre de sesión",
+  "auth_security_review_passkey": "Revisar la eliminación de la clave de acceso",
+  "auth_security_confirm_session": "Confirmar el cierre de sesión",
+  "auth_security_confirm_passkey": "Confirmar la eliminación de la clave de acceso",
+  "auth_security_current_consequence": "Este es tu dispositivo actual. Revocar esta sesión te desconecta aquí y tendrás que iniciar sesión de nuevo.",
+  "auth_security_session_consequence": "Revocar esta sesión desconecta ese dispositivo.",
+  "auth_security_passkey_removal_rule": "Auth rechaza la eliminación si esta es tu última credencial de acceso.",
+  "auth_security_retry_explanation": "Esta confirmación envía un nuevo comando para este elemento exacto. Su presencia actual no aclara el resultado anterior.",
+  "auth_security_target_checking": "Comprobando el estado actual. No se envía ningún comando de eliminación.",
+  "auth_security_target_incomplete": "Este elemento no aparece en una ventana limitada del inventario. No se puede confirmar su ausencia. Comprueba el estado actual de nuevo explícitamente.",
+  "auth_security_session_unknown": "El resultado del cierre de sesión es desconocido. Comprueba el estado actual antes de revisar otro intento.",
+  "auth_security_passkey_unknown": "El resultado de la eliminación de la clave de acceso es desconocido. Comprueba el estado actual antes de revisar otro intento.",
+  "auth_security_session_present": "Esta sesión está presente actualmente. Revisa las indicaciones actuales antes de otro intento.",
+  "auth_security_passkey_present": "Esta clave de acceso está presente actualmente. Revisa las indicaciones actuales antes de otro intento.",
+  "auth_security_session_absent": "Esta sesión no aparece en el inventario actual completo. Esto no demuestra qué hizo el comando anterior.",
+  "auth_security_passkey_absent": "Esta clave de acceso no aparece en el inventario actual completo. Esto no demuestra qué hizo el comando anterior."
 }

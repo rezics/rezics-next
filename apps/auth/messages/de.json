@@ -475,5 +475,21 @@
   "auth_account_delete_retention_limits": "Erforderliche aufbewahrte Daten unterliegen den festgelegten Ausnahmen. Backups und externe Kopien sind gesondert zu behandeln; diese Seite bestätigt deren Löschung nicht.",
   "auth_organization_delete_authentication_required": "Authentifiziere dich, um diese Auswahl zu prüfen. Die ausgewählte ID ist unbestätigt. Die Identität der Organisation, deine Berechtigung und die Löschvoraussetzungen sind erst nach der Autorisierung verfügbar.",
   "auth_organization_delete_authenticate": "Zur Prüfung authentifizieren",
-  "auth_organization_delete_advice": "Diese Prüfung zeigt die aktuelle Berechtigung. Sie erteilt keine Löschfreigabe und bestätigt nicht alle Voraussetzungen. Bei der Bestätigung werden die frische Authentifizierung und die aktuellen Voraussetzungen erneut geprüft."
+  "auth_organization_delete_advice": "Diese Prüfung zeigt die aktuelle Berechtigung. Sie erteilt keine Löschfreigabe und bestätigt nicht alle Voraussetzungen. Bei der Bestätigung werden die frische Authentifizierung und die aktuellen Voraussetzungen erneut geprüft.",
+  "auth_security_review_session": "Abmeldung der Sitzung prüfen",
+  "auth_security_review_passkey": "Entfernen des Passkeys prüfen",
+  "auth_security_confirm_session": "Abmeldung der Sitzung bestätigen",
+  "auth_security_confirm_passkey": "Entfernen des Passkeys bestätigen",
+  "auth_security_current_consequence": "Dies ist dein aktuelles Gerät. Das Widerrufen dieser Sitzung meldet dich hier ab. Du musst dich erneut anmelden.",
+  "auth_security_session_consequence": "Das Widerrufen dieser Sitzung meldet dieses Gerät ab.",
+  "auth_security_passkey_removal_rule": "Auth verweigert das Entfernen, wenn dies dein letztes Anmeldemittel ist.",
+  "auth_security_retry_explanation": "Diese Bestätigung sendet einen neuen Befehl für genau diesen Eintrag. Sein aktuelles Vorhandensein klärt das frühere Ergebnis nicht.",
+  "auth_security_target_checking": "Der aktuelle Status wird geprüft. Es wird kein Entfernungsbefehl gesendet.",
+  "auth_security_target_incomplete": "Dieser Eintrag fehlt in einem begrenzten Ausschnitt. Seine Abwesenheit ist nicht bestätigt. Prüfe den aktuellen Status ausdrücklich erneut.",
+  "auth_security_session_unknown": "Das Ergebnis der Sitzungsabmeldung ist unbekannt. Prüfe den aktuellen Status, bevor du einen weiteren Versuch prüfst.",
+  "auth_security_passkey_unknown": "Das Ergebnis der Passkey-Entfernung ist unbekannt. Prüfe den aktuellen Status, bevor du einen weiteren Versuch prüfst.",
+  "auth_security_session_present": "Diese Sitzung ist derzeit vorhanden. Prüfe vor einem weiteren Versuch die aktuellen Hinweise.",
+  "auth_security_passkey_present": "Dieser Passkey ist derzeit vorhanden. Prüfe vor einem weiteren Versuch die aktuellen Hinweise.",
+  "auth_security_session_absent": "Diese Sitzung fehlt im vollständigen aktuellen Verzeichnis. Daraus folgt nicht, was der frühere Befehl bewirkt hat.",
+  "auth_security_passkey_absent": "Dieser Passkey fehlt im vollständigen aktuellen Verzeichnis. Daraus folgt nicht, was der frühere Befehl bewirkt hat."
 }

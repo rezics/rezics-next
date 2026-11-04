@@ -17,7 +17,6 @@ afterAll(() => {
 const identitySource = async () => ({ kind: 'unavailable' as const });
 const restore = () => window.dispatchEvent(new dom.Event('pageshow') as unknown as Event);
 async function mount(provided: SecurityLoadResult | undefined = initial) {
-  window.confirm = () => true;
   const reads: ReturnType<typeof Promise.withResolvers<SecurityLoadResult>>[] = [];
   const action = Promise.withResolvers<SecurityActionResult>();
   const targets: unknown[] = [],
@@ -112,6 +111,7 @@ test.each([false, true])(
   async (different) => {
     const { host, reads, action, targets } = await mount();
     await flush(() => button(host, m.auth_security_passkey_remove())!.click());
+    await flush(() => button(host, m.auth_security_confirm_passkey())!.click());
     await flush(leave);
     await flush(restore);
     await flush(() => action.resolve({ kind: 'accepted' }));
@@ -125,11 +125,9 @@ test.each([false, true])(
     expect(button(host, m.auth_security_retry_action())).toBeUndefined();
     expect(targets).toHaveLength(1);
     if (different) {
-      window.confirm = () => {
-        leave();
-        return true;
-      };
       await flush(() => button(host, m.auth_security_passkey_remove())!.click());
+      await flush(leave);
+      expect(button(host, m.auth_security_confirm_passkey())).toBeUndefined();
       expect(targets).toHaveLength(1);
     }
   },
@@ -148,4 +146,17 @@ test('departure invalidates pending reads; unavailable retry and signed-out retu
   await flush(() => reads[2]!.resolve({ kind: 'signed-out' }));
   expect(host.querySelector('a[href="/login"]')).not.toBeNull();
   expect(host.querySelector('form')).toBeNull();
+});
+
+test('cached return discards an unsent review and its description without dispatch', async () => {
+  const { host, reads, targets } = await mount();
+  await flush(() => button(host, m.auth_security_passkey_remove())!.click());
+  expect(host.querySelector('[role="dialog"]')).not.toBeNull();
+  await flush(leave);
+  expect(host.textContent).not.toContain('Security key');
+  await flush(restore);
+  await flush(() => reads[0]!.resolve(initial));
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(button(host, m.auth_security_check_current())).toBeUndefined();
+  expect(targets).toHaveLength(0);
 });

@@ -49,7 +49,6 @@ async function mount(securitySource: SecuritySource) {
   destroyHistory = () => history.destroy();
   const router = createRouter({ routeTree, history });
   await router.load();
-  window.confirm = () => true;
   const ui = await open(<RouterProvider router={router} />, { account_id: 'account' });
   await tick();
   return { ...ui, router };
@@ -121,9 +120,10 @@ test('Leave retires an unresolved operation without replaying it after return', 
   });
   const button = ui.host
     .querySelector<HTMLButtonElement>('#security-sessions-heading')
-    ?.parentElement?.querySelector('button');
+    ?.parentElement?.querySelector('li button');
   expect(button).not.toBeNull();
   await flush(() => button!.click());
+  await flush(() => ui.host.querySelector<HTMLButtonElement>('[role="dialog"] button:last-child')!.click());
   expect(calls).toBe(1);
   const { navigation: leaving } = await startNavigation(ui.router, '/next');
   expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
@@ -137,4 +137,33 @@ test('Leave retires an unresolved operation without replaying it after return', 
   await tick();
   expect(calls).toBe(1);
   expect(ui.host.querySelector('[role="alertdialog"]')).toBeNull();
+});
+
+test('Stay keeps an unsent target review and focus; Leave clears it with zero commands', async () => {
+  let commands = 0;
+  const ui = await mount({
+    read: async () => ({ kind: 'unavailable' }),
+    act: async () => {
+      commands++;
+      return { kind: 'unknown' };
+    },
+  });
+  await flush(() =>
+    ui.host
+      .querySelector<HTMLButtonElement>('#security-passkeys-heading')!
+      .parentElement!.querySelector<HTMLButtonElement>('li button')!
+      .click(),
+  );
+  const cancel = ui.host.querySelector<HTMLButtonElement>('[role="dialog"] button')!;
+  expect(document.activeElement).toBe(cancel);
+  await startNavigation(ui.router, '/next');
+  await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-stay]')!.click());
+  await tick();
+  expect(document.activeElement).toBe(cancel);
+  expect(ui.host.querySelector('[role="dialog"]')!.textContent).toContain('Security key');
+  const { navigation } = await startNavigation(ui.router, '/next');
+  await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
+  await flush(() => navigation);
+  expect(commands).toBe(0);
+  expect(ui.host.textContent).not.toContain('Security key');
 });
