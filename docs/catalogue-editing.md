@@ -600,6 +600,14 @@ classification overlay. Draft rank keeps a selected `preferred` assertion; Chara
 
 ## Ordinary multilingual correction
 
+Decision: The mounted `subject.terms` operation is observed through current `statement:propose` authority on the Global Context; the Subject Terms read independently proves current disclosure and revision.
+
+### Correct multilingual Terms with current native edit eligibility
+
+- Touches: the exact currently disclosed Subject Terms/revision, one Global Context reference for the mounted operation and its native Access/disclosure witnesses, bounded language fields, and actual conflict snapshots.
+- Bound: one Subject read and one Global viewer-action reference per observation, explicit retry, or pre-command check; no authority read per language, alias, or historical revision, and no grant enumeration. Existing native request and response bounds apply before hydration.
+- Growth check: use the existing native Terms and authority captures at three legitimate scales. Grow unrelated subjects, revision history, and grants while holding one Subject, bounded Terms payload, and one command fixed; inspect complete-operation work and strict indexed point-read plans. Report local editor copies as separately named bytes.
+
 The selected operation is `PATCH /v1/subjects/{id}/terms`. Required headers are a strong quoted `If-Match`
 containing the actual Subject revision, and the existing quoted `Idempotency-Key`. Its closed request is:
 
