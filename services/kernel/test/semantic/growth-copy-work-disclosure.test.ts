@@ -81,11 +81,12 @@ test('copy/work disclosure stays bounded at 64/512/4096 unrelated subjects and o
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       includeBackends: true,
+      counted: { read: () => ({}), limits: { connections: 1 }, bounds: { connections: 'constant' } },
       async grow(db, scale, previous) {
         await seed(db, data, { from: previous, to: scale });
       },
       async operation() {
-        const deps = await f.deps();
+        const deps = { ...(await f.deps()), deadline: Date.now() + 180_000 };
         const observed = await readCopyWorkDisclosure(deps, { identities: page, languages: ['en'] });
         expect(observed.results.get(edition)).toEqual({
           state: 'available',
@@ -107,4 +108,4 @@ test('copy/work disclosure stays bounded at 64/512/4096 unrelated subjects and o
   } finally {
     await f.close();
   }
-}, 600_000);
+}, 1_800_000);

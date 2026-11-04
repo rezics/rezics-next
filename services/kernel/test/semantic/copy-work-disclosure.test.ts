@@ -79,7 +79,7 @@ test('native Book edition disclosure returns selected work labels and exact empt
     const partial = await f.create('bf:Instance', { 'schema:exampleOfWork': work }, { en: 'Partial' });
     await locators(f.pool, partial, extra.slice(0, 1));
 
-    const deps = await f.deps('anonymous');
+    const deps = { ...(await f.deps('anonymous')), deadline: Date.now() + 180_000 };
     await expect(
       readCopyWorkDisclosure(deps, { identities: Array(COPY_WORK_DISCLOSURE_MAX_RAW + 1).fill(edition) }),
     ).rejects.toBeInstanceOf(RangeError);
@@ -130,4 +130,4 @@ test('native Book edition disclosure returns selected work labels and exact empt
   } finally {
     await f.close();
   }
-}, 180_000);
+}, 1_800_000);

@@ -1,5 +1,7 @@
 import type { Release } from '@rezics/definitions';
+import { within } from '../access/authenticate.ts';
 import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
+import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { partitionReadClients } from '../database/read-snapshot.ts';
 import { readPartition, readPartitions } from '../partition/partition.ts';
 import { accessCheck, type AccessCheck } from '../request/access.ts';
@@ -17,12 +19,13 @@ import {
   type CopyWorkReference,
 } from './copy-work-disclosure-contract.ts';
 import readCopyWorkHeads from './copy-work-disclosure.sql';
-import { currentRelationFacts, type CurrentRelationCandidate } from './current-relations.ts';
-import { activeRelease, GLOBAL_CONTEXT } from './definitions.ts';
+import { activeRelease } from './definitions.ts';
 import { relatedReadEligibility, subjectReadEligibility } from './eligibility.ts';
+import { candidateSources, fenceKey, sourceTuple } from './fences.ts';
 import { readIdentityMappings } from './identity-epoch-read.ts';
-import { isRelationProperty } from './item.ts';
+import { isRelationProperty, type FactRow } from './item.ts';
 import { withReadTransaction } from './read.ts';
+import { effectiveGlobalSlotFacts } from './slots.ts';
 import { readSubjectSummaryObservation, type SubjectSummary, type SubjectSummaryObservation } from './summaries.ts';
 
 export type {
@@ -171,227 +174,289 @@ export async function readCopyWorkDisclosure(
   let targets: string[] = [];
 
   try {
-    const active = await withReadTransaction(deps.pool, (client) => activeRelease(client), deps.deadline);
-    if (!active) {
-      for (const id of routed) results.set(id, unavailable);
-      return observation(deps, results, [], null, null);
-    }
-    releaseDigest = active.digest;
-    releaseHead = active.head;
-    const mappings = await mapIdentities(deps, routed);
-    for (const id of routed) {
-      const mapping = mappings.get(id);
-      if (!mapping || mapping.state === 'pending' || mapping.state === 'unavailable') classified.set(id, unavailable);
-      else {
-        const terminal = mapping.state === 'mapped' ? mapping.terminal : id;
-        const route = routeOf(terminal);
-        if (route === null) classified.set(id, missing);
-        else plans.set(id, { original: id, terminal, home: partitionOf(route) });
+    await within(deps.deadline, async () => {
+      const active = await withReadTransaction(deps.pool, (client) => activeRelease(client), deps.deadline);
+      if (!active) {
+        for (const id of routed) results.set(id, unavailable);
+        return;
       }
-    }
-    const terminals = [...new Set([...plans.values()].map((plan) => plan.terminal))];
-    for (const terminal of terminals) {
-      if (checks.has(terminal)) continue;
-      const route = routeOf(terminal)!;
-      checks.set(
-        terminal,
-        await accessCheck(
-          deps.access,
-          deps.actor,
-          'subject:read',
-          { route, id: terminal, eligibility: subjectReadEligibility({ route, id: terminal }) },
-          { pool: deps.pool, deadline: deps.deadline },
-        ),
-      );
-    }
+      releaseDigest = active.digest;
+      releaseHead = active.head;
+      const mappings = await mapIdentities(deps, routed);
+      for (const id of routed) {
+        const mapping = mappings.get(id);
+        if (!mapping || mapping.state === 'pending' || mapping.state === 'unavailable') classified.set(id, unavailable);
+        else {
+          const terminal = mapping.state === 'mapped' ? mapping.terminal : id;
+          const route = routeOf(terminal);
+          if (route === null) classified.set(id, missing);
+          else plans.set(id, { original: id, terminal, home: partitionOf(route) });
+        }
+      }
+      const terminals = [...new Set([...plans.values()].map((plan) => plan.terminal))];
+      for (const terminal of terminals) {
+        if (checks.has(terminal)) continue;
+        const route = routeOf(terminal)!;
+        checks.set(
+          terminal,
+          await accessCheck(
+            deps.access,
+            deps.actor,
+            'subject:read',
+            { route, id: terminal, eligibility: subjectReadEligibility({ route, id: terminal }) },
+            { pool: deps.pool, deadline: deps.deadline },
+          ),
+        );
+      }
 
-    const sources = new Map<string, SourceObservation>();
-    for (const [home, ids] of groups(terminals)) {
-      const observed = await withReadTransaction(
-        deps.pool,
-        async (client) => {
-          const partition = await readPartition(client, home);
-          if (!partition || partition.writeState !== 'active') throw new AccessUnavailableError('contention');
-          cuts.push({ partition: home, epoch: partition.epoch, position: partition.position });
-          const rows = (await readCopyWorkHeads.run(client, {
-            partition_no: home,
-            property: COPY_WORK_PROPERTY,
-            page_limit: COPY_WORK_DISCLOSURE_LOOKAHEAD,
-            wanted: ids.map((id) => ({ route: routeOf(id)!, subject_id: id })),
-          })) as HeadRow[];
-          const checkpoint = (
-            await client.query<{ epoch: number; position: string }>(
-              'SELECT epoch, position::text FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2',
-              [home, 'semantic_links'],
-            )
-          ).rows[0];
-          const byId = new Map<string, HeadRow[]>();
-          for (const row of rows) {
-            const list = byId.get(row.id) ?? [];
-            list.push(row);
-            byId.set(row.id, list);
-          }
-          const found = new Map<string, SourceObservation>();
-          const candidates: CurrentRelationCandidate[] = [];
-          for (const id of ids) {
-            const group = byId.get(id);
-            if (!group?.length) continue;
-            const header = group[0]!;
-            const locators = group.filter((row) => row.candidate);
-            const check = checks.get(id);
-            const allowed = check ? await check(client) : false;
-            found.set(id, { header, locators, allowed, membership: null });
-            if (header.visibility !== 'visible' || !allowed) continue;
-            if (admittedCopyWork(active.release, header.type) !== 'admitted') continue;
-            if (!checkpoint || checkpoint.epoch !== partition.epoch) throw new AccessUnavailableError('contention');
-            if (
-              header.revision === null ||
-              header.release === null ||
-              header.source_epoch === null ||
-              header.source_position === null ||
-              header.source_epoch !== partition.epoch ||
-              BigInt(checkpoint.position) < BigInt(header.source_position)
-            )
-              throw new AccessUnavailableError('contention');
-            for (const locator of locators) {
-              if (locator.source_revision !== header.revision || locator.source_security_revision !== header.security)
+      const observedSources = new Map<string, SourceObservation>();
+      const fenceTuples: SourceFenceTuple[] = [];
+      const fencedSubjects: string[] = [];
+      for (const [home, ids] of groups(terminals)) {
+        const observed = await withReadTransaction(
+          deps.pool,
+          async (client) => {
+            const partition = await readPartition(client, home);
+            if (!partition || partition.writeState !== 'active') throw new AccessUnavailableError('contention');
+            cuts.push({ partition: home, epoch: partition.epoch, position: partition.position });
+            const values = {
+              partition_no: home,
+              property: COPY_WORK_PROPERTY,
+              page_limit: COPY_WORK_DISCLOSURE_LOOKAHEAD,
+              wanted: JSON.stringify(ids.map((id) => ({ route: routeOf(id)!, subject_id: id }))),
+            };
+            const rows = (
+              await client.query<HeadRow>(
+                readCopyWorkHeads.sql,
+                readCopyWorkHeads.params.map((name) => values[name as keyof typeof values]),
+              )
+            ).rows;
+            const checkpoint = (
+              await client.query<{ epoch: number; position: string }>(
+                'SELECT epoch, position::text FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2',
+                [home, 'semantic_links'],
+              )
+            ).rows[0];
+            const byId = new Map<string, HeadRow[]>();
+            for (const row of rows) {
+              const list = byId.get(row.id) ?? [];
+              list.push(row);
+              byId.set(row.id, list);
+            }
+            const found = new Map<string, SourceObservation>();
+            const provenance: { route: number; subject_id: string; candidate_id: string }[] = [];
+            for (const id of ids) {
+              const group = byId.get(id);
+              if (!group?.length) continue;
+              const header = group[0]!;
+              const locators = group.filter((row) => row.candidate);
+              const check = checks.get(id);
+              const allowed = check ? await check(client) : false;
+              found.set(id, { header, locators, allowed, membership: null });
+              if (header.visibility !== 'visible' || !allowed) continue;
+              if (admittedCopyWork(active.release, header.type) !== 'admitted') continue;
+              if (!checkpoint || checkpoint.epoch !== partition.epoch) throw new AccessUnavailableError('contention');
+              if (
+                header.revision === null ||
+                header.release === null ||
+                header.source_epoch === null ||
+                header.source_position === null ||
+                header.source_epoch !== partition.epoch ||
+                BigInt(checkpoint.position) < BigInt(header.source_position)
+              )
                 throw new AccessUnavailableError('contention');
-              candidates.push({
-                subject: id,
-                property: COPY_WORK_PROPERTY,
-                candidate: locator.candidate!,
-                target: locator.target,
-                context: GLOBAL_CONTEXT,
-                requireRelation: true,
-                ...(locator.slot ? { slot: locator.slot } : {}),
-              });
-            }
-          }
-          const facts = candidates.length ? await currentRelationFacts(client, deps.routeKey, candidates) : new Map();
-          for (const [id, source] of found) {
-            if (source.header.visibility !== 'visible' || !source.allowed) continue;
-            if (admittedCopyWork(active.release, source.header.type) !== 'admitted') continue;
-            if (source.locators.length >= COPY_WORK_DISCLOSURE_LOOKAHEAD) {
-              source.membership = { kind: 'overflow' };
-              continue;
-            }
-            const resolved: string[] = [];
-            let concealed = false;
-            for (const locator of source.locators) {
-              const fact = facts.get(`${locator.id}\n${COPY_WORK_PROPERTY}\n${locator.candidate}`);
-              const body = fact?.body as { value?: { type?: unknown; content?: unknown } } | undefined;
-              const content =
-                body?.value?.type === 'value' && typeof body.value.content === 'string' ? body.value.content : null;
-              if (!content || routeOf(content) === null) {
-                concealed = true;
+              for (const locator of locators) {
+                if (locator.source_revision !== header.revision || locator.source_security_revision !== header.security)
+                  throw new AccessUnavailableError('contention');
+              }
+              if (locators.length >= COPY_WORK_DISCLOSURE_LOOKAHEAD) {
+                found.get(id)!.membership = { kind: 'overflow' };
                 continue;
               }
-              if (!resolved.includes(content)) resolved.push(content);
+              const factsByCandidate = new Map<string, FactRow>();
+              for (const slot of new Set(
+                locators.map((locator) => locator.slot).filter((slot): slot is string => !!slot),
+              )) {
+                const view = await effectiveGlobalSlotFacts(client, id, COPY_WORK_PROPERTY, slot);
+                for (const fact of view.facts) if (fact.statement_id) factsByCandidate.set(fact.statement_id, fact);
+              }
+              const resolved: string[] = [];
+              let concealed = false;
+              for (const locator of locators) {
+                const fact = locator.candidate ? factsByCandidate.get(locator.candidate) : undefined;
+                const body = fact?.body as { value?: { type?: unknown; content?: unknown } } | undefined;
+                const content =
+                  body?.value?.type === 'value' && typeof body.value.content === 'string' ? body.value.content : null;
+                if (!content || routeOf(content) === null) {
+                  concealed = true;
+                  continue;
+                }
+                provenance.push({ route: routeOf(id)!, subject_id: id, candidate_id: locator.candidate! });
+                if (!resolved.includes(content)) resolved.push(content);
+              }
+              found.get(id)!.membership = concealed ? { kind: 'concealed' } : { kind: 'works', ids: resolved };
             }
-            source.membership = concealed ? { kind: 'concealed' } : { kind: 'works', ids: resolved };
-          }
-          return found;
-        },
-        deps.deadline,
+            const recorded = provenance.length ? await candidateSources(client, provenance) : new Map();
+            const tuples: SourceFenceTuple[] = [];
+            const owners: string[] = [];
+            for (const entry of provenance) {
+              const source = recorded.get(`${entry.subject_id}\n${entry.candidate_id}`) ?? null;
+              if (!source) continue;
+              if ('kind' in source) {
+                if (source.kind !== 'agent' || routeOf(source.subject) === null) {
+                  const row = found.get(entry.subject_id);
+                  if (row?.membership?.kind === 'works') row.membership = { kind: 'concealed' };
+                }
+                continue;
+              }
+              try {
+                tuples.push(sourceTuple(deps.routeKey, source));
+                owners.push(entry.subject_id);
+              } catch {
+                const row = found.get(entry.subject_id);
+                if (row?.membership?.kind === 'works') row.membership = { kind: 'concealed' };
+              }
+            }
+            return { found, tuples, owners };
+          },
+          deps.deadline,
+        );
+        for (const [id, source] of observed.found) {
+          observedSources.set(id, source);
+          if (source.membership?.kind === 'works') targets.push(...source.membership.ids);
+        }
+        fenceTuples.push(...observed.tuples);
+        fencedSubjects.push(...observed.owners);
+      }
+      const fencesByHome = new Map<number, SourceFenceTuple[]>();
+      for (const tuple of fenceTuples) {
+        const home = partitionOf(tuple.route);
+        const list = fencesByHome.get(home) ?? [];
+        list.push(tuple);
+        fencesByHome.set(home, list);
+      }
+      const taken = new Set<string>();
+      for (const [home, tuples] of fencesByHome) {
+        const unique = [...new Map(tuples.map((tuple) => [fenceKey(tuple), tuple])).values()];
+        const rows = await withReadTransaction(
+          deps.pool,
+          async (client) => {
+            const partition = await readPartition(client, home);
+            if (!partition || partition.writeState !== 'active') throw new AccessUnavailableError('contention');
+            cuts.push({ partition: home, epoch: partition.epoch, position: partition.position });
+            const found = [];
+            for (let offset = 0; offset < unique.length; offset += 100)
+              found.push(...(await readFences(client, unique.slice(offset, offset + 100))));
+            return found;
+          },
+          deps.deadline,
+        );
+        for (const row of rows) if (row.takenDown) taken.add(fenceKey(row));
+      }
+      if (taken.size) {
+        for (let index = 0; index < fenceTuples.length; index++) {
+          if (!taken.has(fenceKey(fenceTuples[index]!))) continue;
+          const owner = observedSources.get(fencedSubjects[index]!);
+          if (owner?.membership?.kind === 'works') owner.membership = { kind: 'concealed' };
+        }
+      }
+      targets = [...observedSources.values()].flatMap((source) =>
+        source.membership?.kind === 'works' ? source.membership.ids : [],
       );
-      for (const [id, source] of observed) {
-        sources.set(id, source);
-        if (source.membership?.kind === 'works') targets.push(...source.membership.ids);
-      }
-    }
 
-    const uniqueTargets = [...new Set(targets.filter((id) => routeOf(id) !== null))];
-    const mappedTargets = uniqueTargets.length ? await mapIdentities(deps, uniqueTargets) : new Map();
-    const terminalTargets = [
-      ...new Set(
-        uniqueTargets.flatMap((id) => {
-          const mapping = mappedTargets.get(id);
-          if (!mapping || mapping.state === 'pending' || mapping.state === 'unavailable') return [];
-          return mapping.state === 'mapped' ? [mapping.terminal] : [id];
-        }),
-      ),
-    ];
-    const summaryObservation =
-      terminalTargets.length > 0
-        ? await readSummaries(deps, terminalTargets, { languages })
-        : {
-            summaries: new Map<string, SubjectSummary | null>(),
-            components: [] as SubjectSummaryObservation['components'],
-          };
-    cuts.push(
-      ...summaryObservation.components.map((component) => ({
-        partition: component.partition,
-        epoch: component.epoch,
-        position: component.position,
-      })),
-    );
+      const uniqueTargets = [...new Set(targets.filter((id) => routeOf(id) !== null))];
+      const mappedTargets = uniqueTargets.length ? await mapIdentities(deps, uniqueTargets) : new Map();
+      const terminalTargets = [
+        ...new Set(
+          uniqueTargets.flatMap((id) => {
+            const mapping = mappedTargets.get(id);
+            if (!mapping || mapping.state === 'pending' || mapping.state === 'unavailable') return [];
+            return mapping.state === 'mapped' ? [mapping.terminal] : [id];
+          }),
+        ),
+      ];
+      const summaryObservation =
+        terminalTargets.length > 0
+          ? await readSummaries(deps, terminalTargets, { languages })
+          : {
+              summaries: new Map<string, SubjectSummary | null>(),
+              components: [] as SubjectSummaryObservation['components'],
+            };
+      cuts.push(
+        ...summaryObservation.components.map((component) => ({
+          partition: component.partition,
+          epoch: component.epoch,
+          position: component.position,
+        })),
+      );
 
-    for (const [original, plan] of plans) {
-      if (classified.has(original)) continue;
-      const source = sources.get(plan.terminal);
-      if (!source) {
-        classified.set(original, missing);
-        continue;
-      }
-      if (!source.allowed) {
-        classified.set(original, source.header.visibility === 'visible' ? denied : withheld);
-        continue;
-      }
-      if (source.header.visibility !== 'visible') {
-        classified.set(original, withheld);
-        continue;
-      }
-      const admission = admittedCopyWork(active.release, source.header.type);
-      if (admission === 'scope') {
-        classified.set(original, scoped);
-        continue;
-      }
-      if (admission === 'unsupported') {
-        classified.set(original, unsupported);
-        continue;
-      }
-      const membership = source.membership;
-      if (!membership || membership.kind === 'unready') {
-        classified.set(original, unavailable);
-        continue;
-      }
-      if (membership.kind === 'overflow') {
-        classified.set(original, unsupported);
-        continue;
-      }
-      if (membership.kind === 'concealed') {
-        classified.set(original, withheld);
-        continue;
-      }
-      const works: CopyWorkReference[] = [];
-      let concealed = false;
-      let invalid = false;
-      for (const content of membership.ids) {
-        const mapping = mappedTargets.get(content);
-        if (mapping?.state === 'pending' || mapping?.state === 'unavailable') {
+      for (const [original, plan] of plans) {
+        if (classified.has(original)) continue;
+        const source = observedSources.get(plan.terminal);
+        if (!source) {
+          classified.set(original, missing);
+          continue;
+        }
+        if (!source.allowed) {
+          classified.set(original, source.header.visibility === 'visible' ? denied : withheld);
+          continue;
+        }
+        if (source.header.visibility !== 'visible') {
+          classified.set(original, withheld);
+          continue;
+        }
+        const admission = admittedCopyWork(active.release, source.header.type);
+        if (admission === 'scope') {
+          classified.set(original, scoped);
+          continue;
+        }
+        if (admission === 'unsupported') {
+          classified.set(original, unsupported);
+          continue;
+        }
+        const membership = source.membership;
+        if (!membership || membership.kind === 'unready') {
           classified.set(original, unavailable);
-          invalid = true;
-          break;
-        }
-        const terminal = mapping?.state === 'mapped' ? mapping.terminal : content;
-        const summary = summaryObservation.summaries.get(terminal);
-        if (!summary) {
-          concealed = true;
           continue;
         }
-        if (!summary.creativeWork) {
-          invalid = true;
+        if (membership.kind === 'overflow') {
+          classified.set(original, unsupported);
           continue;
         }
-        if (!works.some((work) => work.id === summary.id))
-          works.push({ id: summary.id, labels: selectedLabels(summary) });
+        if (membership.kind === 'concealed') {
+          classified.set(original, withheld);
+          continue;
+        }
+        const works: CopyWorkReference[] = [];
+        let concealed = false;
+        let invalid = false;
+        for (const content of membership.ids) {
+          const mapping = mappedTargets.get(content);
+          if (mapping?.state === 'pending' || mapping?.state === 'unavailable') {
+            classified.set(original, unavailable);
+            invalid = true;
+            break;
+          }
+          const terminal = mapping?.state === 'mapped' ? mapping.terminal : content;
+          const summary = summaryObservation.summaries.get(terminal);
+          if (!summary) {
+            concealed = true;
+            continue;
+          }
+          if (!summary.creativeWork) {
+            invalid = true;
+            continue;
+          }
+          if (!works.some((work) => work.id === summary.id))
+            works.push({ id: summary.id, labels: selectedLabels(summary) });
+        }
+        if (classified.get(original)?.state === 'unavailable') continue;
+        if (invalid) classified.set(original, unsupported);
+        else if (concealed) classified.set(original, withheld);
+        else if (works.length > COPY_WORK_DISCLOSURE_MAX_WORKS) classified.set(original, unsupported);
+        else classified.set(original, works.length ? { state: 'available', works } : emptyAvailable);
       }
-      if (classified.get(original)?.state === 'unavailable') continue;
-      if (invalid) classified.set(original, unsupported);
-      else if (concealed) classified.set(original, withheld);
-      else if (works.length > COPY_WORK_DISCLOSURE_MAX_WORKS) classified.set(original, unsupported);
-      else classified.set(original, works.length ? { state: 'available', works } : emptyAvailable);
-    }
+    });
   } catch (error) {
     if (!(error instanceof AccessUnavailableError) && classifyUnavailability(error) === undefined) throw error;
     for (const id of routed) if (!classified.has(id) && !results.has(id)) classified.set(id, unavailable);
