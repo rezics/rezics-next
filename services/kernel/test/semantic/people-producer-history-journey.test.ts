@@ -223,18 +223,22 @@ test('a reader follows directed parent and replacement history and returns to th
   const parent = await created('schema:Organization', { en: 'Lantern Holdings' });
   const predecessor = await created('schema:Organization', { en: 'Old Lantern' });
   const successor = await created('schema:Organization', { en: 'New Lantern' });
-  const studio = await created('schema:Organization', { en: 'Lantern Studio' }, {
-    'schema:abstract': [
-      {
-        ...snak('schema:abstract', {
-          document: fromPlainText('Studio history written as a document.'),
-          licence: 'CC-BY-4.0',
-          language: 'en',
-        }),
-        references: [reference],
-      },
-    ],
-  });
+  const studio = await created(
+    'schema:Organization',
+    { en: 'Lantern Studio' },
+    {
+      'schema:abstract': [
+        {
+          ...snak('schema:abstract', {
+            document: fromPlainText('Studio history written as a document.'),
+            licence: 'CC-BY-4.0',
+            language: 'en',
+          }),
+          references: [reference],
+        },
+      ],
+    },
+  );
   const person = await created('schema:Person', { en: 'Not an organization' });
   const parentFact = {
     ...snak('wdt:P749', parent.id),
@@ -247,7 +251,10 @@ test('a reader follows directed parent and replacement history and returns to th
   const parentProposal = await proposed(studio.id, parentFact);
   expect(parentProposal.status, JSON.stringify(parentProposal.body)).toBe(201);
   await adopted(studio.id, 'wdt:P749', parentProposal.body.candidate, parent.id);
-  const predecessorProposal = await proposed(studio.id, { ...snak('wdt:P1365', predecessor.id), references: [reference] });
+  const predecessorProposal = await proposed(studio.id, {
+    ...snak('wdt:P1365', predecessor.id),
+    references: [reference],
+  });
   await adopted(studio.id, 'wdt:P1365', predecessorProposal.body.candidate, predecessor.id);
   const successorProposal = await proposed(studio.id, { ...snak('wdt:P1366', successor.id), references: [reference] });
   await adopted(studio.id, 'wdt:P1366', successorProposal.body.candidate, successor.id);
@@ -289,7 +296,9 @@ test('a reader follows directed parent and replacement history and returns to th
     `/v1/subjects/${studio.id}/relations?property=${encodeURIComponent('wdt:P1365')}&limit=20`,
     'editor',
   );
-  const concealed = afterHide.body.relations.find((row: any) => row.statement?.id === predecessorProposal.body.candidate);
+  const concealed = afterHide.body.relations.find(
+    (row: any) => row.statement?.id === predecessorProposal.body.candidate,
+  );
   expect(concealed === undefined || concealed.summary == null).toBe(true);
   const correction = await proposed(studio.id, { ...snak('wdt:P1366', successor.id), references: [reference] });
   expect(correction.status).toBe(201);
