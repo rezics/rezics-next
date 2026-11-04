@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { subjectHref } from '../src/subject/subject-href';
 import { boardReadingHref, captureBoardReadingReturn, parseBoardReadingReturn } from '../src/threads/board-reading';
+import { threadLocation } from '../src/threads/thread-href';
 import threadRecording from '../src/kernel/recorded/board-realm-thread.json';
 import * as start from '../.storybook/react-start';
 
@@ -31,6 +32,7 @@ const { SpacePage } = await import('../src/community/space-page');
 const { loadSpacePage } = await import('../src/community/space');
 const { readBoardPage, readThreadPage } = await import('../src/threads/reads');
 const { ThreadReading } = await import('../src/threads/thread-reading');
+const { BoardCommunity } = await import('../src/threads/board-community');
 const { ThreadReadingHeader, ThreadReadingPost } = await import('../src/routes/threads/$id_.$slug');
 const { SignInPrompt } = await import('../src/threads/composer');
 const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
@@ -99,6 +101,9 @@ test('public Realm destinations and the native discussion reader preserve their 
       });
     });
     expect(boardRead.page.threads.threads.some((candidate) => candidate.id === threadPage.thread.id)).toBe(true);
+    const boardHtml = await render(createElement(BoardCommunity, { page: boardRead.page, sort: 'new' }), `/en/boards/${boardId}`);
+    expect(boardHtml).toContain(boardRead.page.board.title);
+    expect(boardHtml).toContain(`href="${threadLocation('en', { id: threadPage.thread.id, title: threadPage.thread.title })}"`);
 
     const openingId = threadPage.thread.firstPost.id;
     const replies = threadPage.posts.posts.filter((post) => post.parentId === openingId);
