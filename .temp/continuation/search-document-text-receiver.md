@@ -36,10 +36,10 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Install the bounded Content reader as the native public document producer, binding exact current Subject selection and rights across generation, relay and rebuild; cover edits, replacement, rights changes and identity changes."
-    - "Add per-document phrase and actual-language query semantics, nested engine windows, cursor bindings for field/generation/recipe, and verified excerpt hydration with admitted destinations."
-    - "Mount explicit public-document field selection on Search, preserve catalogue defaults and existing filters/sorts/language/rating/personal state, retire stale viewer/request state and restart incompatible cursors."
-    - "Prove finite selected-page, byte and raw upstream work at independent 256/1024/4096 populations, plus body-only matches, edits, revocation, replacement, stale state, 390/1280 layouts and all eight locales."
+    - 'Install the bounded Content reader as the native public document producer, binding exact current Subject selection and rights across generation, relay and rebuild; cover edits, replacement, rights changes and identity changes.'
+    - 'Add per-document phrase and actual-language query semantics, nested engine windows, cursor bindings for field/generation/recipe, and verified excerpt hydration with admitted destinations.'
+    - 'Mount explicit public-document field selection on Search, preserve catalogue defaults and existing filters/sorts/language/rating/personal state, retire stale viewer/request state and restart incompatible cursors.'
+    - 'Prove finite selected-page, byte and raw upstream work at independent 256/1024/4096 populations, plus body-only matches, edits, revocation, replacement, stale state, 390/1280 layouts and all eight locales.'
 estimate:
   lines: 1900
   files: 19

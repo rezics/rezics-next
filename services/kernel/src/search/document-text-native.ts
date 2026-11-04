@@ -1,8 +1,4 @@
-import {
-  readDocument,
-  type DocumentReadDependencies,
-  type DocumentView,
-} from '../content/document-read.ts';
+import { readDocument, type DocumentReadDependencies, type DocumentView } from '../content/document-read.ts';
 import { MAX_DOCUMENT_BYTES } from '../content/document.ts';
 import type { ReadContext } from '../content/model.ts';
 import type { PageDocumentReference } from '@rezics/composition';
@@ -20,19 +16,21 @@ type BoundedDocumentRead = (
  * The current probe is supplied by the native owners so it can check subject selection and
  * document rights without loading bodies a second time.
  */
-export function createPublicDocumentTextSource(input: Readonly<{
-  dependencies: DocumentReadDependencies;
-  context: ReadContext;
-  current: PublicDocumentTextSource['current'];
-  read?: BoundedDocumentRead;
-}>): PublicDocumentTextSource {
+export function createPublicDocumentTextSource(
+  input: Readonly<{
+    dependencies: DocumentReadDependencies;
+    context: ReadContext;
+    current: PublicDocumentTextSource['current'];
+    read?: BoundedDocumentRead;
+  }>,
+): PublicDocumentTextSource {
   const boundedRead = input.read ?? readDocument;
-  const read = async ({ subject, reference, maxSourceBytes }: Parameters<PublicDocumentTextSource['read']>[0]): Promise<DocumentTextRead> => {
-    if (
-      !Number.isSafeInteger(maxSourceBytes) ||
-      maxSourceBytes < 1 ||
-      maxSourceBytes > MAX_DOCUMENT_BYTES
-    )
+  const read = async ({
+    subject,
+    reference,
+    maxSourceBytes,
+  }: Parameters<PublicDocumentTextSource['read']>[0]): Promise<DocumentTextRead> => {
+    if (!Number.isSafeInteger(maxSourceBytes) || maxSourceBytes < 1 || maxSourceBytes > MAX_DOCUMENT_BYTES)
       return { status: 'unavailable' };
     try {
       const result = await boundedRead(input.dependencies, reference.document, input.context, maxSourceBytes);
@@ -48,11 +46,7 @@ export function createPublicDocumentTextSource(input: Readonly<{
   };
 }
 
-function currentReference(
-  document: DocumentView,
-  subject: string,
-  reference: PageDocumentReference,
-): boolean {
+function currentReference(document: DocumentView, subject: string, reference: PageDocumentReference): boolean {
   return (
     document.availability === 'available' &&
     document.subjectId === subject &&
