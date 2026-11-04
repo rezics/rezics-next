@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { subjectHref } from '../src/subject/subject-href';
 import { boardReadingHref, captureBoardReadingReturn, parseBoardReadingReturn } from '../src/threads/board-reading';
+import threadRecording from '../src/kernel/recorded/board-realm-thread.json';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -63,7 +64,7 @@ async function withStoryRequest<T>(read: () => Promise<T>): Promise<T> {
   }
 }
 
-test('the public Realm shelves lead to their exact work and board sources, then return to the same discussion window', async () => {
+test('public Realm destinations and the native discussion reader preserve their exact sources and browser return', async () => {
   const request = new Request('https://site.example.test/en/spaces/atlas-member');
   const page = await loadSpacePage(kernel, request, {}, { address: 'atlas-member' }, 'anonymous');
   if (!page.realm) throw new Error('The recorded Realm carrier is unavailable');
@@ -83,18 +84,15 @@ test('the public Realm shelves lead to their exact work and board sources, then 
     }
     for (const board of page.realm.boards) expect(realmHtml).toContain(`/boards/${encodeURIComponent(board.id)}`);
 
-    const board = page.realm.boards.find((candidate) => candidate.visibility === 'published');
-    if (!board) throw new Error('The admitted Realm has no readable board');
-    const boardId = board.id;
+    const threadPage = await withStoryRequest(() =>
+      readThreadPage({ data: { id: threadRecording.thread.id, credentialMode: 'anonymous' } }),
+    );
+    if ('redirect' in threadPage) throw new Error('The native thread unexpectedly redirected');
+    const boardId = threadPage.thread.boardId;
     const boardRead = await withStoryRequest(() =>
       readBoardPage({ data: { id: boardId, sort: 'new', credentialMode: 'anonymous' } }),
     );
-    const thread = boardRead.page.threads.threads.find((candidate) => candidate.availability === 'available');
-    if (!thread) throw new Error('The admitted board has no readable thread');
-    const threadPage = await withStoryRequest(() =>
-      readThreadPage({ data: { id: thread.id, credentialMode: 'anonymous' } }),
-    );
-    if ('redirect' in threadPage) throw new Error('The native thread unexpectedly redirected');
+    expect(boardRead.page.threads.threads.some((candidate) => candidate.id === threadPage.thread.id)).toBe(true);
 
     const openingId = threadPage.thread.firstPost.id;
     const replies = threadPage.posts.posts.filter((post) => post.parentId === openingId);
@@ -110,12 +108,14 @@ test('the public Realm shelves lead to their exact work and board sources, then 
       boardId,
       sort: 'new',
       locale: 'en',
-      focusThreadId: thread.id,
+      focusThreadId: threadPage.thread.id,
     });
     expect(returnSource).not.toBeNull();
     const returnHref = boardReadingHref(returnSource!);
     expect(parseBoardReadingReturn(returnSource)).toEqual(returnSource);
-    expect(returnHref).toBe(`/en/boards/${encodeURIComponent(boardId)}?sort=new#board-thread-${thread.id}`);
+    expect(returnHref).toBe(
+      `/en/boards/${encodeURIComponent(boardId)}?sort=new#board-thread-${threadPage.thread.id}`,
+    );
 
     setLocale('en', { reload: false });
     const reading = await render(
@@ -125,9 +125,9 @@ test('the public Realm shelves lead to their exact work and board sources, then 
         personal: undefined,
         session: 'signed-out',
         readerSubject: null,
-        returnTo: `/en/threads/${thread.id}`,
+        returnTo: `/en/threads/${threadPage.thread.id}`,
         signedOut: createElement(SignInPrompt, {
-          returnTo: `/en/threads/${thread.id}`,
+          returnTo: `/en/threads/${threadPage.thread.id}`,
           label: m.threads_sign_in_to_reply(),
         }),
         renderHeader: (title, current) =>
@@ -135,7 +135,7 @@ test('the public Realm shelves lead to their exact work and board sources, then 
         onMutation: async () => {},
         onPageRefresh: async () => threadPage,
       }),
-      `/en/threads/${thread.id}`,
+      `/en/threads/${threadPage.thread.id}`,
     );
     expect(reading).toContain(m.thread_posts_heading());
     expect(reading).toContain(m.threads_sign_in_to_reply());
