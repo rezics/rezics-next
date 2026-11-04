@@ -177,8 +177,8 @@ test('GitHub fetch serializes only fetch and ref verify on the store lock', () =
     remote: { ref: 'refs/checks/lock-scope', commit: 'e'.repeat(40) },
   };
   const script = fetchCheckGitScript(publication, '/tmp/lock-scope', '/tmp/check-git.git');
-  const lockFile = "exec 9>>'/tmp/check-git.git.lock'";
-  const pinFile = "exec 8>>'/tmp/check-git.git.preparing/lock-scope'";
+  const lockFile = "lock='/tmp/check-git.git.lock'";
+  const pinFile = "preparing='/tmp/check-git.git.preparing/lock-scope'";
   const gcLock = "flock -x '/tmp/check-git.git.lock'";
   const fetch = script.indexOf('fetch --no-tags --no-write-fetch-head');
   const pin = script.indexOf('flock -x 8');
@@ -187,6 +187,8 @@ test('GitHub fetch serializes only fetch and ref verify on the store lock', () =
   const gc = script.indexOf('gc --quiet --prune=7.days.ago');
   expect(script.indexOf(lockFile)).toBeGreaterThan(-1);
   expect(script.indexOf(pinFile)).toBeGreaterThan(-1);
+  expect(script.indexOf('exec 9>>"$lock"')).toBeGreaterThan(-1);
+  expect(script.indexOf('exec 8>>"$preparing"')).toBeGreaterThan(-1);
   expect(script.indexOf('flock -x 9')).toBeGreaterThan(-1);
   expect(fetch).toBeGreaterThan(script.indexOf('flock -x 9'));
   expect(pin).toBeGreaterThan(fetch);
