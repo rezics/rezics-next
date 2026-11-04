@@ -419,7 +419,14 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
     routeOf(unknown.id),
     unknown.id,
   ]);
-  const unknownPage = await json<{ coverage: { coverage: string }; items: unknown[] }>(
+  const unknownPage = await json<{
+    collectionId: string;
+    basis: object;
+    coverage: { coverage: string; knownFromRevision: number | null; prunedBeforeRevision: number | null };
+    items: unknown[];
+    next: string | null;
+    actions: { review: boolean; reapply: boolean };
+  }>(
     await request('GET', history(unknown.id)),
   );
   expect(unknownPage).toEqual({
@@ -443,11 +450,11 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
   let count = 0;
   let coverage = '';
   do {
-    const nextPage = await json<{
+    const nextPage: {
       items: { revision: number }[];
       next: string | null;
       coverage: { coverage: string; knownFromRevision: number | null; prunedBeforeRevision: number | null };
-    }>(await request('GET', `${history(retained.id)}?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`));
+    } = await json(await request('GET', `${history(retained.id)}?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`));
     count += nextPage.items.length;
     cursor = nextPage.next;
     coverage = nextPage.coverage.coverage;
