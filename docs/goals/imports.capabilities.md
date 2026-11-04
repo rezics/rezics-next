@@ -1311,7 +1311,7 @@ explicit `0` is a stated zero.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-The original-run mapping was introduced in `bangumi@8`; current `bangumi@10`
+The original-run mapping was introduced in `bangumi@8`; current `bangumi@11`
 continues to convert pinned TVAnime `放送开始`, `播放结束` and `话数` through
 ordinary Bangumi registration and selected-family rows, preserving the
 `bangumi@9` player-count mapping and earlier name extraction. Native read is on
@@ -1339,7 +1339,7 @@ the whole occurrence.
 Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
 unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
 
-The player-count mapping was introduced in `bangumi@9`; current `bangumi@10`
+The player-count mapping was introduced in `bangumi@9`; current `bangumi@11`
 continues to convert pinned Game `游玩人数` through ordinary Bangumi
 registration and selected-family rows, preserving the `bangumi@8` original-run
 mapping. Native read is on the acknowledged VideoGame.

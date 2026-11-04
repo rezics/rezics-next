@@ -358,11 +358,6 @@ export function extractBangumiTVAnimeEvidence(
           active.form = 'scalar';
           active.values.push(value);
         }
-      } else if (tvAnime && key === '官方网站') {
-        if (value) {
-          active.form = 'scalar';
-          active.values.push(value);
-        }
       } else if (
         !(tvAnime && bangumiTelevisionRunKeys.has(key)) &&
         !(tvAnime && isBangumiTVAnimeWorkEvidenceField(key))
