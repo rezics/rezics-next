@@ -54,16 +54,15 @@ test('reading retry retains the selected cursor, credentials and request options
   const client = createKernelClient(ORIGIN, {
     fetch: (async (input, init) => {
       sent.push(new Request(input, init));
-      return sent.length === 1
-        ? Response.json({ code: 'dependency_unavailable' }, { status: 503 })
-        : Response.json({});
+      return sent.length === 1 ? Response.json({ code: 'dependency_unavailable' }, { status: 503 }) : Response.json({});
     }) as typeof fetch,
   });
-  const read = () => client.threads({ id: THREAD_ID })['reading-page'].get({
-    query: { cursor: 'selected/frontier+with spaces=' },
-    headers: { authorization: 'Bearer current-viewer' },
-    fetch: { cache: 'no-store' },
-  });
+  const read = () =>
+    client.threads({ id: THREAD_ID })['reading-page'].get({
+      query: { cursor: 'selected/frontier+with spaces=' },
+      headers: { authorization: 'Bearer current-viewer' },
+      fetch: { cache: 'no-store' },
+    });
   expect((await read()).status).toBe(503);
   expect((await read()).error).toBeNull();
   expect(sent.map((request) => [request.url, request.headers.get('authorization'), request.cache])).toEqual([
