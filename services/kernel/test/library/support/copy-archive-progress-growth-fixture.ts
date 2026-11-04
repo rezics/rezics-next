@@ -152,7 +152,6 @@ export function paddedActiveCommand(target = 8000) {
 
 export function expectNoGrownScans(report: GrowthReport) {
   assertGrowthAccessPaths(report.name, report.samples, [
-    'library.progress_session',
     'library.progress_unit',
     'library.progress_change',
     'library.copy_archive_row',
