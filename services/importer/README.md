@@ -2165,3 +2165,15 @@ Organization, refresh by digest, and respect the summary fence` in
 `services/kernel/test/imports/bangumi-people-biography.test.ts`. The native
 scenario uses the current released definitions and Auth/Access/public API;
 execution remains controller-owned and is not recorded as a local pass.
+
+## Explicit local showcase publication
+
+Decision: the built-in `task seed:dev` path explicitly publishes a sealed finite intent of current source and candidate digests; ordinary imports remain proposal-only.
+
+`task seed:dev` reuses the Accounts `dev:persona` setup and its private `.temp/local-stack/seed.env`. The local invocation gives the cross-media CLI a separate durable showcase journal. The ordinary CLI stays proposal-only unless that local publication state is explicitly supplied. The journal records exact create and proposal command bodies before send, then stores native UUIDs only after an acknowledged response. Publication derives its intent from the selected dump family, its current source reads, and those exact candidate identities. It reads only selected subject/property candidate pages, accepts each selected candidate through the review API, and adopts only those IDs while preserving any prior adoption selections. Refused steps keep their known acknowledgements; an unknown send reuses its sealed body and idempotency key on restart.
+
+The result carries provider and native type bindings, source keys, source and converter digests, selected candidate IDs, and ordinary reader routes. Each selected subject and vocabulary dependency is checked through current reads, and the final facts are checked with a tokenless Global-context reader. Source ConceptScheme and Concept records are eligible only when their source create commands are acknowledged and their current source URI and scheme association are present. No canonical equivalence is inferred. Prose stays private without admitted rights, and images are not published by this path.
+
+- Touches: at most 768 selected source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 candidates per current page, and 256 result omissions.
+- Bound: work is limited to the selected source family, source acknowledgements and required current subject/property reads. There is no catalogue-wide candidate scan or generic accept-all mode.
+- Growth check: `services/importer/tests/showcase-publication.test.ts` covers a compact dump plan, exact candidate selection and journal restart after a refusal. `services/kernel/test/imports/showcase-publication.test.ts` covers the native API publication path and anonymous read; its execution remains controller-owned and is not recorded as a local pass.

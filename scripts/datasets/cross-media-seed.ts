@@ -25,6 +25,7 @@ export async function runDevelopmentSeed(
   const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();
   const root = options.root ?? resolve(import.meta.dir, '../..');
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
+  const showcase = join(root, '.temp', 'cross-media-seed', 'showcase.sqlite');
   const result = join(root, '.temp', 'cross-media-seed', 'result.json');
   await (options.runSeed ?? runCrossMediaSeedCli)([
     '--bangumi',
@@ -33,6 +34,8 @@ export async function runDevelopmentSeed(
     dumps.vndb,
     '--state',
     state,
+    '--showcase-state',
+    showcase,
     '--result',
     result,
     '--api',

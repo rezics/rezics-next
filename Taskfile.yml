@@ -101,7 +101,7 @@ tasks:
     cmds: ['bun scripts/datasets/cross-media-seed.ts {{.CLI_ARGS}}']
 
   seed:dev:
-    desc: Fetch pinned cross-media dumps and seed the running local stack with its development persona
+    desc: Fetch pinned cross-media dumps and explicitly publish the selected family through the local development persona
     cmds:
       - task: dev:persona
       # Reload the private seed.env written by persona before invoking the existing seed producer.

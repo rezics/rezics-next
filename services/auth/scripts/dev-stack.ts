@@ -46,6 +46,8 @@ export const importerScopes = [
   'media:read_reservation',
   'source_statistic:write',
   'subject:read',
+  'context:accept',
+  'context:adopt',
 ];
 const personaClient = 'rezics-dev-importer';
 export type DevelopmentKeys = {

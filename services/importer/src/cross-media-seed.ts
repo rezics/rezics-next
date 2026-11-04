@@ -28,6 +28,8 @@ import {
   type BangumiCreatorCreditGap,
 } from './bangumi-creator-credits.ts';
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
+import { createPublicBulkClient } from './public-bulk-client.ts';
+import { captureShowcaseCommands, publishShowcase, ShowcaseJournal } from './showcase-publication.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
@@ -1655,7 +1657,7 @@ export async function seedCrossMedia(
 }
 
 export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<void> {
-  const optionalFlags = ['--bangumi-character-bindings', '--vndb-public-tag-bindings'];
+  const optionalFlags = ['--bangumi-character-bindings', '--vndb-public-tag-bindings', '--showcase-state'];
   const requiredFlags = [
     '--bangumi',
     '--vndb',
@@ -1672,7 +1674,7 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     process.stdout.write(
       `Usage: bun scripts/datasets/cross-media-seed.ts ${requiredFlags
         .map((flag) => `${flag} <value>`)
-        .join(' ')} [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>]\n`,
+        .join(' ')} [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>]\n`,
     );
     return;
   }
@@ -1695,12 +1697,17 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
   const plan = await planCrossMediaSeed(input);
+  const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
     client: values.get('--client')!,
     authOrigin: auth,
-    scopes: [...VNDB_IMPORTER_SCOPES, 'subject:read'],
+    scopes: [
+      ...VNDB_IMPORTER_SCOPES,
+      'subject:read',
+      ...(showcasePath ? (['context:accept', 'context:adopt'] as const) : []),
+    ],
   });
   const resultPath = resolve(values.get('--result')!);
   const statePath = resolve(values.get('--state')!);
@@ -1710,6 +1717,9 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   const tagBindingsPath = values.has('--vndb-public-tag-bindings')
     ? resolve(values.get('--vndb-public-tag-bindings')!)
     : undefined;
+  const showcaseConflictPaths = [statePath, resultPath, characterBindingsPath, tagBindingsPath]
+    .filter((path): path is string => path !== undefined)
+    .flatMap((path) => [path, `${path}-wal`, `${path}-shm`]);
   for (const extra of [characterBindingsPath, tagBindingsPath]) {
     ensure(
       extra === undefined ||
@@ -1727,48 +1737,69 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     resultPath !== statePath && ![`${statePath}-wal`, `${statePath}-shm`].includes(resultPath),
     'Result must not overwrite importer state',
   );
+  ensure(!showcasePath || !showcaseConflictPaths.includes(showcasePath), 'Showcase state must not overlap seed files');
   await mkdir(dirname(statePath), { recursive: true });
-  const port = createImportTransport({ origin: api, tokenProvider });
-  const result = await seedCrossMedia(plan, statePath, port, { origin: api }, undefined, characterBindings);
-  const { importShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
-  let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
-  if (tagBindingsPath) {
-    const bytes = await readFile(tagBindingsPath);
-    ensure(bytes.byteLength <= 256 * 1024, 'VNDB public tag bindings exceed the configuration limit');
-    knownTagBindings = parseShowcaseTagKnownBindings(JSON.parse(bytes.toString('utf8')));
-  }
-  const selectedVids = plan.members
-    .filter((member) => member.source === 'vndb' && member.kind === 'work')
-    .map((member) => member.key);
-  const publicTags = await importShowcaseTags({
-    tables: input,
-    selectedVids,
-    path: statePath,
-    port,
-    known: knownTagBindings,
-    destination: { origin: api },
-  });
-  await mkdir(dirname(resultPath), { recursive: true });
-  await writeFile(
-    resultPath,
-    `${JSON.stringify(
-      {
-        ...result,
-        publicTags: {
-          admitted: publicTags.admitted,
-          vocabulary: publicTags.vocabulary,
-          weightGap: publicTags.weightGap,
-          truncated: publicTags.truncated,
-          adoptedConcepts: publicTags.bindings.concepts.map((item) => item.code),
-          gaps: publicTags.gaps,
+  const importPort = createImportTransport({ origin: api, tokenProvider });
+  const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
+  const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
+  try {
+    const result = await seedCrossMedia(plan, statePath, port, { origin: api }, undefined, characterBindings);
+    const { importShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
+    let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
+    if (tagBindingsPath) {
+      const bytes = await readFile(tagBindingsPath);
+      ensure(bytes.byteLength <= 256 * 1024, 'VNDB public tag bindings exceed the configuration limit');
+      knownTagBindings = parseShowcaseTagKnownBindings(JSON.parse(bytes.toString('utf8')));
+    }
+    const selectedVids = plan.members
+      .filter((member) => member.source === 'vndb' && member.kind === 'work')
+      .map((member) => member.key);
+    const publicTags = await importShowcaseTags({
+      tables: input,
+      selectedVids,
+      path: statePath,
+      port,
+      known: knownTagBindings,
+      destination: { origin: api },
+    });
+    const showcase = journal
+      ? await publishShowcase({
+          plan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review: importPort,
+          publicClient: createPublicBulkClient({ origin: api }),
+        })
+      : undefined;
+    await mkdir(dirname(resultPath), { recursive: true });
+    await writeFile(
+      resultPath,
+      `${JSON.stringify(
+        {
+          ...result,
+          ...(showcase ? { showcase } : {}),
+          publicTags: {
+            admitted: publicTags.admitted,
+            vocabulary: publicTags.vocabulary,
+            weightGap: publicTags.weightGap,
+            truncated: publicTags.truncated,
+            adoptedConcepts: publicTags.bindings.concepts.map((item) => item.code),
+            gaps: publicTags.gaps,
+          },
+          sourceDigests: Object.fromEntries(input.digests),
         },
-        sourceDigests: Object.fromEntries(input.digests),
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  process.stdout.write(
-    `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
-  );
+        null,
+        2,
+      )}\n`,
+    );
+    process.stdout.write(
+      showcase
+        ? `Imported ${result.readings.length} records; publication ${showcase.status}; ${showcase.omissions.length} bounded omissions. Result: ${resultPath}\n`
+        : `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
+    );
+    ensure(!showcase || showcase.status === 'published', 'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps');
+  } finally {
+    journal?.close();
+  }
 }
