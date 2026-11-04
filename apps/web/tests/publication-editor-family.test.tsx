@@ -510,6 +510,7 @@ test('independent publication creation, local corrections, immutable recovery an
     }
 
     // A definite definitions refusal reconciles every staged choice before a deliberate new command.
+    searchCalls.length = 0;
     const recovery = tracked('ready', 'schema:Movie');
     const release = recovery.fixture.release;
     const originalSubmit = recovery.transport.submit;
