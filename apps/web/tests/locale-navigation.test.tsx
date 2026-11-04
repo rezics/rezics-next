@@ -179,16 +179,18 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
       </LocaleHarness>
     ),
   });
-  const subjectRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: '/$locale/subjects/$id',
-    loader: ({ params }) => {
-      admissions.push(params.locale);
-    },
-    component: SubjectReader,
-  });
+  const subjectRoutes = localeCodes.map((locale) =>
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: `/${locale}/subjects/$id`,
+      loader: () => {
+        admissions.push(locale);
+      },
+      component: SubjectReader,
+    }),
+  );
   const router = createRouter({
-    routeTree: rootRoute.addChildren([subjectRoute]),
+    routeTree: rootRoute.addChildren(subjectRoutes),
     history: createMemoryHistory({ initialEntries: [entry] }),
   });
   setLocale('en', { reload: false });

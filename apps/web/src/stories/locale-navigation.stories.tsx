@@ -126,13 +126,16 @@ function ReaderShell({ journey, children }: { journey: Journey; children?: React
 function LocaleJourney({ journey }: { journey: Journey }) {
   const [router] = useState(() => {
     const root = createRootRoute({ component: () => <ReaderShell journey={journey} /> });
-    const reader = createRoute({
-      getParentRoute: () => root,
-      path: '/$locale/subjects/$id',
-      component: () => <ReaderSurface journey={journey} />,
-    });
     return createRouter({
-      routeTree: root.addChildren([reader]),
+      routeTree: root.addChildren(
+        locales.map((locale) =>
+          createRoute({
+            getParentRoute: () => root,
+            path: `/${locale}/subjects/$id`,
+            component: () => <ReaderSurface journey={journey} />,
+          }),
+        ),
+      ),
       history: createMemoryHistory({ initialEntries: [initialLocation] }),
     });
   });
