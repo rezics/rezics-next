@@ -120,7 +120,9 @@ export function OrganizationMembershipRoster({
               return (
                 <li key={holder.accountId} className="space-y-2 py-4">
                   <div>
-                    <p className="font-medium">{displayName || (handle ? `@${handle}` : m.auth_members_identity_unavailable())}</p>
+                    <p className="font-medium">
+                      {displayName || (handle ? `@${handle}` : m.auth_members_identity_unavailable())}
+                    </p>
                     {displayName && handle ? <p className="text-sm text-muted-foreground">@{handle}</p> : null}
                     <p>{holder.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
                     <details className="mt-1 text-sm">
@@ -141,7 +143,12 @@ export function OrganizationMembershipRoster({
                             {m.auth_members_change_role()}
                           </Button>
                         ) : change === 'last-owner' ? (
-                          <Button type="button" variant="outline" disabled aria-describedby={`member-last-owner-${holder.accountId}`}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled
+                            aria-describedby={`member-last-owner-${holder.accountId}`}
+                          >
                             {m.auth_members_change_role()}
                           </Button>
                         ) : (
@@ -159,7 +166,12 @@ export function OrganizationMembershipRoster({
                             {m.auth_members_remove()}
                           </Button>
                         ) : remove === 'last-owner' ? (
-                          <Button type="button" variant="outline" disabled aria-describedby={`member-last-owner-${holder.accountId}`}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled
+                            aria-describedby={`member-last-owner-${holder.accountId}`}
+                          >
                             {m.auth_members_remove()}
                           </Button>
                         ) : (
@@ -417,15 +429,17 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       if (page.viewer.role === 'member') {
         if (page.viewer.accountId !== memberAccountId || page.viewer.leave !== 'allowed') return;
       } else {
-        const holder = page.members.state === 'ready'
-          ? page.members.holders.find((row) => row.accountId === memberAccountId)
-          : undefined;
+        const holder =
+          page.members.state === 'ready'
+            ? page.members.holders.find((row) => row.accountId === memberAccountId)
+            : undefined;
         if (!holder || holder.actions.remove !== 'allowed') return;
       }
     } else {
-      const holder = page.members.state === 'ready'
-        ? page.members.holders.find((row) => row.accountId === memberAccountId)
-        : undefined;
+      const holder =
+        page.members.state === 'ready'
+          ? page.members.holders.find((row) => row.accountId === memberAccountId)
+          : undefined;
       if (page.viewer.role !== 'owner' || !holder || holder.actions.changeRole !== 'allowed') return;
     }
     if (needsProfile) {

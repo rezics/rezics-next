@@ -75,10 +75,18 @@ test('shows disclosed identity and last-owner advice, while a member has no owne
   expect(host.textContent).toContain(m.auth_members_identity_unavailable());
   expect(host.querySelector('details code')?.textContent).toBe(ownerId);
   expect(host.textContent).toContain(m.auth_members_last_owner());
-  expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.auth_members_remove() && button.disabled)).toBe(true);
+  expect(
+    [...host.querySelectorAll('button')].some(
+      (button) => button.textContent === m.auth_members_remove() && button.disabled,
+    ),
+  ).toBe(true);
   await render(memberPage);
   expect(host.textContent).toContain(m.auth_members_leave_unavailable());
   expect(host.textContent).toContain(m.auth_members_inventory_unavailable());
-  expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.auth_members_change_role())).toBe(false);
-  expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.auth_members_remove())).toBe(false);
+  expect(
+    [...host.querySelectorAll('button')].some((button) => button.textContent === m.auth_members_change_role()),
+  ).toBe(false);
+  expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.auth_members_remove())).toBe(
+    false,
+  );
 });

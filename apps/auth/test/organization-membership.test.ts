@@ -18,7 +18,9 @@ const detail = {
   viewer: { accountId: human, role: 'owner', leave: 'unavailable' },
   members: {
     state: 'ready',
-    items: [{ accountId: member, account: identity, role: 'member', actions: { changeRole: 'allowed', remove: 'allowed' } }],
+    items: [
+      { accountId: member, account: identity, role: 'member', actions: { changeRole: 'allowed', remove: 'allowed' } },
+    ],
     next: 'bounded-next',
   },
 };
@@ -33,12 +35,16 @@ test('Manage native organization membership with fresh approved commands preserv
     viewer: { accountId: human, role: 'owner', leave: 'unavailable' },
     members: {
       state: 'ready',
-      holders: [{ accountId: member, account: identity, role: 'member', actions: { changeRole: 'allowed', remove: 'allowed' } }],
+      holders: [
+        { accountId: member, account: identity, role: 'member', actions: { changeRole: 'allowed', remove: 'allowed' } },
+      ],
       next: 'bounded-next',
     },
   });
   expect(parseMembershipPage(detail, human, member).kind).toBe('unavailable');
-  expect(parseMembershipPage({ ...detail, members: { state: 'denied' } }, organization, human).kind).toBe('unavailable');
+  expect(parseMembershipPage({ ...detail, members: { state: 'denied' } }, organization, human).kind).toBe(
+    'unavailable',
+  );
   expect(
     isMembershipOperation({ kind: 'membership', organizationId: organization, memberAccountId: member, role: null }),
   ).toBe(false);

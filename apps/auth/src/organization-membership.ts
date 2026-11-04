@@ -72,8 +72,8 @@ function identity(value: unknown, accountId: string): value is MembershipIdentit
     closed(value, ['id', 'kind', 'handle', 'displayName']) &&
     value.id === accountId &&
     (value.kind === 'actor' || value.kind === 'organization') &&
-    (value.handle === null || typeof value.handle === 'string' && value.handle.length <= 256) &&
-    (value.displayName === null || typeof value.displayName === 'string' && value.displayName.length <= 256)
+    (value.handle === null || (typeof value.handle === 'string' && value.handle.length <= 256)) &&
+    (value.displayName === null || (typeof value.displayName === 'string' && value.displayName.length <= 256))
   );
 }
 export function isMembershipOperation(value: unknown): value is MembershipOperation {

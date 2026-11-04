@@ -96,12 +96,7 @@ export async function readOrganizationMembershipPage(
       BigInt(actor.authnEpoch) < human.minimumAuthnEpoch
     )
       throw new AuthBindingDeniedError();
-    if (
-      !organization ||
-      organization.kind !== 'organization' ||
-      organization.state !== 'active' ||
-      organization.fenced
-    )
+    if (!organization || organization.kind !== 'organization' || organization.state !== 'active' || organization.fenced)
       throw new AuthBindingDeniedError();
 
     const viewerRole = await readOrganizationRole(pool, organizationRoute, organizationId, actor.accountId, at);
@@ -197,17 +192,9 @@ export async function readOrganizationMembershipPage(
         const ownerEvidenceCurrent = !!owners && owners.owners > 0 && owners.target === (row.role === 'owner' ? 1 : 0);
         const lastOwner = ownerEvidenceCurrent && row.role === 'owner' && owners.owners === 1;
         const changeRole: MembershipActionAdvice =
-          !changeRoleAllowed || !ownerEvidenceCurrent
-            ? 'unavailable'
-            : lastOwner
-              ? 'last-owner'
-              : 'allowed';
+          !changeRoleAllowed || !ownerEvidenceCurrent ? 'unavailable' : lastOwner ? 'last-owner' : 'allowed';
         const remove: MembershipActionAdvice =
-          !removeAllowed || !ownerEvidenceCurrent
-            ? 'unavailable'
-            : lastOwner
-              ? 'last-owner'
-              : 'allowed';
+          !removeAllowed || !ownerEvidenceCurrent ? 'unavailable' : lastOwner ? 'last-owner' : 'allowed';
         items.push({
           accountId: row.accountId,
           account: identityById.get(row.accountId) ?? null,
