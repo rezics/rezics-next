@@ -624,7 +624,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
     <ShelfTable
       rows={tableRows}
       columns={columns}
-      {...(controls.sort && controls.sort.orderBy !== 'personalScore'
+      {...(controls.sort && controls.sort.orderBy !== 'personalScore' && controls.sort.orderBy !== 'priority'
         ? {
             sort: {
               field:
@@ -1210,11 +1210,16 @@ export function LabelShelfEntries({
 
 /** The generated score reader is absent. Keep the addressed visit explicit without exposing obsolete rows. */
 export function ShelfScoreUnavailable({ locale, view }: { locale: string; view: ShelfSearch }) {
+  return <ShelfOrderUnavailable locale={locale} view={view} />;
+}
+
+export function ShelfOrderUnavailable({ locale, view }: { locale: string; view: ShelfSearch }) {
+  const priority = view.orderBy === 'priority';
   const { cursor: _cursor, ...restart } = view;
   const dateOrder = shelfSort(view.state ? { state: view.state } : {});
   return (
-    <div data-shelf-score-state="unavailable" className="flex min-w-0 flex-col items-start gap-3">
-      <p role="alert">{m.library_score_unavailable()}</p>
+    <div data-shelf-score-state={priority ? undefined : "unavailable"} data-shelf-priority-state={priority ? "unavailable" : undefined} className="flex min-w-0 flex-col items-start gap-3">
+      <p role="alert">{priority ? m.library_priority_unavailable() : m.library_score_unavailable()}</p>
       <div className="flex max-w-full flex-wrap gap-2">
         <a
           href={shelfHref(locale, restart)}

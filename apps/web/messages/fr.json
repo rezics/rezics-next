@@ -8370,5 +8370,8 @@
   "own_media_recovery_heading": "Suppression du média d’origine",
   "own_media_recovery_browsing": "Consulter une autre ligne n’annule pas cette suppression. Réessayer envoie la demande d’origine.",
   "own_media_recovery_withheld": "La reprise est indisponible car le média d’origine ou l’autorisation ne sont plus disponibles.",
-  "own_media_recovery_return": "Revenir au média d’origine"
+  "own_media_recovery_return": "Revenir au média d’origine",
+  "library_priority_unavailable": "Le tri par priorité n’est pas encore disponible.",
+  "library_priority_ascending": "Rang 1 en premier",
+  "library_priority_descending": "Rang 100 en premier"
 }

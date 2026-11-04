@@ -216,6 +216,8 @@ export function SortControls({
   // Replace pending edits with a newly supplied address without remounting focused controls.
   if (selection.address !== address) setSelection({ address, ...sort });
   const scoreOrder = selection.orderBy === 'personalScore';
+  const priorityOrder = selection.orderBy === 'priority';
+  const unavailableOrder = scoreOrder || priorityOrder;
   if (!entries || !progress) return null;
   return (
     <form
@@ -235,22 +237,23 @@ export function SortControls({
       <input type="hidden" name="size" value={display.size} />
       {display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
       {/* A disabled selected option is not a successful form control. Retain the explicit score address. */}
-      {scoreOrder ? <input type="hidden" name="orderBy" value="personalScore" /> : null}
+      {unavailableOrder ? <input type="hidden" name="orderBy" value={selection.orderBy} /> : null}
       <label className="grid min-w-0 max-w-full gap-1 text-sm">
         {m.library_sort_by()}
         <select
-          name={scoreOrder ? undefined : 'orderBy'}
+          name={unavailableOrder ? undefined : 'orderBy'}
           value={selection.orderBy}
           onChange={(event) => {
             if (!(isCurrent?.() ?? true)) return;
             const orderBy = validateShelfSearch({ orderBy: event.target.value }).orderBy;
-            if (orderBy && orderBy !== 'personalScore') setSelection({ ...selection, orderBy });
+            if (orderBy && orderBy !== 'personalScore' && orderBy !== 'priority') setSelection({ ...selection, orderBy });
           }}
           className="min-h-11 max-w-full rounded-md border bg-background p-2"
         >
           <option value="lastActivity">{m.library_sort_activity()}</option>
           <option value="createdAt">{m.library_sort_created()}</option>
           <option value="finishedAt">{m.library_sort_finished()}</option>
+          <option value="priority" disabled>{m.library_rich_entry_priority()}</option>
           <option value="personalScore" disabled>
             {m.library_score_order()}
           </option>
@@ -270,8 +273,8 @@ export function SortControls({
           }}
           className="min-h-11 max-w-full rounded-md border bg-background p-2"
         >
-          <option value="desc">{scoreOrder ? m.library_score_highest() : m.library_sort_newest()}</option>
-          <option value="asc">{scoreOrder ? m.library_score_lowest() : m.library_sort_oldest()}</option>
+          <option value="desc">{priorityOrder ? m.library_priority_descending() : scoreOrder ? m.library_score_highest() : m.library_sort_newest()}</option>
+          <option value="asc">{priorityOrder ? m.library_priority_ascending() : scoreOrder ? m.library_score_lowest() : m.library_sort_oldest()}</option>
         </select>
       </label>
       <Button type="submit" variant="outline" className="min-h-11">

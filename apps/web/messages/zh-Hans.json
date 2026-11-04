@@ -8370,5 +8370,8 @@
   "own_media_recovery_heading": "原媒体删除操作",
   "own_media_recovery_browsing": "查看其他行不会取消此删除操作。重试会发送原始请求。",
   "own_media_recovery_withheld": "原媒体或权限已不可用，暂无法恢复此操作。",
-  "own_media_recovery_return": "返回原媒体"
+  "own_media_recovery_return": "返回原媒体",
+  "library_priority_unavailable": "暂时无法按优先级排序。",
+  "library_priority_ascending": "优先级 1 在前",
+  "library_priority_descending": "优先级 100 在前"
 }

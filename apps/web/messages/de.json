@@ -8370,5 +8370,8 @@
   "own_media_recovery_heading": "Ursprüngliche Medienentfernung",
   "own_media_recovery_browsing": "Das Öffnen einer anderen Zeile bricht diese Entfernung nicht ab. Erneutes Versuchen sendet die ursprüngliche Anfrage.",
   "own_media_recovery_withheld": "Die Wiederaufnahme ist nicht verfügbar, da die ursprünglichen Medien oder die Berechtigung nicht mehr verfügbar sind.",
-  "own_media_recovery_return": "Zu den ursprünglichen Medien"
+  "own_media_recovery_return": "Zu den ursprünglichen Medien",
+  "library_priority_unavailable": "Die Prioritätssortierung ist noch nicht verfügbar.",
+  "library_priority_ascending": "Rang 1 zuerst",
+  "library_priority_descending": "Rang 100 zuerst"
 }
