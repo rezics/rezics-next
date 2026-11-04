@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
-import { readAuthorContributionActions } from '../../src/content/author-contribution-actions.ts';
 import counts from '../../src/content/reaction-count-page.sql';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createAuthorContributionActionsFixture } from './support/author-contribution-actions-fixture.ts';
@@ -82,15 +81,15 @@ test('unavailable aggregates and absent own slots stay unknown; same-input retry
     await observer.close();
   }
   const retained = JSON.stringify(selected.input);
-  const { viewerActionRuntime: _viewerActionRuntime, ...nativeSources } = f.dependencies;
-  const unavailableAdvice = await readAuthorContributionActions(
-    nativeSources,
-    f.author.accountId,
-    selected.input,
-    f.system.actors.other.actor,
-    Date.now() + 120_000,
-  );
-  expect(unavailableAdvice.value.actions).toMatchObject({ state: 'unavailable', retryable: true, references: [] });
+  const runtime = f.dependencies.viewerActionRuntime;
+  Object.defineProperty(f.dependencies, 'viewerActionRuntime', { configurable: true, value: undefined });
+  try {
+    const unavailableAdvice = await selected.read(f.other.bearer);
+    status(unavailableAdvice, 200);
+    expect(unavailableAdvice.value.actions).toMatchObject({ state: 'unavailable', retryable: true, references: [] });
+  } finally {
+    Object.defineProperty(f.dependencies, 'viewerActionRuntime', { configurable: true, value: runtime });
+  }
   const retry = await selected.read(f.other.bearer);
   status(retry, 200);
   expect(retry.value.selected.map((item: any) => item.reference)).toEqual(selected.input.references);
@@ -156,6 +155,125 @@ test('native reaction retries recover the original receipt once and reauthorize 
   const refreshed = await selected.read(sender.bearer);
   status(refreshed, 200);
   expect(refreshed.value.watch.items).toEqual([{ threadId: thread.id, state: 'current', watching: true }]);
+  const unwatched = await f.call('DELETE', `/v1/threads/${thread.id}/watch`, { bearer: sender.bearer });
+  status(unwatched, 204);
+  const afterUnwatch = await selected.read(sender.bearer);
+  status(afterUnwatch, 200);
+  expect(afterUnwatch.value.watch.items).toEqual([{ threadId: thread.id, state: 'current', watching: false }]);
+  expect(afterUnwatch.value).not.toHaveProperty('receipt');
+});
+
+test('post reaction recovery keeps its original key and registered freshness updates the selected post', async () => {
+  const thread = await f.thread();
+  const post = await f.post(thread.id, 'Selected post reaction target');
+  const selected = await f.admit('posts', null, 1);
+  const advice = await selected.read(f.other.bearer);
+  status(advice, 200);
+  const reference = advice.value.actions.references.find(
+    (item: any) => item.type === 'content.post' && item.id === post.id,
+  );
+  expect(reference.operations).toContainEqual(
+    expect.objectContaining({ operationId: 'post.set_reaction', state: 'available' }),
+  );
+  const path = `/v1/posts/${post.id}/reaction`;
+  const sender = Object.freeze({ bearer: f.other.bearer, key: crypto.randomUUID(), body: Object.freeze({ kind: 'like' }) });
+  const send = () => f.call('PUT', path, sender);
+  await expect(
+    send().then((result) => {
+      status(result, 200);
+      throw new Error('Committed response delivery lost');
+    }),
+  ).rejects.toThrow('Committed response delivery lost');
+  const readback = await selected.read(sender.bearer);
+  status(readback, 200);
+  expect(readback.value).not.toHaveProperty('receipt');
+  expect(readback.value.reactions.items).toContainEqual(
+    expect.objectContaining({ type: 'content.post', id: post.id, state: 'current', viewerSelection: 'like' }),
+  );
+  const replay = await send();
+  status(replay, 200);
+  expect(replay.value).toEqual({ kind: 'like' });
+  const retained = await f.admin.query(
+    'SELECT count(*)::int AS count FROM core.receipt WHERE principal_id=$1 AND idempotency_key=$2',
+    [f.other.accountId, sender.key],
+  );
+  expect(retained.rows).toEqual([{ count: 1 }]);
+  const effects = await f.admin.query(
+    `SELECT count(*)::int AS count FROM core.outbox
+     WHERE type='com.rezics.content.reaction.changed.v1' AND subject=$1 AND data->>'actorId'=$2`,
+    [post.id, f.other.accountId],
+  );
+  expect(effects.rows).toEqual([{ count: 1 }]);
+  await f.grant(post.id, f.other.accountId, ['reaction:set']);
+  await f.admin.query(
+    `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+     VALUES ($1,$2,$3,'reaction:set','resource','(,)',$4)`,
+    [routeOf(post.id), post.id, f.other.accountId, newId(routeOf(post.id)!)],
+  );
+  status(await send(), 403);
+});
+
+test('same selected author proof tolerates unrelated source position advancement', async () => {
+  const thread = await f.thread();
+  const selected = await f.admit('discussion', null, 1);
+  const result = await f.duringAssembly(selected, () => f.post(thread.id, 'Unrelated committed reply'));
+  status(result, 200);
+  expect(result.value.selected.map((item: any) => item.reference)).toEqual(selected.input.references);
+});
+
+test('source partition identity replacement during finish retires the whole selected cohort', async () => {
+  const thread = await f.thread();
+  const selected = await f.admit('discussion', null, 1);
+  const partition = partitionOf(routeOf(thread.id)!);
+  const before = await f.admin.query('SELECT node FROM core.partition WHERE partition_no=$1', [partition]);
+  const originalNode = before.rows[0]!.node as string;
+  try {
+    const changed = await f.duringAssembly(selected, () =>
+      f.admin.query('UPDATE core.partition SET node=$2 WHERE partition_no=$1', [partition, `${originalNode}-replacement`]),
+    );
+    status(changed, 503);
+    expect(changed.value.code).toBe('dependency_unavailable');
+    expect(changed.text).not.toContain('operations');
+  } finally {
+    await f.admin.query('UPDATE core.partition SET node=$2 WHERE partition_no=$1', [partition, originalNode]);
+  }
+});
+
+test('a moved native source home cannot serve an already admitted action proof', async () => {
+  const thread = await f.thread();
+  const selected = await f.admit('discussion', null, 1);
+  const partition = partitionOf(routeOf(thread.id)!);
+  await f.admin.query("UPDATE core.partition SET write_state='moved',moved_to=$2 WHERE partition_no=$1", [
+    partition,
+    partition + 1,
+  ]);
+  try {
+    const moved = await selected.read(f.other.bearer);
+    status(moved, 503);
+    expect(moved.value.code).toBe('dependency_unavailable');
+    expect(moved.text).not.toContain('operations');
+  } finally {
+    await f.admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [
+      partition,
+    ]);
+  }
+});
+
+test('sparse author pages sign visible rows and failed refresh retries never refill the original selection', async () => {
+  const thread = await f.thread();
+  const post = await f.post(thread.id, 'Original selected source');
+  await f.post(thread.id, 'Sparse draft row', undefined, 'draft');
+  const selected = await f.admit('posts', null, 1);
+  expect(selected.input.references.map((reference) => reference.id)).toEqual([post.id]);
+  const original = JSON.stringify({ input: selected.input, next: selected.page.value.next });
+  await f.post(thread.id, 'Newer candidate');
+  await f.revise(post.id, post.revisionId, 'Changed before private assembly');
+  const changed = await selected.read(f.other.bearer);
+  status(changed, 503);
+  expect(changed.value.code).toBe('dependency_unavailable');
+  expect(changed.text).not.toContain('operations');
+  expect(JSON.stringify({ input: selected.input, next: selected.page.value.next })).toBe(original);
+  status(await selected.read(f.other.bearer), 503);
 });
 
 test('source replacement during finish retires advice and retries keep the original revisions', async () => {
@@ -311,12 +429,18 @@ test('a source epoch change during finish cannot inherit the previous source obs
   const thread = await f.thread();
   const selected = await f.admit('discussion', null, 1);
   const partition = partitionOf(routeOf(thread.id)!);
-  const replaced = await f.duringAssembly(selected, () =>
-    f.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [partition]),
-  );
-  status(replaced, 503);
-  expect(replaced.value.code).toBe('dependency_unavailable');
-  expect(replaced.text).not.toContain('operations');
+  const before = await f.admin.query('SELECT epoch FROM core.partition WHERE partition_no=$1', [partition]);
+  const originalEpoch = before.rows[0]!.epoch as number;
+  try {
+    const replaced = await f.duringAssembly(selected, () =>
+      f.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [partition]),
+    );
+    status(replaced, 503);
+    expect(replaced.value.code).toBe('dependency_unavailable');
+    expect(replaced.text).not.toContain('operations');
+  } finally {
+    await f.admin.query('UPDATE core.partition SET epoch=$2 WHERE partition_no=$1', [partition, originalEpoch]);
+  }
 });
 
 test('replacement viewer credentials retain the public selection and revoked credentials disclose no advice', async () => {
@@ -332,8 +456,42 @@ test('replacement viewer credentials retain the public selection and revoked cre
   status(current, 200);
   expect(current.value.viewer).toEqual({ kind: 'account', id: f.other.accountId });
   expect(current.value.selected.map((item: any) => item.reference)).toEqual(selected.input.references);
+  const suspended = await f.duringAssembly(
+    selected,
+    () =>
+      f.admin.query('UPDATE access.account SET state=\'suspended\' WHERE route=$1 AND account_id=$2', [
+        routeOf(f.other.accountId)!,
+        f.other.accountId,
+      ]),
+    replacement.bearer,
+  );
+  status(suspended, 401);
+  expect(suspended.value.code).toBe('invalid_credentials');
+  await f.admin.query('UPDATE access.account SET state=\'active\' WHERE route=$1 AND account_id=$2', [
+    routeOf(f.other.accountId)!,
+    f.other.accountId,
+  ]);
+  const finishCredential = await f.system.auth.issue({
+    accountId: f.other.accountId,
+    clientId: f.system.auth.ordinaryClient.id,
+    scopes: f.system.auth.ordinaryScopes,
+  });
+  const replacedDuringFinish = await f.duringAssembly(
+    selected,
+    async () => {
+      await f.system.nativeAuth.internal.revokeSessions(f.other.accountId);
+      await f.system.auth.issue({
+        accountId: f.other.accountId,
+        clientId: f.system.auth.ordinaryClient.id,
+        scopes: f.system.auth.ordinaryScopes,
+      });
+    },
+    finishCredential.bearer,
+  );
+  status(replacedDuringFinish, 401);
+  expect(replacedDuringFinish.value.code).toBe('invalid_credentials');
   await f.system.nativeAuth.internal.revokeSessions(f.other.accountId);
-  for (const bearer of [f.other.bearer, replacement.bearer]) {
+  for (const bearer of [f.other.bearer, replacement.bearer, finishCredential.bearer]) {
     const revoked = await selected.read(bearer);
     status(revoked, 401);
     expect(revoked.value.code).toBe('invalid_credentials');

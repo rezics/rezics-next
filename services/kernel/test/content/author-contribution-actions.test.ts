@@ -98,6 +98,9 @@ test('publication withdrawal during private assembly retires all advice', async 
       f.author.accountId,
       { view: 'reviews', cursor: null, ...page.value.actionSelection },
       f.system.actors.other.actor,
+      new Request('http://kernel.local/v1/accounts/actions', {
+        headers: { authorization: `Bearer ${f.other.bearer}` },
+      }),
       Date.now() + 120_000,
     );
     // Observe the rejection immediately, including while the SQL gate is held.
