@@ -17,7 +17,7 @@ import { ImportTransportError, type ReviewedSubjectRead } from './import-client.
 import type { Importer, ImportRunResult } from './importer.ts';
 import type { BangumiCharacterAppearance } from './cross-media-seed.ts';
 import { bangumiAppearanceSource, combineSourceVocabularyRequests } from './cross-media-bindings.ts';
-import { createSourceRegistration, type SourceAssets } from './source-registry.ts';
+import { createSourceRegistration, crossMediaBangumiRevision, type SourceAssets } from './source-registry.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const schemes = {
@@ -314,7 +314,7 @@ export async function runBangumiCharacterFidelity(input: {
 
   const base = createSourceRegistration('bangumi', {
     source: input.sourceAlias,
-    converterRevision: entityRevision,
+    converterRevision: crossMediaBangumiRevision,
   });
   const gaps: SourceVocabularyGap[] = [];
   const registration: SourceRegistration<SourceAssets> = {

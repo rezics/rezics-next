@@ -9,8 +9,7 @@ import {
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
-import { bangumiDiagnosticLimit, extractBangumiSubjectNames } from './bangumi-subject-names.ts';
-import { bangumiTelevisionRun } from './bangumi-television-run.ts';
+import { bangumiDiagnosticLimit, extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
 import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
 import {
   checkCoverIntent,
@@ -24,7 +23,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@9';
+export const converter_revision = 'bangumi@10';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
@@ -282,15 +281,17 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     references: references(),
   });
   const bookTitleProfile = record.type === 1 && profile.type === 'schema:Book';
-  const extractedNames = extractBangumiSubjectNames(record, profile.type);
+  const extractedFields = extractBangumiTVAnimeEvidence(record, profile.type);
+  const television = extractedFields.televisionRun;
   const nameFields = new Map<BatchStatement, string>();
   const facts = [fact('wdt:P5732', input.external_id)];
-  for (const name of extractedNames.names) {
+  for (const name of extractedFields.names) {
     const statement = fact(name.property, { language: name.language, text: name.text });
     if (bookTitleProfile && name.pointer.startsWith('/infobox/'))
       nameFields.set(statement, `name:${name.pointer}:${name.property}:${name.language}:${name.text}`);
     facts.push(statement);
   }
+  facts.push(...extractedFields.workEvidence.map((item) => fact(item.property, item.value)));
   if (record.meta_tags?.includes('后宫')) {
     const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
     const dictionary = context.resolvedReferences;
@@ -321,7 +322,6 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       invalid('/summary', 'invalid_record_summary_document_limit');
     }
   }
-  const television = bangumiTelevisionRun(record);
   const playerCount = bangumiGamePlayerCount(record);
   const proposals: BatchCommand[] = [];
   const propose = (
@@ -431,7 +431,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       ...boundedDiagnostics([
         ...retainedFieldDiagnostics(
           record,
-          extractedNames.diagnostics,
+          extractedFields.diagnostics,
           television.handledInfobox || playerCount.handledInfobox || bookTitleProfile,
         ),
         ...television.diagnostics,
