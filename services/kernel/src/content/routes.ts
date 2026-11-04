@@ -694,7 +694,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         query: reviewDestinationQuery,
         response: { 200: withHeaders(ReviewDestinationPageSchema, sessionHeader), ...readFailures },
         detail: {
-          operationId: 'review-destination.list',
+          operationId: 'review_destinations.list',
           'x-exposure': 'public',
           'x-action': 'realm:read',
           security: readSecurity,
