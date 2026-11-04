@@ -37,16 +37,16 @@ the respective owner document, not in this research report.
 
 ## Ranked findings
 
-| Rank | Finding | Product cost | Proposed single owner | Changed-line estimate |
-| --- | --- | --- | --- | --- |
-| 1 | Runtime price protocols across three modules | Extra refusal paths and repeated accounting coupled to SQL changes; violates architecture | Kernel Work execution; static costs with Performance | 2,400–3,000 for a bounded Members/History consolidation |
-| 2 | Repeated session/lifetime observation | Divergent retirement rules and repeated cache subscriptions in privacy-sensitive flows | Web session/viewer infrastructure | 2,200–2,800 for core and representative consumers |
-| 3 | Per-profile creation orchestration | Every metadata/draft/focus fix has multiple implementations | Web catalogue creation host | 2,200–2,800, including finding 5 |
-| 4 | Four retained-list metadata confirmation coordinators | Replay, cancellation and stale-review fixes spread across provider implementations | Commerce Library metadata adoption | 2,400–3,000 for first two adapters |
-| 5 | Statement summary rebuilt by profile | Same qualifiers/references/rank renderer; misleading common rank label | Web shared statement presentation | 600–900 within finding 3 |
-| 6 | Cross-feature lifetime helpers owned by Library | Ratings imports Library infrastructure and personal-library gate context | Web common reader infrastructure | 500–800 within finding 2 |
-| 7 | Two installed mobile hooks | Breakpoint/subscription fixes require two exports and consumer migrations | packages/ui hooks/use-mobile.ts | 80–150 |
-| 8 | Superseded dialog behavior remains exported | Old Ark-shaped helpers alongside current Base UI; accidental reuse risk | packages/ui current dialog primitives | 80–140 |
+| Rank | Finding                                               | Product cost                                                                              | Proposed single owner                                | Changed-line estimate                                   |
+| ---- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------- |
+| 1    | Runtime price protocols across three modules          | Extra refusal paths and repeated accounting coupled to SQL changes; violates architecture | Kernel Work execution; static costs with Performance | 2,400–3,000 for a bounded Members/History consolidation |
+| 2    | Repeated session/lifetime observation                 | Divergent retirement rules and repeated cache subscriptions in privacy-sensitive flows    | Web session/viewer infrastructure                    | 2,200–2,800 for core and representative consumers       |
+| 3    | Per-profile creation orchestration                    | Every metadata/draft/focus fix has multiple implementations                               | Web catalogue creation host                          | 2,200–2,800, including finding 5                        |
+| 4    | Four retained-list metadata confirmation coordinators | Replay, cancellation and stale-review fixes spread across provider implementations        | Commerce Library metadata adoption                   | 2,400–3,000 for first two adapters                      |
+| 5    | Statement summary rebuilt by profile                  | Same qualifiers/references/rank renderer; misleading common rank label                    | Web shared statement presentation                    | 600–900 within finding 3                                |
+| 6    | Cross-feature lifetime helpers owned by Library       | Ratings imports Library infrastructure and personal-library gate context                  | Web common reader infrastructure                     | 500–800 within finding 2                                |
+| 7    | Two installed mobile hooks                            | Breakpoint/subscription fixes require two exports and consumer migrations                 | packages/ui hooks/use-mobile.ts                      | 80–150                                                  |
+| 8    | Superseded dialog behavior remains exported           | Old Ark-shaped helpers alongside current Base UI; accidental reuse risk                   | packages/ui current dialog primitives                | 80–140                                                  |
 
 ### 1. Runtime accounting has become multiple engines around the engine
 
