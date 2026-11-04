@@ -114,6 +114,11 @@ test('failed and uncertain native sign-out recover independently without replay 
       expect(security.isConnected).toBe(true);
       expect(visit(security, 'click')).toBe(true);
       expect(visit(deletion, 'auxclick', 1)).toBe(true);
+      root.render(
+        <QueryClientProvider client={managedClient}>
+          <AccountSafetySection state="signed-out" returnTo="/en/settings" />
+        </QueryClientProvider>,
+      );
     });
 
     await act(async () =>
