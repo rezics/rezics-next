@@ -325,7 +325,11 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
     return Response.json({ statement: paid });
   }) as typeof fetch;
   const rootRoute = createRootRoute({ component: Outlet });
-  const listRoute = createRoute({ getParentRoute: () => rootRoute, path: '/creator/statements', component: () => null });
+  const listRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/creator/statements',
+    component: () => null,
+  });
   let rerenderSession!: () => void;
   function StatementFixture() {
     const [, update] = useState(0);

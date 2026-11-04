@@ -39,10 +39,7 @@ const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, O
   await import('@tanstack/react-router');
 
 test('ordinary same-origin document links keep native click meanings', () => {
-  const destination = (
-    href: string,
-    options: { target?: string; download?: boolean; ctrlKey?: boolean } = {},
-  ) => {
+  const destination = (href: string, options: { target?: string; download?: boolean; ctrlKey?: boolean } = {}) => {
     const anchor = window.document.createElement('a');
     anchor.href = href;
     if (options.target) anchor.target = options.target;
