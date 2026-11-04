@@ -179,5 +179,7 @@ limit; Session/unit/History and archive child tables must be index-only once the
 capture admits 128 MiB of charged plan evidence so a ten-step composed apply can retain its nested notices. The installed export currently emits V4, which the archive
 parser does not accept; the growth fixture encodes a V2 artifact from the native Session rather than the live
 producer. Native Session writes require `advance_progress_discovery_generation_update` to alias transition tables as
-`previous_row`/`next_row`; PL/pgSQL `OLD`/`NEW` make `old.route` and `new.route` ambiguous. Until that check records a scale, that scale stays unmeasured. The focused owner-outcome test in
+`previous_row`/`next_row`; PL/pgSQL `OLD`/`NEW` make `old.route` and `new.route` ambiguous. The profile-migration
+writer fence uses `plan_cache_mode = force_custom_plan` so its indexed pending-pin probes do not seq-scan a grown
+owner Session heap. Until that check records a scale, that scale stays unmeasured. The focused owner-outcome test in
 `copy-archive.test.ts` is not a substitute for those measurements.
