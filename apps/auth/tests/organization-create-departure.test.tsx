@@ -6,7 +6,7 @@ import {
   createRouter,
   RouterContextProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, flush, open, send, session } from './creation-page-fixture';
+import { creationFixture, approval, button, dom, fill, flush, leave, open, send, session } from './creation-page-fixture';
 import { NewOrganizationPage } from '../src/routes/organizations.new';
 import { readPendingAccountOperationStepUp } from '../src/account-operation-step-up';
 import { readPendingOrganizationHandle } from '../src/account-operations';
@@ -118,4 +118,31 @@ test('caller replacement preserves unresolved departure protection and retires p
   await flush(() => page.calls[0]!.resolve(approval()));
   expect(page.calls).toHaveLength(1);
   expect(page.host.textContent).toContain('Sign in');
+});
+
+test('pagehide clears private review before caching and a late approval cannot execute after return', async () => {
+  const page = await setup();
+  await flush(() => fill(page.input, 'team-alpha'));
+  await flush(() => send(page.host));
+  const original = readPendingAccountOperationStepUp();
+  expect(original).not.toBeNull();
+
+  await flush(() => {
+    leave();
+    expect(page.host.querySelector('input')).toBeNull();
+    expect(page.host.textContent).not.toContain('team-alpha');
+    expect(button(page.host, 'Create organization')).toBeNull();
+    expect(button(page.host, 'Retry this creation')).toBeNull();
+  });
+  expect(readPendingAccountOperationStepUp()).toEqual(original);
+
+  const pageshow = new dom.Event('pageshow');
+  Object.defineProperty(pageshow, 'persisted', { value: true });
+  await flush(() => window.dispatchEvent(pageshow as unknown as Event));
+  expect(page.calls).toHaveLength(1);
+  expect(document.activeElement).toBe(page.host.querySelector('[data-organization-create-return]'));
+  await flush(() => page.calls[0]!.resolve(approval()));
+  expect(page.calls).toHaveLength(1);
+  expect(page.host.textContent).not.toContain('team-alpha');
+  expect(readPendingAccountOperationStepUp()).toEqual(original);
 });

@@ -439,14 +439,24 @@ Decision: even readable recovery advice omits private labels; it reports current
 
 Decision: protect nonblank handles and unresolved creation with Stay/Leave and an unload warning; current refusal or loss of session authority retires controls but preserves the earlier unknown attempt and its departure protection. Only a known first mounted refusal releases its continuation; restored hints are conservatively unresolved, regardless of their submitted marker.
 
-`/organizations/new` reads the current session and asks for one handle. An unavailable initial read offers Retry without discarding the saved draft. It applies the same claim rule and
+`/organizations/new` reads the current session and asks for one handle. An unavailable initial read offers a read-only Retry without discarding the saved draft. It applies the same claim rule and
 lowercase normalization as sign-up. Creation uses one operation key for the
 approve and execute requests. The `organizations` gate is checked by Auth; a closed gate keeps the handle and shows a
 localized message without exposing gate details. A 409 says the handle may be taken, leaves it in the field and focuses
 it. Handle format guidance appears before entry. Success names `@<handle>` and links to the created organization's
 membership page using the native result's account ID and the existing membership-ID validator. A result that cannot
 represent that destination keeps the Security fallback. Navigation grants no membership authority; the destination
-retains its own current-session and permission checks. Each explicit submission rechecks the initiating session before and after the native command; the ordinary flow uses five Auth requests regardless of the person's existing sessions or organizations, excluding bounded protocol retries.
+retains its own current-session and permission checks. Each explicit submission rechecks the initiating account, client
+and scopes before and after native work. The first visit reads `/session` once on entry. A command then reads
+`/session` once before native approval and once after native work, sends one `/account-operations/approve`, and sends
+one `/account-operations/execute`: four requests for the command and five for the initial journey. Approval retains
+its existing single same-body retry after an unavailable response, making six requests when that retry is used.
+Execution is never automatically retried; an uncertain result stays unknown until the person deliberately retries the
+exact admitted operation. A retained-document return and each explicit read Retry make one fresh `/session` read and
+zero command requests. They never allocate an operation key or rewrite the saved descriptor. Focus, locale changes and
+result acknowledgement make no requests. Return advice uses only the current session and exact pending marker; it
+performs no organization lookup, list scan or per-row authority read. Step-up keeps its existing exact-operation reads
+after authentication and after the native session observation.
 
 Both creation pages retire browser callbacks on departure, cached-page restoration and session replacement. Retry restores the exact saved operation and initiating account; organization review uses its saved handle and original key. Automated review keeps the exact selected operator. Leaving never clears an unresolved attempt or reverses native creation; uncertain results require explicit confirmation of the same command and never automatically repeat execution.
 

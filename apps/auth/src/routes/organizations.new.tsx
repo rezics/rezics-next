@@ -12,10 +12,10 @@ import {
   AlertDialogCancel,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { ErrorAlert } from '../alert';
-import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import {
   accountOperationSessionMatches,
   accountOperationStepUpUrl,
@@ -36,7 +36,13 @@ import {
   type AccountSessionResult,
 } from '../account-operations';
 import { normalizeSignupHandle } from '../signup';
-import { membershipId } from '../organization-membership';
+import {
+  initialOrganizationCreateReturn,
+  transitionOrganizationCreateReturn,
+  type OrganizationCreateReturnEvent,
+  type OrganizationCreateReturnState,
+} from '../organization-create-return';
+import { OrganizationCreateReturnView } from '../organization-create-return-view';
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 
@@ -105,9 +111,10 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const [accountId, setAccountId] = useState('');
   const [needsProfile, setNeedsProfile] = useState(false);
   const [returned, setReturned] = useState(false);
-  const [unknown, setUnknown] = useState(false);
+  const [returnState, setReturnState] = useState<OrganizationCreateReturnState>(initialOrganizationCreateReturn);
   const unresolvedAttempt = useRef<PendingAccountOperationStepUp | null>(null);
   const [restricted, setRestricted] = useState(false);
+  const [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
   const [handle, setHandle] = useState('');
   const [handleError, setHandleError] = useState('');
   const [pending, setPending] = useState(false);
@@ -121,6 +128,8 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const [reload, setReload] = useState(0);
   const handleInput = useRef<HTMLInputElement>(null);
   const alert = useRef<HTMLDivElement>(null);
+  const returnFocus = useRef<HTMLDivElement>(null);
+  const focusAfterReturn = useRef(false);
   const router = useRouter({ warn: false });
   const bypassDeparture = useRef(false);
   const authority = useRef<Extract<AccountSessionResult, { kind: 'ready' }> | null>(null);
@@ -128,17 +137,48 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   review.current = {
     handle,
     // Losing current authority retires the form, but cannot settle an earlier send.
-    protect: unknown || (loadState === 'ready' && !createdHandle && Boolean(handle.trim() || pending)),
+    protect:
+      returnState.history === 'unconfirmed' ||
+      (loadState === 'ready' && !createdHandle && Boolean(handle.trim() || pending)),
   };
+  const unknown = returnState.history === 'unconfirmed';
   const shouldWarn = useCallback(() => !bypassDeparture.current && review.current.protect, []);
-  const depart = useCallback(() => {
-    // Retire first: an approval or execution response can no longer affect this review.
-    lifetime.current = null;
-    bypassDeparture.current = true;
-    // A retained command, including one whose outcome is unknown, keeps its exact identity.
-    if (pendingAccountOperationStepUpState().kind !== 'absent') return;
-    if (readPendingOrganizationHandle() === review.current.handle) storePendingOrganizationHandle('');
+  const recordReturn = useCallback((event: OrganizationCreateReturnEvent) => {
+    setReturnState((current) => transitionOrganizationCreateReturn(current, event));
   }, []);
+  const depart = useCallback(() => {
+    const descriptorHandle =
+      unresolvedAttempt.current?.operation.kind === 'organization'
+        ? unresolvedAttempt.current.operation.handle
+        : '';
+    const draft = review.current.handle || descriptorHandle;
+    const marker = pendingAccountOperationStepUpState();
+    // Retire authority and force private DOM removal before the browser can cache this document.
+    lifetime.current = null;
+    authority.current = null;
+    submitting.current = false;
+    bypassDeparture.current = true;
+    flushSync(() => {
+      setLoadState('loading');
+      setAccountId('');
+      setNeedsProfile(false);
+      setReturned(false);
+      setRestricted(false);
+      setRecoveryUnavailable(false);
+      setHandle('');
+      setHandleError('');
+      setPending(false);
+      setMessage('');
+      setShowRetry(false);
+      setCreatedHandle('');
+      setCreatedAccountId('');
+      setLoadMessage('');
+      recordReturn({ type: 'return' });
+    });
+    // A retained command, including one whose outcome is unknown, keeps its exact identity.
+    if (marker.kind === 'absent' && readPendingOrganizationHandle() === draft)
+      storePendingOrganizationHandle('');
+  }, [recordReturn]);
   const departure = router ? (
     <OrganizationDeparture shouldWarn={shouldWarn} leave={depart} focus={() => handleInput.current?.focus()} />
   ) : null;
@@ -161,18 +201,29 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     submitting.current = false;
     setPending(false);
     setLoadState('loading');
+    setAccountId('');
+    setNeedsProfile(false);
+    setHandle('');
+    setHandleError('');
     setCreatedHandle('');
+    setCreatedAccountId('');
     setMessage('');
+    setShowRetry(false);
     setReturned(false);
     setRestricted(false);
+    setRecoveryUnavailable(false);
     const stored = pendingAccountOperationStepUpState();
     const saved = stored.kind === 'pending' ? stored.value : null;
     if (!unresolvedAttempt.current && saved?.kind === 'organization') {
       // Storage is a recovery hint, including submitted:false. It cannot prove
       // how far a former mounted page got through approval and execution.
       unresolvedAttempt.current = saved;
+      setReturnState((state) =>
+        state.phase === 'review' && state.history === 'none'
+          ? transitionOrganizationCreateReturn(state, { type: 'unknown' })
+          : state,
+      );
     }
-    setUnknown(Boolean(unresolvedAttempt.current));
     const retire = () => {
       lifetime.current = null;
     };
@@ -180,7 +231,10 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       if (lifetime.current === current) depart();
     };
     const restore = (event: PageTransitionEvent) => {
-      if (event.persisted) setReload((value) => value + 1);
+      if (!event.persisted) return;
+      focusAfterReturn.current = true;
+      depart();
+      flushSync(() => setReload((value) => value + 1));
     };
     window.addEventListener('pagehide', leaveDocument);
     window.addEventListener('pageshow', restore);
@@ -189,27 +243,45 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       if (result.kind === 'ready') {
         const pendingState = pendingAccountOperationStepUpState();
         const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
+        const attemptMismatch =
+          unresolvedAttempt.current !== null &&
+          !pendingAccountOperationMatches(
+            pendingOperation,
+            unresolvedAttempt.current.accountId,
+            unresolvedAttempt.current.operationKey,
+            unresolvedAttempt.current.operation,
+          );
+        const sessionMismatch =
+          pendingOperation !== null &&
+          (pendingOperation.kind !== 'organization' ||
+            pendingOperation.returnTo !== '/organizations/new' ||
+            !accountOperationSessionMatches(result, pendingOperation));
         if (
           pendingState.kind === 'invalid' ||
-          (unresolvedAttempt.current &&
-            !pendingAccountOperationMatches(
-              pendingOperation,
-              unresolvedAttempt.current.accountId,
-              unresolvedAttempt.current.operationKey,
-              unresolvedAttempt.current.operation,
-            )) ||
-          (pendingOperation &&
-            (pendingOperation.kind !== 'organization' ||
-              pendingOperation.returnTo !== '/organizations/new' ||
-              !accountOperationSessionMatches(result, pendingOperation)))
+          attemptMismatch ||
+          sessionMismatch
         ) {
+          authority.current = result;
+          setAccountId(result.accountId);
+          const expected = accountOperationProfile('organization');
+          setNeedsProfile(
+            result.clientId !== expected.client_id ||
+              result.scopes?.length !== 1 ||
+              result.scopes[0] !== expected.scope[0],
+          );
+          setHandle('');
+          setCreatedHandle('');
+          setCreatedAccountId('');
+          setMessage('');
+          setShowRetry(false);
+          setRecoveryUnavailable(true);
+          recordReturn({ type: 'unresumable' });
           setLoadMessage(m.auth_account_operation_failure());
-          setLoadState('failure');
+          setLoadState('ready');
           return;
         }
         if (pendingOperation?.operation.kind === 'organization') {
           setHandle(pendingOperation.operation.handle);
-          storePendingOrganizationHandle(pendingOperation.operation.handle);
         } else setHandle(readPendingOrganizationHandle());
         authority.current = result;
         setAccountId(result.accountId);
@@ -224,6 +296,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       } else if (result.kind === 'signed-out') {
         setLoadState('signed-out');
       } else {
+        recordReturn({ type: 'read-unavailable' });
         setLoadMessage(result.message);
         setLoadState('failure');
       }
@@ -233,7 +306,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       window.removeEventListener('pagehide', leaveDocument);
       window.removeEventListener('pageshow', restore);
     };
-  }, [initial, reload, depart]);
+  }, [initial, reload, depart, recordReturn]);
 
   useLayoutEffect(() => {
     if (handleError) handleInput.current?.focus();
@@ -243,8 +316,27 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     }
   }, [handleError, message]);
 
+  useLayoutEffect(() => {
+    if (!focusAfterReturn.current || loadState === 'loading') return;
+    focusAfterReturn.current = false;
+    if (returnFocus.current) returnFocus.current.focus();
+    else handleInput.current?.focus();
+  }, [loadState, returnState.phase]);
+
+  useLayoutEffect(() => {
+    if (createdHandle) returnFocus.current?.focus();
+  }, [createdHandle]);
+
   async function createOrganization() {
-    if (!lifetime.current || loadState !== 'ready' || submitting.current || pending || restricted) return;
+    if (
+      !lifetime.current ||
+      loadState !== 'ready' ||
+      submitting.current ||
+      pending ||
+      restricted ||
+      recoveryUnavailable
+    )
+      return;
     const normalizedHandle = normalizeSignupHandle(handle);
     if (!normalizedHandle) {
       setMessage('');
@@ -253,6 +345,8 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       return;
     }
     setHandleError('');
+    const priorUncertainty = returnState.history === 'unconfirmed';
+    recordReturn({ type: 'begin' });
     submitting.current = true;
     setPending(true);
     setMessage('');
@@ -260,12 +354,9 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     const operation = { kind: 'organization' as const, handle: normalizedHandle };
     const pendingState = pendingAccountOperationStepUpState();
     const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
-    const operationKey =
-      pendingOperation?.operationKey ??
-      unresolvedAttempt.current?.operationKey ??
-      operationKeyFor(operation, accountId);
-    if (
+    const invalidContinuation =
       pendingState.kind === 'invalid' ||
+      (returnState.history === 'unconfirmed' && !unresolvedAttempt.current) ||
       (unresolvedAttempt.current &&
         !pendingAccountOperationMatches(
           pendingOperation,
@@ -273,18 +364,35 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
           unresolvedAttempt.current.operationKey,
           unresolvedAttempt.current.operation,
         )) ||
-      (pendingOperation && !pendingAccountOperationMatches(pendingOperation, accountId, operationKey, operation))
-    ) {
+      (pendingOperation &&
+        !pendingAccountOperationMatches(pendingOperation, accountId, pendingOperation.operationKey, operation));
+    if (invalidContinuation) {
       // Missing/replaced storage is not a license to allocate a new command key.
       lifetime.current = null;
-      setLoadState('failure');
-      setLoadMessage(m.auth_account_operation_failure());
+      authority.current = null;
       submitting.current = false;
-      setPending(false);
+      flushSync(() => {
+        setLoadState('failure');
+        setAccountId('');
+        setNeedsProfile(false);
+        setHandle('');
+        setHandleError('');
+        setPending(false);
+        setMessage('');
+        setShowRetry(false);
+        setCreatedHandle('');
+        setCreatedAccountId('');
+        setRecoveryUnavailable(true);
+        setLoadMessage(m.auth_account_operation_failure());
+        recordReturn({ type: 'unresumable' });
+      });
       return;
     }
+    const operationKey =
+      pendingOperation?.operationKey ??
+      unresolvedAttempt.current?.operationKey ??
+      operationKeyFor(operation, accountId);
     const current = lifetime.current;
-    const priorUncertainty = Boolean(unresolvedAttempt.current);
     let continuation = JSON.stringify(pendingState);
     const draft = readPendingOrganizationHandle();
     const isCurrent = () => {
@@ -295,10 +403,23 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       )
         return true;
       lifetime.current = null;
-      setLoadState('failure');
-      setLoadMessage(m.auth_account_operation_failure());
+      authority.current = null;
       submitting.current = false;
-      setPending(false);
+      flushSync(() => {
+        setLoadState('failure');
+        setAccountId('');
+        setNeedsProfile(false);
+        setHandle('');
+        setHandleError('');
+        setPending(false);
+        setMessage('');
+        setShowRetry(false);
+        setCreatedHandle('');
+        setCreatedAccountId('');
+        setRecoveryUnavailable(true);
+        setLoadMessage(m.auth_account_operation_failure());
+        recordReturn({ type: 'unresumable' });
+      });
       return false;
     };
     const before = await loadAccountSession();
@@ -310,14 +431,36 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       JSON.stringify(before.scopes) !== JSON.stringify(authority.current?.scopes)
     ) {
       lifetime.current = null;
-      setLoadState(before.kind === 'signed-out' ? 'signed-out' : 'failure');
-      setLoadMessage(m.auth_account_operation_failure());
+      authority.current = null;
       submitting.current = false;
-      setPending(false);
+      flushSync(() => {
+        setLoadState(before.kind === 'signed-out' ? 'signed-out' : 'failure');
+        setAccountId('');
+        setNeedsProfile(false);
+        setHandle('');
+        setHandleError('');
+        setPending(false);
+        setMessage('');
+        setShowRetry(false);
+        setCreatedHandle('');
+        setCreatedAccountId('');
+        setRecoveryUnavailable(false);
+        setLoadMessage(m.auth_account_operation_failure());
+        recordReturn({ type: 'read-unavailable' });
+      });
       return;
     }
     // Retain the exact command before sending it: losing this page cannot unlock another creation.
-    if (!storePendingAccountOperationStepUp({ kind: 'organization', accountId, operationKey, operation })) {
+    const submitted = Boolean(priorUncertainty || pendingOperation?.submitted);
+    if (
+      !storePendingAccountOperationStepUp({
+        kind: 'organization',
+        accountId,
+        operationKey,
+        operation,
+        ...(submitted ? { submitted: true } : {}),
+      })
+    ) {
       setMessage(m.auth_account_operation_failure());
       submitting.current = false;
       setPending(false);
@@ -331,8 +474,47 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       operation,
       returnTo: '/organizations/new',
     };
-    setUnknown(true);
-    let result = await runAccountOperation(operationKey, operation, { isCurrent });
+    recordReturn({ type: 'approval', priorUncertainty });
+    let executionDispatched = false;
+    let result = await runAccountOperation(operationKey, operation, {
+      isCurrent,
+      onExecutionDispatch: () => {
+        if (!isCurrent()) return false;
+        if (
+          !storePendingAccountOperationStepUp({
+            kind: 'organization',
+            accountId,
+            operationKey,
+            operation,
+            submitted: true,
+          })
+        ) {
+          lifetime.current = null;
+          authority.current = null;
+          submitting.current = false;
+          flushSync(() => {
+            setLoadState('failure');
+            setAccountId('');
+            setNeedsProfile(false);
+            setHandle('');
+            setHandleError('');
+            setPending(false);
+            setMessage('');
+            setShowRetry(false);
+            setCreatedHandle('');
+            setCreatedAccountId('');
+            setRecoveryUnavailable(true);
+            setLoadMessage(m.auth_account_operation_failure());
+            recordReturn({ type: 'unresumable' });
+          });
+          return false;
+        }
+        continuation = JSON.stringify(pendingAccountOperationStepUpState());
+        executionDispatched = true;
+        recordReturn({ type: 'execution' });
+        return isCurrent();
+      },
+    });
     if (!isCurrent()) return;
     const after = await loadAccountSession();
     if (!isCurrent()) return;
@@ -343,10 +525,23 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       JSON.stringify(after.scopes) !== JSON.stringify(before.scopes)
     ) {
       lifetime.current = null;
-      setLoadState(after.kind === 'signed-out' ? 'signed-out' : 'failure');
-      setLoadMessage(m.auth_account_operation_failure());
+      authority.current = null;
       submitting.current = false;
-      setPending(false);
+      flushSync(() => {
+        setLoadState(after.kind === 'signed-out' ? 'signed-out' : 'failure');
+        setAccountId('');
+        setNeedsProfile(false);
+        setHandle('');
+        setHandleError('');
+        setPending(false);
+        setMessage('');
+        setShowRetry(false);
+        setCreatedHandle('');
+        setCreatedAccountId('');
+        setRecoveryUnavailable(false);
+        setLoadMessage(m.auth_account_operation_failure());
+        recordReturn({ type: 'read-unavailable' });
+      });
       return;
     }
     if (!result.ok && result.reason === 'denied' && needsProfile) result = { ok: false, reason: 'step-up' };
@@ -355,7 +550,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       storePendingOrganizationHandle('');
       clearPendingAccountOperationStepUp();
       unresolvedAttempt.current = null;
-      setUnknown(false);
+      recordReturn({ type: 'acknowledged' });
       setCreatedHandle(normalizedHandle);
       setCreatedAccountId(result.accountId);
       submitting.current = false;
@@ -363,12 +558,21 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       return;
     }
     if (result.reason === 'step-up') {
-      if (!storePendingAccountOperationStepUp({ kind: 'organization', accountId, operationKey, operation })) {
+      if (
+        !storePendingAccountOperationStepUp({
+          kind: 'organization',
+          accountId,
+          operationKey,
+          operation,
+          ...(submitted ? { submitted: true } : {}),
+        })
+      ) {
         setMessage(m.auth_account_operation_failure());
         submitting.current = false;
         setPending(false);
         return;
       }
+      recordReturn({ type: 'approval', priorUncertainty, settled: true });
       bypassDeparture.current = true;
       window.location.assign(accountOperationStepUpUrl('organization'));
       return;
@@ -382,21 +586,22 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       if (!priorUncertainty) {
         clearPendingAccountOperationStepUp();
         unresolvedAttempt.current = null;
-        setUnknown(false);
       }
+      recordReturn({ type: 'refused', priorUncertainty });
     }
     if (result.reason === 'platform-closed') {
       setMessage(m.auth_organization_not_open());
     } else if (result.reason === 'denied') {
       setMessage(m.auth_organization_refused());
     } else if (result.reason === 'unknown') {
-      storePendingAccountOperationStepUp({ kind: 'organization', accountId, operationKey, operation });
-      setUnknown(true);
+      recordReturn({ type: 'unknown' });
       setShowRetry(true);
     } else if (result.reason === 'unavailable') {
+      recordReturn({ type: 'unavailable' });
       setMessage(m.auth_account_operation_unavailable());
       setShowRetry(true);
     } else {
+      recordReturn({ type: executionDispatched || priorUncertainty ? 'unknown' : 'unavailable' });
       setMessage(m.auth_account_operation_failure());
       setShowRetry(true);
     }
@@ -407,21 +612,71 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     void createOrganization();
   }
 
-  const unresolved =
-    unknown && !pending ? (
-      <Alert role="status">
-        <AlertDescription>{m.auth_organization_creation_unknown()}</AlertDescription>
-      </Alert>
-    ) : null;
+  function retryRead() {
+    focusAfterReturn.current = true;
+    depart();
+    flushSync(() => setReload((value) => value + 1));
+  }
+
+  let returnPhase = returnState.phase;
+  if (recoveryUnavailable) returnPhase = 'unresumable';
+  else if (loadState === 'failure') returnPhase = 'unavailable';
+  else if (loadState === 'signed-out') {
+    returnPhase =
+      returnState.history === 'unconfirmed'
+        ? 'unknown'
+        : returnState.history === 'acknowledged'
+          ? 'acknowledged'
+          : 'review';
+  } else if (loadState === 'loading') {
+    returnPhase = returnState.history === 'unconfirmed'
+      ? 'unknown'
+      : returnState.history === 'acknowledged'
+        ? 'acknowledged'
+        : 'preflight';
+  } else if (pending && ['preflight', 'approval', 'execution'].includes(returnState.phase)) {
+    returnPhase = returnState.phase;
+  } else if (returnState.history === 'unconfirmed') returnPhase = 'unknown';
+  else if (returnState.history === 'acknowledged') returnPhase = 'acknowledged';
+  else if (returned && returnState.phase === 'approval') returnPhase = 'approval';
+  else if (returnState.phase === 'unavailable') returnPhase = 'unavailable';
+  else returnPhase = 'review';
+
+  const canRetryRead =
+    loadState === 'failure' ||
+    recoveryUnavailable ||
+    (loadState === 'ready' && returnState.phase === 'unavailable' && !pending) ||
+    (loadState === 'ready' && returnState.history === 'unconfirmed' && !pending);
+  const canRetryCreation =
+    loadState === 'ready' &&
+    !pending &&
+    !restricted &&
+    !recoveryUnavailable &&
+    unresolvedAttempt.current !== null &&
+    (returnState.history === 'unconfirmed' || showRetry);
+  const returnView = (
+    <OrganizationCreateReturnView
+      phase={returnPhase}
+      history={returnState.history}
+      pending={pending}
+      handle={createdHandle || undefined}
+      accountId={createdHandle ? createdAccountId : undefined}
+      canRetryRead={canRetryRead}
+      canRetryCreation={canRetryCreation}
+      signedOut={loadState === 'signed-out'}
+      readRetry={retryRead}
+      creationRetry={() => void createOrganization()}
+      focusRef={returnFocus}
+    />
+  );
 
   if (loadState === 'signed-out')
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         {departure}
-        {unresolved}
+        {returnView}
         <div className="auth-login-form">
           <p>{m.auth_account_operation_sign_in_required()}</p>
-          <a href="/login">{m.auth_security_sign_in()}</a>
         </div>
       </AuthPage>
     );
@@ -430,11 +685,8 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         {departure}
-        {unresolved}
+        {returnView}
         <ErrorAlert>{loadMessage}</ErrorAlert>
-        <Button type="button" onClick={() => setReload((value) => value + 1)}>
-          {m.auth_account_delete_retry()}
-        </Button>
       </AuthPage>
     );
 
@@ -442,8 +694,16 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         {departure}
-        {unresolved}
+        {returnView}
         <p role="status">{m.auth_inventory_loading()}</p>
+      </AuthPage>
+    );
+
+  if (recoveryUnavailable)
+    return (
+      <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
+        {departure}
+        {returnView}
       </AuthPage>
     );
 
@@ -451,17 +711,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         {departure}
-        <div className="auth-account-operation-success" role="status">
-          <p>{m.auth_organization_created({ handle: createdHandle })}</p>
-          {membershipId(createdAccountId) ? (
-            <p>
-              <a href={`/organizations/members?${new URLSearchParams({ organizationId: createdAccountId })}`}>
-                {m.auth_members_heading()}
-              </a>
-            </p>
-          ) : null}
-          <a href="/security">{m.auth_security_heading()}</a>
-        </div>
+        {returnView}
       </AuthPage>
     );
 
@@ -470,12 +720,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       {departure}
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
         <p>{m.auth_organization_explanation()}</p>
-        {unresolved}
-        {returned ? (
-          <Alert role="status">
-            <AlertDescription>{m.auth_account_operation_reconfirm()}</AlertDescription>
-          </Alert>
-        ) : null}
+        {returnView}
         <Field data-invalid={Boolean(handleError)}>
           <FieldLabel htmlFor={handleId}>{m.auth_signup_handle()}</FieldLabel>
           <p id="organization-handle-help">{m.auth_organization_handle_invalid()}</p>
@@ -496,7 +741,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
             }}
             aria-invalid={handleError ? true : undefined}
             aria-describedby={handleError ? `organization-handle-help ${handleErrorId}` : 'organization-handle-help'}
-            readOnly={pending || unknown}
+            readOnly={pending || unknown || returned}
             required
           />
           {handleError ? <FieldError id={handleErrorId}>{handleError}</FieldError> : null}
@@ -504,16 +749,13 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
         {message ? (
           <ErrorAlert tabIndex={-1} ref={alert}>
             <p>{message}</p>
-            {showRetry ? (
-              <Button type="button" variant="outline" disabled={pending} onClick={() => void createOrganization()}>
-                {m.auth_account_delete_retry()}
-              </Button>
-            ) : null}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending || restricted} aria-busy={pending} className="w-full">
-          {unknown ? m.auth_account_delete_retry() : m.auth_organization_create()}
-        </Button>
+        {!unknown ? (
+          <Button type="submit" disabled={pending || restricted} aria-busy={pending} className="w-full">
+            {m.auth_organization_create()}
+          </Button>
+        ) : null}
       </form>
     </AuthPage>
   );

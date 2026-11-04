@@ -12,7 +12,7 @@ const body = { account_id: initial.accountId, client_id: initial.clientId, scope
 test('initial read retries the saved draft; uncertain creation requires the same handle and command', async () => {
   storePendingOrganizationHandle('Team-Alpha');
   const page = await open(<NewOrganizationPage initial={{ kind: 'failure', message: 'Unavailable' }} />, body);
-  await flush(() => button(page.host, 'Retry')!.click());
+  await flush(() => button(page.host, 'Check current advice')!.click());
   expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('Team-Alpha');
   await flush(() => send(page.host));
   await flush(() => page.calls[0]!.resolve(approval()));
@@ -29,10 +29,23 @@ test('initial read retries the saved draft; uncertain creation requires the same
   await flush(() => page.calls[2]!.resolve(approval()));
   await flush(() => page.calls[3]!.resolve(Response.json({ accountId: '20000000-0000-7000-8000-000000000002' })));
   expect(page.host.textContent).toContain('@team-alpha');
+  expect(document.activeElement).toBe(page.host.querySelector('[data-organization-create-return]'));
   expect(page.host.querySelector('a[href^="/organizations/members?"]')?.getAttribute('href')).toBe(
     '/organizations/members?organizationId=20000000-0000-7000-8000-000000000002',
   );
   expect(readPendingOrganizationHandle()).toBe('');
+  expect(readPendingAccountOperationStepUp()).toBeNull();
+});
+test('a first current refusal remains known and releases its own continuation', async () => {
+  const page = await open(<NewOrganizationPage initial={initial} />, body);
+  await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
+  await flush(() => send(page.host));
+  await flush(() => page.calls[0]!.resolve(approval()));
+  await flush(() =>
+    page.calls[1]!.resolve(Response.json({ error: 'account_operation_denied' }, { status: 403 })),
+  );
+  expect(page.host.textContent).toContain('Creation was refused');
+  expect(page.host.textContent).not.toContain('creation result is still unknown');
   expect(readPendingAccountOperationStepUp()).toBeNull();
 });
 for (const result of ['success', 'step-up', 'approval'] as const)
