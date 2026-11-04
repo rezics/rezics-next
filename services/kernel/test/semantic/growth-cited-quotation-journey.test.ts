@@ -17,6 +17,7 @@ import {
   type Population,
   type Row,
 } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -42,7 +43,14 @@ beforeAll(async () => {
   ]);
   await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
   await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:read');
-  app = createKernel({ pool: db.pool, routeKey, tokens, access: real.access, writeRate: real.writeRate });
+  app = createKernel({
+    pool: db.pool,
+    routeKey,
+    tokens,
+    receiptKeys: testReceiptKeys(),
+    access: real.access,
+    writeRate: real.writeRate,
+  });
   const created = await app.handle(
     new Request('http://kernel.test/v1/subjects', {
       method: 'POST',

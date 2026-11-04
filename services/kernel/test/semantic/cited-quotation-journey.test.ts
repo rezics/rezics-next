@@ -9,6 +9,7 @@ import { setupPresentation } from '../../src/presentation/setup.ts';
 import { quotationTypeAdmitted } from '../../src/presentation/semantic-page.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -33,6 +34,7 @@ const kernel = createKernel({
   pool,
   access: real.access,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(41)]]) },
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32).fill(42),
   writeRate: real.writeRate,
 });
