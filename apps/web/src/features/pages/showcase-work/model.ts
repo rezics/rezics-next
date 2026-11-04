@@ -47,7 +47,7 @@ export function workDestinations(
     const relation = Object.hasOwn(definitions, property) ? definitions[property] : undefined;
     if (!relation) continue;
     // Native current previews are selected per relation slot. Do not rank a truncated preview again.
-    const current = subject.relationCounts ? statements ?? [] : bestRank(statements ?? []);
+    const current = subject.relationCounts ? (statements ?? []) : bestRank(statements ?? []);
     for (const statement of current as Statement[]) {
       if (
         statement.rank === 'deprecated' ||
@@ -89,9 +89,12 @@ export function relationRelated(value: unknown): Related {
   for (const [id, summary] of Object.entries(value)) {
     if (!isRecord(summary) || summary.id !== id) continue;
     const label = summary.label;
-    const labels = isRecord(label) && typeof label.value === 'string' && typeof label.language === 'string'
-      ? { [label.language]: label.value }
-      : typeof label === 'string' ? { en: label } : {};
+    const labels =
+      isRecord(label) && typeof label.value === 'string' && typeof label.language === 'string'
+        ? { [label.language]: label.value }
+        : typeof label === 'string'
+          ? { en: label }
+          : {};
     related[id] = { labels };
   }
   return related;
@@ -104,7 +107,10 @@ export function directedWorkRelations(
   direction: 'in' | 'out',
   body: Record<string, unknown>,
 ): DirectedWorkRelation[] | undefined {
-  const rows = relationItemRows(body[direction === 'in' ? 'links' : 'relations'], direction === 'in' ? 'links' : 'relations');
+  const rows = relationItemRows(
+    body[direction === 'in' ? 'links' : 'relations'],
+    direction === 'in' ? 'links' : 'relations',
+  );
   if (!rows) return;
   const result: DirectedWorkRelation[] = [];
   for (const row of rows) {
@@ -113,20 +119,36 @@ export function directedWorkRelations(
     if (!isRecord(row.summary) || typeof target !== 'string' || !isRecord(original)) continue;
     const kind = showcaseWorkKind(
       typeof row.summary.type === 'string' ? row.summary.type : undefined,
-      Array.isArray(row.summary.types) ? row.summary.types.filter((type): type is string => typeof type === 'string') : [],
+      Array.isArray(row.summary.types)
+        ? row.summary.types.filter((type): type is string => typeof type === 'string')
+        : [],
     );
-    if (!kind || !isRecord(original.property) || original.property.id !== property ||
-        original.property.data_type !== 'wikibase-item' || !isRecord(original.value) ||
-        original.value.type !== 'value' || original.value.content !== (direction === 'in' ? id : target) ||
-        typeof original.id !== 'string' || !['normal', 'preferred'].includes(String(original.rank)) ||
-        !Array.isArray(original.qualifiers) || !Array.isArray(original.references)) continue;
+    if (
+      !kind ||
+      !isRecord(original.property) ||
+      original.property.id !== property ||
+      original.property.data_type !== 'wikibase-item' ||
+      !isRecord(original.value) ||
+      original.value.type !== 'value' ||
+      original.value.content !== (direction === 'in' ? id : target) ||
+      typeof original.id !== 'string' ||
+      !['normal', 'preferred'].includes(String(original.rank)) ||
+      !Array.isArray(original.qualifiers) ||
+      !Array.isArray(original.references)
+    )
+      continue;
     const label = isRecord(row.summary.label) ? row.summary.label.value : row.summary.label;
     const related = relationRelated(row.related);
     Object.assign(related, relationRelated({ [target]: row.summary }));
     result.push({
       holder: direction === 'in' ? target : id,
-      direction, property, statement: original as unknown as Stmt, id: target,
-      label: typeof label === 'string' ? label : '', kind, related,
+      direction,
+      property,
+      statement: original as unknown as Stmt,
+      id: target,
+      label: typeof label === 'string' ? label : '',
+      kind,
+      related,
     });
   }
   return result;

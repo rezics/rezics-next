@@ -23,20 +23,33 @@ export function connectionReturnWindow(hash: string): ConnectionReturnWindow | u
   if (!hash.startsWith('#connections?') || hash.length > 28000) return;
   const params = new URLSearchParams(hash.slice('#connections?'.length));
   const keys = [...params.keys()];
-  if (new Set(keys).size !== keys.length || keys.some((key) => !['stream', 'cursor', 'reading', 'focus', 'holder'].includes(key))) return;
+  if (
+    new Set(keys).size !== keys.length ||
+    keys.some((key) => !['stream', 'cursor', 'reading', 'focus', 'holder'].includes(key))
+  )
+    return;
   const stream = params.get('stream');
   const reading = params.get('reading');
   const cursor = params.get('cursor');
   const focus = params.get('focus');
   const holder = params.get('holder');
-  if (!stream || !/^(in|out):[^\s\u0000-\u001f]{1,256}$/u.test(stream) ||
-      (reading !== null && !/^[a-f0-9]{64}$/.test(reading)) ||
-      (reading === null && (cursor !== null || focus !== null || holder !== null)) ||
-      (cursor !== null && (!cursor || cursor.length > 8192 || /[\u0000-\u001f]/u.test(cursor))) ||
-      (focus !== null && !new RegExp(`^${uuid}$`).test(focus)) ||
-      (holder !== null && (!focus || !new RegExp(`^${uuid}$`).test(holder))) ||
-      (focus !== null && !holder)) return;
-  return { stream, ...(reading ? { reading } : {}), ...(cursor ? { cursor } : {}), ...(focus ? { focus, holder: holder! } : {}) };
+  if (
+    !stream ||
+    !/^(in|out):[^\s\u0000-\u001f]{1,256}$/u.test(stream) ||
+    (reading !== null && !/^[a-f0-9]{64}$/.test(reading)) ||
+    (reading === null && (cursor !== null || focus !== null || holder !== null)) ||
+    (cursor !== null && (!cursor || cursor.length > 8192 || /[\u0000-\u001f]/u.test(cursor))) ||
+    (focus !== null && !new RegExp(`^${uuid}$`).test(focus)) ||
+    (holder !== null && (!focus || !new RegExp(`^${uuid}$`).test(holder))) ||
+    (focus !== null && !holder)
+  )
+    return;
+  return {
+    stream,
+    ...(reading ? { reading } : {}),
+    ...(cursor ? { cursor } : {}),
+    ...(focus ? { focus, holder: holder! } : {}),
+  };
 }
 
 export function connectionWindowFragment(window: ConnectionReturnWindow): string {
@@ -150,7 +163,13 @@ export function subjectRouteSearchLimit(search: string, cursor?: string): number
   }
 }
 
-export function connectionReturnHref(id: string, label: string, locale: string, realm?: string, window?: ConnectionReturnWindow): string {
+export function connectionReturnHref(
+  id: string,
+  label: string,
+  locale: string,
+  realm?: string,
+  window?: ConnectionReturnWindow,
+): string {
   const url = new URL(subjectHref({ id, label }, locale).href, 'https://rezics.invalid');
   if (realm) url.searchParams.set('realm', realm);
   return `${url.pathname}${url.search}${window ? connectionWindowFragment(window) : '#connections'}`;

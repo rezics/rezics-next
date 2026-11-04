@@ -47,48 +47,136 @@ export function WorkFranchiseOverview({
     const relations = workWindowRelations(subject.id, selected);
     const section: Section = {
       ok: true,
-      read: { kind: direction === 'in' ? 'links' : 'relations', id: subject.id, property: selected.property, limit: 20 },
+      read: {
+        kind: direction === 'in' ? 'links' : 'relations',
+        id: subject.id,
+        property: selected.property,
+        limit: 20,
+      },
       body: { [direction === 'in' ? 'links' : 'relations']: selected.rows },
     };
-    const items = direction === 'in' ? holderItems(section.body, 20, locale, readerSpoiler)
-      : statementItems(section, selected.property, 20, value);
-    const href = connectionReturnHref(subject.id, value.subjectLabel ?? value.unlabelled, locale, value.realm,
-      { stream: `${direction}:${selected.property}` });
+    const items =
+      direction === 'in'
+        ? holderItems(section.body, 20, locale, readerSpoiler)
+        : statementItems(section, selected.property, 20, value);
+    const href = connectionReturnHref(subject.id, value.subjectLabel ?? value.unlabelled, locale, value.realm, {
+      stream: `${direction}:${selected.property}`,
+    });
     const Link = link;
     const WorkLink: PageLink = (props) => <Link {...props} href={withSubjectVisitReturn(props.href, href, locale)} />;
-    return <section data-slot="work-franchise" aria-labelledby={heading} className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
-      <h2 id={heading} className="text-xl font-semibold">{m.work_franchise_title({}, options)}</h2>
-      {relations && items ? relations.slice(0, 20).map((relation) => {
-        const item = items.items.find((item) => item.statement === relation.statement.id && item.id === relation.id);
-        const label = direction === 'in' ? definitions[selected.property]!.label : definitions[selected.property]!.forwardLabel ?? '';
-        return item ? <WorkRelation key={JSON.stringify([subject.id, subject.context, subject.release, subject.revision, relation, value.reader])}
-          relation={relation} item={item} value={{ ...value, link: WorkLink }} label={label} returnHref={href} /> : null;
-      }) : <p role="status">{m.subject_section_failed({}, options)}</p>}
-      {relations?.length === 0 && <p role="status">{selected.rows.length ? m.subject_relation_unavailable({}, options) : m.subject_relation_empty_page({}, options)}</p>}
-      <Link href={href} className={workLink}>{m.subject_connections_title({}, options)}</Link>
-    </section>;
+    return (
+      <section
+        data-slot="work-franchise"
+        aria-labelledby={heading}
+        className="min-w-0 space-y-3 [overflow-wrap:anywhere]"
+      >
+        <h2 id={heading} className="text-xl font-semibold">
+          {m.work_franchise_title({}, options)}
+        </h2>
+        {relations && items ? (
+          relations.slice(0, 20).map((relation) => {
+            const item = items.items.find(
+              (item) => item.statement === relation.statement.id && item.id === relation.id,
+            );
+            const label =
+              direction === 'in'
+                ? definitions[selected.property]!.label
+                : (definitions[selected.property]!.forwardLabel ?? '');
+            return item ? (
+              <WorkRelation
+                key={JSON.stringify([
+                  subject.id,
+                  subject.context,
+                  subject.release,
+                  subject.revision,
+                  relation,
+                  value.reader,
+                ])}
+                relation={relation}
+                item={item}
+                value={{ ...value, link: WorkLink }}
+                label={label}
+                returnHref={href}
+              />
+            ) : null;
+          })
+        ) : (
+          <p role="status">{m.subject_section_failed({}, options)}</p>
+        )}
+        {relations?.length === 0 && (
+          <p role="status">
+            {selected.rows.length
+              ? m.subject_relation_unavailable({}, options)
+              : m.subject_relation_empty_page({}, options)}
+          </p>
+        )}
+        <Link href={href} className={workLink}>
+          {m.subject_connections_title({}, options)}
+        </Link>
+      </section>
+    );
   }
   const destinations = workDestinations(subject, related, definitions);
   if (!destinations.length) return null;
   const Link = link;
   if (value) {
-    return <section data-slot="work-franchise" aria-labelledby={heading} className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
-      <h2 id={heading} className="text-xl font-semibold">{m.work_franchise_title({}, options)}</h2>
-      {destinations.map((destination) => {
-        const href = connectionReturnHref(subject.id, value.subjectLabel ?? value.unlabelled, locale, value.realm,
-          { stream: `out:${destination.property}` });
-        const WorkLink: PageLink = (props) => <Link {...props} href={withSubjectVisitReturn(props.href, href, locale)} />;
-        const title = pickText(destination.target.labels, locale);
-        return <WorkRelation key={JSON.stringify([subject.id, subject.context, subject.release, subject.revision, destination, value.reader])}
-          relation={{ holder: subject.id, direction: 'out', property: destination.property, statement: destination.statement,
-            id: destination.id, label: title.text, kind: destination.kind, related }}
-          item={{ id: destination.id, label: { text: title.text, lang: title.lang ?? undefined }, notes: [], gated: false }}
-          value={{ ...value, link: WorkLink }} label={destination.relation.forwardLabel ?? ''} returnHref={href} />;
-      })}
-      <Link href={connectionReturnHref(subject.id, value.subjectLabel ?? value.unlabelled, locale, value.realm)} className={workLink}>
-        {m.subject_connections_title({}, options)}
-      </Link>
-    </section>;
+    return (
+      <section
+        data-slot="work-franchise"
+        aria-labelledby={heading}
+        className="min-w-0 space-y-3 [overflow-wrap:anywhere]"
+      >
+        <h2 id={heading} className="text-xl font-semibold">
+          {m.work_franchise_title({}, options)}
+        </h2>
+        {destinations.map((destination) => {
+          const href = connectionReturnHref(subject.id, value.subjectLabel ?? value.unlabelled, locale, value.realm, {
+            stream: `out:${destination.property}`,
+          });
+          const WorkLink: PageLink = (props) => (
+            <Link {...props} href={withSubjectVisitReturn(props.href, href, locale)} />
+          );
+          const title = pickText(destination.target.labels, locale);
+          return (
+            <WorkRelation
+              key={JSON.stringify([
+                subject.id,
+                subject.context,
+                subject.release,
+                subject.revision,
+                destination,
+                value.reader,
+              ])}
+              relation={{
+                holder: subject.id,
+                direction: 'out',
+                property: destination.property,
+                statement: destination.statement,
+                id: destination.id,
+                label: title.text,
+                kind: destination.kind,
+                related,
+              }}
+              item={{
+                id: destination.id,
+                label: { text: title.text, lang: title.lang ?? undefined },
+                notes: [],
+                gated: false,
+              }}
+              value={{ ...value, link: WorkLink }}
+              label={destination.relation.forwardLabel ?? ''}
+              returnHref={href}
+            />
+          );
+        })}
+        <Link
+          href={connectionReturnHref(subject.id, value.subjectLabel ?? value.unlabelled, locale, value.realm)}
+          className={workLink}
+        >
+          {m.subject_connections_title({}, options)}
+        </Link>
+      </section>
+    );
   }
 
   return (

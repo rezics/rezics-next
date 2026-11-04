@@ -113,16 +113,31 @@ function pageFor(source: SubjectRead): SubjectPageData {
       continue;
     }
     if (planned.kind === 'relations') {
-      reads[key] = { status: 200, body: {
-        relations: (source.subject.statements[planned.property] ?? []).map((statement) => {
-          const target = statement.value.content as string;
-          const entry = source.related[target];
-          return { target, statement, label: Object.values(entry?.labels ?? {})[0] ?? '',
-            summary: entry ? { id: target, type: entry.type, types: entry.types,
-              label: { value: Object.values(entry.labels)[0] ?? '', language: 'ja' }, cover: null } : null,
-            related: {} };
-        }), next: null,
-      } };
+      reads[key] = {
+        status: 200,
+        body: {
+          relations: (source.subject.statements[planned.property] ?? []).map((statement) => {
+            const target = statement.value.content as string;
+            const entry = source.related[target];
+            return {
+              target,
+              statement,
+              label: Object.values(entry?.labels ?? {})[0] ?? '',
+              summary: entry
+                ? {
+                    id: target,
+                    type: entry.type,
+                    types: entry.types,
+                    label: { value: Object.values(entry.labels)[0] ?? '', language: 'ja' },
+                    cover: null,
+                  }
+                : null,
+              related: {},
+            };
+          }),
+          next: null,
+        },
+      };
       continue;
     }
     if (planned.kind !== 'links') continue;

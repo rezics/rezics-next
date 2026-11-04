@@ -32,7 +32,10 @@ export function connectionAddress(value: unknown): ConnectionAddress {
     if (value[key] !== undefined && (typeof value[key] !== 'string' || !uuid.test(value[key])))
       throw new Error('Invalid connections identity');
   }
-  if (value.release !== undefined && (typeof value.release !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.release)))
+  if (
+    value.release !== undefined &&
+    (typeof value.release !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.release))
+  )
     throw new Error('Invalid connections release');
   if (value.only !== undefined && !connectionGroups.includes(value.only as ConnectionGroup))
     throw new Error('Invalid connections group');

@@ -604,7 +604,8 @@ export function SubjectPage({
     const Link = link ?? PlainLink;
     return function SelectedLink(props: ComponentProps<PageLink>) {
       const existingReturn = new URL(props.href, 'https://rezics.invalid').searchParams.get('via');
-      const href = subjectVisitReturn(existingReturn, locale) ? props.href
+      const href = subjectVisitReturn(existingReturn, locale)
+        ? props.href
         : withSubjectVisitReturn(props.href, mangaReturn ?? visitReturn ?? '', locale);
       return <Link {...props} href={contextHref(href, realm)} />;
     };

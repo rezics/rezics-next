@@ -97,7 +97,7 @@ function representation(page: SubjectPageData): string {
 /** Compare delivered content without retaining it in a URL or treating a locator as authorization. */
 async function readingIdentity(value: unknown): Promise<string> {
   const json = JSON.stringify(value, (_key, part: unknown) =>
-    isRecord(part) ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : part,
+    isRecord(part) ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : part,
   );
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(json));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -243,13 +243,22 @@ export async function readConnectionVisit(
             work,
             signal,
           );
-          const identity = section.ok ? await readingIdentity([
-            representation(first.page), release.digest, stream.key, selected?.cursor ?? null, section.body,
-          ]) : undefined;
+          const identity = section.ok
+            ? await readingIdentity([
+                representation(first.page),
+                release.digest,
+                stream.key,
+                selected?.cursor ?? null,
+                section.body,
+              ])
+            : undefined;
           return {
-            group, stream,
-            section: selected?.reading && identity && selected.reading !== identity
-              ? { ok: false as const, status: 409 } : section,
+            group,
+            stream,
+            section:
+              selected?.reading && identity && selected.reading !== identity
+                ? { ok: false as const, status: 409 }
+                : section,
             ...(identity ? { reading: identity } : {}),
           };
         }),
