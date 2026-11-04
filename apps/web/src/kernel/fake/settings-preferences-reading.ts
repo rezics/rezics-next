@@ -36,7 +36,7 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
           : { ok: false, reason: 'invalid', failure: { status: 422 } };
       if (scenario === 'conflict' && calls.length === 1) {
         current = { spoilerLevel: 2, suitability: 'show', version: current.version + 1 };
-        notifications = { reply: false, mention: true };
+        notifications = { ...recording.notifications, reply: false, mention: true };
       }
       if (scenario === 'delayed') await delay;
       if (input.expectedVersion !== current.version)
@@ -97,7 +97,7 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
     current: () => ({ ...current, notifications: { ...notifications } }),
     concurrent: (values: Partial<Pick<ReadingPreferences, 'spoilerLevel' | 'suitability'>> = {}) => {
       current = { ...current, ...values, version: current.version + 1 };
-      notifications = { reply: false, mention: true };
+      notifications = { ...recording.notifications, reply: false, mention: true };
     },
   };
 }

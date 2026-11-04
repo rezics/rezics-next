@@ -97,7 +97,7 @@ function Example({
   return (
     <div className="mx-auto max-w-2xl">
       <NotificationsCard
-        initial={recording.page}
+        initial={settingsPreferencePage(recording.notifications, recording.version)}
         version={version}
         csrfToken="story-token"
         action="/en/settings"

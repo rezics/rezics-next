@@ -175,7 +175,7 @@ export async function submitNotificationForm(request: Request): Promise<Response
               page.page!.kinds.some((entry) => entry.kind === kind && entry.optional),
             ),
           );
-    if (change.notifications !== null && Object.keys(admitted).length === 0)
+    if (admitted !== null && Object.keys(admitted).length === 0)
       return recoveryPage(request, token, change, 'review');
     return recoveryPage(
       request,
