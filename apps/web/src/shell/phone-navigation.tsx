@@ -182,11 +182,11 @@ export function PhoneNavigationView({
       <div data-phone-you-js className="contents">
         {account}
       </div>
-      <noscript className="contents">
-        <style>{'[data-phone-you-js]{display:none!important}'}</style>
-        <a className={phoneTabClass} href={`/${locale}/settings`}>
-          {m.shell_you()}
-        </a>
+      <a data-phone-you-fallback className={`${phoneTabClass} hidden`} href={`/${locale}/settings`}>
+        {m.shell_you()}
+      </a>
+      <noscript>
+        <style>{'[data-phone-you-js]{display:none!important}[data-phone-you-fallback]{display:flex!important}'}</style>
       </noscript>
     </nav>
   );

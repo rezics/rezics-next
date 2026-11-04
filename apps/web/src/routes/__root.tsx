@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-router';
 import type { QueryClient } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
-import { getResponseStatus, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
+import { getRequest, getResponseStatus, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { env } from 'cloudflare:workers';
 import { PreferencesScript } from '../shell/preferences-script';
@@ -97,7 +97,9 @@ const preserveErrorResponse = createIsomorphicFn()
   })
   .client(() => undefined);
 const publicOrigin = createIsomorphicFn()
-  .server(() => validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
+  .server(() =>
+    validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN, getRequest().url),
+  )
   .client(() =>
     validatePublicOrigin(
       new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href ?? window.location.origin).origin,

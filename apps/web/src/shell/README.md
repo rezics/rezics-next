@@ -22,3 +22,6 @@ Decision: Create uses the primary color in both bars, phone destination selectio
 groups start expanded with independent collapsible headings; group folding lasts for the mounted rail or drawer only.
 Unknown sessions reserve account-control space with reduced-motion-aware skeletons; failed sessions show a visible
 unavailable message rather than an indefinite loading placeholder.
+
+Decision: The phone You destination is a real settings link hidden while script runs; noscript CSS reveals it so
+the fallback never prints markup as text.
