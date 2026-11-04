@@ -329,7 +329,9 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
 
   function credentialChoice() {
     const selected = currentChoice.current;
-    return selected.kind === 'ready' && (loginShowsCredentials(selected) || stepUp) ? selected : null;
+    return selected === choice && selected.kind === 'ready' && (loginShowsCredentials(selected) || stepUp)
+      ? selected
+      : null;
   }
 
   function finishPasskey(result: PasskeySignInResult) {

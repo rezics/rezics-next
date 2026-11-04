@@ -125,6 +125,19 @@ test('switching A to B retires old Continue before render and during replacement
   expect(document.activeElement?.getAttribute('role')).toBe('alert');
 });
 
+test('a same-turn Switch cannot submit the retired form credentials or open its passkey prompt', async () => {
+  const p = await setup(advice('a', true));
+  await p.enter();
+  await flush(() => {
+    button(p.host, 'Use a different account')!.click();
+    send(p.host);
+    button(p.host, 'Sign in with a passkey')!.click();
+  });
+  expect(p.calls).toHaveLength(0);
+  expect(p.passkey).not.toHaveBeenCalled();
+  expect(p.host.querySelector<HTMLInputElement>('#login-password')!.value).toBe('');
+});
+
 test.each(['a', 'b', null, 'unavailable'])(
   'unknown authentication review observes %s without resend or attribution',
   async (viewer) => {

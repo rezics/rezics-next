@@ -104,6 +104,12 @@ async function open(path = '/login') {
       flush(async () => {
         await router.navigate({ to });
       }),
+    async leave() {
+      await flush(() => {
+        void router.navigate({ to: '/away' });
+      });
+      await flush(() => button(document.body, 'Leave')!.click());
+    },
     submit,
     async password() {
       await flush(() => {
@@ -247,7 +253,7 @@ test.each(['password', 'passkey'])(
       expect(page.assign).toHaveBeenCalledWith('https://auth.test/security');
       await page.navigate('/step-up?return_to=%2Fsecurity&sig=new');
       await start();
-      await page.navigate('/away');
+      await page.leave();
       await complete(2);
       expect(page.assign).toHaveBeenCalledTimes(1);
     } finally {
