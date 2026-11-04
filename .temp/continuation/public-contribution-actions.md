@@ -33,9 +33,9 @@ estimate:
   files: 9
 acceptance:
   tests:
-    - "After the admitted publisher installs complete official callable-derived types on the public @rezics/client entry, replace the local request/reference ABI and close response adaptation without importing internal producer declarations or parsing unknown receiver values."
-    - "Mount prepared watch, reaction, report and reply in each surviving original Discussion, Post and Review row only through the official mounted contribution adapter; cover current and denied advice, exact uncertain owner retry/discard, original destination return and current recovery notice."
-    - "Keep prepared native reaction retry tests, watch recovery, occurrence-bound return, shared observation retirement, account-public-journey.test.ts and shared managed-session-reader.test.ts with their existing owners; do not add shared lifetime tests or native action producers."
+    - 'After the admitted publisher installs complete official callable-derived types on the public @rezics/client entry, replace the local request/reference ABI and close response adaptation without importing internal producer declarations or parsing unknown receiver values.'
+    - 'Mount prepared watch, reaction, report and reply in each surviving original Discussion, Post and Review row only through the official mounted contribution adapter; cover current and denied advice, exact uncertain owner retry/discard, original destination return and current recovery notice.'
+    - 'Keep prepared native reaction retry tests, watch recovery, occurrence-bound return, shared observation retirement, account-public-journey.test.ts and shared managed-session-reader.test.ts with their existing owners; do not add shared lifetime tests or native action producers.'
 ---
 
 Finish the account-row adapter after the complete publisher delivers its public callable and DTO. Preserve the exact original thread, post and immediate-parent destination, operation lease, viewer and credential for report/reply commands. Compose reports with `PostActions` and replies with `PostComposer`/`ReplyIntent`; replacement readers start with new advice and no earlier intent. Keep native writes independent from readback, preserve the exact account view/cursor/query/hash return, and keep shared observation retirement and regional recovery focus on their existing owners.
