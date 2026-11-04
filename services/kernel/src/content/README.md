@@ -1039,6 +1039,8 @@ Decision: an in-flight exact decision page binds its original Authorization head
 Decision: the shared complete-input publication owns OpenAPI, installed declarations and root exports; consume that
 delivered tree before typed consumer checks instead of generating another partial tree.
 
+Decision: the client facade accepts a per-request Authorization header on the appeal command while retaining its generated body, idempotency header and result types.
+
 The call is `KernelClient['moderation-decisions']({ id }).get({ headers: { authorization } })`;
 the source response and OpenAPI contain the retained top-level decision, `viewer` and `targetContext`. Regenerate
 the installed client declarations before Web adopts the added fields. Narrow on

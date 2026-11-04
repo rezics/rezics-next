@@ -197,8 +197,15 @@ type DecisionPagePath = ReturnType<GeneratedKernelClient['moderation-decisions']
 type DecisionPageGet = DecisionPagePath['get'];
 type DecisionPageRead = Awaited<ReturnType<DecisionPageGet>>;
 type DecisionPageReadResult = Omit<DecisionPageRead, 'data'> & { data: ModerationDecisionPage | null };
-type DecisionPageEndpoints = Omit<DecisionPagePath, 'get'> & {
+type DecisionAppealPost = DecisionPagePath['$appeal']['post'];
+type DecisionAppealOptions = Parameters<DecisionAppealPost>[1] & {
+  headers: { authorization?: string };
+};
+type DecisionPageEndpoints = Omit<DecisionPagePath, 'get' | '$appeal'> & {
   get(...args: Parameters<DecisionPageGet>): Promise<DecisionPageReadResult>;
+  $appeal: Omit<DecisionPagePath['$appeal'], 'post'> & {
+    post(body: Parameters<DecisionAppealPost>[0], options: DecisionAppealOptions): ReturnType<DecisionAppealPost>;
+  };
 };
 type DecisionPages = Omit<GeneratedKernelClient['moderation-decisions'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['moderation-decisions']>) => DecisionPageEndpoints);
