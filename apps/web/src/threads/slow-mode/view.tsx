@@ -140,7 +140,12 @@ function PointEligibility({ boardId, refusal }: EligibilityProps) {
   const now = useDisplayNow(waitUntil);
   const showInterval = policy && policy.intervalSeconds > 0;
   const waiting = waitUntil !== null && waitUntil > now;
-  const empty = read?.kind === 'available' && !showInterval && policy?.admissionState !== 'pending' && !waiting && refusal?.reason !== 'rate-limited';
+  const empty =
+    read?.kind === 'available' &&
+    !showInterval &&
+    policy?.admissionState !== 'pending' &&
+    !waiting &&
+    refusal?.reason !== 'rate-limited';
   if (empty || (!preparing && read === undefined && !waiting && refusal?.reason !== 'rate-limited')) return null;
   return (
     <div className="mb-4 min-w-0 space-y-2 text-sm [overflow-wrap:anywhere]" data-slot="board-slow-mode" role="status">
@@ -213,8 +218,17 @@ function SlowModeSettingForm({
   const intervals = [...new Set<number>([...SLOW_MODE_INTERVALS, ...(policy ? [policy.intervalSeconds] : [])])];
 
   async function save(retry = false) {
-    if (!visit.current() || pending || !policy?.canChange || (needsReview && !retry) || (!retry && outcome?.kind === 'unknown')) return;
-    const command = retry ? exact.current : { interval: selected, key: commandKey.current, sender: port.change.bind(port) };
+    if (
+      !visit.current() ||
+      pending ||
+      !policy?.canChange ||
+      (needsReview && !retry) ||
+      (!retry && outcome?.kind === 'unknown')
+    )
+      return;
+    const command = retry
+      ? exact.current
+      : { interval: selected, key: commandKey.current, sender: port.change.bind(port) };
     if (!command) return;
     if (!retry) exact.current = command;
     setPending(true);

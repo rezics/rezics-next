@@ -11,13 +11,27 @@ test('slow-mode native policy is complete, closed and independent of UI presets'
   const { parseSlowModePolicy, SLOW_MODE_INTERVALS, remainingSeconds, deadlineFromRetryAfter } =
     await import('../src/threads/slow-mode');
   expect(SLOW_MODE_INTERVALS).toEqual([0, 30, 60, 300]);
-  const native = { intervalSeconds: 45, retryAt: null, nextEligibleAt: null, canChange: false,
-    exempt: false, admissionState: 'pending', retryAfterSeconds: 1 };
+  const native = {
+    intervalSeconds: 45,
+    retryAt: null,
+    nextEligibleAt: null,
+    canChange: false,
+    exempt: false,
+    admissionState: 'pending',
+    retryAfterSeconds: 1,
+  };
   for (const intervalSeconds of [0, 45, 300, 86400])
     expect(parseSlowModePolicy({ ...native, intervalSeconds })).toEqual({ ...native, intervalSeconds });
-  for (const body of [{}, { ...native, intervalSeconds: -1 }, { ...native, intervalSeconds: 86401 },
-    { ...native, intervalSeconds: 0.5 }, { ...native, exempt: undefined }, { policy: native },
-    { ...native, admissionState: 'allowed' }, { ...native, extra: true }])
+  for (const body of [
+    {},
+    { ...native, intervalSeconds: -1 },
+    { ...native, intervalSeconds: 86401 },
+    { ...native, intervalSeconds: 0.5 },
+    { ...native, exempt: undefined },
+    { policy: native },
+    { ...native, admissionState: 'allowed' },
+    { ...native, extra: true },
+  ])
     expect(parseSlowModePolicy(body)).toBeUndefined();
   expect(remainingSeconds(deadlineFromRetryAfter(86400, 1000), 1000)).toBe(86400);
 });
@@ -71,6 +85,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     read: async () => read,
     change: async ({ intervalSeconds, idempotencyKey }) => {
       changes.push({ intervalSeconds, idempotencyKey });
+      if (changes.length === 1) return { kind: 'unknown' };
       if (read.kind !== 'available') return { kind: 'unavailable' };
       read = { kind: 'available', policy: { ...read.policy, intervalSeconds } };
       return { kind: 'applied', policy: read.policy };
@@ -130,7 +145,15 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     expect(host.textContent).toContain(m.slow_mode_next_unavailable());
     read = {
       kind: 'available',
-      policy: { intervalSeconds: 0, retryAt: null, nextEligibleAt: null, canChange: true, exempt: false, admissionState: 'ready', retryAfterSeconds: 0 },
+      policy: {
+        intervalSeconds: 45,
+        retryAt: null,
+        nextEligibleAt: null,
+        canChange: true,
+        exempt: false,
+        admissionState: 'pending',
+        retryAfterSeconds: 1,
+      },
     };
     const reloads = [...host.querySelectorAll('button')].filter((button) => button.textContent === m.slow_mode_retry());
     expect(reloads.length).toBeGreaterThan(0);
@@ -138,6 +161,8 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
       await user.click(reloads[0]!);
     });
     await appeared(m.slow_mode_setting_legend());
+    expect(host.textContent).toContain(m.slow_mode_interval_seconds({ seconds: 45 }));
+    expect(host.textContent).not.toContain(m.slow_mode_next_now());
     const thirty = [...host.querySelectorAll('label')].find(
       (label) => label.textContent === m.slow_mode_interval_seconds({ seconds: 30 }),
     );
@@ -149,8 +174,15 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     await act(async () => {
       await user.click(save!);
     });
+    await appeared(m.slow_mode_unknown());
+    const sameKeyRetry = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.slow_mode_retry(),
+    );
+    await act(async () => {
+      await user.click(sameKeyRetry!);
+    });
     await appeared(m.slow_mode_saved());
-    expect(changes).toEqual([{ intervalSeconds: 30, idempotencyKey: changes[0]!.idempotencyKey }]);
+    expect(changes).toEqual(Array(2).fill({ intervalSeconds: 30, idempotencyKey: changes[0]!.idempotencyKey }));
     expect(host.textContent).toContain(
       m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 30 }) }),
     );

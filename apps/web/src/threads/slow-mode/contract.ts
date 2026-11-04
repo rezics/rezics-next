@@ -3,9 +3,9 @@ export const SLOW_MODE_INTERVALS = [0, 30, 60, 300] as const;
 export type SlowModeInterval = number;
 
 /** DTO from the installed shared publisher; parse it at the transport boundary. */
-export type SlowModePolicy = NonNullable<Awaited<ReturnType<
-  ReturnType<import('@rezics/client').KernelClient['boards']>['slowMode']['get']
->>['data']>;
+export type SlowModePolicy = NonNullable<
+  Awaited<ReturnType<ReturnType<import('@rezics/client').KernelClient['boards']>['slowMode']['get']>>['data']
+>;
 
 export type SlowModeRead = { kind: 'available'; policy: SlowModePolicy } | { kind: 'denied' } | { kind: 'unavailable' };
 
@@ -47,19 +47,35 @@ function isoTime(value: unknown): string | null | undefined {
 export function parseSlowModePolicy(body: unknown): SlowModePolicy | undefined {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
   const source = body as Record<string, unknown>;
-  const fields = ['intervalSeconds', 'retryAt', 'nextEligibleAt', 'canChange', 'exempt', 'admissionState', 'retryAfterSeconds'];
+  const fields = [
+    'intervalSeconds',
+    'retryAt',
+    'nextEligibleAt',
+    'canChange',
+    'exempt',
+    'admissionState',
+    'retryAfterSeconds',
+  ];
   if (Object.keys(source).length !== fields.length || fields.some((field) => !(field in source))) return undefined;
   if (!isSlowModeInterval(source.intervalSeconds) || !isSlowModeInterval(source.retryAfterSeconds)) return undefined;
   const retryAt = isoTime(source.retryAt);
   const nextEligibleAt = isoTime(source.nextEligibleAt);
-  if (retryAt === undefined || nextEligibleAt === undefined ||
-      typeof source.canChange !== 'boolean' || typeof source.exempt !== 'boolean' ||
-      (source.admissionState !== 'ready' && source.admissionState !== 'interval' && source.admissionState !== 'pending'))
+  if (
+    retryAt === undefined ||
+    nextEligibleAt === undefined ||
+    typeof source.canChange !== 'boolean' ||
+    typeof source.exempt !== 'boolean' ||
+    (source.admissionState !== 'ready' && source.admissionState !== 'interval' && source.admissionState !== 'pending')
+  )
     return undefined;
   return {
-    intervalSeconds: source.intervalSeconds, retryAt, nextEligibleAt,
-    canChange: source.canChange, exempt: source.exempt,
-    admissionState: source.admissionState, retryAfterSeconds: source.retryAfterSeconds,
+    intervalSeconds: source.intervalSeconds,
+    retryAt,
+    nextEligibleAt,
+    canChange: source.canChange,
+    exempt: source.exempt,
+    admissionState: source.admissionState,
+    retryAfterSeconds: source.retryAfterSeconds,
   };
 }
 
@@ -72,7 +88,8 @@ export function remainingSeconds(waitUntil: number, now: number): number {
 }
 
 export function waitUntilFromPolicy(policy: SlowModePolicy, now: number): number | null {
-  if (policy.admissionState === 'pending' || policy.intervalSeconds === 0 || policy.exempt || !policy.nextEligibleAt) return null;
+  if (policy.admissionState === 'pending' || policy.intervalSeconds === 0 || policy.exempt || !policy.nextEligibleAt)
+    return null;
   const time = Date.parse(policy.nextEligibleAt);
   if (!Number.isFinite(time) || time <= now) return null;
   return time;
