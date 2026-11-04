@@ -8734,5 +8734,19 @@
   "quotation_context_concealed": "此上下文已隐藏。",
   "quotation_context_restricted": "此上下文受限。",
   "quotation_context_missing": "此上下文缺失。",
-  "quotation_context_withheld": "此上下文暂不公开。"
+  "quotation_context_withheld": "此上下文暂不公开。",
+  "concept_tagged_works_title": "带有此概念的作品",
+  "concept_tagged_works_property": "标签属性",
+  "concept_tagged_works_scheme": "来源方案",
+  "concept_tagged_works_type": "作品类型",
+  "concept_tagged_works_spoiler": "剧透级别上限",
+  "concept_tagged_works_descendants": "包含下级概念",
+  "concept_tagged_works_additional": "其他条件",
+  "concept_tagged_works_choose": "选择",
+  "concept_tagged_works_source": "查看来源事实",
+  "concept_tagged_works_invalid": "这些搜索选项无效。请选择有效选项或重新开始搜索。",
+  "concept_tagged_works_continuation_failed": "无法获取下一页结果。已显示的作品仍会保留。",
+  "concept_tagged_works_retry": "重试此结果页",
+  "concept_tagged_works_lagging": "Search 更新期间，作品列表可能不完整。",
+  "concept_tagged_works_next": "显示更多作品"
 }

@@ -1,8 +1,10 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
+import { facetProperties, type FilterRelease } from '@rezics/filter';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import { CONCEPT_PAGE_CAP, typeExtends } from '../../pages/graph-browser';
+import { conditionMetadata, type ConditionMetadata } from '../../../search/condition-editor-model';
 
 export const conceptContinuationLimit = 4096;
 export function validConceptCursor(cursor: string | undefined): boolean {
@@ -36,6 +38,14 @@ export type ConceptHierarchyState = 'available' | 'lagging' | 'preparing' | 'una
 export type ConceptViewerActions =
   | { state: 'available'; account: { id: string } | null; actions: { action: string; operations: string[] }[] }
   | { state: 'unavailable' };
+export type ConceptWorksAdmission =
+  | {
+      state: 'available';
+      types: { id: string; labels: Record<string, string> }[];
+      properties: { id: string; labels: Record<string, string>; types: string[] }[];
+      metadata: ConditionMetadata;
+    }
+  | { state: 'unsupported'; types: []; properties: []; metadata: null };
 export type ConceptRead =
   | CandidateFailure
   | {
@@ -56,12 +66,60 @@ export type ConceptRead =
         next: string | null;
         exactEmpty: boolean;
       };
+      works?: ConceptWorksAdmission;
       viewerActions: ConceptViewerActions;
       spoiler: boolean;
       session?: string | undefined;
     };
 
-type Definitions = Pick<Release, 'types' | 'properties'> & { digest?: string };
+type Definitions = Pick<Release, 'types' | 'properties'> & { digest?: string; filters?: FilterRelease['filters'] };
+
+export function conceptWorksAdmission(release: Definitions, current: boolean): ConceptWorksAdmission {
+  if (!current) return { state: 'unsupported', types: [], properties: [], metadata: null };
+  const types = Object.entries(release.types).filter(([id]) => typeExtends(release, id, 'schema:CreativeWork'));
+  const propertyTypes = new Map<string, string[]>();
+  for (const [type] of types)
+    for (const property of facetProperties(release, [type]))
+      if (release.properties[property]?.datatype === 'wikibase-item') {
+        const values = propertyTypes.get(property) ?? [];
+        values.push(type);
+        propertyTypes.set(property, values);
+      }
+  if (!types.length || !propertyTypes.size)
+    return { state: 'unsupported', types: [], properties: [], metadata: null };
+
+  const typeDefinitions = Object.fromEntries(types);
+  const propertyIds = new Set<string>();
+  for (const [type] of types)
+    for (const property of facetProperties(release, [type])) {
+      propertyIds.add(property);
+      for (const qualifier of release.properties[property]?.qualifiers ?? []) propertyIds.add(qualifier);
+    }
+  const propertyDefinitions = Object.fromEntries(
+    [...propertyIds].flatMap((property) => {
+      const definition = release.properties[property];
+      return definition ? [[property, definition]] : [];
+    }),
+  );
+  const metadata = conditionMetadata({
+    types: typeDefinitions,
+    properties: propertyDefinitions,
+    ...(release.filters ? { filters: release.filters } : {}),
+  });
+  const admission: ConceptWorksAdmission = {
+    state: 'available',
+    types: types.map(([id, definition]) => ({ id, labels: definition.labels ?? {} })),
+    properties: [...propertyTypes].map(([id, typeIds]) => ({
+      id,
+      labels: release.properties[id]?.labels ?? {},
+      types: typeIds,
+    })),
+    metadata,
+  };
+  if (new TextEncoder().encode(JSON.stringify(admission)).byteLength > 65_536)
+    return { state: 'unsupported', types: [], properties: [], metadata: null };
+  return admission;
+}
 
 function headersOf(authorization?: string, session?: string) {
   return {
@@ -156,6 +214,7 @@ export async function readSourceConcept(
           exactEmpty: false,
           ...(input.cursor ? { cursor: input.cursor } : {}),
         },
+        works: { state: 'unsupported', types: [], properties: [], metadata: null },
         viewerActions,
         spoiler: false,
         ...(session ? { session } : {}),
@@ -307,6 +366,7 @@ export async function readSourceConcept(
       codes,
       broader: { rows: broaderRows, withheld: broaderWithheld },
       narrower,
+      works: conceptWorksAdmission(release, retired === false),
       viewerActions,
       spoiler,
       ...(session ? { session } : {}),

@@ -8826,5 +8826,19 @@
   "quotation_context_concealed": "This context is concealed.",
   "quotation_context_restricted": "This context is restricted.",
   "quotation_context_missing": "This context is missing.",
-  "quotation_context_withheld": "This context is withheld."
+  "quotation_context_withheld": "This context is withheld.",
+  "concept_tagged_works_title": "Works carrying this Concept",
+  "concept_tagged_works_property": "Tag property",
+  "concept_tagged_works_scheme": "Source scheme",
+  "concept_tagged_works_type": "Work type",
+  "concept_tagged_works_spoiler": "Spoiler limit",
+  "concept_tagged_works_descendants": "Include descendant Concepts",
+  "concept_tagged_works_additional": "Additional conditions",
+  "concept_tagged_works_choose": "Choose",
+  "concept_tagged_works_source": "Review source facts",
+  "concept_tagged_works_invalid": "These search choices are invalid. Choose valid options or restart the search.",
+  "concept_tagged_works_continuation_failed": "The next result page is unavailable. Existing works are retained.",
+  "concept_tagged_works_retry": "Retry this result page",
+  "concept_tagged_works_lagging": "The work list may be incomplete while Search updates.",
+  "concept_tagged_works_next": "Show more works"
 }

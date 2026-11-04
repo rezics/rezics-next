@@ -8734,5 +8734,19 @@
   "quotation_context_concealed": "이 맥락은 숨겨져 있습니다.",
   "quotation_context_restricted": "이 맥락은 접근이 제한됩니다.",
   "quotation_context_missing": "이 맥락이 없습니다.",
-  "quotation_context_withheld": "이 맥락은 공개되지 않았습니다."
+  "quotation_context_withheld": "이 맥락은 공개되지 않았습니다.",
+  "concept_tagged_works_title": "이 Concept가 붙은 작품",
+  "concept_tagged_works_property": "태그 속성",
+  "concept_tagged_works_scheme": "출처 체계",
+  "concept_tagged_works_type": "작품 유형",
+  "concept_tagged_works_spoiler": "스포일러 한도",
+  "concept_tagged_works_descendants": "하위 Concept 포함",
+  "concept_tagged_works_additional": "추가 조건",
+  "concept_tagged_works_choose": "선택",
+  "concept_tagged_works_source": "출처 사실 확인",
+  "concept_tagged_works_invalid": "검색 선택이 올바르지 않습니다. 유효한 옵션을 선택하거나 검색을 다시 시작하세요.",
+  "concept_tagged_works_continuation_failed": "다음 결과 페이지를 사용할 수 없습니다. 이미 표시된 작품은 유지됩니다.",
+  "concept_tagged_works_retry": "이 결과 페이지 다시 시도",
+  "concept_tagged_works_lagging": "Search가 갱신되는 동안 작품 목록이 불완전할 수 있습니다.",
+  "concept_tagged_works_next": "작품 더 보기"
 }

@@ -8734,5 +8734,19 @@
   "quotation_context_concealed": "此上下文已隱藏。",
   "quotation_context_restricted": "此上下文受限。",
   "quotation_context_missing": "此上下文缺失。",
-  "quotation_context_withheld": "此上下文暫不公開。"
+  "quotation_context_withheld": "此上下文暫不公開。",
+  "concept_tagged_works_title": "帶有此概念的作品",
+  "concept_tagged_works_property": "標籤屬性",
+  "concept_tagged_works_scheme": "來源方案",
+  "concept_tagged_works_type": "作品類型",
+  "concept_tagged_works_spoiler": "劇透級別上限",
+  "concept_tagged_works_descendants": "包含下級概念",
+  "concept_tagged_works_additional": "其他條件",
+  "concept_tagged_works_choose": "選擇",
+  "concept_tagged_works_source": "查看來源事實",
+  "concept_tagged_works_invalid": "這些搜尋選項無效。請選擇有效選項或重新開始搜尋。",
+  "concept_tagged_works_continuation_failed": "無法取得下一頁結果。已顯示的作品仍會保留。",
+  "concept_tagged_works_retry": "重試此結果頁",
+  "concept_tagged_works_lagging": "Search 更新期間，作品清單可能不完整。",
+  "concept_tagged_works_next": "顯示更多作品"
 }

@@ -8734,5 +8734,19 @@
   "quotation_context_concealed": "この文脈は非表示です。",
   "quotation_context_restricted": "この文脈は閲覧が制限されています。",
   "quotation_context_missing": "この文脈は見つかりません。",
-  "quotation_context_withheld": "この文脈は公開されていません。"
+  "quotation_context_withheld": "この文脈は公開されていません。",
+  "concept_tagged_works_title": "このConceptが付いた作品",
+  "concept_tagged_works_property": "タグのプロパティ",
+  "concept_tagged_works_scheme": "出典スキーム",
+  "concept_tagged_works_type": "作品の種類",
+  "concept_tagged_works_spoiler": "ネタバレの上限",
+  "concept_tagged_works_descendants": "下位Conceptを含める",
+  "concept_tagged_works_additional": "追加条件",
+  "concept_tagged_works_choose": "選択",
+  "concept_tagged_works_source": "出典の情報を確認",
+  "concept_tagged_works_invalid": "検索条件が無効です。有効な条件を選ぶか、検索をやり直してください。",
+  "concept_tagged_works_continuation_failed": "次の結果ページを利用できません。表示済みの作品は保持されています。",
+  "concept_tagged_works_retry": "この結果ページを再試行",
+  "concept_tagged_works_lagging": "Searchの更新中は作品一覧が不完全な場合があります。",
+  "concept_tagged_works_next": "さらに作品を表示"
 }

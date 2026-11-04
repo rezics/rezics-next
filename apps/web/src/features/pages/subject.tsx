@@ -84,6 +84,7 @@ import { isMangaReaderType } from '../catalogue/manga-reader/model';
 import { mangaReaderAddress } from '../catalogue/manga-reader/navigation';
 import { WorkFranchiseOverview } from './showcase-work/overview';
 import { showcaseWorkKind } from './showcase-work/model';
+import { SubjectConceptTags } from './subject-slots';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -728,6 +729,15 @@ export function SubjectPage({
   const afterHeader = overview ? (
     <>
       {bar}
+      {read && page.catalogue?.state === 'released' && (
+        <SubjectConceptTags
+          subject={read.subject}
+          related={read.related}
+          definitions={page.catalogue.definitions}
+          locale={locale}
+          spoilerThreshold={(reader ?? defaultReader).spoilerLevel}
+        />
+      )}
       {invite}
     </>
   ) : null;
