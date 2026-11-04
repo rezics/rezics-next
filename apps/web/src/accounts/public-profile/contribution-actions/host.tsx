@@ -18,6 +18,7 @@ import type { PageRead } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { sessionQuery } from '../../../session/query';
 import type { SubjectPageData } from '../../../features/pages/subject';
+import { isRecord } from '../../../features/pages/shared';
 import {
   contributionActionsInput,
   ContributionActionsReceiver,
@@ -107,6 +108,17 @@ export function ContributionActionsPageScope({
 
 export function useContributionActionsPageScope() {
   return useContext(ContributionActionsPageScopeContext);
+}
+
+export function contributionPublicationSource(page: SubjectPageData, accountId: string): object | null {
+  for (const result of Object.values(page.reads)) {
+    if (result.status !== 200 || !isRecord(result.body)) continue;
+    const accounts = result.body.accounts;
+    if (!Array.isArray(accounts)) continue;
+    const source = accounts.find((account) => isRecord(account) && account.id === accountId);
+    if (source) return source;
+  }
+  return null;
 }
 
 type RowObservation = readonly unknown[];
@@ -243,6 +255,7 @@ export function ContributionActionsHost({
   const sessionRevision = useSyncExternalStore(observation.subscribe, observation.snapshot, () => 0);
   const session = observation.read();
   const [navigation, setNavigation] = useState({ revision: 0, active: true });
+  const [hydrated, setHydrated] = useState(false);
   const navigationRef = useRef(navigation);
   navigationRef.current = navigation;
   const current = useRef<Visit | null>(null);
@@ -325,6 +338,7 @@ export function ContributionActionsHost({
 
   const receiver = visit.receiver;
   const state = useSyncExternalStore(receiver?.subscribe ?? noSubscribe, receiver?.snapshot ?? noSnapshot, noSnapshot);
+  useEffect(() => setHydrated(true), []);
   useEffect(() => {
     effectGeneration.current++;
     if (current.current === null) current.current = visit;
@@ -341,7 +355,7 @@ export function ContributionActionsHost({
   const isCurrent = () => !!receiver && current.current === visit && receiver.isCurrent();
   const retry = () => (isCurrent() ? receiver!.refresh() : Promise.resolve());
   const hostValue: ContributionActionsHostValue = { input, state, isCurrent, retry };
-  const showReadStatus = !!input && hasCredential;
+  const showReadStatus = hydrated && !!input && hasCredential;
   return (
     <ContributionActionsHostContext.Provider value={hostValue}>
       <div data-slot="contribution-actions-host" data-action-state={state.state} className="contents">
