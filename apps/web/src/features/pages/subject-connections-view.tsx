@@ -40,6 +40,8 @@ import { WorkRelation } from './showcase-work/relation';
 import { useSubjectCommunityReading } from './subject-community-lifetime';
 import { characterWorkStream } from '../catalogue/character-work-visit/model';
 import { CharacterWorkRows } from '../catalogue/character-work-visit/view';
+import { CharacterIdentityVisit } from '../catalogue/character-identity-visit/view';
+import { identityProperty } from '../catalogue/character-relationships/reading';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -88,6 +90,7 @@ export function SubjectConnections({
     reader: viewer.state === 'signed-in' ? (viewer.subject ?? null) : null,
   });
   if (!value || !page.subject) return null;
+  const character = subjectBody(page)?.subject.type === 'wd:Q95074';
   const ready =
     lifetime.available && (viewer.state === 'signed-out' || (viewer.state === 'signed-in' && !!viewer.subject));
   const current = incarnation.current;
@@ -128,7 +131,7 @@ export function SubjectConnections({
     <ConnectionsReading
       key={incarnation.current!.serial}
       window={incarnation.current!.window}
-      character={subjectBody(page)?.subject.type === 'wd:Q95074'}
+      character={character}
       ready={ready}
       unavailable={viewer.state === 'unavailable' || !lifetime.available}
       returnTo={subjectVisitReturn(returnTo, value.locale)}
@@ -181,8 +184,12 @@ function ConnectionsReading({
     restore.current = undefined;
     const section = snapshot.visit.sections[connectionReturnGroup(target)];
     if (section?.section.ok && section.reading === target.reading) {
-      const row = [...(region.current?.querySelectorAll<HTMLElement>('[data-work-statement]') ?? [])].find(
-        (element) => element.dataset.workStatement === target.focus && element.dataset.workHolder === target.holder,
+      const row = [...(region.current?.querySelectorAll<HTMLElement>(
+        '[data-work-statement], [data-connection-statement]',
+      ) ?? [])].find(
+        (element) =>
+          (element.dataset.workStatement ?? element.dataset.connectionStatement) === target.focus &&
+          (element.dataset.workHolder ?? element.dataset.connectionHolder) === target.holder,
       );
       if (row) row.querySelector<HTMLElement>('a, summary')?.focus();
       else {
@@ -309,6 +316,7 @@ function ConnectionsReading({
             : titles[group];
           const busy = snapshot.pending.has(group);
           const section = current?.section;
+          const characterCurrent = current?.section.ok ? { ...current, section: current.section } : undefined;
           const listed = section?.ok
             ? current?.stream.direction === 'in'
               ? holderItems(section.body, 12, value.locale, value.reader.spoilerLevel)
@@ -324,7 +332,16 @@ function ConnectionsReading({
                   section.body,
                 ) ?? [])
               : [];
-          if (!choices.length)
+          if (!choices.length) {
+            if (character && group === 'relations')
+              return (
+              <section key={group} aria-labelledby={`connections-${group}`} className="min-w-0 space-y-4">
+                <h3 id={`connections-${group}`} className="text-xl font-semibold">
+                  {m.character_identity_visit_heading({}, o)}
+                </h3>
+                <p role="status">{m.character_identity_visit_unavailable({}, o)}</p>
+              </section>
+              );
             return group === 'relations' || (character && group === 'characters') ? (
               <p key={group} role="status">
                 {character && group === 'characters'
@@ -332,6 +349,7 @@ function ConnectionsReading({
                   : m.work_relations_unsupported({}, o)}
               </p>
             ) : null;
+          }
           return (
             <section
               key={group}
@@ -340,7 +358,7 @@ function ConnectionsReading({
               aria-busy={busy}
             >
               <h3 id={`connections-${group}`} className="text-xl font-semibold">
-                {title}
+                {character && group === 'relations' ? m.character_identity_visit_heading({}, o) : title}
               </h3>
               <label
                 className={characterChoices.length === 1 && choices.length === 1 ? 'hidden' : 'block min-w-0 space-y-2'}
@@ -368,12 +386,22 @@ function ConnectionsReading({
                 <p role="status">{m.subject_relation_loading({}, o)}</p>
               ) : listed ? (
                 <>
-                  {!characterKind && listed.count && (
+                  {!characterKind && !(character && group === 'relations') && listed.count && (
                     <p className="text-sm text-muted-foreground tabular-nums">
                       {formatCount(listed.count, value.locale)}
                     </p>
                   )}
-                  {listed.items.length ? (
+                  {character && group === 'relations' ? (
+                    <div className="min-w-0" key={`${group}:${current?.stream.key}`}>
+                      <CharacterIdentityVisit
+                        current={characterCurrent!}
+                        items={listed.items}
+                        value={rowValue}
+                        more={Boolean(next)}
+                        identityAvailable={choices.some((stream) => stream.property === identityProperty)}
+                      />
+                    </div>
+                  ) : listed.items.length ? (
                     <div className="min-w-0 space-y-4" key={`${group}:${current?.stream.key}`}>
                       {characterKind && current && section?.ok && (
                         <CharacterWorkRows current={current} value={rowValue} kind={characterKind} />
