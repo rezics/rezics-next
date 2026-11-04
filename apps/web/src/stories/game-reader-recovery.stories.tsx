@@ -23,7 +23,8 @@ function RecoveryExample({ scenario = 'inspection' }: { scenario?: Scenario }) {
     query.setQueryData(['session'], { state: 'signed-out' });
     return query;
   }, [fixture]);
-  const [source, setSource] = useState<object>({});
+  const [generation, setGeneration] = useState(0);
+  const source = useMemo(() => ({}), [fixture, generation]);
   useEffect(() => {
     if (scenario === 'retired') client.setQueryData(['exposure', 'viewer'], { spoilerLevel: 1 });
     return () => client.clear();
@@ -42,7 +43,7 @@ function RecoveryExample({ scenario = 'inspection' }: { scenario?: Scenario }) {
               reader={null}
               transport={fixture.read}
               refresh={async () => {
-                setSource({});
+                setGeneration((value) => value + 1);
               }}
             />
           </QueryClientProvider>
