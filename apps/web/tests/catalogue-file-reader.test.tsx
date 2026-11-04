@@ -116,6 +116,7 @@ function renderSubject(
   digest: string,
   fileSource?: string,
   statementPropose: 'allowed' | 'denied' | 'unavailable' = 'allowed',
+  currentHref?: string,
 ) {
   const supported = !!release.types[read.subject.type];
   page.catalogue = {
@@ -146,6 +147,7 @@ function renderSubject(
           locale: 'en',
           messages: subjectPageMessages(),
           fileSource,
+          currentHref,
           renderJsonLd: false,
         }),
       ),
@@ -222,6 +224,13 @@ test('retired associations cannot add a destination return, and unsupported file
   expect(unsupportedHtml).toContain('Generic file title');
   expect(unsupportedHtml).not.toContain('data-slot="catalogue-file-reader-recovery"');
   expect(unsupportedHtml).not.toMatch(/href="\/en\/subjects\/[^\"]+\/file(?:\?|\")/);
+  const destination = renderSubject(ordinaryPage(current.public), current.public, current.release, current.digest)
+    .match(/href="([^"]*fileSource=[^"]+)"/)![1]!
+    .replaceAll('&amp;', '&');
+  const back = catalogueFileSourceReturnHref(catalogueFile, 'en', '', fileEvidenceAt(destination, 'en'))!;
+  expect(
+    renderSubject(unsupportedPage, unsupportedRead, missing.release, missing.digest, undefined, 'allowed', back),
+  ).toContain('Current definitions do not admit this subject as a catalogue file or release group.');
 });
 
 test('native page action decisions keep denied and unavailable correction controls closed', async () => {
