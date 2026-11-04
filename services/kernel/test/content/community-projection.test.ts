@@ -5,6 +5,7 @@ import {
   projectCommunityCommentsBatch,
   projectPublicConversationActivity,
   type CommunityActivityWitness,
+  type CommunityComments,
   type ConversationActivityCurrent,
 } from '../../src/content/community-projection/index.ts';
 
@@ -46,7 +47,7 @@ test('community comments preserve exact zero, lower bounds, viewer cohorts and u
   expect(projectCommunityComments('other-thread', zero, account)).toEqual({ state: 'unavailable' });
   expect(projectCommunityComments(zero.threadId, undefined, account)).toEqual({ state: 'unavailable' });
   expect(projectCommunityCommentsBatch([zero.threadId, 'missing'], [zero, zero], account)).toEqual(
-    new Map([
+    new Map<string, CommunityComments>([
       [zero.threadId, { state: 'unavailable' }],
       ['missing', { state: 'unavailable' }],
     ]),
