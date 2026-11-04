@@ -36,7 +36,16 @@ function transport(reply: (call: Call) => Response | Promise<Response>) {
   return calls;
 }
 function native(granted = grant().granted, scopes = grant().granted) {
-  return Response.json({ client_id: 'third-party', display_name: 'Reading companion', scopes, granted });
+  return Response.json({
+    client_id: 'third-party',
+    display_name: 'Reading companion',
+    scopes,
+    requested: [],
+    granted,
+    pending_reduction: false,
+    acting_account: { account_id: 'account-1', email: null },
+    decisions: { allow: true, decline: true, switch_account: true },
+  });
 }
 
 test('Reduce selected existing app permissions through the native consent barrier preserves exact current native authority target privacy and immutable operation readback', async () => {
@@ -63,7 +72,14 @@ test('Reduce selected existing app permissions through the native consent barrie
   expect(await result).toEqual({ kind: 'accepted' });
   expect(calls.map(({ path, body }) => ({ path, body }))).toEqual([
     { path: '/consent/third-party', body: null },
-    { path: '/consent', body: { client_id: 'third-party', scope: ['openid', 'subject:read'] } },
+      {
+        path: '/consent',
+        body: {
+          client_id: 'third-party',
+          scope: ['openid', 'subject:read'],
+          reviewed_scopes: ['openid', 'offline_access', 'subject:read'],
+        },
+      },
   ]);
   expect(
     calls.every(
@@ -113,6 +129,24 @@ test('Changed grants, current ceiling and failed native reads cannot restore sco
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toBeNull();
   }
+});
+
+test('A native stale-review refusal stays explicit and never replays the selected reduction', async () => {
+  const calls = transport((call) =>
+    call.body === null ? native() : Response.json({ code: 'stale_review' }, { status: 409 }),
+  );
+  expect(await reduceConsent(grant(), ['openid'])).toEqual({ kind: 'stale-review' });
+  expect(calls.map(({ path, body }) => ({ path, body }))).toEqual([
+    { path: '/consent/third-party', body: null },
+    {
+      path: '/consent',
+      body: {
+        client_id: 'third-party',
+        scope: ['openid'],
+        reviewed_scopes: ['openid', 'offline_access', 'subject:read'],
+      },
+    },
+  ]);
 });
 
 test('Exact closed acknowledgements only; ambiguous writes require fresh readback and never replay', async () => {
@@ -170,7 +204,11 @@ test('Approval and removal explain exact native capabilities without changing re
       client_id: 'third-party',
       display_name: 'Reading companion',
       scopes: ['openid', 'offline_access', 'subject:read', unknown, otherUnknown, 'account:read'],
+      requested: [],
       granted: ['openid', 'offline_access'],
+      pending_reduction: false,
+      acting_account: { account_id: 'person-1', email: null },
+      decisions: { allow: true, decline: true, switch_account: true },
     };
     const requested = [
       'subject:read',

@@ -5,7 +5,7 @@ import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { createConsentDecision, type ConsentDecision } from '../consent';
 import { ErrorAlert } from '../alert';
-import { PermissionLimits, RequestedPermission } from '../permission-view';
+import { Permission, PermissionLimits, RequestedPermission } from '../permission-view';
 
 export const Route = createFileRoute('/consent')({
   head: () => ({ meta: [{ title: `${m.auth_consent_heading()} · REZICS` }] }),
@@ -15,40 +15,75 @@ export const Route = createFileRoute('/consent')({
 function ConsentPage() {
   const query = useLocation({ select: (location) => location.searchStr });
   const parameters = new URLSearchParams(query);
-  const client_id = parameters.get('client_id') ?? '';
-  const scope = parameters.get('scope') ?? '';
-  return <ConsentRequest key={JSON.stringify([client_id, scope])} clientId={client_id} scope={scope} />;
+  const clients = parameters.getAll('client_id');
+  const scopes = parameters.getAll('scope');
+  const invalid = clients.length !== 1 || scopes.length > 1;
+  const clientId = invalid ? '' : (clients[0] ?? '');
+  const scope = invalid ? '' : (scopes[0] ?? '');
+  return (
+    <ConsentRequest
+      key={JSON.stringify([clientId, scope, invalid])}
+      clientId={clientId}
+      scope={scope}
+      invalid={invalid}
+    />
+  );
 }
 
-function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }) {
-  const [{ state, consent, pending, message, uncertain }, setDecision] = useState<ConsentDecision>({
-    state: clientId ? 'loading' : 'not-found',
+function ConsentRequest({
+  clientId,
+  scope,
+  invalid,
+}: {
+  clientId: string;
+  scope: string;
+  invalid: boolean;
+}) {
+  const [{ state, consent, approved, pending, message, uncertain, unattributedUncertain }, setDecision] =
+    useState<ConsentDecision>({
+    state: clientId && !invalid ? 'loading' : 'not-found',
     pending: false,
     uncertain: false,
+    unattributedUncertain: false,
   });
   const decision = useRef<ReturnType<typeof createConsentDecision> | null>(null);
   const alert = useRef<HTMLDivElement>(null);
-  const requested = [...new Set(scope.split(/\s+/).filter(Boolean))];
 
   useEffect(() => {
     const visit = createConsentDecision(clientId, scope, setDecision);
     decision.current = visit;
-    visit.restore();
+    if (!invalid) visit.restore();
+    let inactive = false;
+    const refresh = () => visit.refresh();
+    const restore = () => visit.restore();
+    const onBlur = () => {
+      inactive = true;
+    };
+    const onFocus = () => {
+      if (inactive && document.visibilityState === 'visible') {
+        inactive = false;
+        refresh();
+      }
+    };
     window.addEventListener('pagehide', visit.suspend);
-    window.addEventListener('pageshow', visit.restore);
+    window.addEventListener('pageshow', restore);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
     return () => {
       window.removeEventListener('pagehide', visit.suspend);
-      window.removeEventListener('pageshow', visit.restore);
+      window.removeEventListener('pageshow', restore);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
       visit.dispose();
       decision.current = null;
     };
-  }, [clientId, scope]);
+  }, [clientId, scope, invalid]);
 
   useEffect(() => {
     if (message) alert.current?.focus();
   }, [message]);
 
-  const returnTo = `/consent?${new URLSearchParams({ client_id: clientId, scope })}`;
+  const returnTo = `/consent?${new URLSearchParams({ client_id: clientId, scope }).toString()}`;
   const signIn = `/login?${new URLSearchParams({ return_to: returnTo })}`;
 
   return (
@@ -67,22 +102,45 @@ function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }
           </>
         ) : null}
         {state === 'not-found' ? <p>{m.auth_consent_not_found()}</p> : null}
-        {state === 'approved' ? <p role="status">{m.auth_consent_approved()}</p> : null}
-        {uncertain ? <p role="status">{m.auth_consent_submission_unknown()}</p> : null}
+        {state === 'approved' && consent ? (
+          <div role="status">
+            <p>{m.auth_consent_approved()}</p>
+            {approved?.length ? (
+              <>
+                <p>{m.auth_consent_approved_permissions()}</p>
+                <ul className="m-0 grid min-w-0 list-none gap-4 p-0">
+                  {approved.map((id) => (
+                    <li key={id} className="grid min-w-0 gap-1 wrap-anywhere">
+                      <Permission scope={id} />
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>{m.auth_consent_approved_none()}</p>
+            )}
+          </div>
+        ) : null}
+        {uncertain && ['ready', 'approved', 'declined'].includes(state) ? (
+          <p role="status">{m.auth_consent_submission_unknown()}</p>
+        ) : null}
+        {unattributedUncertain ? <p role="status">{m.auth_consent_unattributed_submission()}</p> : null}
         {state === 'declined' ? (
           <p role="status">{uncertain ? m.auth_consent_declined_after_submission() : m.auth_consent_declined()}</p>
         ) : null}
-        {state === 'ready' && consent ? (
+        {(state === 'ready' || state === 'approved' || state === 'declined') && consent ? (
           <>
             <div>
               <p>{m.auth_consent_request()}</p>
               <p className="font-semibold wrap-anywhere">{consent.display_name ?? consent.client_id}</p>
             </div>
-            {requested.length ? (
+            <p>{m.auth_login_current_account({ account: consent.acting_account.email ?? m.auth_security_rezics_account() })}</p>
+            {consent.pending_reduction ? <p role="status">{m.auth_inventory_consent_pending()}</p> : null}
+            {consent.requested.length ? (
               <>
                 <PermissionLimits />
                 <ul className="m-0 grid min-w-0 list-none gap-4 p-0">
-                  {requested.map((id) => (
+                  {consent.requested.map((id) => (
                     <li key={id} className="grid min-w-0 gap-1 wrap-anywhere">
                       <RequestedPermission scope={id} consent={consent} />
                     </li>
@@ -92,17 +150,26 @@ function ConsentRequest({ clientId, scope }: { clientId: string; scope: string }
             ) : (
               <p>{m.auth_consent_empty()}</p>
             )}
-            <Button
-              type="button"
-              onClick={() => void decision.current?.approve()}
-              disabled={pending}
-              aria-busy={pending}
-            >
-              {m.auth_consent_approve()}
-            </Button>
-            <Button type="button" variant="outline" disabled={pending} onClick={() => decision.current?.decline()}>
-              {m.auth_consent_decline()}
-            </Button>
+            {state === 'ready' ? (
+              <>
+                {consent.decisions.allow ? (
+                  <Button
+                    type="button"
+                    onClick={() => void decision.current?.approve()}
+                    disabled={pending}
+                    aria-busy={pending}
+                  >
+                    {m.auth_consent_approve()}
+                  </Button>
+                ) : null}
+                {consent.decisions.decline ? (
+                  <Button type="button" variant="outline" disabled={pending} onClick={() => decision.current?.decline()}>
+                    {m.auth_consent_decline()}
+                  </Button>
+                ) : null}
+                {consent.decisions.switch_account ? <a href={signIn}>{m.auth_login_switch_account()}</a> : null}
+              </>
+            ) : null}
           </>
         ) : null}
         {message ? (

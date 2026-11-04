@@ -111,6 +111,34 @@ export const PendingOnConfirmation = {
     if (canvasElement.textContent?.includes(m.auth_inventory_reduced())) throw new Error('Stale DTO must not write');
   },
 };
+export const StaleReviewRequiresFreshDecision = {
+  render: () => {
+    let reads = 0;
+    const source = inventory(() => [
+      {
+        ...consent,
+        granted: reads++ < 2 ? consent.granted : [...consent.granted, 'account:read'],
+      },
+    ]);
+    return (
+      <AuthStory mode="refused">
+        <AuthPage heading={m.auth_security_heading()}>
+          <SecurityInventory source={source} />
+        </AuthPage>
+      </AuthStory>
+    );
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await selectSubset(canvasElement);
+    (await waitFor(() => button(canvasElement, m.auth_inventory_reduce()))).click();
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_consent_stale_review()));
+    await waitFor(() => canvasElement.textContent?.includes('account:read'));
+    if (canvasElement.textContent?.includes(m.auth_inventory_reduced()))
+      throw new Error('A stale review cannot confirm or replay a reduction');
+    if (!button(canvasElement, m.auth_inventory_review_named({ name: 'Reading companion' })))
+      throw new Error('The updated grant must be available for a fresh decision');
+  },
+};
 const restricted = inventory(() => [
   { ...consent, reducible: false },
   { ...consent, client_id: 'pending', pending_reduction: true },

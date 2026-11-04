@@ -45,13 +45,20 @@ test('consent reviews and decisions belong to the current visit and survive sign
     display_name: 'Reader <img src=x onerror=alert(1)>',
     scopes: ['openid', 'offline_access', 'library:read', 'library:write'],
     granted: ['openid', 'library:write'],
+    pending_reduction: false,
+    decisions: { allow: true, decline: true, switch_account: true },
   };
+  const requestScope = 'openid offline_access library:read unknown openid';
+  dom.sessionStorage.setItem(
+    `auth.consent.pending:${JSON.stringify([body.client_id, 'library:read'])}`,
+    'pending',
+  );
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
   const parent = createRootRoute();
   const route = Route.update({ id: '/consent', path: '/consent', getParentRoute: () => parent } as never);
-  const path = (id = body.client_id, scope = 'openid offline_access library:read unknown openid') =>
+  const path = (id = body.client_id, scope = requestScope) =>
     `/consent?${new URLSearchParams({ client_id: id, scope })}`;
   const router = createRouter({
     routeTree: parent.addChildren([route]),
@@ -62,8 +69,29 @@ test('consent reviews and decisions belong to the current visit and survive sign
       await action();
     });
   };
-  const answer = (index: number, status = 200) =>
-    flush(() => calls[index]!.resolve(Response.json(status === 200 ? body : { code: 'unavailable' }, { status })));
+  const answer = (index: number, status = 200, accountId = 'person-1', override?: unknown) =>
+    flush(() => {
+      const call = calls[index]!;
+      const url = new URL(call.url, 'https://auth.test');
+      const result =
+        override ??
+        (call.init?.method === 'POST'
+          ? (() => {
+              const submitted = JSON.parse(String(call.init?.body));
+              return {
+                client_id: submitted.client_id,
+                scope: submitted.scope,
+                account_id: submitted.reviewed_account_id,
+                requested: submitted.reviewed_requested,
+              };
+            })()
+          : {
+              ...body,
+              requested: [...new Set((url.searchParams.get('scope') ?? '').split(' ').filter(Boolean))],
+              acting_account: { account_id: accountId, email: null },
+            });
+      call.resolve(Response.json(status === 200 ? result : { code: 'unavailable' }, { status }));
+    });
   const button = (label: string) =>
     [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
   const navigate = (url: string) =>
@@ -80,14 +108,21 @@ test('consent reviews and decisions belong to the current visit and survive sign
       button('Try this action again')?.click();
     });
     expect(calls).toHaveLength(2);
-    expect(calls.map((call) => call.url)).toEqual(['/consent/reader%2Bclient', '/consent/reader%2Bclient']);
+    expect(calls.map((call) => call.url)).toEqual([
+      `/consent/reader%2Bclient?${new URLSearchParams({ scope: requestScope })}`,
+      `/consent/reader%2Bclient?${new URLSearchParams({ scope: requestScope })}`,
+    ]);
     expect(button('Approve')).toBeUndefined();
     await answer(1);
     expect(host.textContent).toContain(body.display_name);
+    expect(host.textContent).toContain('REZICS account');
     await flush(() => button('Approve')!.click());
     expect(JSON.parse(String(calls[2]!.init?.body))).toEqual({
       client_id: body.client_id,
       scope: ['openid', 'library:write', 'offline_access', 'library:read'],
+      reviewed_account_id: 'person-1',
+      reviewed_scopes: body.granted,
+      reviewed_requested: ['openid', 'offline_access', 'library:read', 'unknown'],
     });
     await answer(2);
     expect(host.textContent).toContain('You can return to the client.');
@@ -122,11 +157,11 @@ test('consent reviews and decisions belong to the current visit and survive sign
     expect(button('Approve')).toBeUndefined();
     await flush(() => void window.dispatchEvent(new dom.Event('pageshow')));
     expect(calls).toHaveLength(11);
-    await answer(9);
+    await answer(9, 200, 'person-1', { client_id: 'wrong-client', scope: [] });
     expect(host.textContent).not.toContain('Access approved.');
     expect(button('Approve')).toBeUndefined();
     await answer(10);
-    expect(host.textContent).toContain('The approval result is unknown');
+    expect(host.textContent).toContain('The approval result for this account is unknown');
     await flush(() => button('Decline')!.click());
     expect(host.textContent).toContain('An earlier approval may still have taken effect.');
     expect(calls).toHaveLength(11);
@@ -134,11 +169,12 @@ test('consent reviews and decisions belong to the current visit and survive sign
     await navigate(path(body.client_id, 'library:read'));
     await answer(11);
     expect(button('Approve')).toBeUndefined();
-    await answer(12);
-    expect(host.textContent).toContain('The approval result is unknown');
+    await answer(12, 200, 'person-2');
+    expect(host.textContent).not.toContain('The approval result for this account is unknown');
+    expect(host.textContent).toContain('An earlier submission for this client and request is unresolved.');
     await flush(() => button('Approve')!.click());
     await answer(13, 503);
-    expect(host.textContent).toContain('The approval result is unknown');
+    expect(host.textContent).toContain('The approval result for this account is unknown');
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     await flush(() => button('Approve')!.click());
     await answer(14);
@@ -147,13 +183,14 @@ test('consent reviews and decisions belong to the current visit and survive sign
     await flush(() => void window.dispatchEvent(new dom.Event('pageshow')));
     expect(host.textContent).not.toContain('Access approved.');
     expect(button('Approve')).toBeUndefined();
-    await answer(15);
-    expect(host.textContent).not.toContain('The approval result is unknown');
+    await answer(15, 200, 'person-2');
+    expect(host.textContent).toContain('The approval result for this account is unknown');
     await navigate(path('unknown'));
     await flush(() => root.unmount());
     expect(calls[16]!.init?.signal?.aborted).toBe(true);
     await answer(16);
     expect(host.textContent).toBe('');
+    dom.sessionStorage.removeItem(`auth.consent.pending:${JSON.stringify([body.client_id, 'library:read'])}`);
   } finally {
     await flush(() => root.unmount());
     host.remove();

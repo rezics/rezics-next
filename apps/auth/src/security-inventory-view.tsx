@@ -190,6 +190,16 @@ function InventoryList<V extends InventoryView>({
           : { kind: 'denied' as const };
     if (generation.current !== current || (reviewOperation.current && !reviewOperation.current.isCurrent())) return;
     setReducing(false);
+    if (result.kind === 'stale-review') {
+      setPending(true);
+      const updated = await source(view, cursor).catch(() => ({ kind: 'unavailable' as const }));
+      if (generation.current !== current) return;
+      setPending(false);
+      finishReview();
+      setError(m.auth_consent_stale_review());
+      setPage(updated);
+      return;
+    }
     if (result.kind === 'unknown') {
       // The native barrier may have ended the session. Keep every page write
       // blocked; neither an inventory reload nor a second click may replay it.

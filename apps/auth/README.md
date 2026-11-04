@@ -143,29 +143,29 @@ Network failures, unread responses and 503 responses stay uncertain. A malformed
 
 ## Consent
 
-`/consent?client_id=<id>&scope=<space-separated scopes>` reviews a third-party client's request. One browser
-`GET /consent/<client_id>` with the session cookie loads its display name (falling back to its id), registered scopes
-and this person's current consent. The page makes no kernel reads. Each requested scope shows a localized description
-first and its identifier in muted monospace afterward, followed by its already granted, new or not available state.
-Unknown scopes keep their raw identifier after a generic localized description.
+`/consent?client_id=<id>&scope=<space-separated scopes>` reviews a third-party client's request. The private
+`GET /consent/<client_id>?scope=...` projection binds the exact bounded request, registered client facts, current
+effective grants, pending reduction state, admitted acting account and native decisions. Its exact-self email is used
+only on this private page; it is not labeled verified or returned to the client. The read revalidates the human session
+and client while holding the existing issuance and consent locks, and returns `private, no-store`. Unknown requested
+names remain visible with their literal identifier and an honest fallback description; query text never declares a
+supported scope or grants access.
 
-Approval uses the shared Auth client to send one same-origin JSON `POST /consent` with only `client_id` and `scope`.
-The approved set is the union of current grants and requested registered scopes, since the write replaces consent.
-Unregistered requested scopes are never sent. Declining writes nothing and confirms that the client got no new access.
-After approval the person can return to the client. Neither query parameters nor response bodies supply a return
-target, and the page never redirects.
+Each requested scope shows a localized description, identifier, and whether it is already granted, new, or unavailable.
+Approval sends the existing same-origin `POST /consent` writer the exact reviewed account, effective grants, request and
+the replacement union of existing grants with requested registered scopes. Native Auth checks the reviewed grant set
+again under the consent lock before writing. A grant added after review makes the action stale and requires a fresh
+explicit decision; it cannot be removed by an ordinary Allow. Requested names outside the registered client ceiling
+remain visible but are excluded from the write. Success lists only the exact submitted scope set. Declining is a local
+decision and never claims to revoke or undo an earlier uncertain approval.
 
-Signed-out visitors get a link to `/login` with the exact client and scope request in the supported local consent
-`return_to` target; sign-in returns to a fresh review. Unknown and first-party clients show a localized not-found message.
-Other failures use the shared status-and-code messages, including valid `Retry-After` seconds; Auth body text is
-never displayed. Pending approval disables both buttons, and a failure permits retrying.
-Failed review reads reuse the localized "Try this action again" button for the same client and requested scopes.
-While that read is pending,
-duplicate activation cannot start another read or enable approval. Changing either request parameter or leaving
-the page discards the old reader's results. Retrying the review never submits approval.
-Departure also invalidates approval results; browser restoration always reads a fresh review before enabling decisions.
-Decision: retain a per-request uncertainty marker in tab storage across departure, never replay approval, and let a fresh
-review enable an explicit approval or decline; declining cannot claim that an earlier uncertain approval had no effect.
+The page never redirects and ignores arbitrary query destinations. The account-switch link uses only the supported
+local `/login` return target for this exact client and request. Unknown and first-party clients show a localized
+not-found message. Unavailable reads never become an empty review. Changed client/request observations, account changes,
+page departure and restoration retire old results; restoration reads a fresh review before enabling decisions.
+Uncertain writes remain unresolved and are never replayed automatically. Tab storage keeps only the minimum marker
+context for the admitted account, client and request. A legacy marker without an account remains visibly unattributed;
+a different account cannot inherit or resolve it from matching consent.
 
 Page paths render only for GET and HEAD. Other methods, including `POST /consent` and `POST /signup`, pass the
 original request through to Auth at the issuer origin in production, or through the existing `AUTH_ORIGIN` proxy in
@@ -200,7 +200,7 @@ Only an unresolved destructive target's original account, kind and native id sur
 account, return requires fresh explicit readback and confirmation; a different account discards that target. Failed
 reads offer Reload, ended sessions offer sign-in, and return never replays a credential or consent command.
 
-Connected-application reviews acquire that same boundary until cancellation or a determinate result; uncertain reductions keep all security writes blocked without replay, while independent owned-client navigation remains available and consent navigation cannot discard a review.
+Connected-application reviews acquire that same boundary until cancellation or a determinate result. Nonempty reductions carry the exact reviewed grant set to the native writer, which rechecks it under the consent lock before publishing a reduction barrier. If it changed, the page refreshes the current permissions and requires a new explicit decision; it never changes the reduction into Allow or resubmits. Explicit remove-all retains its existing meaning, pending reductions keep their ceiling, and uncertain reductions keep all security writes blocked without replay. Independent owned-client navigation remains available and consent navigation cannot discard a review.
 
 Password changes accept 8 to 128 characters and use one random key for the staged credential effect: stage, approve,
 then apply. A failed network request retries only its step with the same key, and a replayed apply receipt counts as

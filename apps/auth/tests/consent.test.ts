@@ -42,7 +42,16 @@ const fake = Bun.serve({
       if (id !== clientId && id !== 'unnamed') return Response.json({ code: 'not_found' }, { status: 404, headers });
       if (readStatus === 200)
         return Response.json(
-          { client_id: id, display_name: id === 'unnamed' ? null : displayName, scopes: registered, granted },
+          {
+            client_id: id,
+            display_name: id === 'unnamed' ? null : displayName,
+            scopes: registered,
+            requested: [...new Set((url.searchParams.get('scope') ?? '').split(' ').filter(Boolean))],
+            granted,
+            pending_reduction: false,
+            acting_account: { account_id: 'person-1', email: 'person@example.test' },
+            decisions: { allow: true, decline: true, switch_account: true },
+          },
           { headers },
         );
       headers.set('retry-after', '37');
@@ -52,13 +61,22 @@ const fake = Bun.serve({
       if (!signedIn) return Response.json({ code: 'authentication_denied' }, { status: 401, headers });
       const body = JSON.parse(call.body);
       if (
-        Object.keys(body).sort().join(',') !== 'client_id,scope' ||
+        Object.keys(body).sort().join(',') !==
+          'client_id,reviewed_account_id,reviewed_requested,reviewed_scopes,scope' ||
         !Array.isArray(body.scope) ||
         body.scope.some((scope: string) => !registered.includes(scope))
       )
         return Response.json({ code: 'invalid_request' }, { status: 400, headers });
       if (writeStatus === 200)
-        return Response.json({ success: true, redirect_uri: 'https://evil.example/' }, { headers });
+        return Response.json(
+          {
+            client_id: body.client_id,
+            scope: body.scope,
+            account_id: body.reviewed_account_id,
+            requested: body.reviewed_requested,
+          },
+          { headers },
+        );
       headers.set('retry-after', '37');
       return Response.json({ code: responseCode, message: 'HOSTILE AUTH BODY' }, { status: writeStatus, headers });
     }
@@ -195,6 +213,7 @@ test(
     try {
       await ready(page);
       expect(await page.getByText(displayName, { exact: true }).count()).toBe(1);
+      expect(await page.getByText('You’re signed in as person@example.test.', { exact: true }).count()).toBe(1);
       expect(await page.locator('main img').count()).toBe(0);
       for (const scope of requested) {
         const row = page.getByRole('listitem').filter({ hasText: scope });
@@ -204,13 +223,23 @@ test(
       expect(await page.getByText('Identify you', { exact: true }).count()).toBe(1);
       expect(await page.getByText('Keep access when you are away', { exact: true }).count()).toBe(1);
       expect(reads()).toHaveLength(1);
-      expect(reads()[0]!.url).toBe(`/consent/${encodeURIComponent(clientId)}`);
+      expect(reads()[0]!.url).toBe(
+        `/consent/${encodeURIComponent(clientId)}?${new URLSearchParams({
+          scope: requested.concat('openid').join(' '),
+        })}`,
+      );
       expect(reads()[0]!.headers.cookie).toContain(`auth_session=${session}`);
       expect(urls.filter((url) => new URL(url).pathname.startsWith('/consent/'))).toHaveLength(1);
       await approve(page);
       expect(writes()).toHaveLength(1);
       const write = writes()[0]!;
-      expect(JSON.parse(write.body)).toEqual({ client_id: clientId, scope: [...new Set([...granted, ...requested])] });
+      expect(JSON.parse(write.body)).toEqual({
+        client_id: clientId,
+        scope: [...new Set([...granted, ...requested])],
+        reviewed_account_id: 'person-1',
+        reviewed_scopes: granted,
+        reviewed_requested: requested,
+      });
       expect(write.headers['content-type']).toBe('application/json');
       expect(write.headers.origin).toBe(origin);
       expect(write.headers.cookie).toContain(`auth_session=${session}`);

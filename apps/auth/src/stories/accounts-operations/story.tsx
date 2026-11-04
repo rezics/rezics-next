@@ -121,13 +121,18 @@ export function AuthStory({
       if (returning === 'organization') storePendingOrganizationHandle('reading-group');
     }
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = new URL(input instanceof Request ? input.url : String(input), window.location.href).pathname;
+      const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
+      const path = url.pathname;
       if (path === '/consent/third-party')
         return Response.json({
           client_id: 'third-party',
           display_name: 'Reading companion',
           scopes: ['openid', 'offline_access', 'subject:read'],
+          requested: url.searchParams.get('scope')?.split(' ').filter(Boolean) ?? [],
           granted: ['openid', 'offline_access', 'subject:read'],
+          pending_reduction: false,
+          acting_account: { account_id: storyAccount, email: 'reader@example.test' },
+          decisions: { allow: true, decline: true, switch_account: true },
         });
       if (
         !['/account-operations/approve', '/account-operations/execute', '/consent', '/passkeys/remove'].includes(path)
@@ -135,6 +140,8 @@ export function AuthStory({
         return originalFetch(input, init);
       if (mode === 'unknown' && ['/account-operations/execute', '/consent'].includes(path))
         throw new TypeError('Story: lost response');
+      if (mode === 'refused' && path === '/consent')
+        return Response.json({ code: 'stale_review' }, { status: 409 });
       const failure =
         mode === 'unavailable'
           ? 503
@@ -153,7 +160,10 @@ export function AuthStory({
           reference: 'story-native-approval',
           expiresAt: new Date(Date.now() + 60_000).toISOString(),
         });
-      if (path === '/consent') return Response.json(JSON.parse(String(init?.body)));
+      if (path === '/consent') {
+        const body = JSON.parse(String(init?.body));
+        return Response.json({ client_id: body.client_id, scope: body.scope });
+      }
       if (path === '/passkeys/remove') return Response.json({});
       const body = JSON.parse(String(init?.body)) as { operation: { kind: string; accountId?: string } };
       return Response.json({ accountId: body.operation.accountId ?? 'story-organization' });
