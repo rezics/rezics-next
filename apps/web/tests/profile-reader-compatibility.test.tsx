@@ -484,7 +484,12 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveWrite(viewSaveCount, { ok: true, profile: viewsAfter }, viewsAfter);
     await until(() => readRequests.length === viewsReadback + 1, 'public activity readback');
     await resolveRead(viewsReadback, successRead(viewsAfter));
-    await until(() => writableEditor.snapshot().phase === 'saved', 'public activity confirmation');
+    await until(
+      () => writableEditor.snapshot().phase === 'review' && writableEditor.snapshot().attempt === null,
+      'public activity confirmation with the later Profile draft retained',
+    );
+    expect(writableEditor.snapshot().known?.publicViews.reviews).toBe(false);
+    expect(writableEditor.snapshot().draft?.displayName).toBe('Current organization');
 
     const speakerSwitch = publicSwitch(m.settings_public_speakers());
     expect(speakerSwitch.getAttribute('aria-checked')).toBe('false');
