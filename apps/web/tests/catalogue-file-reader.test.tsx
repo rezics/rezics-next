@@ -121,7 +121,7 @@ test('retired associations cannot add a destination return, and unsupported file
   }];
   const unsupportedPage = ordinaryPage(unsupportedRead);
   const unsupportedHtml = renderSubject(unsupportedPage, unsupportedRead, missing.release, missing.digest, unsupportedRead.subject.id);
-  expect(unsupportedHtml).toContain('not admitted as a catalogue file or release group');
+  expect(unsupportedHtml).toContain('Current definitions do not admit this subject as a catalogue file or release group.');
   expect(unsupportedHtml).toContain('Generic file title');
   expect(unsupportedHtml).not.toContain('/file');
 });
