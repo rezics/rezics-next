@@ -1,4 +1,4 @@
-import type { PoolClient } from 'pg';
+import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import { candidateSources, fencedIds, sourceTuple, type CandidateSource } from './fences.ts';
 import readLiveCandidates from './current-relations-live-candidate.sql';
@@ -42,7 +42,7 @@ function externalValue(fact: FactRow): string | null {
 }
 
 async function matchesCandidate(
-  client: PoolClient,
+  client: CommandTransaction,
   fact: FactRow,
   candidate: CurrentRelationCandidate,
 ): Promise<boolean> {
@@ -84,7 +84,7 @@ async function matchesCandidate(
  * The caller releases this snapshot before preparing foreign Access evidence.
  */
 export async function currentRelationFacts(
-  client: PoolClient,
+  client: CommandTransaction,
   routeKey: Uint8Array | undefined,
   candidates: readonly CurrentRelationCandidate[],
   options: { sourceFences?: 'caller' } = {},
