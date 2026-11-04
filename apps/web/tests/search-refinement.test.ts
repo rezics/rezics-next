@@ -195,6 +195,40 @@ test('predicate edits, header submission and generation restarts keep conditions
   expect(refinementKey(context)).not.toBe(refinementKey({ ...context, languages: ['ja'] }));
 });
 
+test('inverse released relations compile for facets and retire the previous facet continuation', () => {
+  const relation = Object.entries(release.properties).find(
+    ([, definition]) =>
+      definition.datatype === 'wikibase-item' &&
+      definition.relation &&
+      definition.qualifiers?.some((candidate) => release.properties[candidate]?.datatype === 'wikibase-item'),
+  );
+  expect(relation).toBeDefined();
+  const [property, definition] = relation!;
+  const qualifier = definition.qualifiers!.find(
+    (candidate) => release.properties[candidate]?.datatype === 'wikibase-item',
+  )!;
+  const inverse: FilterDocument = {
+    statement: { property, inverse: true, in: [author], qualifiers: [{ property: qualifier, in: [author] }] },
+  };
+  const conditions = { facetValues: {}, condition: inverse };
+  const filter = compileRefinement(release, conditions);
+  expect(filter).toEqual(inverse);
+  const context = {
+    principal: 'anonymous',
+    languages: ['en'],
+    release: recording.digest,
+    source: 'public-global',
+    text: 'reading',
+    filter: filter!,
+  };
+  const direct: FilterDocument = {
+    statement: { property, in: [author], qualifiers: [{ property: qualifier, in: [author] }] },
+  };
+  expect(refinementKey(context)).not.toBe(
+    refinementKey({ ...context, filter: direct }),
+  );
+});
+
 test('the mounted Search language refinement uses the generated facet client and current count-free options', async () => {
   const calls: unknown[] = [];
   const selectedCondition: FilterDocument = {

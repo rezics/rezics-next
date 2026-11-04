@@ -40,7 +40,26 @@ const actor: IndexedSubject = {
   descriptions: [],
   statements: [],
 };
+const work: IndexedSubject = {
+  id: id(2),
+  type: 'schema:Movie',
+  visibility: 'visible',
+  redirect: null,
+  securityRevision: 1,
+  labels: [],
+  aliases: [],
+  descriptions: [],
+  statements: [id(4), id(5)].map((portrayed) => ({
+    property,
+    value: actor.id,
+    qualifiers: [
+      { property: role, value: id(3) },
+      { property: character, value: portrayed },
+    ],
+  })),
+};
 const hit = { id: actor.id, partition: 10, securityRevision: 1, matched: [] };
+const workHit = { id: work.id, partition: 10, securityRevision: 1, matched: [] };
 const type = { type: { in: [actor.type] } };
 
 function fixture() {
@@ -50,7 +69,13 @@ function fixture() {
   let available = true;
   const calls: string[] = [];
   const source: SubjectSource = {
-    read: async () => ({ partition: 10, position, subjects: [current] }),
+    read: async (partition, ids) => ({
+      partition,
+      position,
+      subjects: ids.flatMap((subject) =>
+        subject === current.id ? [current] : subject === work.id ? [work] : [],
+      ),
+    }),
     count: async () => ({ position, count: 1 }),
     matchRelationFacets: async (_, probes) => {
       const statements = [id(4), id(5)].map((portrayed) => ({
@@ -70,7 +95,7 @@ function fixture() {
             facet: 'statement',
             property: probe.property,
             values: [probe.value],
-            qualifiers: probe.qualifiers,
+            ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
           })
         );
       });
@@ -92,10 +117,10 @@ function fixture() {
     },
   };
 }
-async function lookup(f: ReturnType<typeof fixture>, input: unknown) {
+async function lookup(f: ReturnType<typeof fixture>, input: unknown, hits = [hit]) {
   const filter = admitFilter(parseFilter(input), release, { inverse: true });
   const compiled = compileFilter(filter, { prefix: 'f', relationOverflow: true });
-  return checkHits(f.source, [hit], new Map(compiled.leaves.map((leaf) => [leaf.name, leaf])), {
+  return checkHits(f.source, hits, new Map(compiled.leaves.map((leaf) => [leaf.name, leaf])), {
     filter,
     relationProperties: [property],
     observeRelationRelease: f.observeRelationRelease,
@@ -132,4 +157,19 @@ test('candidate and release changes retire the complete inverse disclosure windo
     expect(result.passed).toEqual([]);
     expect(result.relationRejected).toBe(true);
   }
+});
+
+test('direct and inverse traversal return opposite current populations with the same statement qualifier', async () => {
+  const f = fixture();
+  const qualifiers = selected(id(4)).statement.qualifiers;
+  const types = { type: { in: ['schema:Person', 'schema:Movie'] } };
+  const direct = {
+    and: [types, { statement: { property, in: [actor.id], qualifiers } }],
+  };
+  const inverse = { and: [types, selected(work.id)] };
+
+  const directResults = await lookup(f, direct, [hit, workHit]);
+  const inverseResults = await lookup(f, inverse, [hit, workHit]);
+  expect(directResults.passed.map(({ subject }) => subject.id)).toEqual([work.id]);
+  expect(inverseResults.passed.map(({ subject }) => subject.id)).toEqual([actor.id]);
 });

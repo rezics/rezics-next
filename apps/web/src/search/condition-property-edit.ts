@@ -115,6 +115,7 @@ export function changeStatementProperty(
     statement: {
       property: nextProperty,
       ...operands,
+      ...('inverse' in statement && statement.inverse ? { inverse: true as const } : {}),
       ...(qualifiers.length ? { qualifiers } : {}),
     },
   } as FilterDocument;

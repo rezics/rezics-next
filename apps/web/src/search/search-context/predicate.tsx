@@ -53,11 +53,23 @@ export function PredicateDescription({
   if ('saved' in value) return <>{m.condition_saved_filter_label({ id: value.saved }, options)}</>;
   if ('statement' in value) {
     const statement = value.statement;
+    const inverseDescription =
+      'inverse' in statement && statement.inverse
+        ? m.condition_relation_inverse(
+            {
+              property: label(statement.property),
+              values: new Intl.ListFormat(options.locale, { style: 'long', type: 'conjunction' }).format(
+                statement.in.map(label),
+              ),
+            },
+            options,
+          )
+        : undefined;
     return (
       <>
         {label(statement.property)}:{' '}
         {'in' in statement ? statement.in.map(label).join(', ') : rangeDescription(statement.range)}
-        {'inverse' in statement && statement.inverse ? ' ←' : null}
+        {inverseDescription ? <p>{inverseDescription}</p> : null}
         {'in' in statement && statement.concept
           ? ` (${statement.concept.scheme}${statement.concept.includeChildren ? ' + ↓' : ''})`
           : null}

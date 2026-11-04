@@ -28,6 +28,7 @@ import {
 } from './condition-editor-model';
 import { findConditionErrorTarget, isConditionEditorPointer } from './condition-error-target';
 import { conditionFieldChoices as buildConditionFieldChoices } from './condition-field-choices';
+import { changeConditionDirection, conditionDirection } from './condition-direction';
 import {
   changeQualifierProperty,
   changeStatementProperty,
@@ -491,6 +492,27 @@ function NodeEditor({
     localizedLabel(labels ?? {}, context.locale).text || fallback;
   const property = 'statement' in value ? value.statement.property : undefined;
   const definition = property ? context.metadata.properties[property] : undefined;
+  const statementValue = 'statement' in value ? value.statement : undefined;
+  const relationDirectionVisible = Boolean(
+    statementValue &&
+      (('inverse' in statementValue && statementValue.inverse === true) ||
+        ('in' in statementValue && definition?.datatype === 'wikibase-item' && definition.relation)),
+  );
+  const selectedOperandLabels =
+    statementValue && 'in' in statementValue
+      ? statementValue.in
+          .filter(Boolean)
+          .map((id) => name(context.values[property ?? '']?.find((choice) => choice.value === id)?.labels, id))
+      : [];
+  const relationOperandLabel = selectedOperandLabels.length
+    ? new Intl.ListFormat(messageOptions(context.locale).locale, { style: 'long', type: 'conjunction' }).format(
+        selectedOperandLabels,
+      )
+    : m.condition_relation_operand_missing({}, options);
+  const relationPropertyLabel = property
+    ? name(definition?.labels, property)
+    : m.refinement_choose_property({}, options);
+  const direction = statementValue ? conditionDirection(statementValue) : 'direct';
   const range = 'statement' in value && 'range' in value.statement ? value.statement.range : undefined;
   const [pendingPropertyChange, setPendingPropertyChange] = useState<PendingPropertyChange>();
   const propertyChangeDialog = useRef<HTMLDialogElement>(null);
@@ -717,6 +739,42 @@ function NodeEditor({
             )}
           </EditorField>
           <p className="text-sm text-muted-foreground">{definition?.datatype}</p>
+          {relationDirectionVisible && (
+            <EditorField
+              context={context}
+              pointer={`${pointer}/statement/inverse`}
+              label={m.condition_relation_direction({}, options)}
+            >
+              {(props) => (
+                <NativeSelect
+                  {...props}
+                  value={direction}
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    if (next !== 'direct' && next !== 'inverse') return;
+                    onChange(changeConditionDirection(value, next));
+                    context.announce(
+                      m.condition_relation_direction_changed({}, options),
+                      `${pointer}/statement/inverse`,
+                    );
+                  }}
+                >
+                  <NativeSelectOption value="direct">
+                    {m.condition_relation_direct(
+                      { property: relationPropertyLabel, values: relationOperandLabel },
+                      options,
+                    )}
+                  </NativeSelectOption>
+                  <NativeSelectOption value="inverse">
+                    {m.condition_relation_inverse(
+                      { property: relationPropertyLabel, values: relationOperandLabel },
+                      options,
+                    )}
+                  </NativeSelectOption>
+                </NativeSelect>
+              )}
+            </EditorField>
+          )}
           {range ? (
             <>
               {(['gte', 'lte'] as const).map((bound) => {
