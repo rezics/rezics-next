@@ -9,6 +9,8 @@ export type PendingAccountOperationStepUp = {
   operationKey: string;
   operation: AccountOperation;
   returnTo: '/organizations/new' | '/account/delete';
+  /** Departure hint only. Older continuations may already have been submitted. */
+  submitted?: boolean;
 };
 
 export type AccountOperationStepUpSelection =
@@ -54,6 +56,7 @@ function isPending(value: unknown): value is PendingAccountOperationStepUp {
     typeof value.operationKey === 'string' &&
     /^[a-f0-9]{32}$/.test(value.operationKey) &&
     value.returnTo === returnTargets[kind] &&
+    (value.submitted === undefined || typeof value.submitted === 'boolean') &&
     isOperation(value.operation, kind) &&
     (kind === 'organization' ||
       (value.operation as Extract<AccountOperation, { kind: 'delete' }>).accountId === value.accountId)

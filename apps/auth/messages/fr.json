@@ -454,5 +454,11 @@
   "auth_security_passkeys_browser_unavailable": "Ce navigateur ne peut pas créer de clés d’accès. Vous pouvez toujours consulter et supprimer vos clés enregistrées.",
   "auth_security_inventory_truncated": "Seule la première partie de la liste est affichée. D’autres éléments peuvent exister. Actualisez après vos modifications.",
   "auth_security_step_up_advice": "Confirmez à nouveau votre identité pour continuer.",
-  "auth_security_passkey_capacity": "Vous avez atteint la limite de 32 clés d’accès. Supprimez-en une avant d’en ajouter une autre."
+  "auth_security_passkey_capacity": "Vous avez atteint la limite de 32 clés d’accès. Supprimez-en une avant d’en ajouter une autre.",
+  "auth_account_delete_authentication_required": "Authentifiez-vous pour examiner ce compte et son autorisation actuelle de suppression. Le retour ici ne supprime jamais le compte.",
+  "auth_account_delete_authenticate": "S’authentifier et revenir à la vérification",
+  "auth_account_delete_advice_available": "L’autorisation actuelle permet une demande de suppression. Les prérequis et l’autorisation seront revérifiés lors de l’envoi.",
+  "auth_account_delete_review_changed": "Votre compte ou votre session a changé. Rechargez la vérification et confirmez à nouveau.",
+  "auth_account_delete_submit_requirements": "L’envoi vérifie aussi les blocages temporaires et les tâches internes en attente. Cette page ne confirme pas leur résolution.",
+  "auth_account_delete_retention_limits": "Les données conservées suivent les exceptions de conservation adoptées. Les sauvegardes et copies externes sont distinctes ; cette page ne confirme pas leur effacement."
 }

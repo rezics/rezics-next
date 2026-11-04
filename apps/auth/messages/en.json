@@ -454,5 +454,11 @@
   "auth_security_passkeys_browser_unavailable": "This browser cannot create passkeys. You can still review and remove your saved passkeys.",
   "auth_security_inventory_truncated": "Some sessions or passkeys may not be shown. Refresh the list after making changes.",
   "auth_security_step_up_advice": "Confirm your identity again to continue.",
-  "auth_security_passkey_capacity": "You have reached the limit of 32 passkeys. Remove one before adding another."
+  "auth_security_passkey_capacity": "You have reached the limit of 32 passkeys. Remove one before adding another.",
+  "auth_account_delete_authentication_required": "Authenticate to review this account and its current deletion permission. Returning here never deletes the account.",
+  "auth_account_delete_authenticate": "Authenticate and return to review",
+  "auth_account_delete_advice_available": "Current permission allows a deletion request. Prerequisites and permission are checked again when you submit.",
+  "auth_account_delete_review_changed": "Your account or session changed. Reload the review and confirm again.",
+  "auth_account_delete_submit_requirements": "Submission also checks temporary holds and pending native work. This review does not verify that they are clear.",
+  "auth_account_delete_retention_limits": "Required retained records follow their adopted retention exceptions. Backup expiry and external copies are separate; this page cannot confirm their erasure."
 }

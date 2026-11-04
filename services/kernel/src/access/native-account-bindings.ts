@@ -1,3 +1,4 @@
+import { createAccountDeletionPageAccess, type AccountDeletionPageAccess } from './account-deletion-page-source.ts';
 import { createOperatorOpeningPageAccess, type OperatorOpeningPageAccess } from './operator-opening-page-source.ts';
 import { createOrganizationDeletionAccess, type OrganizationDeletionAccess } from './organization-deletion-source.ts';
 import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
@@ -261,7 +262,13 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     AutomatedOperatorAccess &
     AccountProfileAccess &
     OrganizationDeletionAccess &
+    AccountDeletionPageAccess &
     OperatorOpeningPageAccess = {
+    ...createAccountDeletionPageAccess({
+      pool,
+      access,
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
     ...createOperatorOpeningPageAccess({
       pool,
       access,

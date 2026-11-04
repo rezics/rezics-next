@@ -454,5 +454,11 @@
   "auth_security_passkeys_browser_unavailable": "此浏览器无法创建通行密钥。你仍可查看及移除已保存的通行密钥。",
   "auth_security_inventory_truncated": "当前仅显示第一批项目，可能还有其他项目。更改后请刷新。",
   "auth_security_step_up_advice": "请再次验证身份以继续。",
-  "auth_security_passkey_capacity": "通行密钥已达 32 组上限。请先移除一组再添加。"
+  "auth_security_passkey_capacity": "通行密钥已达 32 组上限。请先移除一组再添加。",
+  "auth_account_delete_authentication_required": "请先认证，再查看此账户及其当前删除权限。返回本页不会删除账户。",
+  "auth_account_delete_authenticate": "认证并返回查看",
+  "auth_account_delete_advice_available": "当前权限允许提交删除请求。提交时会再次检查前提条件和权限。",
+  "auth_account_delete_review_changed": "账户或会话已变化。请重新加载查看，并再次明确确认。",
+  "auth_account_delete_submit_requirements": "提交时还会检查临时保留和待处理的内部任务。本页不表示这些条件已满足。",
+  "auth_account_delete_retention_limits": "必须保留的记录遵循已采纳的保留例外。备份到期和外部副本另行处理；本页无法确认它们已被清除。"
 }

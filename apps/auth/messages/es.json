@@ -454,5 +454,11 @@
   "auth_security_passkeys_browser_unavailable": "Este navegador no puede crear claves de acceso. Puedes consultar y eliminar las claves guardadas.",
   "auth_security_inventory_truncated": "Solo se muestra la primera parte de la lista. Puede haber más elementos. Actualiza después de hacer cambios.",
   "auth_security_step_up_advice": "Confirma de nuevo tu identidad para continuar.",
-  "auth_security_passkey_capacity": "Has alcanzado el límite de 32 claves de acceso. Elimina una antes de añadir otra."
+  "auth_security_passkey_capacity": "Has alcanzado el límite de 32 claves de acceso. Elimina una antes de añadir otra.",
+  "auth_account_delete_authentication_required": "Autentícate para revisar esta cuenta y su permiso actual de eliminación. Volver aquí nunca elimina la cuenta.",
+  "auth_account_delete_authenticate": "Autenticarse y volver a la revisión",
+  "auth_account_delete_advice_available": "El permiso actual permite solicitar la eliminación. Los requisitos y el permiso se comprobarán de nuevo al enviar.",
+  "auth_account_delete_review_changed": "Tu cuenta o sesión ha cambiado. Recarga la revisión y vuelve a confirmar.",
+  "auth_account_delete_submit_requirements": "El envío también comprueba los bloqueos temporales y el trabajo interno pendiente. Esta revisión no confirma que estén resueltos.",
+  "auth_account_delete_retention_limits": "Los registros que deban conservarse siguen las excepciones de retención adoptadas. Los respaldos y las copias externas son independientes; esta página no confirma su borrado."
 }

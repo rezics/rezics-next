@@ -1,32 +1,28 @@
-import type { AccountIdentitySource } from '../../../account-identity';
+import type { AccountDeletionPage } from '../../../account-deletion-page';
 import { DeleteAccountContent } from '../../../routes/account.delete';
 import { m } from '../../../paraglide/messages.js';
 import {
   AuthStory,
   authLocale,
   reviewParameters,
-  session,
   storyAccount,
   populatedInventory,
-  unavailableInventory,
   button,
   fill,
   waitFor,
 } from '../story';
 
 export default { title: 'Pages/Account/Delete account', parameters: reviewParameters, decorators: [authLocale] };
-const initial = session('delete');
-// Same closed display shape as the native exact-self projection.
-const identitySource: AccountIdentitySource = async () => ({
-  kind: 'ready',
+const initial: AccountDeletionPage = {
+  kind: 'review',
   accountId: storyAccount,
-  email: '读者.長いメールアドレス.reading-companion@example.test',
-});
-const unavailableIdentity: AccountIdentitySource = async () => ({ kind: 'unavailable' });
+  email: '読者.長いメールアドレス.reading-companion@example.test',
+  action: 'available',
+  policy: 'personal-deletion',
+};
 const page = (mode: 'success' | 'refused' | 'unknown' | 'unavailable' = 'success', returning = false) => (
   <AuthStory mode={mode} {...(returning ? { returning: 'delete' as const } : {})}>
     <DeleteAccountContent
-      identitySource={identitySource}
       privacyContact="mailto:privacy@example.test"
       initial={initial}
       inventorySource={populatedInventory}
@@ -76,44 +72,50 @@ export const UnknownOutcome = {
 };
 export const DependencyUnavailable = {
   render: () => (
-    <AuthStory mode="unavailable">
-      <DeleteAccountContent
-        identitySource={identitySource}
-        privacyContact={null}
-        initial={initial}
-        inventorySource={unavailableInventory}
-      />
+    <AuthStory>
+      <DeleteAccountContent privacyContact="mailto:privacy@example.test" initial={{ kind: 'unavailable' }} />
     </AuthStory>
   ),
 };
 export const SignedOut = {
-  tags: ['!dev'],
+  render: () => (
+    <AuthStory>
+      <DeleteAccountContent privacyContact="mailto:privacy@example.test" initial={{ kind: 'signed-out' }} />
+    </AuthStory>
+  ),
+};
+export const AuthenticationRequired = {
   render: () => (
     <AuthStory>
       <DeleteAccountContent
-        identitySource={identitySource}
         privacyContact="mailto:privacy@example.test"
-        initial={{ kind: 'signed-out' }}
+        initial={{ kind: 'authentication-required', accountId: storyAccount }}
       />
     </AuthStory>
   ),
 };
-
-export const IdentityUnavailable = {
+export const NativeRefusal = {
   render: () => (
     <AuthStory>
       <DeleteAccountContent
         privacyContact="mailto:privacy@example.test"
-        initial={initial}
+        initial={{
+          ...initial,
+          kind: 'review',
+          accountId: storyAccount,
+          email: 'reader@example.test',
+          action: 'refused',
+          policy: 'personal-deletion',
+        }}
         inventorySource={populatedInventory}
-        identitySource={unavailableIdentity}
       />
     </AuthStory>
   ),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await waitFor(() => button(canvasElement, m.auth_account_identity_retry()));
-    const input = await waitFor(() => canvasElement.querySelector<HTMLInputElement>('#account-delete-input'));
-    if (input.value || !button(canvasElement, m.auth_account_delete_submit())?.disabled)
-      throw new Error('Identity context cannot supply deletion confirmation');
-  },
+};
+export const CurrentnessChanged = {
+  render: () => (
+    <AuthStory>
+      <DeleteAccountContent privacyContact="mailto:privacy@example.test" initial={{ kind: 'changed' }} />
+    </AuthStory>
+  ),
 };
