@@ -450,7 +450,10 @@ export async function importVndbCharacterTraits(input: {
   selectedWorkIds?: readonly string[];
   destination?: { origin: string };
 }): Promise<VndbCharacterTraitsResult> {
-  const plan = await planVndbCharacterTraits(input.tables, { selectedWorkIds: input.selectedWorkIds });
+  const plan = await planVndbCharacterTraits(
+    input.tables,
+    input.selectedWorkIds === undefined ? {} : { selectedWorkIds: input.selectedWorkIds },
+  );
   const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
     vocabularyAdmission: vndbCharacterVocabularyAdmission(input.bindings, plan),
     recordConcurrency: 1,

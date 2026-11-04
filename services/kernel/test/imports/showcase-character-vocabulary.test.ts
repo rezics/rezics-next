@@ -48,7 +48,12 @@ test('selected character traits and appearances use current adopted vocabulary a
   try {
     expect((await runtime.request(`/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`, { key: randomUUID(), tier: 'trusted' }, identitySupport(runtime.identity).managementBearer)).status).toBe(200);
     const editor = await openApiObserver(runtime);
-    await editor.grant({ route: 0, id: GLOBAL_CONTEXT }, ['context:accept', 'context:adopt']);
+    expect((await editor.http('/v1/grants', {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: runtime.identity.governance.accountId },
+      actions: ['context:accept', 'context:adopt'],
+      valid: '(,)',
+    })).status).toBe(201);
     const subjects = [
       ['trait-scheme', 'skos:ConceptScheme', 'VNDB traits'], ['other-scheme', 'skos:ConceptScheme', 'Other terms'],
       ['trait-i73', 'skos:Concept', 'Silver hair'], ['trait-i74', 'skos:Concept', 'Unadmitted trait'],
