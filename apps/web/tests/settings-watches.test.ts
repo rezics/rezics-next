@@ -321,6 +321,69 @@ test('owner-denied remove advice keeps concealed rows and withholds the stop com
   });
 });
 
+test('a confirmed original board stop preserves a refreshed revision and keeps read feedback separate', async () => {
+  const boardAt = (revision: number, target: ManagedWatch['target']) =>
+    managed({
+      subscriptionId: 'board-subscription',
+      kind: 'board',
+      revision,
+      createdAt: '2026-11-03T10:00:00.000Z',
+      target,
+    });
+  const originalRow = boardAt(11, null);
+  const currentRow = boardAt(13, { title: 'Current board', href: '/boards/current' });
+  let result: WatchRead = page([originalRow]);
+  const commands: StopWatch[] = [];
+  const { controller } = setup({
+    read: async () => result,
+    stop: async (command) => {
+      commands.push(command);
+      return commands.length === 1
+        ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } }
+        : { kind: 'removed' };
+    },
+  });
+
+  await controller.selectKind('board');
+  await controller.stop(originalRow.subscriptionId);
+  const original = controller.snapshot().command!;
+  result = { kind: 'unavailable', problem: { status: 502, code: 'inventory_unavailable' } };
+  await controller.refresh();
+  expect(controller.snapshot()).toMatchObject({
+    read: 'unavailable',
+    readProblem: { code: 'inventory_unavailable' },
+    write: 'uncertain',
+    writeProblem: { code: 'deadline_exceeded' },
+    command: original,
+  });
+
+  result = page([currentRow]);
+  await controller.refresh();
+  expect(controller.snapshot()).toMatchObject({
+    read: 'ready',
+    readProblem: null,
+    write: 'uncertain',
+    writeProblem: { code: 'deadline_exceeded' },
+    command: original,
+    rows: [currentRow],
+  });
+  await controller.retryOriginal();
+  expect(commands[1]).toBe(original);
+  expect(controller.snapshot()).toMatchObject({
+    write: 'removed_current',
+    command: null,
+    writeProblem: null,
+    rows: [currentRow],
+    viewer,
+    actions,
+  });
+
+  await controller.stop(currentRow.subscriptionId);
+  expect(commands[2]).toMatchObject({ watchId: 'board-subscription', kind: 'board', expectedRevision: 13 });
+  expect(commands[2]?.idempotencyKey).not.toBe(original.idempotencyKey);
+  expect(controller.snapshot()).toMatchObject({ write: 'removed', rows: [], command: null });
+});
+
 test('conflict and access-denied stops do not replay the original command', async () => {
   const commands: StopWatch[] = [];
   let outcome: 'conflict' | 'denied' = 'conflict';
