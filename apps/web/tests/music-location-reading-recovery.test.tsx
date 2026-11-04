@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -276,6 +276,8 @@ test('denied, withheld and changed results remove retained rows and offer no una
 
 test('endpoint focus returns only after a current keyboard origin leaves the window, and never steals moved focus', async () => {
   const ui = await mount();
+  let now = Date.now();
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
   try {
     await ui.render(<MusicLocationReader {...props} />);
     const anchor = ui.host.querySelector<HTMLAnchorElement>('a[target="_blank"]')!;
@@ -307,6 +309,16 @@ test('endpoint focus returns only after a current keyboard origin leaves the win
     back();
     expect(document.activeElement).toBe(document.body);
     enter();
+    now += 2_000;
+    leave();
+    back();
+    expect(document.activeElement).toBe(document.body);
+    enter();
+    leave();
+    now += 31_000;
+    back();
+    expect(document.activeElement).toBe(document.body);
+    enter();
     leave();
     await ui.render(<MusicLocationReader {...props} source={{}} />);
     back();
@@ -319,6 +331,7 @@ test('endpoint focus returns only after a current keyboard origin leaves the win
     back();
     expect(document.activeElement?.tagName).toBe('H2');
   } finally {
+    clock.mockRestore();
     await ui.close();
   }
 });
