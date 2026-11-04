@@ -532,6 +532,13 @@ for (const attempt of [
     }) as typeof fetch;
     await flush(() => button(host, m.auth_account_delete_retry()).click());
     await flush(() => {});
+    expect(calls).toEqual([
+      '/session',
+      '/session',
+      '/session',
+      OPERATOR_TRANSFER_PAGE_PATH,
+      ...(attempt?.phase === 'approve' ? ['/session', OPERATOR_TRANSFER_PAGE_PATH] : []),
+    ]);
     expect(window.sessionStorage.getItem('rezics.operator-transfer.attempt')).toBe(saved);
     expect(host.textContent).not.toContain(m.auth_transfer_account_changed());
     if (!attempt) expect(host.querySelector('#transfer-subject')).not.toBeNull();
@@ -543,13 +550,6 @@ for (const attempt of [
       if (attempt.phase === 'accepted') text(host, m.auth_transfer_accepted());
       if (attempt.phase === 'execute') expect(host.textContent).toContain(m.auth_transfer_uncertain());
     }
-    expect(calls).toEqual([
-      '/session',
-      '/session',
-      '/session',
-      OPERATOR_TRANSFER_PAGE_PATH,
-      ...(attempt?.phase === 'approve' ? ['/session', OPERATOR_TRANSFER_PAGE_PATH] : []),
-    ]);
   });
 }
 

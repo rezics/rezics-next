@@ -16,6 +16,7 @@ import {
   type TransferAttempt,
 } from '../src/operator-transfer';
 creationFixture();
+const { m } = await import('../src/paraglide/messages.js');
 async function flush(action: () => void) {
   await act(async () => {
     action();
@@ -262,7 +263,15 @@ test('reconciled results leave normally and permission loss revokes a draft with
   window.sessionStorage.clear();
   await page.render(page.view());
   await page.edit('subject', 'subject');
-  globalThis.fetch = (() => Promise.resolve(Response.json({ ...session, scope: [] }))) as typeof fetch;
+  globalThis.fetch = ((input, init) => {
+    if (String(input) === '/session') return Promise.resolve(Response.json({ ...session, scope: [] }));
+    if (String(input) === '/account-management/operators/transfer-review') {
+      const body = JSON.parse(String(init?.body));
+      if (body.kind === 'readiness')
+        return Promise.resolve(Response.json({ viewer: { kind: 'refused' }, review: { kind: 'readiness' } }));
+    }
+    throw new Error(`Unexpected permission-loss read: ${input}`);
+  }) as typeof fetch;
   await page.navigate();
   expect(page.host.querySelector('dialog')).toBeNull();
   expect(page.unload()).toBe(false);
