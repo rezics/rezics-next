@@ -857,8 +857,7 @@ export class WorkerJob implements GateOutcomeSink {
           if (cpu !== undefined && lastCpu !== undefined && cpu > lastCpu) noteNow();
         } else {
           sampledWork = true;
-          if (newest > activity.startedAt)
-            lastLogActivityAt = Math.max(lastLogActivityAt, Math.min(now, newest));
+          if (newest > activity.startedAt) lastLogActivityAt = Math.max(lastLogActivityAt, Math.min(now, newest));
           if (headSample.committedAt !== undefined && headSample.committedAt > activity.startedAt)
             lastLogActivityAt = Math.max(lastLogActivityAt, Math.min(now, headSample.committedAt));
         }
