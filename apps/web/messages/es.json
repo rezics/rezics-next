@@ -8468,5 +8468,21 @@
   "realm_question_management_retired": "Retirada",
   "realm_question_management_units": "Unidades de valoración almacenadas",
   "realm_question_management_zero": "Cero es una puntuación válida. Si no hay puntuación, no hay respuesta.",
-  "realm_question_management_display_step": "Incremento mostrado {step}"
+  "realm_question_management_display_step": "Incremento mostrado {step}",
+  "library_vndb_use_match": "Elegir esta coincidencia nativa exacta",
+  "library_vndb_replace_source": "Sustituir la exportación XML",
+  "library_vndb_previous_page": "Leer la página anterior",
+  "library_vndb_result_unchanged": "Sin cambios; se omitió esta fila",
+  "library_vndb_result_rejected": "Rechazada; actualiza la revisión de esta fila antes de elegir otro cambio",
+  "library_vndb_result_uncertain": "Resultado incierto; reintenta la selección mostrada originalmente",
+  "library_vndb_apply_refused": "Solicitud rechazada; se conserva la selección original para un reintento explícito",
+  "library_vndb_review_withdrawn": "La revisión de la fuente ya no está vigente. Sustituye la exportación para iniciar otra revisión.",
+  "library_vndb_library_title": "Continuar en tu biblioteca",
+  "library_vndb_library_help": "Lee hasta ocho entradas actuales, ordenadas por actividad reciente. Se vuelve a leer la biblioteca, sin deducirla del XML. Las puntuaciones y el progreso de origen no cambian valores locales. Al salir se detienen nuevas tareas de importación; los cambios confirmados permanecen.",
+  "library_vndb_library_refresh": "Leer la biblioteca actual",
+  "library_vndb_library_loading": "Leyendo la biblioteca actual…",
+  "library_vndb_library_open": "Abrir biblioteca",
+  "library_vndb_library_count": "Entradas actuales mostradas: {count}",
+  "library_vndb_library_state": "Estado en la biblioteca: {state}",
+  "library_vndb_library_more": "Abre la biblioteca para explorar más entradas actuales."
 }

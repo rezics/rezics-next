@@ -331,12 +331,8 @@ test.each(['denied', 'unknown'] as const)('source replacement retires review bef
   await journey.confirm();
   expect(journey.snapshot()).toMatchObject({ sourceXML: null, rows: [], selection: [], outcomes: [] });
   expect(previews).toEqual(['<original/>']);
-  if (kind === 'unknown') {
-    await journey.retryUnknown();
-    expect(deletes[1]).toBe(deletes[0]);
-  } else {
-    await journey.preview('<replacement/>');
-  }
+  await journey.retryUnknown();
+  expect(deletes[1]).toBe(deletes[0]);
   expect(previews).toEqual(['<original/>', '<replacement/>']);
 });
 

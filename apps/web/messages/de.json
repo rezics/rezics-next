@@ -8468,5 +8468,21 @@
   "realm_question_management_retired": "Stillgelegt",
   "realm_question_management_units": "Gespeicherte Bewertungseinheiten",
   "realm_question_management_zero": "Null ist eine gültige Bewertung. Ohne Bewertung liegt keine Antwort vor.",
-  "realm_question_management_display_step": "Anzeigeschritt {step}"
+  "realm_question_management_display_step": "Anzeigeschritt {step}",
+  "library_vndb_use_match": "Diesen exakten nativen Treffer wählen",
+  "library_vndb_replace_source": "XML-Export ersetzen",
+  "library_vndb_previous_page": "Vorherige Seite lesen",
+  "library_vndb_result_unchanged": "Unverändert; diese Zeile wurde übersprungen",
+  "library_vndb_result_rejected": "Abgelehnt; vor einer anderen Änderung die Prüfung dieser Zeile aktualisieren",
+  "library_vndb_result_uncertain": "Ergebnis ungewiss; die ursprünglich angezeigte Auswahl erneut versuchen",
+  "library_vndb_apply_refused": "Anwendung abgelehnt; die ursprüngliche Auswahl bleibt für einen bewussten Neuversuch erhalten",
+  "library_vndb_review_withdrawn": "Die Quellprüfung ist nicht mehr aktuell. Ersetze den Export für eine neue Prüfung.",
+  "library_vndb_library_title": "Weiter in deiner Bibliothek",
+  "library_vndb_library_help": "Lies bis zu acht aktuelle Bibliothekseinträge nach letzter Aktivität. Die Bibliothek wird neu gelesen, nicht aus der XML abgeleitet. Quellbewertungen und Fortschritt ändern keine lokalen Werte. Beim Verlassen stoppen neue Importarbeiten; bestätigte Änderungen bleiben.",
+  "library_vndb_library_refresh": "Aktuelle Bibliothek lesen",
+  "library_vndb_library_loading": "Aktuelle Bibliothek wird gelesen…",
+  "library_vndb_library_open": "Bibliothek öffnen",
+  "library_vndb_library_count": "Angezeigte aktuelle Bibliothekseinträge: {count}",
+  "library_vndb_library_state": "Bibliotheksstatus: {state}",
+  "library_vndb_library_more": "Öffne die Bibliothek, um weitere aktuelle Einträge zu sehen."
 }

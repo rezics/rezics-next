@@ -35,14 +35,16 @@ export function VndbRowReview({
   const notMappable = row.kind === 'retained' || row.match.status === 'unsupported';
   const [action, setAction] = useState<'state' | 'skip' | 'retain'>(notMappable ? 'retain' : 'state');
   const [target, setTarget] = useState<EntityPickerSubject | null>(null);
+  const [nativeChosen, setNativeChosen] = useState(false);
   const [states, setStates] = useState<StateChoice[]>([]);
   const [stateId, setStateId] = useState('');
   const [replace, setReplace] = useState(false);
   const [loading, setLoading] = useState(false);
+  const targetId = target?.id ?? (nativeChosen ? row.target?.targetId : null);
   const baseline =
-    row.target && target?.id === row.target.targetId
+    row.target && targetId === row.target.targetId
       ? row.target.baseline
-      : row.decision && target?.id === row.decision.targetId
+      : row.decision && targetId === row.decision.targetId
         ? row.decision.baseline
         : null;
 
@@ -50,6 +52,13 @@ export function VndbRowReview({
     let current = true;
     setStates([]);
     setStateId('');
+    if (nativeChosen && row.target) {
+      setStates(row.target.states.map((item) => ({ id: item.id, label: labelFor(item) })));
+      setLoading(false);
+      return () => {
+        current = false;
+      };
+    }
     if (!target) {
       setLoading(false);
       return () => {
@@ -90,7 +99,7 @@ export function VndbRowReview({
     return () => {
       current = false;
     };
-  }, [row.target, target]);
+  }, [row.target, target, nativeChosen]);
 
   function selectAction(next: 'state' | 'skip' | 'retain') {
     setAction(next);
@@ -99,8 +108,8 @@ export function VndbRowReview({
 
   function save() {
     if (action === 'state') {
-      if (!target || !stateId || !states.some((item) => item.id === stateId)) return;
-      onReview({ ordinal: row.ordinal, action, targetId: target.id, state: stateId, replace });
+      if (!targetId || !stateId || !states.some((item) => item.id === stateId)) return;
+      onReview({ ordinal: row.ordinal, action, targetId, state: stateId, replace });
     } else {
       onReview({ ordinal: row.ordinal, action });
     }
@@ -150,16 +159,36 @@ export function VndbRowReview({
       </fieldset>
       {action === 'state' && !notMappable ? (
         <div className="space-y-3">
+          {row.match.status === 'matched' && row.target ? (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="break-words text-sm">{m.library_vndb_target_id({ id: row.target.targetId })}</p>
+              <VndbAction
+                type="button"
+                variant="outline"
+                disabled={busy}
+                aria-pressed={nativeChosen}
+                onClick={() => {
+                  setTarget(null);
+                  setNativeChosen(true);
+                  setStateId('');
+                  setReplace(false);
+                }}
+              >
+                {m.library_vndb_use_match()}
+              </VndbAction>
+            </div>
+          ) : null}
           <VndbTargetSearch
             disabled={busy}
             value={target}
             onChange={(next) => {
               setTarget(next);
+              setNativeChosen(false);
               setStateId('');
               setReplace(false);
             }}
           />
-          {target ? (
+          {targetId ? (
             <Field>
               <FieldLabel htmlFor={`${id}-state`} className="min-h-11 items-center">
                 {m.library_vndb_state_label()}
@@ -179,9 +208,7 @@ export function VndbRowReview({
                 ))}
               </select>
               {loading ? <p role="status">{m.library_vndb_states_loading()}</p> : null}
-              {target.types.length === 0 || (!loading && states.length === 0) ? (
-                <p role="status">{m.library_vndb_states_unavailable()}</p>
-              ) : null}
+              {!loading && states.length === 0 ? <p role="status">{m.library_vndb_states_unavailable()}</p> : null}
             </Field>
           ) : null}
           {row.suggestedRole ? <p>{m.library_vndb_role_is_only_suggestion({ role: row.suggestedRole })}</p> : null}
@@ -200,7 +227,7 @@ export function VndbRowReview({
       {notMappable ? <p>{m.library_vndb_unmappable_help()}</p> : null}
       <VndbAction
         type="button"
-        disabled={busy || (action === 'state' && (!target || !stateId || loading))}
+        disabled={busy || (action === 'state' && (!targetId || !stateId || loading))}
         onClick={save}
       >
         {m.library_bangumi_save_review()}

@@ -9,6 +9,7 @@ export function VndbReviewPage({
   busy,
   onReview,
   onNext,
+  onPrevious,
   onConfirm,
   onSource,
   onHideSource,
@@ -17,6 +18,7 @@ export function VndbReviewPage({
   busy: boolean;
   onReview: (body: VndbReviewInput) => void;
   onNext: () => void;
+  onPrevious: () => void;
   onConfirm: () => void;
   onSource: () => void;
   onHideSource: () => void;
@@ -54,6 +56,11 @@ export function VndbReviewPage({
         ))}
       </ul>
       <div className="flex flex-wrap gap-3">
+        {snap.offset > 0 ? (
+          <VndbAction type="button" variant="outline" disabled={busy} onClick={onPrevious}>
+            {m.library_vndb_previous_page()}
+          </VndbAction>
+        ) : null}
         {snap.page?.next !== null && snap.page ? (
           <VndbAction type="button" variant="outline" disabled={busy} onClick={onNext}>
             {m.library_vndb_next_page()}

@@ -8468,5 +8468,21 @@
   "realm_question_management_retired": "종료됨",
   "realm_question_management_units": "저장된 평가 단위",
   "realm_question_management_zero": "0은 유효한 점수입니다. 점수가 없으면 응답이 없는 것입니다.",
-  "realm_question_management_display_step": "표시 간격 {step}"
+  "realm_question_management_display_step": "표시 간격 {step}",
+  "library_vndb_use_match": "이 정확한 네이티브 일치 대상 선택",
+  "library_vndb_replace_source": "XML 내보내기 교체",
+  "library_vndb_previous_page": "이전 페이지 읽기",
+  "library_vndb_result_unchanged": "변경 없음. 이 행은 건너뛰었습니다",
+  "library_vndb_result_rejected": "거부되었습니다. 다른 변경을 선택하기 전에 이 행의 검토를 새로 읽으세요",
+  "library_vndb_result_uncertain": "결과가 확실하지 않습니다. 원래 표시된 선택으로 다시 시도하세요",
+  "library_vndb_apply_refused": "적용 요청이 거부되었습니다. 명시적으로 재시도할 수 있도록 원래 선택을 보관합니다",
+  "library_vndb_review_withdrawn": "원본 검토가 더 이상 유효하지 않습니다. 내보내기를 교체하여 새 검토를 시작하세요.",
+  "library_vndb_library_title": "내 라이브러리로 이동",
+  "library_vndb_library_help": "최근 활동순으로 현재 라이브러리 항목을 최대 8개 읽습니다. XML에서 추정하지 않고 라이브러리를 새로 읽습니다. 원본 점수와 진행률은 로컬 값을 바꾸지 않습니다. 나가면 새 가져오기 작업은 중지되지만 확인된 변경은 유지됩니다.",
+  "library_vndb_library_refresh": "현재 라이브러리 읽기",
+  "library_vndb_library_loading": "현재 라이브러리를 읽는 중…",
+  "library_vndb_library_open": "라이브러리 열기",
+  "library_vndb_library_count": "표시된 현재 라이브러리 항목: {count}",
+  "library_vndb_library_state": "라이브러리 상태: {state}",
+  "library_vndb_library_more": "라이브러리를 열어 현재 항목을 더 살펴보세요."
 }
