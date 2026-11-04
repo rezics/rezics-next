@@ -624,15 +624,6 @@ test('reverse Bangumi relations retain their source meaning through canonical ma
 test('every inventoried Bangumi term is bundled, proposed by the vocabulary rules, or omitted with a reason', () => {
   const data = inventory();
   conceptIds.clear();
-  for (const file of data.files) {
-    validate(file.type);
-    for (const field of file.fields) validate(field.mapping);
-    const summary = file.fields.find(({ id }) => id === 'summary' || id === 'description');
-    if (summary) expect(summary.mapping.licence).toEqual({ id: 'CC-BY-SA-3.0', url: data.snapshot.licence.url });
-  }
-  for (const template of data.infobox) for (const field of template.fields) validate(field.mapping);
-  for (const group of data.enumerations) for (const entry of group.values) validate(entry.mapping);
-  for (const mapping of data.vocabulary) validate(mapping);
   const group = (id: string) => data.enumerations.find((entry) => entry.id === id)!.values;
   for (const id of ['staff.3', 'staff.6', 'relation.3'])
     for (const entry of group(id)) expect(entry.mapping.status).toBe('omitted');
@@ -645,6 +636,7 @@ test('every inventoried Bangumi term is bundled, proposed by the vocabulary rule
   for (const entry of liveActionRelations.filter((entry) => entry.id !== 1))
     expect(entry.mapping.status).toBe('omitted');
   const counterpart = bundledRelease.properties['rezics:crossMediaCounterpart']!;
+  expect(bundledRelease.types['schema:TVSeries']?.properties).toContain('rezics:crossMediaCounterpart');
   for (const type of ['schema:Movie', 'schema:TVSeries']) {
     const pending = [type];
     const seen = new Set<string>();
@@ -661,6 +653,15 @@ test('every inventoried Bangumi term is bundled, proposed by the vocabulary rule
     expect(counterpart.datatype).toBe('wikibase-item');
     expect(admitted).toBe(true);
   }
+  for (const file of data.files) {
+    validate(file.type);
+    for (const field of file.fields) validate(field.mapping);
+    const summary = file.fields.find(({ id }) => id === 'summary' || id === 'description');
+    if (summary) expect(summary.mapping.licence).toEqual({ id: 'CC-BY-SA-3.0', url: data.snapshot.licence.url });
+  }
+  for (const template of data.infobox) for (const field of template.fields) validate(field.mapping);
+  for (const group of data.enumerations) for (const entry of group.values) validate(entry.mapping);
+  for (const mapping of data.vocabulary) validate(mapping);
   expect(group('subject.type').find((entry) => entry.id === 3)!.mapping).toMatchObject({
     status: 'existing',
     term: 'schema:MusicAlbum',
