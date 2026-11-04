@@ -1140,6 +1140,10 @@ test('actual null-CSRF Settings composition retains reloads, disabled writers an
         ok: true,
         page: {
           account: { id: 'alice', kind: 'actor', displayName: 'Alice', handle: null },
+          viewer: {
+            state: 'current',
+            account: { id: 'alice', kind: 'actor', displayName: 'Alice', handle: null },
+          },
           organizations: { state: 'ready', items: [], next: null },
           responsibilities: { items: [], next: null },
         },

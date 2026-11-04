@@ -246,6 +246,7 @@ test('directory, organization, account and recovery retain independent phone con
       const rows = Array.from({ length: size }, (_, index) => ({
         account: { ...organization, id: `01a1a000-0000-7000-8000-${String(index).padStart(12, '0')}` },
         role: 'owner' as const,
+        navigation: { state: 'admitted' as const },
       }));
       await mount(
         directory(

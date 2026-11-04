@@ -13,8 +13,10 @@ import { AccountRenameRegion } from '../../src/settings/account-safety';
 
 const viewerId = '019a0000-0000-7000-8000-000000000001';
 const target = { viewerId, accountId: viewerId };
+const account = { id: viewerId, kind: 'actor' as const, handle: null, displayName: null };
 const page = {
-  account: { id: viewerId, kind: 'actor' as const, handle: null, displayName: null },
+  account,
+  viewer: { state: 'current' as const, account },
   organizations: { state: 'ready' as const, items: [], next: 'opaque/+=' },
   responsibilities: { items: [], next: null },
 };

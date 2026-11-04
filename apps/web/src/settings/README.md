@@ -2,6 +2,10 @@
 
 Embedded inventory, detail, action-entry and rename-entry reads use a ten-second deadline including response bodies, composed with caller cancellation; timeout releases pending state into the existing localized retry views, and only deliberate recovery rechecks the current account. Independent feeds retain valid cursors and usable pages on transient failure; session retirement discards late replies. Cancellation never proves that a dispatched command had no effect and never replays a mutation.
 
+The managed-account directory keeps one native page per feed (at most 20 rows, 40 retained identities in total), plus finite current/pending frontier state. Next replaces the selected feed; return-to-first is cursor-free; a stale cursor offers the same restart and never walks automatically. Duplicate identities collapse to the first occurrence inside the current native page only. Detail stays mounted beside a hidden directory so Back preserves that bounded observation for the same viewer and route lifetime; viewer, token or authority loss retires it. Only native `admitted` navigation opens the private target; identity labels are presentation.
+
+**Decision:** Missing additive viewer/navigation from an unpublished generated client is observed as unavailable (`e9314e51` publishes that closure). A reconciling or otherwise non-admitted visible row keeps its readable identity with an unavailable control.
+
 Applicant verification requests use the same ten-second account budget, including headers and bodies, with caller cancellation and explicit recovery only. Review and command readback never await optional subject titles: a separate cancellable title read enhances the existing generic label. Subject suggestions require a fresh caller-bound eligibility release; unavailable reads remain retryable failures, never empty or definitive ineligibility. Uncertain commands retain their exact original input and key, and cancellation grants no replay or completion authority. Reviewer transport remains separate.
 
 ## Watches

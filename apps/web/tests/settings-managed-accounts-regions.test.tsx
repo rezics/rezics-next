@@ -182,8 +182,8 @@ test('two mounted inventories name their independent feeds and retain exact spar
     expect(a.innerHTML).not.toContain(initial.responsibilities.items[1]!.accountId);
     expect(otherOrg.textContent).toContain(m.managed_no_current_page());
     expect(otherOrg.textContent).not.toContain(m.managed_no_organizations());
-    await view.click(button(org, m.settings_managed_load_more()));
-    await view.click(button(resp, m.settings_managed_load_more()));
+    await view.click(button(org, m.managed_next()));
+    await view.click(button(resp, m.managed_next()));
     expect(org.getAttribute('aria-busy')).toBe('true');
     expect(resp.getAttribute('aria-busy')).toBe('true');
     expect(region(a, m.managed_your_account()).getAttribute('aria-busy')).toBe('false');
@@ -197,7 +197,9 @@ test('two mounted inventories name their independent feeds and retain exact spar
     associations(a);
     await first.answer(ready({ ...initial, organizations: { state: 'ready', items: [], next: 'next org +/=' } }));
     expect(org.getAttribute('aria-busy')).toBe('false');
-    expect(within(org).getByRole('link', { name: longName })).toBe(link);
+    expect(within(org).queryByRole('link', { name: longName })).toBeNull();
+    expect(org.textContent).toContain(m.managed_no_current_page());
+    expect(within(org).getByRole('button', { name: m.settings_managed_first_page() })).toBeDefined();
     expect(resp.textContent).toContain(m.settings_managed_responsibilities_retry_wait());
     expect(org.textContent).not.toContain(m.settings_managed_responsibilities_retry_wait());
     associations(a);
@@ -210,10 +212,10 @@ test('two mounted inventories name their independent feeds and retain exact spar
       { organizationsCursor: initial.organizations.next! },
       { operatorsCursor: initial.responsibilities.next! },
     ]);
-    await view.click(button(otherOrg, m.settings_managed_load_more()));
+    await view.click(button(otherOrg, m.managed_next()));
     await second.answer(ready({ ...sparse, organizations: { state: 'ready', items: [], next: null } }));
     expect(otherOrg.textContent).toContain(m.managed_no_organizations());
-    expect(within(otherOrg).queryByRole('button')).toBeNull();
+    expect(within(otherOrg).getByRole('button', { name: m.settings_managed_first_page() })).toBeDefined();
     expect(second.calls).toEqual([{}, { organizationsCursor: '' }]);
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -233,7 +235,7 @@ test('two mounted inventories name their independent feeds and retain exact spar
     );
     expect(resp.textContent).toContain(m.managed_no_responsibilities());
     expect(within(resp).queryByRole('button')).toBeNull();
-    expect(org.contains(link)).toBe(true);
+    expect(org.textContent).toContain(m.managed_no_current_page());
     expect(within(org).queryByText(m.managed_preparing_text())).toBeNull();
     expect(first.calls).toEqual([
       {},
@@ -258,7 +260,7 @@ test('organization retry and first-page controls preserve retained responsibilit
     const org = region(inventory, m.managed_organizations_title());
     const resp = region(inventory, m.managed_operated_title());
     const retained = resp.innerHTML;
-    await view.click(button(org, m.settings_managed_load_more()));
+    await view.click(button(org, m.managed_next()));
     await feed.answer(managedAccountsFailure(400, { code: 'invalid_cursor' }));
     associations(inventory);
     await view.click(button(org, m.settings_retry()));
@@ -317,7 +319,7 @@ test('inventory failure, preparing and sparse responsibility recovery keep their
     expect(within(org).getAllByRole('status')).toHaveLength(1);
     expect(within(org).queryByRole('button', { name: m.settings_managed_restart_list() })).toBeNull();
     await feed.answer(ready({ ...preparing, organizations: { state: 'ready', items: [], next: null } }));
-    await view.click(button(resp, m.settings_managed_load_more()));
+    await view.click(button(resp, m.managed_next()));
     await feed.answer(ready({ ...preparing, responsibilities: { items: [], next: null } }));
     expect(resp.textContent).toContain(m.managed_no_responsibilities());
     expect(feed.calls).toEqual([{}, {}, {}, { operatorsCursor: preparing.responsibilities.next! }]);
@@ -374,7 +376,7 @@ test('current-viewer withdrawal withholds every identity and refuses retained co
     const inventory = view.inventory();
     const links = [...inventory.querySelectorAll('a')];
     const controls = [...inventory.querySelectorAll('button')];
-    await view.click(button(region(inventory, m.managed_organizations_title()), m.settings_managed_load_more()));
+    await view.click(button(region(inventory, m.managed_organizations_title()), m.managed_next()));
     await act(async () => {
       view.client
         .getQueryCache()

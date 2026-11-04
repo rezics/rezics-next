@@ -60,18 +60,21 @@ const withheld = '019a0000-0000-7000-8000-000000000099';
 const longName = 'InternationaleLesegemeinschaftFürUnabhängigeVeröffentlichungen'.repeat(5);
 const settingsHref = '/de/settings?panel=compact&managedAccount=old#profile';
 function page(size = 1): ManagedAccountsPage {
+  const account = { id: viewer, kind: 'actor' as const, displayName: longName, handle: longName.toLowerCase() };
   return {
-    account: { id: viewer, kind: 'actor', displayName: longName, handle: longName.toLowerCase() },
+    account,
+    viewer: { state: 'current', account },
     organizations: {
       state: 'ready',
       items: Array.from({ length: size }, (_, index) => ({
         account: {
           id: `${org.slice(0, -12)}${String(index + 2).padStart(12, '0')}`,
-          kind: 'organization',
+          kind: 'organization' as const,
           displayName: `Organization ${index} ${longName}`,
           handle: longName,
         },
-        role: index % 2 ? 'member' : 'owner',
+        role: index % 2 ? ('member' as const) : ('owner' as const),
+        navigation: { state: 'admitted' as const },
       })),
       next: 'organization opaque +/= &?%',
     },
@@ -80,10 +83,17 @@ function page(size = 1): ManagedAccountsPage {
         {
           reservationId: org,
           accountId: operator,
-          account: { id: operator, kind: 'actor', displayName: `Operator ${longName}`, handle: null },
+          account: { id: operator, kind: 'actor' as const, displayName: `Operator ${longName}`, handle: null },
           state: 'current',
+          navigation: { state: 'admitted' as const },
         },
-        { reservationId: operator, accountId: withheld, account: null, state: 'reconciling' },
+        {
+          reservationId: operator,
+          accountId: withheld,
+          account: null,
+          state: 'reconciling',
+          navigation: { state: 'concealed' as const },
+        },
       ],
       next: 'responsibility opaque +/= &?%',
     },
@@ -205,13 +215,13 @@ test('mounted independent inventories retain native controls, long and unavailab
     expect(first.querySelector('a')?.getAttribute('href')).toBe(managedAccountHref(settingsHref, viewer));
     const organizations = feed(first, m.managed_organizations_title());
     const responsibilities = feed(first, m.managed_operated_title());
-    await settle(() => button(organizations, m.settings_managed_load_more()).click());
+    await settle(() => button(organizations, m.managed_next()).click());
     expect(organizations.getAttribute('aria-busy')).toBe('true');
     expect(button(organizations, m.settings_managed_loading()).disabled).toBe(true);
     await settle(() => button(organizations, m.settings_managed_loading()).click());
     expect(a.calls).toHaveLength(2);
-    expect(button(responsibilities, m.settings_managed_load_more()).disabled).toBe(false);
-    await settle(() => button(feed(second, m.managed_operated_title()), m.settings_managed_load_more()).click());
+    expect(button(responsibilities, m.managed_next()).disabled).toBe(false);
+    await settle(() => button(feed(second, m.managed_operated_title()), m.managed_next()).click());
     expect(b.calls).toEqual([{}, { operatorsCursor: page().responsibilities.next! }]);
     await settle(() =>
       a.replies[1]!.resolve(managedAccountsFailure(409, { code: 'stale_cursor' }, { 'Retry-After': '1' })),
@@ -254,13 +264,13 @@ test('mounted independent inventories retain native controls, long and unavailab
     expect(organizations.textContent).not.toContain(m.managed_no_organizations());
     expect(responsibilities.textContent).toContain(m.managed_reconciling());
     expect(b.calls).toHaveLength(2);
-    await settle(() => button(organizations, m.settings_managed_load_more()).click());
+    await settle(() => button(organizations, m.managed_next()).click());
     const exhausted = page();
     exhausted.organizations = { state: 'ready', items: [], next: null };
     await settle(() => a.replies[4]!.resolve(ready(exhausted)));
     expect(a.calls[4]).toEqual({ organizationsCursor: 'sparse continuation +/=' });
     expect(organizations.textContent).toContain(m.managed_no_organizations());
-    expect(organizations.querySelector('button')).toBeNull();
+    expect(button(organizations, m.settings_managed_first_page()).disabled).toBe(false);
     await settle(() => b.replies[1]!.resolve(ready()));
     geometryContract(view.host);
   } finally {
@@ -287,7 +297,7 @@ test('mounted preparing and sparse responsibilities remain distinct from empty a
     expect(
       [...view.host.querySelectorAll('button')].some((node) => node.textContent === m.settings_managed_restart_list()),
     ).toBe(false);
-    await settle(() => button(view.host, m.settings_managed_load_more()).click());
+    await settle(() => button(view.host, m.managed_next()).click());
     const empty = page();
     empty.responsibilities = { items: [], next: null };
     await settle(() => source.replies[2]!.resolve(ready(empty)));
@@ -361,7 +371,7 @@ for (const transition of ['error', 'signed-out', 'subject', 'remove'] as const) 
         expect(source.calls).toEqual([{}]);
         await settle(() => source.replies[0]!.resolve(ready()));
         const links = [...view.host.querySelectorAll('a')];
-        await settle(() => button(feed(view.host, m.managed_operated_title()), m.settings_managed_load_more()).click());
+        await settle(() => button(feed(view.host, m.managed_operated_title()), m.managed_next()).click());
         await settle(() => {
           if (transition === 'error')
             client
@@ -421,9 +431,9 @@ for (const selected of ['organizations', 'responsibilities'] as const) {
       const region = feed(view.host, label);
       const sibling = feed(view.host, siblingLabel);
       const rows = region.querySelector('ul')!.innerHTML;
-      await settle(() => button(region, m.settings_managed_load_more()).click());
+      await settle(() => button(region, m.managed_next()).click());
       await settle(() => source.replies[1]!.resolve(managedAccountsFailure(400, { code: 'invalid_cursor' })));
-      await settle(() => button(sibling, m.settings_managed_load_more()).click());
+      await settle(() => button(sibling, m.managed_next()).click());
       await settle(() => button(region, m.settings_managed_restart_list()).click());
       expect(source.calls[3]).toEqual({});
       expect(button(region, m.settings_retry()).disabled).toBe(true);
@@ -487,7 +497,7 @@ for (const [locale, direction, width] of [
 
 // Native pages admit at most 20 per feed. Exercise supplied sizes 1/8/20, never pretend 64 is admitted.
 for (const size of [1, 8, 20]) {
-  test(`mounted supplied ${size}-row page adds no IO per identity`, async () => {
+  test(`mounted supplied ${size}-row page adds no IO per identity and sequential pages stay within 40 retained rows`, async () => {
     const source = controlled();
     const view = await mount(<ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} />);
     try {
@@ -495,6 +505,16 @@ for (const size of [1, 8, 20]) {
       expect(feed(view.host, m.managed_organizations_title()).querySelectorAll('li')).toHaveLength(size);
       expect(source.calls).toEqual([{}]);
       geometryContract(view.host);
+      for (let step = 1; step <= 3; step++) {
+        await settle(() => button(feed(view.host, m.managed_organizations_title()), m.managed_next()).click());
+        const next = page(size);
+        next.organizations.next = step === 3 ? null : `organization page ${step}`;
+        await settle(() => source.replies[step]!.resolve(ready(next)));
+      }
+      const inventory = view.host.querySelector('[data-slot="managed-accounts"]')!;
+      expect(inventory.querySelectorAll('li').length).toBeLessThanOrEqual(40);
+      expect(feed(view.host, m.managed_organizations_title()).querySelectorAll('li')).toHaveLength(size);
+      expect(feed(view.host, m.managed_operated_title()).querySelectorAll('li')).toHaveLength(2);
     } finally {
       await view.close();
     }

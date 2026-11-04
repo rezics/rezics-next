@@ -1,9 +1,13 @@
 import type { ManagedAccountsIO, ManagedAccountsPage } from '../../settings/managed-accounts-read';
 
 export const managedViewer = '019a0000-0000-7000-8000-000000000001';
+const admitted = { state: 'admitted' as const };
+const concealed = { state: 'concealed' as const };
 export function managedAccountsExample(): ManagedAccountsPage {
+  const account = { id: managedViewer, kind: 'actor' as const, handle: 'avery', displayName: 'Avery Reader' };
   return {
-    account: { id: managedViewer, kind: 'actor', handle: 'avery', displayName: 'Avery Reader' },
+    account,
+    viewer: { state: 'current', account },
     organizations: {
       state: 'ready',
       items: [
@@ -15,6 +19,7 @@ export function managedAccountsExample(): ManagedAccountsPage {
             displayName: 'Atlas Editors',
           },
           role: 'owner',
+          navigation: admitted,
         },
         {
           account: {
@@ -24,6 +29,7 @@ export function managedAccountsExample(): ManagedAccountsPage {
             displayName: 'Independent Reading Group',
           },
           role: 'member',
+          navigation: admitted,
         },
       ],
       next: 'illustrative organization +/=',
@@ -40,12 +46,14 @@ export function managedAccountsExample(): ManagedAccountsPage {
             displayName: 'Atlas Indexer',
           },
           state: 'current',
+          navigation: admitted,
         },
         {
           reservationId: '019a0000-0000-7000-8000-000000000006',
           accountId: '019a0000-0000-7000-8000-000000000007',
           account: null,
           state: 'reconciling',
+          navigation: concealed,
         },
       ],
       next: 'illustrative operator +/=',

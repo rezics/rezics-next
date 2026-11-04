@@ -99,7 +99,11 @@ function Next({ cursor, field, cursors }: { cursor: string | null; field: keyof 
     </a>
   ) : null;
 }
-function Responsibilities({ page, cursors }: { page: Inventory['responsibilities']; cursors: Cursors }) {
+type ResponsibilityPage = {
+  items: ReadonlyArray<{ reservationId: string; account: Identity | null; state: 'current' | 'reconciling' }>;
+  next: string | null;
+};
+function Responsibilities({ page, cursors }: { page: ResponsibilityPage; cursors: Cursors }) {
   return (
     <Card>
       <CardHeader>

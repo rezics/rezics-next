@@ -8,16 +8,29 @@ import { MediaProblem } from '../media/kernel';
 const id = v.pipe(v.string(), v.uuid());
 const text = v.nullable(v.string());
 const identity = v.strictObject({ id, kind: v.picklist(['actor', 'organization']), handle: text, displayName: text });
-const organization = v.strictObject({ account: identity, role: v.picklist(['owner', 'member']) });
+const navigation = v.variant('state', [
+  v.strictObject({ state: v.literal('admitted') }),
+  v.strictObject({ state: v.literal('unavailable') }),
+  v.strictObject({ state: v.literal('concealed') }),
+]);
+const organization = v.strictObject({
+  account: identity,
+  role: v.picklist(['owner', 'member']),
+  navigation: v.optional(navigation),
+});
 const responsibility = v.strictObject({
   reservationId: id,
   accountId: id,
   account: v.nullable(identity),
   state: v.picklist(['current', 'reconciling']),
+  navigation: v.optional(navigation),
 });
+const viewer = v.strictObject({ state: v.literal('current'), account: identity });
 // Native authority: access/account-management.ts managedAccountsSchema, 20 scanned entries per feed.
+// Additive viewer/navigation stay optional until e9314e51 publishes generated closure.
 const schema = v.strictObject({
   account: identity,
+  viewer: v.optional(viewer),
   organizations: v.strictObject({
     state: v.picklist(['ready', 'preparing']),
     items: v.pipe(v.array(organization), v.maxLength(20)),
@@ -25,8 +38,28 @@ const schema = v.strictObject({
   }),
   responsibilities: v.strictObject({ items: v.pipe(v.array(responsibility), v.maxLength(20)), next: text }),
 });
-export type ManagedAccountsPage = v.InferOutput<typeof schema>;
-export type ManagedIdentity = ManagedAccountsPage['account'];
+export type ManagedDirectoryNavigation = v.InferOutput<typeof navigation>;
+export type ManagedIdentity = v.InferOutput<typeof identity>;
+type DecodedPage = v.InferOutput<typeof schema>;
+export type ManagedAccountsPage = {
+  account: ManagedIdentity;
+  viewer: { state: 'current'; account: ManagedIdentity };
+  organizations: {
+    state: 'ready' | 'preparing';
+    items: Array<{ account: ManagedIdentity; role: 'owner' | 'member'; navigation: ManagedDirectoryNavigation }>;
+    next: string | null;
+  };
+  responsibilities: {
+    items: Array<{
+      reservationId: string;
+      accountId: string;
+      account: ManagedIdentity | null;
+      state: 'current' | 'reconciling';
+      navigation: ManagedDirectoryNavigation;
+    }>;
+    next: string | null;
+  };
+};
 export type ManagedAccountsCursors = { organizationsCursor?: string; operatorsCursor?: string };
 export type ManagedAccountsFailure = {
   ok: false;
@@ -89,6 +122,56 @@ export function managedAccountsException(error: unknown): ManagedAccountsFailure
   return managedAccountsFailure(null);
 }
 
+/** First occurrence in the current native page; earlier pages are not retained to collapse duplicates. */
+export function firstOccurrenceInCurrentPage<T>(items: readonly T[], key: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const id = key(item);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function observedNavigation(
+  value: ManagedDirectoryNavigation | undefined,
+  visible: boolean,
+): ManagedDirectoryNavigation | null {
+  if (value?.state === 'admitted' && !visible) return null;
+  if (value) return value;
+  return { state: visible ? 'unavailable' : 'concealed' };
+}
+
+function projectPage(page: DecodedPage): ManagedAccountsPage | null {
+  const viewer = page.viewer ?? { state: 'current' as const, account: page.account };
+  if (viewer.account.id !== page.account.id || viewer.account.kind !== page.account.kind) return null;
+  const organizations = [];
+  for (const item of page.organizations.items) {
+    const navigation = observedNavigation(item.navigation, true);
+    if (!navigation) return null;
+    organizations.push({ ...item, navigation });
+  }
+  const responsibilities = [];
+  for (const item of page.responsibilities.items) {
+    const visible = item.account !== null;
+    const navigation = observedNavigation(item.navigation, visible);
+    if (!navigation) return null;
+    responsibilities.push({ ...item, navigation });
+  }
+  return {
+    account: page.account,
+    viewer,
+    organizations: {
+      ...page.organizations,
+      items: firstOccurrenceInCurrentPage(organizations, (item) => item.account.id),
+    },
+    responsibilities: {
+      ...page.responsibilities,
+      items: firstOccurrenceInCurrentPage(responsibilities, (item) => item.reservationId),
+    },
+  };
+}
+
 /** The existing server transport keeps credentials private; no target/operated identity is accepted. */
 export async function loadManagedAccounts(
   client: KernelClient,
@@ -110,8 +193,8 @@ export async function loadManagedAccounts(
     if (result.error) return managedAccountsFailure(result.status, result.error.value, result.headers);
     const parsed = v.safeParse(schema, result.data);
     if (!parsed.success) return managedAccountsFailure(result.status, undefined, result.headers);
-    const page = parsed.output;
-    if (page.account.id !== viewerId || page.account.kind !== 'actor')
+    const page = projectPage(parsed.output);
+    if (!page || page.account.id !== viewerId || page.account.kind !== 'actor' || page.viewer.account.id !== viewerId)
       return { ...managedAccountsFailure(result.status, undefined, result.headers), kind: 'denied' };
     if (
       page.organizations.items.some((item) => item.account.kind !== 'organization') ||
@@ -132,15 +215,28 @@ export function managedAccountHref(settingsHref: string, accountId: string): str
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+/** Only native admitted navigation yields a private destination; never a server-supplied URL. */
+export function managedAccountDestination(
+  settingsHref: string,
+  navigation: ManagedDirectoryNavigation | undefined,
+  account: ManagedIdentity | null,
+): string | undefined {
+  if (!account || navigation?.state !== 'admitted') return undefined;
+  return managedAccountHref(settingsHref, account.id);
+}
+
 type Feed<T> = {
   items: T[];
   next: string | null;
+  origin: boolean;
   busy: boolean;
   failure: ManagedAccountsFailure | null;
   restartable: boolean;
+  failedCursors: ManagedAccountsCursors | null;
 };
 export type ManagedAccountsSnapshot = {
   account: ManagedIdentity | null;
+  viewer: ManagedAccountsPage['viewer'] | null;
   loading: boolean;
   failure: ManagedAccountsFailure | null;
   organizations: Feed<ManagedAccountsPage['organizations']['items'][number]> & { state: 'ready' | 'preparing' };
@@ -149,17 +245,44 @@ export type ManagedAccountsSnapshot = {
 function empty(): ManagedAccountsSnapshot {
   return {
     account: null,
+    viewer: null,
     loading: false,
     failure: null,
-    organizations: { state: 'ready', items: [], next: null, busy: false, failure: null, restartable: false },
-    responsibilities: { items: [], next: null, busy: false, failure: null, restartable: false },
+    organizations: {
+      state: 'ready',
+      items: [],
+      next: null,
+      origin: true,
+      busy: false,
+      failure: null,
+      restartable: false,
+      failedCursors: null,
+    },
+    responsibilities: {
+      items: [],
+      next: null,
+      origin: true,
+      busy: false,
+      failure: null,
+      restartable: false,
+      failedCursors: null,
+    },
   };
 }
-function append<T>(before: T[], after: T[], key: (item: T) => string): T[] {
-  return [...new Map([...before, ...after].map((item) => [key(item), item])).values()];
+
+function feedFrom<T>(page: { items: T[]; next: string | null }, origin: boolean, key: (item: T) => string): Feed<T> {
+  return {
+    ...page,
+    items: firstOccurrenceInCurrentPage(page.items, key),
+    origin,
+    busy: false,
+    failure: null,
+    restartable: false,
+    failedCursors: null,
+  };
 }
 
-/** One initial page and one request per explicit feed action. Sibling payloads never advance each other's cursor. */
+/** One retained page per feed and one request per explicit feed action. Sibling payloads never replace each other. */
 export class ManagedAccountsInventory {
   private value = empty();
   private epoch = 0;
@@ -201,7 +324,12 @@ export class ManagedAccountsInventory {
     try {
       if (!this.live()) return managedAccountsFailure(null);
       const result = await withManagedReadDeadline((signal) => this.read(cursors, signal), this.lifetime.signal);
-      if (result.ok && (result.page.account.id !== this.viewerId || result.page.account.kind !== 'actor'))
+      if (
+        result.ok &&
+        (result.page.account.id !== this.viewerId ||
+          result.page.account.kind !== 'actor' ||
+          result.page.viewer.account.id !== this.viewerId)
+      )
         return { ok: false, kind: 'denied', status: null, code: null };
       return result;
     } catch (error) {
@@ -227,16 +355,18 @@ export class ManagedAccountsInventory {
     const { page } = result;
     this.publish({
       account: page.account,
+      viewer: page.viewer,
       loading: false,
       failure: null,
       organizations: {
-        ...page.organizations,
-        items: page.organizations.state === 'preparing' ? [] : page.organizations.items,
-        busy: false,
-        failure: null,
-        restartable: false,
+        ...feedFrom(page.organizations, true, (item) => item.account.id),
+        state: page.organizations.state,
+        items:
+          page.organizations.state === 'preparing'
+            ? []
+            : firstOccurrenceInCurrentPage(page.organizations.items, (item) => item.account.id),
       },
-      responsibilities: { ...page.responsibilities, busy: false, failure: null, restartable: false },
+      responsibilities: feedFrom(page.responsibilities, true, (item) => item.reservationId),
     });
   }
   async more(feed: ManagedFeed) {
@@ -250,18 +380,23 @@ export class ManagedAccountsInventory {
     const before = this.value;
     if (!before.account || before.loading || before[feed].busy) return;
     const preparing = feed === 'organizations' && before.organizations.state === 'preparing';
-    const cursor = before[feed].next;
-    if (cursor === null && !preparing) return;
-    if (firstPage && (preparing || cursor === null || !before[feed].restartable)) return;
+    const retry = !firstPage && before[feed].failure !== null;
+    const origin = before[feed].origin;
+    if (firstPage) {
+      if (preparing) return;
+      if (!before[feed].restartable && origin) return;
+    } else if (!retry && before[feed].next === null && !preparing) return;
+    const cursors: ManagedAccountsCursors =
+      firstPage || preparing || (retry && before[feed].failedCursors !== null && Object.keys(before[feed].failedCursors).length === 0)
+        ? {}
+        : retry && before[feed].failedCursors
+          ? before[feed].failedCursors
+          : feed === 'organizations'
+            ? { organizationsCursor: before[feed].next! }
+            : { operatorsCursor: before[feed].next! };
     const epoch = this.epoch;
     this.publish({ ...before, [feed]: { ...before[feed], busy: true } });
-    const result = await this.request(
-      firstPage || cursor === null
-        ? {}
-        : feed === 'organizations'
-          ? { organizationsCursor: cursor }
-          : { operatorsCursor: cursor },
-    );
+    const result = await this.request(cursors);
     if (!this.live() || epoch !== this.epoch) return;
     if (!result.ok) {
       if (result.kind === 'denied') this.deny(result);
@@ -272,46 +407,41 @@ export class ManagedAccountsInventory {
             ...this.value[feed],
             busy: false,
             failure: result,
+            failedCursors: cursors,
             restartable:
               before[feed].restartable ||
-              (!preparing && cursor !== null && (result.status === 400 || result.status === 409)),
+              (!preparing && (result.status === 400 || result.status === 409) && (firstPage || before[feed].next !== null)),
           },
         });
       return;
     }
     const current = this.value;
+    const replaced = firstPage || Object.keys(cursors).length === 0;
     if (feed === 'organizations') {
       const next = result.page.organizations;
       this.publish({
         ...current,
-        account: firstPage ? current.account : result.page.account,
+        account: result.page.account,
+        viewer: result.page.viewer,
         organizations: {
-          ...next,
-          items:
-            next.state === 'preparing'
-              ? []
-              : firstPage
-                ? next.items
-                : append(preparing ? [] : current.organizations.items, next.items, (item) => item.account.id),
-          busy: false,
-          failure: null,
-          restartable: false,
+          ...feedFrom(
+            {
+              items: next.state === 'preparing' ? [] : next.items,
+              next: next.next,
+            },
+            replaced,
+            (item) => item.account.id,
+          ),
+          state: next.state,
         },
       });
     } else {
       const next = result.page.responsibilities;
       this.publish({
         ...current,
-        account: firstPage ? current.account : result.page.account,
-        responsibilities: {
-          ...next,
-          items: firstPage
-            ? next.items
-            : append(current.responsibilities.items, next.items, (item) => item.reservationId),
-          busy: false,
-          failure: null,
-          restartable: false,
-        },
+        account: result.page.account,
+        viewer: result.page.viewer,
+        responsibilities: feedFrom(next, replaced, (item) => item.reservationId),
       });
     }
   }

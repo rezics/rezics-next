@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import {
   ManagedAccountsInventory,
+  firstOccurrenceInCurrentPage,
   loadManagedAccounts,
+  managedAccountDestination,
   managedAccountHref,
   managedAccountsException,
   managedAccountsFailure,
@@ -17,20 +19,31 @@ const viewer = '019a0000-0000-7000-8000-000000000001';
 const organization = '019a0000-0000-7000-8000-000000000002';
 const operated = '019a0000-0000-7000-8000-000000000003';
 function page(): ManagedAccountsPage {
+  const account = { id: viewer, kind: 'actor' as const, handle: 'avery', displayName: 'Avery' };
   return {
-    account: { id: viewer, kind: 'actor', handle: 'avery', displayName: 'Avery' },
+    account,
+    viewer: { state: 'current', account },
     organizations: {
       state: 'ready',
       items: [
         {
           account: { id: organization, kind: 'organization', handle: null, displayName: 'Reading group' },
           role: 'member',
+          navigation: { state: 'admitted' },
         },
       ],
       next: 'signed organization +/=',
     },
     responsibilities: {
-      items: [{ reservationId: organization, accountId: operated, account: null, state: 'reconciling' }],
+      items: [
+        {
+          reservationId: organization,
+          accountId: operated,
+          account: null,
+          state: 'reconciling',
+          navigation: { state: 'concealed' },
+        },
+      ],
       next: 'signed operator +/=',
     },
   };
@@ -43,7 +56,6 @@ const unavailable: ManagedAccountsResult = {
   code: 'dependency_unavailable',
 };
 
-// These focused oracles are retained for integration; this attempt runs only the workspace typecheck.
 test('A signed-in human can reach their own identity, independent organization membership and operator responsibility pages in settings without treating preparing or reconciling as current authority', async () => {
   const calls: object[] = [];
   const initial = page();
@@ -95,7 +107,8 @@ test('each feed retains its opaque cursor and usable pages across transient fail
   expect(inventory.snapshot().organizations.next).toBe('signed organization +/=');
   await inventory.more('organizations');
   expect(inventory.snapshot().organizations.next).toBe('next signed organization');
-  expect(inventory.snapshot().organizations.items).toHaveLength(1);
+  expect(inventory.snapshot().organizations.items).toHaveLength(0);
+  expect(inventory.snapshot().organizations.origin).toBe(false);
   expect(calls).toEqual([
     {},
     { organizationsCursor: 'signed organization +/=' },
@@ -289,11 +302,12 @@ test('independent delayed feed failures keep exact cursors, retained rows and re
   expect(bothFailed.responsibilities.items).toEqual(page().responsibilities.items);
   await inventory.more('organizations');
   expect(inventory.snapshot().organizations.next).toBeNull();
+  expect(inventory.snapshot().organizations.items).toEqual([]);
   expect(inventory.snapshot().responsibilities).toBe(bothFailed.responsibilities);
   await inventory.more('responsibilities');
   expect(inventory.snapshot().organizations.next).toBeNull();
   expect(inventory.snapshot().responsibilities.next).toBeNull();
-  expect(inventory.snapshot().responsibilities.items[0]?.state).toBe('reconciling');
+  expect(inventory.snapshot().responsibilities.items).toEqual([]);
   expect(calls).toEqual([
     {},
     { organizationsCursor: 'signed organization +/=' },
@@ -326,12 +340,15 @@ test('busy initial and selected-feed actions make one request while disposal sti
   const abandoned = inventory.load();
   const finishAbandoned = finish;
   inventory.dispose();
-  const fresh = inventory.load();
-  finish(ready(page()));
-  await fresh;
   finishAbandoned({ ok: false, kind: 'denied', status: 403, code: 'forbidden' });
   await abandoned;
-  expect(inventory.snapshot().account?.id).toBe(viewer);
+  expect(inventory.snapshot().account).toBeNull();
+  const revived = new ManagedAccountsInventory(viewer, (cursors) => {
+    calls.push(cursors);
+    return Promise.resolve(ready(page()));
+  });
+  await revived.load();
+  expect(revived.snapshot().account?.id).toBe(viewer);
   expect(calls).toHaveLength(4);
 });
 
@@ -491,7 +508,7 @@ test('a failed first-page read retains stale pages and explicit recovery until a
     expect(inventory.snapshot()[feed].restartable).toBe(true);
     expect(inventory.snapshot()[feed].busy).toBe(false);
     await inventory.more(feed);
-    expect(calls[3]).toEqual(calls[1]!);
+    expect(calls[3]).toEqual({});
     await inventory.firstPage(feed);
     expect(calls[2]).toEqual({});
     expect(calls[4]).toEqual({});
@@ -566,3 +583,162 @@ test('initial, preparing and exhausted feeds do not offer cursor recovery or iss
     expect(calls).toEqual(state === 'preparing' ? [{}, {}] : [{}]);
   }
 });
+
+test('first-occurrence-in-current-page is the duplicate policy and earlier pages are not retained to collapse it', () => {
+  const first = page().organizations.items[0]!;
+  const duplicate = { ...first, role: 'owner' as const };
+  const later = {
+    ...first,
+    account: { ...first.account, id: operated },
+    navigation: { state: 'admitted' as const },
+  };
+  expect(firstOccurrenceInCurrentPage([first, duplicate, later], (item) => item.account.id)).toEqual([first, later]);
+  expect(managedAccountDestination('/en/settings', { state: 'admitted' }, first.account)).toBe(
+    managedAccountHref('/en/settings', organization),
+  );
+  expect(managedAccountDestination('/en/settings', { state: 'unavailable' }, first.account)).toBeUndefined();
+  expect(managedAccountDestination('/en/settings', { state: 'concealed' }, first.account)).toBeUndefined();
+  expect(managedAccountDestination('/en/settings', { state: 'admitted' }, null)).toBeUndefined();
+});
+
+test('a native page of duplicate identities keeps the first occurrence only, without a hidden earlier-page cache', async () => {
+  const first = page().organizations.items[0]!;
+  const inventory = new ManagedAccountsInventory(viewer, async () =>
+    ready({
+      ...page(),
+      organizations: {
+        state: 'ready',
+        items: [first, { ...first, role: 'owner' }, { ...first, account: { ...first.account, id: operated } }],
+        next: 'page-2',
+      },
+    }),
+  );
+  await inventory.load();
+  expect(inventory.snapshot().organizations.items.map((item) => item.account.id)).toEqual([organization, operated]);
+  expect(inventory.snapshot().organizations.items).toHaveLength(2);
+});
+
+test('several sequential pages retain at most 20 rows per feed and 40 directory rows in total', async () => {
+  const calls: ManagedAccountsCursors[] = [];
+  const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
+    calls.push(cursors);
+    const index = cursors.organizationsCursor ? Number(cursors.organizationsCursor) : 0;
+    const organizations = Array.from({ length: 20 }, (_, item) => ({
+      account: {
+        id: `019a0000-0000-7000-8000-${String(index * 20 + item + 2).padStart(12, '0')}`,
+        kind: 'organization' as const,
+        handle: null,
+        displayName: `Organization ${index}:${item}`,
+      },
+      role: 'member' as const,
+      navigation: { state: 'admitted' as const },
+    }));
+    return ready({
+      ...page(),
+      organizations: { state: 'ready', items: organizations, next: String(index + 1) },
+      responsibilities: {
+        items: Array.from({ length: 20 }, (_, item) => ({
+          reservationId: `019b0000-0000-7000-8000-${String(item + 1).padStart(12, '0')}`,
+          accountId: operated,
+          account: null,
+          state: 'reconciling' as const,
+          navigation: { state: 'concealed' as const },
+        })),
+        next: null,
+      },
+    });
+  });
+  await inventory.load();
+  for (let step = 0; step < 5; step++) await inventory.more('organizations');
+  const snapshot = inventory.snapshot();
+  expect(snapshot.organizations.items).toHaveLength(20);
+  expect(snapshot.responsibilities.items).toHaveLength(20);
+  expect(snapshot.organizations.items.length + snapshot.responsibilities.items.length).toBe(40);
+  expect(snapshot.organizations.origin).toBe(false);
+  expect(calls).toHaveLength(6);
+  await inventory.firstPage('organizations');
+  expect(inventory.snapshot().organizations.origin).toBe(true);
+  expect(inventory.snapshot().responsibilities.items).toHaveLength(20);
+  expect(calls.at(-1)).toEqual({});
+});
+
+test('missing additive navigation is unavailable, concealed targets have no destination, and a current hold can be admitted', async () => {
+  const requests: Request[] = [];
+  const body: Record<string, unknown> = {
+    account: { id: viewer, kind: 'actor', handle: 'avery', displayName: 'Avery' },
+    organizations: {
+      state: 'ready',
+      items: [{ account: { id: organization, kind: 'organization', handle: null, displayName: 'Group' }, role: 'owner' }],
+      next: null,
+    },
+    responsibilities: {
+      items: [
+        { reservationId: organization, accountId: operated, account: null, state: 'reconciling' },
+        {
+          reservationId: viewer,
+          accountId: operated,
+          account: { id: operated, kind: 'actor', handle: 'bot', displayName: 'Bot' },
+          state: 'current',
+          navigation: { state: 'admitted' },
+        },
+        {
+          reservationId: organization.slice(0, -1) + '8',
+          accountId: organization,
+          account: { id: organization, kind: 'organization', handle: null, displayName: 'Held' },
+          state: 'reconciling',
+          navigation: { state: 'unavailable' },
+        },
+      ],
+      next: null,
+    },
+  };
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json(body);
+    }) as typeof fetch,
+  });
+  const loaded = await loadManagedAccounts(client, 'Bearer viewer', viewer, {});
+  expect(loaded.ok).toBe(true);
+  if (!loaded.ok) return;
+  expect(loaded.page.viewer.account.id).toBe(viewer);
+  expect(loaded.page.organizations.items[0]?.navigation.state).toBe('unavailable');
+  expect(loaded.page.responsibilities.items[0]?.navigation.state).toBe('concealed');
+  expect(loaded.page.responsibilities.items[1]?.navigation.state).toBe('admitted');
+  expect(loaded.page.responsibilities.items[2]?.navigation.state).toBe('unavailable');
+  expect(managedAccountDestination('/en/settings', loaded.page.organizations.items[0]?.navigation, loaded.page.organizations.items[0]?.account ?? null)).toBeUndefined();
+  expect(
+    managedAccountDestination(
+      '/en/settings',
+      loaded.page.responsibilities.items[1]?.navigation,
+      loaded.page.responsibilities.items[1]?.account ?? null,
+    ),
+  ).toBe(managedAccountHref('/en/settings', operated));
+  body.viewer = { state: 'current', account: { id: operated, kind: 'actor', handle: null, displayName: null } };
+  expect((await loadManagedAccounts(client, 'Bearer viewer', viewer, {})).ok).toBe(false);
+});
+
+test('return-to-first after several next pages does not walk cursors and preserves the sibling page', async () => {
+  const calls: ManagedAccountsCursors[] = [];
+  const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
+    calls.push(cursors);
+    if (cursors.organizationsCursor)
+      return ready({
+        ...page(),
+        organizations: { state: 'ready', items: [], next: `${cursors.organizationsCursor}-next` },
+      });
+    return ready(page());
+  });
+  await inventory.load();
+  const responsibilities = inventory.snapshot().responsibilities;
+  await inventory.more('organizations');
+  await inventory.more('organizations');
+  expect(inventory.snapshot().organizations.origin).toBe(false);
+  expect(inventory.snapshot().responsibilities).toBe(responsibilities);
+  await inventory.firstPage('organizations');
+  expect(inventory.snapshot().organizations.origin).toBe(true);
+  expect(inventory.snapshot().organizations.items).toHaveLength(1);
+  expect(inventory.snapshot().responsibilities).toBe(responsibilities);
+  expect(calls.filter((call) => Object.keys(call).length === 0)).toHaveLength(2);
+});
+

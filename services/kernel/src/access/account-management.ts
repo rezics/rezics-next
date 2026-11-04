@@ -29,23 +29,34 @@ const identity = t.Object(
 );
 const role = t.Union([t.Literal('owner'), t.Literal('member')]);
 const next = nullableText;
+/** Closed directory observation: admission is not a URL and a concealed target has no destination. */
+const directoryNavigationSchema = t.Union([
+  t.Object({ state: t.Literal('admitted') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+  t.Object({ state: t.Literal('concealed') }, closed),
+]);
+const currentViewer = t.Object({ state: t.Literal('current'), account: identity }, closed);
 const responsibility = t.Object(
   {
     reservationId: id,
     accountId: id,
     account: t.Union([identity, t.Null()]),
     state: t.Union([t.Literal('current'), t.Literal('reconciling')]),
+    navigation: directoryNavigationSchema,
   },
   closed,
 );
-const responsibilityPageSchema = t.Object({ items: t.Array(responsibility), next }, closed);
+const responsibilityPageSchema = t.Object({ items: t.Array(responsibility, { maxItems: 20 }), next }, closed);
 export const managedAccountsSchema = t.Object(
   {
     account: identity,
+    viewer: currentViewer,
     organizations: t.Object(
       {
         state: t.Union([t.Literal('ready'), t.Literal('preparing')]),
-        items: t.Array(t.Object({ account: identity, role }, closed)),
+        items: t.Array(t.Object({ account: identity, role, navigation: directoryNavigationSchema }, closed), {
+          maxItems: 20,
+        }),
         next,
       },
       closed,
@@ -102,7 +113,9 @@ export const accountManagementSchema = t.Object(
 );
 export type ManagedAccountsPage = Static<typeof managedAccountsSchema>;
 export type AccountManagementPage = Static<typeof accountManagementSchema>;
+export type ManagedDirectoryNavigation = Static<typeof directoryNavigationSchema>;
 type Identity = Static<typeof identity>;
+type DirectoryNavigation = ManagedDirectoryNavigation;
 type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: () => Date };
 export type ManagementQuery = { organizationsCursor?: string; membersCursor?: string; operatorsCursor?: string };
 const limit = 20;
@@ -145,6 +158,12 @@ async function identities(pool: Pool, ids: string[]): Promise<Map<string, Identi
           ],
     ),
   );
+}
+
+/** Visible identity is not admission. A missing public target stays concealed, never a denial. */
+export function directoryNavigation(visible: boolean, admitted: boolean): DirectoryNavigation {
+  if (!visible) return { state: 'concealed' };
+  return { state: admitted ? 'admitted' : 'unavailable' };
 }
 
 /** Private self inventory and current management observations. Coordination holds never prove authority. */
@@ -212,6 +231,7 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
   async function responsibilities(
     operatorId: string,
     cursor?: string,
+    admitted = false,
   ): Promise<Static<typeof responsibilityPageSchema>> {
     const feed = 'account.management.responsibilities';
     const rows = await operatorPage.run(deps.pool, {
@@ -231,14 +251,16 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
         route: routeOf(row.subjectAccountId)!,
         account_id: row.subjectAccountId,
       });
+      const account = publicAccounts.get(row.subjectAccountId) ?? null;
+      const current =
+        relation?.operatorAccountId === operatorId && relation.reservationId === row.reservationId;
       items.push({
         reservationId: row.reservationId,
         accountId: row.subjectAccountId,
-        account: publicAccounts.get(row.subjectAccountId) ?? null,
-        state:
-          relation?.operatorAccountId === operatorId && relation.reservationId === row.reservationId
-            ? 'current'
-            : 'reconciling',
+        account,
+        state: current ? 'current' : 'reconciling',
+        // A reservation or reconciling hold is coordination evidence, never authority.
+        navigation: directoryNavigation(account !== null, admitted && current),
       });
     }
     return {
@@ -248,6 +270,10 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
   }
   return {
     async inventory(query: ManagementQuery): Promise<ManagedAccountsPage> {
+      const account = presentation(human);
+      const viewer = { state: 'current' as const, account };
+      // One current operator-self check for the whole feed; not a per-row Access formula.
+      const operateSelf = await manager(actorId);
       let candidates: string[];
       try {
         candidates = (
@@ -259,9 +285,10 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
       } catch (error) {
         if (!(error instanceof MembershipInverseIncompleteError)) throw error;
         return {
-          account: presentation(human),
+          account,
+          viewer,
           organizations: { state: 'preparing', items: [], next: null },
-          responsibilities: await responsibilities(actorId, query.operatorsCursor),
+          responsibilities: await responsibilities(actorId, query.operatorsCursor, operateSelf),
         };
       }
       const feed = 'account.management.organizations';
@@ -272,17 +299,19 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
       const items: ManagedAccountsPage['organizations']['items'] = [];
       for (const organizationId of page) {
         const role = await currentRole(organizationId);
-        const account = publicAccounts.get(organizationId);
-        if (role && account?.kind === 'organization') items.push({ account, role });
+        const organization = publicAccounts.get(organizationId);
+        if (role && organization?.kind === 'organization')
+          items.push({ account: organization, role, navigation: directoryNavigation(true, true) });
       }
       return {
-        account: presentation(human),
+        account,
+        viewer,
         organizations: {
           state: 'ready',
           items,
           next: remaining.length > limit ? await continuation(feed, actorId, page.at(-1)!) : null,
         },
-        responsibilities: await responsibilities(actorId, query.operatorsCursor),
+        responsibilities: await responsibilities(actorId, query.operatorsCursor, operateSelf),
       };
     },
     async detail(accountId: string, query: ManagementQuery): Promise<AccountManagementPage> {
@@ -340,7 +369,9 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
             : null,
         members,
         responsibilities:
-          canManage && !target.operatorAccountId ? await responsibilities(accountId, query.operatorsCursor) : null,
+          canManage && !target.operatorAccountId
+            ? await responsibilities(accountId, query.operatorsCursor, canManage)
+            : null,
         authActions: await readManagedAuthActions(
           { pool: deps.pool, access: deps.access() },
           actor,

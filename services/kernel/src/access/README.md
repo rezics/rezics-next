@@ -2752,6 +2752,25 @@ organization memberships and personal operator responsibility holds. It accepts 
 `operatorsCursor`. Incomplete native membership-inverse coverage returns an explicit `preparing` organization
 section, while independently available identity and responsibility sections remain readable.
 
+The inventory DTO adds a closed `viewer: {state: "current", account}` that repeats the current human, and a
+closed `navigation` on each organization and responsibility row: `admitted`, `unavailable`, or `concealed`.
+Admission reuses `createManagementRead`'s current membership role and one operator-self `account:manage` check
+for the whole responsibility feed. A reservation or reconciling hold is coordination evidence, never authority.
+A missing public identity is `concealed` and yields no destination or extra denial. `admitted` is not a URL;
+consumers construct the existing Settings destination from the identity. Generated client republication is
+`e9314e51`; until that closure lands, a missing additive field is observed as unavailable.
+
+Decision: directory paging keeps one native page per feed (at most 20 rows each). Next replaces that page;
+return-to-first is a cursor-free read. Duplicates collapse to the first occurrence inside the current page
+only. The sibling feed's current page is retained; the incidental sibling first page in a selected-feed read
+is ignored.
+
+Cost of the additive envelope: the existing finite membership inverse (`MEMBERSHIP_LIMIT` = 1000), both feeds
+actually read (20 scanned candidates and at most 20 returned rows each), public identity hydration, current
+role checks for scanned organizations, one operator-self authority preparation, cursor seal/open and JSON
+serialization. No runtime quotes, funding or metered invisible MVCC versions. Whole-call finite bounds are
+this declaration; measured growth outcomes remain separate.
+
 `GET /v1/accounts/{accountId}/management` (`account.read_management`, `account:read`) accepts `membersCursor` and
 `operatorsCursor`. Both routes require the installed formula's `account:read` on the human's own account, and
 reject operated identities. Organization details require current native membership. Private holders and operator

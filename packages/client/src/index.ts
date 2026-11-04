@@ -6,6 +6,7 @@ import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 import type { ModerationDecisionPage } from './kernel/content/decision-page.ts';
 import type { PostHistoryPage as NativePostHistoryPage } from './kernel/content/history-page.ts';
 import type { WatchManagementKind, WatchManagementPage } from './kernel/content/watch-management-contract';
+import type { ManagedAccountsPage } from './kernel/access/managed-accounts-contract';
 import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
 
@@ -37,6 +38,14 @@ export type {
   WatchManagementKind,
   WatchManagementPage,
 } from './kernel/content/watch-management-contract';
+export type {
+  ManagedAccountIdentity,
+  ManagedAccountsPage,
+  ManagedAccountsViewer,
+  ManagedDirectoryNavigation,
+  ManagedOrganizationItem,
+  ManagedResponsibilityItem,
+} from './kernel/access/managed-accounts-contract';
 export type {
   RealmClaimReviewApprovalAdvice,
   RealmClaimReviewClaimant,
@@ -325,9 +334,29 @@ export type SourceClassificationPutResult = MethodResult<ClassificationMethod<'$
 export type SourceClassificationClearInput = MethodBody<ClassificationMethod<'$clear'>>;
 export type SourceClassificationClearResult = MethodResult<ClassificationMethod<'$clear'>>;
 
+type GeneratedMe = GeneratedKernelClient['me'];
+type GeneratedManagedAccountsGet = GeneratedMe['managedAccounts']['get'];
+type GeneratedManagedAccountsRead = Awaited<ReturnType<GeneratedManagedAccountsGet>>;
+type ManagedAccountsRead = Omit<GeneratedManagedAccountsRead, 'data'> & { data: ManagedAccountsPage | null };
+type ManagedAccountsGetOptions = Omit<NonNullable<Parameters<GeneratedManagedAccountsGet>[0]>, 'query'> & {
+  query?: { organizationsCursor?: string; operatorsCursor?: string };
+};
+type ManagedAccountsPath = Omit<GeneratedMe['managedAccounts'], 'get'> & {
+  get(options?: ManagedAccountsGetOptions): Promise<ManagedAccountsRead>;
+};
+type MeClient = Omit<GeneratedMe, 'managedAccounts'> & { managedAccounts: ManagedAccountsPath };
+
 export type KernelClient = Omit<
   GeneratedKernelClient,
-  'accounts' | 'boards' | 'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms'
+  | 'accounts'
+  | 'boards'
+  | 'posts'
+  | 'subjects'
+  | 'libraryEntries'
+  | 'libraryExports'
+  | 'moderation-decisions'
+  | 'realms'
+  | 'me'
 > & {
   posts: PostsClient;
   libraryEntries: PersonalLibraryEntries;
@@ -337,6 +366,7 @@ export type KernelClient = Omit<
   subjects: KernelSubjectsClient;
   'moderation-decisions': DecisionPages;
   realms: RealmsClient;
+  me: MeClient;
 };
 export type { PostHistoryPage } from './kernel/content/history-page.ts';
 export type {

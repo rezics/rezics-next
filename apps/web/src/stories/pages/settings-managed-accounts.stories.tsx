@@ -147,11 +147,11 @@ const connectedLongRecoveryPlay: NonNullable<Story['play']> = async ({ canvasEle
   await account.findByRole('link', { name: longName });
   const organizations = within(account.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
   const responsibilities = within(account.getByRole('list', { name: m.managed_operated_title() }).parentElement!);
-  await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
+  await userEvent.click(organizations.getByRole('button', { name: m.managed_next() }));
   await organizations.findByRole('alert');
   const restart = organizations.getByRole('button', { name: m.settings_managed_restart_list() });
   await expect(restart).toBeDisabled();
-  await expect(responsibilities.getByRole('button', { name: m.settings_managed_load_more() })).toBeEnabled();
+  await expect(responsibilities.getByRole('button', { name: m.managed_next() })).toBeEnabled();
   for (const button of canvasElement.querySelectorAll<HTMLButtonElement>('[data-slot="managed-accounts"] button')) {
     await expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     await expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
@@ -323,7 +323,7 @@ export const IndependentRecovery: Story = {
     await inventoryGeometry(inventory);
     identity.focus();
     await userEvent.tab();
-    const more = org.getByRole('button', { name: m.settings_managed_load_more() });
+    const more = org.getByRole('button', { name: m.managed_next() });
     await expect(more).toHaveFocus();
     await expect(more.ownerDocument.defaultView!.getComputedStyle(more).boxShadow).not.toBe('none');
     await expect(more).toHaveAccessibleDescription(m.managed_organizations_title());
@@ -348,8 +348,8 @@ export const IndependentRecovery: Story = {
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(org.queryByRole('alert')).toBeNull());
     await expect(org.queryByRole('button')).toBeNull();
-    await expect(resp.getByRole('button', { name: m.settings_managed_load_more() })).toBeEnabled();
-    await userEvent.click(resp.getByRole('button', { name: m.settings_managed_load_more() }));
+    await expect(resp.getByRole('button', { name: m.managed_next() })).toBeEnabled();
+    await userEvent.click(resp.getByRole('button', { name: m.managed_next() }));
     const responsibilityRetry = await resp.findByRole('button', { name: m.settings_retry() });
     await expect(responsibilityRetry).toBeDisabled();
     await expect(org.getByRole('link', { name: longAccountName })).toBeVisible();
@@ -384,12 +384,12 @@ export const PreparingAndSparse: Story = {
       m.managed_preparing_text(),
     );
     await expect(resp.getByText(m.settings_managed_no_responsibilities_page())).toBeVisible();
-    await userEvent.click(resp.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(resp.getByRole('button', { name: m.managed_next() }));
     await resp.findByText(m.managed_no_responsibilities());
     await expect(org.getByRole('button', { name: m.settings_retry() })).toBeEnabled();
     await userEvent.click(org.getByRole('button', { name: m.settings_retry() }));
     await org.findByText(m.managed_no_current_page());
-    const more = org.getByRole('button', { name: m.settings_managed_load_more() });
+    const more = org.getByRole('button', { name: m.managed_next() });
     more.focus();
     await userEvent.keyboard('{Enter}');
     await org.findByText(m.managed_no_organizations());
@@ -451,7 +451,7 @@ export const IndependentMounts: Story = {
     const rtl = inventories[1]!;
     await expect(rtl.ownerDocument.defaultView!.getComputedStyle(rtl).direction).toBe('rtl');
     const org = within(within(rtl).getByRole('region', { name: m.managed_organizations_title() }));
-    await userEvent.click(org.getByRole('button', { name: m.settings_managed_load_more() }));
+    await userEvent.click(org.getByRole('button', { name: m.managed_next() }));
     await org.findByRole('button', { name: m.settings_retry() });
     await expect(within(inventories[0]!).queryByRole('alert')).toBeNull();
     await expect(within(inventories[0]!).getByRole('link', { name: longAccountName })).toBeVisible();

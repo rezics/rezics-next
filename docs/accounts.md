@@ -131,6 +131,8 @@ verification state alone do not establish the final public-page outcome.
 
 Standalone management inventory and detail reads use a ten-second deadline through response decoding, composed with caller cancellation; optional exposure discovery uses two seconds and returns unknown on failure, preserving valid inventory and the existing localized unavailable/retry controls without granting permission.
 
+The Settings directory keeps one native page per feed (at most 20 rows each) with closed current-viewer and allowed-navigation observations. Next replaces the selected feed; return-to-first is cursor-free. Only admitted native navigation opens the existing private detail; a concealed target has no destination. A reconciling responsibility remains coordination evidence. Missing additive viewer/navigation from unpublished generated client types is unavailable until `e9314e51` republishes that closure.
+
 Managed-account settings lead with the supplied display name or handle and an initials avatar. A supplied
 identity without either label uses the unnamed-account treatment; an absent identity uses Identity unavailable.
 Exact supplied account IDs remain selectable inside closed account-detail disclosures for the target, operator,

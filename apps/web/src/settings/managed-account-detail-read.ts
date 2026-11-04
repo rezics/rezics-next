@@ -14,6 +14,13 @@ const id = v.pipe(v.string(), v.regex(uuidPattern));
 const text = v.nullable(v.string());
 const identity = v.strictObject({ id, kind: v.picklist(['actor', 'organization']), handle: text, displayName: text });
 const role = v.picklist(['owner', 'member']);
+const directoryNavigation = v.optional(
+  v.variant('state', [
+    v.strictObject({ state: v.literal('admitted') }),
+    v.strictObject({ state: v.literal('unavailable') }),
+    v.strictObject({ state: v.literal('concealed') }),
+  ]),
+);
 const responsibilityPage = v.strictObject({
   items: v.pipe(
     v.array(
@@ -22,6 +29,7 @@ const responsibilityPage = v.strictObject({
         accountId: id,
         account: v.nullable(identity),
         state: v.picklist(['current', 'reconciling']),
+        navigation: directoryNavigation,
       }),
     ),
     v.maxLength(20),
