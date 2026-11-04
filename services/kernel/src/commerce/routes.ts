@@ -96,9 +96,9 @@ const moneySchema = t.Object(
         {
           currency: t.Union([t.Literal('usd'), t.Literal('eur')]),
           unit: moneyUnitSchema,
-          minAmountMinor: t.Literal(50),
-          maxAmountMinor: t.Literal(99999999),
-          chargeMultiple: t.Literal(1),
+          minAmountMinor: t.Integer({ minimum: 1 }),
+          maxAmountMinor: t.Integer({ minimum: 1 }),
+          chargeMultiple: t.Integer({ minimum: 1 }),
         },
         object,
       ),

@@ -30,8 +30,16 @@ test('Native versioned money policy, captured price and explicit tax: raw bounda
     });
   for (const amountMinor of [0, -1, 49, 100000000, 50.1, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
     expect(() => validateOfferAmount({ currency: 'usd', amountMinor }, policy)).toThrow(RangeError);
+  expect(() => validateOfferAmount({ currency: 'usd', amountMinor: 49 }, policy)).toThrow('below-minimum');
+  expect(() => validateOfferAmount({ currency: 'usd', amountMinor: 100000000 }, policy)).toThrow('above-maximum');
+  const steppedPolicy = {
+    ...policy,
+    configuredSaleCurrencies: policy.configuredSaleCurrencies.map((rule) => ({ ...rule, chargeMultiple: 5 })),
+  };
+  expect(() => validateOfferAmount({ currency: 'usd', amountMinor: 51 }, steppedPolicy)).toThrow('increment-mismatch');
   for (const currency of ['USD', 'eur', 'jpy', 'xxx', '__proto__', 'bhd'])
     expect(() => validateOfferAmount({ currency, amountMinor: 1200 }, policy)).toThrow(RangeError);
+  expect(() => validateOfferAmount({ currency: 'jpy', amountMinor: 1200 }, policy)).toThrow('unsupported-currency');
 });
 
 test('context evidence has no fallback and never enables a sale; all fact rows are immutable', () => {

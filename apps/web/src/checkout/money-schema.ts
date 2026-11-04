@@ -1,18 +1,20 @@
 import type { KernelClient } from '@rezics/client';
+import {
+  decodeMoneyUnitEnvelope,
+  decodeRecordedMoneyUnit,
+  isSafeMinorAmount,
+  type RecordedMoneyUnit,
+} from '@rezics/money';
 
 /** Adopted native DTOs. Unit facts describe recorded money, never permission or provider qualification. */
-export type StripeMoneyUnit = Readonly<{
-  system: 'stripe-api';
-  exponent: 0 | 2;
-  factsVersion: 'stripe-money-v1';
-}>;
+export type StripeMoneyUnit = RecordedMoneyUnit<'stripe-api', 0 | 2, 'stripe-money-v1'>;
 
 export type ConfiguredSaleCurrencyRule = Readonly<{
   currency: 'usd' | 'eur';
   unit: StripeMoneyUnit;
-  minAmountMinor: 50;
-  maxAmountMinor: 99999999;
-  chargeMultiple: 1;
+  minAmountMinor: number;
+  maxAmountMinor: number;
+  chargeMultiple: number;
 }>;
 export type CommerceMoneySchema = Readonly<{
   factsVersion: 'stripe-money-v1';
@@ -31,18 +33,17 @@ function record(value: unknown): value is Record<string, unknown> {
 function keys(value: Record<string, unknown>, names: readonly string[]): boolean {
   return Object.keys(value).length === names.length && names.every((name) => name in value);
 }
+export const stripeRecordedMoneyUnits: readonly StripeMoneyUnit[] = Object.freeze([
+  Object.freeze({ system: 'stripe-api', exponent: 0, factsVersion: 'stripe-money-v1' }),
+  Object.freeze({ system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' }),
+]);
 export function isMoneyUnit(value: unknown): value is StripeMoneyUnit {
-  return (
-    record(value) &&
-    keys(value, ['system', 'exponent', 'factsVersion']) &&
-    value.system === 'stripe-api' &&
-    value.factsVersion === 'stripe-money-v1' &&
-    (value.exponent === 0 || value.exponent === 2)
-  );
+  return decodeRecordedMoneyUnit(value, stripeRecordedMoneyUnits).kind === 'known';
 }
 /** Absence in older generated DTOs and recordings stays UNKNOWN. No table backfill. */
 export function recordedMoneyUnit(value: unknown): StripeMoneyUnit | null {
-  return record(value) && isMoneyUnit(value.moneyUnit) ? value.moneyUnit : null;
+  const reading = decodeMoneyUnitEnvelope(value, stripeRecordedMoneyUnits);
+  return reading.kind === 'known' ? (reading.unit as StripeMoneyUnit) : null;
 }
 export function recordedTaxBehavior(value: unknown): 'exclusive' | null {
   return record(value) && value.taxBehavior === 'exclusive' ? 'exclusive' : null;
@@ -54,9 +55,13 @@ export function isSaleCurrencyRule(value: unknown): value is ConfiguredSaleCurre
     (value.currency === 'usd' || value.currency === 'eur') &&
     isMoneyUnit(value.unit) &&
     value.unit.exponent === 2 &&
-    value.minAmountMinor === 50 &&
-    value.maxAmountMinor === 99999999 &&
-    value.chargeMultiple === 1
+    isSafeMinorAmount(value.minAmountMinor) &&
+    value.minAmountMinor > 0 &&
+    isSafeMinorAmount(value.maxAmountMinor) &&
+    value.maxAmountMinor >= value.minAmountMinor &&
+    typeof value.chargeMultiple === 'number' &&
+    Number.isSafeInteger(value.chargeMultiple) &&
+    value.chargeMultiple > 0
   );
 }
 export function parseMoneySchema(value: unknown): CommerceMoneySchema | null {

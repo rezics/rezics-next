@@ -1,4 +1,6 @@
-import { isMoneyUnit } from './money-schema';
+import { decodeRecordedMoneyUnit, decimalParts } from '@rezics/money';
+import { stripeRecordedMoneyUnits } from './money-schema';
+import { m } from '../paraglide/messages.js';
 
 // Adopted documented currency vocabulary, used only for placement. Exponents always come from recorded metadata.
 const displayCurrencies = new Set([
@@ -28,36 +30,45 @@ const displayCurrencies = new Set([
 
 /** Exact signed recorded money. Intl chooses symbols, grouping and digits, never the unit or divisor. */
 export function formatMinorAmount(locale: string, currency: string, minor: number, unit?: unknown): string | null {
-  if (
-    !Number.isSafeInteger(minor) ||
-    typeof currency !== 'string' ||
-    !isMoneyUnit(unit) ||
-    !displayCurrencies.has(currency.toLowerCase())
-  )
-    return null;
+  if (!Number.isSafeInteger(minor) || typeof currency !== 'string' || !/^[a-z]{3}$/i.test(currency)) return null;
+  const code = currency.toUpperCase();
+  const reading = decodeRecordedMoneyUnit(unit, stripeRecordedMoneyUnits);
+  if (reading.kind !== 'known')
+    return m.money_raw_minor_unknown_unit({ amount: String(minor), currency: code });
+  if (!displayCurrencies.has(currency.toLowerCase()))
+    return m.money_raw_minor_recorded_unit({
+      amount: String(minor),
+      currency: code,
+      exponent: String(reading.unit.exponent),
+    });
+  const parts = decimalParts(minor, reading.unit.exponent);
+  if (!parts.ok) return null;
   try {
-    const digits = unit.exponent;
+    const { negative, whole, fraction, exponent } = parts.value;
     const formatter = new Intl.NumberFormat(locale, {
       style: 'currency',
-      currency: currency.toUpperCase(),
-      minimumFractionDigits: digits,
-      maximumFractionDigits: digits,
+      currency: code,
+      minimumFractionDigits: exponent,
+      maximumFractionDigits: exponent,
     });
-    const amount = BigInt(minor);
-    const scale = 10n ** BigInt(digits);
-    const whole = amount / scale;
-    const remainder = (amount < 0n ? -amount : amount) % scale;
-    const fraction = digits
+    const signedWhole = negative ? (whole === 0n ? -0 : -whole) : whole;
+    const localizedFraction = exponent
       ? new Intl.NumberFormat(locale, {
           useGrouping: false,
-          minimumIntegerDigits: digits,
+          minimumIntegerDigits: exponent,
           maximumFractionDigits: 0,
-        }).format(remainder)
+        }).format(fraction)
       : '';
-    return formatter
-      .formatToParts(whole === 0n && amount < 0n ? -0 : whole)
-      .map((part) => (part.type === 'fraction' ? fraction : part.value))
+    const display = formatter
+      .formatToParts(signedWhole)
+      .map((part) => (part.type === 'fraction' ? localizedFraction : part.value))
       .join('');
+    return m.money_formatted_recorded_minor({
+      display,
+      amount: String(minor),
+      currency: code,
+      exponent: String(exponent),
+    });
   } catch {
     return null;
   }

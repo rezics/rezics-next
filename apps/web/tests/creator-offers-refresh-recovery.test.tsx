@@ -227,7 +227,14 @@ async function mount() {
   const submitCallback = () => {
     const form = host.querySelector('form')!;
     const key = Object.getOwnPropertyNames(form).find((name) => name.startsWith('__reactProps$'))!;
-    return (form as unknown as Record<string, { onSubmit(event: { preventDefault(): void }): unknown }>)[key]!.onSubmit;
+    const handler = key
+      ? (form as unknown as Record<string, { onSubmit?: (event: { preventDefault(): void }) => unknown }>)[key]
+          ?.onSubmit
+      : undefined;
+    return handler ?? ((event: { preventDefault(): void }) => {
+      event.preventDefault();
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    });
   };
   const submit = (twice = false) =>
     act(async () => {
@@ -409,6 +416,46 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.writes[3]!.data).toEqual(p.writes[2]!.data);
     }));
 
+  test('a definitive refusal keeps the correction draft until current terms are explicitly reviewed', async () =>
+    workspace(async (p) => {
+      await p.show();
+      await p.fill('price', '12.99');
+      await p.submit();
+      await p.settle(p.writes[0]!.work, { kind: 'rejected' });
+      expect(p.input('price').value).toBe('12.99');
+      expect(p.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+
+      await p.fill('price', '13.00');
+      expect(p.input('price').value).toBe('13.00');
+      expect(p.writes).toHaveLength(1);
+
+      const latest = list();
+      if (latest.data.page.kind !== 'ready') throw new Error('Expected seller page');
+      Object.assign(latest.data.page.offers[0]!, { revision: creatorOfferFixture.revision + 1 });
+      latest.data.schema = {
+        ...configuredPriceExample,
+        configuredSaleCurrencies: configuredPriceExample.configuredSaleCurrencies.map((rule) => ({
+          ...rule,
+          chargeMultiple: 5,
+        })),
+      };
+      await p.refresh();
+      await p.settle(p.listReads.at(-1)!, latest);
+      await p.click(m.offer_review_terms());
+      await p.settle(p.listReads.at(-1)!, latest);
+      expect(p.input('price').value).toBe('13.00');
+      expect(p.writes).toHaveLength(1);
+
+      await p.submit();
+      expect(p.writes).toHaveLength(2);
+      expect(p.writes[1]!.data).toMatchObject({
+        operation: 'reprice',
+        expectedRevision: creatorOfferFixture.revision + 1,
+        unitAmountMinor: 1300,
+      });
+      expect(p.writes[1]!.data.idempotencyKey).not.toBe(p.writes[0]!.data.idempotencyKey);
+    }));
+
   for (const operation of ['reprice', 'delist'] as const)
     test(`stale ${operation} preserves the draft until explicit review and a separate new action`, async () =>
       workspace(async (p) => {
@@ -525,6 +572,7 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.host.querySelector('form')).toBeNull();
       expect(p.host.textContent).toContain(m.creator_offers_empty());
       await p.show('editor');
+      await p.tick();
       await p.settle(p.editorReads[0]!, editor());
       await p.refresh();
       const fresh = editor();
