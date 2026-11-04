@@ -212,6 +212,44 @@ export function sourceDigest(normalizedProjection: unknown): string {
   return hash(text);
 }
 
+/** Decode the two bounded VNDB representations without coercing absent or malformed data. */
+export function projectVndbReleaseMinimumAge(
+  value: unknown,
+  present: boolean,
+): {
+  sourceValue?: string | number | boolean | null;
+  quantity?: { amount: string; unit: 'http://www.wikidata.org/entity/Q577' };
+  diagnostic?: 'missing_minimum_age' | 'unknown_minimum_age' | 'invalid_minimum_age' | 'non_integral_minimum_age' | 'out_of_range_minimum_age';
+} {
+  if (!present) return { diagnostic: 'missing_minimum_age' };
+  const sourceValue =
+    value === null || typeof value === 'boolean' ||
+    (typeof value === 'string' && value.length <= 32 && value.isWellFormed()) ||
+    (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER)
+      ? value
+      : undefined;
+  if (value === null) return { sourceValue, diagnostic: 'unknown_minimum_age' };
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER)
+      return { diagnostic: 'invalid_minimum_age' };
+    if (!Number.isInteger(value)) return { sourceValue, diagnostic: 'non_integral_minimum_age' };
+    if (value < 0 || value > 18) return { sourceValue, diagnostic: 'out_of_range_minimum_age' };
+    return { sourceValue, quantity: { amount: `+${value}`, unit: 'http://www.wikidata.org/entity/Q577' } };
+  }
+  if (typeof value !== 'string' || value.length > 32 || !value.isWellFormed())
+    return { diagnostic: 'invalid_minimum_age' };
+  if (/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+    const age = Number(value);
+    if (age > 18) return { sourceValue, diagnostic: 'out_of_range_minimum_age' };
+    return { sourceValue, quantity: { amount: `+${age}`, unit: 'http://www.wikidata.org/entity/Q577' } };
+  }
+  if (/^-?(?:0|[1-9][0-9]*)\.[0-9]+$/u.test(value) && Number.isFinite(Number(value)) && !Number.isInteger(Number(value)))
+    return { sourceValue, diagnostic: 'non_integral_minimum_age' };
+  if (/^-?(?:0|[1-9][0-9]*)$/u.test(value) && Number(value) < 0)
+    return { sourceValue, diagnostic: 'out_of_range_minimum_age' };
+  return { sourceValue, diagnostic: 'invalid_minimum_age' };
+}
+
 /**
  * A pure validator over JSON data that skips bodies it already accepted. Only acceptances are
  * remembered, keyed by the body's canonical JSON text (so member order never matters); callers

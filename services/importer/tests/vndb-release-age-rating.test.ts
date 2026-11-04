@@ -100,7 +100,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
     );
     expect(kana.proposals.some((item) => item.statement.property.id === 'wdt:P2899')).toBe(true);
 
-    const previousRevision = 'cross-media-entities@4';
+    const previousRevision = 'cross-media-entities@5';
     const legacy: SourceRegistration = {
       ...current,
       converter_revision: previousRevision,
