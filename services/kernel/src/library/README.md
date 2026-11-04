@@ -2070,6 +2070,8 @@ work retains its existing bound. Each context is <= 4096 serialized UTF-8 bytes;
 unavailable. Labels are <=160 code units, Types <=32 with <=256 code units each. Thus added public context is <=409600
 bytes per native batch, before the existing aggregate transport ceiling. No Library connection spans a foreign read.
 
+Collection structure-history routes use the canonical operation IDs `collection.structure_history` and `collection.structure_history_compare`, following the mounted request catalogue's `<resource>.<verb>` grammar.
+
 `follow-discovery.ts` is the reusable private read seam for Search and Space entry. Input is <=100 unique admitted
 `{ targetId, targetType: subject|collection|space, source }` tuples, not index hints. It derives the home only from the explicit
 Account actor and returns signed-out, unavailable or current account/partition/rows with exact follow/unfollow advice.

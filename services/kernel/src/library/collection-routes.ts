@@ -901,7 +901,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           closed,
         ),
         response: { 200: strict(structureHistoryPageSchema), ...failures },
-        detail: detail('collection.structure_history.list', 'collection:update'),
+        detail: detail('collection.structure_history', 'collection:update'),
         transform: ({ set }) => {
           set.headers['cache-control'] = 'private, no-store';
         },
@@ -920,7 +920,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           closed,
         ),
         response: { 200: strict(structureHistoryComparisonSchema), ...failures },
-        detail: detail('collection.structure_history.compare', 'collection:update'),
+        detail: detail('collection.structure_history_compare', 'collection:update'),
         transform: ({ set }) => {
           set.headers['cache-control'] = 'private, no-store';
         },

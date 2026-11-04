@@ -63,10 +63,10 @@ test('current native context keeps homonyms distinct, bounds UTF-8 before hydrat
     selected[0],
   ]);
   expect((await read()).get(selected[0]!)!.context!.biography).toEqual({ state: 'absent' });
-  await db.admin.query("UPDATE access.handle_claim SET state='reserved' WHERE route=$1 AND normalized_handle=$2", [
-    claimRoute,
-    handle,
-  ]);
+  await db.admin.query(
+    "UPDATE access.handle_claim SET state='reserved',reserved_until=now()+interval '1 day' WHERE route=$1 AND normalized_handle=$2",
+    [claimRoute, handle],
+  );
   expect((await read()).get(selected[0]!)).toMatchObject({
     handle: null,
     context: { biography: { state: 'withheld' } },
@@ -80,10 +80,10 @@ test('current native context keeps homonyms distinct, bounds UTF-8 before hydrat
     "UPDATE access.account SET authn_fenced=false, biography=repeat('界',1000) WHERE route=$1 AND account_id=$2",
     [route, selected[0]],
   );
-  await db.admin.query("UPDATE access.handle_claim SET state='active' WHERE route=$1 AND normalized_handle=$2", [
-    claimRoute,
-    handle,
-  ]);
+  await db.admin.query(
+    "UPDATE access.handle_claim SET state='active',reserved_until=NULL WHERE route=$1 AND normalized_handle=$2",
+    [claimRoute, handle],
+  );
 });
 
 test('fixed Account page and byte bounds remain constant as unrelated native populations grow', async () => {
