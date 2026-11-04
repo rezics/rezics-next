@@ -2145,9 +2145,11 @@ export class Importer {
     // The context-free conversion exists only as input to identifier lookup.
     const lookup = this.options.identifierLookup;
     const ownReferences = lookup ? null : resolveOwnReferences(deferred.projection, row.source, this.session.bindings);
-    const resolvedReferences = lookup
-      ? await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal })
-      : ownReferences?.resolvedReferences;
+    let resolvedReferences = ownReferences?.resolvedReferences;
+    if (lookup) {
+      const resolution = await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal });
+      resolvedReferences = 'status' in resolution && resolution.status === 'unavailable' ? undefined : resolution;
+    }
     const context = {
       subjectId: claim.subject,
       ...(resolvedReferences ? { resolvedReferences } : {}),
