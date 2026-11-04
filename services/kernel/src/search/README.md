@@ -1989,3 +1989,31 @@ future released identities are recognized by this reader, but no album is promot
 association is synthesized. Current Edition, VideoGameRelease and AnimeRelease producers supply real release
 identity today. The separate Web homonym journey must consume the generated field; its mounted receiving and
 navigation acceptance remains an integration check, not evidence supplied by source review or native tests.
+
+## Credited-name projection consumer
+
+Decision: credited-name coverage is all-or-readiness per work; an incomplete credit or creator-label prefix
+publishes no searchable names. Ordinary names/descriptions keep their installed meaning.
+
+[The bounded consumer](credit-search.ts) supplies `CreditSearchSource`, a minimal native adapter contract, and
+an additive successor [mapping](credit-search-mapping.ts). These are not yet mounted in the native projection,
+query, transport or Web controls. An absent adapter returns `unavailable`. The existing three-entry work-context
+preview cannot implement this complete-input seam. Semantic's released `listWorkPlan` credit-property selection
+is the shared meaning; this consumer interprets no generic statements or fixed author-role roster.
+
+The adapter must seek complete selected outgoing credits and public creator labels/aliases, preserve each
+statement's exact target and qualifiers, and bind its observation to the work and every creator dependency.
+Source literal credits are outside this native identity contract. Native disclosure owns concealment and merges.
+The index adapter must retain complete projection witnesses, and actual engine match evidence must select one
+of those witnesses before `currentCreditSearchMatch` revalidates it. Its observation must remain bound to the
+receiving page's existing final disclosure guard. This helper alone does not authorize a public response.
+
+Cost: anchor one work; at most four indexed credit seeks, each examining at most 32 selected credits, with at
+most four qualifiers and 16 public labels/aliases per creator, including nested producer work. The native adapter
+must enforce these ceilings before expansion, and report incomplete label coverage explicitly. Each label has
+at most 256 UTF-8 bytes; each returned page at most 64 KiB; accumulated witness material at most 128 KiB.
+An unfinished fourth page returns incomplete without a fifth read. Final projection validation performs one
+whole-dependency observation; one selected match adds an exact supporting-credit/name read and a final
+whole-dependency observation. Population growth outside these anchored seeks must not increase examined rows.
+Native 256/1024/4096 growth measurement, relay/rebuild invalidation, coverage publication and receiver/browser
+acceptance remain required when mounting this consumer; the focused tests exercise only this consumer contract.
