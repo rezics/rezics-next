@@ -250,15 +250,17 @@ export function useScreenEpisodeVisit({
     }
   }, [currentHref, currentAddress, pageKey, sourceKey, locale, observation, owner]);
 
-  const chosenReturn = directReturn ?? (resolvedReturn?.page === pageKey && resolvedReturn.href
-    ? (() => {
-        const value = subjectVisitReturn(resolvedReturn.href, locale);
-        if (!value) return undefined;
-        const url = new URL(value, 'https://rezics.invalid');
-        const membershipId = new URLSearchParams(url.search).get('screenSelection');
-        return membershipId ? { href: value, membershipId } : undefined;
-      })()
-    : undefined);
+  const chosenReturn =
+    directReturn ??
+    (resolvedReturn?.page === pageKey && resolvedReturn.href
+      ? (() => {
+          const value = subjectVisitReturn(resolvedReturn.href, locale);
+          if (!value) return undefined;
+          const url = new URL(value, 'https://rezics.invalid');
+          const membershipId = new URLSearchParams(url.search).get('screenSelection');
+          return membershipId ? { href: value, membershipId } : undefined;
+        })()
+      : undefined);
 
   useEffect(() => {
     if (!owner.lease.current() || loading || !read?.ok) return;
@@ -270,9 +272,10 @@ export function useScreenEpisodeVisit({
       if (matches && intent.kind === 'start')
         addressesForReading = addressesForReading.filter((address) => address.reading !== reading);
       const known = addressesForReading.find((address) => address.key === currentAddress);
-      if (known) return previous.source === sourceKey && addressesForReading === previousAddresses
-        ? previous
-        : { source: sourceKey, addresses: addressesForReading };
+      if (known)
+        return previous.source === sourceKey && addressesForReading === previousAddresses
+          ? previous
+          : { source: sourceKey, addresses: addressesForReading };
       const previousKey = matches && intent.kind === 'continue' ? intent.from : undefined;
       const cursor = currentCursor.kind === 'cursor' ? currentCursor.cursor : undefined;
       const next: Address = {
@@ -284,8 +287,7 @@ export function useScreenEpisodeVisit({
       };
       return { source: sourceKey, addresses: [...addressesForReading, next].slice(-SCREEN_EPISODE_VISIT_LIMIT) };
     });
-    if (pending.current?.source === sourceKey && pending.current.target === currentAddress)
-      pending.current = undefined;
+    if (pending.current?.source === sourceKey && pending.current.target === currentAddress) pending.current = undefined;
   }, [owner, sourceKey, currentAddress, reading, currentCursor, read, loading, settledKey]);
 
   useEffect(() => {
@@ -314,15 +316,17 @@ export function useScreenEpisodeVisit({
     if (!ticket.lease.current()) return;
     const active = document.activeElement;
     if (active !== ticket.element && !(ticket.allowBody && active === document.body)) return;
-    const selected = ticket.membership && read?.ok && read.entries.some((entry) => entry.membershipId === ticket.membership);
+    const selected =
+      ticket.membership && read?.ok && read.entries.some((entry) => entry.membershipId === ticket.membership);
     const admittedEntry = selected
       ? document.getElementById(screenEpisodeEntryElementId(ticket.membership!) ?? '')
       : null;
-    const element = admittedEntry ??
+    const element =
+      admittedEntry ??
       (read?.ok
         ? document.querySelector('[data-screen-episode-list]')
-        : document.querySelector('[data-screen-episode-recovery]') ??
-          document.querySelector('[data-screen-episode-list]'));
+        : (document.querySelector('[data-screen-episode-recovery]') ??
+          document.querySelector('[data-screen-episode-list]')));
     (element as HTMLElement | null)?.focus();
   }, [loading, read, settledKey, sourceKey, currentAddress]);
 
@@ -392,7 +396,7 @@ export function useScreenEpisodeVisit({
     previousHref: previous?.href,
     startHref,
     canContinue: !!canContinue,
-    stopped: atLimit ? 'limit' as const : repeatedCursor ? 'cycle' as const : undefined,
+    stopped: atLimit ? ('limit' as const) : repeatedCursor ? ('cycle' as const) : undefined,
     visitKey: `${sourceKey}:${pageKey}:${settledKey}`,
     returnHref: chosenReturn?.href,
     returnMembershipId: chosenReturn?.membershipId,

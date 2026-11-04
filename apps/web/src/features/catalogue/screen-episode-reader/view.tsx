@@ -143,8 +143,10 @@ export function ScreenEpisodeList({
   const selected = returnedSelection ?? selectedMembershipId;
   const selectionMissing =
     !!returnedSelection && read?.ok && !read.entries.some((entry) => entry.membershipId === returnedSelection);
-  const startHref = visit?.startHref ??
-    (new URLSearchParams(origin.searchStr).has('screenCursor') || new URLSearchParams(origin.searchStr).has('screenSelection')
+  const startHref =
+    visit?.startHref ??
+    (new URLSearchParams(origin.searchStr).has('screenCursor') ||
+    new URLSearchParams(origin.searchStr).has('screenSelection')
       ? screenEpisodeRestartHref(origin)
       : undefined);
 
@@ -219,7 +221,9 @@ export function ScreenEpisodeList({
               <div className="min-w-0 rounded-md bg-muted/40 p-3">
                 <div
                   className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1"
-                  onClickCapture={(event) => visit?.onEntryNavigate(href, event as unknown as MouseEvent<HTMLAnchorElement>)}
+                  onClickCapture={(event) =>
+                    visit?.onEntryNavigate(href, event as unknown as MouseEvent<HTMLAnchorElement>)
+                  }
                 >
                   <Link
                     href={href}

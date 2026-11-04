@@ -42,12 +42,7 @@ export function screenEpisodeCursorIntent(searchStr: string): ScreenEpisodeCurso
   const values = new URLSearchParams(searchStr).getAll(SCREEN_EPISODE_CURSOR);
   if (!values.length) return { kind: 'first' };
   const value = values[0];
-  if (
-    values.length !== 1 ||
-    !value ||
-    value.length > 8192 ||
-    /[\u0000-\u001f\u007f]/u.test(value)
-  )
+  if (values.length !== 1 || !value || value.length > 8192 || /[\u0000-\u001f\u007f]/u.test(value))
     return { kind: 'invalid' };
   return { kind: 'cursor', cursor: value };
 }
@@ -90,9 +85,10 @@ export function screenEpisodeRestartHref(origin: ScreenEpisodeOrigin): string {
   return queryAddress(origin.pathname, search);
 }
 
-export function screenEpisodeReturn(searchStr: string, locale: string):
-  | { href: string; membershipId: string }
-  | undefined {
+export function screenEpisodeReturn(
+  searchStr: string,
+  locale: string,
+): { href: string; membershipId: string } | undefined {
   const via = new URLSearchParams(searchStr).getAll('via');
   if (via.length !== 1) return;
   const href = subjectVisitReturn(via[0], locale);

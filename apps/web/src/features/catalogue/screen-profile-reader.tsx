@@ -232,14 +232,7 @@ export function ScreenProfileOverview({
   const pageKey = JSON.stringify([profileSourceKey, fullAddress, routeGeneration]);
   const observationCurrent = () => observationStore.getSnapshot() === observation;
   const query = useQuery({
-    queryKey: [
-      'screen-profile-reader',
-      instance,
-      profileSourceKey,
-      pageKey,
-      cursorIntent.kind,
-      episodeCursor ?? '',
-    ],
+    queryKey: ['screen-profile-reader', instance, profileSourceKey, pageKey, cursorIntent.kind, episodeCursor ?? ''],
     queryFn: async (): Promise<ScreenProfileReaderLoad> => {
       if (cursorIntent.kind === 'invalid') {
         const profile = await loadScreenProfileFactsForReader({
@@ -267,23 +260,15 @@ export function ScreenProfileOverview({
   const lastGoodProfile = useRef<{ source: string; profile: typeof loadedProfile } | undefined>(undefined);
   if (lastGoodProfile.current?.source !== profileSourceKey) lastGoodProfile.current = undefined;
   if (loadedProfile?.ok) lastGoodProfile.current = { source: profileSourceKey, profile: loadedProfile };
-  const profile = loadedProfile?.ok ? loadedProfile : lastGoodProfile.current?.profile ?? loadedProfile;
+  const profile = loadedProfile?.ok ? loadedProfile : (lastGoodProfile.current?.profile ?? loadedProfile);
   const release = profile?.ok ? profile.release : undefined;
   const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
   const episodeRead: ScreenEpisodeRead | undefined =
     cursorIntent.kind === 'invalid'
       ? { ok: false, reason: 'stale' }
-      : query.data?.episodes ?? (query.isError ? { ok: false, reason: 'unavailable' } : undefined);
-  const episodeSourceKey = JSON.stringify([
-    profileSourceKey,
-    release ? releaseDigest(release) : '',
-  ]);
-  const settledKey = JSON.stringify([
-    query.dataUpdatedAt,
-    query.errorUpdatedAt,
-    query.fetchStatus,
-    query.failureCount,
-  ]);
+      : (query.data?.episodes ?? (query.isError ? { ok: false, reason: 'unavailable' } : undefined));
+  const episodeSourceKey = JSON.stringify([profileSourceKey, release ? releaseDigest(release) : '']);
+  const settledKey = JSON.stringify([query.dataUpdatedAt, query.errorUpdatedAt, query.fetchStatus, query.failureCount]);
   const directReturn = screenEpisodeReturn(location.searchStr, locale);
   const episodeVisit = useScreenEpisodeVisit({
     sourceKey: episodeSourceKey,

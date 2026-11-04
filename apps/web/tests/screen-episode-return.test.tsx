@@ -145,7 +145,11 @@ function Journey({ initial }: { initial: string }) {
   return h(
     NavigateContext.Provider,
     { value: (next: string) => setHref(next) },
-    h('button', { type: 'button', onClick: () => setHref('/en/subjects/00000000-0000-4000-8000-000000000905/elsewhere') }, 'Leave reading'),
+    h(
+      'button',
+      { type: 'button', onClick: () => setHref('/en/subjects/00000000-0000-4000-8000-000000000905/elsewhere') },
+      'Leave reading',
+    ),
     h(ScreenProfileReader, {
       locale: 'en',
       public: subject(id, type),
@@ -167,8 +171,10 @@ async function mountedJourney(startHref = initialHref) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   ScreenProfileReader = (await import('../src/features/catalogue/screen-profile-reader')).ScreenProfileReader;
-  useScreenEpisodeVisit = (await import('../src/features/catalogue/screen-episode-reader/visit/owner')).useScreenEpisodeVisit;
-  screenEpisodeReturn = (await import('../src/features/catalogue/screen-episode-reader/navigation')).screenEpisodeReturn;
+  useScreenEpisodeVisit = (await import('../src/features/catalogue/screen-episode-reader/visit/owner'))
+    .useScreenEpisodeVisit;
+  screenEpisodeReturn = (await import('../src/features/catalogue/screen-episode-reader/navigation'))
+    .screenEpisodeReturn;
   const window = new Window({ url: `https://site.invalid${startHref}` });
   const keys = [
     'window',
@@ -235,9 +241,9 @@ test('series, season and episode return to the admitted membership and original 
   try {
     await clickText(host, 'Season One', window);
     const seasonAddress = new URL(app.current(), window.location.origin);
-    expect(new URL(seasonAddress.searchParams.get('via')!, window.location.origin).searchParams.get('screenCursor')).toBe(
-      'series-window-two',
-    );
+    expect(
+      new URL(seasonAddress.searchParams.get('via')!, window.location.origin).searchParams.get('screenCursor'),
+    ).toBe('series-window-two');
     await clickText(host, m.screen_episode_reader_continue({}, { locale: 'en' }), window);
     expect(new URL(app.current(), window.location.origin).searchParams.get('screenCursor')).toBe('season-window-two');
     await clickText(host, 'The Observatory Special', window);
@@ -276,7 +282,9 @@ test('stale windows restart explicitly, dependency failures retry the exact curs
     expect(restarted.searchParams.get('realm')).toBe(contextId);
 
     await navigate(`/en/subjects/${seriesId}/the-observatory?realm=${contextId}&screenCursor=failed-window`);
-    const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.correction_retry({}, { locale: 'en' }));
+    const retry = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.correction_retry({}, { locale: 'en' }),
+    );
     expect(retry).toBeTruthy();
     await act(async () => retry!.click());
     expect(retryCursors).toEqual(['failed-window']);
@@ -302,7 +310,10 @@ test('a return focus ticket is retired before a later direct visit can reuse it'
     await clickText(host, 'Season One', window);
     await clickText(host, m.screen_episode_reader_continue({}, { locale: 'en' }), window);
     await clickText(host, 'The Observatory Special', window);
-    const directReturn = new URL(new URL(current(), window.location.origin).searchParams.get('via')!, window.location.origin);
+    const directReturn = new URL(
+      new URL(current(), window.location.origin).searchParams.get('via')!,
+      window.location.origin,
+    );
     holdSeasonRead = true;
     await rerender();
     await clickText(host, m.screen_episode_reader_return({}, { locale: 'en' }), window);

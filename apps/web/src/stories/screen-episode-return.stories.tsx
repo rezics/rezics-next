@@ -153,8 +153,7 @@ const episodeReturn = new URLSearchParams(seasonOrigin.searchStr);
 episodeReturn.delete('via');
 episodeReturn.set('screenCursor', 'season-window');
 episodeReturn.set('screenSelection', episodeMembership);
-const episodeReturnHref =
-  `/en/subjects/${seasonId}/season-one?${episodeReturn}#screen-episode-entry-${episodeMembership}`;
+const episodeReturnHref = `/en/subjects/${seasonId}/season-one?${episodeReturn}#screen-episode-entry-${episodeMembership}`;
 const episodeOrigin: ScreenEpisodeOrigin = {
   pathname: `/en/subjects/${episodeId}/the-observatory-special`,
   searchStr: `?realm=${contextId}&via=${encodeURIComponent(episodeReturnHref)}`,
@@ -197,18 +196,16 @@ export const SparseLaterWindow: Story = {
     type: 'schema:TVSeries',
     label: 'The Observatory',
     origin: { ...seriesOrigin, searchStr: `${seriesOrigin.searchStr}&screenCursor=native-window-two` },
-    read: admitted(
-      [
-        entry({
-          membershipId: otherEpisodeId,
-          id: otherEpisodeId,
-          parentId: seriesId,
-          type: 'schema:Episode',
-          label: 'A Later Special',
-          position: 'Special 4',
-        }),
-      ],
-    ),
+    read: admitted([
+      entry({
+        membershipId: otherEpisodeId,
+        id: otherEpisodeId,
+        parentId: seriesId,
+        type: 'schema:Episode',
+        label: 'A Later Special',
+        position: 'Special 4',
+      }),
+    ]),
   },
 };
 
