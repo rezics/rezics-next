@@ -148,20 +148,42 @@ function recordingClient(
         if (url.pathname === `/v1/threads/${threadId}/reading-page`) {
           const opening = data.threads[0]!.firstPost!;
           const selected = data.posts.filter((post) => post.id !== opening.id).slice(0, 20);
-          const items = selected.map((post) => data.erased.has(post.id) ? {
-            id: post.id, threadId, route: post.route, parentId: post.parentId,
-            removed: true as const, availability: 'erased' as const, body: null, sha256: null,
-          } : post);
-          const disclosed = [...new Set([opening, ...selected.filter((post) => !data.erased.has(post.id))].map((post) => post.authorId))];
-          const page = authoredReadingPage({ ...data.threads[0], kind: 'discussion', title: 'Cost thread' } as ReadingPage['thread'],
-            items as ReadingPage['replies']['items'], disclosed.map((accountId) => ({
-              id: accountId, handle: `author-${accountId.slice(-3)}`, displayName: null, avatar: null,
-            })));
+          const items = selected.map((post) =>
+            data.erased.has(post.id)
+              ? {
+                  id: post.id,
+                  threadId,
+                  route: post.route,
+                  parentId: post.parentId,
+                  removed: true as const,
+                  availability: 'erased' as const,
+                  body: null,
+                  sha256: null,
+                }
+              : post,
+          );
+          const disclosed = [
+            ...new Set([opening, ...selected.filter((post) => !data.erased.has(post.id))].map((post) => post.authorId)),
+          ];
+          const page = authoredReadingPage(
+            { ...data.threads[0], kind: 'discussion', title: 'Cost thread' } as ReadingPage['thread'],
+            items as ReadingPage['replies']['items'],
+            disclosed.map((accountId) => ({
+              id: accountId,
+              handle: `author-${accountId.slice(-3)}`,
+              displayName: null,
+              avatar: null,
+            })),
+          );
           if (failure) {
             page.authors = { state: 'unavailable', retryable: true, items: [] };
             page.currentness.authors = 'unavailable';
           }
-          data.cost = { bytes: new TextEncoder().encode(JSON.stringify(page)).byteLength, rows: 1 + items.length, authors: page.authors.items.length };
+          data.cost = {
+            bytes: new TextEncoder().encode(JSON.stringify(page)).byteLength,
+            rows: 1 + items.length,
+            authors: page.authors.items.length,
+          };
           return Response.json(page);
         }
         if (url.pathname === `/v1/threads/${threadId}`)
@@ -314,4 +336,28 @@ test('failed optional identities leave thread reads intact without retries; Boar
     // The original opening stays present on every bounded reply page.
     expect(metrics).toEqual({ K: 2, D: 1, R: 0, A: 0 });
   }
+});
+
+test('unrelated post and author growth does not enlarge the selected consumer cohort', async () => {
+  const cohorts = [];
+  for (const size of [100, 1000]) {
+    const metrics: Metrics = { K: 0, D: 0, R: 0, A: 0 };
+    const calls: URL[] = [];
+    const recorded = recordingClient(size, size, metrics, calls);
+    const page = await loadThreadPageWithAuthors(
+      recorded.client,
+      signedRequest(),
+      sessionEnv(metrics),
+      { id: threadId },
+      { sitekey: '', scriptUrl: '' },
+    );
+    cohorts.push({
+      ...recorded.data.cost,
+      requests: metrics.K,
+      retainedRows: page.posts.posts.length,
+      retainedAuthors: Object.keys(page.authors ?? {}).length,
+    });
+  }
+  expect(cohorts[0]).toEqual(cohorts[1]);
+  expect(cohorts[0]).toMatchObject({ requests: 2, rows: 21, authors: 21, retainedRows: 21, retainedAuthors: 21 });
 });

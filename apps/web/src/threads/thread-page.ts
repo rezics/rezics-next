@@ -15,10 +15,12 @@ type ThreadResource = ReturnType<KernelClient['threads']>;
 type BoardResource = ReturnType<KernelClient['boards']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'];
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
+type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
 export type ReadingPage = NonNullable<Awaited<ReturnType<ThreadResource['reading-page']['get']>>['data']>;
 export type ThreadPost = ReadingPage['thread']['firstPost'] | ReadingPage['replies']['items'][number];
 export type ThreadPageAuthor = ReadingPage['authors']['items'][number];
-export type ThreadPageObservation = Pick<ReadingPage,
+export type ThreadPageObservation = Pick<
+  ReadingPage,
   'target' | 'viewer' | 'query' | 'actions' | 'watch' | 'slowMode' | 'currentness' | 'reactionsAsOf'
 >;
 
@@ -31,7 +33,7 @@ export type LoadedThreadPage = {
   thread: Thread['thread'];
   board?: Board;
   realm?: BoardRealm;
-  posts: { posts: ThreadPost[]; next: string | null };
+  posts: Omit<PostPage, 'posts'> & { posts: ThreadPost[] };
   /** Present only on the installed composed current-page read. */
   composed?: ThreadPageObservation;
   authors: import('../identity/read').PageAuthors;
@@ -48,8 +50,15 @@ export class ThreadPageCursorError extends Error {
 }
 
 export function isThreadPageCursorError(error: unknown): boolean {
-  return error instanceof ThreadPageCursorError || (!!error && typeof error === 'object' &&
-    'name' in error && error.name === 'ThreadPageCursorError' && 'code' in error && error.code === 'invalid_cursor');
+  return (
+    error instanceof ThreadPageCursorError ||
+    (!!error &&
+      typeof error === 'object' &&
+      'name' in error &&
+      error.name === 'ThreadPageCursorError' &&
+      'code' in error &&
+      error.code === 'invalid_cursor')
+  );
 }
 
 function checkRead<T>(result: { error?: unknown; status?: number; data?: T | null }, resource: string): NonNullable<T> {
@@ -101,10 +110,13 @@ export async function loadThreadPage(
   const readReadingPage = async () => {
     let cursor = data.cursor;
     if (data.post !== undefined) {
-      const result = await client.threads({ id: data.id }).posts({ postId: data.post }).location.get({
-        ...(authorization ? { headers: { authorization } } : {}),
-        fetch: { cache: 'no-store' },
-      });
+      const result = await client
+        .threads({ id: data.id })
+        .posts({ postId: data.post })
+        .location.get({
+          ...(authorization ? { headers: { authorization } } : {}),
+          fetch: { cache: 'no-store' },
+        });
       if (result.status === 404) {
         linkedPostUnavailable = true;
         cursor = undefined;
@@ -175,11 +187,13 @@ export async function loadThreadPage(
     readThreadDocumentMedia(client, posts.posts, authorization),
   ]);
   // Only identities named by readable posts can enter this page's byline map.
-  const disclosed = new Set(posts.posts.flatMap((post) =>
-    post.availability === 'available' ? [post.authorId] : []));
-  const authors = readingPage.authors.state === 'current' && readingPage.currentness.authors === 'current'
-    ? Object.fromEntries(readingPage.authors.items.filter((author) => disclosed.has(author.id)).map((author) => [author.id, author]))
-    : null;
+  const disclosed = new Set(posts.posts.flatMap((post) => (post.availability === 'available' ? [post.authorId] : [])));
+  const authors =
+    readingPage.authors.state === 'current' && readingPage.currentness.authors === 'current'
+      ? Object.fromEntries(
+          readingPage.authors.items.filter((author) => disclosed.has(author.id)).map((author) => [author.id, author]),
+        )
+      : null;
   const { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf } = readingPage;
   return {
     authors,

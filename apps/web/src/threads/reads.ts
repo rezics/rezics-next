@@ -297,33 +297,31 @@ export const readPostHistory = createServerFn({ method: 'GET' })
 
 export const readThreadPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
-  .handler(
-    async ({ data }): Promise<import('./thread-reading').ThreadReadingPage | ThreadSlugRedirect> => {
-      setResponseHeader('cache-control', 'private, no-store');
-      const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
-      const request = getRequest();
-      const client = kernelClient();
-      const page = await loadThreadPageWithAuthors(
+  .handler(async ({ data }): Promise<import('./thread-reading').ThreadReadingPage | ThreadSlugRedirect> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
+    const request = getRequest();
+    const client = kernelClient();
+    const page = await loadThreadPageWithAuthors(
+      client,
+      request,
+      env as Partial<SessionEnv>,
+      data,
+      {
+        sitekey: config.TURNSTILE_SITE_KEY ?? '',
+        scriptUrl:
+          (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
+          'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+      },
+      data.credentialMode ?? 'anonymous',
+    );
+    if ('redirect' in page) return page;
+    return {
+      ...page,
+      provenanceSubjects: await readRevisionSubjects(
         client,
-        request,
-        env as Partial<SessionEnv>,
-        data,
-        {
-          sitekey: config.TURNSTILE_SITE_KEY ?? '',
-          scriptUrl:
-            (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
-            'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
-        },
-        data.credentialMode ?? 'anonymous',
-      );
-      if ('redirect' in page) return page;
-      return {
-        ...page,
-        provenanceSubjects: await readRevisionSubjects(
-          client,
-          page.posts.posts.filter((post) => post.availability === 'available'),
-          page.subjects,
-        ),
-      };
-    },
-  );
+        page.posts.posts.filter((post) => post.availability === 'available'),
+        page.subjects,
+      ),
+    };
+  });

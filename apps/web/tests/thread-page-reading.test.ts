@@ -3,7 +3,7 @@ import { createKernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
 import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
 import type { ReadingPage } from '../src/threads/thread-page';
-import { loadThreadPage } from '../src/threads/thread-page';
+import { isThreadPageCursorError, loadThreadPage } from '../src/threads/thread-page';
 
 const threadId = '11111111-1111-4111-8111-111111111111';
 const boardId = '22222222-2222-4222-8222-222222222222';
@@ -42,7 +42,8 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     sha256: 'reply-digest',
     body: fromPlainText('Reply text stays local', 'blocks'),
   };
-  const response = authoredReadingPage({
+  const response = authoredReadingPage(
+    {
       id: threadId,
       route: 0,
       authorId,
@@ -56,14 +57,25 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
       availability: 'available',
       createdAt,
       firstPost: opening,
-    }, [reply], [{ id: authorId, displayName: 'Disclosed author', handle: null, avatar: null }]);
+    },
+    [reply],
+    [{ id: authorId, displayName: 'Disclosed author', handle: null, avatar: null }],
+  );
   const paths: string[] = [];
+  let failed = false;
+  let missingLocation = false;
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const url = new URL(new Request(input, init).url);
       paths.push(`${url.pathname}${url.search}`);
-      if (url.pathname.endsWith('/location')) return Response.json({ cursor: 'selected-reply-cursor' });
-      if (url.pathname.endsWith('/reading-page')) return Response.json(response);
+      expect(new Request(input, init).headers.has('authorization')).toBe(false);
+      if (url.pathname.endsWith('/location'))
+        return missingLocation
+          ? new Response(null, { status: 404 })
+          : Response.json({ cursor: 'selected-reply-cursor' });
+      if (url.pathname.endsWith('/reading-page'))
+        return failed ? Response.json({ code: 'invalid_cursor' }, { status: 400 }) : Response.json(response);
+      if (url.pathname === `/v1/threads/${threadId}`) return Response.json({ thread: response.thread });
       if (url.pathname === `/v1/boards/${boardId}`) return Response.json({});
       throw new Error(`Unexpected Kernel read: ${url.pathname}`);
     },
@@ -86,19 +98,90 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   ]);
   expect(page.posts.posts.map(({ body }) => body)).toEqual([opening.body, reply.body]);
   expect(page.authors?.[authorId]).toEqual(response.authors.items[0]);
-  expect(page.composed).toMatchObject({ currentness: response.currentness, actions: response.actions, reactionsAsOf: null });
+  expect(page.composed).toMatchObject({
+    currentness: response.currentness,
+    actions: response.actions,
+    reactionsAsOf: null,
+  });
   expect(paths.some((path) => path.startsWith('/v1/accounts'))).toBe(false);
 
   // Safe native tombstones disclose no substitute author or timestamp, and sparse pages retain continuation.
-  response.replies = { items: [
-    { id: replyId, threadId, route: 1, parentId: openingId, availability: 'withheld', removed: true, body: null, sha256: null },
-    { id: '88888888-8888-4888-8888-888888888888', threadId, route: 2, parentId: openingId, availability: 'erased', removed: true, body: null, sha256: null },
-  ], next: 'sparse-next' };
+  response.replies = {
+    items: [
+      {
+        id: replyId,
+        threadId,
+        route: 1,
+        parentId: openingId,
+        availability: 'withheld',
+        removed: true,
+        body: null,
+        sha256: null,
+      },
+      {
+        id: '88888888-8888-4888-8888-888888888888',
+        threadId,
+        route: 2,
+        parentId: openingId,
+        availability: 'erased',
+        removed: true,
+        body: null,
+        sha256: null,
+      },
+    ],
+    next: 'sparse-next',
+  };
   response.authors = { state: 'unavailable', retryable: true, items: [] };
   response.currentness.authors = 'unavailable';
-  const unavailable = await loadThreadPage(client, new Request('https://web.test/'), {}, { id: threadId }, { sitekey: '', scriptUrl: '' }, 'anonymous');
+  const unavailable = await loadThreadPage(
+    client,
+    new Request('https://web.test/'),
+    {},
+    { id: threadId },
+    { sitekey: '', scriptUrl: '' },
+    'anonymous',
+  );
   expect(unavailable.authors).toBeNull();
   expect(unavailable.posts.next).toBe('sparse-next');
   expect(unavailable.posts.posts.slice(1)).toEqual(response.replies.items);
   expect(unavailable.posts.posts[0]?.body).toEqual(opening.body);
+  missingLocation = true;
+  const missing = await loadThreadPage(
+    client,
+    new Request('https://web.test/'),
+    {},
+    { id: threadId, post: replyId },
+    { sitekey: '', scriptUrl: '' },
+    'anonymous',
+  );
+  expect(missing.linkedPostUnavailable).toBe(true);
+  failed = true;
+  for (let retry = 0; retry < 2; retry++) {
+    let failure: unknown;
+    try {
+      await loadThreadPage(
+        client,
+        new Request('https://web.test/'),
+        {},
+        { id: threadId, cursor: 'exact-cursor' },
+        { sitekey: '', scriptUrl: '' },
+        'anonymous',
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(isThreadPageCursorError(failure)).toBe(true);
+  }
+  expect(paths.slice(-2)).toEqual(Array(2).fill(`/v1/threads/${threadId}/reading-page?cursor=exact-cursor`));
+  failed = false;
+  response.thread.title = 'A changed title';
+  const redirect = await loadThreadPage(
+    client,
+    new Request('https://web.test/'),
+    {},
+    { id: threadId, expectedSlug: 'a-reading-page' },
+    { sitekey: '', scriptUrl: '' },
+    'anonymous',
+  );
+  expect(redirect).toEqual({ redirect: { id: threadId, title: 'A changed title' } });
 });

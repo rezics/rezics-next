@@ -65,15 +65,17 @@ export function RemovedPost({
     return (
       <li {...common}>
         <ContentItemFrame as="div" data-slot="content-item-frame" className="min-w-0 rounded-xl px-4 py-5 sm:px-6">
-          {'createdAt' in post ? <div className="mb-3 flex items-start justify-between gap-3">
-            <Byline
-              author={author}
-              createdAt={post.createdAt}
-              now={now}
-              showAuthor={authors !== null && authorId !== undefined}
-              className="min-h-8 flex-1"
-            />
-          </div> : null}
+          {'createdAt' in post ? (
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <Byline
+                author={author}
+                createdAt={post.createdAt}
+                now={now}
+                showAuthor={authors !== null && authorId !== undefined}
+                className="min-h-8 flex-1"
+              />
+            </div>
+          ) : null}
           {children}
           <Withheld shape="passage" labels={{ withheld: m.thread_post_withheld() }} />
           {owner && 'decisionId' in post && post.decisionId ? (

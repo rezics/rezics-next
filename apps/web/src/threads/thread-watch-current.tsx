@@ -254,8 +254,14 @@ export class ThreadWatchVisit {
 
   canBegin = () => {
     const page = this.binding.props.observation;
-    return !page || threadPageOperation(page, { kind: 'thread', id: this.owner.threadId },
-      this.view.watching ? 'thread.unwatch' : 'thread.watch') === 'available';
+    return (
+      !page ||
+      threadPageOperation(
+        page,
+        { kind: 'thread', id: this.owner.threadId },
+        this.view.watching ? 'thread.unwatch' : 'thread.watch',
+      ) === 'available'
+    );
   };
 
   begin = () => {

@@ -518,11 +518,15 @@ export function ThreadPage() {
                   (session !== 'signed-in' ||
                     (!!caller && caller.personalSessionReady() && caller.isConnectedCurrent()))
                 }
-                {...(visiblePage.composed && threadPageViewerMatches(visiblePage.composed, subject) ? {
-                  observation: visiblePage.composed,
-                  ...(visiblePage.composed.currentness.watch === 'current' && visiblePage.composed.watch.state === 'current'
-                    ? { initialWatching: visiblePage.composed.watch.watching } : {}),
-                } : {})}
+                {...(visiblePage.composed && threadPageViewerMatches(visiblePage.composed, subject)
+                  ? {
+                      observation: visiblePage.composed,
+                      ...(visiblePage.composed.currentness.watch === 'current' &&
+                      visiblePage.composed.watch.state === 'current'
+                        ? { initialWatching: visiblePage.composed.watch.watching }
+                        : {}),
+                    }
+                  : {})}
                 returnTo={returnTo}
                 isCurrent={isCallbackCurrent}
               />
@@ -608,9 +612,11 @@ export function ThreadReadingPost({
   review: boolean;
 }) {
   const composedViewerCurrent = !composed || threadPageViewerMatches(composed, viewerId);
-  const canReact = !composed || (composedViewerCurrent &&
-    threadPageOperation(composed, target, `${target.kind}.set_reaction`, post) === 'available' &&
-    threadPageOperation(composed, target, `${target.kind}.clear_reaction`, post) === 'available');
+  const canReact =
+    !composed ||
+    (composedViewerCurrent &&
+      threadPageOperation(composed, target, `${target.kind}.set_reaction`, post) === 'available' &&
+      threadPageOperation(composed, target, `${target.kind}.clear_reaction`, post) === 'available');
   const reactionsAvailable = reactionFieldsAvailable && (!composed || composed.currentness.reactions === 'current');
   const [editing, setEditing] = useState(false);
   const [editKey, setEditKey] = useState('');
@@ -971,16 +977,20 @@ export function ThreadReadingPost({
           plain={target.kind === 'post'}
           layout="detail"
           origin={{ key: String(lifetime.id), isCurrent: () => current() }}
-          reaction={reactionsAvailable ? {
-            target,
-            counts,
-            value,
-            onMutation,
-            personalReady: personalReady && canReact && reactionViewerAvailable,
-            ...(composed ? { sourceWatermark: composed.reactionsAsOf } : {}),
-            settleWithRead: false,
-            reactionOrigin: { key: String(lifetime.id), reader: viewerId ?? null, isCurrent: () => current() },
-          } : undefined}
+          reaction={
+            reactionsAvailable
+              ? {
+                  target,
+                  counts,
+                  value,
+                  onMutation,
+                  personalReady: personalReady && canReact && reactionViewerAvailable,
+                  ...(composed ? { sourceWatermark: composed.reactionsAsOf } : {}),
+                  settleWithRead: false,
+                  reactionOrigin: { key: String(lifetime.id), reader: viewerId ?? null, isCurrent: () => current() },
+                }
+              : undefined
+          }
           reply={{ onReply, disabled: replyPending || !personalReady }}
           overflow={
             editing ? (

@@ -238,9 +238,14 @@ export function ThreadReading({
     [branches, posts.posts],
   );
   // Private data is consumed only while the session still says signed in.
-  const observationMatches = !page.composed || threadPageViewerMatches(page.composed, session === 'signed-in' ? personal?.viewerId : null);
-  const replyAvailable = !page.composed || (observationMatches && page.composed.currentness.actions === 'current' &&
-    page.composed.actions.state === 'current' && page.composed.actions.reply.state === 'available');
+  const observationMatches =
+    !page.composed || threadPageViewerMatches(page.composed, session === 'signed-in' ? personal?.viewerId : null);
+  const replyAvailable =
+    !page.composed ||
+    (observationMatches &&
+      page.composed.currentness.actions === 'current' &&
+      page.composed.actions.state === 'current' &&
+      page.composed.actions.reply.state === 'available');
   const currentPersonal = pageCurrent && session === 'signed-in' ? personal : undefined;
   const retainedCommandAuthority = useRef<{
     session: SessionState | 'unknown';
@@ -407,8 +412,12 @@ export function ThreadReading({
                       readAuthority={readAuthority}
                       authors={authors}
                       composed={page.composed}
-                      reactionFieldsAvailable={!page.composed || ('reactions' in reactionSource && reactionSource.reactions !== undefined)}
-                      reactionViewerAvailable={!page.composed || (observationMatches && 'viewerReaction' in reactionSource)}
+                      reactionFieldsAvailable={
+                        !page.composed || ('reactions' in reactionSource && reactionSource.reactions !== undefined)
+                      }
+                      reactionViewerAvailable={
+                        !page.composed || (observationMatches && 'viewerReaction' in reactionSource)
+                      }
                       mentions={currentMentions}
                       documentMedia={documentMedia}
                       now={now}
@@ -416,11 +425,14 @@ export function ThreadReading({
                       personalReady={commandPersonalReady}
                       onChange={updatePost}
                       target={firstPost ? { kind: 'thread', id: thread.id } : { kind: 'post', id: post.id }}
-                      counts={firstPost ? (thread.reactions ?? {}) : ('reactions' in post ? (post.reactions ?? {}) : {})}
+                      counts={firstPost ? (thread.reactions ?? {}) : 'reactions' in post ? (post.reactions ?? {}) : {}}
                       value={
                         reactionKinds.find(
-                          (kind) => kind === (page.composed && observationMatches && 'viewerReaction' in reactionSource
-                            ? reactionSource.viewerReaction : currentPersonal?.reactions[firstPost ? thread.id : post.id]),
+                          (kind) =>
+                            kind ===
+                            (page.composed && observationMatches && 'viewerReaction' in reactionSource
+                              ? reactionSource.viewerReaction
+                              : currentPersonal?.reactions[firstPost ? thread.id : post.id]),
                         ) ?? null
                       }
                       signedIn={commandSession === 'signed-in'}
@@ -476,8 +488,13 @@ export function ThreadReading({
                 key={`${thread.id}:${composer.current.viewerId}`}
                 initialKey={composer.current.initialKey}
                 canSubmit={pageCurrent && replyAvailable && currentPersonal !== undefined}
-                slowModeAdvice={page.composed ? (page.composed.currentness.slowMode === 'current' && observationMatches
-                  ? page.composed.slowMode : { state: 'unavailable', retryable: true }) : undefined}
+                slowModeAdvice={
+                  page.composed
+                    ? page.composed.currentness.slowMode === 'current' && observationMatches
+                      ? page.composed.slowMode
+                      : { state: 'unavailable', retryable: true }
+                    : undefined
+                }
                 containerId={thread.id}
                 boardId={thread.boardId}
                 parentId={replyTarget.parentId}

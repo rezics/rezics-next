@@ -171,11 +171,29 @@ const fake = Bun.serve({
     if (url.pathname.endsWith('/reading-page')) {
       const failed = url.pathname.includes(failedThreadId);
       const selected = failed ? failedPosts : posts;
-      const source = failed ? { ...threads[0], id: failedThreadId, authorId: authors.failure, title: 'Identity failure', firstPost: failedPosts[0] } : threads[0];
-      const page = authoredReadingPage({ ...source, kind: 'discussion' } as ReadingPage['thread'], selected.slice(1) as ReadingPage['replies']['items'], [...accounts.values()].map((account) => ({
-        id: account.id, displayName: account.displayName, handle: account.handle, avatar: null,
-      })));
-      if (failed) { page.authors = { state: 'unavailable', retryable: true, items: [] }; page.currentness.authors = 'unavailable'; }
+      const source = failed
+        ? {
+            ...threads[0],
+            id: failedThreadId,
+            authorId: authors.failure,
+            title: 'Identity failure',
+            firstPost: failedPosts[0],
+          }
+        : threads[0];
+      const page = authoredReadingPage(
+        { ...source, kind: 'discussion' } as ReadingPage['thread'],
+        selected.slice(1) as ReadingPage['replies']['items'],
+        [...accounts.values()].map((account) => ({
+          id: account.id,
+          displayName: account.displayName,
+          handle: account.handle,
+          avatar: null,
+        })),
+      );
+      if (failed) {
+        page.authors = { state: 'unavailable', retryable: true, items: [] };
+        page.currentness.authors = 'unavailable';
+      }
       return json(page);
     }
     if (url.pathname === `/v1/threads/${threadId}`) return json({ thread: threads[0] });

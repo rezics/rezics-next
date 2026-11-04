@@ -18,7 +18,16 @@ test('reads the thread board once regardless of post count and tolerates a missi
         fetch: async (input, init) => {
           const path = new URL(new Request(input, init).url).pathname;
           calls.push(path);
-          if (path.endsWith('/reading-page')) return Response.json(authoredReadingPage(thread.thread as ReadingPage['thread'], posts.posts.slice(0, count).filter((post) => post.id !== thread.thread.firstPost.id) as ReadingPage['replies']['items'], []));
+          if (path.endsWith('/reading-page'))
+            return Response.json(
+              authoredReadingPage(
+                thread.thread as ReadingPage['thread'],
+                posts.posts
+                  .slice(0, count)
+                  .filter((post) => post.id !== thread.thread.firstPost.id) as ReadingPage['replies']['items'],
+                [],
+              ),
+            );
           if (path.endsWith('/posts')) return Response.json({ ...posts, posts: posts.posts.slice(0, count) });
           if (path.includes('/boards/')) return missing ? new Response(null, { status: 404 }) : Response.json(board);
           return Response.json(thread);
