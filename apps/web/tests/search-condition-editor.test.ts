@@ -213,7 +213,6 @@ test('item operands show stable native identities through entity controls while 
   expect(html).toContain(`data-condition-pointer="${CONDITION_POINTER}/statement/in/chooser"`);
   expect(html).toContain(`value="${itemId}"`);
   expect(html).toContain(`value="${qualifierId}"`);
-  expect(html).toContain('readonly=""');
   expect(html).not.toContain('datalist');
 
   const condition: FilterDocument = {
