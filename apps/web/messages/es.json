@@ -8473,6 +8473,8 @@
   "library_summary_stale": "Tu biblioteca ha cambiado. Actualiza los recuentos.",
   "library_summary_unavailable": "Los recuentos no están disponibles. Puedes seguir usando las entradas.",
   "library_summary_retry": "Actualizar recuentos",
+  "library_summary_first_use_guidance": "Busca obras para añadir, importa una lista existente de otro servicio u organiza las entradas con etiquetas y colecciones.",
+  "library_summary_first_use_imports": "Importar desde otro servicio",
   "concept_explore_original_role": "Rol original de la fuente",
   "concept_explore_role_evidence": "Rol de fuente desconocido: se conserva exactamente como se recibió; no otorga autoridad sobre conceptos ni correcciones.",
   "concept_explore_scheme_withheld": "Destino del esquema oculto",

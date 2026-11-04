@@ -8473,6 +8473,8 @@
   "library_summary_stale": "라이브러리가 변경되었습니다. 항목 수를 새로 고치세요.",
   "library_summary_unavailable": "항목 수를 불러올 수 없습니다. 항목은 계속 사용할 수 있습니다.",
   "library_summary_retry": "항목 수 새로 고침",
+  "library_summary_first_use_guidance": "추가할 작품을 찾아보고, 다른 서비스의 기존 목록을 가져오거나, 라벨과 컬렉션으로 항목을 정리할 수 있습니다.",
+  "library_summary_first_use_imports": "다른 서비스에서 가져오기",
   "concept_explore_original_role": "원래 출처 역할",
   "concept_explore_role_evidence": "알 수 없는 출처 역할입니다. 전달된 값을 그대로 보존하며 개념 승인이나 수정 권한을 부여하지 않습니다.",
   "concept_explore_scheme_withheld": "체계 대상 비공개",

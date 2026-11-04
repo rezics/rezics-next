@@ -8473,6 +8473,8 @@
   "library_summary_stale": "ライブラリが変更されました。件数を更新してください。",
   "library_summary_unavailable": "件数を取得できません。エントリーは引き続き利用できます。",
   "library_summary_retry": "件数を更新",
+  "library_summary_first_use_guidance": "作品を探して追加したり、別のサービスから既存のリストをインポートしたり、ラベルやコレクションでエントリーを整理したりできます。",
+  "library_summary_first_use_imports": "別のサービスからインポート",
   "concept_explore_original_role": "元のソースロール",
   "concept_explore_role_evidence": "不明なソースロールです。受け取った値をそのまま保持します。概念の承認や訂正の権限は与えません。",
   "concept_explore_scheme_withheld": "スキームの参照先は非公開です",

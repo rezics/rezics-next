@@ -8473,6 +8473,8 @@
   "library_summary_stale": "Votre bibliothèque a changé. Actualisez les nombres.",
   "library_summary_unavailable": "Les nombres sont indisponibles. Les entrées restent accessibles.",
   "library_summary_retry": "Actualiser les nombres",
+  "library_summary_first_use_guidance": "Parcourez les œuvres à ajouter, importez une liste existante depuis un autre service ou organisez les entrées avec des libellés et des collections.",
+  "library_summary_first_use_imports": "Importer depuis un autre service",
   "concept_explore_original_role": "Rôle source original",
   "concept_explore_role_evidence": "Rôle source inconnu : conservé tel que fourni ; il ne donne aucun droit sur les concepts ou les corrections.",
   "concept_explore_scheme_withheld": "Destination du schéma masquée",

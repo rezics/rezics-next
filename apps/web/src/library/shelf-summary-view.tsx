@@ -1,12 +1,20 @@
 import { m } from '../paraglide/messages.js';
 import { Exposure } from '../kernel/exposure';
 import { shelfHref, type ShelfDisplay, type ShelfSearch } from './shelf-params';
+import { libraryNavigation } from './navigation';
 import type { PersonalLibraryView } from './entries-read';
 import type { ShelfSummaryState } from './shelf-summary-observation';
 
 export type ShelfSummaryPresentation = { page: ShelfSummaryState; retry: () => unknown };
 const target =
   'inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2';
+const firstUseImports = libraryNavigation.filter(
+  (destination) =>
+    destination.kind === 'navigation' &&
+    destination.id.startsWith('library.import-') &&
+    destination.signedIn === true &&
+    destination.operation === 'library_entry.put',
+);
 
 export function shelfSummaryFirstUse(
   summary: ShelfSummaryState | undefined,
@@ -121,20 +129,38 @@ export function ShelfSummaryNavigation({
 
 export function ShelfSummaryFirstUseLinks({ locale }: { locale: string }) {
   return (
-    <div className="flex flex-wrap justify-center gap-2">
-      <a className={target} href={`/${locale}/search`}>
-        {m.library_browse()}
-      </a>
-      <Exposure operation="library_label.list">
-        <a className={target} href={`/${locale}/library/labels`}>
-          {m.library_nav_labels()}
+    <div className="space-y-3">
+      <p>{m.library_summary_first_use_guidance()}</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        <a className={target} href={`/${locale}/search`}>
+          {m.library_browse()}
         </a>
-      </Exposure>
-      <Exposure operation="collection.list">
-        <a className={target} href={`/${locale}/library/collections`}>
-          {m.library_nav_collections()}
-        </a>
-      </Exposure>
+        <Exposure operation="library_label.list">
+          <a className={target} href={`/${locale}/library/labels`}>
+            {m.library_nav_labels()}
+          </a>
+        </Exposure>
+        <Exposure operation="collection.list">
+          <a className={target} href={`/${locale}/library/collections`}>
+            {m.library_nav_collections()}
+          </a>
+        </Exposure>
+      </div>
+      {firstUseImports.length ? (
+        <Exposure operation="library_entry.put">
+          <nav aria-label={m.library_summary_first_use_imports()}>
+            <ul className="flex flex-wrap justify-center gap-2">
+              {firstUseImports.map((destination) => (
+                <li key={destination.id}>
+                  <a className={target} href={`/${locale}${destination.href}`}>
+                    {destination.label({ locale })}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </Exposure>
+      ) : null}
     </div>
   );
 }

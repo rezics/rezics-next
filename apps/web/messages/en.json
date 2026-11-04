@@ -8585,6 +8585,8 @@
   "library_summary_stale": "Your Library changed. Refresh counts.",
   "library_summary_unavailable": "Library counts are unavailable. Entries can still be used.",
   "library_summary_retry": "Refresh counts",
+  "library_summary_first_use_guidance": "Browse works to add, import an existing list from another service, or organize Entries with Labels and Collections.",
+  "library_summary_first_use_imports": "Import from another service",
   "concept_explore_original_role": "Original source role",
   "concept_explore_role_evidence": "Unknown source role: retained exactly as supplied; it grants no concept or correction authority.",
   "concept_explore_scheme_withheld": "Scheme endpoint withheld",
