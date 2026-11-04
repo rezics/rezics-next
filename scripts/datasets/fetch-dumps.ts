@@ -42,11 +42,19 @@ export const VNDB_DUMP_HEADERS: Readonly<Record<string, readonly string[]>> = {
   tags_parents: ['id', 'parent', 'main'],
   tags_vn: ['date', 'tag', 'vid', 'uid', 'vote', 'spoiler', 'ignore', 'lie', 'notes'],
 };
+/** Required COPY fields for the selected character vocabulary path. Archive-added fields remain valid. */
+export const VNDB_DUMP_REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  chars_traits: ['id', 'tid', 'spoil', 'lie'],
+  chars_vns: ['id', 'vid', 'rid', 'role', 'spoil'],
+  traits: ['id', 'name'],
+  traits_parents: ['id', 'parent', 'main'],
+};
 export const VNDB_DUMP_TABLES = [
   'anime',
   'chars',
   'chars_alias',
   'chars_names',
+  'chars_traits',
   'chars_vns',
   'entry_meta',
   'extlinks',
@@ -67,6 +75,8 @@ export const VNDB_DUMP_TABLES = [
   'tags',
   'tags_parents',
   'tags_vn',
+  'traits',
+  'traits_parents',
   'vn',
   'vn_anime',
   'vn_extlinks',
@@ -326,6 +336,8 @@ async function vndbDirectory(root: string): Promise<string | undefined> {
       const required = VNDB_DUMP_HEADERS[table];
       if (required && (columns.length !== required.length || required.some((name, index) => columns[index] !== name)))
         return false;
+      const requiredFields = VNDB_DUMP_REQUIRED_COLUMNS[table];
+      if (requiredFields && requiredFields.some((name) => !columns.includes(name))) return false;
     }
     return true;
   });

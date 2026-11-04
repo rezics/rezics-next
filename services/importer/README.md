@@ -2267,6 +2267,47 @@ explicit omission.
   identity. Existing Episode ordinal/date/duration/summary checks remain in
   `tests/bangumi-episode-fidelity.test.ts`.
 
+### VNDB character traits and selected work appearances
+
+The default family seed now acquires the verified `traits`, `traits_parents`,
+`chars_traits`, and `chars_vns` COPY tables. It keeps character identity in the
+VNDB source namespace, selects only characters attached to the chosen VNDB
+family works, and imports supported traits as `schema:keywords` and appearances
+as `schema:character` with the exact role Concept and source spoiler level.
+Association citations retain their table keys. False-positive, unsupported,
+missing-qualifier, and release-scoped rows remain review gaps. The adapter
+publishes finite trait, role, and bounded parent-closure requirements in the
+cross-media result manifest for the common vocabulary publisher.
+
+Decision: vocabulary profile UUIDs are lookup hints only; the publication worker emits them after acknowledgement, and the importer rereads each selected Scheme and Concept from current public state before use.
+
+The development seed reads an optional profile path from
+`REZICS_DEV_VNDB_CHARACTER_VOCABULARY`. The common publisher consumes
+`characterVocabulary.requirements` from the result manifest and emits
+`traits.schemeId`, `traits.concepts[{code,id}]`, `roles.schemeId`, and
+`roles.concepts[{code,id}]` only after native command acknowledgement. The
+consumer checks adopted source URIs, Concept types, scheme membership, and the
+bundled release through the existing VNDB admission helper. An absent or stale
+profile withholds only the affected facts; it does not resolve labels or infer
+VNDB/Bangumi character identity. After publishing the profile, rerun the default
+seed with its path in the environment variable.
+
+- Touches: verified archive headers; at most 64 selected VNDB works, 64 trait
+  associations, 64 appearance associations, and 256 parent edges through depth
+  12; existing identity, vocabulary-admission, source-journal, and public-read
+  paths.
+- Bound: dictionary and association files stream through the dump adapter;
+  selected trait closure, diagnostics, and current source bindings are capped.
+  Only selected term IDs are reread, with no catalogue label scan. Missing
+  qualifiers withhold the whole association, and independent provider
+  identities remain separate.
+- Growth check: `tests/showcase-character-vocabulary.test.ts` covers default
+  family planning, COPY-shaped rows, bounded parent closure, unsupported roles,
+  and selected current bindings. The ordinary native public-read scenario is
+  `../kernel/test/imports/showcase-character-vocabulary.test.ts`. These focused
+  tests make no physical-growth claim; broader native acceptance remains
+  controller-owned.
+
 ### Bangumi person biographies
 
 The bounded family seed follows only people actually selected by Bangumi
