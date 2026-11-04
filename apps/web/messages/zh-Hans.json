@@ -8385,5 +8385,11 @@
   "own_media_recovery_return": "返回原媒体",
   "library_priority_unavailable": "暂时无法按优先级排序。",
   "library_priority_ascending": "优先级 1 在前",
-  "library_priority_descending": "优先级 100 在前"
+  "library_priority_descending": "优先级 100 在前",
+  "library_summary_heading": "书库数量",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "正在准备书库数量…",
+  "library_summary_stale": "书库已更改，请刷新数量。",
+  "library_summary_unavailable": "无法获取数量，仍可使用条目。",
+  "library_summary_retry": "刷新数量"
 }

@@ -8385,5 +8385,11 @@
   "own_media_recovery_return": "Zu den ursprünglichen Medien",
   "library_priority_unavailable": "Die Prioritätssortierung ist noch nicht verfügbar.",
   "library_priority_ascending": "Rang 1 zuerst",
-  "library_priority_descending": "Rang 100 zuerst"
+  "library_priority_descending": "Rang 100 zuerst",
+  "library_summary_heading": "Bibliothekszahlen",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "Bibliothekszahlen werden vorbereitet…",
+  "library_summary_stale": "Deine Bibliothek hat sich geändert. Aktualisiere die Zahlen.",
+  "library_summary_unavailable": "Bibliothekszahlen sind nicht verfügbar. Einträge können weiterhin genutzt werden.",
+  "library_summary_retry": "Zahlen aktualisieren"
 }

@@ -8385,5 +8385,11 @@
   "own_media_recovery_return": "원래 미디어로 돌아가기",
   "library_priority_unavailable": "우선순위 정렬은 아직 사용할 수 없습니다.",
   "library_priority_ascending": "1순위부터",
-  "library_priority_descending": "100순위부터"
+  "library_priority_descending": "100순위부터",
+  "library_summary_heading": "라이브러리 항목 수",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "라이브러리 항목 수를 준비하는 중…",
+  "library_summary_stale": "라이브러리가 변경되었습니다. 항목 수를 새로 고치세요.",
+  "library_summary_unavailable": "항목 수를 불러올 수 없습니다. 항목은 계속 사용할 수 있습니다.",
+  "library_summary_retry": "항목 수 새로 고침"
 }

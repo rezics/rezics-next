@@ -18,6 +18,9 @@ import {
 import type { ShelfDisplay, ShelfSearch } from './shelf-params';
 import { PersonalShelfOrigin, usePersonalShelfObservation, type ShelfOrigin } from './personal-shelf-origin';
 
+import { ShelfSummaryAcknowledgement, useShelfSummaryCurrent } from './shelf-summary-current';
+import { ShelfSummaryCount, ShelfSummaryNavigation, type ShelfSummaryPresentation } from './shelf-summary-view';
+
 const subscribe = () => () => {};
 function matches(value: PersonalLibraryCurrentRead | undefined, subject: string, address: PersonalLibraryAddress) {
   return value?.sessionSubject === subject && samePersonalLibraryAddress(value.requested, address);
@@ -109,6 +112,7 @@ export function PersonalLibraryCurrent({
       hydrated,
     });
   else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
+  const summary = useShelfSummaryCurrent(origin.current.authority, subject, address.type, locale, hydrated);
   const mountedOrigin = origin.current;
   useLayoutEffect(() => {
     if (mountedOrigin.active) mountedOrigin.mounted = true;
@@ -131,24 +135,28 @@ export function PersonalLibraryCurrent({
       </p>
     );
   return (
-    <PersonalLibraryRead
-      key={scope.generation}
-      subject={subject}
-      address={address}
-      initial={initial}
-      seed={scope.seed}
-      hydrated={hydrated}
-      display={display}
-      origin={origin.current.authority}
-      mutationLease={lease.value}
-      input={search}
-      pinsAdmitted={!hydrated || pins}
-      collectionsAdmitted={!hydrated || collections}
-    />
+    <ShelfSummaryAcknowledgement.Provider value={summary.acknowledge}>
+      <PersonalLibraryRead
+        summary={summary}
+        key={scope.generation}
+        subject={subject}
+        address={address}
+        initial={initial}
+        seed={scope.seed}
+        hydrated={hydrated}
+        display={display}
+        origin={origin.current.authority}
+        mutationLease={lease.value}
+        input={search}
+        pinsAdmitted={!hydrated || pins}
+        collectionsAdmitted={!hydrated || collections}
+      />
+    </ShelfSummaryAcknowledgement.Provider>
   );
 }
 
 function PersonalLibraryRead({
+  summary,
   subject,
   address,
   initial,
@@ -161,6 +169,7 @@ function PersonalLibraryRead({
   collectionsAdmitted,
   mutationLease,
 }: {
+  summary: ShelfSummaryPresentation;
   subject: string;
   address: PersonalLibraryAddress;
   initial: PersonalLibraryCurrentRead;
@@ -391,6 +400,11 @@ function PersonalLibraryRead({
   if (!accepted)
     return (
       <div className="flex flex-col items-start gap-3">
+        <h1 className="text-3xl font-semibold">
+          {m.library_heading()}
+          <ShelfSummaryCount page={summary.page} locale={address.locale} />
+        </h1>
+        <ShelfSummaryNavigation summary={summary} locale={address.locale} view={{ ...input, ...display }} />
         <p role={query.isError || query.data ? 'alert' : 'status'}>
           {query.isError || query.data ? m.error_message() : m.library_sort_preparing()}
         </p>
@@ -400,10 +414,11 @@ function PersonalLibraryRead({
       </div>
     );
   return (
-    <div hidden={hydrated && !regionAdmitted('entries') && !regionAdmitted('continue')}>
+    <div>
       <PersonalShelfOrigin.Provider value={pageOrigin}>
         <PersonalLibraryPage
           key={readGeneration}
+          summary={summary}
           page={accepted.value.page}
           entriesAdmitted={regionAdmitted('entries')}
           locale={address.locale}

@@ -8497,5 +8497,11 @@
   "own_media_recovery_return": "Return to original media",
   "library_priority_unavailable": "Priority order is not available yet.",
   "library_priority_ascending": "Rank 1 first",
-  "library_priority_descending": "Rank 100 first"
+  "library_priority_descending": "Rank 100 first",
+  "library_summary_heading": "Library counts",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "Preparing Library counts…",
+  "library_summary_stale": "Your Library changed. Refresh counts.",
+  "library_summary_unavailable": "Library counts are unavailable. Entries can still be used.",
+  "library_summary_retry": "Refresh counts"
 }

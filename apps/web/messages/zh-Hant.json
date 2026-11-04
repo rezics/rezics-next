@@ -8385,5 +8385,11 @@
   "own_media_recovery_return": "返回原媒體",
   "library_priority_unavailable": "暫時無法依優先順序排序。",
   "library_priority_ascending": "優先順序 1 在前",
-  "library_priority_descending": "優先順序 100 在前"
+  "library_priority_descending": "優先順序 100 在前",
+  "library_summary_heading": "書庫數量",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "正在準備書庫數量…",
+  "library_summary_stale": "書庫已變更，請重新整理數量。",
+  "library_summary_unavailable": "無法取得數量，仍可使用條目。",
+  "library_summary_retry": "重新整理數量"
 }

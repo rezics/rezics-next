@@ -8385,5 +8385,11 @@
   "own_media_recovery_return": "Volver al archivo original",
   "library_priority_unavailable": "El orden por prioridad aún no está disponible.",
   "library_priority_ascending": "Rango 1 primero",
-  "library_priority_descending": "Rango 100 primero"
+  "library_priority_descending": "Rango 100 primero",
+  "library_summary_heading": "Recuentos de la biblioteca",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "Preparando los recuentos de la biblioteca…",
+  "library_summary_stale": "Tu biblioteca ha cambiado. Actualiza los recuentos.",
+  "library_summary_unavailable": "Los recuentos no están disponibles. Puedes seguir usando las entradas.",
+  "library_summary_retry": "Actualizar recuentos"
 }

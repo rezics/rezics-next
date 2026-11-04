@@ -8385,5 +8385,11 @@
   "own_media_recovery_return": "Revenir au média d’origine",
   "library_priority_unavailable": "Le tri par priorité n’est pas encore disponible.",
   "library_priority_ascending": "Rang 1 en premier",
-  "library_priority_descending": "Rang 100 en premier"
+  "library_priority_descending": "Rang 100 en premier",
+  "library_summary_heading": "Nombre d’entrées de la bibliothèque",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "Préparation du nombre d’entrées…",
+  "library_summary_stale": "Votre bibliothèque a changé. Actualisez les nombres.",
+  "library_summary_unavailable": "Les nombres sont indisponibles. Les entrées restent accessibles.",
+  "library_summary_retry": "Actualiser les nombres"
 }
