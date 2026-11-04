@@ -1,11 +1,13 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { Release } from '@rezics/definitions';
 import type { Related, Subject } from '../src/subject/types';
 import type { Stmt } from '../src/features/pages/shared';
 import { subjectHref } from '../src/subject/subject-href';
-import { SubjectConceptTags } from '../src/features/pages/subject-slots';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { SubjectConceptTags } = await import('../src/features/pages/subject-slots');
 
 const property = 'schema:genre';
 const definitions = () =>
