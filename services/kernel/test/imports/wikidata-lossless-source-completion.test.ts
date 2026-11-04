@@ -150,12 +150,17 @@ test('ordinary Wikidata acquisition retains complete values through independent 
     record.lastrevid++;
     const lost = await runtime.run(dump(), { loseCommittedResponse: true });
     expect(lost.outcome).toBe('interrupted');
+    const lostCommand = commands(lost)[0]!;
+    const lostReceipt = await runtime.receipt(lostCommand.key);
+    expect(lostReceipt).toBeString();
     await runtime.restart();
     const resumed = await runtime.run(dump());
     complete(resumed);
-    const lostCommand = commands(lost)[0]!;
     expect(commands(resumed)).toContainEqual(lostCommand);
-    expect(await runtime.receipt(lostCommand.key)).toBeString();
+    expect(resumed.exchanges.some((e) => e.request.serializedBody === lost.exchanges[0]!.request.serializedBody)).toBe(
+      true,
+    );
+    expect(await runtime.receipt(lostCommand.key)).toBe(lostReceipt);
     const changed = (await page('schema:height')).candidates;
     expect(
       changed.some(
@@ -197,6 +202,7 @@ test('ordinary Wikidata acquisition retains complete values through independent 
     expect(fenced.status).toBe(200);
     const replay = await replayExchange(proposalExchange);
     expect(replay.status).toBe(200);
+    expect(replay.body).toEqual(proposalExchange.response.body);
     expect(await Promise.all(commands(first).map((c) => runtime.receipt(c.key)))).toEqual(receipts);
     expect((await publicRead()).subject.statements['schema:height'] ?? []).toEqual([]);
     const unknown = { ...proposal, key: randomUUID() };
