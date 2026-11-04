@@ -74,9 +74,7 @@ function OwnedClientInventory({
     const current = ++generation.current;
     setPending(true);
     setError('');
-    const result = await source('clients', target).catch(
-      (): InventoryPage<'clients'> => ({ kind: 'unavailable' }),
-    );
+    const result = await source('clients', target).catch((): InventoryPage<'clients'> => ({ kind: 'unavailable' }));
     if (generation.current !== current) return;
     pendingRef.current = false;
     setPending(false);
@@ -137,7 +135,12 @@ function OwnedClientInventory({
               </Button>
             ) : null}
             {page.next ? (
-              <Button type="button" variant="outline" disabled={pending} onClick={() => void navigate(page.next!, 'next')}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => void navigate(page.next!, 'next')}
+              >
                 {m.auth_inventory_next()}
               </Button>
             ) : null}

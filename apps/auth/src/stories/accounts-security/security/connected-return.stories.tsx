@@ -38,18 +38,25 @@ const identitySource: AccountIdentitySource = async () => ({
 });
 
 function canvas(theme: 'light' | 'dark', children: ReactNode) {
-  return <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-background text-foreground`}>{children}</div>;
+  return (
+    <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-background text-foreground`}>{children}</div>
+  );
 }
 
 export const PhoneCurrentReview = {
   parameters: { viewport: { defaultViewport: 'phone390' } },
   render: () => (
     <AuthStory>
-      {canvas('light', <SecurityPage initial={initial} identitySource={identitySource} inventorySource={populatedInventory} />)}
+      {canvas(
+        'light',
+        <SecurityPage initial={initial} identitySource={identitySource} inventorySource={populatedInventory} />,
+      )}
     </AuthStory>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const review = await waitFor(() => button(canvasElement, m.auth_inventory_review_named({ name: 'Reading companion' })));
+    const review = await waitFor(() =>
+      button(canvasElement, m.auth_inventory_review_named({ name: 'Reading companion' })),
+    );
     review.click();
     await waitFor(() => button(canvasElement, m.auth_inventory_review_removal()));
   },
@@ -66,7 +73,9 @@ export const DesktopUnknownReturn = {
     </AuthStory>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const remove = await waitFor(() => button(canvasElement, m.auth_inventory_remove_named({ name: 'Reading companion' })));
+    const remove = await waitFor(() =>
+      button(canvasElement, m.auth_inventory_remove_named({ name: 'Reading companion' })),
+    );
     remove.click();
     (await waitFor(() => button(canvasElement, m.auth_inventory_remove())))!.click();
     await waitFor(() => canvasElement.textContent?.includes(m.auth_connected_operation_unknown()));

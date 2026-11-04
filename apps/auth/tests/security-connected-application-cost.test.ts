@@ -56,7 +56,11 @@ const initial: SecurityLoadResult = {
     passkeys: { kind: 'ready', rows: [], limit: 32, truncated: false },
   },
 };
-const identitySource: AccountIdentitySource = async () => ({ kind: 'ready', accountId: 'measured-viewer', email: null });
+const identitySource: AccountIdentitySource = async () => ({
+  kind: 'ready',
+  accountId: 'measured-viewer',
+  email: null,
+});
 const pageFor = (view: InventoryView): InventoryPage<InventoryView> =>
   view === 'clients' ? { kind: 'ready', rows: [], next: null } : { kind: 'ready', rows: [consent], next: null };
 

@@ -125,31 +125,19 @@ export function useConnectedApplicationReview({
   }, [source, lifetime]);
 
   async function navigate(target?: string, direction: 'next' | 'previous' | 'reset' = 'reset') {
-    if (
-      lifetime?.aborted ||
-      pendingRef.current ||
-      phase.current === 'review' ||
-      phase.current === 'submitting'
-    )
-      return;
+    if (lifetime?.aborted || pendingRef.current || phase.current === 'review' || phase.current === 'submitting') return;
     pendingRef.current = true;
     const current = ++generation.current;
     setPending(true);
     setError('');
-    const result = await source('consents', target).catch(
-      (): InventoryPage<'consents'> => ({ kind: 'unavailable' }),
-    );
+    const result = await source('consents', target).catch((): InventoryPage<'consents'> => ({ kind: 'unavailable' }));
     if (generation.current !== current || lifetime?.aborted) return;
     pendingRef.current = false;
     setPending(false);
     setPage(result);
     if (result.kind === 'ready') {
       setHistory((previous) =>
-        direction === 'next'
-          ? [...previous, cursorRef.current]
-          : direction === 'previous'
-            ? previous.slice(0, -1)
-            : [],
+        direction === 'next' ? [...previous, cursorRef.current] : direction === 'previous' ? previous.slice(0, -1) : [],
       );
       cursorRef.current = target;
     } else if (result.kind === 'signed-out') onSessionEndedRef.current?.();
@@ -192,13 +180,7 @@ export function useConnectedApplicationReview({
   }
 
   async function reduce() {
-    if (
-      lifetime?.aborted ||
-      !selection?.confirming ||
-      preflight ||
-      pendingRef.current ||
-      phase.current !== 'review'
-    )
+    if (lifetime?.aborted || !selection?.confirming || preflight || pendingRef.current || phase.current !== 'review')
       return;
     const held = reviewOperation.current;
     if (held && !held.isCurrent()) return;
@@ -210,9 +192,9 @@ export function useConnectedApplicationReview({
     setReducing(true);
     setError('');
     const current = generation.current;
-    const fresh = await source('consents', cursorRef.current).catch(
-      (): InventoryPage<'consents'> => ({ kind: 'unavailable' }),
-    );
+    const fresh = await source('consents', cursorRef.current).catch((): InventoryPage<'consents'> => ({
+      kind: 'unavailable',
+    }));
     if (generation.current !== current || lifetime?.aborted || (held && !held.isCurrent())) return;
 
     if (fresh.kind === 'expired') {
@@ -246,9 +228,9 @@ export function useConnectedApplicationReview({
     if (result.kind === 'stale-review') {
       pendingRef.current = true;
       setPending(true);
-      const updated = await source('consents', cursorRef.current).catch(
-        (): InventoryPage<'consents'> => ({ kind: 'unavailable' }),
-      );
+      const updated = await source('consents', cursorRef.current).catch((): InventoryPage<'consents'> => ({
+        kind: 'unavailable',
+      }));
       if (generation.current !== current || lifetime?.aborted || (held && !held.isCurrent())) return;
       pendingRef.current = false;
       setPending(false);
@@ -295,9 +277,7 @@ export function useConnectedApplicationReview({
 
   function removePermission(scope: string) {
     setSelection((draft) =>
-      draft && !draft.confirming
-        ? { ...draft, retained: draft.retained.filter((entry) => entry !== scope) }
-        : draft,
+      draft && !draft.confirming ? { ...draft, retained: draft.retained.filter((entry) => entry !== scope) } : draft,
     );
   }
 

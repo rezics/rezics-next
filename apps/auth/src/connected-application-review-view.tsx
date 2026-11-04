@@ -10,11 +10,7 @@ import {
   type ConnectedApplicationReviewViewProps,
 } from './connected-application-review';
 import { Permission, PermissionLimits, RemovablePermission } from './permission-view';
-import type {
-  ConsentOperationBoundary,
-  ConsentReviewHistory,
-  GrantedConsent,
-} from './security-inventory';
+import type { ConsentOperationBoundary, ConsentReviewHistory, GrantedConsent } from './security-inventory';
 import type { InventoryPage } from './security-inventory';
 
 export function ConnectedApplicationHistory({
@@ -144,11 +140,7 @@ export function ConnectedApplicationReviewView({
               {selection.retained.length === 0 ? m.auth_inventory_remove() : m.auth_inventory_reduce()}
             </Button>
           ) : (
-            <Button
-              type="button"
-              disabled={removed.length === 0 || reducing || pending}
-              onClick={onConfirmReview}
-            >
+            <Button type="button" disabled={removed.length === 0 || reducing || pending} onClick={onConfirmReview}>
               {m.auth_inventory_review_removal()}
             </Button>
           )}

@@ -67,9 +67,7 @@ const readyLoad = (accountId: string): SecurityLoadResult => ({
 let identityAccount = 'first-viewer';
 const identitySource: AccountIdentitySource = async () => ({ kind: 'ready', accountId: identityAccount, email: null });
 const inventoryPage = (view: InventoryView, consent: InventoryRows['consents']): InventoryPage<InventoryView> =>
-  view === 'clients'
-    ? { kind: 'ready', rows: [], next: null }
-    : { kind: 'ready', rows: [consent], next: null };
+  view === 'clients' ? { kind: 'ready', rows: [], next: null } : { kind: 'ready', rows: [consent], next: null };
 
 let host: HTMLDivElement;
 let root: Root;
@@ -100,9 +98,7 @@ afterAll(async () => {
   await dom.happyDOM.close();
 });
 
-async function mount(
-  options: { holdPreflight?: boolean; holdRead?: boolean; holdWrite?: boolean } = {},
-) {
+async function mount(options: { holdPreflight?: boolean; holdRead?: boolean; holdWrite?: boolean } = {}) {
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -183,12 +179,10 @@ test('a retired exact native read cannot cross the final consent send boundary',
   await mount({ holdRead: true });
   await flush(() => findButton(m.auth_inventory_review_named({ name: 'Reading companion' })).click());
   const removeScope = () =>
-    [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (candidate) => {
-        const describedBy = candidate.getAttribute('aria-describedby');
-        return !!describedBy && !!document.getElementById(describedBy)?.textContent?.includes('subject:read');
-      },
-    )!;
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => {
+      const describedBy = candidate.getAttribute('aria-describedby');
+      return !!describedBy && !!document.getElementById(describedBy)?.textContent?.includes('subject:read');
+    })!;
   await flush(() => removeScope().click());
   await flush(() => findButton(m.auth_inventory_review_removal()).click());
   await flush(() => findButton(m.auth_inventory_reduce()).click());
