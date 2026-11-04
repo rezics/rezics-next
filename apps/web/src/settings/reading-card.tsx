@@ -75,6 +75,12 @@ type ReadingState = {
   failure?: NativePreferenceFailure | undefined;
 };
 
+function withoutReadingAdvice(preferences: ReadingPreferences): ReadingPreferences {
+  const current = { ...preferences };
+  delete current.advice;
+  return current;
+}
+
 /** Reading keeps the editable draft separate from both confirmed values and an immutable original write. */
 export class ReadingDraftRecovery {
   private state: ReadingState;
@@ -91,7 +97,7 @@ export class ReadingDraftRecovery {
   ) {
     const advice = readingAdviceReady(initial.advice) ? initial.advice : undefined;
     this.state = {
-      known: advice ? initial : { ...initial, advice: undefined },
+      known: advice ? initial : withoutReadingAdvice(initial),
       draft: initial,
       pending: null,
       phase: 'idle',
@@ -129,7 +135,7 @@ export class ReadingDraftRecovery {
       const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed';
       const deniedWrite = result.kind === 'rejected' && retireAdvice;
       this.update({
-        known: retireAdvice ? { ...this.state.known, advice: undefined } : this.state.known,
+        known: retireAdvice ? withoutReadingAdvice(this.state.known) : this.state.known,
         advice: retireAdvice ? undefined : this.state.advice,
         pending: result.kind === 'uncertain' ? input : null,
         phase: result.kind === 'uncertain' ? 'uncertain' : result.reason === 'conflict' ? 'conflict' : 'failed',
@@ -194,7 +200,7 @@ export class ReadingDraftRecovery {
       return;
     }
     const defaults = readingDefaults(this.state.advice);
-    const input = readingReset({ ...this.state.known, advice: this.state.advice });
+    const input = readingReset(this.state.known);
     if (!input || !defaults) {
       this.update({ phase: 'idle', draft: this.state.known });
       return;
@@ -216,7 +222,7 @@ export class ReadingDraftRecovery {
     if (!result.ok) {
       const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed';
       this.update({
-        known: retireAdvice ? { ...this.state.known, advice: undefined } : this.state.known,
+        known: retireAdvice ? withoutReadingAdvice(this.state.known) : this.state.known,
         advice: retireAdvice ? undefined : this.state.advice,
         phase: this.state.pending ? 'uncertain' : 'failed',
         reason: result.reason,

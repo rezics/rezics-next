@@ -62,7 +62,7 @@ export function readingAdviceFor(values: ReadingValues, writable = true): NonNul
   };
 }
 
-function isSpoilerLevel(value: unknown): value is SpoilerLevel {
+function isSpoilerLevel(value: unknown): value is ReadingValues['spoilerLevel'] {
   return value === 0 || value === 1 || value === 2;
 }
 
