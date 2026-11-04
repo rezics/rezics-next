@@ -190,7 +190,9 @@ test('imported Game platform and engine Concepts are independently adopted, curr
         .sort(),
     ).toEqual([concepts[0]!.id, concepts[1]!.id].sort());
     expect(
-      enginePage.candidates.filter((item) => item.source && !item.retracted).map((item) => item.statement.value.content),
+      enginePage.candidates
+        .filter((item) => item.source && !item.retracted)
+        .map((item) => item.statement.value.content),
     ).toEqual([concepts[2]!.id]);
     expect(JSON.stringify([...platformPage.candidates, ...enginePage.candidates])).toContain('/infobox/');
     await acceptAdopt(workId!, 'schema:gamePlatform');

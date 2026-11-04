@@ -407,7 +407,8 @@ export function bangumiGameEnvironment(
     seenKeys.add(field.key);
     const kind = field.key === platformKey ? 'platform' : 'engine';
     const property: BangumiGameEnvironmentProperty = kind === 'platform' ? 'schema:gamePlatform' : 'wdt:P408';
-    const cap = kind === 'platform' ? bangumiGameEnvironmentLimits.maxPlatforms : bangumiGameEnvironmentLimits.maxEngines;
+    const cap =
+      kind === 'platform' ? bangumiGameEnvironmentLimits.maxPlatforms : bangumiGameEnvironmentLimits.maxEngines;
     if (!field.complete || field.nested) {
       sink.add(field.pointer, 'unsupported_infobox_structure');
       continue;

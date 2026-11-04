@@ -106,10 +106,12 @@ export async function readBangumiGameEnvironmentBindings(
       continue;
     }
     const urls = adoptedUrls(page);
-    if (urls.some((url) => {
-      const name = hostnameOf(url);
-      return !!name && bangumiGameEnvironmentForeignHost(name);
-    })) {
+    if (
+      urls.some((url) => {
+        const name = hostnameOf(url);
+        return !!name && bangumiGameEnvironmentForeignHost(name);
+      })
+    ) {
       diagnostics.push({ sourceKey: binding.item, pointer, code: 'reviewed-binding-wrong-source' });
       continue;
     }
@@ -126,9 +128,7 @@ export async function readBangumiGameEnvironmentBindings(
   return { references, diagnostics, concealed };
 }
 
-export function mergeIdentifierResolutions(
-  parts: readonly ImportIdentifierResolution[],
-): ImportIdentifierResolution {
+export function mergeIdentifierResolutions(parts: readonly ImportIdentifierResolution[]): ImportIdentifierResolution {
   const refs: Record<string, string> = {};
   const preserved = new Set<string>();
   let unavailable = 0;

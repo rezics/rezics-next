@@ -505,10 +505,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         ...retainedFieldDiagnostics(
           record,
           extractedNames.diagnostics,
-          television.handledInfobox ||
-            playerCount.handledInfobox ||
-            environment.handledInfobox ||
-            bookTitleProfile,
+          television.handledInfobox || playerCount.handledInfobox || environment.handledInfobox || bookTitleProfile,
         ),
         ...television.diagnostics,
         ...playerCount.diagnostics,
