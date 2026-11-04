@@ -150,8 +150,14 @@ test('current Person credit returns from work, Character and Sources with exact 
       let fiber = Reflect.get(card, Object.keys(card).find((key) => key.startsWith('__reactFiber'))!);
       while (fiber && fiber.type?.name !== 'CoverList') fiber = fiber.return;
       const state = fiber?.memoizedState?.next?.next?.memoizedState;
-      const identity = (value: unknown) => JSON.stringify(value, (_key, part) => part && typeof part === 'object' && !Array.isArray(part) ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : part);
-      throw new Error(`Credit inspection did not open: ${JSON.stringify({owner: state?.owner === fiber?.memoizedState?.next?.memoizedState?.current, row: items.some((item) => identity(item) === state?.identity), body: window.document.body.textContent, suspense: fiber?.child?.child?.sibling?.child?.child?.memoizedState})}`);
+      const seen: unknown[] = [];
+      function trace(part: any) {
+        if (!part) return;
+        if (['ItemCard', 'CreditInspectionAction', 'CreditInspection', 'CreditInspectionSession', 'CandidateSession', 'DialogContent'].includes(part.type?.name)) seen.push([part.type.name, !!part.memoizedProps?.inspection, !!part.memoizedProps?.children, part.memoizedProps?.open]);
+        trace(part.child); trace(part.sibling);
+      }
+      trace(fiber); trace(fiber.alternate);
+      throw new Error(`Credit inspection did not open: ${JSON.stringify(seen)}`);
     }
     expect(dialog.textContent).toContain(labels['wdt:P1932']);
     expect(dialog.textContent).toContain('Original credit');
