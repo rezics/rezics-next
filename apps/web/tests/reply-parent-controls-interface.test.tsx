@@ -237,7 +237,7 @@ test('reply parent controls keep independent associations, private failures and 
       authors: { [first.authorId]: { ...author, id: first.authorId } },
       subjects: [],
       provenanceSubjects: [],
-      mentions: {},
+      mentions: null,
       verification: { sitekey: '', scriptUrl: '' },
       now: first.createdAt,
     };

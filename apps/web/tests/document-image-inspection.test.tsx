@@ -99,7 +99,13 @@ test('disclosure, inspection, retry and reader replacement stay in one current i
     replace = setVisit;
     return (
       <div key={visit.readerKey}>
-        <ThreadPostReadingBody post={visit.post} documentMedia={visit.media} mentions={{}} locale="en" />
+        <ThreadPostReadingBody
+          post={visit.post}
+          documentMedia={visit.media}
+          mentions={null}
+          pageIndex={0}
+          locale="en"
+        />
       </div>
     );
   }

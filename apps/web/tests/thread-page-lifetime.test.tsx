@@ -127,7 +127,7 @@ function pageFor(
       summary: 'Private realm summary',
     },
     posts: { posts: [firstPost], next: null, rankRefreshedAt: null, status: 200 },
-    mentions: {},
+    mentions: null,
     documentMedia: {
       kind: 'ready',
       images: [

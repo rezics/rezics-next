@@ -253,7 +253,7 @@ test('exact and historical revisions retain their immutable media, citation, sub
         revision,
         number: 1,
         authors: {},
-        mentions: {},
+        mentions: null,
         documentMedia,
         now: '2026-10-31T13:00:00Z',
         subjects: [subject],
