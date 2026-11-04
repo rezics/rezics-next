@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { checkBatchWrite } from '@rezics/definitions/bulk';
+import { checkBatchWrite, type BatchCommand } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import {
   converter_revision,
@@ -21,11 +21,10 @@ function character(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function quantities(output: { proposals: readonly { op: string; statement?: { property: { id: string }; value: { type?: string; content: unknown } } }[] }) {
+function quantities(proposals: readonly BatchCommand[]) {
   return Object.fromEntries(
-    output.proposals.flatMap((command) =>
+    proposals.flatMap((command) =>
       command.op === 'propose' &&
-      command.statement &&
       (command.statement.property.id === 'schema:height' || command.statement.property.id === 'schema:weight') &&
       command.statement.value.type === 'value'
         ? [[command.statement.property.id, command.statement.value.content]]
@@ -43,19 +42,20 @@ test('production caller publishes exact COPY height and weight and keeps unknown
   const bound = registration.convert(character(), { source: registration.source, subjectId });
   expect(checkBatchWrite({ commands: [...bound.proposals] }, bundledRelease)).toEqual([]);
   expect(bound.normalized).toMatchObject({ id: 'c1', name: 'Authored heroine', height: '157', weight: '48' });
-  expect(quantities(bound)).toEqual({
+  expect(quantities(bound.proposals)).toEqual({
     'schema:height': { amount: '+157', unit: centimeter },
     'schema:weight': { amount: '+48', unit: kilogram },
   });
   const cited = bound.proposals.find(
     (command) => command.op === 'propose' && command.statement.property.id === 'schema:height',
   );
-  expect(cited?.statement.references).toEqual([
+  if (cited?.op !== 'propose') throw new Error('Missing height proposal');
+  expect(cited.statement.references).toEqual([
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://vndb.org/c1' } }] },
   ]);
   const unknown = convertCrossMediaEntity(character({ height: null, weight: '0' }), { subjectId });
   expect(unknown.normalizedRecord).toMatchObject({ height: null, weight: '0' });
-  expect(quantities(unknown)).toEqual({});
+  expect(quantities(unknown.proposals)).toEqual({});
   expect(unknown.diagnostics).toEqual([]);
   expect(
     unknown.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P3180'),
@@ -72,9 +72,9 @@ test('source sentinels, malformed numeric cells and withdrawn units never become
   for (const cell of ['-1', '157.5', 'NaN', 'Infinity', '32768', '000157', '+157', ' ', '1'.repeat(20)]) {
     const height = bound({ height: cell });
     expect(height.diagnostics).toContainEqual({ pointer: '/height', code: 'invalid_source_value' });
-    expect(quantities(height)).toEqual({});
+    expect(quantities(height.proposals)).toEqual({});
   }
-  expect(quantities(bound({ height: 157 }))).toEqual({});
+  expect(quantities(bound({ height: 157 }).proposals)).toEqual({});
   expect(bound({ height: 157 }).diagnostics).toContainEqual({ pointer: '/height', code: 'invalid_source_value' });
   expect(vndbCharacterQuantity('157', 'schema:height')).toEqual({ amount: '+157', unit: centimeter });
   expect(vndbCharacterQuantity('0', 'schema:height')).toBe('unknown');
