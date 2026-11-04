@@ -46,6 +46,7 @@ properties:
   schema:character: 'Figuren'
   wdt:P179: 'Teil der Reihe oder Serie'
   rezics:spoilerLevel: 'Spoilerstufe'
+  wdt:P3629: 'Alter im Auftritt'
   schema:alternateName: Alternativname
   rezics:representativeEdition: 'Repräsentative Ausgabe'
   rezics:crossMediaCounterpart: 'Werk in einem anderen Medium'
@@ -125,7 +126,8 @@ propertyDescriptions:
   wdt:P1932: 'Der genaue Wortlaut, mit dem die Quelle das Aussageobjekt nennt, etwa ein Name im Abspann.'
   wdt:P3831: 'Ein Konzept für die genaue Tätigkeit oder Auftrittsrolle; kein frei formulierter Name im Abspann.'
   wdt:P453: 'Die fiktive Figur, die bei dieser Sprechrolle dargestellt wird.'
-  schema:character: 'Eine Figur, die in diesem Werk auftritt; Rolle, Handlungsabschnitt und Spoilerstufe können den Auftritt präzisieren.'
+  schema:character: 'Eine Figur, die in diesem Werk auftritt; Rolle, credited-as, Spoilerstufe, Teil, Alter und Nachweise können den Auftritt präzisieren.'
+  wdt:P3629: 'Das Alter der Figur in genau diesem Auftritt als nichtnegative Jahresmenge (wd:Q577); ein quellenweites Alter ist dieser Qualifier nicht.'
   wdt:P179: 'Die Reihe, zu der dieses Mitglied gehört; der Positionsqualifikator hält seine Nummer fest.'
   rezics:spoilerLevel: 'Offenlegungsstufe als einheitenlose ganze Zahl: 0 ohne Spoiler, 1 für kleine und 2 für große Spoiler.'
   schema:alternateName: 'Ein alternativer Titel oder Alias als Text mit Sprachangabe und ursprünglicher Schreibweise.'

@@ -46,6 +46,7 @@ properties:
   schema:character: 'personnages'
   wdt:P179: 'série'
   rezics:spoilerLevel: 'niveau de divulgation'
+  wdt:P3629: "âge à l'apparition"
   schema:alternateName: autre nom
   rezics:representativeEdition: 'Édition représentative'
   rezics:crossMediaCounterpart: 'Œuvre dans un autre média'
@@ -125,7 +126,8 @@ propertyDescriptions:
   wdt:P1932: 'Le libellé exact employé par la source pour nommer l’objet de l’énoncé, par exemple un nom au générique.'
   wdt:P3831: 'Un concept précisant la fonction dans l’équipe ou le rôle d’une apparition ; pas un nom de crédit en texte libre.'
   wdt:P453: 'Le personnage fictif interprété dans ce crédit vocal.'
-  schema:character: 'Un personnage apparaissant dans cette œuvre ; son rôle, son arc ou son niveau de divulgâchage peuvent être précisés.'
+  schema:character: 'Un personnage apparaissant dans cette œuvre ; son rôle, son nom crédité, son niveau de divulgâchage, sa partie, son âge et ses références peuvent être précisés.'
+  wdt:P3629: 'L’âge du personnage sur cette apparition précise, en quantité non négative d’années (wd:Q577) ; un âge valable pour toute la source n’est pas ce qualificatif.'
   wdt:P179: 'La série à laquelle appartient ce membre ; le qualificatif de position indique son rang.'
   rezics:spoilerLevel: 'Le niveau de divulgâchage, entier sans unité : 0 sans révélation, 1 pour une révélation mineure et 2 pour une majeure.'
   schema:alternateName: 'Un titre alternatif ou alias avec indication de langue, en conservant sa graphie.'

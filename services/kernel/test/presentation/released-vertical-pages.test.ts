@@ -54,7 +54,17 @@ type Page = {
   document: CompositionDocument;
   views: View[];
   reads: Record<string, ReadValue>;
+  meanings?: Record<string, { text: string; lang: string | null }>;
+  unavailable?: { id: string; admitted: false }[];
+  viewer?: {
+    signedIn: boolean;
+    actions: Record<string, 'allowed' | 'denied' | 'unavailable'>;
+  };
 };
+function publicPage(page: Page) {
+  const { viewer: _viewer, ...rest } = page;
+  return rest;
+}
 function status(response: HttpResponse, wanted: number, phase: string) {
   expect(response.status, `${phase}: ${JSON.stringify(response.body)}`).toBe(wanted);
 }
@@ -232,7 +242,14 @@ for (const [vertical, types] of Object.entries(launch)) {
         for (const view of ['overview', 'details'] as const) {
           const anonymous = await factualPage(driver, 'anonymous', type, id, factual, view);
           const editor = await factualPage(driver, 'editor', type, id, factual, view);
-          expect(editor).toEqual(anonymous);
+          expect(publicPage(editor)).toEqual(publicPage(anonymous));
+          if (type === 'wd:Q95074') {
+            expect(anonymous.unavailable).toEqual([]);
+            expect(anonymous.meanings?.['rezics:relatedCharacterIdentity']?.text.length).toBeGreaterThan(0);
+            expect(anonymous.viewer?.signedIn).toBe(false);
+            expect(editor.viewer?.signedIn).toBe(true);
+            expect(anonymous.viewer?.actions['statement:propose']).toBe('denied');
+          }
         }
         const missing = await driver.request('anonymous', 'POST', '/v1/pages:read', {
           target: { subject: id, view: 'collections' },
