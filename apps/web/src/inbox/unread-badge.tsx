@@ -90,12 +90,7 @@ export function InboxUnreadSummary() {
   const blocked = unreadCountFetchBlocked(viewer);
   const copy = unreadSummaryCopy(data, isPending, isError);
   return (
-    <section
-      role="status"
-      aria-label={m.inbox_unread_summary()}
-      aria-busy={isFetching}
-      className="mt-4 space-y-2"
-    >
+    <section role="status" aria-label={m.inbox_unread_summary()} aria-busy={isFetching} className="mt-4 space-y-2">
       <p className="text-sm text-muted-foreground">{copy.status}</p>
       {copy.zero ? <p className="text-sm text-muted-foreground">{m.inbox_unread_none_not_empty()}</p> : null}
       {blocked ? <p className="text-sm text-muted-foreground">{m.settings_retry_wait()}</p> : null}

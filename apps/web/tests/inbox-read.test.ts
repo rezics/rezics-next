@@ -187,7 +187,13 @@ test('unread count keeps native zero, lower-bound, bounded Retry-After and signe
     basis: 'current-visible-unread' as const,
     witness: currentDisclosure,
   };
-  expect(await loadUnreadCount(countClient(() => Response.json(ready)), owner.request(), owner.env)).toEqual({
+  expect(
+    await loadUnreadCount(
+      countClient(() => Response.json(ready)),
+      owner.request(),
+      owner.env,
+    ),
+  ).toEqual({
     signedIn: true,
     state: 'ready',
     ...ready,
@@ -198,20 +204,31 @@ test('unread count keeps native zero, lower-bound, bounded Retry-After and signe
     basis: 'current-visible-lower-bound' as const,
     witness: currentDisclosure,
   };
-  expect(await loadUnreadCount(countClient(() => Response.json(capped)), owner.request(), owner.env)).toEqual({
+  expect(
+    await loadUnreadCount(
+      countClient(() => Response.json(capped)),
+      owner.request(),
+      owner.env,
+    ),
+  ).toEqual({
     signedIn: true,
     state: 'ready',
     ...capped,
   });
   const now = Date.parse('2026-10-31T00:00:00.000Z');
-  for (const retryAfter of ['30', 'Sat, 31 Oct 2026 00:01:00 GMT', 'invalid', undefined, `${'9'.repeat(200)}`] as const) {
+  for (const retryAfter of [
+    '30',
+    'Sat, 31 Oct 2026 00:01:00 GMT',
+    'invalid',
+    undefined,
+    `${'9'.repeat(200)}`,
+  ] as const) {
     const result = await loadUnreadCount(
-      countClient(
-        () =>
-          Response.json(
-            { status: 503, code: 'deadline_exceeded', retryable: true, request_id: 'count-wait' },
-            { status: 503, headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter } },
-          ),
+      countClient(() =>
+        Response.json(
+          { status: 503, code: 'deadline_exceeded', retryable: true, request_id: 'count-wait' },
+          { status: 503, headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter } },
+        ),
       ),
       owner.request(),
       owner.env,
@@ -230,9 +247,12 @@ test('unread count keeps native zero, lower-bound, bounded Retry-After and signe
           : {}),
       },
     });
-    expect(preferenceRetryDeadline(result.signedIn && result.state === 'unavailable' ? result.failure.retryAfter : undefined, now)).toBe(
-      retryAfter === '30' ? now + 30_000 : retryAfter?.endsWith('GMT') ? now + 60_000 : 0,
-    );
+    expect(
+      preferenceRetryDeadline(
+        result.signedIn && result.state === 'unavailable' ? result.failure.retryAfter : undefined,
+        now,
+      ),
+    ).toBe(retryAfter === '30' ? now + 30_000 : retryAfter?.endsWith('GMT') ? now + 60_000 : 0);
   }
   let nativeReads = 0;
   expect(

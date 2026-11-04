@@ -216,7 +216,10 @@ test('bulk acknowledgement uses the owner-supplied through and retries that orig
   }
 });
 
-const nativeCount = (count: number, extras: { capped?: boolean; basis?: 'current-visible-unread' | 'current-visible-lower-bound' } = {}) => ({
+const nativeCount = (
+  count: number,
+  extras: { capped?: boolean; basis?: 'current-visible-unread' | 'current-visible-lower-bound' } = {},
+) => ({
   signedIn: true as const,
   state: 'ready' as const,
   count,
@@ -276,7 +279,11 @@ test('a failed unread summary stays unavailable on a usable page, and Retry-Afte
       ),
     ).toBe(true);
     expect(seenCommands).toHaveLength(0);
-    view.client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'original-token' });
+    view.client.setQueryData(sessionQuery.queryKey, {
+      state: 'signed-in',
+      subject: 'bob',
+      csrfToken: 'original-token',
+    });
     await expect(fetchInboxUnreadCount(viewer)).rejects.toThrow('Inbox viewer changed');
   } finally {
     Date.now = clock;

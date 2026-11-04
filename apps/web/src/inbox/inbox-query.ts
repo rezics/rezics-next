@@ -65,9 +65,7 @@ export function unreadCountFetchBlocked(viewer: InboxViewer, now = Date.now()): 
 function rememberUnreadCount(viewer: InboxViewer, result: UnreadCount, now = Date.now()) {
   unreadCountObservations.set(viewer, {
     retryAt:
-      result.signedIn && result.state === 'unavailable'
-        ? preferenceRetryDeadline(result.failure.retryAfter, now)
-        : 0,
+      result.signedIn && result.state === 'unavailable' ? preferenceRetryDeadline(result.failure.retryAfter, now) : 0,
     last: result,
   });
   return result;
