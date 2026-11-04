@@ -1341,7 +1341,7 @@ export async function listSubjectLinks(
             languages,
             deadline,
             seen: options.seen,
-            authorizeSummary: options.authorizeSummary,
+            ...(options.authorizeSummary === undefined ? {} : { authorizeSummary: options.authorizeSummary }),
           })
         : { state: 'unavailable' as const }
       : undefined;

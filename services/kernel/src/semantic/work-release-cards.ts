@@ -184,6 +184,10 @@ export async function readWorkReleaseCards(input: {
                 fields.set(property, { facts: [], withheld: false, unavailable: true });
                 continue;
               }
+              if (rows.some(({ value }) => value === undefined)) {
+                fields.set(property, { facts: [], withheld: false, unavailable: true });
+                continue;
+              }
               fields.set(property, { facts: [], withheld: false });
               const relationFilter = input.release.properties[property]?.relation?.filter;
               const candidates = relationCandidatesByPartition.get(home) ?? [];
