@@ -1,4 +1,4 @@
-import type { KernelClient, SubjectRead, WorkReleaseCards } from '@rezics/client';
+import type { KernelClient, SubjectLinksResponse, SubjectRead, SubjectReadQuery, WorkReleaseCards } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { gameGroups, gameType, gameUuid, type GameGroup } from '../game-profile';
 import type { GuideRelease } from '../definition-guide';
@@ -82,12 +82,12 @@ export async function readGameReader(
   try {
     const [current, release] = await Promise.all([
       client.subjects({ id: address.id }).get({
-        query: { context: address.context, language: locale, includeViewerActions: true },
+        query: { context: address.context, language: locale, includeViewerActions: true } as SubjectReadQuery,
       }),
       definitions,
     ]);
     if (current.status !== 200 || !current.data) return failure(current.status);
-    const read = current.data;
+    const read = current.data as SubjectRead;
     if (
       read.subject.id !== address.id ||
       read.subject.context !== address.context ||
@@ -168,7 +168,7 @@ export async function readGameReader(
     // Neither means that the native stream is exhausted or that retrying the token will help.
     if (response.status === 400 && address.cursor) return { ok: false, reason: 'restart' };
     if (response.status !== 200 || !response.data) return failure(response.status);
-    const page = response.data;
+    const page = response.data as SubjectLinksResponse;
     const { workReleaseCards, ...membershipPage } = page;
     if (
       page.links.length > gameReaderLimit ||
