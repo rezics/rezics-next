@@ -23,7 +23,11 @@ export type ContextComparison = {
   inherited: SubjectRead['subject']['statements'][string];
   adoption: CandidatePage['adoption'];
 };
-export type CandidateFailure = { ok: false; reason: 'denied' | 'stale' | 'unavailable' | 'invalid' };
+export type CandidateFailure = {
+  ok: false;
+  reason: 'denied' | 'stale' | 'unavailable' | 'invalid';
+  clearPrivate?: boolean;
+};
 export type ViewerActionEntry = { action: string; operations: string[] };
 export type ViewerActionComponent =
   | { state: 'not-requested' }
@@ -164,7 +168,7 @@ export async function readCandidateAuthority(
             }),
           }
         : nativeContextActions;
-    const subjectActions = Object.fromEntries(
+    const subjectActions: Record<string, ViewerActionComponent> = Object.fromEntries(
       subjectIds.map((id) => {
         const native = component('semantic.subject', id);
         if (native.state !== 'available') return [id, native];

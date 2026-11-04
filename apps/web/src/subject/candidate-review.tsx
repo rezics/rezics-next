@@ -13,6 +13,7 @@ import { m } from '../paraglide/messages.js';
 import { subjectHref } from './subject-href';
 import { candidateCanSelect, editCandidateDraft, refreshCandidateDraft, type CandidateDraft } from './candidate-draft';
 import {
+  candidateContext,
   candidateSourceRecords,
   nativeOperationAvailability,
   publicCandidateSelection,
