@@ -145,7 +145,7 @@ for (const width of [390, 1280])
     expect(canvas.getByRole('heading', { name: m.library_following_kind_collection() }).textContent).toBe('Collection');
     expect(canvas.getByText(m.access_acting_as({ name: 'Mira' })).closest('details')).toBeNull();
     expect(canvas.getByText(m.access_delegated_by({ name: 'Aki' })).closest('details')).toBeNull();
-    const rows = canvas.getAllByRole('listitem');
+    const rows = canvas.getAllByRole('heading', { level: 3 }).map((heading) => heading.closest('li')!);
     expect(rows).toHaveLength(20);
     for (const [index, row] of rows.entries()) {
       expect(within(row).getAllByRole('heading')).toHaveLength(1);
@@ -184,7 +184,7 @@ test('missing identity is unavailable, only explicit deletion is tombstoned, and
   const io = ioFor(page);
   await show(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />);
   const canvas = within(host);
-  const rows = canvas.getAllByRole('listitem');
+  const rows = canvas.getAllByRole('heading', { level: 3 }).map((heading) => heading.closest('li')!);
   expect(rows).toHaveLength(3);
   expect(within(rows[0]!).getByRole('heading', { level: 3 }).textContent).toBe(m.access_deleted_account());
   expect(rows[0]!.querySelector('[data-slot="tombstone"]')).not.toBeNull();
@@ -225,7 +225,7 @@ test('organization and unnamed Realm owner/member groups keep human qualificatio
   );
   await show(<ResourceAccessPage initial={{ status: 'ready', page }} io={ioFor(page)} />);
   const canvas = within(host);
-  const rows = canvas.getAllByRole('listitem');
+  const rows = canvas.getAllByRole('heading', { level: 3 }).map((heading) => heading.closest('li')!);
   expect(rows.map((row) => within(row).getByRole('heading', { level: 3 }).textContent)).toEqual([
     `Aki · ${m.access_org_owners()}`,
     `Aki · ${m.access_org_members()}`,
@@ -396,7 +396,7 @@ test('actual page confirmation and uncertain retry send byte-identical original 
   expect(canvas.getByRole('status').closest('details')).toBeNull();
   expect(canvas.getByRole('heading', { level: 3 }).textContent).toBe('Aki');
   expect(read.mock.calls).toHaveLength(2);
-  await details(canvas.getByRole('listitem'), [readerId, realmOwnerRole, page.grants[0]!.valid]);
+  await details(canvas.getByRole('heading', { level: 3 }).closest('li')!, [readerId, realmOwnerRole, page.grants[0]!.valid]);
   expect(read.mock.calls).toHaveLength(2);
   await act(async () => user.click(canvas.getByRole('button', { name: m.access_retry_operation() })));
   expect(commands).toHaveLength(2);

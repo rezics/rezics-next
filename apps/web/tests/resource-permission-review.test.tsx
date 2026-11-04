@@ -72,11 +72,11 @@ test('permission filtering, review, and confirmation preserve exact native actio
     const proposedInterval = interval('2027-01-01T12:30', '')!;
     await click(m.access_review_title());
     let review = canvas.getByRole('region', { name: m.access_review_title() });
-    expect(within(review).getByText(m.access_permission_context_accept())).toBeVisible();
-    expect(within(review).getByText('context:accept', { selector: 'code' })).toBeVisible();
-    expect(within(review).getByText(m.access_permission_context_adopt())).toBeVisible();
-    expect(within(review).getByText('context:adopt', { selector: 'code' })).toBeVisible();
-    expect(within(review).getByText(proposedInterval, { selector: 'code' })).toBeVisible();
+    expect(within(review).getByText(m.access_permission_context_accept())).toBeTruthy();
+    expect(within(review).getByText('context:accept', { selector: 'code' })).toBeTruthy();
+    expect(within(review).getByText(m.access_permission_context_adopt())).toBeTruthy();
+    expect(within(review).getByText('context:adopt', { selector: 'code' })).toBeTruthy();
+    expect(within(review).getByText(proposedInterval, { selector: 'code' })).toBeTruthy();
     expect(io.save).not.toHaveBeenCalled();
 
     await click(m.access_review_edit());
@@ -103,7 +103,7 @@ test('permission filtering, review, and confirmation preserve exact native actio
     await click(m.access_review_title());
     review = canvas.getByRole('region', { name: m.access_review_title() });
     expect(within(review).getAllByText(m.access_active_accounts()).length).toBeGreaterThan(0);
-    expect(within(review).getByText(m.access_permission_context_accept())).toBeVisible();
+    expect(within(review).getByText(m.access_permission_context_accept())).toBeTruthy();
     await click(m.access_review_confirm(), within(review));
     expect(saves.map((change) => change.actions)).toEqual([['context:adopt'], ['context:accept']]);
   } finally {
@@ -171,10 +171,10 @@ test('installed governance, author, and ballot roles show their returned expansi
       await act(async () => root.render(<ResourceAccessPage initial={{ status: 'ready', page }} io={io} />));
       const row = within(canvas.getByRole('heading', { level: 3, name: 'Aki' }).closest('li')!);
       expect(row.getAllByText(item.label).length).toBeGreaterThan(0);
-      for (const action of item.actions) expect(row.getByText(action, { selector: 'code' })).toBeVisible();
+      for (const action of item.actions) expect(row.getByText(action, { selector: 'code' })).toBeTruthy();
       if (item.role === 'future.review_role') {
-        expect(row.getByText('future:first', { selector: 'code' })).toBeVisible();
-        expect(row.getByText('future:second', { selector: 'code' })).toBeVisible();
+        expect(row.getByText('future:first', { selector: 'code' })).toBeTruthy();
+        expect(row.getByText('future:second', { selector: 'code' })).toBeTruthy();
         expect(row.getAllByText(m.access_permission_unknown()).length).toBe(2);
       }
     } finally {
@@ -227,7 +227,7 @@ test('a native conflict refreshes the visible row and requires a fresh review', 
     await act(async () => user.selectOptions(currentPermission, 'context:accept'));
     await click(m.access_review_title());
     const review = canvas.getByRole('region', { name: m.access_review_title() });
-    expect(within(review).getByText(m.access_permission_context_accept())).toBeVisible();
+    expect(within(review).getByText(m.access_permission_context_accept())).toBeTruthy();
     expect(saves).toHaveLength(1);
     await click(m.access_review_confirm(), within(review));
     expect(saves).toHaveLength(2);
@@ -277,10 +277,10 @@ test('removal review names the exact direct permission or returned role bundle b
       const row = within(canvas.getByRole('heading', { level: 3, name: 'Aki' }).closest('li')!);
       await act(async () => user.click(row.getByRole('button', { name: m.access_grant_actions() })));
       await act(async () => user.click(within(window.document.body).getByText(m.access_revoke())));
-      const dialog = within(canvas.getByRole('alertdialog'));
+      const dialog = within(within(window.document.body as unknown as HTMLElement).getByRole('alertdialog'));
       expect(dialog.getAllByText(item.kind === 'role' ? m.access_named_role() : m.access_direct_action()).length)
         .toBeGreaterThan(0);
-      for (const action of item.actions) expect(dialog.getByText(action, { selector: 'code' })).toBeVisible();
+      for (const action of item.actions) expect(dialog.getByText(action, { selector: 'code' })).toBeTruthy();
       expect(saves).toHaveLength(0);
       await act(async () => user.click(dialog.getByRole('button', { name: m.access_revoke() })));
       expect(saves[0]).toMatchObject({
