@@ -88,7 +88,21 @@ test('native board action, authorized replay, durable projection and private ins
   expect(page.response.headers.get('cache-control')).toBe('private, no-store');
   const { viewer, targetContext: _targetContext, ...retainedDecision } = detail.body;
   expect(viewer).toMatchObject({ affectedAuthor: false, appeal: { state: 'unsupported', reason: 'board' } });
-  expect(page.body).toEqual({ entries: [retainedDecision], nextCursor: null });
+  expect(page.body).toEqual({
+    entries: [
+      {
+        ...retainedDecision,
+        history: {
+          reasonState: 'retained',
+          decider: 'withheld',
+          receipt: 'permitted',
+          target: 'unavailable',
+        },
+      },
+    ],
+    nextCursor: null,
+    viewer: { kind: 'board-moderator' },
+  });
   expect((await f.call('GET', exact)).response.status).toBe(404);
   expect((await read(exact, f.people.reporter.bearer)).response.status).toBe(404);
   expect((await read(`/v1/boards/${board}`, f.people.reporter.bearer)).response.status).toBe(404);
@@ -115,6 +129,10 @@ test('native board action, authorized replay, durable projection and private ins
   );
   expect((await read(exact)).body?.statement).toBe('');
   expect((await read(history(board))).body?.entries[0].statement).toBe('');
+  expect((await read(history(board))).body?.entries[0].history).toMatchObject({
+    reasonState: 'retired',
+    decider: 'retired',
+  });
   await f.revokeTargetModeration(board, f.people.reviewer.accountId);
   expect((await read(exact)).response.status).toBe(404);
   expect((await read(history(board))).response.status).toBe(404);

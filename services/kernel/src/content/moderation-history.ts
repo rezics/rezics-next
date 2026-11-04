@@ -6,7 +6,7 @@ import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, AuthenticationError, type AccessClient, type Actor } from '../request/access.ts';
+import { accessCheck, actorOf, AuthenticationError, type AccessClient, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -14,6 +14,7 @@ import { ModerationDecisionSchema, readModerationDecision } from './moderation-d
 import currentTarget from './moderation-history-target.sql';
 import page from './page-moderation-history.sql';
 import selectedPage from './moderation-history-kind-page.sql';
+import retention from './moderation-history-retention.sql';
 import type { ModerationDependencies } from './moderation.ts';
 
 export const MODERATION_HISTORY_MAX_LIMIT = 100;
@@ -38,13 +39,30 @@ export type ModerationHistoryQuery = {
 
 export const ModerationHistoryPageSchema = t.Object(
   {
-    entries: t.Array(ModerationDecisionSchema),
+    entries: t.Array(
+      t.Object(
+        {
+          ...ModerationDecisionSchema.properties,
+          history: t.Object(
+            {
+              reasonState: t.Union([t.Literal('retained'), t.Literal('retired')]),
+              decider: t.Union([t.Literal('withheld'), t.Literal('retired')]),
+              receipt: t.Union([t.Literal('permitted'), t.Literal('unavailable')]),
+              target: t.Literal('unavailable'),
+            },
+            { additionalProperties: false },
+          ),
+        },
+        { additionalProperties: false },
+      ),
+    ),
     nextCursor: t.Union([t.String(), t.Null()]),
+    viewer: t.Object({ kind: t.Literal('board-moderator') }, { additionalProperties: false }),
   },
   { additionalProperties: false },
 );
 
-type HistoryContext = { actor: Actor; deadline: number };
+type HistoryContext = { actor: Actor; deadline: number; request?: Request };
 type Candidate = {
   decision_id: string;
   target_kind: 'board' | 'thread' | 'post';
@@ -93,6 +111,7 @@ export async function listModerationHistory(
   query: ModerationHistoryQuery,
 ) {
   if (context.actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+  const authorization = context.request?.headers.get('authorization');
   const route = routeOf(boardId);
   if (route === null) throw missing();
   const limit = query.limit ?? 20;
@@ -193,15 +212,37 @@ export async function listModerationHistory(
       exact.value.targetId !== candidate.target_id
     )
       continue;
-    entries.push(exact.value);
+    const retained = await snapshot(deps.pool, targetRoute, context.deadline, async (client) => {
+      if (!(await targetCheck(client))) return null;
+      return retention.run(client, { route: targetRoute, decision_id: candidate.decision_id });
+    });
+    if (!retained.value || retained.value.statement !== exact.value.statement) continue;
+    entries.push({
+      ...exact.value,
+      history: {
+        reasonState: retained.value.statement_retired ? ('retired' as const) : ('retained' as const),
+        decider: retained.value.decider_retired ? ('retired' as const) : ('withheld' as const),
+        receipt: retained.value.exact_receipt ? ('permitted' as const) : ('unavailable' as const),
+        // A moderation grant does not admit ordinary target navigation. The
+        // separately selected exact page owns its current header disclosure.
+        target: 'unavailable' as const,
+      },
+    });
   }
 
+  if (context.request) {
+    if (!authorization || context.request.headers.get('authorization') !== authorization) throw missing();
+    const currentActor = await actorOf(deps.access, context.request, { pool: deps.pool, deadline: context.deadline });
+    if (JSON.stringify(currentActor) !== JSON.stringify(context.actor)) throw missing();
+  }
   const final = await snapshot(deps.pool, route, context.deadline, checkBoard);
   if (!final.value) throw missing();
+  if (context.request && context.request.headers.get('authorization') !== authorization) throw missing();
   const last = selected.at(-1);
   return {
     value: {
       entries,
+      viewer: { kind: 'board-moderator' as const },
       nextCursor:
         candidates.value.length > limit && last
           ? encodeCursor(ring, binding, {

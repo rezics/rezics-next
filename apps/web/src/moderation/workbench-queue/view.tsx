@@ -7,7 +7,7 @@ import { PageHeading } from '../../shell/page-heading';
 import type { ReportsBulkAction } from '../reports-bulk-action';
 import type { ReportQueueAction } from '../reports-view-action';
 import { WorkbenchAppeal } from '../workbench-appeal';
-import { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistoryUnavailable } from '../workbench-history';
+import { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistory } from '../workbench-history';
 import { WorkbenchReportSelect, WorkbenchSelection } from '../workbench-selection';
 import { WorkbenchTriageCase, workbenchTriageIdentity } from '../workbench-triage';
 import {
@@ -37,6 +37,7 @@ export type WorkbenchViewProps = {
         | 'selectedAppeal'
         | 'nativeSession'
         | 'directory'
+        | 'history'
       >
     >;
   onSearch: (search: WorkbenchSearch) => void;
@@ -98,8 +99,9 @@ export function WorkbenchView({
   const boardId = scope.kind === 'board' ? scope.boardId : undefined;
   const next = page.next;
   useEffect(() => {
-    if (search.historyReturn) document.getElementById(`workbench-queue-${search.queue}`)?.focus();
-  }, [search.historyReturn, search.queue]);
+    if (search.historyReturn && (!isCurrent || isCurrent()))
+      document.getElementById(`workbench-queue-${search.queue}`)?.focus();
+  }, [search.historyReturn, search.queue, isCurrent]);
   const status =
     page.state === 'denied'
       ? m.moderation_workbench_denied()
@@ -133,12 +135,12 @@ export function WorkbenchView({
           {m.moderation_workbench_catalogue_appeals()}
         </p>
       ) : null}
-      {page.state === 'unavailable' && onRetry ? (
+      {page.state === 'unavailable' && !search.history && onRetry ? (
         <Button data-workbench-retry type="button" className={control} onClick={onRetry}>
           {m.moderation_queue_retry()}
         </Button>
       ) : null}
-      {page.state === 'stale' ? (
+      {page.state === 'stale' && !search.history ? (
         <Button type="button" className={control} onClick={() => onSearch(workbenchWithoutContinuation(search))}>
           {m.moderation_queue_restart()}
         </Button>
@@ -164,7 +166,7 @@ export function WorkbenchView({
           {...(isCurrent ? { isCurrent } : {})}
         />
       ) : null}
-      {page.state === 'ready' && queueScope ? (
+      {(page.state === 'ready' || search.history) && queueScope ? (
         <section className="space-y-4" aria-label={m.moderation_workbench_heading()}>
           <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">
             {(['reports', 'appeals', 'resolved'] as const)
@@ -245,7 +247,10 @@ export function WorkbenchView({
             </fieldset>
           ) : null}
           {search.history && scope.kind === 'board' ? (
-            <WorkbenchHistoryUnavailable
+            <WorkbenchHistory
+              page={page.history ?? { state: page.state, entries: [], next: null }}
+              search={search}
+              onSearch={onSearch}
               onReturn={() => onSearch(returnFromWorkbenchHistory(search))}
               {...(onRetry ? { onRetry } : {})}
             />

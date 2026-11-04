@@ -11,6 +11,7 @@ import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from '../privat
 import { preparePrivateReaderRead, type PrivateReaderRead } from '../private-reader-lifetime';
 import { readModerationAppeals, type Appeal, type AppealPage, type AppealProvenance } from '../appeals-read';
 import { readModerationReports, type Report, type ResolvedReportTarget } from '../reports-read';
+import { historySource, readWorkbenchHistory, type HistoryRead, type HistorySource } from '../workbench-history/read';
 import {
   moderationDirectoryPage,
   nativeModerationDirectoryUnavailable,
@@ -63,8 +64,10 @@ export type WorkbenchRead = PrivateReaderRead & {
   /** Legacy presentation input; native appeal reads never hydrate current targets. */
   selectedTarget: ResolvedReportTarget | null;
   unavailableReason?: 'native-appeal-inspect';
+  history?: HistoryRead | undefined;
 };
 export type WorkbenchNativeSource = {
+  history?: HistorySource;
   directory?: ModerationDirectorySource;
   /** Compatibility for older callers; discovery never calls either membership-derived source. */
   realms?: (cursor?: string) => Promise<{ items: WorkbenchDirectoryItem[]; next: string | null }>;
@@ -192,10 +195,11 @@ export async function readWorkbench(
   if (scope.kind === 'catalogue' && search.queue === 'appeals') {
     return { ...identity, state: 'unavailable', ...idle };
   }
-  // Content owns the private board history reader. It is not exposed by the
-  // delivered client yet, so never synthesize a page from report or appeal lists.
   if (scope.kind === 'board' && search.history) {
-    return { ...identity, state: 'unavailable', ...idle };
+    const history = source.history
+      ? await readWorkbenchHistory(source.history, search)
+      : { state: 'unavailable' as const, entries: [], next: null };
+    return { ...identity, ...idle, state: history.state, history };
   }
   if (scope.kind === 'catalogue') {
     const page = await source.catalogueReports(search.cursor, {
@@ -243,6 +247,7 @@ const auth = (authorization: string) => ({ headers: { authorization }, fetch: { 
 function nativeSource(client: KernelClient, authorization: string): WorkbenchNativeSource {
   const headers = auth(authorization);
   return {
+    history: historySource(client, authorization),
     directory: nativeModerationDirectoryUnavailable,
     async boardReports(boardId, cursor, selection) {
       const result = await client.boards({ id: boardId }).reports.get({

@@ -7,6 +7,8 @@ export type WorkbenchSearch = ReportSelection & {
   queue: WorkbenchQueueKind;
   history?: true;
   historyCursor?: string;
+  historyTargetKind?: 'all' | 'board' | 'thread' | 'post';
+  historyDecision?: string;
   historyReturn?: true;
   scope?: 'catalogue';
   realm?: string;
@@ -51,6 +53,11 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
   const directoryCursor = token(search.directoryCursor, 4096);
   const history = search.history === true && board ? true : undefined;
   const historyCursor = history ? token(search.historyCursor, 4096) : undefined;
+  const historyTargetKind =
+    history && ['board', 'thread', 'post'].includes(String(search.historyTargetKind))
+      ? (search.historyTargetKind as 'board' | 'thread' | 'post')
+      : undefined;
+  const historyDecision = history ? token(search.historyDecision, 128) : undefined;
   const historyReturn = !history && board && search.historyReturn === true ? true : undefined;
   const selected = queue === 'appeals' && board && !history ? token(search.case, 128) : undefined;
   return {
@@ -62,6 +69,8 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
     ...(board ? { board } : {}),
     ...(history ? { history } : {}),
     ...(historyCursor ? { historyCursor } : {}),
+    ...(historyTargetKind ? { historyTargetKind } : {}),
+    ...(historyDecision ? { historyDecision } : {}),
     ...(historyReturn ? { historyReturn } : {}),
     ...(selected ? { case: selected } : {}),
     ...(cursor ? { cursor } : {}),
@@ -97,6 +106,8 @@ export function workbenchQueueHref(search: WorkbenchSearch): string {
   if (search.case) params.set('case', search.case);
   if (search.history) params.set('history', 'true');
   if (search.historyCursor) params.set('historyCursor', search.historyCursor);
+  if (search.historyTargetKind) params.set('historyTargetKind', search.historyTargetKind);
+  if (search.historyDecision) params.set('historyDecision', search.historyDecision);
   if (search.historyReturn) params.set('historyReturn', 'true');
   if (search.realmsCursor) params.set('realmsCursor', search.realmsCursor);
   if (search.boardsCursor) params.set('boardsCursor', search.boardsCursor);
@@ -124,6 +135,8 @@ export function workbenchReadKey(search: WorkbenchSearch): string {
     search.order,
     search.history ? 'history' : '',
     search.historyCursor ?? '',
+    search.historyTargetKind ?? 'all',
+    search.historyDecision ?? '',
     search.historyReturn ? 'history-return' : '',
     search.cursor ?? '',
     search.realmsCursor ?? '',

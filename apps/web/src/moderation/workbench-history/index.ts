@@ -1,2 +1,2 @@
 export { openWorkbenchHistory, returnFromWorkbenchHistory } from './navigation';
-export { WorkbenchHistoryUnavailable } from './view';
+export { WorkbenchHistoryUnavailable, WorkbenchHistory } from './view';
