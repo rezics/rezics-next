@@ -189,52 +189,75 @@ export const readThreadPersonal = createServerFn({ method: 'GET' })
       !('postIds' in input) ||
       !Array.isArray(input.postIds) ||
       input.postIds.length > 101 ||
-      input.postIds.some((id) => typeof id !== 'string' || id.length > 128)
+      input.postIds.some((id) => typeof id !== 'string' || id.length > 128) ||
+      !('readReactions' in input) ||
+      typeof input.readReactions !== 'boolean' ||
+      (!input.readReactions && input.postIds.length !== 0)
     )
       throw notFound();
-    return { id: input.id, postIds: input.postIds as string[] };
+    return { id: input.id, postIds: input.postIds as string[], readReactions: input.readReactions };
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
+    const signal = request.signal;
+    signal.throwIfAborted();
     await prepareSession(request, env as Partial<SessionEnv>);
+    signal.throwIfAborted();
     const authorization = viewerCredential(request);
     const viewerId = sessionSubject(request);
     if (!authorization || !viewerId) {
       const reviewVotes: RevisionVotes = {};
-      return { viewerId: null, reactions: {} as Record<string, string | null>, reviewVotes };
+      return { viewerId: null, reactions: {} as Record<string, PersonalReactionSlot>, reviewVotes };
     }
     const client = kernelClient();
     const reviewVotesRead = (async (): Promise<RevisionVotes> => {
       try {
-        const result = await client.threads({ id: data.id }).get({ headers: { authorization } });
+        const result = await client.threads({ id: data.id }).get({ headers: { authorization }, fetch: { signal } });
         const thread = result.error ? undefined : result.data?.thread;
         if (!thread || thread.kind !== 'review' || thread.authorId !== viewerId) return {};
-        return readAuthorRevisionVotes(client, [thread.firstPost], { id: viewerId, authorization });
-      } catch {
+        return readAuthorRevisionVotes(client, [thread.firstPost], { id: viewerId, authorization }, signal);
+      } catch (error) {
+        if (signal.aborted) throw error;
         return {};
       }
     })();
-    const targets = [data.id, ...data.postIds];
-    const values = await Promise.all(
-      targets.map(async (target) => {
-        const resource = target === data.id ? client.threads({ id: target }) : client.posts({ id: target });
-        try {
-          const result = await (
-            resource as unknown as {
-              reaction: {
-                get(options: { headers: { authorization: string } }): Promise<{ data?: { kind?: string | null } }>;
-              };
+    const reactions = data.readReactions
+      ? await Promise.all(
+          [data.id, ...data.postIds].map(async (target) => {
+            const resource = target === data.id ? client.threads({ id: target }) : client.posts({ id: target });
+            try {
+              const result = await (
+                resource as unknown as {
+                  reaction: {
+                    get(options: {
+                      headers: { authorization: string };
+                      fetch: { signal: AbortSignal };
+                    }): Promise<{ error?: unknown; data?: { kind?: string | null } }>;
+                  };
+                }
+              ).reaction.get({ headers: { authorization }, fetch: { signal } });
+              if (
+                result.error ||
+                !result.data ||
+                !('kind' in result.data) ||
+                (result.data.kind !== null && typeof result.data.kind !== 'string')
+              )
+                return [target, { state: 'unavailable' } as const] as const;
+              return [target, { state: 'ready', value: result.data.kind } as const] as const;
+            } catch (error) {
+              if (signal.aborted) throw error;
+              return [target, { state: 'unavailable' } as const] as const;
             }
-          ).reaction.get({ headers: { authorization } });
-          return [target, result.data?.kind ?? null] as const;
-        } catch {
-          return [target, null] as const;
-        }
-      }),
-    );
-    return { viewerId, reactions: Object.fromEntries(values), reviewVotes: await reviewVotesRead };
+          }),
+        )
+      : [];
+    const reviewVotes = await reviewVotesRead;
+    signal.throwIfAborted();
+    return { viewerId, reactions: Object.fromEntries(reactions), reviewVotes };
   });
+
+export type PersonalReactionSlot = { state: 'ready'; value: string | null } | { state: 'unavailable' };
 
 export type PostHistoryReadEnvelope = HistoricalReadEnvelope<PostHistoryReadData>;
 

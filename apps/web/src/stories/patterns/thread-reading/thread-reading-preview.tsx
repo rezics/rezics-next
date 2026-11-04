@@ -73,6 +73,7 @@ function Connected({ state }: { state: ReadingState }) {
       id,
       undefined,
       postIds.length ? postIds : (loaded?.posts.posts.map((post) => post.id) ?? []),
+      { readReactions: !loaded?.composed },
     ),
     enabled: session === 'signed-in' && loaded !== undefined,
   });
