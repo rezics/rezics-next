@@ -127,7 +127,9 @@ function GameWindow({
     // A continuation replaces only its bounded release window. Keep the work reading available
     // while the new window loads or its transport fails; never retain the old release destinations.
     setPage((previous) =>
-      address.cursor && previous ? { ...previous, editions: [], workReleaseCards: undefined, next: null } : undefined,
+      address.cursor && previous
+        ? { ...previous, editions: [], workReleaseCards: { state: 'unavailable' }, next: null }
+        : undefined,
     );
     setFailure(undefined);
     if (address.cursor && (acceptedCursors.current.has(address.cursor) || successfulWindows.current >= 64)) {
