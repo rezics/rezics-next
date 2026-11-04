@@ -233,7 +233,13 @@ export function HomeFeed({
               <HomeFeedActions
                 key={item.id}
                 item={item}
-                commandRecovery={recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`)}
+                commandRecovery={{
+                  ...recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`),
+                  start(command) {
+                    recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`).start(command);
+                    reactions.retire();
+                  },
+                }}
                 reactionPending={recovery.recovery.pending(item.id)}
                 locale={locale}
                 signedIn={signedIn}

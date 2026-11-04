@@ -307,10 +307,13 @@ test.each([null, { epoch: 1, position: '6' }])(
 
 test('native allowed kinds do not change counts or selected facts, and [] disables every kind', async () => {
   let sends = 0;
-  const render = (allowedKinds: readonly ('upvote' | 'love')[]) => (
+  const render = (
+    allowedKinds: readonly ('upvote' | 'love')[],
+    counts: { upvote: number; love?: number } = { upvote: 8, love: 3 },
+  ) => (
     <ThreadReactions
       target={{ kind: 'thread', id }}
-      counts={{ upvote: 8, love: 3 }}
+      counts={counts}
       value="love"
       signedIn
       returnTo="/en/"
@@ -334,6 +337,10 @@ test('native allowed kinds do not change counts or selected facts, and [] disabl
   expect(arrows[1]!.disabled).toBe(true);
   await click(love);
   expect(sends).toBe(0);
+  await paint(render(['upvote'], { upvote: 8 }));
+  const selectedZero = host.querySelector<HTMLButtonElement>('[data-slot="reaction-chip"][aria-pressed="true"]');
+  expect(selectedZero?.textContent).toContain('0');
+  expect(selectedZero?.disabled).toBe(true);
   await paint(render([]));
   expect(host.querySelector('[data-slot="vote-control"] output')?.textContent).toBe('8');
   expect(host.querySelectorAll('[data-slot="reactions"] button:not([disabled])')).toHaveLength(1); // read-only picker
@@ -460,7 +467,13 @@ test('Home keeps an original uncertain command across retired advice, A/B/A and 
           settleWithRead={false}
           personalReady={!scope.recovery.pending('original-occurrence')}
           reactionOrigin={source.origin}
-          commandRecovery={scope.recovery.port('original-occurrence', '/en/threads/original?locate=exact')}
+          commandRecovery={{
+            ...scope.recovery.port('original-occurrence', '/en/threads/original?locate=exact'),
+            start(command) {
+              scope.recovery.port('original-occurrence', '/en/threads/original?locate=exact').start(command);
+              source.retire();
+            },
+          }}
           preparedTransport={transport}
         />
       </>

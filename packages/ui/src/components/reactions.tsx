@@ -460,7 +460,7 @@ export const Reactions = (props: ReactionsProps) => {
       {kinds.map((kind) => {
         if (votes && (kind === 'upvote' || kind === 'downvote')) return null;
         const count = shown.counts[kind] ?? 0;
-        if (count <= 0 && !props.inlineKinds) return null;
+        if (count <= 0 && !props.inlineKinds && shown.value !== kind) return null;
         const pressed = shown.value === kind;
         const formatted = formatCount(props.locale, count);
         const Icon = reactionIcons[kind];

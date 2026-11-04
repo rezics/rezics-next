@@ -140,6 +140,11 @@ export function useHomeReactionCurrentness(
 
   return {
     available,
+    retire: () => {
+      if (current.current !== binding || binding.retired) return;
+      current.current = null;
+      setBinding({ ...binding, retired: true, pending: false, visit: binding.visit + 1 });
+    },
     origin: {
       key: String(binding.visit),
       reader,
