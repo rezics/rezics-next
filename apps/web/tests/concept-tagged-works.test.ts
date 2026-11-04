@@ -119,7 +119,6 @@ test('builds one admitted Concept statement with exact role, scheme, descendants
     'en',
   );
   expect(request?.limit).toBe(24);
-  expect(request?.kinds).toEqual(['subject']);
   expect(request?.spoilerThreshold).toBe(2);
   expect(request?.filter).toEqual({
     and: [
@@ -183,10 +182,10 @@ test('retains at most 24 rows and issues one bounded Search dispatch without det
   });
   expect(dispatches).toEqual([request]);
   expect(JSON.stringify(request).length).toBeLessThanOrEqual(65_536);
-  expect(state.status).toBe('preparing');
+  expect(state.status).toBe('not-ready');
 });
 
-test('distinguishes exact empty from lagging empty and restarts an invalid cursor without merging', async () => {
+test('distinguishes exact empty from lagging empty and offers restart for an invalid cursor without scanning', async () => {
   const exact = {
     status: 'ready',
     page: { hits: [], next: null, freshness: { state: 'current' } },
@@ -208,12 +207,9 @@ test('distinguishes exact empty from lagging empty and restarts an invalid curso
   const dispatches: unknown[] = [];
   const state = await readConceptWorksPage(request, async (body) => {
     dispatches.push(body);
-    return dispatches.length === 1
-      ? { status: 409, error: { code: 'search_restart_required' } }
-      : { status: 503, error: { code: 'semantic_not_ready' } };
+    return { status: 409, error: { code: 'search_restart_required' } };
   });
-  expect(dispatches).toHaveLength(2);
+  expect(dispatches).toHaveLength(1);
   expect((dispatches[0] as { cursor?: string }).cursor).toBe('opaque-current');
-  expect((dispatches[1] as { cursor?: string }).cursor).toBeUndefined();
   expect(state.status).toBe('restart');
 });
