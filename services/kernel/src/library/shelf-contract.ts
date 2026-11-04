@@ -42,7 +42,7 @@ export function isLegacyEntryState(value: string): value is LegacyEntryState {
 export function isShelfEntryState(value: string): boolean {
   return /^[a-z][a-z0-9_.-]{0,63}$(?![\s\S])/.test(value);
 }
-export const SHELF_ORDERS = ['lastActivity', 'finishedAt', 'createdAt', 'personalScore'] as const;
+export const SHELF_ORDERS = ['lastActivity', 'finishedAt', 'createdAt', 'personalScore', 'priority'] as const;
 export const SHELF_DIRECTIONS = ['desc', 'asc'] as const;
 export type ShelfOrder = (typeof SHELF_ORDERS)[number];
 export type ShelfDirection = (typeof SHELF_DIRECTIONS)[number];
@@ -93,6 +93,8 @@ export type ShelfEntry = {
   activeProgressSession: ShelfSession | null;
   /** Native standard-question units; present only for personalScore order. */
   personalScore?: number | null;
+  /** Owner-local annotation rank; present only for priority order. Null is explicitly unranked. */
+  priority?: number | null;
 };
 
 export type ShelfScoreQuestion = {
@@ -261,6 +263,20 @@ export interface ShelfDateReader {
     query: ShelfQuery,
     after: ShelfSeek | null,
   ): Promise<ShelfDateRows>;
+}
+/** Priority candidates join the current owner annotation in the same native statement. */
+export type ShelfPriorityRows = {
+  entries: (Omit<ShelfEntry, 'activeProgressSession' | 'priority'> & { priority: number | null })[];
+  more: boolean;
+};
+export interface ShelfPriorityReader {
+  page(
+    client: Client,
+    route: number,
+    accountId: string,
+    query: ShelfQuery,
+    after: ShelfSeek | null,
+  ): Promise<ShelfPriorityRows>;
 }
 export interface ShelfActiveReader {
   sessions(

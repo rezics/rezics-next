@@ -31,6 +31,7 @@ import {
   type ShelfSeek,
 } from './shelf-contract.ts';
 import { shelfScoreBinding, validShelfScoreKey } from './shelf-score.ts';
+import { validShelfPriorityKey } from './entry-priority-page.ts';
 import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 
 function owner(actor: Actor, progress: boolean): AccountActor {
@@ -282,7 +283,9 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
             routeOf(keys[1]) === null ||
             !(query.orderBy === 'personalScore'
               ? validShelfScoreKey(keys[0])
-              : timestamp(keys[0]) || (query.orderBy === 'finishedAt' && keys[0] === ''))
+              : query.orderBy === 'priority'
+                ? validShelfPriorityKey(keys[0])
+                : timestamp(keys[0]) || (query.orderBy === 'finishedAt' && keys[0] === ''))
           )
             throw new ProblemError('invalid_cursor');
           after = { key: keys[0], subjectId: keys[1] };
@@ -295,7 +298,11 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
             ? last.personalScore === null
               ? ''
               : String(last.personalScore)
-            : query.orderBy === 'lastActivity'
+            : query.orderBy === 'priority'
+              ? last.priority === null
+                ? ''
+                : String(last.priority)
+              : query.orderBy === 'lastActivity'
               ? last.lastActivityAt
               : query.orderBy === 'createdAt'
                 ? last.createdAt
