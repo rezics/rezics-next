@@ -16,7 +16,7 @@ export type FeedReactionProjection = Readonly<{
   reactionsAsOf?: ReactionCountFreshness | null;
 }>;
 
-function targetFor(item: FeedItem): FeedReactionTarget | null {
+export function feedReactionTargetFor(item: FeedItem): FeedReactionTarget | null {
   if (item.key.owner !== 'content') return null;
   const content = item as FeedItem & ContentFeedShape;
   const { key, summary, destination } = content;
@@ -57,7 +57,7 @@ export async function projectFeedReactions(
   const targets = new Map<string, FeedReactionTarget>();
   const itemTargets = new Map<string, FeedReactionTarget>();
   for (const item of items) {
-    const target = targetFor(item);
+    const target = feedReactionTargetFor(item);
     if (!target) continue;
     const prior = targets.get(target.targetId);
     if (prior && prior.targetKind !== target.targetKind) throw new TypeError('Ambiguous feed reaction target');
