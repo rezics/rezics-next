@@ -1248,13 +1248,24 @@ The data language starts unset and must be chosen for each term row; route local
 Private term and fact drafts remain distinct by exact Type. A withdrawn fact stays visible until removed, while a
 withdrawn Type remains available for deliberate whole-draft discard. The contributor reviews the prepared Type,
 terms, facts, targets, ranks, qualifiers, and every evidence part before confirming. A changed release requires a new
-review, and nested native feedback returns to its stable holder. The BFF forwards the reviewed item through ordinary
-native subject creation with current authority. Unknown delivery retries the same bytes and key; after acknowledgement,
-recovery reads only the returned UUID. The ordinary subject reader supplies the exact public identity. Creating a
-place, event, area, or instrument proposes no album, performer, venue, occurrence, membership, personal ownership,
-Context, or account-setting relation.
+review, and nested native feedback returns to its stable holder. The visit returns current Global Context `subject.create`
+eligibility through the private BFF, independently of definition success, and consumes that shared observation in the
+mounted controls. Guest, confirmed refusal and unavailable observation stay distinct; admitted Types remain readable when
+creation is unavailable. A stale allowed observation is not an authorization bypass: fresh submission re-reads current
+eligibility, and the native create command remains final. The BFF rechecks current admission and forwards the reviewed
+item through ordinary native subject creation with current authority. Unknown delivery retries the same bytes and key;
+after acknowledgement, recovery reads only the returned UUID. The ordinary subject reader supplies the exact public
+identity. Creating a place, event, area, or instrument proposes no album, performer, venue, occurrence, membership,
+personal ownership, Context, or account-setting relation.
 
 Decision: music-context creation starts with no data language selected; contributors choose each term language independently of the route locale.
+Decision: music-context creation observes current Global Context `subject.create` eligibility through the shared private BFF; it does not add identity suggestion search or rewrite the ordinary subject reader to a music-context companion.
+
+### Prepare a music-context identity
+
+- Touches: one successful active immutable release, one current Global Context `subject.create` observation, ordinary native subject POST, and one created-identity read.
+- Bound: retain existing field, statement, qualifier, serialized-command and held-retry caps; no permission request per field or suggested identity, history scan or polling.
+- Growth check: hold one released Place, Event, AdministrativeArea or MusicInstrument Type and one parent action observation fixed while unrelated Types, grants and identities grow; charge native authority preparation with Access.
 
 ## Browser flow: catalogue file and release-group creation
 
