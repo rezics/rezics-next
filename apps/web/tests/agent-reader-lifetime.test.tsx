@@ -202,7 +202,7 @@ async function settle() {
   });
 }
 
-// Authored UNRUN: one mounted reader and public-profile consumer regression spanning both account paths.
+// One mounted reader and public-profile consumer regression spanning both account paths.
 test('public account readers retire old admissions across sign-out, replacement, route changes and ABA', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -585,6 +585,28 @@ test('public account readers retire old admissions across sign-out, replacement,
     expect(client.getQueryCache().find({ queryKey: currentViewKey!, exact: true })).toBeUndefined();
     expect(client.getQueryCache().find({ queryKey: currentOverviewKey!, exact: true })).toBeDefined();
     expectAdmittedReader();
+    // All mounted readers and session consumers use the shared observer's single cache subscription.
+    expect((client.getQueryCache() as unknown as { listeners: Set<unknown> }).listeners.size).toBe(1);
+    await setSession(alice); // Equal successful replacement is a new incarnation.
+    expectSafeReader();
+    const equalReplacement = await nextRead(22);
+    equalReplacement.work.resolve(result('show'));
+    await settle();
+    expectAdmittedReader();
+    await act(async () => {
+      client.setQueryData(sessionModule.sessionQuery.queryKey, {
+        state: 'signed-in', subject: alice, csrfToken: 'replacement-credential',
+      });
+    });
+    expectSafeReader();
+    const credentialReplacement = await nextRead(23);
+    credentialReplacement.work.resolve(result('show'));
+    await settle();
+    expectAdmittedReader();
+    await act(async () => client.removeQueries({ queryKey: privateKeyForRoute(overviewRoute)!, exact: true }));
+    await settle();
+    expectSafeReader();
+    expect(nativeReads).toHaveLength(23);
   } finally {
     await act(async () => {
       root.unmount();
@@ -635,3 +657,10 @@ function PublicReaderConsumer({
     renderJsonLd: false,
   });
 }
+
+/** Both focused files use the same prepared-session/native transport boundary. */
+export const readerTestRuntime = {
+  installWindow, settle, markCoversWithheld, result, nativeReads,
+  setReader(reader: string | null) { sessionReader = reader; bffReader = reader; },
+  reset() { nativeReads.length = 0; readerEnvelopes.length = 0; },
+};

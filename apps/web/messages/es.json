@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "Lectura de la corrección retirada",
   "producer_history_retired_explanation": "Esta corrección ya no tiene una lectura vigente. Una orden ya enviada puede haber surtido efecto; su resultado puede ser desconocido. No se reenviará nada desde esta corrección retirada.",
   "producer_history_slice_lost": "El segmento original ya no está disponible aquí. Vuelve a leer antes de iniciar deliberadamente otra corrección.",
-  "producer_history_retired_close": "Cerrar corrección retirada"
+  "producer_history_retired_close": "Cerrar corrección retirada",
+  "profile_reading_conservative": "La lectura pública usa opciones prudentes para portadas y destripes.",
+  "profile_reading_signed_out": "Sin sesión: se aplican opciones prudentes para portadas y destripes.",
+  "profile_reading_loading": "Leyendo tus preferencias. Por ahora se aplican opciones prudentes.",
+  "profile_reading_ready": "Se aplican tus preferencias de lectura.",
+  "profile_reading_unavailable": "Tus preferencias no están disponibles. Puedes seguir leyendo con opciones prudentes.",
+  "profile_reading_rejected": "Estas preferencias no corresponden al lector actual. Se aplican opciones prudentes.",
+  "profile_reading_closed": "La lectura personalizada está cerrada por ahora. Se aplican opciones prudentes.",
+  "profile_reading_preparing": "Tus preferencias se están preparando. Se aplican opciones prudentes.",
+  "profile_reading_retired": "Esta lectura personalizada ha terminado. Se aplican opciones prudentes.",
+  "profile_reading_retry": "Volver a leer las preferencias"
 }

@@ -1,7 +1,7 @@
 import { PublicAccountState } from '../../accounts/public-profile/view';
 import { readFailure } from '../../accounts/public-profile/read';
 import { useOperation } from '../../kernel/exposure';
-import { Cover } from '@rezics/ui/cover';
+import { ProfileReadingCover as Cover } from '../../accounts/public-profile/reader-presentation/view';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { useId, useSyncExternalStore, type ReactNode, type SyntheticEvent } from 'react';

@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "Lecture de la correction retirée",
   "producer_history_retired_explanation": "Cette correction n’a plus de lecture à jour. Une commande déjà envoyée peut avoir pris effet ; son résultat peut être inconnu. Rien ne sera renvoyé depuis cette correction retirée.",
   "producer_history_slice_lost": "La tranche d’origine n’est plus disponible ici. Relisez l’historique avant de commencer volontairement une autre correction.",
-  "producer_history_retired_close": "Fermer la correction retirée"
+  "producer_history_retired_close": "Fermer la correction retirée",
+  "profile_reading_conservative": "La lecture publique utilise des réglages prudents pour les couvertures et les révélations.",
+  "profile_reading_signed_out": "Sans connexion : des réglages prudents protègent les couvertures et les révélations.",
+  "profile_reading_loading": "Lecture de vos préférences. Des réglages prudents sont appliqués en attendant.",
+  "profile_reading_ready": "Vos préférences de lecture sont appliquées.",
+  "profile_reading_unavailable": "Vos préférences sont indisponibles. Vous pouvez continuer avec des réglages prudents.",
+  "profile_reading_rejected": "Ces préférences ne correspondent pas au lecteur actuel. Des réglages prudents sont appliqués.",
+  "profile_reading_closed": "La lecture personnalisée est fermée pour le moment. Des réglages prudents sont appliqués.",
+  "profile_reading_preparing": "Vos préférences sont en préparation. Des réglages prudents sont appliqués.",
+  "profile_reading_retired": "Cette lecture personnalisée est terminée. Des réglages prudents sont appliqués.",
+  "profile_reading_retry": "Relire les préférences"
 }

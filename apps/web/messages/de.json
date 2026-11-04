@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "Korrekturansicht nicht mehr aktuell",
   "producer_history_retired_explanation": "Diese Korrektur hat keine aktuelle Ansicht mehr. Ein bereits gesendeter Befehl kann wirksam geworden sein; das Ergebnis kann unbekannt sein. Aus dieser Korrektur wird nichts erneut gesendet.",
   "producer_history_slice_lost": "Der ursprüngliche Ausschnitt ist hier nicht mehr verfügbar. Lies den Verlauf erneut, bevor du bewusst eine weitere Korrektur beginnst.",
-  "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen"
+  "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen",
+  "profile_reading_conservative": "Öffentliches Lesen verwendet vorsichtige Cover- und Spoiler-Einstellungen.",
+  "profile_reading_signed_out": "Abgemeldet: Es gelten vorsichtige Cover- und Spoiler-Einstellungen.",
+  "profile_reading_loading": "Deine Einstellungen werden geladen. Bis dahin gelten vorsichtige Vorgaben.",
+  "profile_reading_ready": "Deine Leseeinstellungen werden angewendet.",
+  "profile_reading_unavailable": "Deine Einstellungen sind nicht verfügbar. Du kannst mit vorsichtigen Vorgaben weiterlesen.",
+  "profile_reading_rejected": "Diese Einstellungen passen nicht zur aktuellen lesenden Person. Es gelten vorsichtige Vorgaben.",
+  "profile_reading_closed": "Persönliches Lesen ist derzeit geschlossen. Es gelten vorsichtige Vorgaben.",
+  "profile_reading_preparing": "Deine Einstellungen werden vorbereitet. Es gelten vorsichtige Vorgaben.",
+  "profile_reading_retired": "Diese persönliche Lesesitzung ist beendet. Es gelten vorsichtige Vorgaben.",
+  "profile_reading_retry": "Einstellungen erneut lesen"
 }

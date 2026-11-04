@@ -8883,5 +8883,15 @@
   "producer_history_correction_retired": "Correction reading retired",
   "producer_history_retired_explanation": "This correction no longer has a current reading. A command already sent may still have taken effect; its outcome may be unknown. Nothing will be resent from this retired correction.",
   "producer_history_slice_lost": "The original slice is no longer available here. Read again before deliberately starting another correction.",
-  "producer_history_retired_close": "Dismiss retired correction"
+  "producer_history_retired_close": "Dismiss retired correction",
+  "profile_reading_conservative": "Public reading uses cautious cover and spoiler defaults.",
+  "profile_reading_signed_out": "Signed out: cautious cover and spoiler defaults apply.",
+  "profile_reading_loading": "Reading your preferences. Cautious defaults apply for now.",
+  "profile_reading_ready": "Your reading preferences are applied.",
+  "profile_reading_unavailable": "Your preferences are unavailable. You can keep reading with cautious defaults.",
+  "profile_reading_rejected": "These preferences do not match the current reader. Cautious defaults apply.",
+  "profile_reading_closed": "Personal reading is currently closed. Cautious defaults apply.",
+  "profile_reading_preparing": "Your preferences are being prepared. Cautious defaults apply.",
+  "profile_reading_retired": "This personal reading has ended. Cautious defaults apply.",
+  "profile_reading_retry": "Read preferences again"
 }

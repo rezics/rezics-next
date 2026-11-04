@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "更正讀取已失效",
   "producer_history_retired_explanation": "此更正已沒有目前有效的讀取。已傳送的命令可能已經生效，結果也可能尚不明確。不會從此失效的更正重新傳送任何命令。",
   "producer_history_slice_lost": "此處已無法使用原來的片段。請重新讀取歷史，再主動開始另一項更正。",
-  "producer_history_retired_close": "關閉已失效的更正"
+  "producer_history_retired_close": "關閉已失效的更正",
+  "profile_reading_conservative": "公開閱讀使用謹慎的封面與劇透預設值。",
+  "profile_reading_signed_out": "未登入：使用謹慎的封面與劇透預設值。",
+  "profile_reading_loading": "正在讀取你的偏好，暫時使用謹慎的預設值。",
+  "profile_reading_ready": "已套用你的閱讀偏好。",
+  "profile_reading_unavailable": "暫時無法讀取你的偏好。你可以使用謹慎的預設值繼續閱讀。",
+  "profile_reading_rejected": "這些偏好與目前讀者不符，已使用謹慎的預設值。",
+  "profile_reading_closed": "個人閱讀目前已關閉，使用謹慎的預設值。",
+  "profile_reading_preparing": "正在準備你的偏好，暫時使用謹慎的預設值。",
+  "profile_reading_retired": "本次個人閱讀已結束，使用謹慎的預設值。",
+  "profile_reading_retry": "重新讀取閱讀偏好"
 }

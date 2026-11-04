@@ -1,61 +1,15 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { addressLease, readLease } from '../../reader/lease';
+import { browserObservation } from '../../session/observation';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { AgentReaderResult } from './agent-actions';
 import type { AgentReaderQueryKey, AgentReaderQueryScope } from './agent-queries';
 
 export type AgentReaderPath = { kind: 'overview' } | { kind: 'view'; view: string };
-
-type SessionCache = {
-  getSnapshot: () => number;
-  subscribe: (listener: () => void) => () => void;
-  getSession: () => SessionSnapshot | undefined;
-  register: (observation: AgentReaderObservation) => () => void;
-};
-
-type SessionSnapshot = { state?: unknown; subject?: unknown; csrfToken?: unknown } | undefined;
-const sessionCaches = new WeakMap<QueryClient, SessionCache>();
+export type ReaderFailure = 'unavailable' | 'rejected' | 'signed-out' | 'closed' | 'preparing' | 'retired';
 let nextMount = 0;
 let nextGeneration = 0;
-
-function sessionCache(client: QueryClient): SessionCache {
-  let cache = sessionCaches.get(client);
-  if (cache) return cache;
-
-  const getSession = () => {
-    const state = client.getQueryState<SessionSnapshot>(['session']);
-    if (!state || state.status !== 'success' || state.fetchStatus !== 'idle' || state.isInvalidated || !state.data)
-      return undefined;
-    return state.data;
-  };
-  let revision = 0;
-  const listeners = new Set<() => void>();
-  const observations = new Set<AgentReaderObservation>();
-  client.getQueryCache().subscribe((event) => {
-    if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
-    if (event.type !== 'added' && event.type !== 'removed' && event.type !== 'updated') return;
-    revision += 1;
-    for (const observation of [...observations]) {
-      if (observation.revision !== revision) observation.retire();
-    }
-    for (const listener of listeners) listener();
-  });
-  cache = {
-    getSnapshot: () => revision,
-    getSession,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    register: (observation) => {
-      if (observation.revision !== revision) observation.retire();
-      else if (!observation.invalidated()) observations.add(observation);
-      return () => observations.delete(observation);
-    },
-  };
-  sessionCaches.set(client, cache);
-  return cache;
-}
 
 export type AgentReaderObservation = AgentReaderQueryScope & {
   subscribe: (listener: () => void) => () => void;
@@ -65,49 +19,45 @@ export type AgentReaderObservation = AgentReaderQueryScope & {
   invalidate: (notify: boolean) => void;
   invalidated: () => boolean;
   active: () => boolean;
+  failure: () => ReaderFailure | undefined;
+  retry: () => void;
+  canRetry: () => boolean;
 };
 
-type CurrentObservation = { identity: string; observation: AgentReaderObservation };
-
-function sameQueryKey(left: readonly unknown[], right: readonly unknown[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
+type CurrentObservation = { identity: string; owner: unknown; observation: AgentReaderObservation };
 
 function removePrivateObservation(client: QueryClient, queryKey: AgentReaderQueryKey): void {
   void client.cancelQueries({ queryKey, exact: true }).finally(() => client.removeQueries({ queryKey, exact: true }));
 }
 
-/** The public profile routes share this browser-only private query lifetime. */
+/** One mounted public route consumes the shared session authority, never its own session subscription. */
 export function useAgentReaderScope({
   handle,
   locale,
   path,
   enabled,
+  owner,
 }: {
   handle: string;
   locale: string;
   path: AgentReaderPath;
   enabled: boolean;
+  owner?: unknown;
   session: { state: string; subject?: string | null; csrfToken: string | null };
 }): AgentReaderObservation {
   const client = useQueryClient();
-  const sessions = sessionCache(client);
-  const revision = useSyncExternalStore(sessions.subscribe, sessions.getSnapshot, () => 0);
+  const sessions = browserObservation(client);
+  const snapshot = useSyncExternalStore(sessions.subscribe, sessions.getSnapshot, sessions.getServerSnapshot);
   const [mount] = useState(() => ++nextMount);
-  const cachedSession = sessions.getSession();
-  const reader =
-    typeof window !== 'undefined' &&
-    cachedSession?.state === 'signed-in' &&
-    typeof cachedSession.subject === 'string' &&
-    cachedSession.subject.length > 0
-      ? cachedSession.subject
-      : null;
+  const [activation, setActivation] = useState(0);
+  const reader = typeof window !== 'undefined' && snapshot.state === 'signed-in' ? snapshot.observation.subject : null;
+  const revision = snapshot.state === 'signed-in' ? snapshot.observation.id : 0;
   const route = JSON.stringify([path.kind, path.kind === 'view' ? path.view : null]);
   const admitted = enabled && (path.kind !== 'view' || path.view !== 'realms');
-  const identity = JSON.stringify([handle, locale, route, reader, revision, admitted]);
+  const identity = JSON.stringify([handle, locale, route, reader, revision, admitted, activation]);
   const current = useRef<CurrentObservation | null>(null);
 
-  if (!current.current || current.current.identity !== identity) {
+  if (!current.current || current.current.identity !== identity || current.current.owner !== owner) {
     current.current?.observation.invalidate(false);
     const generation = ++nextGeneration;
     const queryKey: AgentReaderQueryKey = ['agent-reader', handle, locale, route, reader, revision, mount, generation];
@@ -115,52 +65,53 @@ export function useAgentReaderScope({
     let retired = false;
     let active = true;
     let version = 0;
+    let failure: ReaderFailure | undefined;
+    let response: AgentReaderResult | undefined;
     const listeners = new Set<() => void>();
-    const invalidate = (notify: boolean) => {
+    const ownsRoute = () =>
+      active && current.current?.observation === observation && sessions.getSnapshot() === snapshot && admitted && !!reader;
+    // Active effect replay is separate from permanent address retirement.
+    const address = addressLease(() =>
+      current.current?.observation === observation && sessions.getSnapshot() === snapshot && admitted,
+    );
+    const read = readLease(reader ?? '', address, () => !retired);
+    const retire = (notify: boolean, reason: ReaderFailure = 'retired') => {
       if (retired) return;
       retired = true;
+      failure = reason;
+      response = undefined;
+      address.retire();
       version += 1;
       if (notify) for (const listener of listeners) listener();
     };
     observation = {
-      reader,
-      route,
-      revision,
-      mount,
-      generation,
+      reader, route, revision, mount, generation,
       enabled: admitted && reader !== null,
       queryKey,
-      current: () => {
-        const liveSession = sessions.getSession();
-        return (
-          !retired &&
-          active &&
-          current.current?.observation === observation &&
-          sessions.getSnapshot() === revision &&
-          typeof window !== 'undefined' &&
-          liveSession?.state === 'signed-in' &&
-          liveSession.subject === reader &&
-          admitted &&
-          reader !== null
-        );
-      },
-      retire: () => invalidate(true),
+      current: () => active && typeof window !== 'undefined' && read.current(),
+      retire: (reason) => retire(true, reason),
+      accept: (result) => { if (observation.current()) response = result; },
+      accepts: (result) => observation.current() && response === result,
       subscribe: (listener) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
       version: () => version,
-      activate: () => {
-        if (!retired) active = true;
-      },
-      deactivate: () => {
-        active = false;
-      },
-      invalidate,
+      activate: () => { if (!retired) active = true; },
+      deactivate: () => { active = false; },
+      invalidate: (notify) => retire(notify),
       invalidated: () => retired,
       active: () => active,
+      failure: () => failure,
+      canRetry: ownsRoute,
+      retry: () => {
+        if (!ownsRoute()) return;
+        retire(true);
+        // A new scope acquires a new lease and query. No retired lease is reactivated.
+        setActivation((value) => value + 1);
+      },
     };
-    current.current = { identity, observation };
+    current.current = { identity, owner, observation };
   }
 
   const observation = current.current.observation;
@@ -168,15 +119,23 @@ export function useAgentReaderScope({
 
   useEffect(() => {
     observation.activate();
-    const unregister = sessions.register(observation);
-    const unsubscribe = client.getQueryCache().subscribe((event) => {
-      if (!sameQueryKey(event.query.queryKey, observation.queryKey)) return;
-      if (event.type === 'removed' || (event.type === 'updated' && event.query.state.status === 'error'))
+    const unsubscribe = sessions.subscribeCache(() => {
+      if (!observation.current()) {
+        if (observation.enabled && !observation.invalidated()) observation.retire();
+        return;
+      }
+      const query = client.getQueryState<AgentReaderResult>(observation.queryKey);
+      if (!query) {
         observation.retire();
+      } else if (query.status === 'error') {
+        observation.retire('unavailable');
+      } else if (query.isInvalidated || (query.status === 'success' &&
+        (query.fetchStatus !== 'idle' || !observation.accepts(query.data)))) {
+        observation.retire();
+      }
     });
     return () => {
       unsubscribe();
-      unregister();
       observation.deactivate();
       queueMicrotask(() => {
         if (observation.active()) return;
@@ -193,16 +152,16 @@ export function useAgentReaderScope({
   return observation;
 }
 
-/** A query failure permanently retires this particular private observation. */
+/** Only this episode's admitted native response supplies private presentation. */
 export function useAgentReaderResult(
   observation: AgentReaderObservation,
   result: AgentReaderResult | undefined,
   status: 'pending' | 'error' | 'success',
 ): Reader {
   useEffect(() => {
-    if (status === 'error') observation.retire();
+    if (status === 'error') observation.retire('unavailable');
   }, [observation, status]);
-  return observation.current() && result?.kind === 'ready' && result.accountId === observation.reader
+  return observation.accepts(result) && result?.kind === 'ready' && result.accountId === observation.reader
     ? result.reader
     : defaultReader;
 }

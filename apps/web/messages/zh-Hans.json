@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "更正读取已失效",
   "producer_history_retired_explanation": "此更正已没有当前有效的读取。已发送的命令可能已经生效，结果也可能尚不明确。不会从此失效的更正重新发送任何命令。",
   "producer_history_slice_lost": "此处已无法使用原来的片段。请重新读取历史，再主动开始另一项更正。",
-  "producer_history_retired_close": "关闭已失效的更正"
+  "producer_history_retired_close": "关闭已失效的更正",
+  "profile_reading_conservative": "公开阅读使用谨慎的封面和剧透默认设置。",
+  "profile_reading_signed_out": "未登录：使用谨慎的封面和剧透默认设置。",
+  "profile_reading_loading": "正在读取你的偏好，暂时使用谨慎的默认设置。",
+  "profile_reading_ready": "已应用你的阅读偏好。",
+  "profile_reading_unavailable": "暂时无法读取你的偏好。你可以使用谨慎的默认设置继续阅读。",
+  "profile_reading_rejected": "这些偏好与当前读者不符，已使用谨慎的默认设置。",
+  "profile_reading_closed": "个人阅读目前已关闭，使用谨慎的默认设置。",
+  "profile_reading_preparing": "正在准备你的偏好，暂时使用谨慎的默认设置。",
+  "profile_reading_retired": "本次个人阅读已结束，使用谨慎的默认设置。",
+  "profile_reading_retry": "重新读取阅读偏好"
 }

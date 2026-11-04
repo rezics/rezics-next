@@ -1,3 +1,6 @@
+import { defaultReader } from '../../../subject/reader';
+import type { ProfileReading } from '../../../accounts/public-profile/reader-presentation/adapter';
+import preferences from '../../../kernel/recorded/settings-preferences.json';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { PublicProfilePage } from '../../../accounts/public-profile/page';
@@ -14,9 +17,11 @@ import { PatternStory } from '../../page';
 import { clippedContributionPage, contributionPage, contributionLongTitle, type ContributionView } from './fixtures';
 
 function Example({
+  readingState,
   mode = 'recorded',
   view,
 }: {
+  readingState?: 'conservative' | 'loading' | 'ready';
   mode?:
     | 'recorded'
     | 'fallbacks'
@@ -88,6 +93,14 @@ function Example({
       <AppShell>
         <PublicProfilePage
           page={page}
+          {...(readingState ? { reading: {
+            state: readingState,
+            response: readingState,
+            reader: readingState === 'ready'
+              ? { spoilerLevel: preferences.spoilerLevel, suitability: preferences.suitability }
+              : defaultReader,
+            ...(readingState !== 'conservative' ? { retry: () => {} } : {}),
+          } as ProfileReading } : {})}
           locale={locale}
           messages={subjectPageMessages()}
           tabs={subjectTabs(page)}
@@ -444,3 +457,7 @@ export const WithheldCollectionContinuation: Story = {
     await expect(within(section).queryByText(m.agent_empty())).toBeNull();
   },
 };
+
+export const ConservativeReading: Story = { render: () => <Example view="posts" readingState="conservative" /> };
+export const RecoveringReading: Story = { render: () => <Example view="posts" readingState="loading" /> };
+export const AdmittedReading: Story = { render: () => <Example view="posts" readingState="ready" /> };

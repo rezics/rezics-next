@@ -2,6 +2,8 @@ import { queryOptions } from '@tanstack/react-query';
 import type { AccountView } from '../../accounts/public-profile/page-read';
 import { personalRead, publicRead } from '../../kernel/query';
 import { defaultReader } from '../../subject/reader';
+import type { AgentReaderResult } from './agent-actions';
+import type { ReaderFailure } from './agent-reader';
 import { readAgentPage, readAgentReader } from './agent-actions';
 
 export type AgentReaderQueryKey = readonly [
@@ -25,7 +27,9 @@ export type AgentReaderQueryScope = {
   enabled: boolean;
   queryKey: AgentReaderQueryKey;
   current: () => boolean;
-  retire: () => void;
+  retire: (reason?: ReaderFailure) => void;
+  accept: (result: AgentReaderResult) => void;
+  accepts: (result: AgentReaderResult | undefined) => boolean;
 };
 
 /** The public profile and overview document, shared by the server loader and hydrated page. */
@@ -52,15 +56,16 @@ export const agentReaderQuery = (handle: string, locale: string, scope: AgentRea
     enabled: typeof window !== 'undefined' && personalRead.enabled && scope.enabled && scope.current(),
     queryFn: async () => {
       const expectedReader = scope.reader;
-      const unavailable = { kind: 'default' as const, accountId: null, reader: defaultReader };
+      const unavailable = { kind: 'default' as const, reason: 'retired' as const, accountId: null, reader: defaultReader };
       if (!expectedReader || !scope.current()) return unavailable;
       try {
         const result = await readAgentReader({ data: { handle, locale, expectedReader } });
         if (!scope.current()) return unavailable;
         if (result.kind !== 'ready' || result.accountId !== expectedReader) {
-          scope.retire();
-          return { kind: 'default' as const, accountId: result.accountId, reader: defaultReader };
+          scope.retire(result.kind === 'default' ? result.reason : 'rejected');
+          return result.kind === 'default' ? result : { kind: 'default' as const, reason: 'rejected' as const, accountId: result.accountId, reader: defaultReader };
         }
+        scope.accept(result);
         return result;
       } catch (error) {
         if (!scope.current()) return unavailable;
@@ -68,6 +73,7 @@ export const agentReaderQuery = (handle: string, locale: string, scope: AgentRea
       }
     },
     staleTime: Infinity,
+    refetchOnMount: false,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "訂正の閲覧内容は失効しました",
   "producer_history_retired_explanation": "この訂正には現在有効な閲覧内容がありません。送信済みの操作はすでに反映されている可能性があり、結果が不明な場合があります。この失効した訂正から再送することはありません。",
   "producer_history_slice_lost": "元の範囲はここでは利用できません。履歴を読み直してから、改めて訂正を開始してください。",
-  "producer_history_retired_close": "失効した訂正を閉じる"
+  "producer_history_retired_close": "失効した訂正を閉じる",
+  "profile_reading_conservative": "公開ページでは表紙とネタバレに慎重な初期設定を使います。",
+  "profile_reading_signed_out": "ログアウト中：表紙とネタバレに慎重な初期設定を使います。",
+  "profile_reading_loading": "閲覧設定を読み込み中です。それまでは慎重な初期設定を使います。",
+  "profile_reading_ready": "あなたの閲覧設定を適用しています。",
+  "profile_reading_unavailable": "閲覧設定を取得できません。慎重な初期設定で読み続けられます。",
+  "profile_reading_rejected": "この設定は現在の読者と一致しません。慎重な初期設定を使います。",
+  "profile_reading_closed": "現在、個人の閲覧設定は利用できません。慎重な初期設定を使います。",
+  "profile_reading_preparing": "閲覧設定を準備中です。慎重な初期設定を使います。",
+  "profile_reading_retired": "この閲覧設定の適用は終了しました。慎重な初期設定を使います。",
+  "profile_reading_retry": "閲覧設定を再読み込み"
 }
