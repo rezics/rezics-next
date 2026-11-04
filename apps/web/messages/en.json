@@ -2442,6 +2442,7 @@
   "settings_notifications_use_current": "Use current values",
   "settings_notifications_reading": "Loading current notification settings…",
   "settings_notifications_read_failed": "Current notification settings could not be loaded",
+  "settings_notifications_confirmed_text": "The original save was confirmed, but current notification settings are still unavailable. Reload to review the latest values.",
   "settings_notifications_read_unavailable": "Notification settings are temporarily unavailable. Try loading them again.",
   "settings_notifications_read_denied": "This sign-in does not have access to read notification settings. Check your account access before trying again.",
   "settings_notifications_read_closed": "Notification settings can't be loaded right now. Reload later to check the current settings.",
