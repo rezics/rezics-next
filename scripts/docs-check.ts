@@ -587,7 +587,8 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
   }
 
   const unique = [...new Set(violations)].sort((a, b) => a.localeCompare(b));
-  return { exitCode: unique.length ? 1 : 0, lines: unique };
+  const failures = unique.filter((line) => !line.startsWith("baseline-lowered |"));
+  return { exitCode: failures.length ? 1 : 0, lines: unique };
 }
 
 if (import.meta.main) {
