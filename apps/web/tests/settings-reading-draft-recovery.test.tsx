@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
 import { readingNeedsNavigationDecision } from '../src/settings/reading-navigation';
+import type { ReadingIO } from '../src/settings/reading-preferences';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ReadingDraftRecovery } = await import('../src/settings/reading-card');
@@ -75,7 +76,7 @@ test('rejected choices survive failed and successful reads until explicit save o
 test('a narrowed current choice keeps the old draft local until every changed value is admitted', async () => {
   const fixture = readingFixture();
   let narrowed = false;
-  const io = {
+  const io: ReadingIO = {
     ...fixture.io,
     read: async () => {
       const page = await fixture.io.read();
