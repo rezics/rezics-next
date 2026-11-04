@@ -14,6 +14,15 @@ import { createListPresentationFixture } from './support/list-presentation-fixtu
 
 const nil = '00000000-0000-0000-0000-000000000000';
 
+async function adoptWork(
+  f: Awaited<ReturnType<typeof createListPresentationFixture>>,
+  edition: string,
+  work: string,
+) {
+  const candidate = await f.propose(edition, 'schema:exampleOfWork', work);
+  await f.adopt(edition, 'schema:exampleOfWork', [candidate]);
+}
+
 async function locators(
   pool: { query: (text: string, values?: unknown[]) => Promise<{ rows: { security: string; revision: number }[] }> },
   edition: string,
@@ -67,16 +76,19 @@ test('native Book edition disclosure returns selected work labels and exact empt
 
     const work = await f.create('schema:Book', {}, { en: 'Harbour', ja: '港' });
     const empty = await f.create('bf:Instance', {}, { en: 'Empty edition' });
-    const edition = await f.create('bf:Instance', { 'schema:exampleOfWork': work }, { en: 'Harbour paperback' });
+    const edition = await f.create('bf:Instance', {}, { en: 'Harbour paperback' });
+    await adoptWork(f, edition, work);
     const person = await f.create('schema:Person', {}, { en: 'Author' });
-    const extra = await Promise.all([
-      f.create('schema:Book', {}, { en: 'Second' }),
-      f.create('schema:Book', {}, { en: 'Third' }),
-      f.create('schema:Book', {}, { en: 'Fourth' }),
-    ]);
-    const overflow = await f.create('bf:Instance', { 'schema:exampleOfWork': work }, { en: 'Omnibus' });
+    const extra = [
+      await f.create('schema:Book', {}, { en: 'Second' }),
+      await f.create('schema:Book', {}, { en: 'Third' }),
+      await f.create('schema:Book', {}, { en: 'Fourth' }),
+    ];
+    const overflow = await f.create('bf:Instance', {}, { en: 'Omnibus' });
+    await adoptWork(f, overflow, work);
     await locators(f.pool, overflow, extra);
-    const partial = await f.create('bf:Instance', { 'schema:exampleOfWork': work }, { en: 'Partial' });
+    const partial = await f.create('bf:Instance', {}, { en: 'Partial' });
+    await adoptWork(f, partial, work);
     await locators(f.pool, partial, extra.slice(0, 1));
 
     const deps = { ...(await f.deps('anonymous')), deadline: Date.now() + 180_000 };
@@ -130,4 +142,4 @@ test('native Book edition disclosure returns selected work labels and exact empt
   } finally {
     await f.close();
   }
-}, 1_800_000);
+}, 180_000);

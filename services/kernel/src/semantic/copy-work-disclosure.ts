@@ -1,10 +1,11 @@
 import type { Release } from '@rezics/definitions';
-import { within } from '../access/authenticate.ts';
+import { deadlineClient, within } from '../access/authenticate.ts';
 import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionReadClients } from '../database/read-snapshot.ts';
 import { readPartition, readPartitions } from '../partition/partition.ts';
-import { accessCheck, type AccessCheck } from '../request/access.ts';
+import { accessCheck, type AccessCheck, type AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { validateHitOptions } from '../search/hits.ts';
 import {
@@ -18,14 +19,15 @@ import {
   type CopyWorkDisclosureState,
   type CopyWorkReference,
 } from './copy-work-disclosure-contract.ts';
-import readCopyWorkHeads from './copy-work-disclosure.sql';
+import readCopyWorkLocators from './copy-work-disclosure.sql';
+import { currentRelationFacts, currentRelationKey, type CurrentRelationCandidate } from './current-relations.ts';
 import { activeRelease } from './definitions.ts';
 import { relatedReadEligibility, subjectReadEligibility } from './eligibility.ts';
 import { candidateSources, fenceKey, sourceTuple } from './fences.ts';
 import { readIdentityMappings } from './identity-epoch-read.ts';
-import { isRelationProperty, type FactRow } from './item.ts';
+import { isRelationProperty } from './item.ts';
+import subjectsSQL from './list-presentation-subjects.sql';
 import { withReadTransaction } from './read.ts';
-import { effectiveGlobalSlotFacts } from './slots.ts';
 import { readSubjectSummaryObservation, type SubjectSummary, type SubjectSummaryObservation } from './summaries.ts';
 
 export type {
@@ -42,7 +44,7 @@ export {
   COPY_WORK_PROPERTY,
 } from './copy-work-disclosure-contract.ts';
 
-type HeadRow = {
+type Header = {
   id: string;
   type: string;
   visibility: string;
@@ -52,24 +54,18 @@ type HeadRow = {
   source_epoch: number | null;
   source_position: string | null;
   redirect: string | null;
-  candidate: string | null;
-  slot: string | null;
-  target: string | null;
-  target_type: string | null;
-  order_key: string | null;
-  source_revision: number | null;
-  source_security_revision: string | null;
-  value: string | null;
 };
-
-type Membership = { kind: 'works'; ids: string[] } | { kind: 'concealed' } | { kind: 'overflow' } | { kind: 'unready' };
-type SourceObservation = {
-  header: HeadRow;
-  locators: HeadRow[];
-  allowed: boolean;
-  membership: Membership | null;
+type Locator = {
+  id: string;
+  property: string;
+  slot: string;
+  candidate: string;
+  order_key: string;
+  source_revision: number;
+  source_security_revision: string;
 };
-
+type Membership = { kind: 'works'; ids: string[] } | { kind: 'concealed' } | { kind: 'overflow' };
+type SourceObservation = { header: Header; allowed: boolean; membership: Membership | null };
 type PartitionCut = { partition: number; epoch: number; position: bigint };
 type SourcePlan = { original: string; terminal: string; home: number };
 
@@ -80,6 +76,7 @@ const denied: CopyWorkDisclosureState = { state: 'denied' };
 const scoped: CopyWorkDisclosureState = { state: 'scope' };
 const unsupported: CopyWorkDisclosureState = { state: 'unsupported' };
 const emptyAvailable: CopyWorkDisclosureState = { state: 'available', works: [] };
+const json = (value: unknown) => JSON.stringify(value);
 
 function isType(release: Pick<Release, 'types'>, type: string, target: string, seen = new Set<string>()): boolean {
   if (type === target) return true;
@@ -123,6 +120,236 @@ function selectedLabels(summary: SubjectSummary): Record<string, string> {
   return summary.label ? { [summary.label.language]: summary.label.value } : {};
 }
 
+function factContent(body: unknown): string | null {
+  const value = (body as { value?: { type?: unknown; content?: unknown } } | undefined)?.value;
+  return value?.type === 'value' && typeof value.content === 'string' ? value.content : null;
+}
+
+/** Each native home is released before Access preparation or any foreign home. */
+async function snapshot<T>(
+  deps: CopyWorkDisclosureDependencies,
+  home: number,
+  work: (client: AccessClient, position: bigint, epoch: number) => Promise<T>,
+): Promise<{ value: T; cut: PartitionCut }> {
+  return within(deps.deadline, () =>
+    withConnection(deps.pool, async (connection) => {
+      const client = deadlineClient(connection, deps.deadline);
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const partition = await readPartition(client, home);
+        if (!partition || partition.writeState !== 'active') throw new AccessUnavailableError('contention');
+        const value = await work(client, partition.position, partition.epoch);
+        requireAccessDeadline(deps.deadline);
+        await client.query('COMMIT');
+        return { value, cut: { partition: home, epoch: partition.epoch, position: partition.position } };
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(connection, rollbackError as Error);
+        }
+        throw error;
+      }
+    }),
+  );
+}
+
+async function mapIdentities(deps: CopyWorkDisclosureDependencies, ids: readonly string[]) {
+  const result = new Map<string, Awaited<ReturnType<typeof readIdentityMappings>>[number]>();
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const batch = ids.slice(offset, offset + 100);
+    const mappings = await readIdentityMappings(deps.pool, batch);
+    batch.forEach((id, index) => result.set(id, mappings[index]!));
+  }
+  return result;
+}
+
+async function prepareChecks(deps: CopyWorkDisclosureDependencies, ids: readonly string[]) {
+  const checks = new Map<string, AccessCheck>();
+  for (const id of ids) {
+    if (checks.has(id)) continue;
+    const route = routeOf(id);
+    if (route === null) continue;
+    checks.set(
+      id,
+      await accessCheck(
+        deps.access,
+        deps.actor,
+        'subject:read',
+        { route, id, eligibility: subjectReadEligibility({ route, id }) },
+        { pool: deps.pool, deadline: deps.deadline },
+      ),
+    );
+  }
+  return checks;
+}
+
+async function observeHome(
+  deps: CopyWorkDisclosureDependencies,
+  release: Release,
+  home: number,
+  ids: readonly string[],
+  checks: ReadonlyMap<string, AccessCheck>,
+): Promise<{
+  found: Map<string, SourceObservation>;
+  tuples: SourceFenceTuple[];
+  owners: string[];
+  cut: PartitionCut;
+}> {
+  const observed = await snapshot(deps, home, async (client, _position, epoch) => {
+    const headers = new Map(
+      (await client.query<Header>(subjectsSQL.sql, [ids.map((id) => routeOf(id)!), ids])).rows.map(
+        (row) => [row.id, row] as const,
+      ),
+    );
+    const found = new Map<string, SourceObservation>();
+    const visible: string[] = [];
+    for (const id of ids) {
+      const header = headers.get(id);
+      if (!header) continue;
+      const check = checks.get(id);
+      const allowed = check ? await check(client) : false;
+      found.set(id, { header, allowed, membership: null });
+      if (header.visibility !== 'visible' || !allowed) continue;
+      if (header.redirect) {
+        found.get(id)!.membership = { kind: 'concealed' };
+        continue;
+      }
+      if (admittedCopyWork(release, header.type) !== 'admitted') continue;
+      if (header.revision === null || header.release === null) throw new AccessUnavailableError('contention');
+      visible.push(id);
+    }
+    if (!visible.length) return { found, tuples: [] as SourceFenceTuple[], owners: [] as string[] };
+    const checkpoint = (
+      await client.query<{ epoch: number; position: string }>(
+        'SELECT epoch, position::text FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2',
+        [home, 'semantic_links'],
+      )
+    ).rows[0];
+    if (!checkpoint || checkpoint.epoch !== epoch) throw new AccessUnavailableError('contention');
+    for (const id of visible) {
+      const header = found.get(id)!.header;
+      if (
+        header.source_epoch === null ||
+        header.source_position === null ||
+        header.source_epoch !== epoch ||
+        BigInt(checkpoint.position) < BigInt(header.source_position)
+      )
+        throw new AccessUnavailableError('contention');
+    }
+    const locators = (
+      await client.query<Locator>(readCopyWorkLocators.sql, [
+        json(visible.map((id) => ({ route: routeOf(id)!, id, property: COPY_WORK_PROPERTY }))),
+        COPY_WORK_DISCLOSURE_LOOKAHEAD,
+      ])
+    ).rows;
+    for (const locator of locators) {
+      const header = found.get(locator.id)!.header;
+      if (locator.source_revision !== header.revision || locator.source_security_revision !== header.security)
+        throw new AccessUnavailableError('contention');
+    }
+    const bySource = new Map<string, Locator[]>();
+    for (const locator of locators) {
+      const list = bySource.get(locator.id) ?? [];
+      list.push(locator);
+      bySource.set(locator.id, list);
+    }
+    const candidates: CurrentRelationCandidate[] = [];
+    for (const id of visible) {
+      const group = bySource.get(id) ?? [];
+      if (group.length >= COPY_WORK_DISCLOSURE_LOOKAHEAD) {
+        found.get(id)!.membership = { kind: 'overflow' };
+        continue;
+      }
+      if (!group.length) {
+        found.get(id)!.membership = { kind: 'works', ids: [] };
+        continue;
+      }
+      for (const locator of group)
+        candidates.push({
+          subject: id,
+          property: COPY_WORK_PROPERTY,
+          candidate: locator.candidate,
+          target: null,
+          value: 'value',
+          slot: locator.slot,
+          requireRelation: true,
+        });
+    }
+    const facts = candidates.length
+      ? await currentRelationFacts(client, deps.routeKey, candidates, { sourceFences: 'caller' })
+      : new Map();
+    const provenance: { route: number; subject_id: string; candidate_id: string; slot_id?: string }[] = [];
+    for (const id of visible) {
+      if (found.get(id)!.membership) continue;
+      const group = bySource.get(id) ?? [];
+      const works: string[] = [];
+      let concealed = false;
+      for (const locator of group) {
+        const fact = facts.get(
+          currentRelationKey({ subject: id, property: COPY_WORK_PROPERTY, candidate: locator.candidate }),
+        );
+        const content = fact ? factContent(fact.body) : null;
+        if (!content || routeOf(content) === null) {
+          concealed = true;
+          continue;
+        }
+        provenance.push({
+          route: routeOf(id)!,
+          subject_id: id,
+          candidate_id: locator.candidate,
+          slot_id: locator.slot,
+        });
+        if (!works.includes(content)) works.push(content);
+      }
+      found.get(id)!.membership = concealed ? { kind: 'concealed' } : { kind: 'works', ids: works };
+    }
+    const recorded = provenance.length ? await candidateSources(client, provenance) : new Map();
+    const tuples: SourceFenceTuple[] = [];
+    const owners: string[] = [];
+    for (const entry of provenance) {
+      const source = recorded.get(`${entry.subject_id}\n${entry.candidate_id}`) ?? null;
+      if (!source) {
+        const row = found.get(entry.subject_id);
+        if (row?.membership?.kind === 'works') row.membership = { kind: 'concealed' };
+        continue;
+      }
+      if ('kind' in source) {
+        if (source.kind !== 'agent' || routeOf(source.subject) === null) {
+          const row = found.get(entry.subject_id);
+          if (row?.membership?.kind === 'works') row.membership = { kind: 'concealed' };
+        }
+        continue;
+      }
+      try {
+        tuples.push(sourceTuple(deps.routeKey, source));
+        owners.push(entry.subject_id);
+      } catch {
+        const row = found.get(entry.subject_id);
+        if (row?.membership?.kind === 'works') row.membership = { kind: 'concealed' };
+      }
+    }
+    return { found, tuples, owners };
+  });
+  return { ...observed.value, cut: observed.cut };
+}
+
+async function readSummaries(
+  deps: CopyWorkDisclosureDependencies,
+  ids: readonly string[],
+  options: { languages: readonly string[] },
+) {
+  const summaries = new Map<string, SubjectSummary | null>();
+  const components: SubjectSummaryObservation['components'][number][] = [];
+  for (let offset = 0; offset < ids.length; offset += 256) {
+    const batch = ids.slice(offset, offset + 256);
+    const observed = await readSubjectSummaryObservation(deps, batch, options);
+    for (const [id, summary] of observed.summaries) summaries.set(id, summary);
+    components.push(...observed.components);
+  }
+  return { summaries, components };
+}
+
 /** One exported native batch: current admitted copy/release-to-work membership, never a guessed primary work. */
 export async function readCopyWorkDisclosure(
   deps: CopyWorkDisclosureDependencies,
@@ -151,38 +378,24 @@ export async function readCopyWorkDisclosure(
       },
     };
 
-  const checks = new Map<string, AccessCheck>();
-  for (const id of routed) {
-    const route = routeOf(id)!;
-    checks.set(
-      id,
-      await accessCheck(
-        deps.access,
-        deps.actor,
-        'subject:read',
-        { route, id, eligibility: subjectReadEligibility({ route, id }) },
-        { pool: deps.pool, deadline: deps.deadline },
-      ),
-    );
-  }
-
+  const classified = new Map<string, CopyWorkDisclosureState>();
+  const cuts: PartitionCut[] = [];
   let releaseDigest: string | null = null;
   let releaseHead: number | null = null;
-  const cuts: PartitionCut[] = [];
-  const plans = new Map<string, SourcePlan>();
-  const classified = new Map<string, CopyWorkDisclosureState>();
-  let targets: string[] = [];
 
   try {
     await within(deps.deadline, async () => {
-      const active = await withReadTransaction(deps.pool, (client) => activeRelease(client), deps.deadline);
-      if (!active) {
-        for (const id of routed) results.set(id, unavailable);
-        return;
-      }
+      const active = (
+        await snapshot(deps, 0, async (client) => {
+          const release = await activeRelease(client);
+          if (!release) throw new AccessUnavailableError('contention');
+          return release;
+        })
+      ).value;
       releaseDigest = active.digest;
       releaseHead = active.head;
       const mappings = await mapIdentities(deps, routed);
+      const plans = new Map<string, SourcePlan>();
       for (const id of routed) {
         const mapping = mappings.get(id);
         if (!mapping || mapping.state === 'pending' || mapping.state === 'unavailable') classified.set(id, unavailable);
@@ -194,137 +407,14 @@ export async function readCopyWorkDisclosure(
         }
       }
       const terminals = [...new Set([...plans.values()].map((plan) => plan.terminal))];
-      for (const terminal of terminals) {
-        if (checks.has(terminal)) continue;
-        const route = routeOf(terminal)!;
-        checks.set(
-          terminal,
-          await accessCheck(
-            deps.access,
-            deps.actor,
-            'subject:read',
-            { route, id: terminal, eligibility: subjectReadEligibility({ route, id: terminal }) },
-            { pool: deps.pool, deadline: deps.deadline },
-          ),
-        );
-      }
-
+      const checks = await prepareChecks(deps, terminals);
       const observedSources = new Map<string, SourceObservation>();
       const fenceTuples: SourceFenceTuple[] = [];
       const fencedSubjects: string[] = [];
       for (const [home, ids] of groups(terminals)) {
-        const observed = await withReadTransaction(
-          deps.pool,
-          async (client) => {
-            const partition = await readPartition(client, home);
-            if (!partition || partition.writeState !== 'active') throw new AccessUnavailableError('contention');
-            cuts.push({ partition: home, epoch: partition.epoch, position: partition.position });
-            const values = {
-              partition_no: home,
-              property: COPY_WORK_PROPERTY,
-              page_limit: COPY_WORK_DISCLOSURE_LOOKAHEAD,
-              wanted: JSON.stringify(ids.map((id) => ({ route: routeOf(id)!, subject_id: id }))),
-            };
-            const rows = (
-              await client.query<HeadRow>(
-                readCopyWorkHeads.sql,
-                readCopyWorkHeads.params.map((name) => values[name as keyof typeof values]),
-              )
-            ).rows;
-            const checkpoint = (
-              await client.query<{ epoch: number; position: string }>(
-                'SELECT epoch, position::text FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer=$2',
-                [home, 'semantic_links'],
-              )
-            ).rows[0];
-            const byId = new Map<string, HeadRow[]>();
-            for (const row of rows) {
-              const list = byId.get(row.id) ?? [];
-              list.push(row);
-              byId.set(row.id, list);
-            }
-            const found = new Map<string, SourceObservation>();
-            const provenance: { route: number; subject_id: string; candidate_id: string }[] = [];
-            for (const id of ids) {
-              const group = byId.get(id);
-              if (!group?.length) continue;
-              const header = group[0]!;
-              const locators = group.filter((row) => row.candidate);
-              const check = checks.get(id);
-              const allowed = check ? await check(client) : false;
-              found.set(id, { header, locators, allowed, membership: null });
-              if (header.visibility !== 'visible' || !allowed) continue;
-              if (admittedCopyWork(active.release, header.type) !== 'admitted') continue;
-              if (!checkpoint || checkpoint.epoch !== partition.epoch) throw new AccessUnavailableError('contention');
-              if (
-                header.revision === null ||
-                header.release === null ||
-                header.source_epoch === null ||
-                header.source_position === null ||
-                header.source_epoch !== partition.epoch ||
-                BigInt(checkpoint.position) < BigInt(header.source_position)
-              )
-                throw new AccessUnavailableError('contention');
-              for (const locator of locators) {
-                if (locator.source_revision !== header.revision || locator.source_security_revision !== header.security)
-                  throw new AccessUnavailableError('contention');
-              }
-              if (locators.length >= COPY_WORK_DISCLOSURE_LOOKAHEAD) {
-                found.get(id)!.membership = { kind: 'overflow' };
-                continue;
-              }
-              const factsByCandidate = new Map<string, FactRow>();
-              for (const slot of new Set(
-                locators.map((locator) => locator.slot).filter((slot): slot is string => !!slot),
-              )) {
-                const view = await effectiveGlobalSlotFacts(client, id, COPY_WORK_PROPERTY, slot);
-                for (const fact of view.facts) if (fact.statement_id) factsByCandidate.set(fact.statement_id, fact);
-              }
-              const resolved: string[] = [];
-              let concealed = false;
-              for (const locator of locators) {
-                const fact = locator.candidate ? factsByCandidate.get(locator.candidate) : undefined;
-                const body = fact?.body as { value?: { type?: unknown; content?: unknown } } | undefined;
-                const content =
-                  body?.value?.type === 'value' && typeof body.value.content === 'string' ? body.value.content : null;
-                if (!content || routeOf(content) === null) {
-                  concealed = true;
-                  continue;
-                }
-                provenance.push({ route: routeOf(id)!, subject_id: id, candidate_id: locator.candidate! });
-                if (!resolved.includes(content)) resolved.push(content);
-              }
-              found.get(id)!.membership = concealed ? { kind: 'concealed' } : { kind: 'works', ids: resolved };
-            }
-            const recorded = provenance.length ? await candidateSources(client, provenance) : new Map();
-            const tuples: SourceFenceTuple[] = [];
-            const owners: string[] = [];
-            for (const entry of provenance) {
-              const source = recorded.get(`${entry.subject_id}\n${entry.candidate_id}`) ?? null;
-              if (!source) continue;
-              if ('kind' in source) {
-                if (source.kind !== 'agent' || routeOf(source.subject) === null) {
-                  const row = found.get(entry.subject_id);
-                  if (row?.membership?.kind === 'works') row.membership = { kind: 'concealed' };
-                }
-                continue;
-              }
-              try {
-                tuples.push(sourceTuple(deps.routeKey, source));
-                owners.push(entry.subject_id);
-              } catch {
-                const row = found.get(entry.subject_id);
-                if (row?.membership?.kind === 'works') row.membership = { kind: 'concealed' };
-              }
-            }
-            return { found, tuples, owners };
-          },
-          deps.deadline,
-        );
-        for (const [id, source] of observed.found) {
-          observedSources.set(id, source);
-          if (source.membership?.kind === 'works') targets.push(...source.membership.ids);
-        }
+        const observed = await observeHome(deps, active.release, home, ids, checks);
+        cuts.push(observed.cut);
+        for (const [id, source] of observed.found) observedSources.set(id, source);
         fenceTuples.push(...observed.tuples);
         fencedSubjects.push(...observed.owners);
       }
@@ -338,19 +428,14 @@ export async function readCopyWorkDisclosure(
       const taken = new Set<string>();
       for (const [home, tuples] of fencesByHome) {
         const unique = [...new Map(tuples.map((tuple) => [fenceKey(tuple), tuple])).values()];
-        const rows = await withReadTransaction(
-          deps.pool,
-          async (client) => {
-            const partition = await readPartition(client, home);
-            if (!partition || partition.writeState !== 'active') throw new AccessUnavailableError('contention');
-            cuts.push({ partition: home, epoch: partition.epoch, position: partition.position });
+        const rows = (
+          await snapshot(deps, home, async (client) => {
             const found = [];
             for (let offset = 0; offset < unique.length; offset += 100)
               found.push(...(await readFences(client, unique.slice(offset, offset + 100))));
             return found;
-          },
-          deps.deadline,
-        );
+          })
+        ).value;
         for (const row of rows) if (row.takenDown) taken.add(fenceKey(row));
       }
       if (taken.size) {
@@ -360,11 +445,14 @@ export async function readCopyWorkDisclosure(
           if (owner?.membership?.kind === 'works') owner.membership = { kind: 'concealed' };
         }
       }
-      targets = [...observedSources.values()].flatMap((source) =>
-        source.membership?.kind === 'works' ? source.membership.ids : [],
-      );
 
-      const uniqueTargets = [...new Set(targets.filter((id) => routeOf(id) !== null))];
+      const uniqueTargets = [
+        ...new Set(
+          [...observedSources.values()].flatMap((source) =>
+            source.membership?.kind === 'works' ? source.membership.ids.filter((id) => routeOf(id) !== null) : [],
+          ),
+        ),
+      ];
       const mappedTargets = uniqueTargets.length ? await mapIdentities(deps, uniqueTargets) : new Map();
       const terminalTargets = [
         ...new Set(
@@ -415,7 +503,7 @@ export async function readCopyWorkDisclosure(
           continue;
         }
         const membership = source.membership;
-        if (!membership || membership.kind === 'unready') {
+        if (!membership) {
           classified.set(original, unavailable);
           continue;
         }
@@ -467,32 +555,6 @@ export async function readCopyWorkDisclosure(
   return observation(deps, results, cuts, releaseDigest, releaseHead);
 }
 
-async function mapIdentities(deps: CopyWorkDisclosureDependencies, ids: readonly string[]) {
-  const result = new Map<string, Awaited<ReturnType<typeof readIdentityMappings>>[number]>();
-  for (let offset = 0; offset < ids.length; offset += 100) {
-    const batch = ids.slice(offset, offset + 100);
-    const mappings = await readIdentityMappings(deps.pool, batch);
-    batch.forEach((id, index) => result.set(id, mappings[index]!));
-  }
-  return result;
-}
-
-async function readSummaries(
-  deps: CopyWorkDisclosureDependencies,
-  ids: readonly string[],
-  options: { languages: readonly string[] },
-) {
-  const summaries = new Map<string, SubjectSummary | null>();
-  const components: SubjectSummaryObservation['components'][number][] = [];
-  for (let offset = 0; offset < ids.length; offset += 256) {
-    const batch = ids.slice(offset, offset + 256);
-    const observed = await readSubjectSummaryObservation(deps, batch, options);
-    for (const [id, summary] of observed.summaries) summaries.set(id, summary);
-    components.push(...observed.components);
-  }
-  return { summaries, components };
-}
-
 function observation(
   deps: CopyWorkDisclosureDependencies,
   results: Map<string, CopyWorkDisclosureState>,
@@ -508,52 +570,60 @@ function observation(
   return {
     results,
     async current() {
-      requireAccessDeadline(deps.deadline);
-      const active = await withReadTransaction(deps.pool, (client) => activeRelease(client), deps.deadline);
-      if (!active || active.digest !== digest || active.head !== head) return false;
-      const unique = [...new Set(disclosed.filter((id) => routeOf(id) !== null))];
-      const checks: AccessCheck[] = [];
-      for (const id of unique) {
-        const route = routeOf(id)!;
-        checks.push(
-          await accessCheck(
-            deps.access,
-            deps.actor,
-            'subject:read',
-            {
-              route,
-              id,
-              eligibility: relatedReadEligibility({ route, id }, unique),
-            },
-            { pool: deps.pool, deadline: deps.deadline },
-          ),
-        );
-      }
-      return withReadTransaction(
-        deps.pool,
-        async (client) => {
-          if (components.length)
-            await partitionReadClients(
-              client,
-              components.map((cut) => cut.partition),
-            );
-          const current = new Map(
-            (
-              await readPartitions(
+      return within(deps.deadline, async () => {
+        requireAccessDeadline(deps.deadline);
+        const active = (
+          await snapshot(deps, 0, async (client) => {
+            const release = await activeRelease(client);
+            if (!release) return null;
+            return release;
+          })
+        ).value;
+        if (!active || active.digest !== digest || active.head !== head) return false;
+        const unique = [...new Set(disclosed.filter((id) => routeOf(id) !== null))];
+        const checks: AccessCheck[] = [];
+        for (const id of unique) {
+          const route = routeOf(id)!;
+          checks.push(
+            await accessCheck(
+              deps.access,
+              deps.actor,
+              'subject:read',
+              {
+                route,
+                id,
+                eligibility: relatedReadEligibility({ route, id }, unique),
+              },
+              { pool: deps.pool, deadline: deps.deadline },
+            ),
+          );
+        }
+        return withReadTransaction(
+          deps.pool,
+          async (client) => {
+            if (components.length)
+              await partitionReadClients(
                 client,
                 components.map((cut) => cut.partition),
-              )
-            ).map((row) => [row.partitionNo, row]),
-          );
-          for (const cut of components) {
-            const found = current.get(cut.partition);
-            if (!found || found.epoch !== cut.epoch || found.position !== cut.position) return false;
-          }
-          for (const check of checks) if (!(await check(client))) return false;
-          return true;
-        },
-        deps.deadline,
-      );
+              );
+            const current = new Map(
+              (
+                await readPartitions(
+                  client,
+                  components.map((cut) => cut.partition),
+                )
+              ).map((row) => [row.partitionNo, row]),
+            );
+            for (const cut of components) {
+              const found = current.get(cut.partition);
+              if (!found || found.epoch !== cut.epoch || found.position !== cut.position) return false;
+            }
+            for (const check of checks) if (!(await check(client))) return false;
+            return true;
+          },
+          deps.deadline,
+        );
+      });
     },
   };
 }
