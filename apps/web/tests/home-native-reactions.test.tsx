@@ -124,9 +124,11 @@ test.each([1, 10, 20])(
   },
 );
 
-test('a Home baseline cannot be rebound after a viewer or request observation changes', async () => {
+test('a Home baseline retires across session, request, provider and route incarnations', async () => {
+  const baseline = { ...result, page: { ...result.page } };
+  let latestOrigin: ReturnType<typeof useHomeReactionCurrentness>['origin'] | undefined;
   function Probe({
-    current = result,
+    current = baseline,
     spaceId,
     busy = false,
   }: {
@@ -141,22 +143,86 @@ test('a Home baseline cannot be rebound after a viewer or request observation ch
       true,
       busy,
     );
+    latestOrigin = scope.origin;
     return <output>{scope.available ? 'current' : 'retired'}</output>;
   }
   await paint(<Probe />);
   expect(host.textContent).toBe('current');
+
+  const initialOrigin = latestOrigin!;
+  let startFetch!: () => void;
+  let finishFetch!: (value: { state: 'signed-in'; subject: string; csrfToken: string }) => void;
+  const fetchStarted = new Promise<void>((resolve) => (startFetch = resolve));
+  const response = new Promise<{ state: 'signed-in'; subject: string; csrfToken: string }>(
+    (resolve) => (finishFetch = resolve),
+  );
+  let request!: Promise<unknown>;
   await act(async () => {
-    client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
+    request = client.fetchQuery({
+      queryKey: ['session'],
+      staleTime: 0,
+      queryFn: async () => {
+        startFetch();
+        return response;
+      },
+    });
+    await fetchStarted;
+  });
+  expect(host.textContent).toBe('current');
+  expect(initialOrigin.isCurrent()).toBe(true);
+  finishFetch({ state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
+  await act(async () => {
+    await request;
   });
   expect(host.textContent).toBe('retired');
-  const replacement = { ...result };
-  await paint(<Probe current={replacement} />);
+  expect(initialOrigin.isCurrent()).toBe(false);
+
+  await paint(<Probe current={{ ...baseline }} />);
+  expect(host.textContent).toBe('retired');
+
+  const fresh = { ...baseline, page: { ...baseline.page } };
+  await paint(<Probe current={fresh} />);
   expect(host.textContent).toBe('current');
-  await paint(<Probe current={replacement} spaceId="another-space" />);
+  const requestOrigin = latestOrigin!;
+  await paint(<Probe current={fresh} spaceId="another-space" />);
   expect(host.textContent).toBe('retired');
-  await paint(<Probe current={replacement} />);
+  expect(requestOrigin.isCurrent()).toBe(false);
+  await paint(<Probe current={fresh} />);
   expect(host.textContent).toBe('retired');
-  await paint(<Probe current={{ ...result }} busy />);
+
+  const credentialPage = { ...baseline, page: { ...baseline.page } };
+  await paint(<Probe current={credentialPage} />);
+  expect(host.textContent).toBe('current');
+  const credentialOrigin = latestOrigin!;
+  await act(async () => {
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'rotated' });
+  });
+  expect(host.textContent).toBe('retired');
+  expect(credentialOrigin.isCurrent()).toBe(false);
+
+  const batchedPage = { ...baseline, page: { ...baseline.page } };
+  await paint(<Probe current={batchedPage} />);
+  expect(host.textContent).toBe('current');
+  const batchedOrigin = latestOrigin!;
+  await act(async () => {
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-b', csrfToken: 'csrf-b' });
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-c', csrfToken: 'csrf-c' });
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'rotated' });
+  });
+  expect(host.textContent).toBe('retired');
+  expect(batchedOrigin.isCurrent()).toBe(false);
+
+  const routePage = { ...baseline, page: { ...baseline.page } };
+  await paint(<Probe current={routePage} />);
+  expect(host.textContent).toBe('current');
+  const routeOrigin = latestOrigin!;
+  await act(async () => root.unmount());
+  expect(routeOrigin.isCurrent()).toBe(false);
+  root = createRoot(host);
+  await paint(<Probe current={routePage} />);
+  expect(host.textContent).toBe('retired');
+
+  await paint(<Probe current={{ ...baseline, page: { ...baseline.page } }} busy />);
   expect(host.textContent).toBe('retired');
   expect(nativeFetch).not.toHaveBeenCalled();
 });

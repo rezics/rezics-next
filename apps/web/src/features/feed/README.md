@@ -185,8 +185,11 @@ the reveal.
 
 `useHomeReactionCurrentness` binds one displayed page to its result, request/cursor, stream, filters, Space, source
 states and existing session-cache observation. Beginning a replacement read, changing any binding or observing
-session replacement retires the old action origin immediately, including equal session success. Only a new result
-can admit it again. This observer makes no reads and does not install a missing reaction baseline.
+session replacement retires the old action origin immediately, including equal session success. This observer
+makes no reads and does not install a missing reaction baseline.
+
+Decision: each exact `FeedPage` object admits Home reaction controls once; session or route retirement requires a
+distinct page object before controls can return.
 
 Decision: Home renders the disclosed review target and cited question/vote revision plus at most the exact immediate
 parent preview. A withheld or unavailable context has no body, link or identity; reactions bind only the native
