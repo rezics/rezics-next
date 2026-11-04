@@ -367,7 +367,7 @@ await Bun.write(state, previous + 'state');
   }
 });
 
-test('compiler database cleanup failure is infrastructure, and no-diagnostic command failures are not type errors', async () => {
+test('compiler cleanup and no-diagnostic compiler failures are infrastructure, never type errors', async () => {
   const databaseFixture = fixture();
   const error = spyOn(console, 'error').mockImplementation(() => {});
   try {
@@ -402,7 +402,7 @@ test('compiler database cleanup failure is infrastructure, and no-diagnostic com
     const output = collector();
     const code = await typecheck({ root: commandFixture.root, changedFiles: ['packages/failing/fail.ts'], stdout: output.stdout });
     expect(code).toBe(1);
-    expect(output.text()).toContain('execution after');
+    expect(output.text()).toContain('infrastructure after');
     expect(output.text()).not.toContain('type-errors after');
   } finally {
     commandFixture.remove();

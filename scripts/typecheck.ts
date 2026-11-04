@@ -350,7 +350,7 @@ function blockFor(
         ? 'infrastructure'
         : hasDiagnostics
           ? 'type-errors'
-          : 'execution');
+          : 'infrastructure');
   const relativeDirectory = workspace.directory.startsWith(`${root}/`)
     ? workspace.directory.slice(root.length + 1)
     : relative(root, workspace.directory);
