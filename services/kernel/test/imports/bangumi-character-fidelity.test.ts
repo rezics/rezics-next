@@ -70,7 +70,10 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
           references: [
             {
               parts: [
-                { property: { id: 'schema:url' }, value: { type: 'value', content: `https://example.test/authored/${key}` } },
+                {
+                  property: { id: 'schema:url' },
+                  value: { type: 'value', content: `https://example.test/authored/${key}` },
+                },
               ],
             },
           ],
@@ -78,19 +81,24 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
       });
     };
     propose(kindSchemeId, 'kind-scheme-url', 'schema:url', 'https://rezics.com/schemes/bangumi/character-kinds');
-    propose(
-      appearanceSchemeId,
-      'role-scheme-url',
-      'schema:url',
-      'https://rezics.com/schemes/bangumi/appearance-roles',
-    );
-    for (const [number, id] of [[1, kindOne], [2, kindTwo]] as const)
+    propose(appearanceSchemeId, 'role-scheme-url', 'schema:url', 'https://rezics.com/schemes/bangumi/appearance-roles');
+    for (const [number, id] of [
+      [1, kindOne],
+      [2, kindTwo],
+    ] as const)
       propose(id, `kind-${number}-url`, 'schema:url', `https://rezics.com/schemes/bangumi/character-kinds/${number}`);
-    for (const [number, id] of [[1, roleOne], [2, roleTwo], [3, roleThree]] as const) {
+    for (const [number, id] of [
+      [1, roleOne],
+      [2, roleTwo],
+      [3, roleThree],
+    ] as const) {
       propose(id, `role-${number}-url`, 'schema:url', `https://rezics.com/schemes/bangumi/appearance-roles/${number}`);
       propose(id, `role-${number}-scheme`, 'skos:inScheme', appearanceSchemeId);
     }
-    for (const [number, id] of [[1, kindOne], [2, kindTwo]] as const)
+    for (const [number, id] of [
+      [1, kindOne],
+      [2, kindTwo],
+    ] as const)
       propose(id, `kind-${number}-scheme`, 'skos:inScheme', kindSchemeId);
     for (let offset = 0; offset < authoredFacts.length; offset += 8) {
       const facts = await runtime.importTransport.batch({ commands: authoredFacts.slice(offset, offset + 8) });
@@ -116,13 +124,25 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
         source: 'bangumi',
         key: '990010',
         revision: 'authored-1',
-        payload: { id: 990010, type: 2, name: 'Authored anime work', name_cn: '原創動畫', summary: 'An authored synopsis.' },
+        payload: {
+          id: 990010,
+          type: 2,
+          name: 'Authored anime work',
+          name_cn: '原創動畫',
+          summary: 'An authored synopsis.',
+        },
       },
       {
         source: 'bangumi',
         key: 'character:990001',
         revision: 'authored-1',
-        payload: { id: 990001, type: 1, name: 'Authored character one', name_cn: '原創角色一', summary: 'A character synopsis.' },
+        payload: {
+          id: 990001,
+          type: 1,
+          name: 'Authored character one',
+          name_cn: '原創角色一',
+          summary: 'A character synopsis.',
+        },
       },
       {
         source: 'bangumi',
@@ -138,9 +158,12 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
       },
     ];
     const registration = createSourceRegistration('bangumi', { source: alias, converterRevision: entityRevision });
-    const initial = await runtime.importer.runRecords(registration, (async function* () {
-      yield* records;
-    })());
+    const initial = await runtime.importer.runRecords(
+      registration,
+      (async function* () {
+        yield* records;
+      })(),
+    );
     expect(initial.status).toBe('committed');
     await editor.adopt(alias, '990010', 'wdt:P5732', '990010');
     await editor.adopt(alias, 'character:990001', 'wdt:P6296', '990001');
@@ -204,13 +227,25 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
     const first = await runFidelity(1);
     expect(first.run.status).toBe('committed');
     expect(first.gaps).toContainEqual(
-      expect.objectContaining({ path: '/subject-characters/2/type', reason: 'qualifier_not_admitted', property: 'schema:position' }),
+      expect.objectContaining({
+        path: '/subject-characters/2/type',
+        reason: 'qualifier_not_admitted',
+        property: 'schema:position',
+      }),
     );
     const workId = runtime.importer.session.bindings.claim({ source: alias, external_id: '990010' });
     const characterId = runtime.importer.session.bindings.claim({ source: alias, external_id: 'character:990001' });
-    const secondCharacterId = runtime.importer.session.bindings.claim({ source: alias, external_id: 'character:990002' });
+    const secondCharacterId = runtime.importer.session.bindings.claim({
+      source: alias,
+      external_id: 'character:990002',
+    });
     const personId = runtime.importer.session.bindings.claim({ source: alias, external_id: 'person:990020' });
-    if (workId?.state !== 'bound' || characterId?.state !== 'bound' || secondCharacterId?.state !== 'bound' || personId?.state !== 'bound')
+    if (
+      workId?.state !== 'bound' ||
+      characterId?.state !== 'bound' ||
+      secondCharacterId?.state !== 'bound' ||
+      personId?.state !== 'bound'
+    )
       throw new Error('Missing authored source identity');
     const workView = await editor.read(alias, '990010');
     const characterView = await editor.read(alias, 'character:990001');
@@ -255,9 +290,8 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
     const adoptedWorkValue = (await runtime.importTransport.readReviewedSubject(workId.subject)).subject?.statements[
       'schema:character'
     ]?.[0]?.value;
-    const adoptedCharacterValue = (await runtime.importTransport.readReviewedSubject(characterId.subject)).subject?.statements[
-      'schema:keywords'
-    ]?.[0]?.value;
+    const adoptedCharacterValue = (await runtime.importTransport.readReviewedSubject(characterId.subject)).subject
+      ?.statements['schema:keywords']?.[0]?.value;
     expect(adoptedWorkValue?.type === 'value' ? adoptedWorkValue.content : undefined).toBe(characterId.subject);
     expect(adoptedCharacterValue?.type === 'value' ? adoptedCharacterValue.content : undefined).toBe(kindOne);
 
@@ -278,8 +312,8 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
     const changedRole = await runFidelity(2);
     expect(changedRole.run.status).toBe('committed');
     expect(
-      (await editor.read(alias, '990010')).proposals.some(
-        (item) => item.statement?.qualifiers?.some((qualifier) => qualifier.value.content === roleTwo),
+      (await editor.read(alias, '990010')).proposals.some((item) =>
+        item.statement?.qualifiers?.some((qualifier) => qualifier.value.content === roleTwo),
       ),
     ).toBe(true);
     const missingRole = await runFidelity(3, {
@@ -294,8 +328,8 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
     const fenced = await runFidelity(3);
     expect(fenced.run.status).toBe('committed');
     expect(
-      (await editor.read(alias, '990010')).proposals.some(
-        (item) => item.statement?.qualifiers?.some((qualifier) => qualifier.value.content === roleThree),
+      (await editor.read(alias, '990010')).proposals.some((item) =>
+        item.statement?.qualifiers?.some((qualifier) => qualifier.value.content === roleThree),
       ),
     ).toBe(false);
   } finally {
