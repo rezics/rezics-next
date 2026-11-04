@@ -117,7 +117,10 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
           ok: true,
           value: {
             collections: [
-              withVisibility({ ...initial, id: 'settings-current-collection', title: 'Current reading', revision: 3 }, 'private'),
+              withVisibility(
+                { ...initial, id: 'settings-current-collection', title: 'Current reading', revision: 3 },
+                'private',
+              ),
             ],
             next: null,
           },
@@ -133,7 +136,12 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
       return {
         ok: true,
         value: {
-          collections: [withVisibility({ ...initial, id: 'settings-collection-3', title: 'Weekend reading', revision: 2 }, 'unlisted')],
+          collections: [
+            withVisibility(
+              { ...initial, id: 'settings-collection-3', title: 'Weekend reading', revision: 2 },
+              'unlisted',
+            ),
+          ],
           next: null,
         },
       };

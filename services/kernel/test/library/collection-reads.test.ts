@@ -6,7 +6,11 @@ import type { Pool } from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess } from '../../src/access/index.ts';
 import { PROBLEMS, ProblemError } from '../../src/http/problem.ts';
-import { createCollectionReads, type CollectionResourceView, type CollectionView } from '../../src/library/collection-reads.ts';
+import {
+  createCollectionReads,
+  type CollectionResourceView,
+  type CollectionView,
+} from '../../src/library/collection-reads.ts';
 import type { Collection, CollectionMember, CollectionVisibility } from '../../src/library/collection-model.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { createWorkClient } from '../../src/work/client.ts';

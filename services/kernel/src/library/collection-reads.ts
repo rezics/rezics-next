@@ -685,10 +685,7 @@ export function createCollectionReads(
         ? null
         : await readablePresentationCover(dependencies, viewer, row.coverMediaId, deadline);
     let editor = false;
-    if (
-      owner &&
-      viewer.scopes.includes('collection:update')
-    ) {
+    if (owner && viewer.scopes.includes('collection:update')) {
       const check = await accessCheck(
         access,
         viewer,
@@ -831,10 +828,7 @@ export function createCollectionReads(
     const collections: CollectionResourceView[] = shownLogical.map((collection) =>
       ownerManagement ? { ...collection, allowedVisibilityActions: [] } : collection,
     );
-    for (const row of result.collections)
-      collections.push(
-        await present(viewer, row, undefined, ownerManagement),
-      );
+    for (const row of result.collections) collections.push(await present(viewer, row, undefined, ownerManagement));
     if (preview) {
       const previews = await readCollectionPreviews(
         dependencies,

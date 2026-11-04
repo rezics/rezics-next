@@ -37,7 +37,10 @@ test('retirement scrubs retained Collection rows, drafts and attempts and ignore
   expect(editor.snapshot()).toMatchObject({ current: null, attempt: null, desired: 'private' });
 
   page.resolve({ ok: true, value: { collections: [privateRow], next: 'retired-cursor' } });
-  write.resolve({ ok: true, collection: { ...privateRow, visibility: 'public', revision: 5, allowedVisibilityActions: ['private', 'unlisted'] } });
+  write.resolve({
+    ok: true,
+    collection: { ...privateRow, visibility: 'public', revision: 5, allowedVisibilityActions: ['private', 'unlisted'] },
+  });
   await Promise.all([loading, saving]);
   expect(pager.snapshot().collections).toEqual([]);
   expect(editor.snapshot().current).toBeNull();

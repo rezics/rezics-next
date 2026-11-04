@@ -267,7 +267,9 @@ export async function readOwnedCollections(
     },
     headers: { authorization },
   });
-  const page = readCollectionPrivacyResult(result as { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit }) as OwnerManagementRead;
+  const page = readCollectionPrivacyResult(
+    result as { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit },
+  ) as OwnerManagementRead;
   return ownerPage(page, accountId);
 }
 
@@ -330,7 +332,9 @@ export async function reloadOwnedCollection(
     query: { view: 'FULL', ownerManagement: true },
     headers: { authorization },
   });
-  const response = readCollectionPrivacyResult(result as { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit }) as OwnerManagementRead;
+  const response = readCollectionPrivacyResult(
+    result as { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit },
+  ) as OwnerManagementRead;
   return ownedCollection(response.collection, accountId);
 }
 

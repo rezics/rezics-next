@@ -33,7 +33,10 @@ const builtin: OwnedCollection = {
   revision: null,
   allowedVisibilityActions: [],
 };
-const io = { save: async () => ({ ok: false as const, reason: 'unavailable' as const }), read: async () => ({ ok: false as const, reason: 'unavailable' as const }) };
+const io = {
+  save: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+  read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+};
 
 function markup(collection: OwnedCollection) {
   return renderToStaticMarkup(createElement(CollectionRow, { collection, io }));

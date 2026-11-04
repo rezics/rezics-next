@@ -137,10 +137,7 @@ function CollectionRowView({
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const { current, desired, phase } = state;
   if (!current) return null;
-  const options = [...new Set([
-    ...visibilityOptions(current),
-    ...(desired !== current.visibility ? [desired] : []),
-  ])];
+  const options = [...new Set([...visibilityOptions(current), ...(desired !== current.visibility ? [desired] : [])])];
   const canChangeVisibility = current.revision !== null && current.allowedVisibilityActions.length > 0;
   if (state.readRefusal) {
     return (

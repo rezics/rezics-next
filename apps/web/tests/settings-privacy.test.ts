@@ -72,7 +72,12 @@ function ownerPage(collections: unknown[], next: string | null) {
   return { ownerManagement: 'owner', ownerAccountId: 'alice', collections, next };
 }
 
-function owned(id: string, title: string, visibility: 'private' | 'unlisted' | 'public', revision = 7): OwnedCollection {
+function owned(
+  id: string,
+  title: string,
+  visibility: 'private' | 'unlisted' | 'public',
+  revision = 7,
+): OwnedCollection {
   return {
     id,
     title,
@@ -90,7 +95,9 @@ test('privacy page reads one bounded owner page at a time and preserves its curs
     fetch: (async (input, init) => {
       const current = new Request(input, init);
       calls.push(current);
-      return Response.json(ownerPage([collection(`c${calls.length}`, 'Reading list', 'unlisted')], calls.length === 1 ? 'cursor-2' : null));
+      return Response.json(
+        ownerPage([collection(`c${calls.length}`, 'Reading list', 'unlisted')], calls.length === 1 ? 'cursor-2' : null),
+      );
     }) as typeof fetch,
   });
   const first = await readOwnedCollections(client, request(), env, null);
@@ -231,13 +238,27 @@ test('the strict owner decoder preserves curated, saved dynamic and logical iden
   };
   const client = createKernelClient('https://kernel.example.test', {
     fetch: (async () =>
-      Response.json(ownerPage([collection('curated', 'Private list', 'private'), dynamic, logical], null))) as typeof fetch,
+      Response.json(
+        ownerPage([collection('curated', 'Private list', 'private'), dynamic, logical], null),
+      )) as typeof fetch,
   });
   const result = await readOwnedCollections(client, request(), env, null);
   expect(result.collections).toMatchObject([
-    { id: 'curated', kind: 'curated', membershipKind: 'curated', revision: 7, allowedVisibilityActions: ['unlisted', 'public'] },
+    {
+      id: 'curated',
+      kind: 'curated',
+      membershipKind: 'curated',
+      revision: 7,
+      allowedVisibilityActions: ['unlisted', 'public'],
+    },
     { id: 'saved-dynamic', kind: 'dynamic', membershipKind: 'dynamic', revision: 9 },
-    { id: 'builtin-everything', kind: 'builtin', builtinKind: 'everything', revision: null, allowedVisibilityActions: [] },
+    {
+      id: 'builtin-everything',
+      kind: 'builtin',
+      builtinKind: 'everything',
+      revision: null,
+      allowedVisibilityActions: [],
+    },
   ]);
 
   const wrongOwner = createKernelClient('https://kernel.example.test', {

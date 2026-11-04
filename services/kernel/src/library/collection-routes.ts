@@ -563,13 +563,13 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
     if (actor.kind !== 'account' || !actor.scopes.includes('collection:read'))
       return { ...collectionView(value), coverMediaId: value.coverMediaId };
     const current = await read().readCollection(actor, value.id, undefined, undefined, ownerManagement);
-    if (
-      ownerManagement &&
-      (current.revision !== value.revision || current.visibility !== value.visibility)
-    )
+    if (ownerManagement && (current.revision !== value.revision || current.visibility !== value.visibility))
       throw new ProblemError('dependency_unavailable');
     const cover =
-      hasCover && 'coverMediaId' in current && current.revision === value.revision && current.coverMediaId === value.coverMediaId
+      hasCover &&
+      'coverMediaId' in current &&
+      current.revision === value.revision &&
+      current.coverMediaId === value.coverMediaId
         ? current.cover
         : null;
     return {
@@ -577,9 +577,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       ...(ownerManagement && 'allowedVisibilityActions' in current
         ? { allowedVisibilityActions: current.allowedVisibilityActions }
         : {}),
-      ...(hasCover
-        ? { ...collectionPresentation(value, cover), coverMediaId: value.coverMediaId }
-        : {}),
+      ...(hasCover ? { ...collectionPresentation(value, cover), coverMediaId: value.coverMediaId } : {}),
     };
   }
   async function writtenCurated(value: Collection, actor: Actor) {
@@ -775,7 +773,10 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             throw new ProblemError('invalid_request');
           const page = await read().listCollections(
             actor,
-            { ...basicQuery(options), ...(query.ownerManagement === undefined ? {} : { ownerManagement: query.ownerManagement }) },
+            {
+              ...basicQuery(options),
+              ...(query.ownerManagement === undefined ? {} : { ownerManagement: query.ownerManagement }),
+            },
             preview === undefined ? undefined : { deadline: job.deadline },
           );
           return fullView(viewDependencies(), actor, query.view, {
@@ -831,7 +832,13 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         admission.run('normal', job, async () =>
           fullView(viewDependencies(), actor, query.view, {
             collection: collectionReadView(
-              await read().readCollection(actor, params.collectionId, undefined, undefined, query.ownerManagement === true),
+              await read().readCollection(
+                actor,
+                params.collectionId,
+                undefined,
+                undefined,
+                query.ownerManagement === true,
+              ),
             ),
           }),
         ),
