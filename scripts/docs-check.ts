@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { statSync as fsStatSync } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { lstatSync as fsLstatSync } from "node:fs";
+import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 type Budget = { path: string; kind: "file" | "directory"; bytes: number };
@@ -189,7 +189,10 @@ function gitBlobHash(bytes: Uint8Array): string {
 async function parsedMarkdown(root: string, file: string, memory: Map<string, ParsedMarkdown>): Promise<ParsedMarkdown> {
   const present = memory.get(file);
   if (present) return present;
-  const bytes = await readFile(path.join(root, file));
+  const fullPath = path.join(root, file);
+  const info = await lstat(fullPath);
+  if (!info.isFile() || info.isSymbolicLink()) return { links: [], anchors: [] };
+  const bytes = await readFile(fullPath);
   const hash = gitBlobHash(bytes);
   const cacheFile = path.join(root, CACHE_PATH, `${hash}.json`);
   let parsed: ParsedMarkdown;
@@ -246,7 +249,7 @@ function linkTarget(root: string, source: string, target: string): { file: strin
 }
 
 function statSync(file: string): { isFile(): boolean; isDirectory(): boolean } {
-  return fsStatSync(file);
+  return fsLstatSync(file);
 }
 
 function currentMainCheckout(root: string): string | undefined {
@@ -265,6 +268,8 @@ async function checkBrief(root: string, file: string): Promise<RunResult> {
   }
   let bytes: Buffer;
   try {
+    const info = await lstat(resolved);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error("brief must be a regular file");
     bytes = await readFile(resolved);
   } catch (error) {
     return { exitCode: 2, lines: [`brief-read | ${file} | ${String(error).split("\n")[0]} | remedy: provide a readable worktree file`] };
@@ -324,6 +329,13 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
     tracked = splitGitPaths(runGit(root, ["ls-files", "-z"]));
     untracked = splitGitPaths(runGit(root, ["ls-files", "--others", "--exclude-standard", "-z"]));
     diff = parseDiff(root, baselineRef);
+    if (!changedMode) {
+      try {
+        diff.push(...parseDiff(root, "HEAD^"));
+      } catch {
+        // A one-commit repository has no prior committed changes to inspect.
+      }
+    }
   } catch (error) {
     return { exitCode: 2, lines: [`git | repository | ${String(error).split("\n")[0]} | remedy: run from a Git worktree`] };
   }
@@ -333,7 +345,7 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
   await Promise.all(allFiles.map(async (file) => {
     if (file.startsWith(".temp/")) return;
     try {
-      const info = await stat(path.join(root, file));
+      const info = await lstat(path.join(root, file));
       if (info.isFile()) sizes.set(file, info.size);
     } catch {
       // A tracked deletion has no current size.
@@ -363,6 +375,10 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
   let baseline: Baseline;
   let registry: { reports: { path: string; topic: string; researcher: string; state: string; decision?: string }[] };
   try {
+    for (const configPath of [budgetsPath, baselinePath, registryPath]) {
+      const info = await lstat(configPath);
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error(`${path.relative(root, configPath)} must be a regular file`);
+    }
     budgetFile = json<BudgetFile>(await readFile(budgetsPath, "utf8"), BUDGETS_PATH);
     baseline = json<Baseline>(await readFile(baselinePath, "utf8"), BASELINE_PATH);
     registry = json(await readFile(registryPath, "utf8"), REGISTRY_PATH);
@@ -430,20 +446,21 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
 
   const fileBudgets = budgetFile.budgets.filter((budget) => budget.kind === "file");
   const directoryBudgets = budgetFile.budgets.filter((budget) => budget.kind === "directory");
-  for (const budget of fileBudgets) {
-    const regex = parseGlob(budget.path);
-    for (const [file, size] of sizes) {
-      if (!regex.test(file) || file.startsWith(".temp/")) continue;
-      const current = entries.get(file);
-      if (current !== undefined) {
-        if (size > current) violations.push(safeLine("budget-growth", file, `size ${size} bytes exceeds baseline ${current} bytes`, "shrink the file or raise the baseline with a reason trailer"));
-        else if (size < current) {
-          if (mode === "--update-baseline") entries.set(file, size);
-          else violations.push(safeLine("budget-shrank", file, `size ${size} bytes is below baseline ${current} bytes`, "run bun scripts/docs-check.ts --update-baseline and commit"));
-        }
-      } else if (size > budget.bytes) {
-        violations.push(safeLine("budget-cap", file, `size ${size} bytes exceeds cap ${budget.bytes} bytes`, "reduce the file to its cap"));
+  for (const [file, size] of sizes) {
+    if (file.startsWith(".temp/")) continue;
+    const applicable = fileBudgets.filter((budget) => matches(budget.path, file));
+    if (!applicable.length) continue;
+    const specificity = Math.max(...applicable.map((budget) => budget.path.replace(/[?*]/g, "").length));
+    const budget = applicable.filter((candidate) => candidate.path.replace(/[?*]/g, "").length === specificity).sort((a, b) => a.bytes - b.bytes)[0]!;
+    const current = entries.get(file);
+    if (current !== undefined) {
+      if (size > current) violations.push(safeLine("budget-growth", file, `size ${size} bytes exceeds baseline ${current} bytes`, "shrink the file or raise the baseline with a reason trailer"));
+      else if (size < current) {
+        if (mode === "--update-baseline") entries.set(file, size);
+        else violations.push(safeLine("budget-shrank", file, `size ${size} bytes is below baseline ${current} bytes`, "run bun scripts/docs-check.ts --update-baseline and commit"));
       }
+    } else if (size > budget.bytes) {
+      violations.push(safeLine("budget-cap", file, `size ${size} bytes exceeds cap ${budget.bytes} bytes`, "reduce the file to its cap"));
     }
   }
   for (const budget of directoryBudgets) {
@@ -458,6 +475,11 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
     } else if (size > budget.bytes) {
       violations.push(safeLine("budget-cap", budget.path, `size ${size} bytes exceeds cap ${budget.bytes} bytes`, "reduce the directory total to its cap"));
     }
+  }
+  for (const [file, previous] of [...entries]) {
+    if (file.includes("*") || sizes.has(file)) continue;
+    if (mode === "--update-baseline") entries.set(file, 0);
+    else violations.push(safeLine("budget-shrank", file, `size 0 bytes is below baseline ${previous} bytes`, "run bun scripts/docs-check.ts --update-baseline and commit"));
   }
   if (mode === "--update-baseline") {
     const lowered = baseline.entries.filter((entry) => (entries.get(entry.path) ?? entry.bytes) < entry.bytes);
@@ -521,12 +543,26 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
       const text = await readFile(path.join(root, file), "utf8");
       for (const error of extractOwnerViolations(text)) violations.push(safeLine(error.rule, file, error.detail, "remove the dated heading, task ID or temporary path"));
       const marker = /<!-- generated: ([^\s]+) -->\r?\n([\s\S]*?)<!-- \/generated -->/g;
-      for (const match of text.matchAll(marker)) {
+      const generatedBlocks = [...text.matchAll(marker)];
+      const openMarkers = [...text.matchAll(/<!-- generated:/g)].length;
+      const closeMarkers = [...text.matchAll(/<!-- \/generated -->/g)].length;
+      if (openMarkers !== generatedBlocks.length || closeMarkers !== generatedBlocks.length) {
+        violations.push(safeLine("generated-block", file, "generated block markers are incomplete", "pair each generated marker around its rendered source bytes"));
+      }
+      for (const match of generatedBlocks) {
         const source = match[1];
+        const sourcePath = path.resolve(root, source);
+        const sourceRelative = path.relative(root, sourcePath);
+        if (source.startsWith("/") || sourceRelative.startsWith("..") || source.startsWith(".temp/")) {
+          violations.push(safeLine("generated-block", file, `source ${source} is outside the readable worktree`, "use a repository-relative regular-file source"));
+          continue;
+        }
         try {
-          const sourceText = (await readFile(path.join(root, source), "utf8")).replace(/\r\n/g, "\n").trimEnd();
+          const sourceInfo = await lstat(sourcePath);
+          if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink()) throw new Error("source must be a regular file");
+          const sourceText = (await readFile(sourcePath, "utf8")).replace(/\r\n/g, "\n").trimEnd();
           const body = match[2].replace(/\r\n/g, "\n").replace(/^\n|\n$/g, "");
-          if (source.startsWith("/") || path.relative(root, path.resolve(root, source)).startsWith("..") || sourceText !== body) {
+          if (sourceText !== body) {
             violations.push(safeLine("generated-block", file, `render from ${source} differs from the block`, "regenerate the block from its repository-relative source"));
           }
         } catch {
@@ -567,13 +603,13 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
         continue;
       }
       const targetPath = path.join(root, resolved.file);
-      let targetStat: Awaited<ReturnType<typeof stat>> | undefined;
+      let targetStat: Awaited<ReturnType<typeof lstat>> | undefined;
       try {
-        targetStat = await stat(targetPath);
+        targetStat = await lstat(targetPath);
       } catch {
         // Report below with a stable missing-target rule.
       }
-      if (!targetStat?.isFile()) {
+      if (!targetStat?.isFile() || targetStat.isSymbolicLink()) {
         violations.push(safeLine("link-target", source, `target ${link.target} does not resolve (line ${link.line})`, "fix the relative link or restore the target"));
         continue;
       }
