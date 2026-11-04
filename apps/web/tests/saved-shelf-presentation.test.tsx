@@ -286,7 +286,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
   }) as typeof fetch;
 
   try {
-    const { kernelClient } = await import('../src/kernel/client');
+    const { createKernelClient } = await import('@rezics/client');
     const { loadSettingsPage, changePreferences } = await import('../src/settings/preferences');
     const { accountPreferenceIO } = await import('../src/settings/settings-page');
     const { ShelfPreferencesCard } = await import('../src/settings/shelf-preferences');
@@ -298,7 +298,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     const { m } = await import('../src/paraglide/messages.js');
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
     const { createRoot } = await import('react-dom/client');
-    const kernel = kernelClient('en');
+    const kernel = createKernelClient('https://kernel.test', { fetch: globalThis.fetch });
     const transport = {
       read: async () => {
         currentRequest = requestFor('GET');
