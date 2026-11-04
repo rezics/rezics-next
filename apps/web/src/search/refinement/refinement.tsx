@@ -624,7 +624,8 @@ function RefinementInstance({
             className="min-w-0 gap-2 border-t border-border/60 pt-4"
             disabled={
               (busy && !keepSelectedEditable) ||
-              (!perPropertyState && !keepSelectedEditable &&
+              (!perPropertyState &&
+                !keepSelectedEditable &&
                 (state?.status === 'refused' ||
                   state?.status === 'restart' ||
                   state?.status === 'preparing' ||
@@ -694,7 +695,9 @@ function RefinementInstance({
                               property,
                               nextValues,
                               nextValues[0],
-                              nextValues[0] === entry.value ? picked.text.trim() || selectedLabels[property] : undefined,
+                              nextValues[0] === entry.value
+                                ? picked.text.trim() || selectedLabels[property]
+                                : undefined,
                             );
                           if (onConditionsChange) {
                             onConditionsChange({

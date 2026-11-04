@@ -46,10 +46,9 @@ test('resource languages canonicalize, round-trip as one OR filter and leave the
     'es-419',
     'bad code',
   ]);
-  expect(searchLoaderDeps({ 'f.schema:inLanguage': ['PT-br', 'bad code'] }).facets[RESOURCE_LANGUAGE_PROPERTY]).toEqual([
-    'pt-BR',
-    'bad code',
-  ]);
+  expect(searchLoaderDeps({ 'f.schema:inLanguage': ['PT-br', 'bad code'] }).facets[RESOURCE_LANGUAGE_PROPERTY]).toEqual(
+    ['pt-BR', 'bad code'],
+  );
   expect(RESOURCE_LANGUAGE_SELECTION_LIMIT).toBe(64);
 
   const condition: FilterDocument = {
@@ -58,16 +57,21 @@ test('resource languages canonicalize, round-trip as one OR filter and leave the
       { or: [{ statement: { property: 'schema:genre', in: ['mystery'] } }, { type: { in: ['schema:Book'] } }] },
     ],
   };
-  const href = refinementHref('en', 'Mira', {
-    type: 'schema:Book',
-    facetValues: { [RESOURCE_LANGUAGE_PROPERTY]: languages, 'schema:genre': ['mystery'] },
-    languages: ['en', 'fr'],
-    kinds: ['article', 'video'],
-    condition,
-    filter: searchFilterWithScope(undefined, scope),
-    resourceScope: scope,
-    ratingPopulation,
-  }, 'rating');
+  const href = refinementHref(
+    'en',
+    'Mira',
+    {
+      type: 'schema:Book',
+      facetValues: { [RESOURCE_LANGUAGE_PROPERTY]: languages, 'schema:genre': ['mystery'] },
+      languages: ['en', 'fr'],
+      kinds: ['article', 'video'],
+      condition,
+      filter: searchFilterWithScope(undefined, scope),
+      resourceScope: scope,
+      ratingPopulation,
+    },
+    'rating',
+  );
   const roundTrip = searchLoaderDeps(record(new URL(href, 'https://search.test').searchParams));
   expect(roundTrip.facets[RESOURCE_LANGUAGE_PROPERTY]).toEqual(languages);
   expect(roundTrip.type).toBe('schema:Book');
@@ -106,11 +110,7 @@ test('bounded count-free facet state keeps absent and malformed selections remov
     status: 'ready',
     page: { as_of, facets: [{ property: RESOURCE_LANGUAGE_PROPERTY, values, next: 'opaque-next' }] },
   };
-  const model = resourceLanguageRefinement(
-    [languageProperty],
-    ['PT-br', 'pt-BR', 'de-CH', 'bad code'],
-    ready,
-  );
+  const model = resourceLanguageRefinement([languageProperty], ['PT-br', 'pt-BR', 'de-CH', 'bad code'], ready);
   expect(model).toMatchObject({
     applicability: 'applicable',
     readiness: 'ready',

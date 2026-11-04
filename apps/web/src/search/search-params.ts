@@ -133,8 +133,7 @@ export function facetValuesFromSearch(search: Record<string, unknown>): SearchFa
     if (!key.startsWith('f.') || key.length <= 2) continue;
     const property = key.slice(2);
     if (typeof value === 'string')
-      facets[property] =
-        property === RESOURCE_LANGUAGE_PROPERTY ? canonicalResourceLanguageValues([value]) : [value];
+      facets[property] = property === RESOURCE_LANGUAGE_PROPERTY ? canonicalResourceLanguageValues([value]) : [value];
     else if (Array.isArray(value)) {
       if (value.length > FILTER_LIMITS.in || value.some((item) => typeof item !== 'string'))
         throw new Error('Invalid facet values');

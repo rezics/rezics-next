@@ -289,7 +289,10 @@ test('the live Search filter renders a separate resource-language refinement wit
 test('resource-language refusal, preparation, unavailable and missing-release states keep selected values repairable', () => {
   const stateMessages = [
     [{ status: 'refused', httpStatus: 403, code: 'forbidden' } as const, m.refinement_refused({}, options.en)],
-    [{ status: 'preparing', httpStatus: 202, code: 'index_not_ready' } as const, m.search_reader_facets_not_ready({}, options.en)],
+    [
+      { status: 'preparing', httpStatus: 202, code: 'index_not_ready' } as const,
+      m.search_reader_facets_not_ready({}, options.en),
+    ],
     [{ status: 'unavailable', code: 'transport_error' } as const, m.search_reader_facets_unavailable({}, options.en)],
   ] as const;
   for (const [state, message] of stateMessages) {

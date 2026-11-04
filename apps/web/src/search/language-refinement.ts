@@ -99,7 +99,9 @@ export function resourceLanguageRefinement(
       : !state
         ? 'not-requested'
         : state.status === 'ready'
-          ? (facet ? 'ready' : 'invalid')
+          ? facet
+            ? 'ready'
+            : 'invalid'
           : state.status;
   const current = facet?.values ?? [];
   const canonicalCurrent = current
@@ -133,10 +135,7 @@ export function resourceLanguageRefinement(
     });
   }
   const retry =
-    readiness === 'preparing' ||
-    readiness === 'unavailable' ||
-    readiness === 'invalid' ||
-    readiness === 'restart';
+    readiness === 'preparing' || readiness === 'unavailable' || readiness === 'invalid' || readiness === 'restart';
   return {
     property: RESOURCE_LANGUAGE_PROPERTY,
     applicability,

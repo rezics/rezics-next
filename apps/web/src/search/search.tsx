@@ -711,15 +711,16 @@ export function SearchPage({
                 ?.values.find((entry) => entry.value === value)?.labels
             : undefined
           : page?.status === 'ready'
-          ? page.page.facets.find((entry) => entry.property === property)?.values.find((entry) => entry.value === value)
-              ?.labels
-          : undefined;
+            ? page.page.facets
+                .find((entry) => entry.property === property)
+                ?.values.find((entry) => entry.value === value)?.labels
+            : undefined;
       const selectedLanguage =
-        property === RESOURCE_LANGUAGE_PROPERTY ? resourceLanguage?.selected.find((entry) => entry.value === value) : undefined;
-      const languageLabel =
         property === RESOURCE_LANGUAGE_PROPERTY
-          ? localizedLabel(valueLabels ?? {}, locale)
+          ? resourceLanguage?.selected.find((entry) => entry.value === value)
           : undefined;
+      const languageLabel =
+        property === RESOURCE_LANGUAGE_PROPERTY ? localizedLabel(valueLabels ?? {}, locale) : undefined;
       const fallbackValue =
         property === RESOURCE_LANGUAGE_PROPERTY
           ? selectedLanguage?.needsRepair
@@ -728,11 +729,16 @@ export function SearchPage({
           : m.search_constraint_identity_value_unavailable({}, options);
       add(
         `facet:${property}:${value}`,
-        `${property === 'type'
-          ? m.search_subject_types({}, options)
-          : property === RESOURCE_LANGUAGE_PROPERTY
-            ? m.search_resource_language({}, options)
-            : label(data?.selectedFacetLabels[property], m.search_constraint_identity_property_unavailable({}, options))}: ${
+        `${
+          property === 'type'
+            ? m.search_subject_types({}, options)
+            : property === RESOURCE_LANGUAGE_PROPERTY
+              ? m.search_resource_language({}, options)
+              : label(
+                  data?.selectedFacetLabels[property],
+                  m.search_constraint_identity_property_unavailable({}, options),
+                )
+        }: ${
           property === RESOURCE_LANGUAGE_PROPERTY
             ? languageLabel?.text.trim() || fallbackValue
             : label(valueLabels, fallbackValue)
