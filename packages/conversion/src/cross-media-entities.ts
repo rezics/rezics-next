@@ -33,6 +33,14 @@ export const vndbReleaseNameLimits = Object.freeze({
 const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
 const durationSecond = 'http://www.wikidata.org/entity/Q11574';
 const episodeOrdinalPattern = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u;
+/** Finite admitted staff aliases per person; overflow is rejected, never truncated. */
+export const vndbStaffNameLimit = 64;
+export const vndbStaffNameLimits = Object.freeze({
+  maxAliases: vndbStaffNameLimit,
+  maxNameChars: 200,
+  recordBytes: vndbLimits.recordBytes,
+  maxCommands: vndbStaffNameLimit + 1,
+});
 
 export type SourceMapping = {
   status: 'existing' | 'proposed' | 'omitted';
@@ -279,6 +287,26 @@ function text(value: unknown, pointer: string, max: number, empty = false): stri
   return value as string;
 }
 
+/** COPY integer cells arrive as decimal text from the dump decoder. */
+function copyAid(value: unknown, pointer: string): string {
+  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) fail(pointer);
+  const n = Number(value);
+  if (!Number.isSafeInteger(n)) fail(pointer);
+  return value as string;
+}
+
+function array(value: unknown, pointer: string): unknown[] {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    utilTypes.isProxy(value) ||
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype
+  )
+    fail(pointer);
+  return value as unknown[];
+}
+
 function nativeNumber(value: unknown, pointer: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) fail(pointer, 'invalid_identifier');
   return value as number;
@@ -379,9 +407,78 @@ type Projected = {
   names?: { language: string; text: string }[];
   alternateNames?: { language: string; text: string }[];
   identifier: string;
+  nameFacts?: { language: string; text: string }[];
+  maxCommands?: number;
   ignored?: ConversionDiagnostic;
   diagnostics?: ConversionDiagnostic[];
 };
+
+function projectStaffNames(
+  raw: object,
+  expected: string,
+): {
+  labels: Record<string, string>;
+  nameFacts?: { language: string; text: string }[];
+  normalized: Normalized;
+  diagnostics: ConversionDiagnostic[];
+} {
+  const aliasesValue = own(raw, 'aliases', '/aliases');
+  const mainValue = own(raw, 'main', '/main');
+  const diagnostics: ConversionDiagnostic[] = [];
+  if (aliasesValue === undefined) {
+    const name = own(raw, 'name', '/name');
+    const label = name !== undefined ? text(name, '/name', 500) : expected;
+    return {
+      labels: { und: label },
+      ...(name !== undefined ? { nameFacts: [{ language: 'und', text: label }] } : {}),
+      normalized: { id: expected, name: label },
+      diagnostics,
+    };
+  }
+  const rows = array(aliasesValue, '/aliases');
+  const length = Object.getOwnPropertyDescriptor(rows, 'length')!.value as number;
+  if (length > vndbStaffNameLimits.maxAliases) fail('/aliases', 'invalid_record_alias_limit');
+  const seen = new Map<string, string>();
+  const aliases: { id: string; aid: string; name: string }[] = [];
+  for (let index = 0; index < length; index++) {
+    const pointer = `/aliases/${index}`;
+    const item = own(rows, String(index), pointer);
+    if (item === undefined) fail(pointer, 'invalid_record');
+    const row = object(item, pointer);
+    const owner = own(row, 'id', `${pointer}/id`);
+    if (owner !== expected) fail(`${pointer}/id`, 'invalid_identifier');
+    const aid = copyAid(own(row, 'aid', `${pointer}/aid`), `${pointer}/aid`);
+    const aliasName = text(
+      own(row, 'name', `${pointer}/name`),
+      `${pointer}/name`,
+      vndbStaffNameLimits.maxNameChars,
+    );
+    if (seen.has(aid)) fail(`${pointer}/aid`, 'duplicate_alias_key');
+    seen.set(aid, aliasName);
+    aliases.push({ id: expected, aid, name: aliasName });
+  }
+  aliases.sort((left, right) => Number(left.aid) - Number(right.aid) || compareText(left.name, right.name));
+  let preferred: string | undefined;
+  let main: string | null = null;
+  if (mainValue !== undefined && mainValue !== null && mainValue !== '0') {
+    main = copyAid(mainValue, '/main');
+    preferred = aliases.find((alias) => alias.aid === main)?.name;
+    if (preferred === undefined) diagnostics.push({ pointer: '/main', code: 'missing_preferred_alias' });
+  } else {
+    main = mainValue === '0' ? '0' : null;
+    diagnostics.push({ pointer: '/main', code: 'missing_preferred_alias' });
+  }
+  const additional = [...new Set(aliases.map((alias) => alias.name))]
+    .filter((name) => name !== preferred)
+    .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  const ordered = preferred === undefined ? additional : [preferred, ...additional];
+  return {
+    labels: { und: preferred ?? expected },
+    nameFacts: ordered.map((value) => ({ language: 'und', text: value })),
+    normalized: { id: expected, name: preferred ?? expected, main, aliases },
+    diagnostics,
+  };
+}
 
 function copyFlag(value: unknown, pointer: string): boolean {
   if (value === true || value === 't') return true;
@@ -553,7 +650,22 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       names: projectedTitles.names,
       alternateNames: projectedTitles.alternateNames,
       identifier: expected,
+      maxCommands: vndbReleaseNameLimits.maxCommands,
       diagnostics: projectedTitles.diagnostics,
+    };
+  }
+  if (kind === 'vndb-staff') {
+    const names = projectStaffNames(raw, expected);
+    if (Buffer.byteLength(JSON.stringify(names.normalized), 'utf8') > vndbStaffNameLimits.recordBytes)
+      fail('', 'invalid_record_byte_limit');
+    return {
+      normalized: names.normalized,
+      type: profile.type,
+      labels: names.labels,
+      identifier: expected,
+      ...(names.nameFacts ? { nameFacts: names.nameFacts } : {}),
+      maxCommands: vndbStaffNameLimits.maxCommands,
+      diagnostics: names.diagnostics,
     };
   }
   const name = own(raw, 'name', '/name');
@@ -699,7 +811,9 @@ function convert(
   const profile = profiles[kind];
   const identifierContent = kind === 'bangumi-episode' ? url : projected.identifier;
   const names =
-    projected.names ?? Object.entries(projected.labels).map(([language, value]) => ({ language, text: value }));
+    projected.names ??
+    projected.nameFacts ??
+    Object.entries(projected.labels).map(([language, value]) => ({ language, text: value }));
   const facts: BatchStatement[] = [
     fact(profile.identifier, identifierContent),
     ...names.map((name) => fact('schema:name', name)),
@@ -783,7 +897,8 @@ function convert(
       });
     }
   }
-  if (proposals.length > vndbReleaseNameLimits.maxCommands) fail('', 'invalid_record_proposals');
+  if (proposals.length > (projected.maxCommands ?? vndbReleaseNameLimits.maxCommands))
+    fail('', 'invalid_record_proposals');
   for (let offset = 0; offset < proposals.length; offset += BATCH_LIMIT)
     if (checkBatchWrite({ commands: proposals.slice(offset, offset + BATCH_LIMIT) }).length)
       fail('', 'invalid_record_proposals');

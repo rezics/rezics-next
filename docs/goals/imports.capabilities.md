@@ -676,6 +676,18 @@ not additional check requests.
   resolved staff ID via `aid`, never the alias text. Organization or non-`s*` targets withhold the credit. Voice
   keeps VN and character endpoints. Bindings are current accepted/adopted `vndb.credit_type` Concepts. Person
   identities are imported before works so credit rows can name native holders.
+- `production operator imports VNDB staff preferred and additional source names through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-staff-names.test.ts`.
+  Frozen scenario names:
+  `preferred alias not last supplies the label and every admitted source name`;
+  `operator plans preferred-not-last aliases and imports every admitted source name`;
+  `authored COPY headers feed the dump reader and sealed reopen keeps name command keys`;
+  `production operator imports VNDB staff preferred and additional source names through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed as worker-check in this attempt; no native pass is claimed. Fixtures are marked authored. Decision:
+  preferred label is `staff.main` matched to the same-owner `staff_alias.aid`; every distinct admitted alias name is
+  an `und` `schema:name` fact with the preferred name first and remaining names in codepoint order; `main=0` or a
+  missing same-owner alias keeps other names and uses the staff id as the bootstrap label.
 - `Ordinary operator exact ACK interruption and restart recovery`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-ack-recovery.test.ts`.
   The [ACK report](../research/imports-audit/cli-ack-recovery.md#native-receipt) records one native case,

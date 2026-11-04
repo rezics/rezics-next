@@ -20,7 +20,7 @@ The [package exports](package.json) are only these entry points:
 | `@rezics/conversion/source-vocabulary`    | Released binding, identity, row, gap and result types                                                                                      |
 | `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                                                        |
 | `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                                                            |
-| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `CrossMediaEntityConversion`                                      |
+| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `vndbStaffNameLimit`, `CrossMediaEntityConversion`                 |
 
 Each converter takes an input, an optional context, and optional registered
 converter options. The option is `converterRevision`; import the matching
@@ -343,6 +343,33 @@ on this table and does not inherit the `vn_titles` empty-cell decision. Title
 language is not a whole-release `schema:inLanguage` fact. Scalar `{id,title}`
 payloads remain the untagged legacy envelope for sealed journals. Date, status
 and completeness stay on the release-fidelity vocabulary path.
+
+### VNDB staff preferred and additional source names
+
+Revision `cross-media-entities@4` projects a selected VNDB staff Person from the staff row plus its
+bounded `staff_alias` collection. `staff.main` is the preferred-alias selector (source join
+bookkeeping, not a published statement). The matching `staff_alias.aid` of the same owner supplies
+the initial `und` label. Every distinct admitted `staff_alias.name` is an independently readable
+`schema:name` fact on that same identity, also in `und`; proposals put the preferred name first and
+sort remaining names by codepoint. The source supplies no per-name language here; script and
+`staff.lang` are not inferred. Alias `id`/`aid` remain join keys, never an external Person identity.
+Both `staff.main` and `staff_alias.aid` are COPY-decoded PostgreSQL integer text; alias keys must be
+positive decimal values, while `main=0` means no available preferred selector.
+A matching spelling on another owner never merges identities or supplies the preferred label.
+Missing preferred association keeps other admitted names and uses the staff id as the bootstrap label
+while diagnosing `/main`. Duplicate or conflicting alias keys, wrong COPY integer text for
+`aid`/`main`, another owner's alias row, and more than 64 aliases or a 64 KiB normalized projection
+are rejected rather than last-row selection or truncation. One selected staff record contributes at
+most 65 conversion commands (identifier plus 64 names), below the existing 100-command batch limit.
+`staff_alias.latin`, gender, biography and websites stay outside this mapping. Old scalar `{name}`
+payloads remain convertible so sealed journals keep their original body and key; the new revision lets
+unchanged dump bytes acquire the additional name facts through the existing refresh path.
+
+Decision: if `staff.main` does not resolve to an admitted same-owner alias, keep the staff key as the
+bootstrap label and order remaining distinct names by codepoint.
+
+Focused pure controls live in `tests/vndb-staff-names.test.ts`. Exact credited roles and
+credited-as spelling remain the staff-credit coordinator.
 
 ### VNDB native alternate-name contract
 

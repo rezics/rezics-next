@@ -14,6 +14,8 @@ import {
   type SourceMapping,
   vndbProducerParentEnds,
   vndbRecordUrl,
+  vndbStaffNameLimit,
+  vndbStaffNameLimits,
 } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
 import { subjectSlug } from '@rezics/definitions/slug';
@@ -761,8 +763,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   }
   const releases = new Set<string>(),
     chars = new Set<string>(),
-    aliases = new Set<string>(),
-    staff = new Set<string>();
+    aliases = new Set<string>();
   for await (const row of input.rows('vndb', 'releases_vn'))
     if (vnIds.has(text(row, 'vid'))) releases.add(text(row, 'id'));
   for await (const row of input.rows('vndb', 'releases_vn')) {
@@ -864,21 +865,93 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       ...tagged(vnFamily.get(text(row, 'vid'))),
     });
   }
-  for await (const row of input.rows('vndb', 'staff_alias'))
-    if (aliases.has(text(row, 'aid'))) staff.add(text(row, 'id'));
   const aliasToStaff = new Map<string, string>();
-  const aliasNames = new Map<string, string>();
-  const staffNames = new Map<string, string>();
   for await (const row of input.rows('vndb', 'staff_alias')) {
-    if (!staff.has(text(row, 'id'))) continue;
-    aliasToStaff.set(text(row, 'aid'), text(row, 'id'));
-    if (typeof row.name === 'string' && row.name) {
-      aliasNames.set(text(row, 'aid'), row.name);
-      staffNames.set(text(row, 'id'), row.name);
-    }
+    const aid = text(row, 'aid');
+    if (aliases.has(aid)) aliasToStaff.set(aid, text(row, 'id'));
   }
+  const staff = new Set(aliasToStaff.values());
   const staffRows = new Set<string>();
-  for await (const row of input.rows('vndb', 'staff')) if (staff.has(text(row, 'id'))) staffRows.add(text(row, 'id'));
+  const staffRowById = new Map<string, Row>();
+  const preferredAliasOwners = new Map<string, Set<string>>();
+  for await (const row of input.rows('vndb', 'staff')) {
+    const id = text(row, 'id');
+    if (!staff.has(id)) continue;
+    staffRows.add(id);
+    staffRowById.set(id, row);
+    const main = row.main;
+    if (typeof main !== 'string' || !/^[1-9][0-9]*$/.test(main) || !Number.isSafeInteger(Number(main))) continue;
+    const owners = preferredAliasOwners.get(main) ?? new Set<string>();
+    owners.add(id);
+    preferredAliasOwners.set(main, owners);
+  }
+  const aliasNames = new Map<string, string>();
+  const staffAliasLists = new Map<string, { id: string; aid: string; name: string }[]>();
+  const aliasAidOwners = new Map<string, string>();
+  const staffAliasRejected = new Set<string>();
+  const staffAliasOverflowReported = new Set<string>();
+  const preferredOwnerGaps = new Set<string>();
+  for await (const row of input.rows('vndb', 'staff_alias')) {
+    const sid = text(row, 'id');
+    const aid = row.aid;
+    if (typeof aid === 'string') {
+      for (const selectedOwner of preferredAliasOwners.get(aid) ?? []) {
+        const gapKey = `${selectedOwner}\u0000${aid}`;
+        if (selectedOwner !== sid && !preferredOwnerGaps.has(gapKey)) {
+          const staffRow = staffRowById.get(selectedOwner);
+          if (staffRow) gap('vndb', 'staff', staffRow, 'Preferred staff alias belongs to another owner');
+          preferredOwnerGaps.add(gapKey);
+        }
+      }
+    }
+    if (!staff.has(sid)) continue;
+    if (typeof row.name === 'string' && row.name) aliasNames.set(text(row, 'aid'), row.name);
+    const aliasName = row.name;
+    if (typeof aid !== 'string' || !/^[1-9][0-9]*$/.test(aid) || !Number.isSafeInteger(Number(aid))) {
+      gap('vndb', 'staff_alias', row, 'Invalid VNDB staff alias identity');
+      continue;
+    }
+    if (
+      typeof aliasName !== 'string' ||
+      !aliasName.isWellFormed() ||
+      !aliasName.trim() ||
+      aliasName.length > vndbStaffNameLimits.maxNameChars
+    ) {
+      gap('vndb', 'staff_alias', row, 'Staff alias name is not admitted as a native name fact');
+      continue;
+    }
+    const owner = aliasAidOwners.get(aid);
+    if (owner !== undefined && owner !== sid) {
+      gap('vndb', 'staff_alias', row, 'Staff alias key belongs to another owner');
+      staffAliasLists.set(
+        owner,
+        (staffAliasLists.get(owner) ?? []).filter((item) => item.aid !== aid),
+      );
+      aliasAidOwners.delete(aid);
+      continue;
+    }
+    const list = staffAliasLists.get(sid) ?? [];
+    if (list.some((item) => item.aid === aid)) {
+      gap('vndb', 'staff_alias', row, 'Duplicate staff alias key');
+      staffAliasLists.set(
+        sid,
+        list.filter((item) => item.aid !== aid),
+      );
+      aliasAidOwners.delete(aid);
+      continue;
+    }
+    if (list.length >= vndbStaffNameLimit) {
+      staffAliasRejected.add(sid);
+      if (!staffAliasOverflowReported.has(sid)) {
+        gap('vndb', 'staff_alias', row, 'Staff alias membership exceeds the bounded import cap');
+        staffAliasOverflowReported.add(sid);
+      }
+      continue;
+    }
+    aliasAidOwners.set(aid, sid);
+    list.push({ id: sid, aid, name: aliasName });
+    staffAliasLists.set(sid, list);
+  }
   const withheldCredits = new Set<GraphEdgeDraft>();
   for (const draft of plan.edges) {
     if (draft.source !== 'vndb' || !draft.target.startsWith('staff-alias:')) continue;
@@ -926,14 +999,15 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     }
     plan.entities.vndb.push({ source: 'vndb', key: text(row, 'id'), revision: null, payload: row });
   }
-  for await (const row of input.rows('vndb', 'staff'))
-    if (staff.has(text(row, 'id')))
-      plan.entities.vndb.push({
-        source: 'vndb',
-        key: text(row, 'id'),
-        revision: null,
-        payload: { ...row, ...(staffNames.get(text(row, 'id')) ? { name: staffNames.get(text(row, 'id')) } : {}) },
-      });
+  for (const [id, row] of staffRowById) {
+    if (staffAliasRejected.has(id)) continue;
+    plan.entities.vndb.push({
+      source: 'vndb',
+      key: id,
+      revision: null,
+      payload: { ...row, aliases: staffAliasLists.get(id) ?? [] },
+    });
+  }
   const releaseTitleRows: Row[] = [];
   for await (const row of input.rows('vndb', 'releases_titles')) {
     if (typeof row.id !== 'string' || !releases.has(row.id)) continue;
