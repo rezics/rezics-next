@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useMemo, useState } from 'react';
-import { catalogueFileReaderVisit, type CatalogueFileReaderVisit } from '../features/catalogue/catalogue-file-reader/model';
+import {
+  catalogueFileReaderVisit,
+  type CatalogueFileReaderVisit,
+} from '../features/catalogue/catalogue-file-reader/model';
 import { CatalogueFileReader } from '../features/catalogue/catalogue-file-reader/reader';
 import { catalogueFileProfileFixture, catalogueFile } from '../kernel/fake/catalogue-file-profile';
 import { AppShell } from '../shell/shell';
@@ -10,7 +13,10 @@ import { PatternStory } from './page';
 
 function CatalogueFileReaderStory({ unsupported = false }: { unsupported?: boolean }) {
   const locale = getLocale();
-  const fixture = useMemo(() => catalogueFileProfileFixture(unsupported ? 'unreleased' : 'ready', locale), [locale, unsupported]);
+  const fixture = useMemo(
+    () => catalogueFileProfileFixture(unsupported ? 'unreleased' : 'ready', locale),
+    [locale, unsupported],
+  );
   const [visit, setVisit] = useState<CatalogueFileReaderVisit>();
   useEffect(() => {
     let live = true;
@@ -18,26 +24,30 @@ function CatalogueFileReaderStory({ unsupported = false }: { unsupported?: boole
       if (!live || !result.ok) return;
       const stream = result.stream;
       const relationPages = stream
-        ? [{
-            property: stream.property,
-            direction: stream.direction,
-            rows: result.rows.map((row) => ({
+        ? [
+            {
               property: stream.property,
-              subject: row.holder,
-              statement: row.statement,
-              summary: row.summary,
-              related: row.related,
-            })),
-            complete: result.next === null,
-          }]
+              direction: stream.direction,
+              rows: result.rows.map((row) => ({
+                property: stream.property,
+                subject: row.holder,
+                statement: row.statement,
+                summary: row.summary,
+                related: row.related,
+              })),
+              complete: result.next === null,
+            },
+          ]
         : [];
-      setVisit(catalogueFileReaderVisit({
-        locale,
-        public: result.public,
-        release: result.release,
-        digest: result.digest,
-        relationPages,
-      }));
+      setVisit(
+        catalogueFileReaderVisit({
+          locale,
+          public: result.public,
+          release: result.release,
+          digest: result.digest,
+          relationPages,
+        }),
+      );
     });
     return () => {
       live = false;
@@ -47,7 +57,9 @@ function CatalogueFileReaderStory({ unsupported = false }: { unsupported?: boole
     return (
       <PatternStory path={`/subjects/${catalogueFile}/episode-file`} visitor="Signed Out">
         <AppShell>
-          <div className="mx-auto max-w-4xl p-6" role="status">{m.candidate_loading()}</div>
+          <div className="mx-auto max-w-4xl p-6" role="status">
+            {m.candidate_loading()}
+          </div>
         </AppShell>
       </PatternStory>
     );
@@ -76,7 +88,8 @@ const meta = {
     },
     docs: {
       description: {
-        component: 'Illustrative ordinary-reader states built from a bounded supplied catalogue sample. The sample establishes neither native availability nor rendered acceptance.',
+        component:
+          'Illustrative ordinary-reader states built from a bounded supplied catalogue sample. The sample establishes neither native availability nor rendered acceptance.',
       },
     },
   },

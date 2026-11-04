@@ -204,9 +204,7 @@ function CatalogueFileProfileLive({
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const href = subjectHref({ id, label: title.text }, locale).href;
   const sourceId = catalogueFileSourceId(returnSourceId);
-  const sourceReturnHref = sourceId
-    ? catalogueFileSourceReturnHref(sourceId, locale)
-    : undefined;
+  const sourceReturnHref = sourceId ? catalogueFileSourceReturnHref(sourceId, locale) : undefined;
   const codec = read ? codecProperty(read.release, read.public.subject.type) : undefined;
   const codecEnum = (() => {
     const schema = codec ? read?.release.properties[codec]?.value : undefined;

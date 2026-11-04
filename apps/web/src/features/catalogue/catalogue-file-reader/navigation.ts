@@ -17,11 +17,7 @@ export function catalogueFileSourceReturnHref(id: string, locale: string, label 
 }
 
 /** Add a single same-locale source ID to an ordinary Subject destination. */
-export function catalogueFileDestinationHref(
-  href: string,
-  sourceId: string,
-  locale: string,
-): string | undefined {
+export function catalogueFileDestinationHref(href: string, sourceId: string, locale: string): string | undefined {
   if (!fileUuid.test(sourceId) || !href.startsWith(`/${locale}/subjects/`)) return;
   const url = new URL(href, 'https://rezics.invalid');
   if (url.origin !== 'https://rezics.invalid' || !url.pathname.startsWith(`/${locale}/subjects/`)) return;
@@ -31,11 +27,7 @@ export function catalogueFileDestinationHref(
 }
 
 /** Preserve one validated source subject when opening its existing correction profile. */
-export function catalogueFileCorrectionHref(
-  href: string,
-  sourceId: string,
-  locale: string,
-): string | undefined {
+export function catalogueFileCorrectionHref(href: string, sourceId: string, locale: string): string | undefined {
   if (!fileUuid.test(sourceId) || !href.startsWith(`/${locale}/subjects/`)) return;
   const url = new URL(href, 'https://rezics.invalid');
   if (url.origin !== 'https://rezics.invalid' || !url.pathname.startsWith(`/${locale}/subjects/`)) return;

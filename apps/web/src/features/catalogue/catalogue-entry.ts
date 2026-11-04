@@ -179,9 +179,7 @@ export const catalogueEntries = {
     label?: string | undefined;
     release?: Pick<Release, 'types' | 'properties'> | undefined;
     returnSourceId?: string | undefined;
-  }):
-    | CatalogueEntry
-    | undefined => {
+  }): CatalogueEntry | undefined => {
     if (id) {
       if (!type || !release || !isFileOrGroupType(release, type)) return;
       const base = `${subject({ id, label, locale })}/file`;

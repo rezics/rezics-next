@@ -125,18 +125,26 @@ test('file companion entry needs current type admission and eight locales keep t
   );
   expect(html).toContain('/file');
   expect(html).toContain(`fileSource=${catalogueFile}`);
-  expect(renderToStaticMarkup(createElement(CatalogueFileProfileEntry, {
-    id: catalogueFile,
-    type: 'schema:MediaObject',
-    locale: 'en',
-  }))).toBe('');
-  expect(catalogueEntries.catalogueFile({ id: catalogueFile, type: 'schema:MediaObject', locale: 'en' })).toBeUndefined();
-  expect(catalogueEntries.catalogueFile({
-    id: catalogueFile,
-    type: 'schema:MediaObject',
-    locale: 'en',
-    release: admitted.release,
-  })?.href).toContain('/file');
+  expect(
+    renderToStaticMarkup(
+      createElement(CatalogueFileProfileEntry, {
+        id: catalogueFile,
+        type: 'schema:MediaObject',
+        locale: 'en',
+      }),
+    ),
+  ).toBe('');
+  expect(
+    catalogueEntries.catalogueFile({ id: catalogueFile, type: 'schema:MediaObject', locale: 'en' }),
+  ).toBeUndefined();
+  expect(
+    catalogueEntries.catalogueFile({
+      id: catalogueFile,
+      type: 'schema:MediaObject',
+      locale: 'en',
+      release: admitted.release,
+    })?.href,
+  ).toContain('/file');
   expect(catalogueEntries.catalogueFile({ id: catalogueFile, type: 'bf:Instance', locale: 'en' })).toBeUndefined();
   expect(catalogueGroup).toContain('a204');
   expect(catalogueFileTwo).toContain('a202');

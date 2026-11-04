@@ -11,11 +11,7 @@ import { ProfileBoundNotes, ProfileSourceList } from '../music-reader-view';
 import type { SubjectPageData } from '../../pages/subject';
 import { boundedProfileRelations, profileRelationPages } from '../../pages/views';
 import { linkClass, linkColor, PlainLink, type PageLink } from '../../pages/shared';
-import {
-  catalogueFileDestinationHref,
-  catalogueFileSourceId,
-  catalogueFileSourceReturnHref,
-} from './navigation';
+import { catalogueFileDestinationHref, catalogueFileSourceId, catalogueFileSourceReturnHref } from './navigation';
 import { loadCatalogueFileReaderDefinitions, type CatalogueFileReaderDefinitions } from './actions';
 import {
   catalogueFileReaderCandidate,
@@ -25,7 +21,8 @@ import {
   type CatalogueFileReaderVisit,
 } from './model';
 
-const readerLinkClass = 'inline-flex min-h-11 min-w-11 max-w-full items-center break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
+const readerLinkClass =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8';
 
 type Statement = SubjectRead['subject']['statements'][string][number];
 type FilePart = Statement | Statement['qualifiers'][number];
@@ -86,7 +83,15 @@ function FileValue({
   return <CandidateValue snak={part} related={publicRead.related} locale={locale} link={link} />;
 }
 
-function FactValue({ fact, visit, link }: { fact: CatalogueFileFact; visit: CatalogueFileReaderVisit; link: PageLink }) {
+function FactValue({
+  fact,
+  visit,
+  link,
+}: {
+  fact: CatalogueFileFact;
+  visit: CatalogueFileReaderVisit;
+  link: PageLink;
+}) {
   const o = options(visit.locale);
   const release = visit.release;
   if (!release || !visit.digest) return null;
@@ -117,7 +122,10 @@ function FactValue({ fact, visit, link }: { fact: CatalogueFileFact; visit: Cata
                     const label = pickText(release.properties[part.property.id]?.labels ?? {}, visit.locale);
                     const property = label.text || part.property.id;
                     return (
-                      <div key={index} className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                      <div
+                        key={index}
+                        className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+                      >
                         <dt className="text-muted-foreground">{property}</dt>
                         <dd className="min-w-0 [overflow-wrap:anywhere]">
                           <FileValue part={part} publicRead={visit.public} locale={visit.locale} link={link} />
@@ -139,7 +147,10 @@ function FactValue({ fact, visit, link }: { fact: CatalogueFileFact; visit: Cata
                           const label = pickText(release.properties[part.property.id]?.labels ?? {}, visit.locale);
                           const property = label.text || part.property.id;
                           return (
-                            <li key={partIndex} className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                            <li
+                              key={partIndex}
+                              className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+                            >
                               <span className="text-muted-foreground">{property}</span>
                               <span className="min-w-0 [overflow-wrap:anywhere]">
                                 <FileValue part={part} publicRead={visit.public} locale={visit.locale} link={link} />
@@ -180,13 +191,14 @@ function AssociationList({ visit, link }: { visit: CatalogueFileReaderVisit; lin
           const sourceLabel = association.direction === 'forward' ? currentTitle : association.source.label;
           const targetLabel = association.direction === 'forward' ? association.target.label : currentTitle;
           const relationLabel = association.label.text || association.property;
-          const kindLabel = association.kind === 'episode'
-            ? m.catalogue_file_episode({}, o)
-            : association.kind === 'release'
-              ? m.catalogue_file_release({}, o)
-              : association.kind === 'group'
-                ? m.catalogue_file_group({}, o)
-                : m.catalogue_file_title({}, o);
+          const kindLabel =
+            association.kind === 'episode'
+              ? m.catalogue_file_episode({}, o)
+              : association.kind === 'release'
+                ? m.catalogue_file_release({}, o)
+                : association.kind === 'group'
+                  ? m.catalogue_file_group({}, o)
+                  : m.catalogue_file_title({}, o);
           return (
             <li key={association.key}>
               <ContentItemFrame as="div" className="min-w-0 space-y-2 p-4">
@@ -211,7 +223,11 @@ function AssociationList({ visit, link }: { visit: CatalogueFileReaderVisit; lin
                     {related.label || m.subject_value_unlabelled({}, o)}
                   </Link>
                 ) : association.readability === 'concealed' ? (
-                  <p>{association.kind === 'episode' ? m.catalogue_file_episode_concealed({}, o) : m.candidate_value_unavailable({}, o)}</p>
+                  <p>
+                    {association.kind === 'episode'
+                      ? m.catalogue_file_episode_concealed({}, o)
+                      : m.candidate_value_unavailable({}, o)}
+                  </p>
                 ) : association.historical ? (
                   <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
                 ) : (
@@ -222,7 +238,10 @@ function AssociationList({ visit, link }: { visit: CatalogueFileReaderVisit; lin
                     {association.statement.qualifiers.map((part, index) => {
                       const label = pickText(visit.release?.properties[part.property.id]?.labels ?? {}, visit.locale);
                       return (
-                        <div key={index} className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                        <div
+                          key={index}
+                          className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+                        >
                           <dt className="text-muted-foreground">{label.text || part.property.id}</dt>
                           <dd className="min-w-0 [overflow-wrap:anywhere]">
                             <FileValue part={part} publicRead={visit.public} locale={visit.locale} link={link} />
@@ -241,9 +260,15 @@ function AssociationList({ visit, link }: { visit: CatalogueFileReaderVisit; lin
                         </p>
                         <ul className="space-y-1">
                           {reference.parts.map((part, partIndex) => {
-                            const label = pickText(visit.release?.properties[part.property.id]?.labels ?? {}, visit.locale);
+                            const label = pickText(
+                              visit.release?.properties[part.property.id]?.labels ?? {},
+                              visit.locale,
+                            );
                             return (
-                              <li key={partIndex} className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                              <li
+                                key={partIndex}
+                                className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+                              >
                                 <span className="text-muted-foreground">{label.text || part.property.id}</span>
                                 <span className="min-w-0 [overflow-wrap:anywhere]">
                                   <FileValue part={part} publicRead={visit.public} locale={visit.locale} link={link} />
@@ -274,13 +299,7 @@ function AssociationList({ visit, link }: { visit: CatalogueFileReaderVisit; lin
   );
 }
 
-export function CatalogueFileReader({
-  visit,
-  link = PlainLink,
-}: {
-  visit: CatalogueFileReaderVisit;
-  link?: PageLink;
-}) {
+export function CatalogueFileReader({ visit, link = PlainLink }: { visit: CatalogueFileReaderVisit; link?: PageLink }) {
   const o = options(visit.locale);
   const pickedTitle = pickText(visit.public.subject.labels, visit.locale);
   const title = pickedTitle.text || m.subject_value_unlabelled({}, o);
@@ -346,11 +365,7 @@ export function CatalogueFileReader({
   );
 }
 
-function definitionsQueryKey(
-  publicRead: SubjectRead,
-  page: SubjectPageData,
-  locale: string,
-) {
+function definitionsQueryKey(publicRead: SubjectRead, page: SubjectPageData, locale: string) {
   return [
     'catalogue-file-reader-definitions',
     publicRead.subject.id,
@@ -433,13 +448,9 @@ export function CatalogueFileReturnLink({
   const Link = link;
   return (
     <p data-slot="catalogue-file-reader-return">
-      <Link
-        className={`${readerLinkClass} ${linkClass} ${linkColor}`}
-        href={href}
-      >
+      <Link className={`${readerLinkClass} ${linkClass} ${linkColor}`} href={href}>
         {m.catalogue_file_reader_return({}, options(locale))}
       </Link>
     </p>
   );
 }
-

@@ -15,12 +15,7 @@ import {
   selectedStatements,
   type FileStream,
 } from '../catalogue-file-profile/model';
-import {
-  fileTypeCandidates,
-  groupTypeCandidates,
-  isA,
-  isReleaseType,
-} from '../release-fidelity/model';
+import { fileTypeCandidates, groupTypeCandidates, isA, isReleaseType } from '../release-fidelity/model';
 import type { ProfileRelationPage } from '../../pages/views';
 
 type Statement = SubjectRead['subject']['statements'][string][number];
@@ -62,10 +57,7 @@ export type CatalogueFileReaderVisit = {
 };
 
 export function catalogueFileReaderCandidate(read: SubjectRead): boolean {
-  const known = new Set([
-    read.subject.type,
-    ...(read.summary?.types ?? []),
-  ]);
+  const known = new Set([read.subject.type, ...(read.summary?.types ?? [])]);
   return [...fileTypeCandidates, ...groupTypeCandidates].some((type) => known.has(type));
 }
 
@@ -74,9 +66,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isStatement(value: unknown): value is Statement {
-  if (!isRecord(value) || typeof value.id !== 'string' || !['normal', 'preferred', 'deprecated'].includes(String(value.rank)))
+  if (
+    !isRecord(value) ||
+    typeof value.id !== 'string' ||
+    !['normal', 'preferred', 'deprecated'].includes(String(value.rank))
+  )
     return false;
-  if (!isRecord(value.property) || typeof value.property.id !== 'string' || typeof value.property.data_type !== 'string')
+  if (
+    !isRecord(value.property) ||
+    typeof value.property.id !== 'string' ||
+    typeof value.property.data_type !== 'string'
+  )
     return false;
   if (!isRecord(value.value) || !['value', 'somevalue', 'novalue'].includes(String(value.value.type))) return false;
   if (!Array.isArray(value.qualifiers) || !Array.isArray(value.references) || !isRecord(value.rezics)) return false;
@@ -88,7 +88,8 @@ function relatedInfo(value: unknown, id: string): { type: string; labels: Record
   if (typeof value.id === 'string' && value.id !== id) return;
   const labels: Record<string, string> = {};
   if (isRecord(value.labels)) {
-    for (const [language, label] of Object.entries(value.labels)) if (typeof label === 'string') labels[language] = label;
+    for (const [language, label] of Object.entries(value.labels))
+      if (typeof label === 'string') labels[language] = label;
   }
   if (isRecord(value.label) && typeof value.label.value === 'string' && typeof value.label.language === 'string')
     labels[value.label.language] = value.label.value;
@@ -133,11 +134,13 @@ function factFields(
   return properties.flatMap((property) => {
     const statements = selectedStatements(publicRead.subject.statements[property]);
     if (!statements.length) return [];
-    return [{
-      property,
-      label: pickText(release.properties[property]?.labels ?? {}, locale),
-      statements,
-    }];
+    return [
+      {
+        property,
+        label: pickText(release.properties[property]?.labels ?? {}, locale),
+        statements,
+      },
+    ];
   });
 }
 
@@ -168,12 +171,14 @@ function associations(
     seen.add(key);
     const readability = relatedReadable(related, relatedId);
     const relatedLabel = pickText(info.labels, locale);
-    const source = stream.direction === 'forward'
-      ? { id: publicRead.subject.id, label: title.text, ...(title.lang ? { lang: title.lang } : {}) }
-      : { id: relatedId, label: relatedLabel.text, ...(relatedLabel.lang ? { lang: relatedLabel.lang } : {}) };
-    const target = stream.direction === 'forward'
-      ? { id: relatedId, label: relatedLabel.text, ...(relatedLabel.lang ? { lang: relatedLabel.lang } : {}) }
-      : { id: publicRead.subject.id, label: title.text, ...(title.lang ? { lang: title.lang } : {}) };
+    const source =
+      stream.direction === 'forward'
+        ? { id: publicRead.subject.id, label: title.text, ...(title.lang ? { lang: title.lang } : {}) }
+        : { id: relatedId, label: relatedLabel.text, ...(relatedLabel.lang ? { lang: relatedLabel.lang } : {}) };
+    const target =
+      stream.direction === 'forward'
+        ? { id: relatedId, label: relatedLabel.text, ...(relatedLabel.lang ? { lang: relatedLabel.lang } : {}) }
+        : { id: publicRead.subject.id, label: title.text, ...(title.lang ? { lang: title.lang } : {}) };
     result.push({
       key,
       property: stream.property,
@@ -209,9 +214,12 @@ function associations(
       const statement = isStatement(assertion) ? assertion : undefined;
       if (!statement || statement.property.id !== page.property) continue;
       if (page.direction === 'inverse' && rawRow.statement !== statement.id) continue;
-      const relatedId = page.direction === 'forward'
-        ? relatedTarget(statement)
-        : typeof rawRow.subject === 'string' ? rawRow.subject : undefined;
+      const relatedId =
+        page.direction === 'forward'
+          ? relatedTarget(statement)
+          : typeof rawRow.subject === 'string'
+            ? rawRow.subject
+            : undefined;
       if (!relatedId || !rowSummary || rowSummary.id !== relatedId) continue;
       if (page.direction === 'inverse' && relatedTarget(statement) !== publicRead.subject.id) continue;
       const info = relatedInfo(related[relatedId], relatedId);
@@ -262,7 +270,7 @@ export function catalogueFileReaderVisit(input: {
   if (input.unavailable || !input.release || !input.digest) return { ...base, state: 'unavailable' };
   const release = input.release;
   const type = input.public.subject.type;
-  if (!release.types[type] || !isCatalogueFileType(release, type) && !isReleaseGroupType(release, type))
+  if (!release.types[type] || (!isCatalogueFileType(release, type) && !isReleaseGroupType(release, type)))
     return { ...base, state: 'unsupported' };
   const grouped = fileGroups(release, type);
   const streams = fileStreams(release, type, input.locale);
@@ -276,24 +284,19 @@ export function catalogueFileReaderVisit(input: {
   };
   const codec = codecProperty(release, type);
   const codecSchema = codec ? release.properties[codec]?.value : undefined;
-  const codecEnum = isRecord(codecSchema) && Array.isArray(codecSchema.enum)
-    ? codecSchema.enum.filter((value): value is string => typeof value === 'string')
-    : undefined;
+  const codecEnum =
+    isRecord(codecSchema) && Array.isArray(codecSchema.enum)
+      ? codecSchema.enum.filter((value): value is string => typeof value === 'string')
+      : undefined;
   const unknownCodec = codec
     ? selectedStatements(input.public.subject.statements[codec]).some((statement) => {
         if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return false;
         return codecEnum ? !codecEnum.includes(statement.value.content) : true;
       })
     : false;
-  const rows = associations(
-    input.public,
-    release,
-    input.digest,
-    streams,
-    input.relationPages ?? [],
-    input.locale,
-  );
-  const hasContent = Object.values(groups).some((items) => items.length) || rows.length || input.public.subject.sourceRecords.length;
+  const rows = associations(input.public, release, input.digest, streams, input.relationPages ?? [], input.locale);
+  const hasContent =
+    Object.values(groups).some((items) => items.length) || rows.length || input.public.subject.sourceRecords.length;
   return {
     ...base,
     state: hasContent ? 'ready' : 'empty',

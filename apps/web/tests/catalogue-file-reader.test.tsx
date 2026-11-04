@@ -6,10 +6,17 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import * as start from '../.storybook/react-start';
 import type { SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
-import { catalogueFileProfileFixture, catalogueFile, catalogueEpisode } from '../src/kernel/fake/catalogue-file-profile';
+import {
+  catalogueFileProfileFixture,
+  catalogueFile,
+  catalogueEpisode,
+} from '../src/kernel/fake/catalogue-file-profile';
 import type { SubjectPageData } from '../src/features/pages/subject';
 import { subjectPageMessages } from '../src/features/pages/route-support';
-import { catalogueFileDestinationHref, catalogueFileSourceReturnHref } from '../src/features/catalogue/catalogue-file-reader/navigation';
+import {
+  catalogueFileDestinationHref,
+  catalogueFileSourceReturnHref,
+} from '../src/features/catalogue/catalogue-file-reader/navigation';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -56,7 +63,13 @@ function ordinaryPage(publicRead: SubjectRead): SubjectPageData {
   return page;
 }
 
-function renderSubject(page: SubjectPageData, read: SubjectRead, release: Release, digest: string, fileSource?: string) {
+function renderSubject(
+  page: SubjectPageData,
+  read: SubjectRead,
+  release: Release,
+  digest: string,
+  fileSource?: string,
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(catalogueFileReaderDefinitionsKey(read, page, 'en'), { ok: true, release, digest });
   return renderToStaticMarkup(
@@ -79,11 +92,7 @@ test('ordinary Subject separates file facts from its directed episode relation a
   if (!result.ok || !result.stream) throw new Error('Expected the admitted file read');
   const page = ordinaryPage(result.public);
   const html = renderSubject(page, result.public, result.release, result.digest);
-  const destination = catalogueFileDestinationHref(
-    `/en/subjects/${catalogueEpisode}/episode-1`,
-    catalogueFile,
-    'en',
-  );
+  const destination = catalogueFileDestinationHref(`/en/subjects/${catalogueEpisode}/episode-1`, catalogueFile, 'en');
   expect(html).toContain('data-slot="catalogue-file-reader-technical"');
   expect(html).toContain('data-slot="catalogue-file-reader-associations"');
   expect(html).toContain('data-direction="forward"');
@@ -99,10 +108,12 @@ test('retired associations cannot add a destination return, and unsupported file
   const retiredRead = structuredClone(current.public);
   const assertion = retiredRead.subject.statements['schema:encodesCreativeWork']?.[0];
   if (!assertion) throw new Error('Expected the current file association');
-  retiredRead.subject.statements['schema:encodesCreativeWork'] = [{
-    ...assertion,
-    rezics: { ...assertion.rezics, release: 'sha256:retired' },
-  }];
+  retiredRead.subject.statements['schema:encodesCreativeWork'] = [
+    {
+      ...assertion,
+      rezics: { ...assertion.rezics, release: 'sha256:retired' },
+    },
+  ];
   const retiredHtml = renderSubject(ordinaryPage(retiredRead), retiredRead, current.release, current.digest);
   expect(retiredHtml).not.toContain(`/subjects/${catalogueEpisode}/episode-1?fileSource=`);
 
@@ -112,16 +123,26 @@ test('retired associations cannot add a destination return, and unsupported file
   unsupportedRead.subject.type = 'schema:Person';
   const source = current.public.subject.statements['schema:sha256']?.[0];
   if (!source) throw new Error('Expected a generic fact example');
-  unsupportedRead.subject.statements['schema:name'] = [{
-    ...source,
-    id: '00000000-0000-4000-8000-00000000a219',
-    property: { id: 'schema:name', data_type: 'string' },
-    value: { type: 'value', content: 'Generic file title' },
-    rezics: { ...source.rezics, release: missing.digest },
-  }];
+  unsupportedRead.subject.statements['schema:name'] = [
+    {
+      ...source,
+      id: '00000000-0000-4000-8000-00000000a219',
+      property: { id: 'schema:name', data_type: 'string' },
+      value: { type: 'value', content: 'Generic file title' },
+      rezics: { ...source.rezics, release: missing.digest },
+    },
+  ];
   const unsupportedPage = ordinaryPage(unsupportedRead);
-  const unsupportedHtml = renderSubject(unsupportedPage, unsupportedRead, missing.release, missing.digest, unsupportedRead.subject.id);
-  expect(unsupportedHtml).toContain('Current definitions do not admit this subject as a catalogue file or release group.');
+  const unsupportedHtml = renderSubject(
+    unsupportedPage,
+    unsupportedRead,
+    missing.release,
+    missing.digest,
+    unsupportedRead.subject.id,
+  );
+  expect(unsupportedHtml).toContain(
+    'Current definitions do not admit this subject as a catalogue file or release group.',
+  );
   expect(unsupportedHtml).toContain('Generic file title');
   expect(unsupportedHtml).not.toMatch(/href="\/en\/subjects\/[^\"]+\/file(?:\?|\")/);
 });
@@ -130,6 +151,8 @@ test('return destinations stay in the same locale and accept only a subject path
   expect(catalogueFileDestinationHref(`/en/subjects/${catalogueEpisode}/episode-1`, catalogueFile, 'en')).toContain(
     `fileSource=${catalogueFile}#catalogue-file-reader`,
   );
-  expect(catalogueFileDestinationHref(`/ja/subjects/${catalogueEpisode}/episode-1`, catalogueFile, 'en')).toBeUndefined();
+  expect(
+    catalogueFileDestinationHref(`/ja/subjects/${catalogueEpisode}/episode-1`, catalogueFile, 'en'),
+  ).toBeUndefined();
   expect(catalogueFileDestinationHref('https://example.test/en/subjects/episode', catalogueFile, 'en')).toBeUndefined();
 });

@@ -33,15 +33,10 @@ export function CatalogueFileProfileEntry({
   if (id) {
     if (!admittedFileType(type, release)) return null;
     const base = `${subjectHref({ id, label: label ?? '' }, locale).href}/file`;
-    const href = returnSourceId
-      ? catalogueFileCorrectionHref(base, returnSourceId, locale)
-      : base;
+    const href = returnSourceId ? catalogueFileCorrectionHref(base, returnSourceId, locale) : base;
     if (!href) return null;
     return (
-      <a
-        className={entryClass}
-        href={href}
-      >
+      <a className={entryClass} href={href}>
         {m.catalogue_file_title({}, { locale: locale as never })}
       </a>
     );
