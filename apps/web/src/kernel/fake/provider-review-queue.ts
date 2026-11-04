@@ -60,7 +60,6 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
   const page = {
     actions: {
       state: 'available' as const,
-      viewer: { kind: 'account' as const, id: native.id },
       context: scope.context,
       operations: ['subject.accept_candidate', 'subject.reject_candidate'],
     },
@@ -161,6 +160,21 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
       const context = url.pathname.includes(editorial.id) ? editorial : global;
       return json({ context });
     }
+    if (url.pathname === '/v1/viewerActions')
+      return json({
+        resources: [
+          {
+            type: 'semantic.context',
+            id: scope.context,
+            viewerActions: [
+              {
+                action: 'context:accept',
+                operations: page.actions.state === 'available' ? page.actions.operations : [],
+              },
+            ],
+          },
+        ],
+      });
     if (url.pathname === '/v1/review-candidates:prepare') {
       current = 'preparing';
       return json({ preparing: true }, 202);

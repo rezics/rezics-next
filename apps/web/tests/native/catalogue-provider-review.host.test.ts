@@ -130,13 +130,6 @@ nativeTest(
 
     const ready = await readProviderReviewPage(current.stack, 'alice', current.context.id);
     expect(ready.status).toBe(200);
-    expect(ready.body).toMatchObject({
-      actions: {
-        state: 'available',
-        context: current.context.id,
-        operations: expect.arrayContaining(['subject.accept_candidate', 'subject.reject_candidate']),
-      },
-    });
     await page.getByText('Current allowed operations:', { exact: false }).waitFor();
     const pageBody = ready.body as {
       candidates: { subject: string; candidate: { id: string; source?: { source?: string } }; adoption: unknown }[];

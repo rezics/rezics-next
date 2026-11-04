@@ -75,12 +75,7 @@ test('explicit derived preparation builds a real native page; GET does no bootst
   expect(work).toBeDefined();
   await client.retrieveWorkflow(work!.workflowID).getResult({ pollingIntervalMs: 10 });
   const page = status(await f.call('GET', endpoint), 200);
-  expect(Object.keys(page).sort()).toEqual(['actions', 'candidates', 'freshness', 'next']);
-  expect(page.actions).toMatchObject({
-    state: 'available',
-    context: GLOBAL_CONTEXT,
-    operations: expect.arrayContaining(['subject.accept_candidate', 'subject.reject_candidate']),
-  });
+  expect(Object.keys(page).sort()).toEqual(['candidates', 'freshness', 'next']);
   expect(page.candidates).toHaveLength(3);
   expect(page.candidates[0].candidate).toMatchObject({
     source: { source: provider },
@@ -103,19 +98,9 @@ test('explicit derived preparation builds a real native page; GET does no bootst
     ),
     200,
   );
-  expect(ordinary.actions.operations).toEqual(
-    installed.resources[0].viewerActions
-      .flatMap((entry: { operations: string[] }) => entry.operations)
-      .filter((operation: string) =>
-        ['subject.accept_candidate', 'subject.reject_candidate', 'subject.adopt'].includes(operation),
-      ),
-  );
-
-  expect(ordinary.actions).toMatchObject({
-    state: 'available',
-    context: GLOBAL_CONTEXT,
-    operations: ['subject.accept_candidate', 'subject.reject_candidate'],
-  });
+  expect(installed.resources[0].viewerActions).toEqual([
+    { action: 'context:accept', operations: ['subject.accept_candidate', 'subject.reject_candidate'] },
+  ]);
   status(
     await f.call(
       'POST',

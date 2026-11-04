@@ -148,7 +148,10 @@ export function providerQueueReturnForReview(
 type QueueResponse = NonNullable<Awaited<ReturnType<KernelClient['review-candidates']['get']>>['data']>;
 type NativeQueuePage = Extract<QueueResponse, { candidates: unknown }>;
 export type QueueRow = Omit<NativeQueuePage['candidates'][number], 'candidate'> & { candidate: Candidate };
-export type QueuePage = Omit<NativeQueuePage, 'candidates'> & { candidates: QueueRow[] };
+export type QueuePage = Omit<NativeQueuePage, 'candidates'> & {
+  candidates: QueueRow[];
+  actions: { state: 'available'; context: string; operations: string[] } | { state: 'unavailable' };
+};
 export type QueueState =
   | { state: 'idle' | 'loading' | 'denied' | 'missing' | 'invalid' | 'unavailable' }
   | { state: 'preparing'; next?: string }
@@ -234,6 +237,30 @@ export async function readProviderQueue(
   // An unscoped presentation caller cannot turn the provider API into a catalogue scan.
   if (!client || !authorization || !definitions || !scope) return { ok: false, reason: 'unavailable' };
   try {
+    // Hydrate once for the exact Context through the installed generated native surface.
+    // Queue admission runs afterwards, so failed action hydration cannot conceal revoked list access.
+    let actions: QueuePage['actions'] = { state: 'unavailable' };
+    try {
+      const observed = await client.viewerActions.post(
+        { resources: [{ type: 'semantic.context', id: scope.context }] },
+        { headers: { authorization } },
+      );
+      const anchor = observed.data?.resources.find(
+        (resource) => resource.type === 'semantic.context' && resource.id === scope.context,
+      );
+      if (observed.status === 200 && anchor && 'viewerActions' in anchor)
+        actions = {
+          state: 'available',
+          context: scope.context,
+          operations: anchor.viewerActions
+            .flatMap((entry) => entry.operations)
+            .filter((operation) =>
+              ['subject.accept_candidate', 'subject.reject_candidate', 'subject.adopt'].includes(operation),
+            ),
+        };
+    } catch {
+      /* An unavailable component is independent of native list admission. */
+    }
     const [result, release, contextDefinitions] = await Promise.all([
       client['review-candidates'].get({
         query: { ...scope, limit: 20, ...(cursor ? { cursor } : {}) },
@@ -281,6 +308,7 @@ export async function readProviderQueue(
       state: 'ready',
       page: {
         ...result.data,
+        actions,
         candidates,
       },
       names,

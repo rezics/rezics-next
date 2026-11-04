@@ -94,8 +94,8 @@ test('A filtered queue with only deleted rows and a real next cursor shows prepa
   expect(html).not.toContain(m.prq_empty());
   expect(html).not.toContain(fixture.deleted.candidate.id);
   expect(html).not.toContain(fixture.native.candidate.id);
-  expect(fixture.calls).toHaveLength(2); // The bounded page plus the existing Context definitions read.
-  expect(fixture.calls.every((call) => call.method === 'GET')).toBe(true);
+  expect(fixture.calls).toHaveLength(3); // One action batch, bounded page and Context definitions read.
+  expect(fixture.calls.every((call) => call.method === 'GET' || call.path === '/v1/viewerActions')).toBe(true);
   if (read.state !== 'preparing') throw new Error('Expected explicit continuation');
   const continued = await fixture.transport.read(fixture.scope, read.next, 'prepared-session');
   expect(continued.state === 'ready' && continued.page.candidates.map((row) => row.candidate.id)).toEqual([
@@ -108,8 +108,8 @@ test('A filtered queue with only deleted rows and a real next cursor shows prepa
   );
   const query = new URL(pages[1]!.path, 'https://queue.test').searchParams;
   expect(Object.fromEntries(query)).toEqual({ ...fixture.scope, limit: '20', cursor: fixture.next });
-  expect(fixture.calls).toHaveLength(5);
-  const subjectRead = fixture.calls[4]!;
+  expect(fixture.calls).toHaveLength(7);
+  const subjectRead = fixture.calls[6]!;
   expect(subjectRead).toMatchObject({
     method: 'GET',
     authorization: 'Bearer fixture',
@@ -119,7 +119,7 @@ test('A filtered queue with only deleted rows and a real next cursor shows prepa
   const subjectUrl = new URL(subjectRead.path, 'https://queue.test');
   expect(subjectUrl.pathname).toBe(`/v1/subjects/${fixture.native.id}`);
   expect(Object.fromEntries(subjectUrl.searchParams)).toEqual({ context: fixture.scope.context });
-  expect(fixture.calls.every((call) => call.method === 'GET')).toBe(true);
+  expect(fixture.calls.every((call) => call.method === 'GET' || call.path === '/v1/viewerActions')).toBe(true);
 });
 
 test('Mixed pages retain readable decisions while exhausted deleted pages stay empty and inconsistent native empty pages fail closed', async () => {
@@ -183,9 +183,9 @@ test('unrelated Contexts Subjects candidates and revisions do not enlarge the ex
     if (read.state !== 'ready') throw new Error('Expected bounded native page');
     expect(read.page.candidates).toHaveLength(2);
     expect(read.readings).toHaveLength(1);
-    expect(fixture.calls).toHaveLength(3); // Queue, Context terms, one distinct exact Subject/Context.
-    expect(new URL(fixture.calls[0]!.path, 'https://queue.test').searchParams.get('limit')).toBe('20');
-    expect(fixture.calls[2]!.session).toBe('queue-session');
+    expect(fixture.calls).toHaveLength(4); // One Context action batch, queue, Context terms and exact Subject read.
+    expect(new URL(fixture.calls[1]!.path, 'https://queue.test').searchParams.get('limit')).toBe('20');
+    expect(fixture.calls[3]!.session).toBe('queue-session');
   }
 });
 

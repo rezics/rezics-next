@@ -92,9 +92,10 @@ existing subject candidate row, including statement, release, revision, decision
 `digest`, `converter_revision` and `field_group`; references remain native statement references. Freshness is the existing eventual
 projection `{consistency:"eventual",target_seconds:10,caught_up}` shape and Session propagation remains native.
 
-The page's `actions` component is either explicitly unavailable or contains the current account viewer, exact
+The private BFF page's `actions` component is either explicitly unavailable or contains the current account viewer, exact
 Context and allowed installed accept/reject/adopt operation IDs. Decision and selection authority are independent.
-One shared `readViewerActions` projection uses the native Context anchor for the entire bounded page; commands
+One generated `viewerActions` request invokes the shared native `readViewerActions` projection on the Context anchor
+before native queue admission for the entire bounded page; commands
 reauthorize independently. Missing action evidence leaves comparisons readable with refresh available and disables
 fresh decisions. New page/head observations clear checkbox intent and invalidate unconfirmed review; sealed unknown
 commands keep their original operands and keys for explicit retry.
