@@ -9,7 +9,8 @@ task dev
 ```
 
 `dev:infra` starts persistent PostgreSQL and OpenSearch, migrates Kernel and a separate `rezics_auth` database,
-creates development keys and configures the Web worker. It can be repeated. An interrupted setup can be repeated too.
+creates development keys and configures the Web worker. It can be repeated. Identical generated configuration is not rewritten, so repeating setup while app servers run
+does not trigger configuration reloads. An interrupted setup can be repeated too.
 `dev` also runs setup, then starts these processes together; Ctrl-C ends the processes it launched and leaves
 infrastructure running. A child startup failure ends the other children.
 

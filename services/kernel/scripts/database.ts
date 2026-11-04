@@ -262,7 +262,8 @@ async function up(): Promise<void> {
   }
   const envFile = resolve(directory, '.env');
   const existingEnv = (await Bun.file(envFile).exists()) ? await Bun.file(envFile).text() : '';
-  await Bun.write(envFile, developmentEnv(existingEnv, url), { mode: 0o600 });
+  const generated = developmentEnv(existingEnv, url);
+  if (generated !== existingEnv) await Bun.write(envFile, generated, { mode: 0o600 });
 }
 
 async function main(): Promise<void> {

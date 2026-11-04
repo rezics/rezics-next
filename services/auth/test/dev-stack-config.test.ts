@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
@@ -9,6 +9,7 @@ import {
   localDatabase,
   openLocalShowcase,
   publicKey,
+  privateFile,
   retireDevelopmentSeedState,
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
@@ -126,6 +127,23 @@ test('generated Web bindings preserve literal JWK JSON through the actual Vite d
     const { loadEnv } = await import(require.resolve('vite'));
     const bindings = loadEnv('development', directory, 'WEBSITE_');
     expect(JSON.parse(bindings.WEBSITE_CLIENT_KEY!)).toEqual(key);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('repeated setup leaves identical private configuration untouched for live dev watchers', async () => {
+  const directory = await mkdtemp(resolve(import.meta.dir, '../../../.temp/stable-config-'));
+  const file = resolve(directory, '.dev.vars');
+  try {
+    await privateFile(file, 'LOCAL=value');
+    await utimes(file, new Date('2000-01-01'), new Date('2000-01-01'));
+    const before = (await stat(file)).mtimeMs;
+    await privateFile(file, 'LOCAL=value');
+    expect((await stat(file)).mtimeMs).toBe(before);
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
+    await privateFile(file, 'LOCAL=updated');
+    expect(await readFile(file, 'utf8')).toBe('LOCAL=updated');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
