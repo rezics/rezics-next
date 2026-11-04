@@ -440,7 +440,7 @@ export function pageRoutes<App>(
           ? Object.keys(initialSubject.subject.statements)
           : [];
       const plannedDocuments = documentRead(resolved.document, subject?.id ?? null, properties, selected?.context.id);
-      const viewer = subject
+      const viewer: SubjectPageViewer | undefined = subject
         ? await admission.run('normal', job, () =>
             readSubjectPageViewer(authority.deps.access, actor, { pool, deadline: job.deadline }, subject.id),
           )
@@ -449,7 +449,7 @@ export function pageRoutes<App>(
         release: (await activeRelease(pool))?.release,
         ...(viewer ? { viewer } : {}),
         locale: languages?.[0] ?? 'en',
-        subjectType: subject?.type,
+        ...(subject?.type ? { subjectType: subject.type } : {}),
         continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
         ...(selected ? { context: selected.context } : {}),
         ...(selected || plannedDocuments
@@ -668,7 +668,11 @@ async function pageAnswer(input: {
   const overlay =
     input.overlay ??
     (input.release && input.subjectType
-      ? characterWorkIdentityOverlay(input.release, input.subjectType, input.locale ?? 'en')
+      ? characterWorkIdentityOverlay(
+          input.release as Parameters<typeof characterWorkIdentityOverlay>[0],
+          input.subjectType,
+          input.locale ?? 'en',
+        )
       : undefined);
   return respond(
     200,
