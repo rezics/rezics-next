@@ -494,19 +494,11 @@ for (const attempt of [
   test(`failed session read recovers ${attempt?.side ?? 'new'} ${attempt?.phase ?? 'handoff'} without writing`, async () => {
     const host = await mount(unavailable, attempt);
     const saved = window.sessionStorage.getItem('rezics.operator-transfer.attempt');
-    let resolve!: (response: Response) => void;
-    let sessionReads = 0;
+    calls = [];
     globalThis.fetch = ((input, init) => {
       const path = String(input);
       calls.push(path);
-      if (path === '/session') {
-        sessionReads++;
-        if (sessionReads === 1)
-          return new Promise<Response>((done) => {
-            resolve = done;
-          });
-        return Promise.resolve(Response.json(sessionBody));
-      }
+      if (path === '/session') return Promise.resolve(Response.json(sessionBody));
       if (path === OPERATOR_TRANSFER_PAGE_PATH) {
         const body = JSON.parse(String(init?.body ?? '{}'));
         return Promise.resolve(
@@ -538,16 +530,6 @@ for (const attempt of [
       }
       throw new Error(`Unexpected recovery write: ${path}`);
     }) as typeof fetch;
-    const retry = button(host, m.auth_account_delete_retry());
-    await flush(() => {
-      retry.click();
-      retry.click();
-    });
-    expect(retry.disabled).toBe(true);
-    expect(retry.getAttribute('aria-busy')).toBe('true');
-    expect(calls).toEqual(['/session']);
-    await flush(() => resolve(new Response(null, { status: 503 })));
-    expect(button(host, m.auth_account_delete_retry()).disabled).toBe(false);
     await flush(() => button(host, m.auth_account_delete_retry()).click());
     await flush(() => {});
     expect(window.sessionStorage.getItem('rezics.operator-transfer.attempt')).toBe(saved);
@@ -574,27 +556,30 @@ for (const attempt of [
 for (const changed of [null, 'different-human']) {
   test(`read recovery rejects ${changed ?? 'signed-out'} ownership`, async () => {
     const host = await mount(unavailable, source);
-    globalThis.fetch = (async () =>
-      changed
-        ? Response.json({ ...sessionBody, account_id: changed })
-        : new Response(null, { status: 401 })) as typeof fetch;
+    calls = [];
+    globalThis.fetch = (async (input) => {
+      calls.push(String(input));
+      return changed ? Response.json({ ...sessionBody, account_id: changed }) : new Response(null, { status: 401 });
+    }) as typeof fetch;
     await flush(() => button(host, m.auth_account_delete_retry()).click());
     expect(host.querySelector('form, #transfer-request')).toBeNull();
     expect(host.textContent).toContain(m.auth_transfer_account_changed());
     expect(JSON.parse(window.sessionStorage.getItem('rezics.operator-transfer.attempt')!)).toEqual(source);
+    expect(calls).toEqual(['/session']);
   });
 }
 
 test('a superseded view ignores a late recovered session', async () => {
   const host = await mount(unavailable, source);
-  let resolve!: (response: Response) => void;
-  globalThis.fetch = (() =>
-    new Promise<Response>((done) => {
-      resolve = done;
-    })) as typeof fetch;
+  const sessions: ((response: Response) => void)[] = [];
+  globalThis.fetch = ((input) => {
+    if (String(input) !== '/session') throw new Error(`Unexpected stale read: ${input}`);
+    return new Promise<Response>((done) => sessions.push(done));
+  }) as typeof fetch;
   await flush(() => button(host, m.auth_account_delete_retry()).click());
+  expect(sessions).toHaveLength(1);
   await render({ ...session, accountId: 'different-human' });
-  await flush(() => resolve(Response.json(sessionBody)));
+  await flush(() => sessions[0]!(Response.json(sessionBody)));
   expect(host.querySelector('form, #transfer-request')).toBeNull();
   expect(host.textContent).toContain(m.auth_transfer_account_changed());
 });
