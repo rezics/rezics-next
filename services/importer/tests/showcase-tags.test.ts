@@ -163,6 +163,12 @@ function port(commands: BatchCommand[]): CrossMediaPort {
 }
 
 test('default showcase adapter projects selected COPY tags with admitted, unsupported and qualified associations', async () => {
+  await expect(
+    planShowcaseTags({
+      tables: authoredTables(),
+      selectedVids: Array.from({ length: 97 }, (_, index) => `v${index + 1}`),
+    }),
+  ).rejects.toThrow('Selected VNDB work limit exceeded');
   const plan = await planShowcaseTags({ tables: authoredTables(), selectedVids: ['v410'] });
   expect(plan.records.vndb.map((row) => row.key)).toEqual(['v410']);
   expect(plan.admitted.map((row) => [row.tag, row.category, row.spoiler])).toEqual([

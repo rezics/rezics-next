@@ -27,9 +27,11 @@ import {
 import type { ShowcaseJournal } from './showcase-publication.ts';
 import {
   acquireShowcaseVndbTagRatings,
+  showcaseVndbTagRatingLimits,
   type VndbTagRatingFetch,
   type VndbTagRatingObservation,
 } from './showcase-vndb-tag-ratings.ts';
+import { vndbLimits } from '@rezics/conversion/vndb';
 import {
   importVndbPublicTags,
   planVndbPublicTags,
@@ -173,6 +175,7 @@ export function parseShowcaseTagKnownBindings(value: unknown): VndbPublicTagKnow
 }
 
 function selectedWorkIds(values: readonly string[]): Set<string> {
+  ensure(values.length <= showcaseVndbTagRatingLimits.works, 'Selected VNDB work limit exceeded');
   const selected = new Set<string>();
   for (const id of values) {
     ensure(workId.test(id), 'Invalid selected VNDB work identity');
@@ -302,17 +305,55 @@ export async function projectShowcaseTagTables(
   const vnRows: Row[] = [];
   const titleRows: Row[] = [];
   const revisionRows: Row[] = [];
+  const vnCounts = new Map<string, number>();
+  const titleCounts = new Map<string, number>();
+  const titleBytes = new Map<string, number>();
+  const revisionCounts = new Map<string, number>();
+  const titleLimitReported = new Set<string>();
+  const retainOnceOrDuplicate = (rows: Row[], counts: Map<string, number>, id: string, row: Row) => {
+    const count = counts.get(id) ?? 0;
+    if (count >= 2) return;
+    counts.set(id, count + 1);
+    rows.push(row);
+  };
   for await (const row of input.rows('vndb', 'vn')) {
     const id = typeof row.id === 'string' ? row.id : undefined;
-    if (id && selected.has(id)) vnRows.push(row);
+    if (id && selected.has(id)) retainOnceOrDuplicate(vnRows, vnCounts, id, row);
   }
   for await (const row of input.rows('vndb', 'vn_titles')) {
     const id = typeof row.id === 'string' ? row.id : undefined;
-    if (id && selected.has(id)) titleRows.push(row);
+    if (!id || !selected.has(id)) continue;
+    const count = titleCounts.get(id) ?? 0;
+    const latin = row.latin;
+    const titleValues = [row.id, row.lang, row.title, ...(typeof latin === 'string' ? [latin] : [])];
+    const official = row.official === true || row.official === 't' ? true : row.official === false || row.official === 'f' ? false : null;
+    const fieldsValid =
+      official !== null &&
+      (latin === null || typeof latin === 'string') &&
+      titleValues.every((value) => typeof value === 'string' && Buffer.byteLength(value, 'utf8') <= vndbLimits.stringBytes);
+    const bytes = fieldsValid
+      ? Buffer.byteLength(JSON.stringify({ id: row.id, lang: row.lang, official, title: row.title, latin }))
+      : Number.POSITIVE_INFINITY;
+    const usedBytes = titleBytes.get(id) ?? 0;
+    if (
+      count >= vndbLimits.maxTitles ||
+      !Number.isFinite(bytes) ||
+      bytes > vndbLimits.recordBytes - usedBytes
+    ) {
+      if (!titleLimitReported.has(id)) {
+        gap('vn_titles', { id }, 'Selected VNDB title projection exceeds the source record cap');
+        titleLimitReported.add(id);
+      }
+      truncated.value = true;
+      continue;
+    }
+    titleCounts.set(id, count + 1);
+    titleBytes.set(id, usedBytes + bytes);
+    titleRows.push(row);
   }
   for await (const row of input.rows('vndb', 'entry_meta')) {
     const id = typeof row.id === 'string' ? row.id : undefined;
-    if (id && selected.has(id)) revisionRows.push(row);
+    if (id && selected.has(id)) retainOnceOrDuplicate(revisionRows, revisionCounts, id, row);
   }
 
   return {
