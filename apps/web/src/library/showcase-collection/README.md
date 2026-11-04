@@ -16,6 +16,7 @@ Presentation tests retain explicit unknown/empty/unavailable context states from
 
 Decision: review stays inline in the metadata form, uses the editor's captured loaded page, and returns focus to
 its initiating control or the existing Save button without submitting; member Type geometry and order never change.
+Save operation review keeps the existing captured-plan component; presentation review only edits its metadata inputs.
 
 The saved native Type and cover, retained local operands, deliberate automatic reset and explicit replacements
 have separate descriptions. Missing release configuration is unavailable; exact unknown IDs stay in command
