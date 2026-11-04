@@ -109,7 +109,7 @@ export function QuerySharePreview({
                   <Button
                     type="button"
                     onClick={async () => {
-                      const generation = command.current;
+                      const generation = ++command.current;
                       try {
                         await navigator.clipboard.writeText(url);
                         if (alive.current && generation === command.current) setCopy('copied');
