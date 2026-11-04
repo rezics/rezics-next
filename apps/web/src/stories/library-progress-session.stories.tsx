@@ -116,6 +116,30 @@ export const ProfileUnits: Story = {
   render: () => <DeclaredProfileView />,
 };
 
+export const ContinuedIndexReturn: Story = {
+  name: 'Return to the selected filtered index',
+  parameters: {
+    docs: { description: { story: 'Router history state retains the selected Progress index address.' } },
+  },
+  render: () => (
+    <PatternStory visitor="Signed In" path={`/library/progress/${profileSessionId}`}>
+      <main className="w-full max-w-4xl space-y-6 p-4">
+        <ProgressSessionPage
+          page={boundedProfilePage}
+          returnContext={{
+            indexHref: `/en/library/progress?state=active&cursor=profile-origin`,
+            indexSearch: { state: 'active', cursor: 'profile-origin' },
+            locale: 'en',
+            sessionId: profileSession.id,
+            subjectId: profileSession.subjectId,
+            startedAt: profileSession.startedAt,
+          }}
+        />
+      </main>
+    </PatternStory>
+  ),
+};
+
 export const ProfileUnitsRecordingUnavailable: Story = {
   name: 'Journey route without recorded presentation',
   play: async ({ canvasElement }) => {

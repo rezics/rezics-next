@@ -20,11 +20,11 @@ import {
 } from '@rezics/ui/shadcn/select';
 import { Loader2Icon } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
-import { useLocation, useRouter } from '@tanstack/react-router';
+import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { SubjectLabelNotice } from './subject-labels.tsx';
 import { subjectHref } from '../subject/subject-href';
-import { subjectSlotReturnTo } from './subject-slot-return-context';
+import { subjectProgressEntryLocationState, subjectSlotReturnTo } from './subject-slot-return-context';
 import { useSession } from '../session/query';
 import type { SubjectReference } from './subject-ref';
 import {
@@ -1293,9 +1293,14 @@ function SubjectLibrarySlotView({
           className="mt-4 flex flex-col gap-2 border-t border-border pt-3 empty:hidden"
         >
           <Exposure operation="progress_session.create">
-            <a className={linkClass} href={`/library/progress?subjectId=${encodeURIComponent(subject.id)}`}>
+            <Link
+              to="/library/progress"
+              search={{ subjectId: subject.id }}
+              state={subjectProgressEntryLocationState(returnTo) as never}
+              className={linkClass}
+            >
               {m.library_subject_start_progress()}
-            </a>
+            </Link>
           </Exposure>
           <Exposure operation="copy.list">
             <a className={linkClass} href={`/library/copies?subjectId=${encodeURIComponent(subject.id)}`}>

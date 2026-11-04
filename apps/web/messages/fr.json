@@ -1103,6 +1103,8 @@
   "library_progress_record_heading": "Noter la progression",
   "library_progress_remove_units": "Retirer des unités",
   "library_progress_restart": "Recommencer",
+  "library_progress_return_to_progress": "Revenir à la page de progression",
+  "library_progress_return_to_subject": "Revenir à cette œuvre",
   "library_progress_start": "Commencer",
   "library_progress_start_heading": "Commencer un suivi",
   "library_progress_start_draft_navigation_title": "Abandonner cette configuration Progress ?",

@@ -73,6 +73,12 @@ const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { ProgressIndexPage } = await import('../src/library/progress-page');
+const {
+  progressIndexSelectionLocationState,
+  progressReturnContextFromLocationState,
+  progressReturnLocationState,
+  progressIndexReturnSelectionFromLocationState,
+} = await import('../src/library/progress-start-draft-navigation');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { subjectHref } = await import('../src/subject/subject-href');
@@ -104,13 +110,22 @@ test('disclosed Subject navigation survives read-only active and completed rows;
     next: null,
     idempotencyKey: crypto.randomUUID(),
   };
-  const render = async (state: 'active' | 'completed', disclosed = true) => {
+  const render = async (
+    state: 'active' | 'completed',
+    disclosed = true,
+    options: { cursor?: string; returnSelection?: ReturnType<typeof progressIndexReturnSelectionFromLocationState> } = {},
+    row = profileSession,
+  ) => {
     const session = { ...profileSession, state, subject: disclosed ? subject : null };
     await tick(() =>
       root.render(
         <QueryClientProvider client={client}>
           <RouterContextProvider router={router}>
-            <ProgressIndexPage page={{ ...page, sessions: [session] }} />
+            <ProgressIndexPage
+              page={{ ...page, sessions: [row === profileSession ? session : row], subjectId: row.subjectId }}
+              cursor={options.cursor}
+              returnSelection={options.returnSelection}
+            />
           </RouterContextProvider>
         </QueryClientProvider>,
       ),
@@ -159,6 +174,47 @@ test('disclosed Subject navigation survives read-only active and completed rows;
       expect(menu()).toBeNull();
     }
     expect(request).not.toHaveBeenCalled();
+
+    operations.add('progress_session.read');
+    const continued = 'cursor/+?== &記録';
+    await render('active', true, { cursor: continued });
+    const sessionLink = host.querySelector<HTMLAnchorElement>(`a[href="/en/library/progress/${profileSession.id}"]`)!;
+    await tick(() => user.click(sessionLink));
+    const returnContext = progressReturnContextFromLocationState(
+      router.state.location.state,
+      profileSession.id,
+      'en',
+    );
+    expect(new URL(returnContext!.indexHref, window.location.href).searchParams.get('cursor')).toBe(continued);
+    expect(returnContext?.subjectId).toBe(profileSession.subjectId);
+    expect(returnContext?.startedAt).toBe(profileSession.startedAt);
+
+    const selection = progressIndexReturnSelectionFromLocationState(
+      progressIndexSelectionLocationState(returnContext!, profileSession.startedAt),
+      'en',
+    );
+    await tick(() =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterContextProvider router={router}>
+            <ProgressIndexPage
+              page={{ ...page, subjectId: profileSession.subjectId, sessions: [{ ...profileSession, subject }] }}
+              cursor={continued}
+              returnSelection={selection}
+            />
+          </RouterContextProvider>
+        </QueryClientProvider>,
+      ),
+    );
+    expect(window.document.activeElement).toBe(host.querySelector('[data-progress-session-id]'));
+
+    const changedIncarnation = { ...profileSession, startedAt: '2026-11-01T00:00:00Z', subject };
+    await render('active', true, { cursor: continued, returnSelection: selection }, changedIncarnation);
+    expect(view.getByText(m.library_progress_discovery_stale())).toBeDefined();
+    const firstPage = view.getByRole('link', { name: m.library_collections_first_page() });
+    expect(new URL(firstPage.getAttribute('href')!, window.location.href).searchParams.has('cursor')).toBe(false);
+    const changedState = progressReturnLocationState(returnContext!);
+    expect(progressReturnContextFromLocationState(changedState, profileSession.id, 'ja')).toBeUndefined();
   } finally {
     await tick(() => root.unmount());
     host.remove();

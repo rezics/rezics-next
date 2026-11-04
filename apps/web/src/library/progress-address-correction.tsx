@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { useRouter } from '@tanstack/react-router';
+import { Link, useRouter } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
@@ -49,6 +49,13 @@ export function ProgressAddressCorrection({
             ? m.library_progress_address_invalid({ field: labels[issue] })
             : m.library_progress_address_heading()}
       </p>
+      <Link
+        to="/library/progress"
+        search={{}}
+        className="inline-flex min-h-[44px] min-w-[44px] items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {m.library_progress_return_to_progress()}
+      </Link>
       {fields.map((field) => (
         <AddressField
           key={JSON.stringify([field, address])}

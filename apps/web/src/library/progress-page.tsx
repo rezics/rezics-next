@@ -19,6 +19,7 @@ import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
 import {
+  useEffect,
   useId,
   useRef,
   useState,
@@ -57,10 +58,13 @@ import {
 import { progressFailureMessage, progressView } from './progress-label';
 import type { ProgressChoices } from './progress-profile';
 import {
+  progressReturnContextForPage,
+  progressReturnLocationState,
   progressStartDraftChanged,
   progressStartDraftFromPage,
   progressStartDraftNavigationContext,
   progressStartDraftNavigationMessages,
+  type ProgressIndexReturnSelection,
   type ProgressStartDraft,
 } from './progress-start-draft-navigation';
 import {
@@ -88,6 +92,48 @@ function stateLabel(state: ProgressIndex['sessions'][number]['state']): string {
 const buttonClass =
   'inline-flex min-h-[44px] min-w-0 max-w-full items-center justify-center rounded-lg border border-border px-4 py-2 text-center whitespace-normal wrap-anywhere text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
+function ProgressReturnRecovery({
+  selection,
+  search,
+  currentWorkId,
+  current,
+}: {
+  selection: ProgressIndexReturnSelection;
+  search: { subjectId?: string; state?: string; mode?: string; profileId?: string };
+  currentWorkId?: string | undefined;
+  current?: (() => boolean) | undefined;
+}) {
+  return (
+    <section className="space-y-3">
+      <p role="status">{m.library_progress_discovery_stale()}</p>
+      <nav className="flex flex-wrap gap-2" aria-label={m.library_progress_return_to_progress()}>
+        <Link
+          to="/library/progress"
+          search={search}
+          onClick={(event) => {
+            if (current && !current()) event.preventDefault();
+          }}
+          className={buttonClass}
+        >
+          {m.library_collections_first_page()}
+        </Link>
+        {currentWorkId === selection.subjectId ? (
+          <Link
+            to="/library/progress"
+            search={{ ...search, subjectId: currentWorkId }}
+            onClick={(event) => {
+              if (current && !current()) event.preventDefault();
+            }}
+            className={buttonClass}
+          >
+            {m.library_progress_restart()}
+          </Link>
+        ) : null}
+      </nav>
+    </section>
+  );
+}
+
 const subscribe = () => () => {};
 type ProgressRowReview = (id: string) => Promise<ProgressIndex['sessions'][number] | null>;
 
@@ -108,9 +154,13 @@ const progressOperations = [
 export function CurrentViewerProgressIndexPage({
   loader,
   requested,
+  returnSelection,
+  sourceReturnTo,
 }: {
   loader: CurrentViewerProgressIndex;
   requested: { subjectId?: string; state?: string; mode?: string; profileId?: string; cursor?: string };
+  returnSelection?: ProgressIndexReturnSelection | undefined;
+  sourceReturnTo?: string | undefined;
 }) {
   const renderedSession = useSession();
   const client = useQueryClient();
@@ -267,6 +317,19 @@ export function CurrentViewerProgressIndexPage({
     return (
       <article className="max-w-4xl space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
+        {returnSelection ? (
+          <ProgressReturnRecovery
+            selection={returnSelection}
+            search={{
+              ...(requested.subjectId ? { subjectId: requested.subjectId } : {}),
+              ...(requested.state ? { state: requested.state } : {}),
+              ...(requested.mode ? { mode: requested.mode } : {}),
+              ...(requested.profileId ? { profileId: requested.profileId } : {}),
+            }}
+            currentWorkId={returnSelection.subjectId}
+            current={authority?.isCurrent}
+          />
+        ) : null}
         {viewer && allowed ? (
           <>
             <p role="status">{m.library_progress_unavailable()}</p>
@@ -295,6 +358,8 @@ export function CurrentViewerProgressIndexPage({
           if (origin.isCurrent()) void query.refetch();
         }}
         authority={authority}
+        returnSelection={returnSelection}
+        sourceReturnTo={sourceReturnTo}
         reviewRow={async (id) => {
           const fresh = await readCurrentViewerProgressIndex({ data: requested });
           if (!matches(fresh)) throw new Error('Progress review origin mismatch');
@@ -312,6 +377,8 @@ export function ProgressIndexPage(props: {
   retry?: () => void;
   authority?: ProgressAuthority;
   reviewRow?: ProgressRowReview;
+  returnSelection?: ProgressIndexReturnSelection | undefined;
+  sourceReturnTo?: string | undefined;
 }) {
   return (
     <AuthoringDepartureBoundary
@@ -330,6 +397,8 @@ function ProgressIndexPageContent({
   retry,
   authority,
   reviewRow,
+  returnSelection,
+  sourceReturnTo,
 }: {
   page: ProgressIndex;
   cursor?: string | null;
@@ -337,6 +406,8 @@ function ProgressIndexPageContent({
   retry?: () => void;
   authority?: ProgressAuthority;
   reviewRow?: ProgressRowReview;
+  returnSelection?: ProgressIndexReturnSelection | undefined;
+  sourceReturnTo?: string | undefined;
 }) {
   const router = useRouter();
   const identity = authority?.key ?? page;
@@ -349,8 +420,10 @@ function ProgressIndexPageContent({
   const initialDraft = useRef(progressStartDraftFromPage(page));
   const completedStart = useRef(false);
   const pendingNavigation = useRef<HTMLAnchorElement | null>(null);
+  const pendingReturnContext = useRef<ReturnType<typeof progressReturnContextForPage> | undefined>(undefined);
   const replayingNavigation = useRef<HTMLAnchorElement | null>(null);
   const departureRef = useRef<{ release: () => void } | null>(null);
+  const focusedReturn = useRef<string | null>(null);
   const sessions = progressIndexSubjects(page.sessions);
   const [chosen, setChosen] = useState(() => {
     const subject = page.selectedSubject;
@@ -399,6 +472,32 @@ function ProgressIndexPageContent({
     ...(page.mode ? { mode: page.mode } : {}),
     ...(page.profileId ? { profileId: page.profileId } : {}),
   };
+  const selectedReturnRow = returnSelection
+    ? sessions.find(
+        (session) =>
+          session.id === returnSelection.sessionId &&
+          session.subjectId === returnSelection.subjectId &&
+          (returnSelection.startedAt === undefined || session.startedAt === returnSelection.startedAt),
+      )
+    : undefined;
+  const missingReturnRow = !!returnSelection && !selectedReturnRow;
+
+  useEffect(() => {
+    if (
+      !selectedReturnRow ||
+      (authority !== undefined && !authority.isCurrent()) ||
+      authority?.rowCurrent(progressRowContext(selectedReturnRow)) === false
+    )
+      return;
+    const row = Array.from(document.querySelectorAll<HTMLElement>('[data-progress-session-id]')).find(
+      (candidate) => candidate.dataset.progressSessionId === selectedReturnRow.id,
+    );
+    if (!row || !returnSelection) return;
+    const focusKey = `${returnSelection.sessionId}:${returnSelection.startedAt ?? ''}`;
+    if (focusedReturn.current === focusKey) return;
+    focusedReturn.current = focusKey;
+    row.focus();
+  }, [authority, returnSelection, selectedReturnRow]);
 
   if (seenIdentity !== episode) {
     setSeenIdentity(episode);
@@ -460,9 +559,18 @@ function ProgressIndexPageContent({
       departureRef.current?.release();
       const link = pendingNavigation.current;
       pendingNavigation.current = null;
+      const context = pendingReturnContext.current;
+      pendingReturnContext.current = undefined;
       if (link?.isConnected) {
-        replayingNavigation.current = link;
-        link.click();
+        if (context) {
+          void router.navigate({
+            href: link.getAttribute('href') ?? link.href,
+            state: progressReturnLocationState(context) as never,
+          });
+        } else {
+          replayingNavigation.current = link;
+          link.click();
+        }
       }
     },
     undefined,
@@ -487,6 +595,52 @@ function ProgressIndexPageContent({
       return;
     }
     if (
+      !event.defaultPrevented &&
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !link.target &&
+      !link.hasAttribute('download') &&
+      link.origin === window.location.origin
+    ) {
+      let rowId = '';
+      try {
+        rowId = decodeURIComponent(link.pathname.split('/').at(-1) ?? '');
+      } catch {
+        /* Invalid local paths remain ordinary navigation. */
+      }
+      const row = sessions.find((session) => session.id === rowId);
+      const context =
+        row && authority?.isCurrent() !== false && authority?.rowCurrent(progressRowContext(row)) !== false
+          ? progressReturnContextForPage(
+              page,
+              cursor,
+              getLocale(),
+              row.id,
+              row.subjectId,
+              sourceReturnTo,
+              row.startedAt,
+            )
+          : undefined;
+      if (context && link.pathname.endsWith(`/library/progress/${encodeURIComponent(rowId)}`)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (departure.hasOwner && needsDeparture()) {
+          pendingNavigation.current = link;
+          pendingReturnContext.current = context;
+          departure.requestDiscard();
+        } else {
+          void router.navigate({
+            href: link.getAttribute('href') ?? link.href,
+            state: progressReturnLocationState(context) as never,
+          });
+        }
+        return;
+      }
+    }
+    if (
       event.defaultPrevented ||
       event.button !== 0 ||
       event.metaKey ||
@@ -503,6 +657,7 @@ function ProgressIndexPageContent({
     event.preventDefault();
     event.stopPropagation();
     pendingNavigation.current = link;
+    pendingReturnContext.current = undefined;
     departure.requestDiscard();
   }
 
@@ -550,7 +705,19 @@ function ProgressIndexPageContent({
       draftRef.current = { scope: draftScope, token: {} };
       setKey(crypto.randomUUID());
       if (!current()) return;
-      window.location.assign(router.buildLocation({ to: '/library/progress/$id', params: { id: result.id } }).href);
+      const context = progressReturnContextForPage(
+        page,
+        cursor,
+        getLocale(),
+        result.id,
+        command.data.subjectId,
+        sourceReturnTo,
+      );
+      const location = router.buildLocation({ to: '/library/progress/$id', params: { id: result.id } });
+      await router.navigate({
+        href: location.href,
+        ...(context ? { state: progressReturnLocationState(context) as never } : {}),
+      });
     } catch {
       if (draftCurrent()) setAlert(m.library_progress_unavailable());
     } finally {
@@ -579,16 +746,25 @@ function ProgressIndexPageContent({
       <article className="max-w-4xl space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
         <p role="status">{m.library_progress_discovery_stale()}</p>
-        <Link
-          to="/library/progress"
-          search={currentFilterAddress}
-          onClick={(event) => {
-            if (authority && !authority.isCurrent()) event.preventDefault();
-          }}
-          className={buttonClass}
-        >
-          {m.library_collections_first_page()}
-        </Link>
+        {returnSelection ? (
+          <ProgressReturnRecovery
+            selection={returnSelection}
+            search={currentFilterAddress}
+            currentWorkId={returnSelection.subjectId}
+            current={authority?.isCurrent}
+          />
+        ) : (
+          <Link
+            to="/library/progress"
+            search={currentFilterAddress}
+            onClick={(event) => {
+              if (authority && !authority.isCurrent()) event.preventDefault();
+            }}
+            className={buttonClass}
+          >
+            {m.library_collections_first_page()}
+          </Link>
+        )}
       </article>
     );
   const viewerState = page.viewerState ?? (page.signedIn ? 'signed_in' : 'signed_out');
@@ -612,8 +788,32 @@ function ProgressIndexPageContent({
     );
   const ratio = rowRatio(sessions.map((session) => session.subject));
   return (
-    <article className="max-w-4xl space-y-10 text-foreground" onClickCapture={protectNavigation}>
+      <article className="max-w-4xl space-y-10 text-foreground" onClickCapture={protectNavigation}>
       <PageHeading>{m.library_progress_heading()}</PageHeading>
+      {missingReturnRow && returnSelection ? (
+        <ProgressReturnRecovery
+          selection={returnSelection}
+          search={currentFilterAddress}
+          currentWorkId={returnSelection.subjectId}
+          current={authority?.isCurrent}
+        />
+      ) : null}
+      {page.selectedSubject ? (
+        <nav aria-label={m.library_progress_return_to_subject()}>
+          <a
+            className={buttonClass}
+            href={
+              sourceReturnTo ??
+              subjectHref(
+                { id: page.selectedSubject.id, label: page.selectedSubject.label },
+                getLocale(),
+              ).href
+            }
+          >
+            {m.library_progress_return_to_subject()}
+          </a>
+        </nav>
+      ) : null}
       {loading ? (
         <p role="status" aria-live="polite">
           {m.library_progress_discovery_loading()}
@@ -732,6 +932,7 @@ function ProgressIndexPageContent({
                 sourcePage={page}
                 authority={authority}
                 reviewRow={reviewRow}
+                returnFocus={session === selectedReturnRow}
               />
             ))}
           </ol>
@@ -980,12 +1181,14 @@ function SessionRow({
   sourcePage,
   authority,
   reviewRow,
+  returnFocus = false,
 }: {
   session: ProgressIndex['sessions'][number];
   ratio: CoverRatio;
   sourcePage: ProgressIndex;
   authority?: ProgressAuthority | undefined;
   reviewRow?: ProgressRowReview | undefined;
+  returnFocus?: boolean | undefined;
 }) {
   const readable = useOperation('progress_session.read');
   const completable = useOperation('progress_session.complete');
@@ -1262,6 +1465,8 @@ function SessionRow({
     : null;
   return (
     <ContentItem
+      data-progress-session-id={session.id}
+      tabIndex={returnFocus ? -1 : undefined}
       title={title.text}
       {...(title.lang ? { titleLang: title.lang } : {})}
       headingLevel={2}

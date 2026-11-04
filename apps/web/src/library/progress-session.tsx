@@ -44,6 +44,11 @@ import { displayLibraryTitle, LibraryTitle } from './title';
 import { progressFailureMessage, progressView } from './progress-label';
 import { scalarRecordingValue } from './progress-view';
 import { ProgressCorrectionReview } from './progress-actions';
+import {
+  progressIndexSelectionLocationState,
+  type ProgressReturnContext,
+} from './progress-start-draft-navigation';
+import { subjectProgressEntryLocationState, subjectSlotReturnTo } from './subject-slot-return-context';
 import { PrivateOccurrenceControls } from './private-diary/occurrence-detail';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import {
@@ -61,7 +66,7 @@ import {
 } from './episode-checklist/server';
 
 const buttonClass =
-  'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
+  'inline-flex min-h-[44px] min-w-[44px] items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 const { Exposure } = exposure;
 const readDetail = async (data: ProgressDetailAddress, isCurrent: () => boolean) => {
@@ -121,7 +126,15 @@ export type ProgressDetailOrigin = {
 const detailReads = detailOperations.slice(0, 4);
 
 /** The actual viewer observation owns the read; loader identity only rejects mismatches. */
-export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDetail; address: ProgressDetailAddress }) {
+export function CurrentProgressDetail({
+  loaded,
+  address,
+  returnContext,
+}: {
+  loaded: ProgressDetail;
+  address: ProgressDetailAddress;
+  returnContext?: ProgressReturnContext | undefined;
+}) {
   const { client, browser, store, snapshot } = useReadingAuthority(detailOperations);
   const viewer = browser ? snapshot.viewer : loaded.viewer;
   const locale = getLocale();
@@ -300,6 +313,9 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
       <article className="max-w-4xl space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
         <p role="status">{m.library_progress_unavailable()}</p>
+        <Link to="/library/progress" search={{}} className={buttonClass}>
+          {m.library_progress_return_to_progress()}
+        </Link>
         {viewer && allowed ? (
           <Button
             variant="outline"
@@ -314,12 +330,23 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
       </article>
     );
   const originating = originRef.current!.value;
+  const session = detail.progress.session;
+  const currentReturnContext =
+    returnContext &&
+    originating.isCurrent() &&
+    returnContext.locale === locale &&
+    returnContext.sessionId === session.id &&
+    returnContext.subjectId === session.subjectId &&
+    (!returnContext.startedAt || returnContext.startedAt === session.startedAt)
+      ? returnContext
+      : undefined;
   return (
     <ProgressSessionPage
       key={`${instance}:${boundary.epoch}`}
       page={detail.progress}
       logsCursor={address.logs}
       originating={originating}
+      returnContext={currentReturnContext}
     >
       <ProgressLogs progress={detail.progress} logs={detail.logs} search={address} originating={originating} />
     </ProgressSessionPage>
@@ -538,19 +565,68 @@ export function ProgressSessionPage({
   children,
   logsCursor,
   originating,
+  returnContext,
 }: {
   page: ProgressSessionPage;
   children?: ReactNode;
   logsCursor?: string | undefined;
   originating?: ProgressDetailOrigin | undefined;
+  returnContext?: ProgressReturnContext | undefined;
 }) {
   if (!page.signedIn) return null;
   return (
     <PublicationNoteDraftNavigation messages="progress">
-      <SessionEditor page={page} logsCursor={logsCursor} originating={originating}>
+      <SessionEditor page={page} logsCursor={logsCursor} originating={originating} returnContext={returnContext}>
         {children}
       </SessionEditor>
     </PublicationNoteDraftNavigation>
+  );
+}
+
+function ProgressSessionReturnControls({
+  session,
+  returnContext,
+}: {
+  session: ProgressSessionView;
+  returnContext?: ProgressReturnContext | undefined;
+}) {
+  const locale = getLocale();
+  const context =
+    returnContext &&
+    returnContext.locale === locale &&
+    returnContext.sessionId === session.id &&
+    returnContext.subjectId === session.subjectId &&
+    (!returnContext.startedAt || returnContext.startedAt === session.startedAt)
+      ? returnContext
+      : undefined;
+  const subjectReturn = session.subject
+    ? subjectSlotReturnTo(context?.sourceReturnTo, { id: session.subject.id, label: session.subject.label }, locale)
+    : undefined;
+  return (
+    <nav className="flex flex-wrap gap-2" aria-label={m.library_progress_return_to_progress()}>
+      <Link
+        to="/library/progress"
+        search={context ? context.indexSearch : {}}
+        {...(context
+          ? { state: progressIndexSelectionLocationState(context, session.startedAt) as never }
+          : {})}
+        className={buttonClass}
+      >
+        {m.library_progress_return_to_progress()}
+      </Link>
+      <Link
+        to="/library/progress"
+        search={{ ...(context ? { ...context.indexSearch, cursor: undefined } : {}), subjectId: session.subjectId }}
+        className={buttonClass}
+      >
+        {m.library_progress_restart()}
+      </Link>
+      {subjectReturn ? (
+        <a href={subjectReturn} className={buttonClass}>
+          {m.library_progress_return_to_subject()}
+        </a>
+      ) : null}
+    </nav>
   );
 }
 
@@ -559,11 +635,13 @@ function SessionEditor({
   children,
   logsCursor,
   originating,
+  returnContext,
 }: {
   page: LoadedPage;
   children?: ReactNode;
   logsCursor?: string | undefined;
   originating?: ProgressDetailOrigin | undefined;
+  returnContext?: ProgressReturnContext | undefined;
 }) {
   const lifetime = useRef<EditorLifetime | null>(null);
   const draftBaseline = useRef<ProgressDraftBaseline | null>(null);
@@ -1247,17 +1325,20 @@ function SessionEditor({
     <>
       {offered ? recordForm : null}
       {review && review.kind !== 'finish' ? (
-        <ProgressCorrectionReview
-          data={review.data}
-          busy={busy}
-          conflict={conflict}
-          onConfirm={() => {
-            const origin = lifetime.current;
-            if (canHandle() && isCurrent(origin)) void dispatch(review, origin);
-          }}
-          onCancel={() => edit(() => setReview(null))}
-          onReload={() => void reviewLatest()}
-        />
+        <section className="space-y-4">
+          <ProgressSessionReturnControls session={session} returnContext={returnContext} />
+          <ProgressCorrectionReview
+            data={review.data}
+            busy={busy}
+            conflict={conflict}
+            onConfirm={() => {
+              const origin = lifetime.current;
+              if (canHandle() && isCurrent(origin)) void dispatch(review, origin);
+            }}
+            onCancel={() => edit(() => setReview(null))}
+            onReload={() => void reviewLatest()}
+          />
+        </section>
       ) : null}
     </>
   );
@@ -1266,6 +1347,7 @@ function SessionEditor({
     <article className="max-w-4xl space-y-10 text-foreground">
       <header className="space-y-6">
         <PageHeading>{m.library_progress_heading()}</PageHeading>
+        <ProgressSessionReturnControls session={session} returnContext={returnContext} />
         <div className="flex items-start gap-5 sm:gap-7">
           <div className="w-24 shrink-0 sm:w-40">
             <SubjectCover subject={session.subject} ratio={ratio} size="fill" priority />
@@ -1434,7 +1516,25 @@ function SessionEditor({
       </Exposure>
       <Exposure operation="progress_session.create">
         <section className="space-y-3">
-          <Link to="/library/progress" search={{ subjectId: session.subjectId }} className={buttonClass}>
+          <Link
+            to="/library/progress"
+            search={{
+              ...(returnContext ? { ...returnContext.indexSearch, cursor: undefined } : {}),
+              subjectId: session.subjectId,
+            }}
+            {...(session.subject && returnContext?.sourceReturnTo
+              ? {
+                  state: subjectProgressEntryLocationState(
+                    subjectSlotReturnTo(
+                      returnContext.sourceReturnTo,
+                      { id: session.subject.id, label: session.subject.label },
+                      getLocale(),
+                    ),
+                  ) as never,
+                }
+              : {})}
+            className={buttonClass}
+          >
             {m.library_progress_new_session()}
           </Link>
           <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>

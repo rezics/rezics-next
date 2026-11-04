@@ -1103,6 +1103,8 @@
   "library_progress_record_heading": "記錄進度",
   "library_progress_remove_units": "移除單位",
   "library_progress_restart": "重新開始",
+  "library_progress_return_to_progress": "返回進度頁面",
+  "library_progress_return_to_subject": "返回此作品",
   "library_progress_start": "開始",
   "library_progress_start_heading": "開始追蹤",
   "library_progress_start_draft_navigation_title": "要捨棄這個 Progress 設定嗎？",
