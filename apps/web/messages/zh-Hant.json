@@ -4173,6 +4173,8 @@
   "condition_choose_value": "選擇值",
   "condition_add_value": "新增值",
   "condition_metadata_unavailable": "條件定義暫時無法使用。已保留提交的條件。",
+  "condition_entity_unresolved": "目前無法取得此項目的公開標籤。請移除該項目或選擇其他項目。",
+  "condition_entity_invalid": "此值不是原生項目 ID。請移除它，或選擇搜尋結果將它取代。",
   "condition_retained": "已保留此現有條件。此處暫不支援選取或編輯。",
   "condition_saved_filter_label": "已儲存的篩選條件：{id}",
   "condition_saved_filter_reference": "已儲存篩選條件參照",

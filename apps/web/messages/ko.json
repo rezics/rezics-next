@@ -4170,6 +4170,8 @@
   "condition_choose_value": "값 선택",
   "condition_add_value": "값 추가",
   "condition_metadata_unavailable": "조건 정의를 사용할 수 없습니다. 제출한 조건은 유지됩니다.",
+  "condition_entity_unresolved": "이 항목의 현재 공개 라벨을 사용할 수 없습니다. 항목을 제거하거나 다른 항목을 선택하세요.",
+  "condition_entity_invalid": "이 값은 네이티브 항목 ID가 아닙니다. 값을 제거하거나 검색 결과를 선택해 바꾸세요.",
   "condition_retained": "기존 조건이 유지됩니다. 여기서는 선택하거나 편집할 수 없습니다.",
   "condition_saved_filter_label": "저장된 필터: {id}",
   "condition_saved_filter_reference": "저장된 필터 참조",

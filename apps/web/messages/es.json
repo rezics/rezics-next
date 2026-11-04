@@ -4170,6 +4170,8 @@
   "condition_choose_value": "Elegir valor",
   "condition_add_value": "Añadir valor",
   "condition_metadata_unavailable": "Las definiciones no están disponibles. Se conservan las condiciones enviadas.",
+  "condition_entity_unresolved": "La etiqueta pública actual de este elemento no está disponible. Quítalo o elige otro elemento.",
+  "condition_entity_invalid": "Este valor no es un ID de elemento nativo. Quítalo o elige un resultado para reemplazarlo.",
   "condition_retained": "Se conserva esta condición existente. Aquí no se puede seleccionar ni editar.",
   "condition_saved_filter_label": "Filtro guardado: {id}",
   "condition_saved_filter_reference": "Referencia al filtro guardado",

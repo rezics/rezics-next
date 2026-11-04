@@ -54,6 +54,8 @@ Use the one released Boolean grammar, typed properties, units and same-statement
 saved and authorized private predicates together, then exact-deduplicate and admit the whole tree: at most
 32 leaves, depth 4, OR 16, `in` 64 and qualifiers 4. Never truncate expansion or drop an OR branch to fit.
 
+Decision: Preserve an item-valued operand across a property change only when both properties declare the same released target set; a different target set requires confirmation and resets the value.
+
 ### Concept-valued statements
 
 A concept predicate is a statement leaf with its property, one concept ID in `in`, and its selected scheme:

@@ -4275,6 +4275,8 @@
   "condition_choose_value": "Choose a value",
   "condition_add_value": "Add value",
   "condition_metadata_unavailable": "Condition definitions are unavailable. Your submitted conditions are retained.",
+  "condition_entity_unresolved": "This item's current public label is unavailable. Remove it or choose another item.",
+  "condition_entity_invalid": "This value is not a native item ID. Remove it or choose a result to replace it.",
   "condition_retained": "This existing condition is retained. Selection and editing are unavailable here.",
   "condition_saved_filter_label": "Saved filter: {id}",
   "condition_saved_filter_reference": "Saved filter reference",
