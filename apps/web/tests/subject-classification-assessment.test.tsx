@@ -181,7 +181,7 @@ test('support, independent lie flag, oppose change, withdrawal, exact retry and 
   const session = {};
   const own = await readClassificationOwnBallot(transport, request(), session, identity, undefined);
   expect(own.outcome.kind).toBe('absent');
-  expect((await readClassificationAggregate(transport, identity)).outcome).toEqual({
+  expect((await readClassificationAggregate(transport, identity, 'Bearer token')).outcome).toEqual({
     kind: 'ready',
     value: store.aggregate,
   });
