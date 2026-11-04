@@ -98,9 +98,7 @@ test('ordinary item, qualifier, reference and association visits return to the e
         .replace('/en/', `/${locale}/`)
         .replace('episode-1-file-a', encodeURIComponent('証拠'.repeat(30)));
       const current = { ...visit(), locale };
-      await render(
-        createElement(CatalogueFileReader, { key: `source-${kind}`, visit: current, currentHref: sourceHref }),
-      );
+      await render(createElement(CatalogueFileReader, { key: `source-${kind}`, visit: current, currentHref: origin }));
       if (kind === 'qualifier' || kind === 'reference') {
         await act(async () => host.querySelector<HTMLButtonElement>('[data-property="wdt:P4092"] button')!.click());
       }
