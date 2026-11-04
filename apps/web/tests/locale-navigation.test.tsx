@@ -112,6 +112,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   } =
     await import('@tanstack/react-router');
   const { setLocale } = await import('../src/paraglide/runtime.js');
+  const { deriveLocaleDestinations } = await import('../src/shell/locale-navigation/routing');
   const { LocaleNavigationProvider } = await import('../src/shell/locale-navigation/context');
   const { AppearanceControls } = await import('../src/shell/appearance-controls');
   const storybook = createRequire(require.resolve('storybook/test'));
@@ -196,7 +197,13 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   await act(async () => {
     await router.load();
     expect(router.state.location.pathname).toBe('/en/subjects/reader-01');
+    expect(router.state.location.searchStr).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
+    expect(router.state.location.hash).toBe('#chapter-4');
     expect(router.state.matches.length).toBeGreaterThan(1);
+    expect(deriveLocaleDestinations(visit(router.state.location, true), true).find(({ locale }) => locale === 'ja')).toMatchObject({
+      href: '/ja/subjects/reader-01?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88#chapter-4',
+      kind: 'page',
+    });
     root.render(<RouterProvider router={router} />);
   });
   const body = within(window.document.body);
