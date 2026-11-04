@@ -183,21 +183,14 @@ const listPresentation = t.Object(
   },
   closed,
 );
-const viewerFactsUnavailable = t.Object(
-  {
-    state: t.Literal('unavailable'),
-    reason: t.Union([t.Literal('identity'), t.Literal('currentness'), t.Literal('response_limit')]),
-    retryable: t.Boolean(),
-  },
-  closed,
-);
+const [currentViewerFactsResponseSchema, unavailableViewerFactsResponseSchema] = viewerFactsResponseSchema.anyOf;
 const searchViewerFacts = t.Object(
   {
-    ...viewerFactsResponseSchema.properties,
+    ...currentViewerFactsResponseSchema.properties,
     rows: t.Array(
       t.Object(
         {
-          ...viewerFactsResponseSchema.properties.rows.items.properties,
+          ...currentViewerFactsResponseSchema.properties.rows.items.properties,
           resolvedSubjectId: t.Optional(t.String({ format: 'uuid' })),
         },
         closed,
@@ -207,7 +200,7 @@ const searchViewerFacts = t.Object(
   },
   closed,
 );
-const viewerFacts = t.Union([t.Null(), searchViewerFacts, viewerFactsUnavailable]);
+const viewerFacts = t.Union([t.Null(), searchViewerFacts, unavailableViewerFactsResponseSchema]);
 /** The owner-tagged key and non-null native summary close together; no Account Subject shell. */
 export const DiscoveryPageSchema = t.Object(
   {
