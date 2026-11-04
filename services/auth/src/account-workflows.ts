@@ -197,6 +197,18 @@ export function clientAuthority(
     if (issuance.getStore()?.clientId !== clientId) deny();
     if (firstParty) {
       const granted = normalize(scopes);
+      // Repeated proof signing reuses an established consent. Scheduling a writer
+      // here can wait on the client lock held by the credential transaction that
+      // called us. The issuance barrier keeps this exact current read stable.
+      const current = await database.query<{ scopes: string[] }>(
+        `SELECT scopes FROM auth_consent c
+         WHERE account_id=$1 AND client_id=$2 AND pending_scopes IS NULL AND pending_reference IS NULL
+           AND NOT EXISTS (SELECT 1 FROM auth_kind_consent_transition t
+             WHERE t.state<>'applied' AND (t.transition_kind='restore'
+               OR (t.client_id=$2 AND (t.account_id=$1 OR t.account_id IS NULL))))`,
+        [accountId, clientId],
+      );
+      if (current.rows[0] && sameScopes(current.rows[0].scopes, granted)) return;
       const transitionKey = `kind-consent:materialize:${createHash('sha256')
         .update(JSON.stringify([accountId, clientId, granted]))
         .digest('hex')}`;
