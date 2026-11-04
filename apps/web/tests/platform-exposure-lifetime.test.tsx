@@ -110,15 +110,19 @@ const rowTime = '2026-11-01T00:00:00.123456Z';
 function readyPage(group: string, next: string | null = null): Page {
   return {
     status: 'ready',
-    groups: [group],
-    inventory: 'visible-only',
-    current: { status: 'available', exposureGroups: [{ group, open: false, at: rowTime }], next },
-    authority: { status: 'available', offered: ['open', 'close'] },
+    discovery: { status: 'available', groups: [group] },
+    current: {
+      status: 'available',
+      viewer: { accountId: subjectA, clientId: 'exposure-management' },
+      actions: { open: true, close: true },
+      exposureGroups: [{ group, open: false, at: rowTime }],
+      next,
+    },
   };
 }
 
-function envelope(subject: string, group: string): ExposureReaderEnvelope {
-  return { page: readyPage(group), sessionSubject: subject };
+function envelope(subject: string, group: string, next: string | null = null): ExposureReaderEnvelope {
+  return { page: readyPage(group, next), sessionSubject: subject };
 }
 
 function openEnvelope(subject: string, group: string): ExposureReaderEnvelope {
@@ -140,8 +144,8 @@ function signedIn(subject: string, csrfToken: string | null) {
   return { state: 'signed-in' as const, subject, csrfToken };
 }
 
-function setInitial(subject: string, group: string) {
-  loaderEnvelope = envelope(subject, group);
+function setInitial(subject: string, group: string, next: string | null = null) {
+  loaderEnvelope = envelope(subject, group, next);
   loaderReads.length = 0;
   readCalls.length = 0;
   changeCalls.length = 0;
@@ -418,10 +422,37 @@ test('production route and page retire reader-bound work without losing same-own
   expect(container.textContent).toContain(m.exposure_current_unavailable());
 
   await act(async () => root.unmount());
-  await window.happyDOM.close();
+});
+
+test('an expired continuation can restart the same visit at its first-page limit', async () => {
+  setInitial(subjectA, 'collections', 'expired-cursor');
+  const client = createClient(signedIn(subjectA, null));
+  const router = makeRouter(client);
+  await router.load();
+  const container = window.document.createElement('main');
+  window.document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => root.render(createApp(client, router)));
+
+  await click(button(container, m.exposure_next_page()));
+  expect(readCalls[0]!.query).toEqual({ cursor: 'expired-cursor', limit: 20 });
+  await resolveRead(0, {
+    page: { status: 'invalid-cursor', discovery: { status: 'available', groups: ['collections'] } },
+    sessionSubject: subjectA,
+  });
+  expect(container.textContent).toContain(m.exposure_invalid_cursor());
+  await click(button(container, m.exposure_first_page()));
+  expect(readCalls[1]!.query).toEqual({ limit: 20 });
+  await resolveRead(1, envelope(subjectA, 'collections'));
+  expect(container.textContent).toContain(m.exposure_current_page());
+  expect(container.textContent).not.toContain(m.exposure_invalid_cursor());
+
+  await act(async () => root.unmount());
+  container.remove();
 });
 
 afterAll(async () => {
+  await window.happyDOM.close();
   mock.restore();
   for (const [key, descriptor] of previousGlobals) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
