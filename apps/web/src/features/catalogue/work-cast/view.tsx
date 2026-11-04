@@ -22,7 +22,11 @@ export function WorkCastWindow({
   label,
 }: {
   items: Item[];
-  value: RowValue & { subject?: string | null; subjectLabel?: string; realm?: string };
+  value: RowValue & {
+    subject?: string | null | undefined;
+    subjectLabel?: string | undefined;
+    realm?: string | undefined;
+  };
   label: string;
 }) {
   const [presentation, setPresentation] = useState<Presentation>('character');
@@ -103,15 +107,18 @@ export function WorkCastWindow({
                 {performances.map(({ performer, character: target }) => {
                   const performerItem: Item = {
                     ...performer,
-                    qualified: performer.qualified?.filter((note) => note.property !== 'wdt:P453' || !note.subject),
+                    ...(performer.qualified
+                      ? { qualified: performer.qualified.filter((note) => note.property !== 'wdt:P453' || !note.subject) }
+                      : {}),
                   };
                   const characterItem: Item = {
                     id: target.id,
                     label: {
                       text: target.label,
-                      ...(target.summary?.label && typeof target.summary.label === 'object'
-                        ? { lang: target.summary.label.language }
-                        : {}),
+                      lang:
+                        target.summary?.label && typeof target.summary.label === 'object'
+                          ? target.summary.label.language
+                          : undefined,
                     },
                     ...(target.summary ? { summary: target.summary } : {}),
                     notes: [],
