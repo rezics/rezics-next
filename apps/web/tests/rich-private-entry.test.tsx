@@ -125,7 +125,7 @@ async function reader() {
       await pause();
     });
   const note = () => host.querySelector('textarea')!;
-  const rank = () => host.querySelector('input[type=number]')!;
+  const rank = () => host.querySelector('input[inputmode=numeric]')!;
   const change = async (element: Element, value: string) => {
     const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
     const properties = (element as unknown as Record<string, { onChange: (event: unknown) => void }>)[key]!;

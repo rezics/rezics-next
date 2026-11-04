@@ -123,6 +123,7 @@ export function RichPrivateEntry(props: PrivateEntryProps) {
     <PrivateEntryReview
       key={JSON.stringify([
         props.subject.id,
+        props.admitted,
         props.session.state,
         props.session.state === 'signed-in' ? props.session.subject : null,
         props.session.state === 'signed-in' ? props.session.csrfToken : null,
