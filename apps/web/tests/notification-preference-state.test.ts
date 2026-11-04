@@ -379,7 +379,10 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     expect(editor.snapshot()).toMatchObject({
       commandRetryAt: 0,
       pending: null,
-      confirmedReceipt: { attempt: { input: pending!.input }, receipt: { notifications: receiptNotifications, version: 8 } },
+      confirmedReceipt: {
+        attempt: { input: pending!.input },
+        receipt: { notifications: receiptNotifications, version: 8 },
+      },
     });
     expect(confirmed).toEqual([8]);
     await editor.edit('thread_watch', false, 7);
@@ -417,14 +420,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     expect(transport.calls[5]!.headers.get('idempotency-key')).not.toBe(
       transport.calls[0]!.headers.get('idempotency-key'),
     );
-    expect(transport.calls.map((call) => call.method)).toEqual([
-      'PATCH',
-      'PATCH',
-      'GET',
-      'GET',
-      'GET',
-      'PATCH',
-    ]);
+    expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET', 'GET', 'GET', 'PATCH']);
     expect(transport.sessionReads()).toBe(6);
     expect(confirmed).toEqual([8, 10, 11]);
     expect(editor.snapshot()).toMatchObject({

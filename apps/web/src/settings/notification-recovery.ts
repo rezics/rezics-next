@@ -111,7 +111,9 @@ function snapshotFrom(page: PreferencePage): Snapshot {
 export function notificationsNeedNavigationDecision(state: NotificationEditorState): boolean {
   return (
     state.confirmedReceipt !== null ||
-    state.pending !== null || state.intent !== undefined || !sameNotifications(state.known.notifications, state.draft)
+    state.pending !== null ||
+    state.intent !== undefined ||
+    !sameNotifications(state.known.notifications, state.draft)
   );
 }
 
