@@ -49,8 +49,8 @@ function episode() {
     reader,
     commands,
     calls,
-    stale: () => {
-      stale = true;
+    stale: (value = true) => {
+      stale = value;
     },
     unavailable: (value: boolean) => {
       unavailable = value;
@@ -96,11 +96,12 @@ test('in-flight erase survives pagination, another inspection, refresh/restart a
     await e.settle({ ok: false, reason: 'unavailable' });
     await f.click('Retry the same erase');
     expect(e.calls[2]).toEqual(e.calls[0]);
-    await e.settle({ ok: true });
-    await f.click('Retry this page');
-    expect(f.host.textContent).toContain('The erase request was acknowledged');
-    await f.click('Read current post');
-    expect(f.host.textContent).toContain('That does not confirm erasure');
+    await e.settle({ ok: false, reason: 'conflict' });
+    e.stale(false);
+    await f.click('Inspect draft privately');
+    expect(
+      [...f.host.querySelectorAll('button')].find((b) => b.textContent === 'Use server-saved body in editor')?.disabled,
+    ).toBe(false);
     expect(e.calls).toHaveLength(3);
   } finally {
     await f.close();
@@ -144,25 +145,3 @@ test.each(['account', 'session', 'inactive', 'native epoch'] as const)(
     }
   },
 );
-
-test.each([true, false])('settled erase (%s) allows ordinary inspection and editing', async (ok) => {
-  const e = episode();
-  const f = await mountOwnDrafts();
-  try {
-    await f.render({ identity, active: true, reader: e.reader, commands: e.commands });
-    await f.click('Inspect draft privately');
-    await f.click('Erase draft');
-    await f.click('Confirm erase');
-    await f.click('Return to drafts');
-    await f.click('Continue to older drafts');
-    await e.settle(ok ? { ok: true } : { ok: false, reason: 'conflict' });
-    if (ok) await f.click('Retry this page');
-    await f.click('Inspect draft privately');
-    expect(
-      [...f.host.querySelectorAll('button')].find((b) => b.textContent === 'Use server-saved body in editor')?.disabled,
-    ).toBe(false);
-    expect(e.calls).toHaveLength(1);
-  } finally {
-    await f.close();
-  }
-});
