@@ -198,8 +198,9 @@ export function subjectSource(
         if (rows.length === 0) return { partition, position, subjects: [] };
 
         const found = new Map(rows.map((row) => [row.id, row]));
-        const pending = rows.find((row) => !row.selection_ready);
-        if (pending) return { partition, position, subjects: [] as IndexedSubject[], pending };
+        const unreadied = rows.find((row) => !row.selection_ready);
+        if (unreadied)
+          return { partition, position, subjects: [] as IndexedSubject[], pending: unreadied, rebuild: true };
         const present = rows.map(({ id, route }) => ({ id, route }));
         const factRows = (await readFacts.run(client, {
           partition_no: partition,
@@ -215,12 +216,13 @@ export function subjectSource(
         const currentCounts = new Map<string, number>();
         for (const row of currentRows) currentCounts.set(row.id, (currentCounts.get(row.id) ?? 0) + 1);
         const overflow = present.find(({ id }) => (currentCounts.get(id) ?? 0) >= CURRENT_STATEMENT_LIMIT);
-        if (overflow) return { partition, position, subjects: [] as IndexedSubject[], pending: overflow };
+        if (overflow)
+          return { partition, position, subjects: [] as IndexedSubject[], pending: overflow, rebuild: false };
 
         const entries: StatementEntry[] = currentRows.flatMap((row) => {
           if (!row.candidate_id || !row.property || !row.release) return [];
           const body = object(row.body) ? row.body : {};
-          const rank = selectedRank(body.rank) ?? selectedRank(row.rank);
+          const rank = selectedRank(row.rank) ?? selectedRank(body.rank);
           if (rank === null) return [];
           return [
             {
@@ -315,10 +317,11 @@ export function subjectSource(
         return { partition, position, subjects, relation };
       });
       if ('pending' in snapshot && snapshot.pending) {
-        await rebuildSelection.run(pool, {
-          route: snapshot.pending.route,
-          subject_id: snapshot.pending.id,
-        });
+        if (snapshot.rebuild)
+          await rebuildSelection.run(pool, {
+            route: snapshot.pending.route,
+            subject_id: snapshot.pending.id,
+          });
         throw new CommandUnavailableError('contention', partition);
       }
       // Release the source owner before independently anchoring foreign identities or tuples.

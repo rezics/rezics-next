@@ -101,22 +101,22 @@ function nodes(value: unknown): Record<string, unknown>[] {
 }
 
 function expectCurrentHeadPlan(plans: readonly unknown[]): void {
-  const selected = nodes(plans).filter((node) => node['Relation Name'] === 'search_selected');
+  const selected = nodes(plans).filter(
+    (node) =>
+      node['Relation Name'] === 'search_selected' ||
+      /search_selected_(page|value)/.test(String(node['Index Name'] ?? '')),
+  );
   expect(selected.length).toBeGreaterThan(0);
   for (const scan of selected) {
     expect(['Index Scan', 'Index Only Scan', 'Bitmap Index Scan', 'Bitmap Heap Scan']).toContain(
       String(scan['Node Type']),
     );
-    if (scan['Index Name']) expect(String(scan['Index Name'])).toContain('search_selected');
+    if (scan['Index Name']) expect(String(scan['Index Name'])).toMatch(/search_selected_(page|value)/);
     expect(Number(scan['Rows Removed by Filter'] ?? 0)).toBe(0);
   }
-  const sorts = nodes(plans).filter(
-    (node) =>
-      node['Node Type'] === 'Sort' &&
-      String(node['Sort Key'] ?? '').includes('log_seq') &&
-      String((node as { 'Query Text'?: string })['Query Text'] ?? '').includes("kind = 'statement'"),
+  expect(nodes(plans).filter((node) => node['Relation Name'] === 'fact' && node['Node Type'] === 'Seq Scan')).toEqual(
+    [],
   );
-  expect(sorts).toEqual([]);
 }
 
 async function appendObsoleteHistory(subject: string, from: number, to: number): Promise<void> {
