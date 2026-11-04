@@ -95,6 +95,9 @@ The native producer currently projects row source anchors independently from the
 selections therefore require additive final source coverage from the declaration publisher; Web cannot manufacture
 it or treat the opaque token as inspectable authority. No new native DTO or endpoint is authored by Web.
 
+Decision: `provenance.source` remains the authorized parent observation; `provenance.sourceObservations` carries one
+appeal-ID-bound final source anchor for each returned pending row and exact selection, without authorizing the parent read.
+
 ## Cost
 
 ### Cost: selected report inspection
