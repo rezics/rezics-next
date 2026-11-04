@@ -83,7 +83,7 @@ describe("documentation budgets and registry", () => {
     write("docs/large.md", "12345678");
     write("docs/budgets.json", JSON.stringify({ version: 1, budgets: [{ path: "docs/large.md", kind: "file", bytes: 4 }] }));
     write("docs/budgets-baseline.json", JSON.stringify({ version: 1, entries: [{ path: "docs/large.md", bytes: 8 }] }));
-    commit();
+    commit("fixture seed\n\nBudget-Raise: seed the oversized fixture");
     write("docs/large.md", "12345");
     const before = await runDocsCheck(root);
     expect(output(before)).toContain("budget-shrank | docs/large.md | size 5 bytes is below baseline 8 bytes | remedy:");
