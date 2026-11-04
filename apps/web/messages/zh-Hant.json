@@ -9001,5 +9001,13 @@
   "character_work_performer": "演出者",
   "character_work_original": "原始陳述",
   "character_work_new_tab": "（在新分頁開啟）",
-  "character_work_return_missing": "選取的陳述已不在此範圍內。請重新讀取此關聯串流的目前內容。"
+  "character_work_return_missing": "選取的陳述已不在此範圍內。請重新讀取此關聯串流的目前內容。",
+  "subject_artwork_view": "檢視圖片",
+  "subject_artwork_reveal": "顯示圖片",
+  "subject_artwork_hide": "隱藏圖片",
+  "subject_artwork_withheld": "選擇「顯示圖片」後，才會載入並顯示這張圖片。",
+  "subject_artwork_unsupported": "此媒體值沒有支援的圖片呈現方式。",
+  "subject_artwork_oversized": "圖片回應過大，請重試。",
+  "subject_artwork_timeout": "圖片請求逾時，請重試。",
+  "subject_artwork_alt": "{title}的{property}"
 }

@@ -9001,5 +9001,13 @@
   "character_work_performer": "演出者",
   "character_work_original": "原始陈述",
   "character_work_new_tab": "（在新标签页打开）",
-  "character_work_return_missing": "所选陈述已不在此范围内。请重新读取此关联流的当前内容。"
+  "character_work_return_missing": "所选陈述已不在此范围内。请重新读取此关联流的当前内容。",
+  "subject_artwork_view": "查看图片",
+  "subject_artwork_reveal": "显示图片",
+  "subject_artwork_hide": "隐藏图片",
+  "subject_artwork_withheld": "选择「显示图片」后，才会加载并显示这张图片。",
+  "subject_artwork_unsupported": "此媒体值没有支持的图片呈现方式。",
+  "subject_artwork_oversized": "图片响应过大，请重试。",
+  "subject_artwork_timeout": "图片请求超时，请重试。",
+  "subject_artwork_alt": "{title}的{property}"
 }

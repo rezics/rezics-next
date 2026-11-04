@@ -9001,5 +9001,13 @@
   "character_work_performer": "Interprète",
   "character_work_original": "Assertion d’origine",
   "character_work_new_tab": "(nouvel onglet)",
-  "character_work_return_missing": "L’assertion sélectionnée ne figure plus dans cette fenêtre. Recommencez ce flux pour lire les associations actuelles."
+  "character_work_return_missing": "L’assertion sélectionnée ne figure plus dans cette fenêtre. Recommencez ce flux pour lire les associations actuelles.",
+  "subject_artwork_view": "Voir l’image",
+  "subject_artwork_reveal": "Afficher l’image",
+  "subject_artwork_hide": "Masquer l’image",
+  "subject_artwork_withheld": "Choisissez Afficher l’image pour charger et voir cette image.",
+  "subject_artwork_unsupported": "Cette valeur multimédia ne dispose pas d’une présentation d’image prise en charge.",
+  "subject_artwork_oversized": "La réponse de l’image est trop volumineuse. Réessayez.",
+  "subject_artwork_timeout": "La demande d’image a expiré. Réessayez.",
+  "subject_artwork_alt": "{property} — {title}"
 }

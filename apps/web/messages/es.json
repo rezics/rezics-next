@@ -9001,5 +9001,13 @@
   "character_work_performer": "Intérprete",
   "character_work_original": "Afirmación original",
   "character_work_new_tab": "(se abre en una pestaña nueva)",
-  "character_work_return_missing": "La afirmación seleccionada ya no está en esta ventana. Reinicia este flujo para leer las asociaciones actuales."
+  "character_work_return_missing": "La afirmación seleccionada ya no está en esta ventana. Reinicia este flujo para leer las asociaciones actuales.",
+  "subject_artwork_view": "Ver imagen",
+  "subject_artwork_reveal": "Mostrar imagen",
+  "subject_artwork_hide": "Ocultar imagen",
+  "subject_artwork_withheld": "Elige Mostrar imagen para cargar y ver esta imagen.",
+  "subject_artwork_unsupported": "Este valor multimedia no tiene una presentación de imagen compatible.",
+  "subject_artwork_oversized": "La respuesta de la imagen es demasiado grande. Inténtalo de nuevo.",
+  "subject_artwork_timeout": "La solicitud de imagen agotó el tiempo de espera. Inténtalo de nuevo.",
+  "subject_artwork_alt": "{property} — {title}"
 }

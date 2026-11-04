@@ -9001,5 +9001,13 @@
   "character_work_performer": "연기자",
   "character_work_original": "원본 서술",
   "character_work_new_tab": "(새 탭에서 열기)",
-  "character_work_return_missing": "선택한 서술이 이 범위에 없습니다. 이 연결을 처음부터 다시 불러오세요."
+  "character_work_return_missing": "선택한 서술이 이 범위에 없습니다. 이 연결을 처음부터 다시 불러오세요.",
+  "subject_artwork_view": "이미지 보기",
+  "subject_artwork_reveal": "이미지 표시",
+  "subject_artwork_hide": "이미지 숨기기",
+  "subject_artwork_withheld": "이미지 표시를 선택하면 이 이미지를 불러와 표시합니다.",
+  "subject_artwork_unsupported": "이 미디어 값에는 지원되는 이미지 표시가 없습니다.",
+  "subject_artwork_oversized": "이미지 응답이 너무 큽니다. 다시 시도하세요.",
+  "subject_artwork_timeout": "이미지 요청 시간이 초과되었습니다. 다시 시도하세요.",
+  "subject_artwork_alt": "{title}의 {property}"
 }

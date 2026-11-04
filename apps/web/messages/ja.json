@@ -9001,5 +9001,13 @@
   "character_work_performer": "演者",
   "character_work_original": "元の記述",
   "character_work_new_tab": "（新しいタブで開く）",
-  "character_work_return_missing": "選択した記述はこの範囲にありません。この関連項目を最初から読み直してください。"
+  "character_work_return_missing": "選択した記述はこの範囲にありません。この関連項目を最初から読み直してください。",
+  "subject_artwork_view": "画像を見る",
+  "subject_artwork_reveal": "画像を表示",
+  "subject_artwork_hide": "画像を隠す",
+  "subject_artwork_withheld": "「画像を表示」を選ぶと、この画像を読み込んで表示します。",
+  "subject_artwork_unsupported": "このメディア値には、対応する画像表示がありません。",
+  "subject_artwork_oversized": "画像の応答が大きすぎます。もう一度お試しください。",
+  "subject_artwork_timeout": "画像のリクエストがタイムアウトしました。もう一度お試しください。",
+  "subject_artwork_alt": "{title}の{property}"
 }

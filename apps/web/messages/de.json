@@ -9001,5 +9001,13 @@
   "character_work_performer": "Darstellende Person",
   "character_work_original": "Ursprüngliche Aussage",
   "character_work_new_tab": "(öffnet einen neuen Tab)",
-  "character_work_return_missing": "Die ausgewählte Aussage ist nicht mehr in diesem Fenster. Starten Sie diesen Verlauf neu, um die aktuellen Verknüpfungen zu lesen."
+  "character_work_return_missing": "Die ausgewählte Aussage ist nicht mehr in diesem Fenster. Starten Sie diesen Verlauf neu, um die aktuellen Verknüpfungen zu lesen.",
+  "subject_artwork_view": "Bild ansehen",
+  "subject_artwork_reveal": "Bild anzeigen",
+  "subject_artwork_hide": "Bild ausblenden",
+  "subject_artwork_withheld": "Wähle Bild anzeigen, um dieses Bild zu laden und anzusehen.",
+  "subject_artwork_unsupported": "Für diesen Medienwert ist keine unterstützte Bilddarstellung verfügbar.",
+  "subject_artwork_oversized": "Die Bildantwort ist zu groß. Versuche es erneut.",
+  "subject_artwork_timeout": "Die Bildanfrage hat zu lange gedauert. Versuche es erneut.",
+  "subject_artwork_alt": "{property} — {title}"
 }
