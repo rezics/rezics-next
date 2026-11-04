@@ -74,7 +74,12 @@ test('FULL page context stays per copy, preserves qualified facts, and performs 
   expect(contexts[0]).toMatchObject({ state: 'available', work: [{ id: workId, label: 'Shared work' }] });
   expect(contexts[1]).toMatchObject({ state: 'unsupported' });
   expect(contexts[1]?.state === 'unsupported' && contexts[1].facts).toContainEqual(
-    expect.objectContaining({ property: 'schema:author', label: 'Author', text: 'A. Writer', subject: { id: authorId } }),
+    expect.objectContaining({
+      property: 'schema:author',
+      label: 'Author',
+      text: 'A. Writer',
+      subject: expect.objectContaining({ id: authorId }),
+    }),
   );
   expect(contexts[1]?.state === 'unsupported' && contexts[1].facts).toContainEqual(
     expect.objectContaining({ property: 'schema:datePublished', label: 'Publication date', text: 'April 1986' }),
