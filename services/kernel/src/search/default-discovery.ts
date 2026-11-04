@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 import { boundWorkContexts } from './work-context.ts';
-=======
 import { readFollowDiscovery } from '../library/follow-discovery.ts';
->>>>>>> c9311a6b29 (Squash worker branch changes)
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import { isDeepStrictEqual } from 'node:util';

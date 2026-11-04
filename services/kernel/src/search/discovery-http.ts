@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import {
   WorkContextSchema,
   validWorkContext,
@@ -6,9 +5,7 @@ import {
   workContextKind,
   WORK_CONTEXT_LIMITS,
 } from './work-context.ts';
-=======
 import { CollectionCuratorSchema, CollectionPreviewSchema, FollowDiscoverySchema } from './collection-context-http.ts';
->>>>>>> c9311a6b29 (Squash worker branch changes)
 import type { Static } from 'typebox';
 import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';

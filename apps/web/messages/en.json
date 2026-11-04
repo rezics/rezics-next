@@ -8103,7 +8103,6 @@
   "prq_actions_unavailable": "Allowed operations could not be read. Refresh this page to retry.",
   "prq_selection_separate": "Selection requires the separate candidate review visit.",
   "prq_selection_not_allowed": "Selection is not currently allowed in this Context.",
-<<<<<<< HEAD
   "own_classifications_acknowledged": "The native command was acknowledged. Reload this exact page before another change.",
   "own_classifications_readback": "Read current assessment",
   "own_classifications_readback_separate": "Current readback does not acknowledge the original request.",
@@ -8196,8 +8195,7 @@
   "search_share_oversized": "This query is too large for a link. Keep editing to reduce it.",
   "search_share_private": "This query has private or nonportable conditions. Remove them explicitly before sharing.",
   "search_share_unavailable": "Sharing is unavailable. Your query is preserved; try again.",
-  "search_share_close": "Close preview"
-=======
+  "search_share_close": "Close preview",
   "discovery_collection_curator": "Curated by",
   "discovery_collection_curator_unavailable": "Curator unavailable",
   "discovery_collection_preview": "Contents preview",
@@ -8206,5 +8204,4 @@
   "discovery_collection_empty": "This Collection is empty.",
   "discovery_collection_withheld": "No members can be shown.",
   "discovery_collection_preview_unavailable": "Contents preview unavailable."
->>>>>>> c9311a6b29 (Squash worker branch changes)
 }
