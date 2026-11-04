@@ -81,10 +81,12 @@ function receipt(
     source: visit.public.subject.id,
     slug:
       fileReaderSlug(href, visit.public.subject.id, visit.locale) ??
-      subjectHref(
-        { id: visit.public.subject.id, label: pickText(visit.public.subject.labels, visit.locale).text },
-        visit.locale,
-      ).params.slug,
+      encodeURIComponent(
+        subjectHref(
+          { id: visit.public.subject.id, label: pickText(visit.public.subject.labels, visit.locale).text },
+          visit.locale,
+        ).params.slug,
+      ),
     context: visit.public.subject.context,
     definition: visit.digest ?? '',
     ...(realm ? { realm } : {}),
@@ -460,6 +462,10 @@ function selectedEvidence(
               property: fact.property,
               label: fact.label,
               statement,
+              association: visit.associations.find(
+                (item) =>
+                  item.direction === 'forward' && item.property === fact.property && item.statement.id === statement.id,
+              ),
             } satisfies Evidence;
         }
       }
@@ -847,56 +853,64 @@ export function CatalogueFileReader({
     if (element) groupHeadings.current.set(key, element);
     else groupHeadings.current.delete(key);
   };
-  useLayoutEffect(() => {
-    if (!returned || !returnHash) {
-      attemptedReturn.current = undefined;
-      setReturnOutcome(undefined);
-      return;
-    }
-    if (!reading.episode.current()) return;
-    if (attemptedReturn.current?.hash === returnHash) {
-      if (attemptedReturn.current.episode === reading.episode) return;
-      // Replacing an admitted reading must not replay the URL's old selection (including A/B/A).
-      setReturnOutcome('retired');
-      (groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current)?.focus();
-      return;
-    }
-    if (visit.state === 'loading') return;
-    attemptedReturn.current = { hash: returnHash, episode: reading.episode };
-    const resolved = selectedEvidence(visit, returned);
-    const contextMatches =
-      returned.context === visit.public.subject.context &&
-      returned.realm === fileReaderRealm(currentHref, visit.public.subject.id, visit.locale);
-    const currentRow = resolved ?? selectedEvidence(visit, returned, false);
-    const historical =
-      !!currentRow && (currentRow.statement.rezics.release !== visit.digest || !!currentRow.association?.historical);
-    const available =
-      (visit.state === 'ready' || visit.state === 'empty') &&
-      (!resolved?.association || resolved.association.readability === 'readable') &&
-      (!resolved || spoilerLevel(resolved.statement) <= readerSpoiler);
-    const part = returned.part.split(':');
-    const partExists =
-      returned.part === 'value' ||
-      (resolved &&
-        (part[0] === 'q'
-          ? !!resolved.statement.qualifiers[Number(part[1])]
-          : !!resolved.statement.references[Number(part[1])]?.parts[Number(part[2])]));
-    const opener = resolved ? triggers.current.get(resolved.key) : undefined;
-    if (
-      contextMatches &&
-      returned.definition === visit.digest &&
-      resolved &&
-      partExists &&
-      !historical &&
-      available &&
-      opener
-    ) {
-      setReturnOutcome(undefined);
-      reading.select(returned, opener, groupHeadings.current.get(returned.group), true);
-    } else {
-      setReturnOutcome(!available ? 'unavailable' : historical ? 'historical' : 'changed');
-      (groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current)?.focus();
-    }
+  useEffect(() => {
+    let cancelled = false;
+    // Let the current session/cache subscription settle before consuming a navigation receipt.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (!returned || !returnHash) {
+        attemptedReturn.current = undefined;
+        setReturnOutcome(undefined);
+        return;
+      }
+      if (!reading.episode.current()) return;
+      if (attemptedReturn.current?.hash === returnHash) {
+        if (attemptedReturn.current.episode === reading.episode) return;
+        // Replacing an admitted reading must not replay the URL's old selection (including A/B/A).
+        setReturnOutcome('retired');
+        (groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current)?.focus();
+        return;
+      }
+      if (visit.state === 'loading') return;
+      attemptedReturn.current = { hash: returnHash, episode: reading.episode };
+      const resolved = selectedEvidence(visit, returned);
+      const contextMatches =
+        returned.context === visit.public.subject.context &&
+        returned.realm === fileReaderRealm(currentHref, visit.public.subject.id, visit.locale);
+      const currentRow = resolved ?? selectedEvidence(visit, returned, false);
+      const historical =
+        !!currentRow && (currentRow.statement.rezics.release !== visit.digest || !!currentRow.association?.historical);
+      const available =
+        (visit.state === 'ready' || visit.state === 'empty') &&
+        (!resolved?.association || resolved.association.readability === 'readable') &&
+        (!resolved || spoilerLevel(resolved.statement) <= readerSpoiler);
+      const part = returned.part.split(':');
+      const partExists =
+        returned.part === 'value' ||
+        (resolved &&
+          (part[0] === 'q'
+            ? !!resolved.statement.qualifiers[Number(part[1])]
+            : !!resolved.statement.references[Number(part[1])]?.parts[Number(part[2])]));
+      const opener = resolved ? triggers.current.get(resolved.key) : undefined;
+      if (
+        contextMatches &&
+        returned.definition === visit.digest &&
+        resolved &&
+        partExists &&
+        !historical &&
+        available &&
+        opener
+      ) {
+        setReturnOutcome(undefined);
+        reading.select(returned, opener, groupHeadings.current.get(returned.group), true);
+      } else {
+        setReturnOutcome(!available ? 'unavailable' : historical ? 'historical' : 'changed');
+        (groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current)?.focus();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [reading.episode, returnHash]);
   useLayoutEffect(() => {
     if (evidence && reading.episode.current()) {

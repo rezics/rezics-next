@@ -36,7 +36,7 @@ export function fileEvidenceReturn(hash: string): FileEvidenceReturn | undefined
       !groups.has(group) ||
       !token(key, 1024) ||
       (kind === 'association') !== (group === 'associations') ||
-      !token(slug, 512) ||
+      !token(slug, 768) ||
       !/^[A-Za-z0-9_%~-]+$/.test(slug) ||
       typeof part !== 'string' ||
       !/^(?:value|q:(?:0|[1-9]\d{0,3})|r:(?:0|[1-9]\d{0,3}):(?:0|[1-9]\d{0,3}))$/.test(part)
