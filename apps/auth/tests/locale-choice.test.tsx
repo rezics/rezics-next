@@ -1,8 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { useState } from 'react';
 import { creationFixture, dom, flush, open } from './creation-page-fixture';
-import { hydrateRoot, type Root } from 'react-dom/client';
-import { renderToString } from 'react-dom/server';
+import type { Root } from 'react-dom/client';
 import { AuthPage, AuthShell } from '../src/frame';
 import { localeNames } from '../src/locale-choice';
 import {
@@ -15,6 +14,8 @@ import { cookieName, getLocale, locales } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 
 creationFixture();
+const { hydrateRoot } = await import('react-dom/client');
+const { renderToString } = await import('react-dom/server');
 afterEach(() => {
   document.cookie = `${cookieName}=; path=/; max-age=0`;
 });
