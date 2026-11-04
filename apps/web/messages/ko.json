@@ -9059,5 +9059,19 @@
   "profile_reading_closed": "현재 개인 읽기 설정을 사용할 수 없습니다. 보수적인 기본 설정을 사용합니다.",
   "profile_reading_preparing": "읽기 설정을 준비하고 있습니다. 보수적인 기본 설정을 사용합니다.",
   "profile_reading_retired": "이 개인 읽기 설정의 적용이 끝났습니다. 보수적인 기본 설정을 사용합니다.",
-  "profile_reading_retry": "읽기 설정 다시 불러오기"
+  "profile_reading_retry": "읽기 설정 다시 불러오기",
+  "subject_synopsis_choice": "제공된 줄거리 선택",
+  "subject_synopsis_candidate": "후보 {number}",
+  "subject_synopsis_evidence": "이 줄거리의 근거",
+  "subject_synopsis_none": "제공된 작품 줄거리가 없습니다.",
+  "subject_synopsis_choices_unavailable": "줄거리 선택지를 사용할 수 없습니다.",
+  "subject_synopsis_unavailable": "이 줄거리의 문서를 사용할 수 없습니다.",
+  "subject_synopsis_missing": "선택한 줄거리 본문을 아직 사용할 수 없습니다.",
+  "subject_synopsis_loading": "선택한 줄거리를 읽는 중…",
+  "subject_synopsis_failed": "선택한 줄거리를 읽지 못했습니다.",
+  "subject_synopsis_retry": "다시 읽기",
+  "subject_short_description": "짧은 설명",
+  "subject_synopsis_advice_refused": "정정 안내에서 이 작업은 거부되었습니다.",
+  "subject_synopsis_advice_unavailable": "정정 안내를 사용할 수 없습니다.",
+  "subject_synopsis_return": "이 읽기 위치로 돌아가기"
 }

@@ -27,6 +27,7 @@ type Props = {
   busy?: boolean;
   headingRef?: Ref<HTMLHeadingElement>;
   observation?: SourceObservationMount;
+  returnTo?: string;
 };
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -55,7 +56,7 @@ function CitationPart({
 }
 
 /** The detailed public reader shares the subject frame, value renderer and original Sources presentation. */
-export function SubjectSourcesPage({ result, locale, onRetry, busy = false, headingRef, observation }: Props) {
+export function SubjectSourcesPage({ result, locale, onRetry, busy = false, headingRef, observation, returnTo }: Props) {
   const headingId = useId();
   const o = { locale: locale as never };
   if (result.kind !== 'ready')
@@ -90,6 +91,9 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
           >
             {m.sources_retry({}, o)}
           </Button>
+        )}
+        {returnTo && (
+          <a className={linkClassName} href={returnTo}>{m.subject_synopsis_return({}, o)}</a>
         )}
       </article>
     );
@@ -138,6 +142,9 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
             <a className={linkClassName} href={page.href}>
               {m.sources_back({}, o)}
             </a>
+            {returnTo && (
+              <a className={linkClassName} href={returnTo}>{m.subject_synopsis_return({}, o)}</a>
+            )}
             <a className={linkClassName} href={contextHref(`${page.href.split('?', 1)[0]}/details`, page.realm)}>
               {m.subject_details({}, o)}
             </a>

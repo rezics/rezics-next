@@ -9059,5 +9059,19 @@
   "profile_reading_closed": "現在、個人の閲覧設定は利用できません。慎重な初期設定を使います。",
   "profile_reading_preparing": "閲覧設定を準備中です。慎重な初期設定を使います。",
   "profile_reading_retired": "この閲覧設定の適用は終了しました。慎重な初期設定を使います。",
-  "profile_reading_retry": "閲覧設定を再読み込み"
+  "profile_reading_retry": "閲覧設定を再読み込み",
+  "subject_synopsis_choice": "提供されたあらすじを選択",
+  "subject_synopsis_candidate": "候補 {number}",
+  "subject_synopsis_evidence": "このあらすじの根拠",
+  "subject_synopsis_none": "作品のあらすじは提供されていません。",
+  "subject_synopsis_choices_unavailable": "あらすじの選択肢を利用できません。",
+  "subject_synopsis_unavailable": "このあらすじの文書は利用できません。",
+  "subject_synopsis_missing": "選択したあらすじの本文はまだ利用できません。",
+  "subject_synopsis_loading": "選択したあらすじを読み込んでいます…",
+  "subject_synopsis_failed": "選択したあらすじを読み込めませんでした。",
+  "subject_synopsis_retry": "もう一度読み込む",
+  "subject_short_description": "短い説明",
+  "subject_synopsis_advice_refused": "訂正に関する案内では、この操作は拒否されています。",
+  "subject_synopsis_advice_unavailable": "訂正に関する案内を利用できません。",
+  "subject_synopsis_return": "この読み取り位置に戻る"
 }

@@ -9059,5 +9059,19 @@
   "profile_reading_closed": "個人閱讀目前已關閉，使用謹慎的預設值。",
   "profile_reading_preparing": "正在準備你的偏好，暫時使用謹慎的預設值。",
   "profile_reading_retired": "本次個人閱讀已結束，使用謹慎的預設值。",
-  "profile_reading_retry": "重新讀取閱讀偏好"
+  "profile_reading_retry": "重新讀取閱讀偏好",
+  "subject_synopsis_choice": "選擇已提供的劇情簡介",
+  "subject_synopsis_candidate": "候選項 {number}",
+  "subject_synopsis_evidence": "此劇情簡介的證據",
+  "subject_synopsis_none": "沒有可用的作品劇情簡介。",
+  "subject_synopsis_choices_unavailable": "無法使用劇情簡介選項。",
+  "subject_synopsis_unavailable": "此劇情簡介沒有可用的文件。",
+  "subject_synopsis_missing": "所選劇情簡介的文字暫不可用。",
+  "subject_synopsis_loading": "正在讀取所選劇情簡介…",
+  "subject_synopsis_failed": "無法讀取所選劇情簡介。",
+  "subject_synopsis_retry": "重新讀取",
+  "subject_short_description": "簡短描述",
+  "subject_synopsis_advice_refused": "更正建議表明此操作已被拒絕。",
+  "subject_synopsis_advice_unavailable": "更正建議暫不可用。",
+  "subject_synopsis_return": "返回此閱讀位置"
 }

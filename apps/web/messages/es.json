@@ -9059,5 +9059,19 @@
   "profile_reading_closed": "La lectura personalizada está cerrada por ahora. Se aplican opciones prudentes.",
   "profile_reading_preparing": "Tus preferencias se están preparando. Se aplican opciones prudentes.",
   "profile_reading_retired": "Esta lectura personalizada ha terminado. Se aplican opciones prudentes.",
-  "profile_reading_retry": "Volver a leer las preferencias"
+  "profile_reading_retry": "Volver a leer las preferencias",
+  "subject_synopsis_choice": "Elegir un resumen proporcionado",
+  "subject_synopsis_candidate": "Candidato {number}",
+  "subject_synopsis_evidence": "Evidencia de este resumen",
+  "subject_synopsis_none": "No hay ningún resumen proporcionado de la obra.",
+  "subject_synopsis_choices_unavailable": "La selección de resúmenes no está disponible.",
+  "subject_synopsis_unavailable": "Este resumen no tiene ningún documento disponible.",
+  "subject_synopsis_missing": "El texto del resumen seleccionado aún no está disponible.",
+  "subject_synopsis_loading": "Leyendo el resumen seleccionado…",
+  "subject_synopsis_failed": "No se pudo leer el resumen seleccionado.",
+  "subject_synopsis_retry": "Volver a leer",
+  "subject_short_description": "Descripción breve",
+  "subject_synopsis_advice_refused": "La recomendación de corrección indica que esta acción no está permitida.",
+  "subject_synopsis_advice_unavailable": "La recomendación de corrección no está disponible.",
+  "subject_synopsis_return": "Volver a esta lectura"
 }

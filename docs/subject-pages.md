@@ -2189,3 +2189,35 @@ retains its own candidate, command and draft state; the names projection is neve
 Decision: until the shared names-return handoff is delivered, people names use the existing page Context link adapter
 for Terms and Sources and do not promise restoration of a former group, filter or focus. That handoff and its exact
 return acceptance remain a continuation; public name expansion grants no editor permission.
+## Choose a supplied work synopsis
+
+The ordinary About section for Visual Novels (`wd:Q689445`), anime films and series (`schema:Movie` and
+`schema:TVSeries`), and books (`schema:Book`) admits only the already disclosed best-rank `schema:abstract`
+assertions. It groups supplied document languages using their native tags and retains each assertion as a separate
+choice. The default uses the current supported language fallback; an explicit choice does not change the interface
+locale. A language describes the supplied text only. It does not claim source language, authorship, verification or a
+translation relationship. Person and Character pages keep their existing reading owners.
+
+The selected document must bind to that Subject, candidate, document ID, digest, language and available state through
+the existing `statementDocument` contract. Filled text requires no request. Selecting a missing body or retrying makes
+one explicit `readPublicSubjectDocument` request; a fresh response repeats the exact binding before display. Empty
+documents remain successful reads. Unavailable references, missing bodies and failed reads stay separate, and a short
+description remains labeled as a separate fallback. Candidate qualifiers and references render only from the selected
+assertion; no page-level source record is attributed to synopsis text. Spoiler disclosure covers both text and evidence.
+
+Sources and the existing authored-field correction route receive a bounded `via` descriptor for the current
+candidate, document digest, language, Subject context, Realm, locale and release when present. It retains only selection,
+expansion and a safe focus target; it contains no prose, body, credentials or editor state. Return restores only an exact
+current candidate match. Correction links use the page's bounded `statementPropose` advice and do not infer authority
+from public reading.
+
+Decision: Keep same-language synopsis candidates separate and label them by native order unless disclosed citation
+metadata gives a clearer distinction; show evidence only for the selected assertion.
+
+### Cost
+
+The selector consumes only the existing disclosed Subject assertions and makes no language, reference, paragraph or
+render requests. It admits the complete choice metadata projection up to 256 KiB and 512 entries; larger projections
+make the selector unavailable instead of dropping choices. This Web consumer limit is separate from native statement,
+provenance and document bounds. It retains one selected body, one active explicit read and one bounded return
+descriptor; no cross-visit body cache is added. Composition growth and native producer checks remain separate acceptance.

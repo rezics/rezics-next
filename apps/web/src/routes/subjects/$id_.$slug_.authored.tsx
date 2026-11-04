@@ -2,7 +2,7 @@ import { editorRequest } from '../../features/catalogue/editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { useQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useRouterState } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -19,6 +19,7 @@ import { useSession } from '../../session/query';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
+import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 
 const canonicalAuthored = createServerFn({ method: 'GET', strict: false })
   .validator((value: { id: string; slug: string; locale: string; search: string }) => {
@@ -73,9 +74,18 @@ function AuthoredRoute() {
   const { id } = Route.useLoaderData();
   const { property } = Route.useSearch();
   const locale = getLocale();
+  const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
+  const via = subjectVisitReturn(new URLSearchParams(locationSearch).get('via'), locale);
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property]));
   const { state } = useSession();
+  const returnLink = via ? (
+    <p className="px-6 text-sm">
+      <a className="underline underline-offset-4" href={via}>
+        {m.subject_synopsis_return()}
+      </a>
+    </p>
+  ) : null;
   const read = async (field = property, session?: string) => {
     const result = await loadAuthoredField({
       data: editorRequest({ id, property: field, session }, editorWork),
@@ -95,9 +105,10 @@ function AuthoredRoute() {
   });
   if (state === 'signed-out')
     return (
-      <div className="p-6">
-        <EditorFailure reason="denied" locale={locale} />
-      </div>
+      <>
+        <div className="p-6"><EditorFailure reason="denied" locale={locale} /></div>
+        {returnLink}
+      </>
     );
   if (query.isError && !query.data)
     return (
@@ -106,35 +117,37 @@ function AuthoredRoute() {
         <Button variant="outline" onClick={() => candidateWork.live() && void query.refetch()}>
           {m.correction_reload()}
         </Button>
+        {returnLink}
       </div>
     );
   if (!query.data)
     return (
-      <p role="status" className="p-6">
-        {m.candidate_loading()}
-      </p>
+      <div><p role="status" className="p-6">{m.candidate_loading()}</p>{returnLink}</div>
     );
   return (
-    <AuthoredField
-      key={`${id}:${property}:${locale}`}
-      initial={query.isError ? { ok: false, reason: 'unavailable' } : query.data}
-      locale={locale}
-      transport={{
-        read,
-        propose: (data) => submitAuthoredField({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-        review: (field, candidate, cursor, session, work) =>
+    <>
+      <AuthoredField
+        key={`${id}:${property}:${locale}`}
+        initial={query.isError ? { ok: false, reason: 'unavailable' } : query.data}
+        locale={locale}
+        transport={{
+          read,
+          propose: (data) => submitAuthoredField({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          review: (field, candidate, cursor, session, work) =>
+            !work?.live()
+              ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })
+              : loadAuthoredReview({
+                  data: { id, property: field, candidate, cursor, session, expectedReader: work.reader },
+                  headers: csrfHeaders(),
+                }),
+        }}
+        confirm={(data, work) =>
           !work?.live()
-            ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })
-            : loadAuthoredReview({
-                data: { id, property: field, candidate, cursor, session, expectedReader: work.reader },
-                headers: csrfHeaders(),
-              }),
-      }}
-      confirm={(data, work) =>
-        !work?.live()
-          ? Promise.resolve({ ok: false, reason: 'denied' })
-          : confirmAuthoredField({ data, headers: csrfHeaders() })
-      }
-    />
+            ? Promise.resolve({ ok: false, reason: 'denied' })
+            : confirmAuthoredField({ data, headers: csrfHeaders() })
+        }
+      />
+      {returnLink}
+    </>
   );
 }

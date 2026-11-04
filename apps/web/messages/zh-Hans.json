@@ -9059,5 +9059,19 @@
   "profile_reading_closed": "个人阅读目前已关闭，使用谨慎的默认设置。",
   "profile_reading_preparing": "正在准备你的偏好，暂时使用谨慎的默认设置。",
   "profile_reading_retired": "本次个人阅读已结束，使用谨慎的默认设置。",
-  "profile_reading_retry": "重新读取阅读偏好"
+  "profile_reading_retry": "重新读取阅读偏好",
+  "subject_synopsis_choice": "选择已提供的剧情简介",
+  "subject_synopsis_candidate": "候选项 {number}",
+  "subject_synopsis_evidence": "此剧情简介的证据",
+  "subject_synopsis_none": "没有可用的作品剧情简介。",
+  "subject_synopsis_choices_unavailable": "无法使用剧情简介选项。",
+  "subject_synopsis_unavailable": "此剧情简介没有可用的文档。",
+  "subject_synopsis_missing": "所选剧情简介的文本暂不可用。",
+  "subject_synopsis_loading": "正在读取所选剧情简介…",
+  "subject_synopsis_failed": "无法读取所选剧情简介。",
+  "subject_synopsis_retry": "重新读取",
+  "subject_short_description": "简短描述",
+  "subject_synopsis_advice_refused": "更正建议表明此操作已被拒绝。",
+  "subject_synopsis_advice_unavailable": "更正建议暂不可用。",
+  "subject_synopsis_return": "返回此阅读位置"
 }

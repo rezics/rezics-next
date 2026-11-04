@@ -791,6 +791,8 @@ export function PageData({
   pageTarget,
   context,
   continuation,
+  viewer,
+  releaseDigest,
   listTarget,
   fullList,
   listCursor,
@@ -819,6 +821,13 @@ export function PageData({
   pageTarget?: MemberPageTarget | undefined;
   context?: SelectedContext | undefined;
   continuation?: PageContinuation | undefined;
+  viewer?: {
+    state: 'anonymous' | 'account';
+    account?: string;
+    context: string;
+    actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
+  };
+  releaseDigest?: string;
   listTarget?: TypeListTarget | undefined;
   fullList?: string | undefined;
   listCursor?: string | undefined;
@@ -881,6 +890,7 @@ export function PageData({
   };
   const prepared = new Map<string, PreparedRead>();
   let overviewSubjectLabel = subjectLabel;
+  let overviewRelated: Related | undefined;
   let sources: Sources | null = null;
   let artworkRelease: unknown;
   let artworkContext: unknown;
@@ -893,6 +903,7 @@ export function PageData({
       if (planned.id === subject) {
         artworkRelease = (result.body as SubjectRead).subject.release;
         artworkContext = (result.body as SubjectRead).subject.context;
+        overviewRelated = result.body.related as Related;
         sources = read.sources ?? null;
         if (overviewSubjectLabel === undefined) {
           const body = result.body as SubjectRead;
@@ -982,6 +993,27 @@ export function PageData({
     relations,
     ...(directions !== undefined ? { relationDirections: directions } : {}),
     relationNodes: nodesOfType(composition.content, 'RelationGroups'),
+    ...(viewer ? { viewer } : {}),
+    ...(releaseDigest ? { releaseDigest } : {}),
+    ...(overviewRelated
+      ? {
+          renderCandidateValue: (snak: Snak & { id?: string }, candidateSubject: string, candidateLink?: PageLink) => (
+            <CandidateValue
+              snak={snak}
+              related={overviewRelated!}
+              locale={locale}
+              subject={candidateSubject}
+              link={candidateLink ?? link}
+            />
+          ),
+          candidatePropertyLabel: (propertyId: string) => {
+            const propertyLabels = Object.hasOwn(overviewRelated!, propertyId)
+              ? overviewRelated![propertyId]?.labels
+              : {};
+            return fieldLabel(pageText(propertyLabels, locale), locale).text || resolved.unlabelled;
+          },
+        }
+      : {}),
     ...(zoneRatio ? { ratio: zoneRatio } : {}),
     ...(ratio ? { frameRatio: ratio } : {}),
   };

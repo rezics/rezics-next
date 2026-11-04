@@ -800,6 +800,8 @@ export function SubjectPage({
           reads={page.reads}
           context={page.context}
           realm={realm}
+          {...(page.viewer ? { viewer: page.viewer } : {})}
+          {...(page.catalogue?.digest ? { releaseDigest: page.catalogue.digest } : {})}
           cacheReader={page.requestedReader}
           continuation={page.continuation}
           messages={messages}
