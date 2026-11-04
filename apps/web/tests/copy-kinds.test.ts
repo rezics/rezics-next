@@ -85,6 +85,8 @@ mock.module('../src/library/copies-actions', () => ({
   updateCopy() {},
   deleteCopy() {},
   readCopySubject() {},
+  readCopyDetail() {},
+  undoCopy() {},
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({}) }));
 mock.module('../src/kernel/exposure', () => ({
