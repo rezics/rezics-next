@@ -29,6 +29,8 @@ import {
   type RelationProgress,
 } from './relation-stream-progress';
 import { StreamHeading, type StreamHeadingLevel } from './view-heading';
+import { workCastAdmitted, WORK_VOICE_PROPERTY } from '../catalogue/work-cast/model';
+import { WorkCastWindow } from '../catalogue/work-cast/view';
 
 let nextRelationIncarnation = 0;
 let nextSectionIncarnation = 0;
@@ -199,6 +201,8 @@ export function RelationStream(props: {
   view: string;
   title: string;
   titleLang?: string | undefined;
+  /** Character-first composition of this already selected forward work voice-credit window. */
+  workCast?: boolean | undefined;
   /** Direct full-page hosts may select h1; composed hosts supply the shared heading context. */
   headingLevel?: StreamHeadingLevel | undefined;
 }) {
@@ -247,6 +251,7 @@ function StreamState({
   view,
   title,
   titleLang,
+  workCast,
   headingLevel,
   identity,
   registerOwner,
@@ -257,6 +262,7 @@ function StreamState({
   view: string;
   title: string;
   titleLang?: string | undefined;
+  workCast?: boolean | undefined;
   headingLevel?: StreamHeadingLevel | undefined;
   identity: string;
   registerOwner: (identity: string, retire: (updateState?: boolean) => void) => () => void;
@@ -360,6 +366,12 @@ function StreamState({
   const visibleError = currentSession ? (error ?? (malformedPage ? {} : undefined)) : undefined;
   const visibleCompletion = currentSession ? completion : undefined;
   const retryWait = useSearchRetryWait(currentSession ? error?.retryAt : undefined);
+  const castWindowReady =
+    workCast &&
+    workCastAdmitted(value) &&
+    visiblePage?.ok === true &&
+    visiblePage.read.kind === 'relations' &&
+    visiblePage.read.property === WORK_VOICE_PROPERTY;
 
   useLayoutEffect(() => {
     if (owner.retired) return;
@@ -601,10 +613,24 @@ function StreamState({
       >
         {title}
       </StreamHeading>
+      {workCast && !castWindowReady && visiblePage?.ok === true && (
+        <p role="note" className="text-sm text-muted-foreground">
+          {m.work_cast_unavailable({}, options)}
+        </p>
+      )}
+      {workCast && !workCastAdmitted(value) && visiblePage?.ok !== true && !readerUnavailable && (
+        <p role="note" className="text-sm text-muted-foreground">
+          {m.work_cast_unavailable({}, options)}
+        </p>
+      )}
       {readerUnavailable ? (
         <p role="alert">{m.subject_relation_unavailable({}, options)}</p>
       ) : items.length ? (
-        <CoverList items={items} value={value} label={title} />
+        castWindowReady ? (
+          <WorkCastWindow items={items} value={value} label={title} />
+        ) : (
+          <CoverList items={items} value={value} label={title} />
+        )
       ) : !visibleError ? (
         <p role={!section.ok ? 'status' : undefined}>
           {section.ok ? m.subject_relation_empty_page({}, options) : failure(section.status, value.locale)}
