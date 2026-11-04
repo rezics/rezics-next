@@ -72,6 +72,53 @@ test('rejected choices survive failed and successful reads until explicit save o
   }
 });
 
+test('a narrowed current choice keeps the old draft local until every changed value is admitted', async () => {
+  const fixture = readingFixture();
+  let narrowed = false;
+  const io = {
+    ...fixture.io,
+    read: async () => {
+      const page = await fixture.io.read();
+      if (!narrowed || !('preferences' in page)) return page;
+      const advice = page.preferences.advice!;
+      return {
+        ...page,
+        preferences: {
+          ...page.preferences,
+          advice: {
+            ...advice,
+            reading: {
+              ...advice.reading,
+              supported: { spoilerLevels: [0, 1], suitability: ['blur', 'show'] },
+            },
+          },
+        },
+      };
+    },
+  };
+  const editor = new ReadingDraftRecovery(fixture.initial, io, owner());
+  await editor.reload();
+  await editor.edit({ spoilerLevel: 2, suitability: 'show' });
+  narrowed = true;
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({
+    phase: 'review',
+    knownCurrent: true,
+    known: { spoilerLevel: 0, suitability: 'blur', version: 0 },
+    draft: { spoilerLevel: 2, suitability: 'show' },
+  });
+
+  await editor.submit();
+  expect(fixture.calls).toHaveLength(0);
+  expect(editor.snapshot().draft).toMatchObject({ spoilerLevel: 2, suitability: 'show' });
+
+  await editor.edit({ spoilerLevel: 1 });
+  await editor.submit();
+  expect(fixture.calls).toHaveLength(1);
+  expect(fixture.calls[0]).toMatchObject({ expectedVersion: 0, spoilerLevel: 1, suitability: 'show' });
+  expect(editor.snapshot().phase).toBe('saved');
+});
+
 test('loading current values retains the exact uncertain original and later edits through independent recovery', async () => {
   const fixture = readingFixture('lost');
   const editor = new ReadingDraftRecovery(fixture.initial, fixture.io, owner());

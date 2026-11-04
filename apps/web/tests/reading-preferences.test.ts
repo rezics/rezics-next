@@ -1,4 +1,6 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { decodePreferencePage } from '@rezics/client';
 import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
 import {
@@ -14,6 +16,9 @@ import { preferenceRetryDeadline } from '../src/settings/preference-failure-retr
 import { createKernelClient } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { ReadingCard } = await import('../src/settings/reading-card');
 
 const latest = () => 0;
 
@@ -120,4 +125,23 @@ test('a lost acknowledgement retry confirms its command while current values sti
   });
   expect(fixture.calls[1]).toBe(input);
   expect(await readReading(fixture.io, 0)).toMatchObject({ ok: false, reason: 'unavailable' });
+});
+
+test('a singleton suitability choice has a read-only presentation and keeps native effective/default values', () => {
+  const fixture = readingFixture();
+  const advice = readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' });
+  advice.reading.supported.suitability = ['blur'];
+  const markup = renderToStaticMarkup(
+    createElement(ReadingCard, {
+      initial: { ...fixture.initial, advice },
+      version: 0,
+      csrfToken: null,
+      onVersionChange: () => {},
+      io: fixture.io,
+    }),
+  );
+
+  expect(markup).not.toContain('role="switch"');
+  expect(markup).toContain('read-only');
+  expect(markup).toContain('Native default:');
 });
