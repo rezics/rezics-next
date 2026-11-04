@@ -533,7 +533,7 @@ export function BoardPinThreadControls({
             className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
             ...{ 'data-board-pin-focus': 'toggle' },
             'aria-expanded': pending === action,
-            'aria-controls': `board-pin-confirm-${row!.thread.id}`,
+            'aria-controls': `board-pin-confirm-${row!.threadId}`,
             onClick: () => setPending(pending === action ? null : action),
           },
           action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
@@ -543,17 +543,17 @@ export function BoardPinThreadControls({
       ? createElement(
           'div',
           {
-            id: `board-pin-confirm-${row.thread.id}`,
+            id: `board-pin-confirm-${row.threadId}`,
             'data-slot': 'board-pin-confirmation',
             role: 'group',
-            'aria-labelledby': `board-pin-confirm-title-${row.thread.id}`,
-            'aria-describedby': `board-pin-confirm-description-${row.thread.id}`,
+            'aria-labelledby': `board-pin-confirm-title-${row.threadId}`,
+            'aria-describedby': `board-pin-confirm-description-${row.threadId}`,
             className: 'min-w-0 max-w-full basis-full space-y-2 rounded-md border p-3 [overflow-wrap:anywhere]',
           },
-          createElement('h4', { id: `board-pin-confirm-title-${row.thread.id}`, className: 'font-medium' }, confirmTitle),
+          createElement('h4', { id: `board-pin-confirm-title-${row.threadId}`, className: 'font-medium' }, confirmTitle),
           createElement(
             'p',
-            { id: `board-pin-confirm-description-${row.thread.id}`, className: 'text-sm text-muted-foreground' },
+            { id: `board-pin-confirm-description-${row.threadId}`, className: 'text-sm text-muted-foreground' },
             confirmBody,
           ),
           createElement(
