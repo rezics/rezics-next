@@ -74,15 +74,21 @@ const access: Access = {
     return permitted;
   },
 };
-const search = {
+const search: SearchService = {
   async search(_principal, _request, _now, _release, context) {
     executions++;
     const page = { subjects: [], next: null, as_of: new Date().toISOString() };
     await context?.complete(page);
     return page;
   },
-} satisfies Pick<SearchService, 'search'>;
-const app = createKernel({ pool, access, routeKey: new Uint8Array(32), search: search as SearchService });
+  async facets() {
+    return { facets: [], as_of: new Date().toISOString() };
+  },
+  async suggest() {
+    return { subjects: [], as_of: new Date().toISOString() };
+  },
+};
+const app = createKernel({ pool, access, routeKey: new Uint8Array(32), search });
 test('mounted preparation executes native admission and a recipient denial cannot acquire a portable query', async () => {
   const send = () =>
     app.handle(
