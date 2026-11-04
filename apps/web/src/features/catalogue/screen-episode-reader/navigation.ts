@@ -129,6 +129,7 @@ export function screenEpisodeSubjectHref(
       returnUrl.hash = returnHash ? `#${returnHash}` : '#screen-episode-list';
       const returnAddress = subjectVisitReturn(`${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`, locale);
       if (returnAddress) search.set('via', returnAddress);
+    }
   }
   target.search = search.toString();
   return `${target.pathname}${target.search}`;
