@@ -1,14 +1,15 @@
+import { SearchResultsRegion } from './search-regions/results';
 import { QuerySharePreview } from './query-share-preview';
 import { parseQueryShare, shareUnavailable } from './query-share';
-import { SearchCoverage } from './search-context/coverage';
+
 import { facetProperties, FILTER_LIMITS, parseFilter, type FilterDocument, type FilterRange } from '@rezics/filter';
 import * as v from 'valibot';
-import { Link, useRouter } from '@tanstack/react-router';
+import { useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
-import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
+
 import { SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
@@ -20,8 +21,8 @@ import { kernelClient } from '../kernel/client.ts';
 import { requestLanguages } from '../kernel/languages.ts';
 import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
-import { localizedLabel, ResultList } from './results.tsx';
-import { SearchSort } from './sort.tsx';
+import { localizedLabel } from './results.tsx';
+
 import { discoveryRequest } from './search-request.ts';
 import { refinementProperties } from './refinement/model';
 import { readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
@@ -39,8 +40,7 @@ import {
   searchUnavailablePage,
   type SearchRecoveryState,
 } from './search-recovery';
-import { SearchRecovery } from './search-recovery-view';
-import { EmptySearchRecovery } from './empty-recovery';
+
 import { useSearchRetryFocus } from './search-retry-focus';
 import { discoverySearchHref, searchParams, type SearchLoaderDeps } from './search-params';
 import {
@@ -52,10 +52,9 @@ import {
 } from './advanced-scope';
 import { hasResultSearchIntent } from './search-intent';
 import { DiscoveryKinds } from './discovery-kinds';
-import { ResultKindNavigation } from './result-kind-navigation';
+
 import { useDiscoveryPersonalResults } from './discovery-personal-host';
-import { DiscoveryResults } from './discovery-results';
-import { realmCatalogueSubjectHref } from './realm-catalogue-handoff';
+
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 import { ConditionEditor } from './condition-editor';
 import { SearchRealmDiscovery } from './realm-discovery';
@@ -487,18 +486,6 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     });
   });
 
-function searchHref(
-  locale: string,
-  query: string,
-  type: string | undefined,
-  facets: Record<string, string[]>,
-  cursor?: string,
-  sort?: 'rating',
-  state?: SearchLoaderDeps,
-): string {
-  return discoverySearchHref(locale, { ...state, query, type, facets, cursor, sort });
-}
-
 function languageDisplayName(tag: string, locale: string) {
   try {
     return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag;
@@ -858,20 +845,22 @@ export function SearchPage({
   useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
   const revertStatus = useRef<HTMLParagraphElement>(null);
   const retryFocus = useSearchRetryFocus({ scope: stateKey, locale, session }, data?.recovery?.status !== 'loading');
-  const results = renderResults(
-    query,
-    result,
-    locale,
-    type,
-    selectedFacets,
-    editableData,
-    !editing,
-    localIssues.length > 0,
-    onRetry,
-    committedState,
-    retryFocus,
-    searchHref,
-    personal,
+  const results = (
+    <SearchResultsRegion
+      query={query}
+      result={result}
+      locale={locale}
+      type={type}
+      selectedFacets={selectedFacets}
+      data={editableData}
+      continuationAllowed={!editing}
+      invalid={localIssues.length > 0}
+      onRetry={onRetry}
+      retryState={committedState}
+      retryFocus={retryFocus}
+      currentSearchHref={searchHref}
+      personal={personal}
+    />
   );
   const navigate = (href: string, removingCondition = false) => {
     setDraft((previous) => ({ ...previous, attempted: true }));
@@ -1359,237 +1348,6 @@ export function SearchPage({
         content
       )}
     </section>
-  );
-}
-
-function renderResults(
-  query: string,
-  result: SearchResult | undefined,
-  locale: string,
-  type: string | undefined,
-  selectedFacets: Record<string, string[]>,
-  data: SearchPageData | undefined,
-  continuationAllowed = true,
-  invalid = false,
-  onRetry?: (() => void) | undefined,
-  retryState = data?.queryState,
-  retryFocus?: ReturnType<typeof useSearchRetryFocus>,
-  currentSearchHref?: string | undefined,
-  personal?: ReturnType<typeof useDiscoveryPersonalResults>,
-) {
-  if (!result && !data?.discovery && !data?.recovery) return null;
-  const options = messageOptions(locale);
-  const subjectHrefFor = currentSearchHref
-    ? (subject: { id: string; label: string }) => realmCatalogueSubjectHref(subject, locale, currentSearchHref)
-    : undefined;
-  const next =
-    continuationAllowed && (!data?.recovery || data.recovery.status === 'ready')
-      ? data?.discovery?.status === 'ready'
-        ? data.discovery.page.next
-        : result?.next
-      : undefined;
-  return (
-    <>
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">{m.search_results({}, options)}</p>
-          <SearchSort
-            sort={data?.sort ?? 'relevance'}
-            locale={locale}
-            query={query}
-            type={type}
-            facets={selectedFacets}
-            state={data?.queryState}
-            ratingPopulations={data?.ratingPopulations}
-            ratingPopulation={data?.queryState?.ratingPopulation}
-            ratingReadiness={data?.ratingReadiness}
-            disabled={invalid}
-          />
-        </div>
-        {data?.queryState && !result && (
-          <ResultKindNavigation
-            kinds={data.discovery?.status === 'ready' ? data.discovery.page.kinds : undefined}
-            state={data.queryState}
-            locale={locale}
-            disabled={invalid}
-          />
-        )}
-      </div>
-      {data?.queryState &&
-        (data.discovery?.status === 'ready' || result) &&
-        (!data.recovery || data.recovery.status === 'ready') && (
-          <SearchCoverage
-            state={retryState ?? data.queryState}
-            data={data}
-            observation={data.discovery?.status === 'ready' ? data.discovery.page : result!}
-            locale={locale}
-            refreshHref={discoverySearchHref(locale, { ...(retryState ?? data.queryState), cursor: undefined })}
-            onRefresh={onRetry}
-            refreshRef={retryFocus?.retryRef}
-            onFocus={retryFocus?.captureRetryFocus}
-          />
-        )}
-      {data?.staleCursorRestarted && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.search_stale_cursor_restarted({}, options)}
-        </p>
-      )}
-      {data?.facetRetry && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {data.facetIndexNotReady
-            ? m.search_reader_facets_not_ready({}, options)
-            : m.search_reader_facets_unavailable({}, options)}{' '}
-          <a
-            className={linkClass}
-            href={searchHref(
-              locale,
-              query,
-              type,
-              selectedFacets,
-              undefined,
-              data.sort === 'rating' ? 'rating' : undefined,
-              data.queryState,
-            )}
-          >
-            {m.search_facet_retry({}, options)}
-          </a>
-        </p>
-      )}
-      <section
-        id="search-results"
-        ref={(element) => {
-          if (retryFocus) retryFocus.regionRef.current = element;
-          if (personal) personal.regionRef.current = element;
-        }}
-        tabIndex={-1}
-        aria-label={m.search_results({}, options)}
-        data-search-results
-      >
-        {data?.recovery &&
-        data.recovery.status !== 'ready' &&
-        data.queryState &&
-        !(
-          ['loading', 'sparse', 'exhausted', 'index-not-ready', 'source-not-ready', 'unavailable'].includes(
-            data.recovery.status,
-          ) &&
-          (data.discovery || result)
-        ) ? (
-          <SearchRecovery
-            state={data.recovery}
-            retryHref={discoverySearchHref(locale, retryState ?? data.queryState)}
-            restartHref={discoverySearchHref(locale, { ...data.queryState, cursor: undefined })}
-            onRetry={onRetry}
-            locale={locale}
-            {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
-          />
-        ) : data?.discovery ? (
-          <>
-            {data.recovery && data.recovery.status !== 'ready' ? (
-              <SearchRecovery
-                state={data.recovery}
-                retryHref={discoverySearchHref(locale, retryState ?? data.queryState!)}
-                restartHref={discoverySearchHref(locale, { ...data.queryState!, cursor: undefined })}
-                onRetry={onRetry}
-                locale={locale}
-                {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
-              />
-            ) : null}
-            <DiscoveryResults
-              state={data.discovery}
-              renderPersonal={personal?.renderPersonal}
-              locale={locale}
-              yearProperties={data.yearProperties}
-              factDefinitions={data.conditionMetadata?.properties}
-              subjectHrefFor={subjectHrefFor}
-              restartHref={
-                data.queryState ? discoverySearchHref(locale, { ...data.queryState, cursor: undefined }) : undefined
-              }
-            />
-            {data.recovery?.status === 'ready' &&
-            data.queryState &&
-            data.discovery.status === 'ready' &&
-            data.discovery.page.hits.length === 0 &&
-            data.discovery.page.next === null &&
-            data.queryState.cursor === undefined &&
-            data.discovery.page.emptyRecovery ? (
-              <EmptySearchRecovery
-                recovery={data.discovery.page.emptyRecovery}
-                state={data.queryState}
-                locale={locale}
-                labels={{
-                  typeLabels: data.typeLabels ?? {},
-                  typeChoices: data.typeChoices,
-                  selectedFacetLabels: data.selectedFacetLabels,
-                  groups: data.groups,
-                }}
-                onRetry={onRetry}
-              />
-            ) : null}
-          </>
-        ) : result?.subjects.length === 0 ? (
-          <>
-            <Empty className="border">
-              <EmptyHeader>
-                <EmptyTitle className="text-base font-normal">{m.search_no_results({}, options)}</EmptyTitle>
-              </EmptyHeader>
-            </Empty>
-            {data?.queryState &&
-            data.queryState.cursor === undefined &&
-            result.next === null &&
-            result.emptyRecovery ? (
-              <EmptySearchRecovery
-                recovery={result.emptyRecovery}
-                state={data.queryState}
-                locale={locale}
-                labels={{
-                  typeLabels: data.typeLabels ?? {},
-                  typeChoices: data.typeChoices,
-                  selectedFacetLabels: data.selectedFacetLabels,
-                  groups: data.groups,
-                }}
-                onRetry={onRetry}
-              />
-            ) : null}
-          </>
-        ) : (
-          <>
-            <ResultList
-              hits={result?.subjects ?? []}
-              locale={locale}
-              hitTypes={data?.hitTypes ?? {}}
-              yearProperties={data?.yearProperties ?? []}
-              factDefinitions={data?.conditionMetadata?.properties}
-              subjectHrefFor={subjectHrefFor}
-            />
-          </>
-        )}
-      </section>
-      {next && (
-        <Link
-          to="/search"
-          search={{
-            q: query,
-            type,
-            cursor: next,
-            sort: data?.sort === 'rating' ? 'rating' : undefined,
-            ratingPopulation: data?.queryState?.ratingPopulation,
-            kinds: data?.queryState?.kinds,
-            language: data?.queryState?.languages,
-            filter: data?.queryState?.filter,
-            condition: data?.condition ? JSON.stringify(data.condition) : undefined,
-            ...Object.fromEntries(
-              Object.entries(data?.ranges ?? {}).map(([property, range]) => [`r.${property}`, JSON.stringify(range)]),
-            ),
-            ...Object.fromEntries(
-              Object.entries(selectedFacets).map(([property, values]) => [`f.${property}`, values]),
-            ),
-          }}
-          className={buttonVariants({ variant: 'outline' })}
-        >
-          {m.search_more({}, options)}
-        </Link>
-      )}
-    </>
   );
 }
 

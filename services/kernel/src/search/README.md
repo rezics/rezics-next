@@ -165,6 +165,20 @@ owner state before allowing fresh contributions; old contributions never return.
 - Verification: focused projection/reduction/consumer cases and actual-shell preparing/unavailable stories.
   Qualified native publication and visual review remain integration work, not evidence supplied by these stories.
 
+## HTTP response families
+
+`http/discovery/` separates Subject, Account, Collection, Review and Space schemas, native identity admission and
+detached serialization. `page.ts` composes the closed union and preserves page byte budgets, duplicate identity
+checks and the ordered private overlay admission before cursor signing. `viewer-overlays.ts` binds Library facts
+and follows to the exact public rows; native Library, Rating, work-context and Space contracts remain their owners.
+`discovery-http.ts` retains the stable exports. Catalogue, grouped releases/children, facets and suggestions own
+their response definitions and adapters in `http/{catalogue,releases,facets,suggest}.ts`; `http/routes.ts` registers,
+admits and dispatches requests. Family changes belong in their module. Shared envelope or route changes must name
+an after dependency on their current owner.
+
+The mounted Search host retains query execution and reader/cursor lifetimes; `search-regions/results.tsx` receives
+the admitted page, continuation permission, recovery callbacks and current personal-action renderer as bounded props.
+
 ## Mixed-kind foundation
 
 [discovery.ts](discovery.ts) is the shared type home for `AccountDiscoverySource`, `AccountSnapshot`,
