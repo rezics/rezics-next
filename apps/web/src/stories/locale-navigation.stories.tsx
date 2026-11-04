@@ -28,13 +28,16 @@ function localeAt(pathname: string): Locale {
   return locales.find((locale) => locale === prefix) ?? 'en';
 }
 
-function visit(location: {
-  pathname: string;
-  searchStr: string;
-  hash: string;
-  href: string;
-  state: unknown;
-}, supported: boolean): LocaleNavigationLocation {
+function visit(
+  location: {
+    pathname: string;
+    searchStr: string;
+    hash: string;
+    href: string;
+    state: unknown;
+  },
+  supported: boolean,
+): LocaleNavigationLocation {
   const state = location.state;
   const key = state !== null && typeof state === 'object' ? (state as { __TSR_key?: unknown }).__TSR_key : undefined;
   return {
@@ -55,7 +58,12 @@ function ReaderSurface({ journey }: { journey: Journey }) {
     <main className="space-y-4 rounded-2xl border border-border p-4">
       <h1 className="text-lg font-semibold">Subject reader route</h1>
       <p className="break-all text-sm text-muted-foreground">
-        Reader location: <code>{location.pathname}{location.searchStr}{location.hash}</code>
+        Reader location:{' '}
+        <code>
+          {location.pathname}
+          {location.searchStr}
+          {location.hash}
+        </code>
       </p>
       <button
         type="button"
@@ -65,8 +73,15 @@ function ReaderSurface({ journey }: { journey: Journey }) {
         {dirty ? 'Draft is dirty' : 'Mark reader draft dirty'}
       </button>
       {blocker.status === 'blocked' ? (
-        <section role="alertdialog" aria-modal="true" aria-labelledby="locale-departure-title" className="space-y-3 rounded-xl border border-border p-4">
-          <h2 id="locale-departure-title" className="font-semibold">Leave this reader?</h2>
+        <section
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="locale-departure-title"
+          className="space-y-3 rounded-xl border border-border p-4"
+        >
+          <h2 id="locale-departure-title" className="font-semibold">
+            Leave this reader?
+          </h2>
           <p className="text-sm">The current editor asks before leaving this page.</p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -112,7 +127,9 @@ function ReaderShell({ journey, children }: { journey: Journey; children?: React
     <LocaleNavigationProvider value={value}>
       <div className="mx-auto max-w-3xl space-y-5 p-3 sm:p-6">
         <AppearanceControls />
-        <p className="text-xs text-muted-foreground">{m.shell_language_page_destination({}, { locale: location.locale })}</p>
+        <p className="text-xs text-muted-foreground">
+          {m.shell_language_page_destination({}, { locale: location.locale })}
+        </p>
         {children}
         <Outlet />
       </div>
@@ -152,7 +169,8 @@ const meta = {
     },
     docs: {
       description: {
-        story: 'Review the mounted reader journey at phone390 and desktop1440 in both themes. The language menu uses keyboard focus and the existing route departure guard.',
+        story:
+          'Review the mounted reader journey at phone390 and desktop1440 in both themes. The language menu uses keyboard focus and the existing route departure guard.',
       },
     },
   },

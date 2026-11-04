@@ -204,7 +204,11 @@ function Root({ children }: { children: ReactNode }) {
     document.documentElement.dataset.hydrated = '';
   }, []);
   return (
-    <html lang={locale} dir={/^(ar|ckb|dv|fa|he|ku|ps|sd|ug|ur|yi)(?:-|$)/i.test(locale) ? 'rtl' : 'ltr'} suppressHydrationWarning>
+    <html
+      lang={locale}
+      dir={/^(ar|ckb|dv|fa|he|ku|ps|sd|ug|ur|yi)(?:-|$)/i.test(locale) ? 'rtl' : 'ltr'}
+      suppressHydrationWarning
+    >
       <head>
         {nonce ? <meta property="csp-nonce" content={nonce} /> : null}
         <PreferencesScript />

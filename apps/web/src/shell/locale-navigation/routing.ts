@@ -206,10 +206,7 @@ export function deriveLocaleDestinations(
   });
 }
 
-export function isDestinationVisit(
-  location: LocaleNavigationLocation,
-  destination: LocaleDestination,
-): boolean {
+export function isDestinationVisit(location: LocaleNavigationLocation, destination: LocaleDestination): boolean {
   if (location.locale !== destination.locale || !location.supported) return false;
   const address = safeAddress(location, true);
   return (

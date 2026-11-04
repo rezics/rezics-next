@@ -335,13 +335,9 @@ export function LanguageControl() {
             {m.shell_language({}, { locale })}: {names[locale]}
           </summary>
           {destinations.every((destination) => destination.kind === 'home') ? (
-            <p className="max-w-64 break-words p-2 text-sm">
-              {m.shell_language_page_fallback({}, { locale })}
-            </p>
+            <p className="max-w-64 break-words p-2 text-sm">{m.shell_language_page_fallback({}, { locale })}</p>
           ) : (
-            <p className="max-w-64 break-words p-2 text-sm">
-              {m.shell_language_page_destination({}, { locale })}
-            </p>
+            <p className="max-w-64 break-words p-2 text-sm">{m.shell_language_page_destination({}, { locale })}</p>
           )}
           <div className="absolute z-50 grid max-w-64 rounded-xl bg-popover p-2">
             {destinations.map((destination) => (

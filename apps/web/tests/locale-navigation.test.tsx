@@ -13,7 +13,9 @@ function visit(
 ): LocaleNavigationLocation {
   const routeState = location.state;
   const key =
-    routeState !== null && typeof routeState === 'object' ? (routeState as { __TSR_key?: unknown }).__TSR_key : undefined;
+    routeState !== null && typeof routeState === 'object'
+      ? (routeState as { __TSR_key?: unknown }).__TSR_key
+      : undefined;
   const pathLocale = location.pathname.split('/')[1];
   const locale = localeCodes.find((candidate) => candidate === pathLocale);
   return {
@@ -110,8 +112,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
     useBlocker,
     useRouter,
     useRouterState,
-  } =
-    await import('@tanstack/react-router');
+  } = await import('@tanstack/react-router');
   const { deriveLocaleDestinations } = await import('../src/shell/locale-navigation/routing');
   const { LocaleNavigationProvider } = await import('../src/shell/locale-navigation/context');
   const { AppearanceControls } = await import('../src/shell/appearance-controls');
@@ -202,7 +203,9 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
     expect(router.state.location.searchStr).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
     expect(router.state.location.hash).toBe('chapter-4');
     expect(router.state.matches.length).toBeGreaterThan(1);
-    expect(deriveLocaleDestinations(visit(router.state.location, true), true).find(({ locale }) => locale === 'ja')).toMatchObject({
+    expect(
+      deriveLocaleDestinations(visit(router.state.location, true), true).find(({ locale }) => locale === 'ja'),
+    ).toMatchObject({
       href: '/ja/subjects/reader-01?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88#chapter-4',
       kind: 'page',
     });
@@ -244,38 +247,40 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
 }
 
 test('keyboard switching keeps the reader query and fragment; staying in a dirty editor keeps its language', async () => {
-  await withReader(async ({ router, body, user, act, waitFor, admissions, committedLocales, setDraft, setCanLeave, confirmCount }) => {
-    const button = () => body.getByRole('button', { name: /言語|Language/ });
-    const trigger = button();
-    trigger.focus();
-    await act(async () => user.keyboard('{Enter}'));
-    const japanese = await body.findByRole('menuitemradio', { name: /日本語/ });
-    japanese.focus();
-    await act(async () => user.keyboard('{Enter}'));
+  await withReader(
+    async ({ router, body, user, act, waitFor, admissions, committedLocales, setDraft, setCanLeave, confirmCount }) => {
+      const button = () => body.getByRole('button', { name: /言語|Language/ });
+      const trigger = button();
+      trigger.focus();
+      await act(async () => user.keyboard('{Enter}'));
+      const japanese = await body.findByRole('menuitemradio', { name: /日本語/ });
+      japanese.focus();
+      await act(async () => user.keyboard('{Enter}'));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/ja/subjects/reader-01'));
-    expect(body.getByRole('heading', { name: 'Subject reader route' })).toBeDefined();
-    expect(router.state.location.searchStr).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
-    expect(router.state.location.hash).toBe('chapter-4');
-    expect(committedLocales).toEqual(['ja']);
-    await waitFor(() => expect(admissions).toContain('ja'));
-    expect(button().getAttribute('aria-label')).toContain('日本語');
+      await waitFor(() => expect(router.state.location.pathname).toBe('/ja/subjects/reader-01'));
+      expect(body.getByRole('heading', { name: 'Subject reader route' })).toBeDefined();
+      expect(router.state.location.searchStr).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
+      expect(router.state.location.hash).toBe('chapter-4');
+      expect(committedLocales).toEqual(['ja']);
+      await waitFor(() => expect(admissions).toContain('ja'));
+      expect(button().getAttribute('aria-label')).toContain('日本語');
 
-    await act(async () => setDraft(true));
-    setCanLeave(false);
-    const updatedTrigger = button();
-    updatedTrigger.focus();
-    await act(async () => user.keyboard('{Enter}'));
-    const traditional = await body.findByRole('menuitemradio', { name: /繁體中文/ });
-    traditional.focus();
-    await act(async () => user.keyboard('{Enter}'));
-    await waitFor(() => expect(confirmCount()).toBeGreaterThan(0));
+      await act(async () => setDraft(true));
+      setCanLeave(false);
+      const updatedTrigger = button();
+      updatedTrigger.focus();
+      await act(async () => user.keyboard('{Enter}'));
+      const traditional = await body.findByRole('menuitemradio', { name: /繁體中文/ });
+      traditional.focus();
+      await act(async () => user.keyboard('{Enter}'));
+      await waitFor(() => expect(confirmCount()).toBeGreaterThan(0));
 
-    expect(router.state.location.pathname).toBe('/ja/subjects/reader-01');
-    expect(committedLocales).toEqual(['ja']);
-    expect(button().getAttribute('aria-label')).toContain('日本語');
-    expect(body.queryByRole('alert')).toBeNull();
-  });
+      expect(router.state.location.pathname).toBe('/ja/subjects/reader-01');
+      expect(committedLocales).toEqual(['ja']);
+      expect(button().getAttribute('aria-label')).toContain('日本語');
+      expect(body.queryByRole('alert')).toBeNull();
+    },
+  );
 });
 
 test('navigation failure offers the current safe reader and an obsolete completion cannot replace a newer visit', async () => {

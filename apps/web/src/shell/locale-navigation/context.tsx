@@ -59,10 +59,7 @@ function RouterLocaleNavigationProvider({ children }: { children: ReactNode }) {
   const location = useRouterState({
     select: (state) => routeLocation(state as unknown as RouterSnapshot),
   });
-  const readCurrentLocation = useCallback(
-    () => routeLocation(router.state as unknown as RouterSnapshot),
-    [router],
-  );
+  const readCurrentLocation = useCallback(() => routeLocation(router.state as unknown as RouterSnapshot), [router]);
   const navigate = useCallback(
     async (href: string) => {
       await router.navigate({ href });
