@@ -145,6 +145,39 @@ test('fresh advice retires a previously available Continue action while its revi
   page.calls[0]!.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 }));
 });
 
+test('a failed Continue recheck requires a fresh advice read before authentication is offered', async () => {
+  const page = await setup();
+  await beginPendingPassword(page);
+  await pagehide();
+  const original = globalThis.fetch;
+  let reads = 0;
+  const request = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    if (String(input) === '/recovery/page') {
+      reads++;
+      return reads === 2
+        ? Promise.resolve(new Response('', { status: 503 }))
+        : Promise.resolve(nativeAdvice());
+    }
+    return original(input, init);
+  });
+
+  await pageshow();
+  expect(button(page.host, m.auth_step_up_return_continue())).toBeDefined();
+  await flush(() => button(page.host, m.auth_step_up_return_continue())!.click());
+  await settle();
+  expect(page.host.textContent).toContain(m.auth_failure_unavailable());
+  expect(button(page.host, m.auth_step_up_return_continue())).toBeUndefined();
+  expect(button(page.host, m.auth_step_up_return_start())).toBeUndefined();
+  expect(page.assign).not.toHaveBeenCalled();
+
+  await flush(() => button(page.host, m.auth_login_retry())!.click());
+  await settle();
+  expect(button(page.host, m.auth_step_up_return_start())).toBeDefined();
+  expect(reads).toBe(3);
+  request.mockRestore();
+  page.calls[0]!.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 }));
+});
+
 test('a replaced management marker fails its released read without consuming replacement state', async () => {
   const firstAccount = '00000000-0000-4000-8000-000000000011';
   const replacementAccount = '00000000-0000-4000-8000-000000000022';

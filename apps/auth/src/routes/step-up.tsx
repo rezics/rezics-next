@@ -191,6 +191,7 @@ function StepUpForm({
   const returnReview = useStepUpReturnReview(query, origin, returning, advice.state, isCurrent);
   const [continuing, setContinuing] = useState(false);
   const continuingRef = useRef(false);
+  const [reviewRequiresFreshRead, setReviewRequiresFreshRead] = useState(false);
   const shouldWarn = useCallback(
     () =>
       journey.isCurrent() &&
@@ -315,6 +316,7 @@ function StepUpForm({
   async function continueFromReview() {
     if (continuingRef.current || returnReview.state.kind !== 'continue' || !journey.isCurrent()) return;
     continuingRef.current = true;
+    setReviewRequiresFreshRead(true);
     setContinuing(true);
     const result = await returnReview.recheck();
     if (!journey.isCurrent()) return;
@@ -394,11 +396,21 @@ function StepUpForm({
           <StepUpReturnView
             history={history!}
             review={returnReview.state}
-            canAuthenticate={Boolean(page?.actions.authenticate && (page.methods.password || (passkeys && page.methods.passkey)))}
+            canAuthenticate={Boolean(
+              !reviewRequiresFreshRead &&
+                !continuing &&
+                returnReview.state.kind !== 'checking' &&
+                returnReview.state.kind !== 'unavailable' &&
+                page?.actions.authenticate &&
+                (page.methods.password || (passkeys && page.methods.passkey)),
+            )}
             continuing={continuing}
             statusRef={returnStatus}
             alertRef={alert}
-            onRetry={advice.retry}
+            onRetry={() => {
+              setReviewRequiresFreshRead(false);
+              advice.retry();
+            }}
             onContinue={() => void continueFromReview()}
             onAuthenticate={startFresh}
           />
