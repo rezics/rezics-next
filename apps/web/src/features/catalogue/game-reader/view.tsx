@@ -317,7 +317,8 @@ function GameWindow({
                         const card =
                           page.workReleaseCards?.state === 'available'
                             ? page.workReleaseCards.cards.find(
-                                (candidate) => candidate.subject === row.subject && candidate.membership.id === row.statement,
+                                (candidate) =>
+                                  candidate.subject === row.subject && candidate.membership.id === row.statement,
                               )
                             : undefined;
                         const related = Object.fromEntries(
@@ -382,7 +383,9 @@ function GameWindow({
                                 close={() => setSelected(undefined)}
                               />
                             ) : null}
-                            {card ? <WorkReleaseComparison card={card} page={page} locale={locale} link={Link} /> : null}
+                            {card ? (
+                              <WorkReleaseComparison card={card} page={page} locale={locale} link={Link} />
+                            ) : null}
                           </>
                         );
                         return (
@@ -452,7 +455,10 @@ function GameWindow({
   );
 }
 
-type WorkReleaseCardView = Extract<NonNullable<GameReaderReady['workReleaseCards']>, { state: 'available' }>['cards'][number];
+type WorkReleaseCardView = Extract<
+  NonNullable<GameReaderReady['workReleaseCards']>,
+  { state: 'available' }
+>['cards'][number];
 type WorkReleaseCardProperty = keyof WorkReleaseCardView['fields'];
 
 function WorkReleaseComparison({
@@ -494,7 +500,9 @@ function WorkReleaseComparison({
         {groups.map((group) => {
           const fields = group.properties.map((property) => card.fields[property]);
           const available = fields.filter((field) => field.state === 'available');
-          const states = [...new Set(fields.filter((field) => field.state !== 'available').map((field) => field.state))];
+          const states = [
+            ...new Set(fields.filter((field) => field.state !== 'available').map((field) => field.state)),
+          ];
           return (
             <div key={group.id} className="min-w-0 rounded-md bg-muted/40 p-2">
               <dt className="font-medium">{group.label}</dt>

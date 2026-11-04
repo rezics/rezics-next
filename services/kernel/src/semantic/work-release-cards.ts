@@ -60,7 +60,13 @@ type MembershipLink = {
 };
 
 type SelectedField = { facts: FactRow[]; withheld: boolean; unavailable?: boolean };
-type CardSource = { id: string; type: string; summary: SubjectSummary; membership: Statement; related: Record<string, SubjectSummary> };
+type CardSource = {
+  id: string;
+  type: string;
+  summary: SubjectSummary;
+  membership: Statement;
+  related: Record<string, SubjectSummary>;
+};
 type RelationKey = { id: string; property: string; candidate: CurrentRelationCandidate };
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
@@ -131,20 +137,29 @@ export async function readWorkReleaseCards(input: {
     const route = routeOf(link.subject);
     if (route === null) continue;
     routeById.set(link.subject, partitionOf(route));
-    memberships.push({ id: link.subject, type: summary.type, summary, membership: assertion, related: link.related ?? {} });
+    memberships.push({
+      id: link.subject,
+      type: summary.type,
+      summary,
+      membership: assertion,
+      related: link.related ?? {},
+    });
   }
   if (!memberships.length) return { state: 'available', cards: [] };
 
   try {
     const ids = [...new Set(memberships.map(({ id }) => id))];
-    const ready = await Promise.all(
-      ids.map((id) => waitForSubjectLinks(input.pool, input.seen, id, input.deadline)),
-    );
+    const ready = await Promise.all(ids.map((id) => waitForSubjectLinks(input.pool, input.seen, id, input.deadline)));
     if (ready.some((caughtUp) => !caughtUp)) return { state: 'unavailable' };
     const requested = new Map<string, string[]>();
     for (const { id, type } of memberships) {
       const admitted = input.release.types[type]?.properties ?? [];
-      requested.set(id, workReleaseCardProperties.filter((property) => admitted.includes(property) && input.release.properties[property]));
+      requested.set(
+        id,
+        workReleaseCardProperties.filter(
+          (property) => admitted.includes(property) && input.release.properties[property],
+        ),
+      );
     }
 
     const relationCandidatesByPartition = new Map<number, RelationKey[]>();
@@ -231,7 +246,11 @@ export async function readWorkReleaseCards(input: {
         const local = (await partitionReadClient(client, home)) as CommandTransaction;
         for (let offset = 0; offset < candidates.length; offset += 500) {
           const batch = candidates.slice(offset, offset + 500);
-          const current = await currentRelationFacts(local, input.routeKey, batch.map(({ candidate }) => candidate));
+          const current = await currentRelationFacts(
+            local,
+            input.routeKey,
+            batch.map(({ candidate }) => candidate),
+          );
           for (const [key, fact] of current) relationFacts.set(key, fact);
         }
       }

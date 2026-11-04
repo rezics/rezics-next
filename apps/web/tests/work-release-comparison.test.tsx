@@ -13,12 +13,36 @@ const { GameReader } = await import('../src/features/catalogue/game-reader/view'
 const { m } = await import('../src/paraglide/messages.js');
 
 async function mounted() {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.example/en/subjects/game/harbour-game' });
-  const keys = ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'Event', 'MouseEvent', 'MutationObserver'];
-  const values = [window, window.document, window.navigator, window.HTMLElement, window.Element, window.Node, window.Event, window.MouseEvent, window.MutationObserver];
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'Element',
+    'Node',
+    'Event',
+    'MouseEvent',
+    'MutationObserver',
+  ];
+  const values = [
+    window,
+    window.document,
+    window.navigator,
+    window.HTMLElement,
+    window.Element,
+    window.Node,
+    window.Event,
+    window.MouseEvent,
+    window.MutationObserver,
+  ];
   const previous = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  keys.forEach((key, index) => Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: values[index] }));
+  keys.forEach((key, index) =>
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: values[index] }),
+  );
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { configurable: true, writable: true, value: true });
   const { createRoot } = await import('react-dom/client');
   const host = document.createElement('div');
@@ -26,10 +50,26 @@ async function mounted() {
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-out' });
-  const render = async (fixture: ReturnType<typeof workReleaseComparisonExample>, transport: GameReaderTransport = fixture.read) =>
-    act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(GameReader, {
-      ...fixture.address, locale: 'en', realm: 'games', source: fixture, reader: null, transport,
-    }))));
+  const render = async (
+    fixture: ReturnType<typeof workReleaseComparisonExample>,
+    transport: GameReaderTransport = fixture.read,
+  ) =>
+    act(async () =>
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(GameReader, {
+            ...fixture.address,
+            locale: 'en',
+            realm: 'games',
+            source: fixture,
+            reader: null,
+            transport,
+          }),
+        ),
+      ),
+    );
   const click = async (label: string) => {
     const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === label);
     if (!button) throw new Error(`Missing button: ${label}`);
@@ -54,7 +94,8 @@ test('mounted comparison keeps advice failure separate, shows release roles and 
     const fixture = workReleaseComparisonExample('advice-unavailable');
     let retire = false;
     const transport: GameReaderTransport = async (address) => {
-      if (address.cursor && retire) fixture.respond({ ...fixture.last, workReleaseCards: { state: 'available', cards: [] } });
+      if (address.cursor && retire)
+        fixture.respond({ ...fixture.last, workReleaseCards: { state: 'available', cards: [] } });
       return fixture.read(address);
     };
     await ui.render(fixture, transport);
@@ -72,7 +113,9 @@ test('mounted comparison keeps advice failure separate, shows release roles and 
     const destination = ui.host.querySelector<HTMLAnchorElement>('a[href*="/release?"]');
     expect(destination?.target).toBe('_blank');
     destination!.focus();
-    await act(async () => destination!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 })));
+    await act(async () =>
+      destination!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 })),
+    );
     destination!.blur();
     await act(async () => ui.window.dispatchEvent(new Event('focus')));
     expect(document.activeElement).toBe(destination);

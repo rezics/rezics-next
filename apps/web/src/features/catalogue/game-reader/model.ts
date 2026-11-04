@@ -1,4 +1,10 @@
-import type { KernelClient, SubjectLinksResponse, SubjectRead, SubjectReadQuery, WorkReleaseCards } from '@rezics/client';
+import type {
+  KernelClient,
+  SubjectLinksResponse,
+  SubjectRead,
+  SubjectReadQuery,
+  WorkReleaseCards,
+} from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { gameGroups, gameType, gameUuid, type GameGroup } from '../game-profile';
 import type { GuideRelease } from '../definition-guide';

@@ -15,7 +15,8 @@ function body(response: HttpResponse, status = 200) {
   return response.body as Record<string, any>;
 }
 type Fact = Parameters<ReleasedDiscoveryFixture['adopt']>[1];
-const named = (property: string, content: unknown) => discoveryStatement(property, content as StatementInput['value']['content']);
+const named = (property: string, content: unknown) =>
+  discoveryStatement(property, content as StatementInput['value']['content']);
 async function selected(subject: CreatedSubject, fact: Fact) {
   const result = await fixture.adopt(subject, fact);
   expect(result.candidate).toBeTruthy();
@@ -57,11 +58,13 @@ test('native comparison composes exact public work membership, current release e
   await selected(release, named('wdt:P2899', { amount: '+17', unit: 'http://www.wikidata.org/entity/Q577' }));
   await fixture.catchUp([work, release, sparse, platform, status, creator, publisher, producer, developer]);
 
-  const raw = body(await fixture.request(
-    'anonymous',
-    'GET',
-    `/v1/subjects/${work.id}/links?property=schema%3AexampleOfWork&limit=20&language=en`,
-  ));
+  const raw = body(
+    await fixture.request(
+      'anonymous',
+      'GET',
+      `/v1/subjects/${work.id}/links?property=schema%3AexampleOfWork&limit=20&language=en`,
+    ),
+  );
   expect(raw.freshness).toMatchObject({ caught_up: true });
   expect(raw.links).toHaveLength(2);
   expect(raw.workReleaseCards.state).toBe('available');
@@ -86,7 +89,8 @@ test('native comparison composes exact public work membership, current release e
   });
   expect(card.fields['schema:creativeWorkStatus'].statements[0].value.content).toBe(status.id);
   expect(card.fields['wdt:P2899'].statements[0].value.content).toEqual({
-    amount: '+17', unit: 'http://www.wikidata.org/entity/Q577',
+    amount: '+17',
+    unit: 'http://www.wikidata.org/entity/Q577',
   });
   expect(card.fields['schema:publisher'].related[publisher.id].label.value).toContain('Release publisher');
   expect(card.fields['schema:producer'].statements[0]).toMatchObject({
@@ -107,11 +111,13 @@ test('native comparison composes exact public work membership, current release e
   expect(sparseCard.fields['wdt:P2899'].state).toBe('missing');
   expect(sparseCard.fields['schema:producer'].state).toBe('missing');
 
-  const wide = body(await fixture.request(
-    'anonymous',
-    'GET',
-    `/v1/subjects/${work.id}/links?property=schema%3AexampleOfWork&limit=21&language=en`,
-  ));
+  const wide = body(
+    await fixture.request(
+      'anonymous',
+      'GET',
+      `/v1/subjects/${work.id}/links?property=schema%3AexampleOfWork&limit=21&language=en`,
+    ),
+  );
   expect(wide.links).toHaveLength(2);
   expect(wide.workReleaseCards).toEqual({ state: 'unavailable' });
 
@@ -122,12 +128,16 @@ test('native comparison composes exact public work membership, current release e
   await fixture.grant('steward', ['moderation:hide'], developer.id);
   body(await fixture.request('steward', 'POST', `/v1/subjects/${developer.id}:hide`, { reason: 'Conceal target' }));
   await fixture.catchUp([developer]);
-  const hidden = body(await fixture.request(
-    'anonymous',
-    'GET',
-    `/v1/subjects/${work.id}/links?property=schema%3AexampleOfWork&limit=20&language=en`,
-  ));
-  const hiddenCard = (hidden.workReleaseCards.cards as Record<string, any>[]).find((entry) => entry.subject === release.id)!;
+  const hidden = body(
+    await fixture.request(
+      'anonymous',
+      'GET',
+      `/v1/subjects/${work.id}/links?property=schema%3AexampleOfWork&limit=20&language=en`,
+    ),
+  );
+  const hiddenCard = (hidden.workReleaseCards.cards as Record<string, any>[]).find(
+    (entry) => entry.subject === release.id,
+  )!;
   expect(hiddenCard.fields['wdt:P178'].state).toBe('withheld');
   expect(JSON.stringify(hiddenCard)).not.toContain(developer.id);
 });

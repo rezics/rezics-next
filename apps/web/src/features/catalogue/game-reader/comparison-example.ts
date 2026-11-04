@@ -30,7 +30,10 @@ function statement(
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
     property: { id: property, data_type },
-    value: typeof content === 'object' && content !== null && 'type' in content ? (content as GameStatement['value']) : { type: 'value', content },
+    value:
+      typeof content === 'object' && content !== null && 'type' in content
+        ? (content as GameStatement['value'])
+        : { type: 'value', content },
     rank: 'normal',
     qualifiers: [],
     references: [],
@@ -76,21 +79,26 @@ export function workReleaseComparisonExample(scenario: ComparisonExample = 'part
     }),
     'schema:inLanguage': available(statement(402, 'schema:inLanguage', 'string', 'ja')),
     'schema:datePublished': available(dateStatement),
-    'schema:creativeWorkStatus': available(
-      statement(403, 'schema:creativeWorkStatus', 'wikibase-item', statusId),
-      { [statusId]: status },
-    ),
+    'schema:creativeWorkStatus': available(statement(403, 'schema:creativeWorkStatus', 'wikibase-item', statusId), {
+      [statusId]: status,
+    }),
     'wdt:P5804': { state: 'unsupported' },
     'rezics:releaseStatus': { state: 'missing' },
     'schema:contentRating': { state: 'unsupported' },
-    'schema:publisher': available(statement(405, 'schema:publisher', 'wikibase-item', publisherId), { [publisherId]: publisher }),
-    'schema:producer': available(statement(406, 'schema:producer', 'wikibase-item', producerId), { [producerId]: producer }),
+    'schema:publisher': available(statement(405, 'schema:publisher', 'wikibase-item', publisherId), {
+      [publisherId]: publisher,
+    }),
+    'schema:producer': available(statement(406, 'schema:producer', 'wikibase-item', producerId), {
+      [producerId]: producer,
+    }),
     'wdt:P178': available(statement(407, 'wdt:P178', 'wikibase-item', developerId), { [developerId]: developer }),
     'wdt:P162': { state: 'unsupported' },
     'wdt:P2899':
       scenario === 'withheld'
         ? { state: 'withheld' }
-        : available(statement(408, 'wdt:P2899', 'quantity', { amount: '+17', unit: 'http://www.wikidata.org/entity/Q577' })),
+        : available(
+            statement(408, 'wdt:P2899', 'quantity', { amount: '+17', unit: 'http://www.wikidata.org/entity/Q577' }),
+          ),
   };
   const card: WorkReleaseCard = {
     subject: row.subject,
@@ -110,7 +118,10 @@ export function workReleaseComparisonExample(scenario: ComparisonExample = 'part
   fixture.publicRead.viewerActions =
     scenario === 'advice-unavailable'
       ? { state: 'unavailable' }
-      : { state: 'available', actions: [{ action: 'statement:propose', operations: ['subject.propose', 'subject.terms'] }] };
+      : {
+          state: 'available',
+          actions: [{ action: 'statement:propose', operations: ['subject.propose', 'subject.terms'] }],
+        };
   fixture.respond({ ...fixture.first, workReleaseCards: { state: 'available', cards: [card] } });
   return fixture;
 }
