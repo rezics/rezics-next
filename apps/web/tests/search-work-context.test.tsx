@@ -23,7 +23,9 @@ test('native homonyms retain their role, partial date, exact localized targets a
         },
       },
       facts: {
-        [property]: [{ kind: 'item', id: `creator-${index}`, labels: { en: `Creator ${index}` } }],
+        [property]: [
+          { kind: 'item', id: `00000000-0000-4000-8000-00000000010${index}`, labels: { en: `Creator ${index}` } },
+        ],
         'schema:datePublished': [{ kind: 'time', year: 2000 + index, ...(index ? { month: 2 } : {}) }],
       },
       listPresentation: { imageAspect: 'portrait', keyFacts: [property, 'schema:datePublished'] },
@@ -33,7 +35,12 @@ test('native homonyms retain their role, partial date, exact localized targets a
   const client = createKernelClient('http://kernel.local', {
     fetch: async () => {
       calls++;
-      return Response.json({ hits, kinds: { values: [], next: null }, next: 'native-next', as_of: 'now' });
+      return Response.json({
+        hits,
+        kinds: { values: [], next: null },
+        next: 'native-next',
+        as_of: '2026-11-04T00:00:00Z',
+      });
     },
   });
   const { discovery } = await readDiscovery({ representation: 'discovery-v1', languages: ['ja'], limit: 20 }, (body) =>
@@ -56,9 +63,11 @@ test('native homonyms retain their role, partial date, exact localized targets a
   expect(html.match(/出版日:/g)).toHaveLength(2);
   expect(html).toContain('data-slot="year">2000</span>');
   expect(html).toContain('data-slot="date">2001年2月</span>');
-  expect(html).toContain('/ja/subjects/creator-1/creator-1');
+  expect(html).toContain('/ja/subjects/00000000-0000-4000-8000-000000000101/creator-1');
   expect(html).toContain(`/ja/subjects/${hits[1]!.key.id}/echo`);
-  expect(html.indexOf('creator-0')).toBeLessThan(html.indexOf('creator-1'));
+  expect(html.indexOf('00000000-0000-4000-8000-000000000100')).toBeLessThan(
+    html.indexOf('00000000-0000-4000-8000-000000000101'),
+  );
   expect(html).not.toContain('2000年1月');
   expect(calls).toBe(1);
   expect(discovery.status === 'ready' && discovery.page.next).toBe('native-next');
@@ -70,11 +79,19 @@ test('missing metadata never supplies a creator role or a date', () => {
       locale: 'en',
       hitTypes: {},
       yearProperties: ['schema:datePublished'],
-      hits: [{ id: 'bare-work', type: 'schema:Book', labels: { en: 'Echo' }, facts: {} }],
+      hits: [
+        {
+          id: 'bare-work',
+          type: 'schema:Book',
+          labels: { en: 'Echo' },
+          facts: { 'schema:contributor': [{ kind: 'item', id: 'creator', labels: { en: 'Mira' } }] },
+        },
+      ],
     }),
   );
   expect(html).toContain('/en/subjects/bare-work/echo');
   expect(html).not.toContain('data-slot="year"');
+  expect(html).toContain('Mira');
   expect(html).not.toContain('Author:');
   expect(html).not.toContain('Publication date:');
 });
