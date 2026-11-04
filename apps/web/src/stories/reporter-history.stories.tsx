@@ -33,7 +33,7 @@ const row: ReporterHistoryEntry = {
 
 function page(
   state: 'ready' | 'preparing',
-  entries: readonly ReporterHistoryEntry[],
+  entries: ReporterHistoryEntry[],
   selectedReportId: string | null = null,
   nextCursor: string | null = null,
 ): HistoryPage {
