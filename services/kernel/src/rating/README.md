@@ -1794,7 +1794,7 @@ Both the point reader and the existing own-page aggregate receiver apply this sa
 Own-state reads repeat the current account, actor lifecycle generation, exact private slot and actor-home witness
 after reading delivery state. Both point readers repeat Semantic's current exact association and native Access
 after payload selection. A visibility loss returns the same 404 as absence; a changed binding or witness returns a
-retryable failure. A visible mismatched binding cannot be edited or silently rebound. Withdrawing after lost
+retryable failure. An own slot whose retained binding already differs returns the ordinary 404, never a false empty slot. A visible mismatched binding cannot be edited or silently rebound. Withdrawing after lost
 visibility still returns only 204 under the existing own-account rule.
 
 The existing receiver can represent these responses without new UI:
@@ -1835,7 +1835,8 @@ the original response only after current admission, even if a later command has 
   receipt and changed outbox event. Target delivery subtracts the exact retained contribution and advances both slot
   witness and aggregate generation. Missing association visibility uses only the existing minimal own-account rule.
 - Bound: One locked slot and at most one update/event, plus an activation cleanup event when needed. Each lifecycle
-  page selects at most 51 indexed obligations and updates at most 50 exact keys, emitting one ordered slot revision
+  page seeks the `(route, actor, eligibility generation, subject, association)` obligation prefix in index order,
+  selects at most 51 obligations and updates at most 50 exact keys, emitting one ordered slot revision
   per update and a continuation event when another page remains. A visible binding mismatch fails before mutation.
 - Growth check: Retain change-clear-change and exact uncertain-clear replay with a newer slot. Grow selected actor
   history and eligible cleanup obligations independently of unrelated actors at 256/1024/4096; capture all shared

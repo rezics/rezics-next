@@ -220,6 +220,27 @@ CREATE TABLE rating.classification_aggregate (
 
 
 --
+-- Name: classification_aggregate_source; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.classification_aggregate_source (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    association_id uuid NOT NULL,
+    binding_hash bytea NOT NULL,
+    source_partition integer NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT classification_aggregate_source_binding_hash_check CHECK ((octet_length(binding_hash) = 32)),
+    CONSTRAINT classification_aggregate_source_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT classification_aggregate_source_check1 CHECK ((route = ((get_byte(uuid_send(association_id), 10) * 256) + get_byte(uuid_send(association_id), 11)))),
+    CONSTRAINT classification_aggregate_source_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT classification_aggregate_source_source_partition_check CHECK (((source_partition >= 0) AND (source_partition <= 4095))),
+    CONSTRAINT classification_aggregate_source_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
 -- Name: classification_ballot; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -983,6 +1004,14 @@ ALTER TABLE ONLY rating.classification_aggregate
 
 
 --
+-- Name: classification_aggregate_source classification_aggregate_source_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.classification_aggregate_source
+    ADD CONSTRAINT classification_aggregate_source_pkey PRIMARY KEY (route, subject_id, association_id, binding_hash, source_partition);
+
+
+--
 -- Name: classification_ballot_actor classification_ballot_actor_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -1611,20 +1640,6 @@ ALTER TABLE ONLY rating.vote
 
 
 --
-CREATE TABLE rating.classification_aggregate_source (
-  route integer NOT NULL,
-  subject_id uuid NOT NULL,
-  association_id uuid NOT NULL,
-  binding_hash bytea NOT NULL CHECK (octet_length(binding_hash) = 32),
-  source_partition integer NOT NULL CHECK (source_partition BETWEEN 0 AND 4095),
-  source_epoch integer NOT NULL CHECK (source_epoch > 0),
-  source_position bigint NOT NULL CHECK (source_position > 0),
-  PRIMARY KEY (route, subject_id, association_id, binding_hash, source_partition),
-  CHECK (route = get_byte(uuid_send(subject_id), 10) * 256 + get_byte(uuid_send(subject_id), 11)),
-  CHECK (route = get_byte(uuid_send(association_id), 10) * 256 + get_byte(uuid_send(association_id), 11))
-);
-
-
 -- PostgreSQL database dump complete
 --
 
