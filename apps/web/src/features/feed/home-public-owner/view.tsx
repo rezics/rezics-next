@@ -3,7 +3,64 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
 import type { FeedItem } from '../../pages/home-feed-read';
-import { homeFeedDestination, homeFeedTitle } from '../../pages/home-feed-destination';
+import { homeFeedDestination, homeFeedRealmDestination, homeFeedTitle } from '../../pages/home-feed-destination';
+
+type SpaceSummary = Extract<FeedItem['summary'], { address: string }>;
+
+function HomeSpaceCarrierContext({
+  item,
+  summary,
+  locale,
+}: {
+  item: FeedItem;
+  summary: SpaceSummary;
+  locale: string;
+}) {
+  const options = { locale: locale as Locale };
+  if (!('realm' in summary) || summary.realm === undefined)
+    return (
+      <p className="text-muted-foreground" data-home-carrier-state="unavailable">
+        {m.home_owner_carrier_unavailable({}, options)}
+      </p>
+    );
+  if (summary.realm === null)
+    return (
+      <p className="text-muted-foreground" data-home-carrier-state="none">
+        {m.home_owner_carrier_none({}, options)}
+      </p>
+    );
+
+  const realm = summary.realm;
+  const state = realm.title === null ? 'title-unavailable' : realm.title === '' ? 'title-empty' : 'current';
+  const title =
+    realm.title === null
+      ? m.home_owner_carrier_title_unavailable({}, options)
+      : realm.title === ''
+        ? m.home_owner_carrier_title_empty({}, options)
+        : realm.title;
+  const href = homeFeedRealmDestination(item, locale);
+  return (
+    <p
+      className="text-muted-foreground"
+      data-home-carrier-state={state}
+      data-home-carrier-id={realm.id}
+    >
+      <bdi>{m.space_realm_heading({}, options)}:</bdi>{' '}
+      {href ? (
+        <a
+          data-home-carrier-link
+          data-realm-id={realm.id}
+          href={href}
+          className="text-primary underline underline-offset-4"
+        >
+          <bdi>{title}</bdi>
+        </a>
+      ) : (
+        <bdi>{title}</bdi>
+      )}
+    </p>
+  );
+}
 
 /** Only native page summaries: no target hydration, membership inference or private cache. */
 export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; locale: string }) {
@@ -31,10 +88,15 @@ export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; local
             : m.home_owner_description_unavailable({}, options)}
         </p>
       )}
+      {kind === 'space' && 'address' in summary ? (
+        <p className="text-muted-foreground" data-home-space-address={summary.address}>
+          <bdi>{m.space_setup_address({}, options)}:</bdi> <bdi>{summary.address}</bdi>
+        </p>
+      ) : null}
       {kind === 'collection' ? (
         <p className="text-muted-foreground">{m.home_owner_curator_unavailable({}, options)}</p>
-      ) : !('realm' in summary) || !summary.realm?.title ? (
-        <p className="text-muted-foreground">{m.home_owner_carrier_unavailable({}, options)}</p>
+      ) : 'address' in summary ? (
+        <HomeSpaceCarrierContext item={item} summary={summary} locale={locale} />
       ) : null}
       <p className="text-muted-foreground">{m.home_owner_follow_context({}, options)}</p>
     </div>
