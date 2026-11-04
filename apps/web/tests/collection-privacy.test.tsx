@@ -8,6 +8,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/query', () => ({
   sessionQuery: { queryKey: ['session'] },
   exposureQuery: { queryKey: ['exposure'] },
+  sessionCsrfToken: () => 'test-token',
   useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }),
 }));
 const { CollectionRow } = await import('../src/settings/collection-privacy');
