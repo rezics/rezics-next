@@ -237,7 +237,7 @@ test('music context keeps two events at a place, dated recordings, partial dates
   expect(timeFact('wdt:P9001')).toMatchObject({ state: 'unsupported', reason: 'calendar' });
   expect(timeFact('wdt:P9002')).toMatchObject({ state: 'unsupported', reason: 'uncertainty' });
   expect(timeFact('wdt:P1619')).toMatchObject({ state: 'novalue' });
-  expect(read.facts.some((fact) => fact.unknown)).toBe(true);
+  expect(read.facts.some((fact) => fact.unknown)).toBe(false);
   expect(read.links.map((link) => link.label)).toEqual(['Spring concert', 'Autumn concert', 'Live']);
   expect(read.links[0]?.date).toMatchObject({ state: 'supported', date: '+2001-05', calendar: 'julian' });
   expect(read.links[1]?.date).toMatchObject({ state: 'unsupported', reason: 'calendar' });
