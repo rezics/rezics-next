@@ -147,6 +147,7 @@ export function MusicLocationWindow({
               : m.music_location_requested_start({}, options)}
           </p>
         ) : null}
+        {!busy && !failure && page ? <p role="status">{m.music_location_accepted({}, options)}</p> : null}
         {refreshing ? <p role="status">{m.music_location_refreshing({}, options)}</p> : null}
         {reading.restoredUnavailable ? <p>{m.music_location_stream_removed({}, options)}</p> : null}
         {reading.refreshFailed ? <p role="alert">{m.music_location_refresh_failed({}, options)}</p> : null}
@@ -194,7 +195,7 @@ export function MusicLocationWindow({
           <p className="font-medium" data-slot="music-location-accepted">
             {retained ? m.music_location_retained({}, options) : m.music_location_accepted({}, options)}
             {' · '}
-            {kindLabel(page.kind, locale)}
+            <span>{kindLabel(page.kind, locale)}</span>
             {page.identity.typeLabel.text ? (
               <span lang={page.identity.typeLabel.lang ?? undefined}> · {page.identity.typeLabel.text}</span>
             ) : null}
