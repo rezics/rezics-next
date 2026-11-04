@@ -953,7 +953,21 @@ function PublicationEditorLive({
                   ) : null}
                   {failure.refreshDefinitions && <p>{m.catalogue_create_refresh({}, o)}</p>}
                   {failure.reason === 'conflict' && !reviewDefinitions && (
-                    <Button className={actionClassName} type="button" variant="outline" onClick={() => edit(() => {})}>
+                    <Button
+                      className={actionClassName}
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        if (!lifetime.active() || running.current) return;
+                        command.current = null;
+                        localDraft.current = true;
+                        admission.current.disabled = false;
+                        setReviewing(false);
+                        setReviewed(undefined);
+                        setFailure(undefined);
+                        setCorrections([]);
+                      }}
+                    >
                       {m.catalogue_create_review_new({}, o)}
                     </Button>
                   )}
