@@ -3,6 +3,10 @@ import { readEditionSourceIdentity } from './edition-reads.ts';
 import { locateThreadPost } from './post-location.ts';
 import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
+import { readAuthorContributionActions } from './author-contribution-actions.ts';
+import {
+  AuthorContributionActionsInputSchema, AuthorContributionActionsResponseSchema,
+} from './author-contribution-actions-schema.ts';
 import { listOwnDrafts, resumeOwnDraft } from './own-drafts.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import { BoardOpeningChangedError, createBoardPageReader, type BoardOpeningPage } from './board-page.ts';
@@ -1384,7 +1388,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               },
             );
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
-            return { threads: [...page.entries], next: page.nextCursor };
+            return { threads: [...page.entries], next: page.nextCursor,
+              ...(page.actionSelection ? { actionSelection: page.actionSelection } : {}) };
           }),
         );
       },
@@ -1416,9 +1421,32 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               },
             );
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
-            return { posts: [...page.entries], next: page.nextCursor };
+            return { posts: [...page.entries], next: page.nextCursor,
+              ...(page.actionSelection ? { actionSelection: page.actionSelection } : {}) };
           }),
         );
+      },
+    )
+    .post(
+      '/v1/accounts/:accountId/contribution-actions',
+      {
+        params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
+        parse: [parseBody, 'json'],
+        transform: rejectOversized,
+        body: strictContentSchema(AuthorContributionActionsInputSchema),
+        response: { 200: withHeaders(strictContentSchema(AuthorContributionActionsResponseSchema), sessionHeader),
+          ...readFailures },
+        detail: { operationId: 'author_contributions.actions', 'x-exposure': 'public',
+          'x-action': 'thread:read', security: readSecurity },
+      },
+      async ({ params: { accountId }, body, actor, admission, job, session, set }) => {
+        existingId(accountId);
+        set.headers['cache-control'] = 'private, no-store';
+        return contentOperation(() => admission.run('normal', job, async () => {
+          const result = await readAuthorContributionActions(dependencies, accountId, body, actor, job.deadline);
+          for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+          return result.value;
+        }));
       },
     )
     .get(

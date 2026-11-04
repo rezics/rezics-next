@@ -20,6 +20,8 @@ import {
 } from './reads.ts';
 import threadPage from './author-item-threads.sql';
 import postPage from './author-item-posts.sql';
+import { issueAuthorContributionSelection } from './author-contribution-actions.ts';
+import type { AuthorContributionSelection } from './author-contribution-actions-schema.ts';
 import {
   prepareAuthorItemContext,
   type AuthorContextReference,
@@ -34,7 +36,10 @@ export type AuthorPostEntry = Extract<ItemView, { availability: 'available' }> &
 } & Partial<AuthorItemContext>;
 export type AuthorThreadEntry = ThreadView & Partial<AuthorItemContext>;
 export type AuthorItemDependencies = ContentReadDependencies & { cursorNow?: () => number };
-export type AuthorPage<T> = { entries: readonly T[]; nextCursor: string | null; anchors: readonly AnchoredPosition[] };
+export type AuthorPage<T> = {
+  entries: readonly T[]; nextCursor: string | null; anchors: readonly AnchoredPosition[];
+  actionSelection?: AuthorContributionSelection;
+};
 type Key = { createdAt: string; itemId: string };
 type Candidate = Key & { threadId: string };
 type List = 'threads' | 'posts';
@@ -328,6 +333,12 @@ async function listAuthorItems(
   return {
     entries: entries.map((entry) => ({ ...entry, ...contexts.get(entry.id) })),
     anchors,
+    ...(context.actor.kind === 'anonymous' && selected.length > 0 ? {
+      actionSelection: issueAuthorContributionSelection(
+        dependencies.tokens, accountId, list === 'posts' ? 'posts' : kind === 'review' ? 'reviews' : 'discussion',
+        input.cursor, selected, final, now,
+      ),
+    } : {}),
     nextCursor: hasMore && last ? encodeAuthorItemKey(dependencies.tokens, scope, last, page.anchor.epoch, now) : null,
   };
 }
