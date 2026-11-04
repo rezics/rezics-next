@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
+import { createOwnedErasureFixture } from './support/erasure-worker.ts';
 import { sessionScopes } from './support/session-profile-fixture.ts';
+import { deletePersona } from '../support/account-deletion.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 
 let native: NativeProfileFixture;
@@ -48,13 +50,11 @@ async function occurrence(subjectId: string, finishDate?: { year: number; month?
   const started = await call('POST', '/v1/progressSessions', { subjectId, mode: 'scalar_amount', unit: 'page' });
   expect(started.response.status).toBe(201);
   const id = started.value.progressSession.id as string;
-  let revision = 0;
   if (finishDate) {
-    const journal = await call('PATCH', `/v1/progressSessions/${id}/journal`, { revision, finishDate });
+    const journal = await call('PATCH', `/v1/progressSessions/${id}/journal`, { revision: 0, finishDate });
     expect(journal.response.status).toBe(200);
-    revision++;
   }
-  const completed = await call('POST', `/v1/progressSessions/${id}:complete`, { revision });
+  const completed = await call('POST', `/v1/progressSessions/${id}:complete`, { revision: 1 });
   expect(completed.response.status).toBe(200);
   return id;
 }
@@ -188,28 +188,56 @@ test('foreign owners see only their own goal state and account retirement erases
   expect(hidden.status).toBe(200);
   expect((await hidden.json()).target).toEqual({ state: 'none', revision: null });
 
-  const ownerRoute = (
-    await native.pool.query<{ route: number }>('SELECT route FROM access.account WHERE account_id=$1', [
-      owner.actor.accountId,
-    ])
-  ).rows[0]!.route;
-  await native.revokeIdentity(owner.actor.accountId);
-  expect((await native.send(owner.bearer, 'GET', `${path}?year=2040`)).status).toBe(401);
-  const erased = await purgeOwnedGraphPage(native.pool, {
-    accountId: owner.actor.accountId,
-    kind: 'yearly_completion_goals',
-    parent: null,
-    after: null,
-    ordinal: 0,
-    segment: 0,
-  });
-  expect(erased.removed).toBeGreaterThan(0);
-  expect(
-    (
-      await native.pool.query('SELECT 1 FROM library.yearly_completion_goal WHERE route=$1 AND account_id=$2 LIMIT 1', [
-        ownerRoute,
-        owner.actor.accountId,
+  const erasure = await createOwnedErasureFixture();
+  try {
+    const retiring = erasure.people.bob;
+    const key = entryKey();
+    const commandBody = {
+      year: 2040,
+      metric,
+      target: 12,
+      expectedRevision: null,
+    };
+    const originalCommand = () =>
+      erasure.kernel.handle(
+        new Request(`http://kernel.test${path}`, {
+          method: 'PUT',
+          headers: {
+            authorization: `Bearer ${retiring.bearer}`,
+            'content-type': 'application/json',
+            'idempotency-key': JSON.stringify(key),
+          },
+          body: JSON.stringify(commandBody),
+        }),
+      );
+    const original = await originalCommand();
+    expect(original.status).toBe(200);
+    expect(await original.json()).toMatchObject({ target: 12, revision: '1' });
+    await deletePersona(erasure.options, retiring);
+    expect((await originalCommand()).status).toBe(401);
+    const ownerRoute = (
+      await erasure.db.pool.query<{ route: number }>('SELECT route FROM access.account WHERE account_id=$1', [
+        retiring.accountId,
       ])
-    ).rowCount,
-  ).toBe(0);
+    ).rows[0]!.route;
+    const erased = await purgeOwnedGraphPage(erasure.db.pool, {
+      accountId: retiring.accountId,
+      kind: 'yearly_completion_goals',
+      parent: null,
+      after: null,
+      ordinal: 0,
+      segment: 0,
+    });
+    expect(erased.removed).toBeGreaterThan(0);
+    expect(
+      (
+        await erasure.db.pool.query(
+          'SELECT 1 FROM library.yearly_completion_goal WHERE route=$1 AND account_id=$2 LIMIT 1',
+          [ownerRoute, retiring.accountId],
+        )
+      ).rowCount,
+    ).toBe(0);
+  } finally {
+    await erasure.close();
+  }
 }, 120_000);

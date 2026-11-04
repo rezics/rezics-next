@@ -173,24 +173,25 @@ export function createYearlyCompletionGoalCommands(dependencies: {
         async (tx): Promise<CommandResult<YearlyCompletionGoalChangeResult>> => {
           let row: { target: number | null; revision: string } | undefined;
           try {
-            row = (
-              await tx.query<{ target: number | null; revision: string }>(
-                `INSERT INTO library.yearly_completion_goal(route,account_id,year,target,revision)
-                 SELECT $1,$2,$3,$4::integer,1
-                 WHERE $5::text='completed_consumption_occurrences' AND $6::bigint IS NULL
-                 ON CONFLICT(route,account_id,year) DO UPDATE SET
-                   target=EXCLUDED.target,
-                   revision=library.yearly_completion_goal.revision+1,
-                   changed_at=clock_timestamp()
-                 WHERE $5::text='completed_consumption_occurrences'
-                   AND $6::bigint IS NOT NULL
-                   AND library.yearly_completion_goal.revision=$6::bigint
-                   AND library.yearly_completion_goal.revision < 9223372036854775807
-                   AND (EXCLUDED.target IS NOT NULL OR library.yearly_completion_goal.target IS NOT NULL)
-                 RETURNING target,revision::text`,
-                [route, actor.accountId, value.year, value.target, value.metric, value.expectedRevision],
-              )
-            ).rows[0];
+            const changed =
+              value.expectedRevision === null
+                ? await tx.query<{ target: number | null; revision: string }>(
+                    `INSERT INTO library.yearly_completion_goal(route,account_id,year,target,revision)
+                     VALUES($1,$2,$3,$4::integer,1)
+                     ON CONFLICT(route,account_id,year) DO NOTHING
+                     RETURNING target,revision::text`,
+                    [route, actor.accountId, value.year, value.target],
+                  )
+                : await tx.query<{ target: number | null; revision: string }>(
+                    `UPDATE library.yearly_completion_goal SET target=$4::integer,revision=revision+1,
+                       changed_at=clock_timestamp()
+                     WHERE route=$1 AND account_id=$2 AND year=$3
+                       AND revision=$5::bigint AND revision < 9223372036854775807
+                       AND (target IS NOT NULL OR $4::integer IS NOT NULL)
+                     RETURNING target,revision::text`,
+                    [route, actor.accountId, value.year, value.target, value.expectedRevision],
+                  );
+            row = changed.rows[0];
           } catch (error) {
             if (isMissingInstallation(error)) throw new ProblemError('dependency_unavailable');
             throw error;
