@@ -46,9 +46,9 @@ test('default selected-family planning closes only evidenced VNDB character voca
     const raw = new CrossMediaDumpFiles('', vndb);
     const sourceRows: Record<string, Record<string, unknown>[]> = {
       'bangumi/subject': [
-        { id: 1, type: 2, name: 'STEINS;GATE', name_cn: null },
-        { id: 2, type: 2, name: 'CLANNAD', name_cn: null },
-        { id: 3, type: 2, name: 'Fate/stay night', name_cn: null },
+        { id: 1, type: 2, name: 'STEINS;GATE', name_cn: 'STEINS;GATE' },
+        { id: 2, type: 2, name: 'CLANNAD', name_cn: 'CLANNAD' },
+        { id: 3, type: 2, name: 'Fate/stay night', name_cn: 'Fate/stay night' },
       ],
       'vndb/vn_titles': [
         { id: 'v1', lang: 'en', official: 't', title: 'STEINS;GATE', latin: null },
