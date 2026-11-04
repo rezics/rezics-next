@@ -1,31 +1,53 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createContext, useContext, useRef, useState } from 'react';
-import * as start from '../.storybook/react-start';
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-  useRouterState,
-} from '@tanstack/react-router';
 import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/rating/own-votes-page.ts';
 import type { OwnVoteIntent } from '../src/ratings/own-votes/intent';
 import type { OwnVoteCommandResult, OwnVotesRead } from '../src/ratings/own-votes/actions';
 import type { OwnVoteReadback } from '../src/ratings/own-votes/readback';
-import {
-  OwnVotesReturnProvider,
-  useOwnVotesReturn,
-  useOwnVotesReturnReceipt,
-  type OwnVotesReturnOutcome,
-  type OwnVotesReturnOwner,
-} from '../src/ratings/own-votes/return';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const viewer = 'f6f6f6f6-f6f6-46f6-86f6-f6f6f6f6f6f6';
+const terminal = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
+const target = 'b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2';
+const question = 'd4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4';
+const secondTarget = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: 'https://site.test/library/ratings' });
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  Element: window.Element,
+  Node: window.Node,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  ShadowRoot: window.ShadowRoot,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  Event: window.Event,
+  MouseEvent: window.MouseEvent,
+  KeyboardEvent: window.KeyboardEvent,
+  FocusEvent: window.FocusEvent,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => undefined,
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const savedGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+const start = await import('../.storybook/react-start');
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('../src/kernel/client', () => ({ configured: () => false }));
@@ -34,13 +56,19 @@ mock.module('../src/ratings/own-votes/actions', () => ({
   executeOwnVoteIntent: async () => ({ kind: 'rejected' }),
   voteReadbackForIntent: async () => ({ kind: 'unavailable' }),
 }));
+const {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+  useRouterState,
+} = await import('@tanstack/react-router');
+const { OwnVotesReturnProvider, useOwnVotesReturn, useOwnVotesReturnReceipt } = await import(
+  '../src/ratings/own-votes/return'
+);
 const { OwnVotesWorkspace } = await import('../src/ratings/own-votes/page');
-
-const viewer = 'f6f6f6f6-f6f6-46f6-86f6-f6f6f6f6f6f6';
-const terminal = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
-const target = 'b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2';
-const question = 'd4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4';
-const secondTarget = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((yes) => (resolve = yes));
@@ -176,39 +204,9 @@ async function setup(
   const history = createMemoryHistory({ initialEntries: ['/library/ratings'] });
   const router = createRouter({ routeTree, history });
   await router.load();
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
-  const window = new Window({ url: 'https://site.test/library/ratings' });
   const outside = window.document.createElement('button');
   outside.textContent = 'Other page control';
   window.document.body.append(outside);
-  const globals = {
-    window,
-    document: window.document,
-    navigator: window.navigator,
-    HTMLElement: window.HTMLElement,
-    HTMLButtonElement: window.HTMLButtonElement,
-    Element: window.Element,
-    Node: window.Node,
-    Document: window.Document,
-    DocumentFragment: window.DocumentFragment,
-    ShadowRoot: window.ShadowRoot,
-    MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver,
-    Event: window.Event,
-    MouseEvent: window.MouseEvent,
-    KeyboardEvent: window.KeyboardEvent,
-    FocusEvent: window.FocusEvent,
-    getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-    scrollTo: () => undefined,
-    IS_REACT_ACT_ENVIRONMENT: true,
-  };
-  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { hydrateRoot } = await import('react-dom/client');
   const { renderToString } = await import('react-dom/server');
   const host = window.document.createElement('main');
@@ -285,11 +283,6 @@ async function setup(
       await act(async () => root.unmount());
       outside.remove();
       await setLocale(previousLocale, { reload: false });
-      await window.happyDOM.close();
-      for (const [key, descriptor] of saved) {
-        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-        else Reflect.deleteProperty(globalThis, key);
-      }
     },
   };
 }
@@ -307,6 +300,15 @@ async function back(view: Awaited<ReturnType<typeof setup>>) {
   });
   await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
 }
+
+afterAll(async () => {
+  await window.happyDOM.close();
+  for (const [key, descriptor] of savedGlobals) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+  mock.restore();
+});
 
 test('mounted journey keeps zero and original key, confirms exact readback, opens Subject and rereads on return', async () => {
   const original = row();

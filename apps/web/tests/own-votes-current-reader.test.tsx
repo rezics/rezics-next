@@ -1,7 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
-import * as start from '../.storybook/react-start';
 import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/rating/own-votes-page.ts';
 import type { OwnVotesRead } from '../src/ratings/own-votes/actions';
 
@@ -16,8 +15,6 @@ const reads: ReadCall[] = [];
 const readWaiters: (() => void)[] = [];
 let activeSubject = '11111111-1111-4111-8111-111111111111';
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
 mock.module('../src/kernel/client', () => ({ configured: () => false }));
 mock.module('../src/ratings/own-votes/actions', () => ({
   readOwnVotesForViewer: ({ data }: { data: { cursor?: string } }) => {
@@ -60,6 +57,9 @@ const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPr
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
+const start = await import('../.storybook/react-start');
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 const { hydrateRoot } = await import('react-dom/client');
 const { renderToString } = await import('react-dom/server');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
