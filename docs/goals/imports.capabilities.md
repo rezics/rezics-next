@@ -1285,7 +1285,7 @@ explicit `0` is a stated zero.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-`bangumi@9` converts pinned TVAnime `放送开始`, `播放结束` and `话数` through
+`bangumi@10` converts pinned TVAnime `放送开始`, `播放结束` and `话数` through
 the ordinary Bangumi registration used by JSON-lines dumps and the selected
 family, preserving `bangumi@7` name extraction. Native read is on the
 acknowledged TVSeries. Weekday schedule text, custom infobox keys, OVA/Movie
@@ -1312,9 +1312,10 @@ the whole occurrence.
 Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
 unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
 
-`bangumi@9` converts pinned Game `游玩人数` through the ordinary Bangumi
-registration used by JSON-lines dumps and the selected family, preserving
-`bangumi@8` original-run mapping. Native read is on the acknowledged VideoGame.
+The current `bangumi@10` converter retains pinned Game `游玩人数` through the
+ordinary Bangumi registration and selected family, preserving the `bangumi@9`
+player-count and `bangumi@8` original-run mappings. Native read is the
+acknowledged VideoGame.
 DoujinGame templates, quantity uncertainty bounds and inferred minimums stay
 outside this mapping.
 
@@ -1516,3 +1517,29 @@ The selected default Bangumi seed already elects character IDs through the selec
 - Touches: one selected Character record, at most one released height and one weight fact, bounded source evidence, and sanitized field-path diagnostics. Existing names, kind, appearance and licensed summary handling remain on their current paths.
 - Bound: 65,536 UTF-8 source bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 quantity facts and 16 diagnostics. Unsupported or oversized values do not create partial quantities; the existing converter command ceiling and common publication manifest remain authoritative.
 - Growth check: conversion `bangumi-character-measurements.test.ts` covers explicit source units, unknown/unitless and unsupported values, independent field removal and caps. Kernel `bangumi-character-measurements.test.ts` covers selected identity, exact source citation, proposal versus public adoption, journal reopen and current-fence suppression; its native execution is deferred to integration.
+
+## Bangumi Game subject names
+
+Decision: the exact Game template admits scalar `中文名` as `zh` and scalar or
+single-level bullet `别名` as `und`; ordinary conversion uses `bangumi@10` and
+selected-family registration uses `bangumi@10+cross-media-entities@10`.
+
+The pinned `{{Infobox Game` grammar is distinct from TVAnime. Type 4 remains
+`schema:VideoGame`; its admitted names become cited `schema:name` or
+`schema:alternateName` values only on the source-selected Game identity. Top-level
+labels keep their current meanings. The complete bounded infobox remains in the
+source projection and digest. Unsupported nested markup and malformed field
+occurrences are withheld as bounded diagnostics without source prose. Names do
+not set `inLanguage`, select preferred labels, translate one another or resolve
+identity by title. Platform, genre, player count, summary and cover rights remain
+with their existing owners.
+
+- Touches: one source-selected Game record, at most 24 distinct names and 16
+  omission diagnostics; exact property/language/text tuples deduplicate.
+- Bound: 65,536 infobox characters, 64 field occurrences, the normalized-record
+  cap, and existing journal and batch limits. Source prose never enters logs.
+- Growth check: `services/importer/tests/bangumi-game-names.test.ts` exercises
+  selected-family conversion, exact provenance, unsupported occurrences and
+  neighbor exclusion. `services/kernel/test/imports/bangumi-game-names.test.ts`
+  covers ordinary proposal, review/adoption, reopen, refresh and facts-fence
+  behavior; its native execution is deferred to integration.

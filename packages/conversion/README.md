@@ -256,7 +256,7 @@ refreshes under this revision. Unknown or invalid types still fail with
 and retry keys. Platform and community tools use this same pure module;
 importer skipped-count accounting is separate.
 
-Bangumi revision `bangumi@9` converts the pinned TVAnime infobox fields
+Bangumi revision `bangumi@10` converts the pinned TVAnime infobox fields
 `放送开始`, `播放结束` and `话数` on type 2 through the same bound proposal
 path, preserving `bangumi@7` TVAnime name extraction. Start and end keep
 Gregorian year/month/day precision, including explicit `年月日` spellings;
@@ -275,7 +275,7 @@ access authority.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-Bangumi revision `bangumi@9` converts pinned Game infobox `游玩人数` on type 4
+Bangumi revision `bangumi@10` converts pinned Game infobox `游玩人数` on type 4
 through the same bound proposal path, preserving `bangumi@8` TVAnime original-run
 mapping. A single stated maximum emits only `schema:numberOfPlayers`. An
 inclusive lower/upper range emits the upper endpoint as the exact unit-1 amount
@@ -954,12 +954,13 @@ The caller owns current native trust; dictionary syntax is no proof of authority
 The production Importer/CLI obtains the dictionary through its existing
 `identifierLookup`, after explicit reviewed seeding. Normalization and digesting
 remain pure; the source-only digest includes the ordered metadata tags and excludes
-bindings. Supported records visit twelve top-level fields and produce at most nine
-commands and one cover intent; byte caps remain unchanged. The new keyword adds one bounded citation and one qualifier.
+bindings. Supported records visit twelve top-level fields and remain within the existing
+BatchWrite command ceiling, with one cover intent; byte caps remain unchanged.
+The new keyword adds one bounded citation and one qualifier.
 
 ## Bangumi TVAnime subject names
 
-`bangumi@9` consumes only `中文名` and `别名` from the exact pinned
+`bangumi@10` consumes only `中文名` and `别名` from the exact pinned
 `{{Infobox animanga/TVAnime` template on Bangumi type 2 `schema:TVSeries` records.
 The ordinary Bangumi converter and selected-family registrations share this pure extraction.
 The existing top-level `name` and `name_cn` bootstrap labels keep their current
@@ -977,6 +978,32 @@ diagnostic cap with retained source-field, TVAnime run and Game player-count
 omissions. Each field
 occurrence is staged until its complete scalar or bullet-list form is known;
 malformed or mixed occurrences contribute no names.
+
+## Bangumi Game subject names
+
+`bangumi@10` consumes only scalar `中文名` and scalar or flat bullet-list
+`别名` from the exact pinned `{{Infobox Game` template on type 4
+`schema:VideoGame` records. The Game grammar is distinct from TVAnime. The
+complete bounded infobox remains in the normalized projection and digest for
+source change detection, while admitted names become independently cited
+`schema:name` and `schema:alternateName` facts on the existing game identity.
+
+Decision: `中文名` supplies `zh`; unlabeled aliases remain `und`, with no
+language inference from glyphs or provider.
+
+Unsupported nested markup and malformed field occurrences become bounded
+omissions without source prose. Exact property/language/text tuples deduplicate;
+source spelling and stable semantic ordering remain intact. Platform, genre,
+player count, summary and cover mappings remain with their current owners.
+
+- Touches: one source-selected Game record, at most 24 admitted names and 16
+  omissions, each name with its exact Bangumi subject citation.
+- Bound: a 65,536-character infobox, 64 visited fields, the existing normalized
+  record, command, digest and journal caps.
+- Growth check: `services/importer/tests/bangumi-game-names.test.ts` covers the
+  selected-family fixture and proposals. The ordinary review/adoption/reopen
+  journey is `services/kernel/test/imports/bangumi-game-names.test.ts`; native
+  execution remains controller-owned.
 
 ### Bangumi character physical profile
 
@@ -1014,7 +1041,7 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 
 ## Bangumi Book-template subject names
 
-`bangumi@9` extracts Book titles only when the selected converter profile is
+`bangumi@10` extracts Book titles only when the selected converter profile is
 `schema:Book` and the first nonempty infobox line is the exact pinned
 [`{{Infobox animanga/Book`](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L67-L85)
 head. **Decision:** separately inventoried `Novel`, `Manga`, `PhotoBook` and

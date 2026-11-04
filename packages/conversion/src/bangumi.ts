@@ -10,6 +10,7 @@ import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/defini
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { bangumiDiagnosticLimit, extractBangumiSubjectNames } from './bangumi-subject-names.ts';
+import { extractBangumiGameNames } from './bangumi-game-names.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
 import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
 import {
@@ -24,13 +25,13 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@9';
+export const converter_revision = 'bangumi@10';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Twelve projected top-level fields; at most nine commands, one cover intent,
-// and one citation envelope per statement with at most two URL parts.
+// Twelve projected top-level fields; names and commands stay within the existing
+// BatchWrite limit, with one cover intent and at most two URL parts per citation.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
   id: number;
@@ -282,7 +283,8 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     references: references(),
   });
   const bookTitleProfile = record.type === 1 && profile.type === 'schema:Book';
-  const extractedNames = extractBangumiSubjectNames(record, profile.type);
+  const extractedNames =
+    record.type === 4 ? extractBangumiGameNames(record) : extractBangumiSubjectNames(record, profile.type);
   const nameFields = new Map<BatchStatement, string>();
   const facts = [fact('wdt:P5732', input.external_id)];
   for (const name of extractedNames.names) {
