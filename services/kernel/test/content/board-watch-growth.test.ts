@@ -383,10 +383,10 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
           if (step === 'opening' && previous === 0) {
             const thread = await f.thread();
             source = (await f.envelope(thread.firstPost.id)).events.find(Boolean)!;
-            await db.admin.query(
-              'DELETE FROM content.board_watch_notice_work WHERE route=$1 AND post_id=$2',
-              [routeOf(thread.firstPost.id), thread.firstPost.id],
-            );
+            await db.admin.query('DELETE FROM content.board_watch_notice_work WHERE route=$1 AND post_id=$2', [
+              routeOf(thread.firstPost.id),
+              thread.firstPost.id,
+            ]);
           }
         },
         prepare,
