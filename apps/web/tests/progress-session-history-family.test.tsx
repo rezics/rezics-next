@@ -56,6 +56,7 @@ mock.module('@tanstack/react-start/server', () => import('../.storybook/react-st
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }));
 mock.module('../src/kernel/exposure', () => ({
   useOperation: (operation: string) => admitted.has(operation),
+  operationIsAdmitted: (operation: string) => admitted.has(operation),
   Exposure: ({ operation, children }: { operation: string; children: ReactNode }) =>
     admitted.has(operation) ? <Fragment>{children}</Fragment> : null,
 }));
@@ -65,7 +66,8 @@ mock.module('../src/library/progress-server', () => ({
   finishProgressSession: unexpectedRequest,
 }));
 const { createRoot } = await import('react-dom/client');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { within, userEvent } = await import('storybook/test');
 const { ProgressSessionPage } = await import('../src/library/progress-session');
@@ -127,7 +129,18 @@ function page(values: Partial<LoadedPage['session']> = {}): LoadedPage {
     },
   };
 }
-async function mount(initial: LoadedPage) {
+async function mount(
+  initial: LoadedPage,
+  returnContext?: {
+    indexHref: string;
+    indexSearch: { state?: string; cursor?: string };
+    locale: string;
+    sessionId: string;
+    subjectId: string;
+    startedAt: string;
+    sourceReturnTo?: string;
+  },
+) {
   setLocale('en', { reload: false });
   admitted.clear();
   for (const operation of ['record', 'complete', 'abandon', 'create', 'changes', 'units'])
@@ -136,8 +149,11 @@ async function mount(initial: LoadedPage) {
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const rootRoute = createRootRoute();
+  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/en/library/progress', component: () => null });
   const router = createRouter({
-    routeTree: createRootRoute(),
+    routeTree: rootRoute.addChildren([indexRoute]),
     history: createMemoryHistory({ initialEntries: ['/en/library/progress'] }),
   });
   await router.load();
@@ -145,9 +161,15 @@ async function mount(initial: LoadedPage) {
     act(async () =>
       root.render(
         <StrictMode>
-          <RouterContextProvider router={router}>
-            <ProgressSessionPage page={p} logsCursor="logs-current/+?== &公開" />
-          </RouterContextProvider>
+          <QueryClientProvider client={client}>
+            <RouterContextProvider router={router}>
+              <ProgressSessionPage
+                page={p}
+                logsCursor="logs-current/+?== &公開"
+                returnContext={returnContext}
+              />
+            </RouterContextProvider>
+          </QueryClientProvider>
         </StrictMode>,
       ),
     );
@@ -159,12 +181,14 @@ async function mount(initial: LoadedPage) {
     host,
     body,
     user,
+    router,
     show,
     history,
     rows: () => [...history().querySelectorAll(':scope > ol > li')],
     close: async () => {
       await act(async () => root.unmount());
       host.remove();
+      client.clear();
     },
   };
 }
@@ -313,10 +337,7 @@ test('Unknown meaning and recording limits stay beside the current value and rec
     expect(summary.tagName).toBe('SUMMARY');
     expect(details.hasAttribute('open')).toBe(false);
     expect(summary.className).toContain('focus-visible:outline');
-    await act(async () => {
-      await h.user.tab();
-      await h.user.tab();
-    });
+    summary.focus();
     expect(window.document.activeElement).toBe(summary);
     expect(definitions(details)).toEqual([
       [m.library_progress_mode(), 'cursor_position'],
@@ -334,6 +355,51 @@ test('Unknown meaning and recording limits stay beside the current value and rec
       [m.library_progress_position(), '0.000001'],
     ]);
     expect(unexpectedRequest).not.toHaveBeenCalled();
+  } finally {
+    await h.close();
+  }
+});
+
+test('a reviewed correction returns to its selected index only after the draft choice', async () => {
+  const original = page();
+  const cursor = 'continued/+?== &記録';
+  const indexSearch = { state: 'active', cursor };
+  const returnContext = {
+    indexHref: `/en/library/progress?${new URLSearchParams(indexSearch)}`,
+    indexSearch,
+    locale: 'en',
+    sessionId: original.session.id,
+    subjectId: original.session.subjectId,
+    startedAt: original.session.startedAt,
+  };
+  const h = await mount(original, returnContext);
+  try {
+    await act(async () => h.user.click(h.body.getByRole('button', { name: m.library_progress_clear() })));
+    const editor = h.body.getByRole('dialog');
+    const returnLink = within(editor).getByRole('link', { name: m.library_progress_return_to_progress() });
+    const target = new URL(returnLink.getAttribute('href')!, window.location.href);
+    expect(target.searchParams.get('cursor')).toBe(cursor);
+    expect(target.searchParams.get('state')).toBe('active');
+
+    await act(async () => h.user.click(returnLink));
+    let decision = h.body.getByRole('alertdialog');
+    expect(within(decision).getByRole('heading', { name: m.library_progress_draft_navigation_title() })).toBeDefined();
+    await act(async () => h.user.click(within(decision).getByRole('button', { name: m.library_progress_draft_navigation_stay() })));
+    expect(h.body.getByRole('dialog')).toBeDefined();
+
+    await act(async () => h.user.click(within(h.body.getByRole('dialog')).getByRole('link', { name: m.library_progress_return_to_progress() })));
+    decision = h.body.getByRole('alertdialog');
+    await act(async () =>
+      h.user.click(within(decision).getByRole('button', { name: m.library_progress_draft_navigation_discard() })),
+    );
+    const state = h.router.state.location.state as { progressReturnSelection?: { sessionId?: string; subjectId?: string } };
+    expect(state.progressReturnSelection).toEqual({
+      locale: 'en',
+      sessionId: original.session.id,
+      subjectId: original.session.subjectId,
+      startedAt: original.session.startedAt,
+    });
+    expect(h.router.state.location.search).toMatchObject(indexSearch);
   } finally {
     await h.close();
   }

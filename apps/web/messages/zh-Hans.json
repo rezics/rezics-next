@@ -1112,6 +1112,8 @@
   "library_progress_record_heading": "记录进度",
   "library_progress_remove_units": "移除单位",
   "library_progress_restart": "重新开始",
+  "library_progress_return_to_progress": "返回进度页面",
+  "library_progress_return_to_subject": "返回此作品",
   "library_progress_start": "开始",
   "library_progress_start_heading": "开始追踪",
   "library_progress_start_draft_navigation_title": "放弃此 Progress 设置？",

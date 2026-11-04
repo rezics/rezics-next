@@ -8,6 +8,23 @@ if (!('pattern' in linkSchema) || typeof linkSchema.pattern !== 'string')
   throw new Error('The shared href schema requires a pattern');
 const safeHref = new RegExp(linkSchema.pattern, 'u');
 const localOrigin = 'https://rezics.invalid';
+const progressEntryReturnKey = 'progressSubjectReturnTo';
+
+/** Keep the public Subject reader address in in-app navigation state only. */
+export function subjectProgressEntryLocationState(returnTo: string) {
+  return { [progressEntryReturnKey]: returnTo };
+}
+
+export function subjectProgressEntryReturnFromState(
+  value: unknown,
+  subject: SubjectHrefInput,
+  locale: string,
+): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const candidate = (value as Record<string, unknown>)[progressEntryReturnKey];
+  if (typeof candidate !== 'string') return;
+  return subjectSlotReturnTo(candidate, subject, locale);
+}
 
 /** The router's current reader address is navigation only; the destination still checks Auth and Realm access. */
 export function subjectSlotReturnTo(
