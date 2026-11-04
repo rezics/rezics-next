@@ -119,7 +119,10 @@ test('Following feed projects native counts and only the current viewer slot for
         allowed: [...REACTION_KINDS],
       },
     });
-    expect(home.feedItems.find((item) => item.key.kind === 'post')?.summary).toMatchObject({
+    const homePost = home.feedItems.find((item) => item.key.kind === 'post');
+    if (!homePost || homePost.key.owner !== 'content' || homePost.key.kind !== 'post')
+      throw new Error('Home post card missing');
+    expect(homePost.summary).toMatchObject({
       reactionAdvice: {
         target: { targetKind: 'post', targetId: reply.post.id },
         state: 'current',
