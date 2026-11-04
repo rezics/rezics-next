@@ -10,8 +10,8 @@ const authorId = id('92');
 type CopyListResponse = NonNullable<Awaited<ReturnType<KernelClient['copies']['get']>>['data']>;
 
 const facts = {
-  'schema:author': [{ kind: 'item', id: authorId, labels: { en: 'A. Writer' } }],
-  'schema:datePublished': [{ kind: 'time', year: 1986, month: 4 }],
+  'schema:author': [{ kind: 'item' as const, id: authorId, labels: { en: 'A. Writer' } }],
+  'schema:datePublished': [{ kind: 'time' as const, year: 1986, month: 4 }],
 };
 const nativeCopy = (number: number, context: object) => ({
   id: id(String(number)),

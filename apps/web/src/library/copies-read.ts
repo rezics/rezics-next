@@ -4,7 +4,11 @@ import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { CopyProfile } from './copies-profiles';
-import type { CopyReadingContext, NativeCopyListContext, NativeCopyListRow } from './copy-reading-context/types';
+import type {
+  CopyReadingContext,
+  NativeCopyListContext,
+  NativeCopyListRow,
+} from './copy-reading-context/types';
 import { copyListContextFromNativeRow } from './copy-reading-context/read';
 import { deletionEvidence, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
