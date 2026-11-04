@@ -19,7 +19,13 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
   // The public route loader has already re-read this address. An immediately stale observer would
   // dispatch a second request when it changes keys after that loader has completed.
   const query = useQuery({ ...options, staleTime: searchRequiresCurrentReader(params) ? 0 : Infinity });
-  const owner = JSON.stringify([locale, reader, admission.value.subject, admission.value.viewer, admission.value.observation?.id]);
+  const owner = JSON.stringify([
+    locale,
+    reader,
+    admission.value.subject,
+    admission.value.viewer,
+    admission.value.observation?.id,
+  ]);
   const readCount = () => client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
   const lifetime = useRef({ owner, minimum: 0, refresh: false });
   if (lifetime.current.owner !== owner) lifetime.current = { owner, minimum: readCount() + 1, refresh: true };
@@ -38,8 +44,10 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
     return () => window.removeEventListener('pageshow', restored);
   }, [locale, JSON.stringify(params), owner]);
   const actual = router?.state.location;
-  const matches = !actual || (actual.pathname.replace(/\/$/, '').endsWith('/search') &&
-    discoverySearchHref(locale, searchLoaderDeps(actual.search)) === discoverySearchHref(locale, params));
+  const matches =
+    !actual ||
+    (actual.pathname.replace(/\/$/, '').endsWith('/search') &&
+      discoverySearchHref(locale, searchLoaderDeps(actual.search)) === discoverySearchHref(locale, params));
   const waiting = !matches || query.isFetching || readCount() < current.minimum || !address.isCurrent();
   const data = waiting
     ? searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' })
@@ -50,6 +58,8 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
         : searchPageForRecovery(searchUnavailablePage(params), { status: query.isPending ? 'loading' : 'unavailable' });
   return {
     data,
-    retry: () => { void query.refetch(); },
+    retry: () => {
+      void query.refetch();
+    },
   };
 }

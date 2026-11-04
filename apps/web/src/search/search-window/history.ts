@@ -25,19 +25,24 @@ export function restoreSearchWindows(value: unknown, request: string): SearchWin
     history.request !== request ||
     !Array.isArray(history.windows) ||
     history.windows.length > SEARCH_WINDOW_LIMIT
-  ) return empty;
+  )
+    return empty;
   const seen = new Set<string | null>();
   const windows: SearchWindowAddress[] = [];
   for (const entry of history.windows) {
     if (
-      !entry || typeof entry !== 'object' ||
-      (entry.cursor !== null && (typeof entry.cursor !== 'string' || !entry.cursor || entry.cursor.length > SEARCH_CURSOR_LIMIT)) ||
-      !Number.isSafeInteger(entry.number) || entry.number < 1 ||
+      !entry ||
+      typeof entry !== 'object' ||
+      (entry.cursor !== null &&
+        (typeof entry.cursor !== 'string' || !entry.cursor || entry.cursor.length > SEARCH_CURSOR_LIMIT)) ||
+      !Number.isSafeInteger(entry.number) ||
+      entry.number < 1 ||
       (entry.cursor === null && entry.number !== 1) ||
       (entry.cursor !== null && entry.number === 1) ||
       (windows.length > 0 && entry.number !== windows.at(-1)!.number + 1) ||
       seen.has(entry.cursor)
-    ) return empty;
+    )
+      return empty;
     seen.add(entry.cursor);
     windows.push({ cursor: entry.cursor, number: entry.number });
   }
@@ -57,7 +62,10 @@ export function admitSearchWindow(
   const parent = from === undefined ? -1 : history.windows.findIndex((entry) => entry.cursor === from);
   // A direct cursor visit can be current, but its absolute page number is unknown.
   if (parent < 0 || history.windows[parent]!.number >= Number.MAX_SAFE_INTEGER - 1) return history;
-  const windows = [...history.windows.slice(0, parent + 1), { cursor: address, number: history.windows[parent]!.number + 1 }];
+  const windows = [
+    ...history.windows.slice(0, parent + 1),
+    { cursor: address, number: history.windows[parent]!.number + 1 },
+  ];
   return { ...history, windows: windows.slice(-SEARCH_WINDOW_LIMIT) };
 }
 
@@ -72,7 +80,11 @@ export function searchWindowPosition(history: SearchWindowHistory, cursor: strin
 }
 
 /** Do not follow a repeated native token back into an already visited ancestor. */
-export function searchWindowNextAllowed(history: SearchWindowHistory, cursor: string | undefined, next: string | null | undefined) {
+export function searchWindowNextAllowed(
+  history: SearchWindowHistory,
+  cursor: string | undefined,
+  next: string | null | undefined,
+) {
   if (!next || next.length > SEARCH_CURSOR_LIMIT || next === cursor) return false;
   const current = searchWindowPosition(history, cursor).index;
   const target = history.windows.findIndex((entry) => entry.cursor === next);

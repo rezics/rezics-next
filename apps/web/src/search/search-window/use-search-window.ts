@@ -3,8 +3,14 @@ import { useRouter } from '@tanstack/react-router';
 import { useWorkspaceAdmission, useReaderAddress } from '../../session/reader';
 import { discoverySearchHref, type SearchLoaderDeps } from '../search-params';
 import {
-  SEARCH_WINDOW_STATE, SEARCH_ADDRESS_LIMIT, emptySearchWindows, restoreSearchWindows, admitSearchWindow,
-  searchWindowPosition, searchWindowNextAllowed, type SearchWindowHistory,
+  SEARCH_WINDOW_STATE,
+  SEARCH_ADDRESS_LIMIT,
+  emptySearchWindows,
+  restoreSearchWindows,
+  admitSearchWindow,
+  searchWindowPosition,
+  searchWindowNextAllowed,
+  type SearchWindowHistory,
 } from './history';
 import { searchWindowFocus } from './focus';
 
@@ -14,7 +20,13 @@ type Visit = { request: string; history: SearchWindowHistory; cursor: string | n
 
 /** A single Search visit owns its address history; browser entries carry only its bounded admitted addresses. */
 export function useSearchWindow({
-  state, locale, session, ready, settled, checkpoint, enabled = true,
+  state,
+  locale,
+  session,
+  ready,
+  settled,
+  checkpoint,
+  enabled = true,
 }: {
   state: SearchLoaderDeps;
   locale: string;
@@ -38,10 +50,12 @@ export function useSearchWindow({
   const navigationRef = useRef<HTMLElement>(null);
   const regionRef = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState(false);
-  const stored = () => typeof window === 'undefined' ? undefined : window.history.state?.[SEARCH_WINDOW_STATE];
+  const stored = () => (typeof window === 'undefined' ? undefined : window.history.state?.[SEARCH_WINDOW_STATE]);
   const persisted = () => {
     const envelope = stored();
-    return envelope?.request === request ? restoreSearchWindows(envelope.history, firstHref) : emptySearchWindows(firstHref);
+    return envelope?.request === request
+      ? restoreSearchWindows(envelope.history, firstHref)
+      : emptySearchWindows(firstHref);
   };
   const changedOwner = visit.current?.request !== request;
   if (!visit.current || changedOwner) {
@@ -51,7 +65,11 @@ export function useSearchWindow({
   } else if (visit.current.cursor !== cursor) {
     const transition = pending.current;
     // Browser traversal uses the entry being entered. An activated transition carries the same admitted list.
-    visit.current = { ...visit.current, cursor, history: transition?.request === request && transition.to === cursor ? visit.current.history : persisted() };
+    visit.current = {
+      ...visit.current,
+      cursor,
+      history: transition?.request === request && transition.to === cursor ? visit.current.history : persisted(),
+    };
     if (transition && transition.to !== cursor) {
       pending.current = undefined;
       focus.current.retire();
@@ -79,19 +97,25 @@ export function useSearchWindow({
     } else if (!transition) setBusy(false);
     if (!ready || !historyEnabled || typeof window === 'undefined') return;
     // Preserve the router's own entry key and scroll state. No navigation or request is dispatched here.
-    window.history.replaceState({
-      ...window.history.state,
-      [SEARCH_WINDOW_STATE]: { request, history: current.history },
-    }, '');
+    window.history.replaceState(
+      {
+        ...window.history.state,
+        [SEARCH_WINDOW_STATE]: { request, history: current.history },
+      },
+      '',
+    );
   }, [request, cursor, ready, settled, enabled, checkpoint, current.history]);
 
   useEffect(() => {
     if (changedOwner) setBusy(false);
   }, [request]);
-  useEffect(() => () => {
-    focus.current?.retire();
-    pending.current = undefined;
-  }, []);
+  useEffect(
+    () => () => {
+      focus.current?.retire();
+      pending.current = undefined;
+    },
+    [],
+  );
   useEffect(() => {
     if (!router) return;
     return router.subscribe('onBeforeNavigate', ({ toLocation }) => {
@@ -108,7 +132,15 @@ export function useSearchWindow({
   }, [router, request, cursor, locale]);
 
   function activate(event: React.MouseEvent<HTMLAnchorElement>, target: string | undefined, action: string) {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
     if (!router) return; // The exact address remains a native link before hydration.
     event.preventDefault();
     if (!enabled || pending.current || !address.isCurrent() || (target ?? null) === cursor) return;
