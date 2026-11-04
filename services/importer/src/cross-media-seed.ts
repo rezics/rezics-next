@@ -1869,10 +1869,7 @@ export async function planCrossMediaSeed(
     if (draft.source === 'vndb' && draft.table === 'releases_vn' && selectedReleaseSet.has(draft.holder))
       releaseLinks.set(draft.holder, (releaseLinks.get(draft.holder) ?? 0) + 1);
   const availableVocabularyRows = new Map(
-    selectedReleaseIds.map((id) => [
-      id,
-      Math.max(0, sourceVocabularyLimits.rows - 1 - (releaseLinks.get(id) ?? 0)),
-    ]),
+    selectedReleaseIds.map((id) => [id, Math.max(0, sourceVocabularyLimits.rows - 1 - (releaseLinks.get(id) ?? 0))]),
   );
   const releasePlatformPlan = await planVndbReleasePlatforms(input, selectedReleaseIds, availableVocabularyRows);
   plan.releasePlatforms = releasePlatformPlan.byRelease;
@@ -2859,11 +2856,8 @@ export async function runCrossMediaSeedCli(
   });
   const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
-  const {
-    parseVndbReleaseStateBindings,
-    prepareShowcaseVndbReleaseClassifications,
-    seedShowcaseVndbReleases,
-  } = await import('./showcase-vndb-releases.ts');
+  const { parseVndbReleaseStateBindings, prepareShowcaseVndbReleaseClassifications, seedShowcaseVndbReleases } =
+    await import('./showcase-vndb-releases.ts');
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
@@ -3081,7 +3075,7 @@ export async function runCrossMediaSeedCli(
       port,
       bindings: releaseClassificationPreparation.bindings,
       destination: { origin: api },
-      ...((vndbReleaseStateBindings?.groups.length || releaseClassificationPreparation.groups.length)
+      ...(vndbReleaseStateBindings?.groups.length || releaseClassificationPreparation.groups.length
         ? { groups: [...(vndbReleaseStateBindings?.groups ?? []), ...releaseClassificationPreparation.groups] }
         : {}),
       extras: {

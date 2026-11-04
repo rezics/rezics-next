@@ -146,9 +146,10 @@ const releaseClassificationSchemes = [
   },
 ] as const;
 
-function releaseClassificationNeeds(
-  platforms: ReadonlyMap<string, VndbReleasePlatformFacts>,
-): { schemes: ReleaseClassificationNeed[]; concepts: ReleaseClassificationNeed[] } {
+function releaseClassificationNeeds(platforms: ReadonlyMap<string, VndbReleasePlatformFacts>): {
+  schemes: ReleaseClassificationNeed[];
+  concepts: ReleaseClassificationNeed[];
+} {
   const concepts = new Map<string, ReleaseClassificationNeed>();
   const schemes = new Map<string, ReleaseClassificationNeed>();
   const schemeFor = new Map(releaseClassificationSchemes.map((entry) => [entry.taxonomy, entry]));
@@ -277,8 +278,7 @@ function classificationCommands(input: {
 
 function isReleaseClassificationCommand(command: BatchCommand): boolean {
   return (
-    command.source.source === 'vndb_cross_media' &&
-    command.source.converter_revision === releaseClassificationRevision
+    command.source.source === 'vndb_cross_media' && command.source.converter_revision === releaseClassificationRevision
   );
 }
 
@@ -299,9 +299,9 @@ async function sendMissingReleaseClassificationCommands(input: {
   journal: ShowcaseJournal;
   commands: readonly BatchCommand[];
 }): Promise<void> {
-  const pending = input.journal.preparedCommands().flatMap((row) =>
-    isReleaseClassificationCommand(row.command) ? [row.command] : [],
-  );
+  const pending = input.journal
+    .preparedCommands()
+    .flatMap((row) => (isReleaseClassificationCommand(row.command) ? [row.command] : []));
   if (pending.length) await sendReleaseClassificationPages(input.port, pending);
   const sealed = new Map<string, string>();
   const created = new Set<string>();
@@ -327,9 +327,7 @@ function acknowledgedReleaseClassificationCreates(journal: ShowcaseJournal): Map
     journal
       .acknowledgedCommands()
       .flatMap((row) =>
-        row.command.op === 'create' &&
-        row.subjectId &&
-        isReleaseClassificationCommand(row.command)
+        row.command.op === 'create' && row.subjectId && isReleaseClassificationCommand(row.command)
           ? [[row.command.source.external_id, row.subjectId] as const]
           : [],
       ),
@@ -395,7 +393,11 @@ export async function prepareShowcaseVndbReleaseClassifications(input: {
         })
       : [];
   });
-  await sendMissingReleaseClassificationCommands({ port: input.port, journal: input.journal, commands: schemeProposals });
+  await sendMissingReleaseClassificationCommands({
+    port: input.port,
+    journal: input.journal,
+    commands: schemeProposals,
+  });
   let groups = releaseClassificationGroups(needs, input.journal);
   let bindings = await readVndbReleaseBindings(input.port, groups);
   if (input.stage === 'schemes' || !needs.concepts.length)
@@ -415,7 +417,11 @@ export async function prepareShowcaseVndbReleaseClassifications(input: {
       labels: { en: need.code! },
     }),
   );
-  await sendMissingReleaseClassificationCommands({ port: input.port, journal: input.journal, commands: conceptCommands });
+  await sendMissingReleaseClassificationCommands({
+    port: input.port,
+    journal: input.journal,
+    commands: conceptCommands,
+  });
   const creates = acknowledgedReleaseClassificationCreates(input.journal);
   const conceptProposals = selectedConceptNeeds.flatMap((need) => {
     const subjectId = creates.get(showcaseVocabularyExternalId(need.sourceKey));

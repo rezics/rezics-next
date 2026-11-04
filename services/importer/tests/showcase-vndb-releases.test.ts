@@ -18,10 +18,7 @@ import {
   developmentStatusSchemeUri,
   developmentStatusTaxonomy,
 } from '../src/vndb-release-fidelity.ts';
-import {
-  prepareShowcaseVndbReleaseClassifications,
-  seedShowcaseVndbReleases,
-} from '../src/showcase-vndb-releases.ts';
+import { prepareShowcaseVndbReleaseClassifications, seedShowcaseVndbReleases } from '../src/showcase-vndb-releases.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
 import { planVndbReleasePlatforms } from '../src/vndb-release-platforms.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
@@ -124,7 +121,9 @@ function localReviewPort(commands: BatchCommand[], created = new Map<string, str
     async writeSourceStatistic() {},
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      return (subjectsById.get(id) ?? { subject: { id } }) as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      return (subjectsById.get(id) ?? { subject: { id } }) as Awaited<
+        ReturnType<CrossMediaPort['readReviewedSubject']>
+      >;
     },
   };
 }
@@ -352,7 +351,12 @@ test('default seed without binding files rereads catalogue state and exposes sel
     const sealedBeforeRetry = journal.preparedCommands().map((row) => row.command);
     expect(sealedBeforeRetry).toEqual(attempted);
     const reviewPort = recoveryPort;
-    const schemes = await prepareShowcaseVndbReleaseClassifications({ plan, port: reviewPort, journal, stage: 'schemes' });
+    const schemes = await prepareShowcaseVndbReleaseClassifications({
+      plan,
+      port: reviewPort,
+      journal,
+      stage: 'schemes',
+    });
     expect(attempted.slice(0, sealedBeforeRetry.length)).toEqual(
       attempted.slice(sealedBeforeRetry.length, sealedBeforeRetry.length * 2),
     );
@@ -432,9 +436,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
           : [],
       );
     const codeId = (code: string) => classifications.bindings.concepts.find((item) => item.code === code)!.id;
-    expect(
-      classificationsByProperty('schema:gamePlatform').sort((a, b) => a.concept.localeCompare(b.concept)),
-    ).toEqual(
+    expect(classificationsByProperty('schema:gamePlatform').sort((a, b) => a.concept.localeCompare(b.concept))).toEqual(
       [
         { release: 'r1', concept: codeId('mac') },
         { release: 'r1', concept: codeId('win') },
@@ -445,11 +447,13 @@ test('default seed without binding files rereads catalogue state and exposes sel
       classificationsByProperty('wdt:P437').sort(
         (left, right) => left.release.localeCompare(right.release) || left.concept.localeCompare(right.concept),
       ),
-    ).toEqual([
-      { release: 'r1', concept: codeId('cd') },
-      { release: 'r1', concept: codeId('dvd') },
-      { release: 'r2', concept: codeId('cd') },
-    ].sort((left, right) => left.release.localeCompare(right.release) || left.concept.localeCompare(right.concept)));
+    ).toEqual(
+      [
+        { release: 'r1', concept: codeId('cd') },
+        { release: 'r1', concept: codeId('dvd') },
+        { release: 'r2', concept: codeId('cd') },
+      ].sort((left, right) => left.release.localeCompare(right.release) || left.concept.localeCompare(right.concept)),
+    );
     const associationProposals = proposed.filter(
       (command) =>
         command.statement.property.id === 'schema:gamePlatform' || command.statement.property.id === 'wdt:P437',
@@ -483,11 +487,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
       ),
     ).toBe(true);
     expect(
-      proposed.some(
-        (command) =>
-          command.source.external_id === 'r1' &&
-          command.statement.property.id === 'wdt:P2899',
-      ),
+      proposed.some((command) => command.source.external_id === 'r1' && command.statement.property.id === 'wdt:P2899'),
     ).toBe(true);
     expect(
       proposed.some(
@@ -705,8 +705,16 @@ test('malformed and retracted source states withhold only affected claims', asyn
       extras: extras(),
       groups: classificationGroups(),
     });
-    expect(initialPlatformCommands.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:gamePlatform')).toBe(true);
-    expect(initialPlatformCommands.some((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P437')).toBe(true);
+    expect(
+      initialPlatformCommands.some(
+        (command) => command.op === 'propose' && command.statement.property.id === 'schema:gamePlatform',
+      ),
+    ).toBe(true);
+    expect(
+      initialPlatformCommands.some(
+        (command) => command.op === 'propose' && command.statement.property.id === 'wdt:P437',
+      ),
+    ).toBe(true);
     const changedPlatformTables = family({
       platforms: [
         { id: 'r1', platform: 'win' },
@@ -726,11 +734,20 @@ test('malformed and retracted source states withhold only affected claims', asyn
     expect(changedPlatform.identities.find((row) => row.key === 'r1')?.subjectId).toBe(
       initialPlatform.identities.find((row) => row.key === 'r1')?.subjectId,
     );
-    expect(changedPlatform.bindings.concepts.some((row) => row.taxonomy === vndbReleasePlatformTaxonomy && row.code === 'win')).toBe(false);
-    expect(changedPlatform.bindings.concepts.some((row) => row.taxonomy === vndbReleasePlatformTaxonomy && row.code === 'mac')).toBe(true);
+    expect(
+      changedPlatform.bindings.concepts.some(
+        (row) => row.taxonomy === vndbReleasePlatformTaxonomy && row.code === 'win',
+      ),
+    ).toBe(false);
+    expect(
+      changedPlatform.bindings.concepts.some(
+        (row) => row.taxonomy === vndbReleasePlatformTaxonomy && row.code === 'mac',
+      ),
+    ).toBe(true);
     expect(
       changedPlatform.vocabularyGaps.some(
-        (row) => row.path === '/releases_platforms/r1/platform' && row.code === 'win' && row.reason === 'missing_concept',
+        (row) =>
+          row.path === '/releases_platforms/r1/platform' && row.code === 'win' && row.reason === 'missing_concept',
       ),
     ).toBe(true);
     expect(
