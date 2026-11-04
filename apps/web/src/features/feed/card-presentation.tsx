@@ -228,18 +228,7 @@ export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; local
         </div>
       );
     }
-    if ('subject' in summary && summary.subject) {
-      const subject = summary.subject;
-      const title = subject.title ?? m.subject_value_unlabelled({}, options);
-      return (
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject>
-          <span>{m.home_card_review_subject({}, options)}</span>
-          <a href={subjectHref({ id: subject.id, label: title }, locale).href} className={feedCardLinkClassName}>
-            <bdi>{title}</bdi>
-          </a>
-        </span>
-      );
-    }
+    return null;
   }
   if (item.destination.kind === 'space' && 'realm' in summary && summary.realm?.title) {
     return (

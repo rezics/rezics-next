@@ -239,8 +239,8 @@ old identity, preview, image and destination. Reader/session/source retirement s
   currently supply title/description only; Space summaries require current title/address and may supply Realm carrier
   text. Native eligibility still depends on Search's Review coverage and Community's complete Space/Realm tuple.
 - For Content review and reply cards, the current native `reviewContext` and `parentContext` control their related
-  display. A withheld target or citation never falls back to a stale discovery label, and a reply shows only its exact
-  immediate parent with the supplied identity, language, spoiler state and native links.
+  display. Missing, absent, withheld or unavailable review context never falls back to discovery metadata, and a reply
+  shows only its exact immediate parent with the supplied identity, language, spoiler state and native links.
 
 `10-feed-card-reading` stories use visibly prepared native-shaped examples, not native source evidence.
 They exercise the same shared FeedResults projection at 390 and 1280, in light/dark, long text and keyboard states.

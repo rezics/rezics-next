@@ -13,6 +13,7 @@ export function homeFeedReaction(
     hasReactionFreshness?: boolean;
   },
 ): FeedReaction | undefined {
+  if (!input.hasReactionFreshness || input.reactionsAsOf === undefined) return;
   const summary = item.summary;
   if (!('reactionTarget' in summary) || !summary.reactionTarget || !('reactions' in summary) || !summary.reactions)
     return;
@@ -26,6 +27,6 @@ export function homeFeedReaction(
     counts: summary.reactions,
     value: input.signedIn && 'viewerReaction' in summary ? (summary.viewerReaction ?? null) : null,
     ...(input.origin ? { reactionOrigin: input.origin } : {}),
-    ...(input.hasReactionFreshness ? { sourceWatermark: input.reactionsAsOf ?? null } : {}),
+    sourceWatermark: input.reactionsAsOf,
   };
 }

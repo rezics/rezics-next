@@ -17,7 +17,7 @@ const ids = {
 };
 
 function review(
-  context: NonNullable<
+  context?: NonNullable<
     Extract<FeedItem, { source: 'discovery' }>['summary'] extends infer S
       ? S extends { reviewContext?: infer C }
         ? C
@@ -37,7 +37,7 @@ function review(
       author: { displayName: 'Reviewer', handle: 'reviewer' },
       excerpt: 'Review body excerpt',
       subject: { id: ids.staleSubject, title: 'Stale Subject label' },
-      reviewContext: context,
+      ...(context === undefined ? {} : { reviewContext: context }),
     },
     destination: { kind: 'thread', id: ids.thread, title: 'Review title' },
   };
@@ -88,6 +88,10 @@ test('withheld and absent citations keep their distinct disclosure states', () =
   expect(absent).toContain('No answer is currently stored');
   expect(absent).not.toContain('No recorded rating is disclosed');
   expect(absent).not.toContain('Stale Subject label');
+});
+
+test('missing review context does not substitute discovery metadata', () => {
+  expect(html(review())).not.toContain('Stale Subject label');
 });
 
 test('reply cards keep exact post and revision destinations and hide spoiler text until a current reveal', () => {
@@ -155,6 +159,7 @@ test('reaction receiving preserves exact target, empty totals, viewer selection 
     sourceWatermark: null,
   });
   expect(reaction?.reactionOrigin?.key).toBe('page-1');
+  expect(homeFeedReaction(current, { signedIn: true })).toBeUndefined();
   const mismatch = {
     ...current,
     summary: { ...current.summary, reactionTarget: { targetKind: 'thread' as const, targetId: ids.staleSubject } },
