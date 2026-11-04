@@ -320,7 +320,9 @@ test('native inbox keeps readable public notices, hides a revoked protected noti
       };
     }>;
     const publicNotice = restoredItems.find((item) => item.currentTarget.postId === publicReply.id)!;
-    expect(publicNotice.currentActor).toMatchObject({ state: 'available', accountId: people.replier.id });
+    expect(publicNotice.currentActor).toMatchObject({
+      state: 'available', accountId: people.replier.id, avatar: null, avatarUrl: null,
+    });
     expect(publicNotice.currentActor.displayName.length).toBeGreaterThan(0);
     expect(publicNotice.currentTarget).toMatchObject({
       state: 'available',
@@ -348,7 +350,7 @@ test('native inbox keeps readable public notices, hides a revoked protected noti
       notice: {
         id: publicNotice.id,
         unread: true,
-        currentActor: { state: 'available', accountId: people.replier.id },
+        currentActor: { state: 'available', accountId: people.replier.id, avatar: null, avatarUrl: null },
         currentTarget: { state: 'available', threadId: publicThread.id, postId: publicReply.id },
         actions: { open: { kind: 'thread_post', threadId: publicThread.id, postId: publicReply.id } },
       },

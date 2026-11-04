@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 
 type QueryInput = string | { text?: string };
 
-/** Runs a native transition after the first current public-profile read in an Inbox request. */
+/** Runs a native transition after the first current bounded public-identity read in an Inbox request. */
 export async function afterInboxActorProfile<T>(
   pool: Pool,
   transition: () => Promise<void>,
@@ -28,7 +28,7 @@ export async function afterInboxActorProfile<T>(
                 const input = queryArgs[0] as QueryInput;
                 const text = typeof input === 'string' ? input : (input?.text ?? '');
                 const actorProfile =
-                  !transitioned && text.includes('public_views') && text.includes('FROM access.account');
+                  !transitioned && text.includes('WITH ORDINALITY') && text.includes('FROM access.account') && text.includes('operatorId');
                 const result = Reflect.apply(target.query, target, queryArgs);
                 if (!actorProfile || queryArgs.some((value) => typeof value === 'function')) return result;
                 return Promise.resolve(result).then(async (value) => {
@@ -48,7 +48,7 @@ export async function afterInboxActorProfile<T>(
 
   try {
     const result = await read();
-    if (!transitioned) throw new Error('Inbox actor profile read did not reach its interleaving point');
+    if (!transitioned) throw new Error('Inbox actor identity read did not reach its interleaving point');
     return result;
   } finally {
     if (originalDescriptor) Object.defineProperty(pool, 'connect', originalDescriptor);

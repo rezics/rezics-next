@@ -18,7 +18,8 @@ import {
   markNoticesSeen,
   readNoticeInboxItem,
 } from './notice-inbox.ts';
-import { strictContentSchema } from './schemas.ts';
+import { AvatarSummarySchema, strictContentSchema } from './schemas.ts';
+import type { NoticeActorObservationReader } from './notice-actor-context.ts';
 
 type Dependencies = {
   pool: import('pg').Pool;
@@ -26,6 +27,7 @@ type Dependencies = {
   tokens: KeyRing;
   routeKey: Uint8Array;
   clock?: () => Date;
+  noticeActorObservations?: NoticeActorObservationReader;
 };
 const params = t.Object({ accountId: t.String() }, { additionalProperties: false });
 const noticeParams = t.Object({ accountId: t.String(), noticeId: t.String() }, { additionalProperties: false });
@@ -65,7 +67,8 @@ const item = t.Object({
         accountId: t.String(),
         displayName: t.String(),
         handle: t.Union([t.String(), t.Null()]),
-        avatarUrl: t.Union([t.String(), t.Null()]),
+        avatar: AvatarSummarySchema,
+        avatarUrl: t.Null(),
         automated: t.Boolean(),
       },
       { additionalProperties: false },
@@ -75,12 +78,13 @@ const item = t.Object({
         state: t.Literal('withheld'),
         displayName: t.Literal('Former or unavailable account'),
         handle: t.Null(),
+        avatar: t.Null(),
         avatarUrl: t.Null(),
       },
       { additionalProperties: false },
     ),
     t.Object(
-      { state: t.Literal('system'), displayName: t.Literal('Moderation team'), handle: t.Null(), avatarUrl: t.Null() },
+      { state: t.Literal('system'), displayName: t.Literal('Moderation team'), handle: t.Null(), avatar: t.Null(), avatarUrl: t.Null() },
       { additionalProperties: false },
     ),
   ]),
@@ -204,6 +208,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 tokens: dependencies.tokens,
                 access: dependencies.access,
                 routeKey: dependencies.routeKey,
+                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
                 ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
@@ -245,6 +250,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 tokens: dependencies.tokens,
                 access: dependencies.access,
                 routeKey: dependencies.routeKey,
+                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
                 ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
@@ -282,6 +288,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 tokens: dependencies.tokens,
                 access: dependencies.access,
                 routeKey: dependencies.routeKey,
+                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
                 ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
@@ -326,6 +333,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 access: dependencies.access,
                 tokens: dependencies.tokens,
                 routeKey: dependencies.routeKey,
+                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
               },
@@ -371,6 +379,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 access: dependencies.access,
                 tokens: dependencies.tokens,
                 routeKey: dependencies.routeKey,
+                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
               },
