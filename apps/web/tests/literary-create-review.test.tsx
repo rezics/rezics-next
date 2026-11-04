@@ -366,7 +366,7 @@ test('standalone Literary creation reviews evidence, copies references, and retr
   }
 }, 45_000);
 
-test('Literary review uses the current release and locale while retaining withdrawn evidence and unsupported time advice', async () => {
+test('Literary review uses the current release and locale while retaining withdrawn evidence, signed time and unsupported precision', async () => {
   const { renderToStaticMarkup } = await import('react-dom/server');
   const { LiteraryCreateReview } = await import('../src/features/catalogue/literary-create-review-view');
   const { m } = await import('../src/paraglide/messages.js');
@@ -424,7 +424,14 @@ test('Literary review uses the current release and locale while retaining withdr
   expect(withdrawn).toContain('lang="ja"');
   expect(withdrawn).toContain(m.correction_stale({}, { locale: 'ja' }));
   expect(withdrawn).toContain(m.literary_review_stale({}, { locale: 'ja' }));
-  expect(withdrawn).toContain(m.time_unsupported_uncertainty({}, { locale: 'ja' }));
+  expect(withdrawn).toContain('-000000000044-03-15');
+  expect(withdrawn).toContain(m.time_calendar_julian({}, { locale: 'ja' }));
+  expect(withdrawn).toContain(
+    m.time_uncertainty({ before: 1, after: m.time_unspecified({}, { locale: 'ja' }) }, { locale: 'ja' }),
+  );
+  item.statements['schema:url'][0]!.references[0]!.parts[0]!.value.content.precision = 8;
+  expect(render('ja', true)).toContain(m.time_unsupported_precision({ precision: 8 }, { locale: 'ja' }));
+  item.statements['schema:url'][0]!.references[0]!.parts[0]!.value.content.precision = 11;
   expect(withdrawn).toContain('https://example.org/retained');
   expect(JSON.stringify(item)).toBe(snapshot);
 });
