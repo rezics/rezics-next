@@ -101,11 +101,18 @@ function SourcesRoute() {
         ? current.result
         : { kind: 'loading' as const }
       : result;
-  return <SourcesPresentation result={currentReader ? selected : { kind: 'loading' }} reader={reader} returnTo={via} />;
+  return (
+    <SourcesPresentation
+      result={currentReader ? selected : { kind: 'loading' }}
+      reader={reader}
+      {...(via ? { returnTo: via } : {})}
+    />
+  );
 }
 
 function SourcesError({ reset }: { reset: () => void }) {
-  return <SourcesPresentation result={{ kind: 'unavailable' }} reset={reset} returnTo={Route.useSearch().via} />;
+  const via = Route.useSearch().via;
+  return <SourcesPresentation result={{ kind: 'unavailable' }} reset={reset} {...(via ? { returnTo: via } : {})} />;
 }
 
 function SourcesPresentation({

@@ -1166,7 +1166,7 @@ function synopsisLanguageName(language: string, locale: string): string {
 }
 
 function subjectRevision(subject: Subject): string | undefined {
-  const revision = Reflect.get(subject, 'revision');
+  const revision: unknown = (subject as { revision?: unknown }).revision;
   return typeof revision === 'string' && revision.length <= 128 ? revision : undefined;
 }
 
@@ -1195,8 +1195,8 @@ function SummaryContent({
       ? [{
           statement: legacyCandidate.statement,
           language: legacyCandidate.language,
-          documentId: legacyReference?.documentId,
-          digest: legacyReference?.digest,
+            ...(legacyReference?.documentId ? { documentId: legacyReference.documentId } : {}),
+            ...(legacyReference?.digest ? { digest: legacyReference.digest } : {}),
         }]
       : [];
   const defaultId = choiceSet.kind === 'ready' ? choiceSet.selectedId : legacyCandidate?.statement.id;

@@ -63,17 +63,17 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/authored')({
     property: typeof input.property === 'string' && input.property.length <= 256 ? input.property : undefined,
     via: subjectVisitReturn(input.via, getLocale()),
   }),
-  loader: ({ params, location }) =>
+  loader: ({ params, location, search }) =>
     canonicalAuthored({
       data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
-    }),
+    }).then((result) => ({ ...result, via: search.via })),
   head: () => ({ meta: [{ title: m.authored_title() }, { name: 'robots', content: 'noindex' }] }),
   component: candidateSession(AuthoredRoute),
 });
 
 function AuthoredRoute() {
-  const { id } = Route.useLoaderData();
-  const { property, via } = Route.useSearch();
+  const { id, via } = Route.useLoaderData();
+  const { property } = Route.useSearch();
   const locale = getLocale();
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property]));
