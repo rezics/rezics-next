@@ -6675,6 +6675,7 @@
   "library_export_retry_save": "Retry download",
   "library_export_cancel": "Cancel this capture",
   "library_export_cancelling": "Cancelling…",
+  "library_export_cancel_uncertain": "Cancellation is unconfirmed. No file is available. Retry the original cancellation for this capture.",
   "library_export_cancelled": "This capture was cancelled. No file was saved.",
   "library_export_stale": "A later Library change made this capture stale. The original file cannot be completed from these pages.",
   "library_export_stale_restart": "Start a new capture. The previous capture is stale and will not be reused.",

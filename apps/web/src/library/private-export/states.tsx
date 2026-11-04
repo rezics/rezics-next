@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -59,14 +59,18 @@ function terminalMessage(
 export function ExportTerminal({
   stage,
   onRestart,
+  statusRef,
 }: {
   stage: Extract<ExportStage, 'cancelled' | 'stale' | 'expired' | 'conflict' | 'limit' | 'denied' | 'unavailable'>;
   onRestart?: () => void;
+  statusRef?: Ref<HTMLParagraphElement>;
 }) {
   const restartable = stage === 'stale' || stage === 'expired' || stage === 'cancelled' || stage === 'limit';
   return (
     <section className="space-y-4" data-export-stage={stage}>
-      <p role="status">{terminalMessage(stage)}</p>
+      <p ref={statusRef} tabIndex={-1} role="status">
+        {terminalMessage(stage)}
+      </p>
       {stage === 'stale' ? <p>{m.library_export_stale_restart()}</p> : null}
       <div className="flex flex-wrap gap-3">
         {restartable && onRestart ? (

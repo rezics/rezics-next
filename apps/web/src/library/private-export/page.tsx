@@ -16,7 +16,8 @@ import { useExportVisit, type ExportVisit } from './visit';
 
 function noticeText(notice: ExportJourneySnapshot['notice']): string | null {
   if (!notice) return null;
-  if (notice.kind === 'unknown') return m.library_export_uncertain();
+  if (notice.kind === 'unknown')
+    return notice.command.kind === 'cancel' ? m.library_export_cancel_uncertain() : m.library_export_uncertain();
   if (notice.kind === 'saved') return m.library_export_downloaded();
   if (notice.kind === 'bytes-lost') return m.library_export_bytes_lost();
   return exportFailureLabel(notice.kind, 'detail' in notice ? notice.detail : undefined);
@@ -54,7 +55,7 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
 
   useEffect(() => {
     statusRef.current?.focus();
-  }, [snap.stage, snap.notice?.kind]);
+  }, [snap.stage, snap.notice?.kind, snap.busy]);
 
   async function act(run: (current: ExportJourney) => Promise<ExportJourneySnapshot> | ExportJourneySnapshot) {
     if (!journey.current) return;
@@ -102,9 +103,14 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
         <ExportProgress
           records={snap.records}
           pages={snap.pages}
-          busy={snap.busy}
+          statusRef={text ? undefined : statusRef}
           onCancel={() => void act((current) => current.cancel())}
         />
+      ) : null}
+      {snap.stage === 'cancelling' && !text ? (
+        <p ref={statusRef} tabIndex={-1} role="status" aria-live="polite">
+          {m.library_export_cancelling()}
+        </p>
       ) : null}
       {snap.stage === 'ready' || snap.stage === 'empty' || snap.stage === 'save-failed' ? (
         snap.manifest ? (
@@ -124,6 +130,7 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
       {terminal ? (
         <ExportTerminal
           stage={snap.stage as 'cancelled' | 'stale' | 'expired' | 'conflict' | 'limit' | 'denied' | 'unavailable'}
+          statusRef={text ? undefined : statusRef}
           onRestart={() => act((current) => current.restart())}
         />
       ) : null}

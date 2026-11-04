@@ -6598,6 +6598,7 @@
   "library_export_retry_save": "重试下载",
   "library_export_cancel": "取消此次捕获",
   "library_export_cancelling": "正在取消…",
+  "library_export_cancel_uncertain": "取消尚未确认。没有可用文件。请重试此次捕获的原始取消请求。",
   "library_export_cancelled": "此次捕获已取消。未保存文件。",
   "library_export_stale": "之后的资料库更改使此次捕获过时。无法用这些分页完成原始文件。",
   "library_export_stale_restart": "开始新的捕获。先前捕获已过时，不会被重用。",

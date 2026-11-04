@@ -6598,6 +6598,7 @@
   "library_export_retry_save": "다운로드 다시 시도",
   "library_export_cancel": "이 캡처 취소",
   "library_export_cancelling": "취소 중…",
+  "library_export_cancel_uncertain": "취소가 확인되지 않았습니다. 사용할 수 있는 파일이 없습니다. 이 캡처의 원래 취소 요청을 다시 시도하세요.",
   "library_export_cancelled": "이 캡처가 취소되었습니다. 파일은 저장되지 않았습니다.",
   "library_export_stale": "이후 라이브러리 변경으로 이 캡처가 오래되었습니다. 이 페이지로는 원래 파일을 완성할 수 없습니다.",
   "library_export_stale_restart": "새 캡처를 시작하세요. 이전 캡처는 오래되어 다시 쓰지 않습니다.",

@@ -6598,6 +6598,7 @@
   "library_export_retry_save": "Reintentar descarga",
   "library_export_cancel": "Cancelar esta captura",
   "library_export_cancelling": "Cancelando…",
+  "library_export_cancel_uncertain": "La cancelación no está confirmada. No hay ningún archivo disponible. Reintenta la cancelación original de esta captura.",
   "library_export_cancelled": "Esta captura se canceló. No se guardó ningún archivo.",
   "library_export_stale": "Un cambio posterior de la biblioteca dejó esta captura obsoleta. El archivo original no se puede completar con estas páginas.",
   "library_export_stale_restart": "Empieza una captura nueva. La captura anterior está obsoleta y no se reutilizará.",

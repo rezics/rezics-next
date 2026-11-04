@@ -6598,6 +6598,7 @@
   "library_export_retry_save": "ダウンロードを再試行",
   "library_export_cancel": "このキャプチャを取り消す",
   "library_export_cancelling": "取り消し中…",
+  "library_export_cancel_uncertain": "キャンセルは未確認です。ファイルは利用できません。このキャプチャの元のキャンセル操作を再試行してください。",
   "library_export_cancelled": "このキャプチャは取り消されました。ファイルは保存されていません。",
   "library_export_stale": "その後のライブラリ変更でこのキャプチャは古くなりました。これらのページから元のファイルを完成できません。",
   "library_export_stale_restart": "新しいキャプチャを開始してください。以前のキャプチャは古く、再利用しません。",
