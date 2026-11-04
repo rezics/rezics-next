@@ -432,7 +432,10 @@ test('Inbox session failure retires retained private rows badges and exact marke
       await tick();
       expect(view.rows()).toEqual([['recovered', 'true']]);
       expect(host.querySelector('[data-badge]')?.textContent).toBe('2');
-      const newPageKey = inboxPageQuery(recovered).queryKey;
+      const newPageKey = client
+        .getQueryCache()
+        .findAll({ queryKey: inboxViewerQueryKey(recovered) })
+        .find(({ queryKey }) => queryKey.at(-2) === 'all' && queryKey.at(-1) === null)!.queryKey;
       const newCountKey = unreadCountQueryFor(recovered).queryKey;
       const freshReads = pageCalls.length;
       await act(async () => {
@@ -664,7 +667,11 @@ test('a delayed access page cannot complete an old marker recovery after session
       expect(view.commands).toHaveLength(1);
       expect(view.pageCalls).toHaveLength(freshReads);
       expect(sessionRequests).toBe(requests);
-      expect(view.client.getQueryState(inboxPageQuery(fresh).queryKey)?.isInvalidated).toBe(false);
+      const freshPageKey = view.client
+        .getQueryCache()
+        .findAll({ queryKey: inboxViewerQueryKey(fresh) })
+        .find(({ queryKey }) => queryKey.at(-2) === 'all' && queryKey.at(-1) === null)!.queryKey;
+      expect(view.client.getQueryState(freshPageKey)?.isInvalidated).toBe(false);
     } finally {
       await view.close();
     }

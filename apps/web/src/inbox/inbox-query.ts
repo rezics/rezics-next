@@ -135,7 +135,7 @@ async function forInboxCredential<T>(
 ): Promise<T> {
   const current = () => viewer.isCurrent() && inboxViewerCsrfToken(client, viewer) === csrfToken;
   const assertCurrent = () => {
-    if (!current()) throw new DOMException('Inbox credential changed', 'AbortError');
+    if (!current()) throw new DOMException('Inbox viewer changed', 'AbortError');
   };
   assertCurrent();
   try {
