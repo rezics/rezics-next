@@ -69,12 +69,13 @@ export async function loadAdmittedNewThreadPage(
 
 function NewThreadPage() {
   const { board, idempotencyKey, readerAdmission } = Route.useLoaderData();
-  const { subject: presetSubject, subjectTitle: presetSubjectTitle } = Route.useSearch();
+  const { subject: presetSubject, subjectTitle: presetSubjectTitle, returnTo } = Route.useSearch();
   return (
     <NewThreadComposition
       board={board}
       idempotencyKey={idempotencyKey}
       readerAdmission={readerAdmission}
+      {...(returnTo ? { returnTo } : {})}
       {...(presetSubject ? { presetSubject } : {})}
       {...(presetSubjectTitle ? { presetSubjectTitle } : {})}
     />
@@ -85,6 +86,7 @@ type NewThreadCompositionProps = {
   board: Awaited<ReturnType<typeof readNewThreadPage>>['board'];
   idempotencyKey: string;
   readerAdmission: ThreadCreationReaderAdmission;
+  returnTo?: string;
   presetSubject?: string;
   presetSubjectTitle?: string;
 };
@@ -104,6 +106,7 @@ function NewThreadEditor({
   board,
   idempotencyKey,
   readerAdmission,
+  returnTo,
   presetSubject,
   presetSubjectTitle,
 }: NewThreadCompositionProps) {
@@ -115,6 +118,7 @@ function NewThreadEditor({
     idempotencyKey,
     presetSubject: presetSubject ?? null,
     presetSubjectTitle: presetSubjectTitle ?? null,
+    returnTo: returnTo ?? null,
   }));
   const visit = useThreadCreationLifetime(
     {
@@ -216,6 +220,15 @@ function NewThreadEditor({
       >
         <article className="max-w-6xl space-y-8 text-foreground">
           <header className="space-y-3">
+            {origin.returnTo ? (
+              <a
+                data-slot="thread-create-return"
+                className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                href={origin.returnTo}
+              >
+                {m.library_subject_return_reader()}
+              </a>
+            ) : null}
             {bound ? (
               <p className="text-sm font-medium text-muted-foreground">{origin.board.title ?? m.threads_untitled()}</p>
             ) : null}

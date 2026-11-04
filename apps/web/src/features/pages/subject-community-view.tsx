@@ -7,7 +7,12 @@ import { threadLocation } from '../../threads/thread-href';
 import type { ThreadReactionsProps } from '../../threads/thread-reactions';
 import type { ThreadWatchProps } from '../../threads/thread-watch';
 import type { CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
-import { communityRegionLinks } from './subject-community-navigation';
+import {
+  communityBoardHref,
+  communityRegionAnchor,
+  communityRegionLinks,
+  communityRegionReturnTo,
+} from './subject-community-navigation';
 import { SubjectCommunityPreview } from './subject-community-preview';
 import { useSubjectCommunityReading } from './subject-community-lifetime';
 import { linkClass, linkColor } from './shared';
@@ -36,6 +41,7 @@ export function SubjectCommunityRegion({
   href,
   paged = false,
   node,
+  currentHref,
   preparedTransport,
   preparedWatch,
 }: {
@@ -49,6 +55,7 @@ export function SubjectCommunityRegion({
   href: string;
   paged?: boolean;
   node?: string;
+  currentHref?: string;
   preparedTransport?: ThreadReactionsProps['preparedTransport'];
   preparedWatch?: ThreadWatchProps['native'];
 }) {
@@ -106,6 +113,18 @@ export function SubjectCommunityRegion({
       ? m.prq_global({}, options)
       : `${m.space_realm_heading({}, options)} · ${currentContext.place.title}`
     : undefined;
+  const returnTo = currentHref
+    ? communityRegionReturnTo({
+        currentHref,
+        locale,
+        id,
+        subjectId: subject.id,
+        kind,
+        paged,
+        ...(node ? { node } : {}),
+        region,
+      })
+    : undefined;
   const state = empty ? (next ? 'continuation' : 'empty') : region.state === 'ready' ? 'populated' : region.state;
   const links = communityRegionLinks({ href, paged, ...(node ? { node } : {}), region });
   const retryHref = links.retry;
@@ -118,6 +137,7 @@ export function SubjectCommunityRegion({
   });
   return (
     <section
+      id={communityRegionAnchor(id)}
       data-slot={review ? 'review-list' : 'thread-list'}
       data-state={state}
       aria-labelledby={`${id}-title`}
@@ -288,7 +308,7 @@ export function SubjectCommunityRegion({
                   >
                     <a
                       className={actionClass}
-                      href={`/${encodeURIComponent(locale)}/boards/${encodeURIComponent(thread.boardId)}`}
+                      href={communityBoardHref(locale, thread.boardId, returnTo)}
                     >
                       {m.subject_community_board({}, options)}
                     </a>

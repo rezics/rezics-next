@@ -13,6 +13,7 @@ import { BoardWatchControl } from '../../threads/board-watch/control';
 import { SlowModeSetting } from '../../threads/slow-mode';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { isBoardPageCursorError } from '../../threads/board-reading';
+import { subjectCommunityVisitReturn } from '../../features/pages/subject-visit-navigation';
 import {
   BoardPageCallerHost,
   createBoardPageCaller,
@@ -20,12 +21,16 @@ import {
   type BoardPageLoadResult,
 } from '../../threads/board-page-caller';
 
-function boardSearch(search: Record<string, unknown>): { cursor?: string; sort?: 'hot' | 'new' } {
+export function boardSearch(
+  search: Record<string, unknown>,
+): { cursor?: string; sort?: 'hot' | 'new'; returnTo?: string } {
   const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
   const sort = boardSortFromSearch(v.parse(v.fallback(v.optional(v.string()), undefined), search.sort));
+  const returnTo = subjectCommunityVisitReturn(search.returnTo, getLocale());
   return {
     ...(typeof cursor === 'string' ? { cursor } : {}),
     ...(sort ? { sort } : {}),
+    ...(returnTo ? { returnTo } : {}),
   };
 }
 
@@ -81,7 +86,11 @@ function BoardPage() {
   const id = Route.useParams().id;
   const search = Route.useSearch();
   const sort = boardSortFromSearch(search.sort);
-  const returnTo = location.publicHref.split('#')[0]!;
+  const boardQuery = new URLSearchParams();
+  if (search.cursor !== undefined) boardQuery.set('cursor', search.cursor);
+  if (sort !== undefined) boardQuery.set('sort', sort);
+  if (search.returnTo) boardQuery.set('returnTo', search.returnTo);
+  const returnTo = `${location.pathname}${boardQuery.size ? `?${boardQuery}` : ''}`;
   return (
     <BoardPageCallerHost
       result={page}
@@ -102,7 +111,12 @@ function BoardPage() {
           participation={(page) => <BoardParticipation community={page.community} returnTo={returnTo} />}
           watch={<BoardWatchControl boardId={id} returnTo={returnTo} session={session} authority={reactionOrigin} />}
           start={(page) => (
-            <BoardStartThread board={page.board} advice={page.actions.createThread} returnTo={returnTo} />
+            <BoardStartThread
+              board={page.board}
+              advice={page.actions.createThread}
+              returnTo={returnTo}
+              {...(search.returnTo ? { preparedReturnTo: search.returnTo } : {})}
+            />
           )}
           overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
           postingInterval={

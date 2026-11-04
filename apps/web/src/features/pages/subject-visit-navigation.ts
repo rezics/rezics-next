@@ -13,6 +13,7 @@ const realmDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/realm
 const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/library/copies$`);
 const returnAddressCap = 32768;
 const collectionDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/collections/${uuid}$`);
+const subjectCommunityFragment = /^#subject-community-[A-Za-z0-9_-]{1,64}$/u;
 
 export type WorkTagReturn = {
   statement: string;
@@ -405,6 +406,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       !(subject && summaryReadingReturn(fragment)) &&
       fragment !== '#manga-reader' &&
       !(subject && (fragment === '#work-tags' || workTagReturn(fragment))) &&
+      !(subject && subjectCommunityFragment.test(fragment)) &&
       fragment !== '#screen-episode-list' &&
       screenEntry === null &&
       !recordingStatement &&
@@ -420,6 +422,13 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
 /** A public return address may restore one admitted Subject or Collection view window. */
 export function subjectVisitReturn(value: unknown, locale?: string): string | undefined {
   return subjectVisitReturnAt(value, locale, false);
+}
+
+/** A thread-entry return may target only a real mounted community region on an admitted Subject route. */
+export function subjectCommunityVisitReturn(value: unknown, locale?: string): string | undefined {
+  const accepted = subjectVisitReturn(value, locale);
+  if (!accepted) return;
+  return subjectCommunityFragment.test(new URL(accepted, 'https://rezics.invalid').hash) ? accepted : undefined;
 }
 
 /** Bound route search by its fixed fields plus one validated opaque return address and current cursor. */
