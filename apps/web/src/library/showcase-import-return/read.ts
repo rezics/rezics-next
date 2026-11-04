@@ -41,13 +41,14 @@ export async function loadImportLibrary(
     return { state: 'current', page };
   } catch (error) {
     return {
-      state: error instanceof StaleCursorError
-        ? 'expired'
-        : isPlatformClosedError(error)
-        ? 'closed'
-        : error instanceof Error && 'state' in error && error.state === 'denied'
-          ? 'denied'
-          : 'unavailable',
+      state:
+        error instanceof StaleCursorError
+          ? 'expired'
+          : isPlatformClosedError(error)
+            ? 'closed'
+            : error instanceof Error && 'state' in error && error.state === 'denied'
+              ? 'denied'
+              : 'unavailable',
     };
   }
 }

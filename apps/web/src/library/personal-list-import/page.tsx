@@ -39,7 +39,13 @@ function download(xml: string) {
   URL.revokeObjectURL(url);
 }
 
-export function PersonalVndbImportPage({ visit, libraryReturn = false }: { visit?: VndbVisit | null; libraryReturn?: boolean }) {
+export function PersonalVndbImportPage({
+  visit,
+  libraryReturn = false,
+}: {
+  visit?: VndbVisit | null;
+  libraryReturn?: boolean;
+}) {
   const observed = useVndbVisit();
   const current = visit === undefined ? observed : visit;
   useEffect(() => () => current?.retire(), [current]);

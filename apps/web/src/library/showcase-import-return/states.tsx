@@ -67,7 +67,10 @@ export function ImportLibraryEmptyState({ snapshot }: { snapshot: ImportLibraryS
   const sparse = snapshot.visible.page.next !== null;
   const first = snapshot.cursor === null;
   return (
-    <div className="space-y-2 rounded-md border border-dashed p-4" data-vndb-browse-empty={sparse ? 'sparse' : first ? 'empty' : 'end'}>
+    <div
+      className="space-y-2 rounded-md border border-dashed p-4"
+      data-vndb-browse-empty={sparse ? 'sparse' : first ? 'empty' : 'end'}
+    >
       <p className="font-medium">
         {sparse
           ? m.library_vndb_browse_sparse()

@@ -16,9 +16,7 @@ export type ImportLibraryLabels = {
 export function importLibraryLabels(page: ImportLibraryPage, locale: string, release?: Release): ImportLibraryLabels[] {
   return page.libraryEntries.map((entry) => {
     const label =
-      release && entry.subject
-        ? libraryStateLabel(release, entry.subject.type, entry.state, locale)
-        : undefined;
+      release && entry.subject ? libraryStateLabel(release, entry.subject.type, entry.state, locale) : undefined;
     return {
       state: label?.text ?? m.library_other({}, { locale: locale as Locale }),
       ...(label?.lang ? { stateLanguage: label.lang } : {}),
@@ -58,7 +56,7 @@ export function importLibraryRows(
       state: labels?.[index]?.state ?? m.library_other({}, { locale: locale as Locale }),
       ...(labels?.[index]?.stateLanguage ? { stateLanguage: labels[index]!.stateLanguage } : {}),
       // The installed native page has no rating projection. Import score decisions cannot fill that gap.
-      progress: progressView(entry.activeProgressSession ?? null, locale),
+      progress: progressView('activeProgressSession' in entry ? (entry.activeProgressSession ?? null) : null, locale),
     };
   });
 }

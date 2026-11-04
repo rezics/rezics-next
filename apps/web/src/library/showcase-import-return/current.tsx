@@ -118,7 +118,7 @@ export function CurrentImportLibrary({ visit, returned = false }: { visit: VndbV
   const current = !!admitted && visit.current() && !snapshot.retired;
   return (
     <ImportLibraryView
-      snapshot={current ? snapshot : undefined}
+      {...(current ? { snapshot } : {})}
       result={null}
       busy={current && !!snapshot.pending}
       available={current}

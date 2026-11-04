@@ -20,11 +20,7 @@ export function importLibraryWorkHref(row: ImportLibraryRow, locale: string): st
 }
 
 /** Consume the real shelf URL contract, explicitly retaining this reader's order over saved defaults. */
-export function importLibraryShelfHref(
-  locale: string,
-  layout: ShelfLayout = 'list',
-  size: ShelfSize = 'm',
-): string {
+export function importLibraryShelfHref(locale: string, layout: ShelfLayout = 'list', size: ShelfSize = 'm'): string {
   return shelfHref(locale, {
     orderBy: 'lastActivity',
     direction: 'desc',

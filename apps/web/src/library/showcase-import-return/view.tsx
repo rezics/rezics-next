@@ -48,15 +48,15 @@ export function ImportLibraryView({
     launcher: HTMLButtonElement;
   } | null>(null);
   const pageHeading = useRef<HTMLParagraphElement>(null);
-  const pageIdentity = useRef<{ source: CurrentImportLibraryRead | null; generation: number }>({ source: null, generation: 0 });
+  const pageIdentity = useRef<{ source: CurrentImportLibraryRead | null; generation: number }>({
+    source: null,
+    generation: 0,
+  });
   const snapshot: ImportLibrarySnapshot = suppliedSnapshot ?? {
     visible: result?.state === 'current' ? result : null,
     cursor: null,
     pending: busy ? { cursor: null, kind: 'first' } : null,
-    failed:
-      result && result.state !== 'current'
-        ? { intent: { cursor: null, kind: 'first' }, result }
-        : null,
+    failed: result && result.state !== 'current' ? { intent: { cursor: null, kind: 'first' }, result } : null,
     revision: 0,
     retired: false,
   };
@@ -66,7 +66,10 @@ export function ImportLibraryView({
   if (pageIdentity.current.source !== visible) {
     pageIdentity.current = { source: visible, generation: pageIdentity.current.generation + 1 };
   }
-  const inspected = inspection?.generation === pageIdentity.current.generation ? rows[inspection.position] ?? null : null;
+  const inspected =
+    inspection && inspection.generation === pageIdentity.current.generation
+      ? (rows[inspection.position] ?? null)
+      : null;
 
   return (
     <section
@@ -79,10 +82,20 @@ export function ImportLibraryView({
         onDepart?.(event as unknown as MouseEvent<HTMLAnchorElement>);
       }}
     >
-      <h2 ref={headingRef} tabIndex={-1} className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <h2
+        ref={headingRef}
+        tabIndex={-1}
+        className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         {m.library_vndb_library_title()}
       </h2>
-      <p ref={pageHeading} tabIndex={-1} className="text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring">{m.library_vndb_library_help()}</p>
+      <p
+        ref={pageHeading}
+        tabIndex={-1}
+        className="text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        {m.library_vndb_library_help()}
+      </p>
       <ImportLibraryReadState snapshot={snapshot} available={available} returned={returned} />
       <ImportLibraryPageControls snapshot={snapshot} available={available} actions={actions} />
       <div className="flex flex-wrap items-start gap-3">
@@ -108,12 +121,15 @@ export function ImportLibraryView({
               layout={layout}
               size={size}
               onInspect={(position, launcher) => {
-                if (available && !snapshot.pending) setInspection({ generation: pageIdentity.current.generation, position, launcher });
+                if (available && !snapshot.pending)
+                  setInspection({ generation: pageIdentity.current.generation, position, launcher });
               }}
             />
           </div>
           {!snapshot.pending && !snapshot.failed && rows.length > 0 && visible.page.next === null ? (
-            <p role="status" className="text-sm text-muted-foreground">{m.library_vndb_browse_end()}</p>
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.library_vndb_browse_end()}
+            </p>
           ) : null}
           <p className="text-sm text-muted-foreground">{m.library_vndb_browse_facts_help()}</p>
         </>
@@ -127,7 +143,9 @@ export function ImportLibraryView({
         onClose={() => setInspection(null)}
         finalFocus={() =>
           available && inspection?.generation === pageIdentity.current.generation
-            ? inspection.launcher.isConnected ? inspection.launcher : pageHeading.current ?? false
+            ? inspection.launcher.isConnected
+              ? inspection.launcher
+              : (pageHeading.current ?? false)
             : false
         }
       />

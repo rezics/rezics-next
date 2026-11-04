@@ -23,7 +23,13 @@ export const readImportLibrary = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     const locale = requestLocale(request) ?? 'en';
-    const result = await loadImportLibrary(kernelClient(locale), request, env as Partial<SessionEnv>, data, data.cursor);
+    const result = await loadImportLibrary(
+      kernelClient(locale),
+      request,
+      env as Partial<SessionEnv>,
+      data,
+      data.cursor,
+    );
     if (result.state !== 'current') return result;
     const release = await readRelease().catch(() => undefined);
     return { ...result, labels: importLibraryLabels(result.page, locale, release) };

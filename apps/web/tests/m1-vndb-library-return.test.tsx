@@ -303,7 +303,8 @@ test('refused apply and foreign receipts retain original operands; source replac
 const { createImportLibraryBrowser } = await import('../src/library/showcase-import-return/browser');
 const { loadImportLibrary } = await import('../src/library/showcase-import-return/read');
 const { importLibraryRows, importLibraryLabels } = await import('../src/library/showcase-import-return/presentation');
-const { importLibraryShelfHref, importLibraryWorkHref } = await import('../src/library/showcase-import-return/navigation');
+const { importLibraryShelfHref, importLibraryWorkHref } =
+  await import('../src/library/showcase-import-return/navigation');
 const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
 const recordedLibrary = (await import('../src/kernel/recorded/library-entries.json')).default;
 const nativePage: ImportLibraryPage = { libraryEntries: recordedLibrary.libraryEntries.slice(0, 2), next: null };
@@ -312,29 +313,39 @@ test('prepared native read carries the exact opaque cursor and original order, a
   const queries: URL[] = [];
   let expired = false;
   const client = createKernelClient('https://kernel.invalid', {
-    fetch: Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = new Request(input, init);
-      queries.push(new URL(request.url));
-      expect(request.headers.get('authorization')).toBe('Bearer native-reader');
-      expect(request.cache).toBe('no-store');
-      return expired
-        ? Response.json({ code: 'invalid_cursor' }, { status: 400 })
-        : Response.json(nativePage);
-    }, { preconnect: fetch.preconnect }),
+    fetch: Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        queries.push(new URL(request.url));
+        expect(request.headers.get('authorization')).toBe('Bearer native-reader');
+        expect(request.cache).toBe('no-store');
+        return expired ? Response.json({ code: 'invalid_cursor' }, { status: 400 }) : Response.json(nativePage);
+      },
+      { preconnect: fetch.preconnect },
+    ),
   });
   const session = { status: 'active', subject: targetId, csrfToken: 'original', accessToken: 'native-reader' };
   const env = {
-    AUTH_ISSUER: 'https://auth.invalid', API_RESOURCE: 'api', WEBSITE_SCOPES: 'scopes',
-    WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: 'key', SITE_ORIGINS: 'https://site.invalid',
+    AUTH_ISSUER: 'https://auth.invalid',
+    API_RESOURCE: 'api',
+    WEBSITE_SCOPES: 'scopes',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: 'key',
+    SITE_ORIGINS: 'https://site.invalid',
     SESSIONS: { idFromName: (id: string) => id, get: () => ({ credentialIfFresh: async () => session }) },
   } as never;
-  const request = () => new Request('https://site.invalid/en/library/import-vndb', {
-    headers: { cookie: `__Host-rezics_session=${'A'.repeat(43)}` },
-  });
+  const request = () =>
+    new Request('https://site.invalid/en/library/import-vndb', {
+      headers: { cookie: `__Host-rezics_session=${'A'.repeat(43)}` },
+    });
   const expected = { expectedReader: targetId, expectedCredential: 'original' };
   expect((await loadImportLibrary(client, request(), env, expected, 'opaque+/=cursor')).state).toBe('current');
   expect(Object.fromEntries(queries[0]!.searchParams)).toEqual({
-    view: 'FULL', limit: '8', cursor: 'opaque+/=cursor', orderBy: 'lastActivity', direction: 'desc',
+    view: 'FULL',
+    limit: '8',
+    cursor: 'opaque+/=cursor',
+    orderBy: 'lastActivity',
+    direction: 'desc',
   });
   expired = true;
   expect(await loadImportLibrary(client, request(), env, expected, 'opaque+/=cursor')).toEqual({ state: 'expired' });
@@ -342,23 +353,30 @@ test('prepared native read carries the exact opaque cursor and original order, a
   session.csrfToken = 'replacement';
   expect(await loadImportLibrary(client, request(), env, expected)).toEqual({ state: 'denied' });
   expect(queries).toHaveLength(2);
-  expect(await loadImportLibrary(client, new Request('https://site.invalid/en/library/import-vndb'), {}, expected))
-    .toEqual({ state: 'signed-out' });
+  expect(
+    await loadImportLibrary(client, new Request('https://site.invalid/en/library/import-vndb'), {}, expected),
+  ).toEqual({ state: 'signed-out' });
 });
 
 test('native page replacement preserves duplicate associations, sparse continuation, exact retry, refresh and first-page restart', async () => {
   const cursors: (string | undefined)[] = [];
   const duplicate = { ...nativePage.libraryEntries[0]!, subjectId: nativePage.libraryEntries[1]!.subjectId };
-  const first = { state: 'current' as const, page: { libraryEntries: [nativePage.libraryEntries[0]!, duplicate], next: 'next' } };
+  const first = {
+    state: 'current' as const,
+    page: { libraryEntries: [nativePage.libraryEntries[0]!, duplicate], next: 'next' },
+  };
   const sparse = { state: 'current' as const, page: { libraryEntries: [], next: 'after-sparse' } };
   const pending = Promise.withResolvers<Awaited<ReturnType<typeof loadImportLibrary>>>();
   let nextAttempts = 0;
-  const browser = createImportLibraryBrowser({ current: () => true, read: async (cursor) => {
-    cursors.push(cursor);
-    if (!cursor) return first;
-    if (cursor === 'next' && ++nextAttempts === 1) return pending.promise;
-    return cursor === 'next' ? sparse : { state: 'current', page: nativePage };
-  } });
+  const browser = createImportLibraryBrowser({
+    current: () => true,
+    read: async (cursor) => {
+      cursors.push(cursor);
+      if (!cursor) return first;
+      if (cursor === 'next' && ++nextAttempts === 1) return pending.promise;
+      return cursor === 'next' ? sparse : { state: 'current', page: nativePage };
+    },
+  });
   await browser.first();
   expect(browser.snapshot().visible?.page.libraryEntries).toHaveLength(2);
   const next = browser.next();
@@ -368,14 +386,18 @@ test('native page replacement preserves duplicate associations, sparse continuat
   await next;
   expect(browser.snapshot().visible).toBe(first);
   expect(browser.snapshot().cursor).toBeNull();
-  const failed = await render(<ImportLibraryView result={null} busy={false} snapshot={browser.snapshot()} onRead={nothing} />);
+  const failed = await render(
+    <ImportLibraryView result={null} busy={false} snapshot={browser.snapshot()} onRead={nothing} />,
+  );
   expect(failed.match(/data-vndb-current-entry=/g)).toHaveLength(2);
   expect(failed).toContain('Retry the failed page');
   expect(failed).not.toContain('This native page has no continuation');
   expect(failed).not.toContain('Private source note');
   await browser.retry();
   expect(browser.snapshot()).toMatchObject({ cursor: 'next', previous: null, visible: sparse });
-  const sparseHtml = await render(<ImportLibraryView result={null} busy={false} snapshot={browser.snapshot()} onRead={nothing} />);
+  const sparseHtml = await render(
+    <ImportLibraryView result={null} busy={false} snapshot={browser.snapshot()} onRead={nothing} />,
+  );
   expect(sparseHtml).toContain('data-vndb-browse-empty="sparse"');
   expect(sparseHtml).toContain('Next page');
   await browser.next();
@@ -390,12 +412,24 @@ test('native page replacement preserves duplicate associations, sparse continuat
 
 test('current row presentation and public Work return keep native identities, localized labels and supplied progress separate from XML', async () => {
   const first = nativePage.libraryEntries[0]!;
-  const page: ImportLibraryPage = { libraryEntries: [
-    { ...first, state: 'undisplayed-native-state', activeProgressSession: {
-      mode: 'scalar_amount', unit: 'page', amount: '3', total: '10', completedUnitCount: 0, locator: null,
-    } },
-    { ...first, subject: null },
-  ], next: null };
+  const page: ImportLibraryPage = {
+    libraryEntries: [
+      {
+        ...first,
+        state: 'undisplayed-native-state',
+        activeProgressSession: {
+          mode: 'scalar_amount',
+          unit: 'page',
+          amount: '3',
+          total: '10',
+          completedUnitCount: 0,
+          locator: null,
+        },
+      },
+      { ...first, subject: null },
+    ],
+    next: null,
+  };
   for (const locale of ['en', 'zh-Hant', 'ja'] as const) {
     setLocale(locale, { reload: false });
     const labels = importLibraryLabels(page, locale);
@@ -406,11 +440,20 @@ test('current row presentation and public Work return keep native identities, lo
     const href = new URL(importLibraryWorkHref(rows[0]!, locale)!, 'https://site.invalid');
     expect(href.pathname).toContain(`/subjects/${first.subject!.id}/`);
     expect(href.searchParams.get('via')).toBe(`/${locale}/library/import-vndb#vndb-current-library`);
-    expect(subjectVisitReturn(`/${locale}/library/import-vndb?cursor=private#vndb-current-library`, locale)).toBeUndefined();
+    expect(
+      subjectVisitReturn(`/${locale}/library/import-vndb?cursor=private#vndb-current-library`, locale),
+    ).toBeUndefined();
     const shelf = new URL(importLibraryShelfHref(locale, 'grid', 'l'), 'https://site.invalid');
-    expect(Object.fromEntries(shelf.searchParams)).toEqual({ orderBy: 'lastActivity', direction: 'desc', layout: 'grid', size: 'l' });
+    expect(Object.fromEntries(shelf.searchParams)).toEqual({
+      orderBy: 'lastActivity',
+      direction: 'desc',
+      layout: 'grid',
+      size: 'l',
+    });
     for (const layout of ['list', 'grid', 'table'] as const) {
-      const html = await render(<ImportLibraryView result={{ state: 'current', page, labels }} busy={false} layout={layout} onRead={nothing} />);
+      const html = await render(
+        <ImportLibraryView result={{ state: 'current', page, labels }} busy={false} layout={layout} onRead={nothing} />,
+      );
       expect(html.match(/data-vndb-current-entry=/g)).toHaveLength(2);
       expect(html).not.toContain('undisplayed-native-state');
       expect(html).not.toContain('07.3');
@@ -434,10 +477,16 @@ test('old visit pages cannot attach after replacement, and native loss of access
   expect(browser.snapshot()).toMatchObject({ retired: true, visible: null, pending: null });
   for (const state of ['closed', 'denied', 'signed-out'] as const) {
     let first = true;
-    const active = createImportLibraryBrowser({ current: () => true, read: async () => {
-      if (first) { first = false; return { state: 'current', page: nativePage }; }
-      return { state };
-    } });
+    const active = createImportLibraryBrowser({
+      current: () => true,
+      read: async () => {
+        if (first) {
+          first = false;
+          return { state: 'current', page: nativePage };
+        }
+        return { state };
+      },
+    });
     await active.first();
     await active.refresh();
     expect(active.snapshot().visible).toBeNull();

@@ -6,12 +6,12 @@ export type ImportLibraryIntent = {
   cursor: string | null;
   kind: 'first' | 'next' | 'previous' | 'restart' | 'refresh';
   /** One previous address, rather than a history of private pages. Undefined means no previous address. */
-  previous?: string | null;
+  previous?: string | null | undefined;
 };
 export type ImportLibrarySnapshot = {
   visible: CurrentImportLibraryRead | null;
   cursor: string | null;
-  previous?: string | null;
+  previous?: string | null | undefined;
   pending: ImportLibraryIntent | null;
   failed: { intent: ImportLibraryIntent; result: ImportLibraryFailure } | null;
   revision: number;
