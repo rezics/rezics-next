@@ -183,7 +183,11 @@ test('available choices use supplied localized names, with exact saved and field
           ready().rule.releaseDigest,
           ready().rule.sourceGeneration,
         ]) {
-          const code = [...ui.host.querySelectorAll('code')].find((node) => node.textContent === raw);
+          const code = [...ui.host.querySelectorAll('details code')].find(
+            (node) =>
+              node.textContent === raw &&
+              node.closest('details')?.querySelector('summary')?.textContent?.startsWith(m.catalogue_technical_details()),
+          );
           expect(code).toBeDefined();
           const details = code!.closest('details')!;
           expect(details.open).toBe(false);
