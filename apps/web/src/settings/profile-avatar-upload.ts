@@ -174,19 +174,10 @@ export class ProfileAvatarUpload {
     this.adviceRetryAt = Math.max(this.adviceRetryAt, preferenceRetryDeadline(retryAfter, responseTime));
   }
   private currentAdviceEpisode(target: string, episode: number) {
-    return (
-      this.connected &&
-      this.adviceTarget === target &&
-      this.adviceEpisode === episode &&
-      this.target() === target
-    );
+    return this.connected && this.adviceTarget === target && this.adviceEpisode === episode && this.target() === target;
   }
   private ownsAdvice(target: string, episode: number, request: AbortController) {
-    return (
-      this.currentAdviceEpisode(target, episode) &&
-      this.adviceRequest === request &&
-      !request.signal.aborted
-    );
+    return this.currentAdviceEpisode(target, episode) && this.adviceRequest === request && !request.signal.aborted;
   }
   canOfferAdviceRetry = () =>
     this.connected &&
@@ -194,9 +185,7 @@ export class ProfileAvatarUpload {
     !!this.live() &&
     this.target() === this.adviceTarget &&
     this.advice !== 'loading' &&
-    (this.advice === 'unavailable' ||
-      this.advice === 'denied' ||
-      (!!this.selection && this.state.phase === 'error'));
+    (this.advice === 'unavailable' || this.advice === 'denied' || (!!this.selection && this.state.phase === 'error'));
   canRetryAdvice = () => this.canOfferAdviceRetry() && Date.now() >= this.adviceRetryAt;
   retryAdvice = () => {
     if (!this.canRetryAdvice() || !this.adviceTarget) return;
