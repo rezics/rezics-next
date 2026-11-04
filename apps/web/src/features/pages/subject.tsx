@@ -313,8 +313,9 @@ export async function loadSubjectPage(
     const { account: _account, ...page } = result.data;
     // Read the existing mounted Terms authority resource once, alongside this page reading.
     // An advice outage must never fail or conceal the admitted public page.
-    const reading = subjectBody(page as SubjectPageData);
-    const eligible = reading && page.catalogue?.state === 'released' && supportsReleasedWorkNames(reading.subject.type, page.catalogue.definitions);
+    const currentPage = page as SubjectPageData;
+    const reading = subjectBody(currentPage);
+    const eligible = reading && currentPage.catalogue?.state === 'released' && supportsReleasedWorkNames(reading.subject.type, currentPage.catalogue.definitions);
     const termsAuthority = eligible
       ? await (await import('../catalogue/subject-terms-request')).readTermsPageAuthority(client, options.authorization ? 'signed-in' : 'signed-out', options.authorization)
       : undefined;
