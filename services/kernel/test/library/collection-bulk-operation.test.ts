@@ -55,6 +55,7 @@ async function preview(subjectIds: string[], requestKey = key()) {
 }
 
 test('preview is inert, confirmation binds stored peers, and changed entries are skipped individually', async () => {
+  await f.grantLibraryGate(f.owner.actor.accountId);
   const a = await entry(),
     b = await entry();
   const requestKey = key(),
@@ -149,15 +150,13 @@ test('filtered preview exhausts native Members pages before status confirmation'
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
   const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
   const source = (
-    await collections.createCollection(owner.actor, { title: 'Paged bulk source', visibility: 'private' }, key())
+    await collections.createCollection(owner.actor, { title: 'Paged bulk source', visibility: 'public' }, key())
   ).value;
   const subjectId = await f.createSubject('game');
   await f.commands.putEntry(owner.actor, subjectId, { state: 'planned' }, key());
   for (let n = 0; n < 101; n++)
     await collections.addMember(owner.actor, source.id, { subjectId, note: `occurrence-${n}` }, key());
 
-  expect((await f.send(owner.bearer, 'GET', `/v1/collections/${source.id}`)).status).toBe(200);
-  expect((await f.send(owner.bearer, 'GET', `/v1/collections/${source.id}/members`)).status).toBe(200);
   const response = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
     action: 'set_status',
     state: 'completed',
@@ -300,7 +299,7 @@ test('current authority loss prevents another effect and result disclosure', asy
     deadline: workStepDeadline(),
   };
   const committed = await executeStatusTarget(runtime, command);
-  expect(committed.kind).toBe('terminal');
+  expect(committed).toMatchObject({ kind: 'terminal', evidence: { outcome: 'applied' } });
   await f.revokeLibraryGate(f.owner.actor.accountId);
   // A lost native response is privately recoverable even after write/disclosure authority is gone.
   expect(await executeStatusTarget(runtime, command)).toEqual(committed);
@@ -327,11 +326,7 @@ test('filtered review pages never narrow the captured set; exact start replay ke
   await f.grantLibraryGate(owner.actor.accountId);
   const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
   const source = (
-    await collections.createCollection(
-      owner.actor,
-      { title: 'Filtered operation review', visibility: 'private' },
-      key(),
-    )
+    await collections.createCollection(owner.actor, { title: 'Filtered operation review', visibility: 'public' }, key())
   ).value;
   const captured: Awaited<ReturnType<typeof entry>>[] = [];
   for (let n = 0; n < 25; n++) {

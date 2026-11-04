@@ -242,7 +242,8 @@ export async function previewCollectionBulk(
       (route,operation_id,ordinal,account_id,subject_id,target_kind,collection_id,member_id,target,
         source_digest,receipt,created_transaction_id,state,chunk_index)
       SELECT $1,$2::uuid,(n-1),$3::uuid,(target->>'subjectId')::uuid,target->>'kind',
-        (target->>'collectionId')::uuid,(target->>'memberId')::uuid,target,$5,
+        CASE WHEN target->>'kind'='occurrence' THEN (target->>'collectionId')::uuid END,
+        CASE WHEN target->>'kind'='occurrence' THEN (target->>'memberId')::uuid END,target,$5,
         jsonb_build_object('partition',($7::jsonb->>((n-1)::integer))::integer,
           'principalKind','account','principalId',($3::uuid)::text,
           'commandKind','library.collectionBulk.target','key',($2::uuid)::text||':'||(n-1)::text,
