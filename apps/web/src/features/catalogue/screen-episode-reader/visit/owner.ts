@@ -107,7 +107,7 @@ function setEntryReceipt({
   if (!target) return;
   const targetUrl = new URL(childHref, 'https://rezics.invalid');
   const via = subjectVisitReturn(targetUrl.searchParams.get('via'), locale);
-  const child = routeWithoutVia(`${target.pathname}${target.search}`);
+  const child = routeWithoutVia(`${target.pathname}${target.searchStr}`);
   const expected = via && canonicalAddress(via);
   const safeParentReturn = parentReturn ? subjectVisitReturn(parentReturn, locale) : undefined;
   if (!child || !expected) return;

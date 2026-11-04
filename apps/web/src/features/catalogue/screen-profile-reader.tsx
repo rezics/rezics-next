@@ -282,7 +282,7 @@ export function ScreenProfileOverview({
     query.dataUpdatedAt,
     query.errorUpdatedAt,
     query.fetchStatus,
-    query.fetchFailureCount,
+    query.failureCount,
   ]);
   const episodeVisit = useScreenEpisodeVisit({
     sourceKey: episodeSourceKey,
@@ -291,7 +291,7 @@ export function ScreenProfileOverview({
     locale,
     observation,
     observationCurrent,
-    read: episodeRead,
+    ...(episodeRead ? { read: episodeRead } : {}),
     loading: query.isPending || query.isFetching,
     settledKey,
     directReturn: screenEpisodeReturn(location.searchStr, locale),
