@@ -1,4 +1,5 @@
 import type { FilterDocument } from '@rezics/filter';
+import { memo, useMemo } from 'react';
 import type { LibraryProfile } from '@rezics/definitions';
 import type { ConditionMetadata } from '../../search/condition-editor-model';
 import { localizedLabel } from '../../search/results';
@@ -324,7 +325,7 @@ function Tree({
 }
 
 /** A read-only rendering of the admitted grammar. It does not find, count, sort, or evaluate members. */
-export function DynamicRuleReview({
+export const DynamicRuleReview = memo(function DynamicRuleReview({
   filter,
   stage,
   current,
@@ -340,14 +341,19 @@ export function DynamicRuleReview({
 }: DynamicRuleReviewProps) {
   const locale = getLocale();
   const acceptedRelease = accepted ?? current;
-  if (!ownerCurrent)
+  const acceptedMeaning = useMemo(() => release(acceptedRelease), [acceptedRelease]);
+  const currentMeaning = useMemo(() => release(current), [current]);
+  const tree = useMemo(
+    () => (ownerCurrent ? savedFilterReviewTree(filter, acceptedMeaning, currentMeaning, locale) : null),
+    [acceptedMeaning, currentMeaning, filter, locale, ownerCurrent],
+  );
+  if (!ownerCurrent || !tree)
     return (
       <section role="alert" className="rounded-lg border border-destructive/50 p-4">
         <h2 className="font-semibold">{m.library_rule_review_heading()}</h2>
         <p>{m.library_rule_review_owner_changed()}</p>
       </section>
     );
-  const tree = savedFilterReviewTree(filter, release(acceptedRelease), release(current), locale);
   const currentIssue = stateMessage(current.state);
   const acceptedIssue = stateMessage(acceptedRelease.state);
   const ownerProfiles = profiles ?? choices.release.profiles;
@@ -398,7 +404,7 @@ export function DynamicRuleReview({
       </details>
     </section>
   );
-}
+});
 
 export function ruleReviewReleaseFromChoices(choices: RuleChoices): RuleReviewRelease {
   return {

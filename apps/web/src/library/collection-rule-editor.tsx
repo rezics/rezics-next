@@ -1,6 +1,6 @@
 import { collectionTextIssue } from './collection-text-input';
 import { CollectionTextInputHelp, collectionTextInputAttributes } from './collection-text-input-field';
-import { useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { FilterDocument, OwnerLeaf } from '@rezics/filter';
 import { parseFilter } from '@rezics/filter';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -696,11 +696,14 @@ function RuleForm({
         </Button>
       </div>
     );
-  const visibleChoices =
-    canLabel && (canLabelCurrent?.() ?? true)
-      ? choices
-      : { ...choices, labels: { state: 'unavailable' as const, values: [], next: null } };
-  const currentMeaning = ruleReviewReleaseFromChoices(choices);
+  const visibleChoices = useMemo(
+    () =>
+      canLabel && (canLabelCurrent?.() ?? true)
+        ? choices
+        : { ...choices, labels: { state: 'unavailable' as const, values: [], next: null } },
+    [canLabel, canLabelCurrent, choices],
+  );
+  const currentMeaning = useMemo(() => ruleReviewReleaseFromChoices(choices), [choices]);
   const filterMatchesSaved = base.state === 'ready' && ruleDraftSnapshot(filter) === ruleDraftSnapshot(base.rule.filter);
   const reviewFilter = intent?.filter ?? filter ?? presence;
   const reviewStage = intent
@@ -710,22 +713,25 @@ function RuleForm({
       : filterMatchesSaved
         ? 'saved'
         : 'draft';
-  const savedMeaning: RuleMeaning | undefined =
-    base.state === 'ready'
-      ? (base.accepted ?? {
-          state:
-            choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest
-              ? 'ready'
-              : 'unavailable',
-          digest: base.rule.releaseDigest,
-          ...(choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest
-            ? {
-                metadata: choices.release.metadata,
-                profiles: choices.release.profiles,
-              }
-            : { profiles: [] }),
-        })
-      : undefined;
+  const savedMeaning: RuleMeaning | undefined = useMemo(
+    () =>
+      base.state === 'ready'
+        ? (base.accepted ?? {
+            state:
+              choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest
+                ? 'ready'
+                : 'unavailable',
+            digest: base.rule.releaseDigest,
+            ...(choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest
+              ? {
+                  metadata: choices.release.metadata,
+                  profiles: choices.release.profiles,
+                }
+              : { profiles: [] }),
+          })
+        : undefined,
+    [base, choices],
+  );
   const reviewUsesSavedMeaning = filterMatchesSaved && base.state === 'ready' && !savedId;
   const reviewMeaning = reviewUsesSavedMeaning && savedMeaning ? savedMeaning : undefined;
   const reviewProfiles = reviewMeaning?.profiles ?? choices.release.profiles;
