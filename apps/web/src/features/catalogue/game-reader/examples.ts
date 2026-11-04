@@ -1,9 +1,12 @@
-import { createKernelClient, type KernelClient, type SubjectLinksResponse, type SubjectRead } from '@rezics/client';
+import { createKernelClient, type KernelClient, type SubjectRead, type WorkReleaseCards } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { candidateContext } from '../../../subject/candidates';
 import { readGameReader, editionProperty, type GameStatement, type GameReaderAddress } from './model';
 
-type Links = SubjectLinksResponse;
+type Endpoint = ReturnType<KernelClient['subjects']>;
+type Links = NonNullable<Awaited<ReturnType<Endpoint['links']['get']>>['data']> & {
+  workReleaseCards?: WorkReleaseCards;
+};
 export const gameId = '00000000-0000-4000-8000-00000000c301';
 export const editionId = '00000000-0000-4000-8000-00000000c302';
 const platformId = '00000000-0000-4000-8000-00000000c303';
