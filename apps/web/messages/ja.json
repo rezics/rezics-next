@@ -7973,5 +7973,10 @@
   "prq_actions_current": "現在許可されている操作：",
   "prq_actions_unavailable": "許可されている操作を取得できませんでした。ページを更新して再試行してください。",
   "prq_selection_separate": "選択には候補の個別レビュー画面での操作が必要です。",
-  "prq_selection_not_allowed": "このコンテキストでは現在、選択は許可されていません。"
+  "prq_selection_not_allowed": "このコンテキストでは現在、選択は許可されていません。",
+  "own_classifications_acknowledged": "操作が確認されました。次の変更の前にこのページを再読み込みしてください。",
+  "own_classifications_readback": "現在の評価を確認",
+  "own_classifications_readback_separate": "現在の状態を読んでも、元のリクエストの確認にはなりません。",
+  "own_classifications_refresh": "このページを再読み込み",
+  "own_classifications_coverage": "現在保持されている評価 · 全履歴は含まれません"
 }

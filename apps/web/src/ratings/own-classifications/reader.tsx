@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OwnClassificationsRead } from './actions';
-import { classificationAddressKey } from './inventory';
+import { classificationAddressKey, indexOwnClassifications, OWN_CLASSIFICATIONS_SOURCE } from './inventory';
 import { OwnClassificationsWorkspace } from './page';
+import type { ClassificationCommands } from './editor';
 import type { ClassificationFrontier, OwnClassificationsState } from './types';
 
-export type OwnClassificationsReader = (frontier: ClassificationFrontier) => Promise<OwnClassificationsRead>;
+export type OwnClassificationsReadFn = (frontier: ClassificationFrontier, signal?: AbortSignal) => Promise<OwnClassificationsRead>;
 
 /** Loader feedback cannot be borrowed by another account, locale or selected continuation. */
 export function classificationReadMatches(
@@ -13,6 +14,12 @@ export function classificationReadMatches(
   locale: string,
   frontier: ClassificationFrontier,
 ): boolean {
+  if (read.state === 'ready') {
+    try {
+      if (read.source !== OWN_CLASSIFICATIONS_SOURCE || read.page.viewer.accountId !== subject) return false;
+      indexOwnClassifications(read.page, frontier);
+    } catch { return false; }
+  }
   return (
     (read.subject === subject || (read.state === 'signed-out' && read.subject === null)) &&
     read.locale === locale &&
@@ -20,8 +27,8 @@ export function classificationReadMatches(
   );
 }
 
-/** The unpublished protocol stays unavailable, with the same private lifetime as a future native reader. */
-export function UnavailableClassificationsReader({
+/** Every admission reads this exact frontier anew; loader rows never admit a browser command. */
+export function ClassificationsReader({
   initial,
   frontier,
   locale,
@@ -29,6 +36,8 @@ export function UnavailableClassificationsReader({
   state,
   isCurrent,
   read,
+  commands,
+  onNext = () => {},
 }: {
   initial: OwnClassificationsRead;
   frontier: ClassificationFrontier;
@@ -36,18 +45,22 @@ export function UnavailableClassificationsReader({
   subject: string | null;
   state: OwnClassificationsState | null;
   isCurrent: () => boolean;
-  read: OwnClassificationsReader;
+  read: OwnClassificationsReadFn;
+  commands?: Omit<ClassificationCommands, 'read'>;
+  onNext?: (frontier: ClassificationFrontier) => void;
 }) {
-  const latest = useRef({ subject, locale, address: classificationAddressKey(frontier), initial, active: true });
+  const latest = useRef({ subject, locale, address: classificationAddressKey(frontier), initial, state, active: true, abort: new AbortController() });
   const address = classificationAddressKey(frontier);
   if (
     latest.current.subject !== subject ||
     latest.current.locale !== locale ||
     latest.current.address !== address ||
+    latest.current.state !== state ||
     latest.current.initial !== initial
   ) {
     latest.current.active = false;
-    latest.current = { subject, locale, address, initial, active: true };
+    latest.current.abort.abort();
+    latest.current = { subject, locale, address, initial, state, active: true, abort: new AbortController() };
   }
   const visit = latest.current;
   const [result, update] = useState<{ visit: object; value: OwnClassificationsRead } | null>(null);
@@ -55,14 +68,16 @@ export function UnavailableClassificationsReader({
   const mounted = useRef(false);
   const inFlight = useRef<object | null>(null);
   const started = useRef<object | null>(null);
-  const current = () => mounted.current && latest.current === visit && visit.active && isCurrent();
+  const current = () => mounted.current && latest.current === visit && visit.active && state === null && isCurrent();
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      visit.abort.abort();
     };
   }, [visit]);
-  const candidate = result?.visit === visit ? result.value : initial;
+  const candidate = result?.visit === visit ? result.value : initial.state === 'ready'
+    ? { ...initial, state: 'preparing' as const, page: null } : initial;
   const admitted = !!subject && classificationReadMatches(candidate, subject, locale, frontier);
   const feedback = state ?? (admitted ? candidate.state : 'preparing');
   const refresh = async (original: ClassificationFrontier) => {
@@ -77,7 +92,7 @@ export function UnavailableClassificationsReader({
       page: null,
     };
     try {
-      const value = await read(original);
+      const value = await read(original, visit.abort.signal);
       if (current() && subject)
         update({ visit, value: classificationReadMatches(value, subject, locale, original) ? value : unavailable });
     } catch {
@@ -95,12 +110,16 @@ export function UnavailableClassificationsReader({
   return (
     <OwnClassificationsWorkspace
       state={state ?? (pending === visit ? 'preparing' : feedback)}
-      page={null}
+      page={admitted && candidate.state === 'ready' ? candidate.page : null}
       frontier={frontier}
       locale={locale}
       isCurrent={isCurrent}
-      onNext={() => {}}
+      onNext={onNext}
       onRetry={refresh}
+      commands={commands && candidate.state === 'ready' && admitted ? { ...commands, read: candidate } : undefined}
     />
   );
 }
+
+/** Kept for callers presenting an unavailable response through the same admission lifecycle. */
+export const UnavailableClassificationsReader = ClassificationsReader;

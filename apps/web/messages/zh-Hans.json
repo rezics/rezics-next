@@ -7973,5 +7973,10 @@
   "prq_actions_current": "当前允许的操作：",
   "prq_actions_unavailable": "无法读取允许的操作。请刷新此页面重试。",
   "prq_selection_separate": "选择需要前往独立的候选审核页面。",
-  "prq_selection_not_allowed": "当前语境不允许选择。"
+  "prq_selection_not_allowed": "当前语境不允许选择。",
+  "own_classifications_acknowledged": "原生指令已确认。再次更改前请重新加载此页。",
+  "own_classifications_readback": "读取当前评估",
+  "own_classifications_readback_separate": "当前读取结果不代表原始请求已获确认。",
+  "own_classifications_refresh": "重新加载此页",
+  "own_classifications_coverage": "当前保留的评估 · 不涵盖完整历史"
 }

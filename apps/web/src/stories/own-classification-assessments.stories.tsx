@@ -44,7 +44,7 @@ const available: OwnClassification = {
     readback: path,
   },
 };
-type Mode = 'ready' | 'empty' | 'sparse' | 'withheld' | 'binding-mismatch' | 'read-only' | 'unavailable' | 'long';
+type Mode = 'ready' | 'empty' | 'sparse' | 'withheld' | 'binding-mismatch' | 'read-only' | 'unavailable' | 'long' | 'uncertain' | 'selected' | 'preparing';
 function sample(mode: Mode): OwnClassificationsPage {
   let row = structuredClone(available);
   if (mode === 'long' && row.state === 'available') {
@@ -78,12 +78,12 @@ function sample(mode: Mode): OwnClassificationsPage {
 }
 function Story({ mode }: { mode: Mode }) {
   const [page, replace] = useState(() => sample(mode));
-  const [state, setState] = useState<OwnClassificationsState>(mode === 'unavailable' ? 'unavailable' : 'ready');
+  const [state, setState] = useState<OwnClassificationsState>(mode === 'unavailable' ? 'unavailable' : mode === 'preparing' ? 'preparing' : 'ready');
   return (
     <OwnClassificationsWorkspace
       state={state}
       page={page}
-      frontier={{ cursor: null, selected: null }}
+      frontier={{ cursor: null, selected: mode === 'selected' ? { subjectId, associationId } : null }}
       locale={getLocale()}
       isCurrent={() => true}
       onRetry={async () => {
@@ -91,6 +91,13 @@ function Story({ mode }: { mode: Mode }) {
         setState('ready');
       }}
       onNext={() => replace(sample('empty'))}
+      commands={{
+        read: { state: 'ready', page, frontier: { cursor: null, selected: null }, subject: subjectId, locale: getLocale(),
+          source: 'content.classification-ballot-own-page.v1', credential: 'ab'.repeat(32), observation: 'cd'.repeat(32) },
+        csrfToken: () => 'story-csrf',
+        send: async () => ({ kind: mode === 'uncertain' ? 'uncertain' : 'acknowledged' }),
+        review: async () => ({ kind: 'current', own: { associationId, hasBallot: false, assessment: null, falsePositive: false, revision: '2', pending: true } }),
+      }}
     />
   );
 }
@@ -102,7 +109,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Source-contract presentation examples. Production explicitly stays unavailable until generated Client delivery; command and uncertain-clear stories follow that binding.',
+          'Native source presentation with a supplied command adapter. These examples do not establish native execution or recorded-response verification.',
       },
     },
   },
@@ -115,7 +122,7 @@ export const Ready: StoryType = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() }));
     await expect(canvas.getByText(m.subject_classification_assessment_provenance())).toBeVisible();
-    await expect(canvas.getByText(m.own_classifications_commands_unavailable())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.subject_classification_assessment_withdraw() })).toBeVisible();
   },
 };
 export const Empty: StoryType = { args: { mode: 'empty' } };
@@ -125,3 +132,21 @@ export const BindingMismatch: StoryType = { args: { mode: 'binding-mismatch' } }
 export const ReadOnly: StoryType = { args: { mode: 'read-only' } };
 export const Unavailable: StoryType = { args: { mode: 'unavailable' } };
 export const LongLocalized: StoryType = { args: { mode: 'long' } };
+
+export const UncertainWithdrawal: StoryType = {
+  args: { mode: 'uncertain' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.subject_classification_assessment_withdraw() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.library_my_ratings_confirm_clear() }));
+    await expect(canvas.getByText(m.subject_classification_assessment_uncertain())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.own_classifications_readback() }));
+    await expect(canvas.getByText(m.own_classifications_readback_separate())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.subject_classification_assessment_retry() })).toBeEnabled();
+  },
+};
+export const Phone: StoryType = { args: { mode: 'long' }, globals: { viewport: { value: 'phone390', isRotated: false } } };
+export const Desktop: StoryType = { args: { mode: 'ready' }, globals: { viewport: { value: 'desktop1280', isRotated: false } } };
+export const SelectedOffPage: StoryType = { args: { mode: 'selected' } };
+export const Preparing: StoryType = { args: { mode: 'preparing' } };

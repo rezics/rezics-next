@@ -4,6 +4,8 @@ import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 import { classificationAddressKey, classificationPair, indexOwnClassifications } from './inventory';
+import { ClassificationEditor, type ClassificationCommands } from './editor';
+import { classificationActionAllowed } from './intent';
 import type {
   ClassificationFrontier,
   OwnClassification,
@@ -13,7 +15,7 @@ import type {
 
 const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2';
 
-/** Source-contract projection. Production remains unavailable until the installed Client can read the page. */
+/** Native page order and original keys survive summary movement and selected promotion. */
 export function OwnClassificationsWorkspace({
   state,
   page,
@@ -22,6 +24,7 @@ export function OwnClassificationsWorkspace({
   isCurrent,
   onRetry,
   onNext,
+  commands,
 }: {
   state: OwnClassificationsState;
   page: OwnClassificationsPage | null;
@@ -30,9 +33,11 @@ export function OwnClassificationsWorkspace({
   isCurrent: () => boolean;
   onRetry: (frontier: ClassificationFrontier) => Promise<unknown>;
   onNext: (frontier: ClassificationFrontier) => void;
+  commands?: ClassificationCommands;
 }) {
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const [selection, select] = useState<{ generation: number; key: string } | null>(null);
+  const [protectedEditor, protectEditor] = useState(false);
   const active = isCurrent();
   const address = classificationAddressKey(frontier);
   const latest = useRef({ page, state, active, locale, address, generation: 0 });
@@ -63,8 +68,13 @@ export function OwnClassificationsWorkspace({
       admitted = null;
     }
   }
-  const selected = admitted && selection?.generation === generation ? index?.get(selection.key) : null;
+  const selectedKey = selection?.generation === generation ? selection.key :
+    commands && frontier.selected ? classificationPair(frontier.selected) : null;
+  const selected = admitted && selectedKey ? index?.get(selectedKey) : null;
   const inspect = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (commands && selected && current()) inspect.current?.focus();
+  }, [generation, selectedKey]);
   const feedback = () => {
     if (state === 'signed-out') return m.own_classifications_signed_out({}, options);
     if (state === 'denied') return m.own_classifications_denied({}, options);
@@ -89,6 +99,7 @@ export function OwnClassificationsWorkspace({
         </div>
       ) : (
         <>
+          <p role="status">{m.own_classifications_coverage({}, options)}</p>
           {admitted.items.length === 0 ? (
             <p role="status">
               {admitted.next === null
@@ -110,13 +121,14 @@ export function OwnClassificationsWorkspace({
                     <p>{m.own_classifications_withheld({}, options)}</p>
                   )}
                   <OwnState row={row} locale={locale} />
-                  {row.state === 'available' ? (
+                  {row.state === 'available' || (commands && classificationActionAllowed(row, 'DELETE')) ? (
                     <Button
                       className={control}
                       variant="outline"
                       aria-pressed={selected === row}
+                      disabled={protectedEditor}
                       onClick={() => {
-                        if (!current()) return;
+                        if (!current() || protectedEditor) return;
                         select({ generation, key: pair });
                         requestAnimationFrame(() => {
                           if (current()) inspect.current?.focus();
@@ -130,9 +142,10 @@ export function OwnClassificationsWorkspace({
               );
             })}
           </ol>
-          {selected?.state === 'available' ? (
-            <section ref={inspect} tabIndex={-1} className="min-w-0 space-y-3 rounded-xl border p-4 wrap-anywhere">
+          {selected ? (
+            <section key={`${generation}:${classificationPair(selected)}`} ref={inspect} tabIndex={-1} className="min-w-0 space-y-3 rounded-xl border p-4 wrap-anywhere">
               <h2 className="text-xl font-semibold">{m.subject_classification_assessment_provenance({}, options)}</h2>
+              {selected.state === 'available' ? <>
               <p>
                 {m.own_classifications_original({}, options)}: {selected.subjectId} · {selected.associationId}
               </p>
@@ -162,19 +175,24 @@ export function OwnClassificationsWorkspace({
                 ))}
               </div>
               <Aggregate row={selected} locale={locale} />
-              <p role="status">
+              </> : <p>{m.own_classifications_withheld({}, options)}</p>}
+              {commands ? <ClassificationEditor
+                row={selected} commands={commands} locale={locale} isCurrent={current}
+                refresh={() => onRetry(frontier)} onProtection={protectEditor}
+              /> : <p role="status">
                 {selected.actions.state === 'read-only' || selected.actions.state === 'withheld'
                   ? m.own_classifications_read_only({}, options)
                   : m.own_classifications_commands_unavailable({}, options)}
-              </p>
+              </p>}
             </section>
           ) : null}
           {admitted.next !== null ? (
             <Button
               key={generation}
               className={control}
+              disabled={protectedEditor}
               onClick={() => {
-                if (current())
+                if (current() && !protectedEditor)
                   onNext({
                     cursor: admitted.next,
                     selected: selected
@@ -239,6 +257,11 @@ function Aggregate({ row, locale }: { row: OwnClassification; locale: string }) 
           options,
         )}
       </p>
+      {row.aggregate.supportFraction !== null ? <p>{m.subject_classification_assessment_support_fraction(
+        { fraction: number.format(row.aggregate.supportFraction * 100) }, options,
+      )}</p> : null}
+      <p>{m.subject_classification_assessment_as_of({ date: row.aggregate.asOf }, options)}</p>
+      <p>{m.library_publication_published_generation({ generation: row.aggregate.generation }, options)}</p>
     </div>
   );
 }

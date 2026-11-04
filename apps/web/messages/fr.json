@@ -7973,5 +7973,10 @@
   "prq_actions_current": "Opérations actuellement autorisées :",
   "prq_actions_unavailable": "Impossible de lire les opérations autorisées. Actualisez cette page pour réessayer.",
   "prq_selection_separate": "La sélection nécessite la visite distincte de révision du candidat.",
-  "prq_selection_not_allowed": "La sélection n’est actuellement pas autorisée dans ce contexte."
+  "prq_selection_not_allowed": "La sélection n’est actuellement pas autorisée dans ce contexte.",
+  "own_classifications_acknowledged": "La commande a été confirmée. Rechargez cette page avant une autre modification.",
+  "own_classifications_readback": "Lire l’évaluation actuelle",
+  "own_classifications_readback_separate": "L’état actuel ne confirme pas la requête initiale.",
+  "own_classifications_refresh": "Recharger cette page",
+  "own_classifications_coverage": "Évaluations conservées actuellement · historique incomplet"
 }

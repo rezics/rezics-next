@@ -4,10 +4,11 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { readOwnClassificationsForViewer } from '../../ratings/own-classifications/actions';
+import { executeClassificationIntent, reviewClassificationIntent, readOwnClassificationsForViewer } from '../../ratings/own-classifications/actions';
 import { useLibraryWorkspaceAdmission } from '../../library/library-workspace-admission';
+import { OwnVotesDeparture } from '../../ratings/own-votes/departure';
 import { useClassificationAddress } from '../../ratings/own-classifications/address';
-import { UnavailableClassificationsReader } from '../../ratings/own-classifications/reader';
+import { ClassificationsReader } from '../../ratings/own-classifications/reader';
 import {
   classificationFrontier,
   classificationSearch,
@@ -29,6 +30,7 @@ export const Route = createFileRoute('/library/classification-assessments')({
 
 function ClassificationAssessmentsRoute() {
   const initial = Route.useLoaderData();
+  const navigate = Route.useNavigate();
   const search = Route.useSearch();
   const locale = getLocale();
   const frontier = 'invalidAddress' in search ? null : classificationFrontier(search);
@@ -42,9 +44,8 @@ function ClassificationAssessmentsRoute() {
       : admission.rejected || (origin.authoritative && origin.retained[0] && !admission.allowed[0])
         ? 'denied'
         : null;
-  // This mounted production boundary cannot admit rows while the generated operation is unavailable.
   return (
-    <UnavailableClassificationsReader
+    <ClassificationsReader
       key={JSON.stringify([origin.lifetime(0), origin.epoch(0)])}
       initial={initial}
       frontier={frontier ?? { cursor: null, selected: null }}
@@ -52,7 +53,14 @@ function ClassificationAssessmentsRoute() {
       subject={origin.subject}
       state={state}
       isCurrent={() => address.isCurrent() && origin.current(0)}
-      read={(original) => readOwnClassificationsForViewer({ data: classificationSearch(original) })}
+      read={(original, signal) => readOwnClassificationsForViewer({ data: classificationSearch(original), signal })}
+      onNext={(next) => { if (address.isCurrent() && origin.current(0)) void navigate({ search: classificationSearch(next) }); }}
+      commands={{
+        csrfToken: () => origin.credential(0) ?? null,
+        send: (intent, signal) => executeClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
+        review: (intent, signal) => reviewClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
+        departure: (dirty, locked, current) => <OwnVotesDeparture dirty={dirty} locked={locked} isCurrent={current} />,
+      }}
     />
   );
 }

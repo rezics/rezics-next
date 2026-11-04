@@ -7973,5 +7973,10 @@
   "prq_actions_current": "目前允許的操作：",
   "prq_actions_unavailable": "無法讀取允許的操作。請重新整理此頁面再試。",
   "prq_selection_separate": "選取需要前往獨立的候選審核頁面。",
-  "prq_selection_not_allowed": "目前語境不允許選取。"
+  "prq_selection_not_allowed": "目前語境不允許選取。",
+  "own_classifications_acknowledged": "原生指令已確認。再次變更前請重新載入此頁。",
+  "own_classifications_readback": "讀取目前評估",
+  "own_classifications_readback_separate": "目前讀取結果不代表原始請求已獲確認。",
+  "own_classifications_refresh": "重新載入此頁",
+  "own_classifications_coverage": "目前保留的評估 · 不涵蓋完整歷史"
 }

@@ -7973,5 +7973,10 @@
   "prq_actions_current": "Aktuell erlaubte Aktionen:",
   "prq_actions_unavailable": "Erlaubte Aktionen konnten nicht gelesen werden. Aktualisiere diese Seite, um es erneut zu versuchen.",
   "prq_selection_separate": "Die Auswahl erfordert die separate Kandidatenprüfung.",
-  "prq_selection_not_allowed": "Die Auswahl ist in diesem Kontext derzeit nicht erlaubt."
+  "prq_selection_not_allowed": "Die Auswahl ist in diesem Kontext derzeit nicht erlaubt.",
+  "own_classifications_acknowledged": "Der Befehl wurde bestätigt. Lade diese Seite vor einer weiteren Änderung neu.",
+  "own_classifications_readback": "Aktuelle Bewertung lesen",
+  "own_classifications_readback_separate": "Der aktuelle Zustand bestätigt nicht die ursprüngliche Anfrage.",
+  "own_classifications_refresh": "Diese Seite neu laden",
+  "own_classifications_coverage": "Aktuell gespeicherte Bewertungen · kein vollständiger Verlauf"
 }

@@ -17,11 +17,12 @@ clear examples are in
 [`classification-ballot-own-page.test.ts`](../../../../../services/kernel/test/rating/classification-ballot-own-page.test.ts).
 Source presence does not establish generated publication or native verification.
 
-The installed Client declarations do not publish this page or the exact ballot advice protocol. `actions.ts`
-therefore contains an explicit typed unavailable seam. The production loader prepares the existing private
-session, uses `private, no-store`, and returns no rows. It makes no raw requests or structural Client extensions.
-The source-contract workspace can inspect a supplied page; it cannot write, withdraw or claim response recovery.
-It is an independent interface part, not a working account inventory until generated binding is delivered.
+The installed public Client at declaration head `52c39d796113bf237a7472b2a40958330122e88d` publishes
+`me['classification-assessments'].get` and the exact association `assessment.get/put/delete` methods.
+`native.ts` derives page, body and readback types from those methods; it does not extend the Client or reconstruct
+the older Subject writer's qualifiers. `actions.ts` prepares the current session and delegates to that adapter.
+Responses use `private, no-store`; an unavailable session or origin cannot supply rows. Installed typing is checked
+with the Web workspace typecheck; native execution and recorded presentation remain separate controller checks.
 
 Available rows retain their original Subject/association keys even when the disclosed summary has moved. The
 source union admits only minimal own-state for withheld rows, with no hydration, navigation or reconstructed
@@ -37,44 +38,44 @@ does not grant account or command admission. Aggregate observations must retain 
 Decision: disclosed Subject/Concept links use the existing localized Subject helper with a neutral slug so private
 labels never enter browser URLs. Only native disclosed identities supply those links; native API hrefs are ignored.
 
-## Remaining binding
+## Private visit and exact commands
 
-The generated page and exact typed writers must be installed before connecting ready account data. That binding
-must compose the existing private reader/current-origin, departure and command-intent owners. Bind account,
-credential/CSRF episode, client/delegator/scopes, exposure, locale, full frontier including the selected pair, and
-native observation. No source provenance by itself grants browser authority. Retire all private data, editors,
-intent material and delayed effects on replacement, revocation or away/return; return needs fresh admission.
+The mounted reader composes the existing private reader/current-origin, address observer and departure controls.
+Every browser admission reads its exact raw frontier again, including both selected operands; loader feedback alone
+never admits rows. Account, credential/CSRF observation, exposure, locale, address and source replacement retire the
+visit. Abort signals and generation guards reject late reads and commands. Return starts a fresh admission.
 
-Use exact native `actions.state` and set/clear/readback advice with current browser command admission. In
-particular, a visible binding mismatch has no clear, revoked SET scope cannot authorize clear, and withheld
-withdrawal is possible only with actual native preparation. Never rebuild qualifiers from a digest to fit the
-older Subject writer. Unknown commands retain their immutable method, path, body, precondition, credential episode
-and idempotency key. Explicit retry replays that intent; supported current readback is distinct and cannot prove
-an unknown command succeeded. Stale/conflict requires fresh native inspection before another intent.
+The selected editor follows native `actions.state`, set, clear and readback advice. A visible binding mismatch offers
+no Clear; withheld withdrawal requires the producer's actual withdrawal advice and the native writer's preparation.
+Revoked SET scope cannot become withdrawal authority. Read-only and concealed rows never infer permission from a
+public summary. A selected off-page row uses its original pair; current summaries never rebind the ballot slot.
+
+Decision: credential fingerprints keep bearer material on the server while rejecting replacement episodes before
+dispatch; an unknown request retains its original CSRF token, credential fingerprint, method, exact path, serialized
+body, precondition and idempotency key until explicit retry or visit retirement.
+
+The shared command-intent owner supplies command keys. Explicit retry replays the same frozen intent; separate
+current readback cannot acknowledge that intent, including an absent or opposite current ballot. Malformed readback
+stays unavailable. Acknowledged, stale or denied commands require fresh exact page inspection before another edit.
+Unknown commands keep new edits locked. Changing the selected record or private visit destroys drafts and intent.
 
 ## Cost
 
-Decision: every mounted browser admission performs a fresh read of the exact paired frontier; loader feedback
-is only a candidate for the same account and locale, and a credential/exposure episode retires pending results.
-The installed protocol remains unavailable, so these preparations return no private rows and make no Content reads.
-The address observer includes the full search and navigation in flight; locale, source and frontier replacement
-also retire inspection controls and delayed focus. Choosing a disclosed row carries its original pair into Next.
-
-- **Touches:** after generated binding, one prepared native page read per admission, explicit next/retry or return;
-  one deliberately selected command and its separately supported exact readback. The current unavailable seam
-  makes zero Content reads, with one mounted preparation per browser admission or explicit retry. No polling,
-  per-row reads, accumulation, sorting, searching or refill.
+- **Touches:** one prepared native page read per mounted admission, explicit next/retry or return; one deliberately
+  selected native command and a separately requested exact readback. The transport bounds response bytes before
+  public-client JSON materialization. No polling, per-row hydration, accumulation, sorting, searching or refill.
 - **Bound:** native raw page 20 plus at most one selected promotion, cursor 4096 characters, at most one selected
   editor/intent and no retained page history. Native identity/type/property bounds are 256 characters, label 2000,
   release 128, href 128 and digests 64. The producer and source presentation cap serialized UTF-8 response bytes at
   1,048,576; the presentation validates the closed native union, including absent, suppressed and published aggregates.
-  Revision and generation strings remain native positive decimals within that total byte cap. The installed generated
-  binding must apply this validation before browser admission and bind the current account and observation separately.
+  Revision and generation strings remain native positive decimals within that total byte cap. The adapter validates this closed source union before browser admission and binds the current account, credential
+  episode and native response observation separately.
 - **Growth check:** vary 1/10/20 raw rows, optional selected row 21, and bounded labels; the authored regression
   preserves exact order and original keys. Indexing and presentation are O(N), and selection uses one exact-pair
   lookup. One HTTP request is not constant native work. Native physical rows, authorization, nested Semantic
   disclosure and producer growth evidence remain producer/controller obligations.
 
-Storybook supplies the source presentation's ready, empty, sparse, concealed, binding-mismatch, read-only,
-unavailable and long-label states with the existing locale/theme controls. Connected withdrawal, uncertain clear,
-open/return and final 390/1280 light/dark, keyboard and eight-locale review follow the installed protocol.
+Storybook supplies ready, preparing, empty, sparse, concealed, binding-mismatch, read-only, selected off-page,
+uncertain withdrawal and long-label states with the existing locale/theme controls and 390/1280 viewports. Supplied
+command adapters illustrate interactions; native recorded responses and browser/keyboard/screen-reader execution
+remain controller verification, separate from these authored examples.
