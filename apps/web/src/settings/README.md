@@ -82,6 +82,8 @@ Keep the existing thread watch toggle on the thread page. Settings does not add 
 
 **Decision:** Settings removes the exact current thread or board subscription, including when its target is withheld; opening, returning or starting a later subscription does not acknowledge or replay that removal. The credential selected for that episode travels on the DELETE itself; factory defaults cannot replace it, and retirement drops the unresolved intent before another viewer can retry it.
 
+**Decision:** A confirmed original removal clears only a displayed row matching its watch ID, kind and expected revision. A refreshed row with another revision stays current, and stopping it is a new command.
+
 **Decision:** A watch-only departure names removal recovery; watches combined with any other Settings draft use the shared all-settings warning. Stay preserves the original intent and focus; Leave discards local recovery without promising native cancellation.
 
 **Cost:** Each selected-kind Settings page dispatches one inventory request and retains at most 20 rows. Removal is one native command; deliberate refresh and explicit retry remain user actions. One controller owns one active read and one unresolved original command, and retirement releases its rows and callbacks. Native SQL and history growth are owned by Content. Browser growth coverage varies unrelated watches across 1, 10 and 100 sequential visits while checking request counts, retained rows and bytes, active controller release and command attempts.

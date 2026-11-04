@@ -128,6 +128,7 @@
   "settings_watches_stop": "Arrêter le suivi",
   "settings_watches_stopping": "Arrêt du suivi…",
   "settings_watches_removed": "Suivi arrêté. Les prochaines notifications de cet abonnement sont arrêtées.",
+  "settings_watches_removed_current": "La demande initiale d’arrêt a été confirmée. Un abonnement actuel est toujours affiché ; l’arrêter enverra une nouvelle demande.",
   "settings_watches_rejected": "Le suivi n’a pas été arrêté. Actualisez vos suivis avant de réessayer.",
   "settings_watches_uncertain_title": "Le suivi a-t-il été arrêté ?",
   "settings_watches_uncertain_text": "Le résultat est inconnu. Actualisez la liste pour vérifier si l’arrêt est autorisé. Si c’est le cas, réessayez la même demande pour en confirmer le résultat.",

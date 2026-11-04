@@ -128,6 +128,7 @@
   "settings_watches_stop": "Beobachtung beenden",
   "settings_watches_stopping": "Abonnement wird beendet…",
   "settings_watches_removed": "Abonnement beendet. Künftige Benachrichtigungen für dieses Abonnement sind gestoppt.",
+  "settings_watches_removed_current": "Die ursprüngliche Beendigungsanfrage wurde bestätigt. Ein aktuelles Abonnement wird weiterhin angezeigt; seine Beendigung sendet eine neue Anfrage.",
   "settings_watches_rejected": "Das Abonnement wurde nicht beendet. Aktualisiere die Liste vor einem neuen Versuch.",
   "settings_watches_uncertain_title": "Wurde das Abonnement beendet?",
   "settings_watches_uncertain_text": "Das Ergebnis ist unbekannt. Aktualisiere die Liste, um die aktuelle Berechtigung zum Entfernen zu prüfen. Wenn das Entfernen möglich ist, wiederhole dieselbe Anfrage, um ihr Ergebnis zu bestätigen.",

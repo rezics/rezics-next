@@ -141,12 +141,34 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     await click(m.settings_retry());
     expect(host.textContent).toContain(m.settings_watches_remove_denied());
     expect(retryButton().disabled).toBe(true);
-    response = { kind: 'page', page: { ...envelope, watches: [], next: null } };
+    response = {
+      kind: 'page',
+      page: {
+        ...envelope,
+        watches: [
+          row({
+            subscriptionId: 'hidden-owner-id',
+            kind: 'thread',
+            revision: 10,
+            createdAt: '2026-11-05T10:00:00.000Z',
+            target: { title: 'Current thread', href: '/threads/current' },
+          }),
+        ],
+        next: null,
+      },
+    };
     await click(m.settings_watches_refresh());
     expect(retryButton().disabled).toBe(false);
     await click(m.settings_watches_retry_original());
-    expect(host.textContent).toContain(m.settings_watches_removed());
+    expect(host.textContent).toContain(m.settings_watches_removed_current());
     expect(host.textContent).not.toContain(m.settings_watches_access_lost());
+    expect(host.querySelector('a[href="/threads/current"]')?.textContent).toBe('Current thread');
+    const currentStop = [...host.querySelectorAll('button')].find(
+      (item) => item.textContent === m.settings_watches_stop(),
+    );
+    expect(currentStop?.disabled).toBe(false);
+    await click(m.settings_watches_stop());
+    expect(host.textContent).toContain(m.settings_watches_removed());
     response = { kind: 'page', page: { ...envelope, watches: [], next: 'opaque' } };
     await click(m.settings_watches_refresh());
     expect(host.textContent).toContain(m.settings_watches_sparse());
