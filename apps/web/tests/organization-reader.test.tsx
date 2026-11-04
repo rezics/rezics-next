@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { peopleOrganizationId, peopleProfileFixture } from '../src/kernel/fake/catalogue-people-profile';
@@ -8,10 +8,12 @@ import {
   type OrganizationFact,
   type OrganizationCurrent,
 } from '../src/features/catalogue/organization-reader';
-import { OrganizationReader } from '../src/features/catalogue/organization-reader/view';
-import { OrganizationOverview } from '../src/features/catalogue/organization-reader/overview';
 import type { PeopleRead } from '../src/features/catalogue/people-profile';
 import { m } from '../src/paraglide/messages.js';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { OrganizationReader } = await import('../src/features/catalogue/organization-reader/view');
+const { OrganizationOverview } = await import('../src/features/catalogue/organization-reader/overview');
 
 const target = '00000000-0000-4000-8000-00000000d301';
 function fixture() {
@@ -95,6 +97,12 @@ test('history inspection follows the exact disclosed identity, returns focus, an
   const globals = {
     window,
     document: window.document,
+    navigator: window.navigator,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
@@ -183,6 +191,12 @@ test('delayed profile reads cannot cross a source, locale, authority or page lif
   const globals = {
     window,
     document: window.document,
+    navigator: window.navigator,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
