@@ -23,11 +23,7 @@ import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { subjectHref } from '../../subject/subject-href';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
-import {
-  isAllowedCreateAuthority,
-  observedCreateAuthority,
-  type CreateAuthority,
-} from './identity-intake';
+import { isAllowedCreateAuthority, observedCreateAuthority, type CreateAuthority } from './identity-intake';
 import { CreateAuthorityStatus } from './identity-intake-view';
 import {
   publicationDraft,

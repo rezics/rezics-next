@@ -113,7 +113,11 @@ test('independent publication creation, local corrections, immutable recovery an
       ? { state: 'signed-in' as const, subject: 'reader', csrfToken: 'original-credential-epoch' }
       : { state: 'signed-out' as const, csrfToken: null };
   const Scene = () => {
-    useSyncExternalStore(subscribe, () => revision, () => revision);
+    useSyncExternalStore(
+      subscribe,
+      () => revision,
+      () => revision,
+    );
     const destination = useRouterState({ select: (state) => state.location.search.page });
     return destination === 'other' ? null : (
       <CandidateReaderBoundary address={`publication-family-${scene}`} observed={observed()}>
@@ -424,9 +428,9 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(article().textContent).toContain(m.correction_citation_hint());
     expect(invalidAmount.value).toBe('+240');
     expect(invalidPrecision.value).toBe('10');
-    expect(
-      (scope().getByRole('combobox', { name: publisherLabel }) as HTMLInputElement).value,
-    ).toBe('Supplied publisher');
+    expect((scope().getByRole('combobox', { name: publisherLabel }) as HTMLInputElement).value).toBe(
+      'Supplied publisher',
+    );
     await associations(0);
 
     await replace(invalidAmount, '+241');
@@ -610,9 +614,7 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () =>
       user.click(within(workSection()).getByRole('button', { name: m.correction_remove_reference() })),
     );
-    await act(async () =>
-      user.click(within(workSection()).getByRole('button', { name: m.contribution_confirm() })),
-    );
+    await act(async () => user.click(within(workSection()).getByRole('button', { name: m.contribution_confirm() })));
     expect(recoveryButton().disabled).toBe(false);
     await click(m.catalogue_create_review_new());
     await create();
@@ -861,11 +863,7 @@ test('independent publication creation, local corrections, immutable recovery an
     const freshPicker = scope().getByRole('combobox', { name: publisherName }) as HTMLInputElement;
     expect(freshPicker.value).toBe('');
     await act(async () => user.type(freshPicker, 'Press'));
-    const freshChoice = await optionsInDocument.findByRole(
-      'option',
-      { name: /Supplied publisher/ },
-      { timeout: 5000 },
-    );
+    const freshChoice = await optionsInDocument.findByRole('option', { name: /Supplied publisher/ }, { timeout: 5000 });
     await act(async () => user.click(freshChoice));
     await create();
     await scope().findByRole('link', { name: m.catalogue_create_open() });
@@ -1001,7 +999,11 @@ test('publication creation uses Global Context eligibility independently of the 
     return () => listeners.delete(listener);
   };
   const Scene = () => {
-    useSyncExternalStore(subscribe, () => revision, () => revision);
+    useSyncExternalStore(
+      subscribe,
+      () => revision,
+      () => revision,
+    );
     return entry ? (
       <CandidateReaderBoundary
         address={`publication-eligibility-${scene}`}
@@ -1037,7 +1039,10 @@ test('publication creation uses Global Context eligibility independently of the 
         </QueryClientProvider>,
       );
     });
-  function make(observation: CreateAuthority | Promise<CreateAuthority>, scenario: PublicationScenario = 'ready'): Entry {
+  function make(
+    observation: CreateAuthority | Promise<CreateAuthority>,
+    scenario: PublicationScenario = 'ready',
+  ): Entry {
     const fixture = publicationFixture(scenario);
     const commands: PublicationCommand[] = [];
     const reads: string[] = [];
@@ -1105,9 +1110,9 @@ test('publication creation uses Global Context eligibility independently of the 
     );
     expect(scope().getByRole('heading', { name: refused.fixture.work.subject.labels.en!, level: 2 })).toBeDefined();
     expect(reviewButton().disabled).toBe(true);
-    expect(
-      (scope().getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value,
-    ).toBe('A distinct edition');
+    expect((scope().getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
+      'A distinct edition',
+    );
     expect(refused.commands).toHaveLength(0);
 
     const unknown = make({ state: 'unknown', reason: 'unavailable' });
