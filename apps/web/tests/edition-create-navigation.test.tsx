@@ -140,7 +140,7 @@ test('Stay preserves the uncertain publication intent; Discard returns to the or
     await click(m.creator_edition_origin_return());
     await click(m.thread_authoring_leave());
     await act(async () => navigate.mock.results.at(-1)?.value);
-    expect(router.state.location.pathname).toBe('/editions/');
+    expect(router.state.location.pathname).toBe('/editions');
     expect(router.state.location.search).toMatchObject({ cursor: 'continued/+=', editionOrigin: token });
     expect(router.state.location.search).not.toHaveProperty('postId');
     expect(router.state.location.search).not.toHaveProperty('revisionId');
