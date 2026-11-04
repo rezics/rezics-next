@@ -1,13 +1,16 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Window } from 'happy-dom';
 import * as start from '../.storybook/react-start';
 import type { ManagedWatch, WatchManagementIO, WatchRead } from '../src/settings/watch-native';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const { sessionQuery } = await import('../src/session/query');
 const { SettingsSessionOwner, SettingsSessionContext } = await import('../src/settings/settings-session-owner');
 const { WatchesSection } = await import('../src/settings/watches');
