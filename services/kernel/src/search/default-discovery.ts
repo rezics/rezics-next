@@ -802,6 +802,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             ? await readDiscoveryFigures(config, enriched.figureIds, context.deadline)
             : enriched.figures;
           if (!isDeepStrictEqual(enriched.figures, finalFigures)) throw new ProblemError('search_restart_required');
+          const reviewedPage = await reviews.finish(enriched.page);
           const viewerCurrent =
             !enriched.viewer ||
             (await viewerFactsCurrent(
@@ -810,7 +811,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
               enriched.viewer.prepared,
               context.deadline,
             ));
-          return { page: await reviews.finish(enriched.page), viewerCurrent };
+          return { page: reviewedPage, viewerCurrent };
         } catch (error) {
           if (error instanceof ProblemError || error instanceof CollectionDiscoveryReadinessError) throw error;
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
