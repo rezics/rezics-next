@@ -8455,5 +8455,8 @@
   "board_watch_retry_exact": "同じ変更を再試行",
   "board_watch_check_again": "現在の状態を確認",
   "board_watch_inspect_conflict": "別の変更を行う前に現在の状態を確認してください。",
-  "board_watch_sending": "ウォッチ変更を送信中…"
+  "board_watch_sending": "ウォッチ変更を送信中…",
+  "showcase_people_names": "名前と別名",
+  "showcase_people_character": "キャラクター紹介",
+  "showcase_people_credits": "作品ごとのクレジット"
 }

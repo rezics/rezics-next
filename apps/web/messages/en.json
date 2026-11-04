@@ -8567,5 +8567,8 @@
   "board_watch_retry_exact": "Retry this exact change",
   "board_watch_check_again": "Check current status",
   "board_watch_inspect_conflict": "Review the current status before making another change.",
-  "board_watch_sending": "Sending watch change…"
+  "board_watch_sending": "Sending watch change…",
+  "showcase_people_names": "Names and aliases",
+  "showcase_people_character": "Character profile",
+  "showcase_people_credits": "Credits across works"
 }

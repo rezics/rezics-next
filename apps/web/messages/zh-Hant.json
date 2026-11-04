@@ -8455,5 +8455,8 @@
   "board_watch_retry_exact": "重試這項完全相同的變更",
   "board_watch_check_again": "檢查目前狀態",
   "board_watch_inspect_conflict": "請先檢查目前狀態再進行其他變更。",
-  "board_watch_sending": "正在送出追蹤變更…"
+  "board_watch_sending": "正在送出追蹤變更…",
+  "showcase_people_names": "名稱與別名",
+  "showcase_people_character": "角色介紹",
+  "showcase_people_credits": "跨作品演職紀錄"
 }

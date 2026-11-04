@@ -13,6 +13,8 @@ const { locales } = await import('../src/paraglide/runtime.js');
 
 test('ordinary Person overview places the reader; admitted authored text and labelled facts keep evidence and correction identity', async () => {
   const fixture = personReaderExample();
+  fixture.read.subject.labels.ja = '本来の名前';
+  fixture.read.subject.aliases.ja = ['別名'];
   const { SubjectPage } = await import('../src/features/pages/subject');
   const { subjectPageMessages } = await import('../src/features/pages/route-support');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -47,6 +49,8 @@ test('ordinary Person overview places the reader; admitted authored text and lab
       h(PersonReader, { public: fixture.read, release: fixture.release, documents: fixture.documents, locale }),
     );
     expect(html).toContain('Mira directs independent films.');
+    expect(html).toContain('本来の名前');
+    expect(html).toContain('別名');
     expect(html).toContain(m.people_occupations_title({}, { locale }));
     expect(html).toContain(m.people_languages_title({}, { locale }));
     expect(html).toContain(`/subjects/${fixture.occupation}/`);
@@ -141,13 +145,15 @@ test('old definition responses, expanded evidence and focused controls retire on
     new Promise<PersonDefinitions | null>((done) => {
       resolve = done;
     });
+  const { CharacterOverview } = await import('../src/features/pages/showcase-people/character');
+  let character = false;
   const draw = () =>
     act(async () =>
       root.render(
         h(
           QueryClientProvider,
           { client },
-          h(PersonOverview, {
+          h(character ? CharacterOverview : PersonOverview, {
             source,
             viewer: null,
             public: fixture.read,
@@ -188,6 +194,20 @@ test('old definition responses, expanded evidence and focused controls retire on
       client.setQueryData(['session'], { state: 'signed-in', subject: 'new-reader', csrfToken: 'new-session' }),
     );
     expect(host.textContent).not.toContain('Mira directs');
+    source = {};
+    character = true;
+    fixture.read.subject.type = 'wd:Q95074';
+    await draw();
+    const priorCharacter = resolve!;
+    source = {};
+    await draw();
+    await act(async () => priorCharacter(fixture.release));
+    expect(host.querySelector('[data-slot="character-reader-facts"]')).toBeNull();
+    await act(async () => resolve!(fixture.release));
+    expect(host.querySelector('[data-slot="character-reader-facts"]')).not.toBeNull();
+    await act(async () => client.setQueryData(['exposure', 'viewer'], { spoilerLevel: 0 }));
+    expect(host.querySelector('[data-slot="character-reader-facts"]')).toBeNull();
+    expect(host.querySelector('a[href*="character-relationships"]')).toBeNull();
     source = {};
     await draw();
     const last = resolve!;

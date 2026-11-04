@@ -8455,5 +8455,8 @@
   "board_watch_retry_exact": "Reintentar exactamente este cambio",
   "board_watch_check_again": "Comprobar el estado actual",
   "board_watch_inspect_conflict": "Revisa el estado actual antes de hacer otro cambio.",
-  "board_watch_sending": "Enviando el cambio de seguimiento…"
+  "board_watch_sending": "Enviando el cambio de seguimiento…",
+  "showcase_people_names": "Nombres y alias",
+  "showcase_people_character": "Perfil del personaje",
+  "showcase_people_credits": "Participaciones por obra"
 }

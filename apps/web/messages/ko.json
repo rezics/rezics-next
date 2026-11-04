@@ -8455,5 +8455,8 @@
   "board_watch_retry_exact": "같은 변경 다시 시도",
   "board_watch_check_again": "현재 상태 확인",
   "board_watch_inspect_conflict": "다른 변경을 하기 전에 현재 상태를 확인하세요.",
-  "board_watch_sending": "구독 변경 전송 중…"
+  "board_watch_sending": "구독 변경 전송 중…",
+  "showcase_people_names": "이름과 별칭",
+  "showcase_people_character": "캐릭터 소개",
+  "showcase_people_credits": "작품별 참여 기록"
 }
