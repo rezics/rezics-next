@@ -58,9 +58,9 @@ type Candidate = {
   retracted: number | null;
   source?: unknown;
   statement: {
-    value: { content: unknown };
+    value: { type?: string; content: unknown };
     rank?: 'normal' | 'preferred';
-    qualifiers?: { property: { id: string }; value: { content: unknown } }[];
+    qualifiers?: { property: { id: string }; value: { type?: string; content: unknown } }[];
   };
 };
 
@@ -216,7 +216,10 @@ test('production operator imports authored VNDB character traits and appearances
           type: string;
           statements: Record<
             string,
-            { value: { content: unknown }; qualifiers?: { property: { id: string }; value: { content: unknown } }[] }[]
+            {
+              value: { type?: string; content: unknown };
+              qualifiers?: { property: { id: string }; value: { type?: string; content: unknown } }[];
+            }[]
           >;
         };
       };
