@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'bun:test';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { planReads, platformRegistry } from '@rezics/composition';
 import { act, createElement, type ReactNode } from 'react';
 import { createRequire } from 'node:module';
@@ -126,14 +127,19 @@ function renderSubject(
     context: read.subject.context,
     actions: { statementPropose },
   };
+  const client = new QueryClient();
   return renderToStaticMarkup(
-    createElement(SubjectPage, {
-      page,
-      locale: 'en',
-      messages: subjectPageMessages(),
-      fileSource,
-      renderJsonLd: false,
-    }),
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(SubjectPage, {
+        page,
+        locale: 'en',
+        messages: subjectPageMessages(),
+        fileSource,
+        renderJsonLd: false,
+      }),
+    ),
   );
 }
 
@@ -332,7 +338,7 @@ test('one exact inspection keeps value provenance and grouped evidence while con
   const historicalAssociation = historical.associations.find((item) => item.target.id === catalogueEpisode);
   expect(historicalAssociation?.historical).toBe(true);
   const historicalMarkup = renderToStaticMarkup(createElement(CatalogueFileReader, { visit: historical }));
-  expect(historicalMarkup).toContain('Historical');
+  expect(historicalMarkup).toContain('This value was accepted under an earlier definition release.');
   expect(historicalMarkup).not.toContain(`fileSource=${catalogueFile}#catalogue-file-reader`);
 
   historical.associations.forEach((item) => {
