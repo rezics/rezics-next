@@ -1,10 +1,10 @@
 # Private reading insights
 
-This owner document covers the retained-profile distribution and private assessment coverage projections. New native
-sessions capture accepting unit meaning and assessment presence, while old rows without captured unit meaning remain
-unavailable for dimensional interpretation. The complete private insights journey still needs its maintained
-current-unit aggregate, composed viewer/actions and reachable Web page. Existing all-time/year counts, month
-navigation, journal reads and commands, and diary allocation remain authoritative and unchanged.
+This owner document covers the retained-profile distribution, private assessment coverage and current-progress
+projections. New native sessions capture accepting unit meaning and assessment presence, while old rows without
+captured unit meaning remain unavailable for dimensional interpretation. The complete private insights journey still
+needs its reachable Web page and matching generated client. Existing all-time/year counts, month navigation, journal
+reads and commands, and diary allocation remain authoritative and unchanged.
 
 Decision: Group historical completions by the entire immutable accepting profile pin, including release and accepting
 Type; show profile identity with historical labels unavailable until accepted descriptors are retained, never infer books
@@ -13,6 +13,7 @@ Decision: Capture current-progress meaning only from the accepting pinned descri
 rows without a captured descriptor remain unavailable, and labels or current profiles never supply historical meaning.
 Decision: Assessment coverage includes retained non-retired sessions, including active sessions; retirement removes a session from the panel and restoration receives it again. Keep exact values and half-point frequencies within each meaning revision, report historical null presence as unknown, and never average incompatible revisions.
 Decision: Insights returns diary navigation as the existing `library_diary.list` operation and its query values; Diary retains ownership of the destination and allocation.
+Decision: Current progress groups retained `active` sessions as active and retained `abandoned` sessions as backlog; completed and retired sessions are excluded.
 
 ## Mounted panel contract
 
@@ -71,8 +72,8 @@ the retained-session counter. The reader addresses at most sixteen revision rows
 per revision, rechecks authority and generation, and caps JSON at 16,384 UTF-8 bytes. GET remains pure.
 
 The mounted route and schema are exported by `reading-insights-routes.ts`; Content still needs to publish its matching
-generated client output before Web can call this endpoint. This independent panel is not yet composed with the
-all-time/year summary, retained-profile distribution or current-progress aggregate.
+generated client output before Web can call this endpoint. The panel is composed with the all-time/year summary,
+retained-profile distribution, current-progress and assessment panels by `GET /v1/libraryReadingInsights`.
 
 ## Coverage, installation and cleanup
 
@@ -94,9 +95,10 @@ zero only with these installation premises. Otherwise the response contains no d
 | `unavailable/initializing`            | Initialized and retained counters differ; their exact quantities are disclosed |
 | `unavailable/maintenance_unavailable` | Maintenance or source installation is not ready/open                           |
 
-An explicit finite funded retained-owner installation schedule has not yet been delivered. Operators may use the
-existing authorized `requestRebuild(...kind:'backfill'...)` port; a GET never schedules it or claims that it ran.
-The continuation must supply the finite schedule and native work-cost evidence before claiming complete deployment.
+Operators use the existing authorized `requestRebuild(...kind:'backfill'...)` port for finite installation and repair;
+its existing run, epoch, sequence and cursor remain the only admission. The 100-row sessions phase addresses retained
+native rows and invokes current-progress receiving in their existing transaction. A GET never schedules repair or
+claims that it ran.
 
 Receiving serializes each owner head and removes the old initialized contribution before adding the new one, in the
 same source transaction. Correction across years, completion, retirement, restoration and deletion maintain exact
@@ -133,6 +135,19 @@ restoration, last-source cleanup, ranked remainder, partial initialization, boun
 64/512/4096 retained-source populations. No existing test or frozen acceptance is edited. The typed mounted producer
 is in `reading-insights-routes.ts`; Content owns generated client/declaration/root-export publication. No generator,
 raw-fetch Web adapter or handwritten client delivery is added. Installed client and rendered evidence remain pending.
+
+Current progress is maintained per retained owner from each session's captured accepting descriptors and native
+operands. Active sessions and abandoned backlog sessions are separate; completed and retired sessions are excluded.
+Groups include the full accepted pin, meaning revision, mode, unit, dimension, precision, bounds, total policy,
+identity, structure and cursor locator. Only equal meanings are summed, using PostgreSQL exact numeric arithmetic.
+The response returns at most eight groups per scope and exact remainder coverage counts, without merging values from
+different meanings or hydrating sessions. Older rows without accepted descriptors remain unsupported.
+
+Retained rows enter the receiver only through native row changes or the existing addressed sessions phase. Each
+replacement removes the previous contribution and adds the current one in the same transaction; receipt replay is
+idempotent, source deletion removes the final owner projection, and owner generations invalidate stale reads. Native
+and physical cost measurements remain controller-owned; the added statements and row work remain within the original
+writer or admitted maintenance transaction and do not introduce a new scheduler, receipt or funding protocol.
 
 `bun run --cwd services/kernel derived schema` succeeded and regenerated only the Library canonical schema.
 `bun run --cwd services/kernel typecheck` failed with 301 diagnostics, identical to a clean clone of the bound
