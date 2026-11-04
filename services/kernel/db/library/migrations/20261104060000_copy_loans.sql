@@ -1,3 +1,4 @@
+-- migrate:up
 CREATE TABLE library.copy_loan_generation (
     route integer NOT NULL,
     account_id uuid NOT NULL,
