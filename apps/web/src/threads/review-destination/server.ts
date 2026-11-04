@@ -67,17 +67,22 @@ export const readReviewDestination = createServerFn({ method: 'GET' })
     request.signal.throwIfAborted();
     if (!authorization || !sameReviewReader(data.expected, provenance)) return { kind: 'mismatch' };
     const page = await loadReviewDestinationPage(
-      kernelClient(data.locale, authorization, (fetcher) => async (input, init) => {
-        request.signal.throwIfAborted();
-        const response = await fetcher(input, {
-          ...init,
-          signal: request.signal,
-          cache: 'no-store',
-          credentials: 'omit',
-        });
-        request.signal.throwIfAborted();
-        return response;
-      }),
+      kernelClient(
+        data.locale,
+        authorization,
+        (fetcher) =>
+          (async (input, init) => {
+            request.signal.throwIfAborted();
+            const response = await fetcher(input, {
+              ...init,
+              signal: request.signal,
+              cache: 'no-store',
+              credentials: 'omit',
+            });
+            request.signal.throwIfAborted();
+            return response;
+          }) as typeof fetch,
+      ),
       {
         realmId: data.realmId,
         subjectId: data.subjectId,
