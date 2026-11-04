@@ -81,6 +81,17 @@ rendering counts. This transport does not establish browser currentness or autho
 their revision, incarnation, original-key retry and recovery operands retain command ownership. Native growth and
 mounted navigation/acknowledgement measurements remain required; this boundary supplies no population-cost proof.
 
+The current Web route mounts one Entry-list-admitted summary observation for its viewer, exact Type, source address
+and locale. The heading and separate count navigation share it outside the eight Collection pins. The five legacy
+bucket links use exact native state IDs and preserve sort/display/Type while dropping cursors; profile controls keep
+command ownership. Missing, preparing, refused and failed summaries never mean zero or remove rows. Progress-list
+refusal does not retire an Entry-list-admitted summary. Known shelf state/delete/restore acknowledgements discard any
+pre-write summary and offer a deliberate count refresh; uncertain commands retain their existing recovery operands.
+The same-origin page referrer binds server-function summary provenance to its source address.
+
+Decision: first-use guidance requires an exhausted, ready, unfiltered Entry page and a current complete summary with
+`all.total = 0`; otherwise an empty page describes only that page. Summary refresh does not restart row commands.
+
 `GET /v1/libraryShelfTypes?limit=&cursor=` returns `{types: [{type, count}], next}` in stable private UUID order
 (the UUID is not returned). Counts are the account's entries of the type in any state. Limit 1 to 100, default 20.
 

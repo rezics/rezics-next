@@ -8405,5 +8405,11 @@
   "library_copy_filters_active": "활성 복본 필터",
   "library_copy_matching_empty": "이 필터와 일치하는 복본이 없습니다.",
   "library_copies_address_filter_invalid": "종류 또는 상태 필터가 올바르지 않습니다. 복본을 불러오지 않았습니다. 수정하거나 이 보기를 처음부터 여세요.",
-  "library_copies_address_filter_label": "종류 또는 상태 필터"
+  "library_copies_address_filter_label": "종류 또는 상태 필터",
+  "library_summary_heading": "라이브러리 항목 수",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "라이브러리 항목 수를 준비하는 중…",
+  "library_summary_stale": "라이브러리가 변경되었습니다. 항목 수를 새로 고치세요.",
+  "library_summary_unavailable": "항목 수를 불러올 수 없습니다. 항목은 계속 사용할 수 있습니다.",
+  "library_summary_retry": "항목 수 새로 고침"
 }

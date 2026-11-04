@@ -37,6 +37,7 @@ import type { LibraryLabelSummary } from './subject-labels.ts';
 import { useSession } from '../session/query';
 import { readShelfLabelAssignment } from './labels-actions';
 import { captureShelfLabelEntry, executeShelfLabelRequest, type ShelfLabelKind } from './shelf-label-request';
+import { ShelfSummaryAcknowledgement } from './shelf-summary-current';
 import { PersonalShelfOrigin } from './personal-shelf-origin';
 import {
   bulkStatusReviewMatches,
@@ -122,6 +123,7 @@ export function useShelfRows(
   originatingCurrent?: () => boolean,
 ) {
   const shelfOrigin = useContext(PersonalShelfOrigin);
+  const summaryAcknowledged = useContext(ShelfSummaryAcknowledgement);
   const session = useSession();
   const [rows, setRows] = useState<ShelfRow[]>(() =>
     initial.map((entry) => ({ entry, conflict: false, failure: null })),
@@ -431,6 +433,7 @@ export function useShelfRows(
       const result = await command.send({ data: intent, headers: new Headers(command.headers) });
       if (!isCurrent() || !stateCurrent()) return { status: 'unknown', stop: true };
       if (result.ok && result.entry && result.entry.subjectId === intent.subjectId) {
+        summaryAcknowledged?.();
         const saved = result.entry;
         patch(intent.subjectId, (current) => ({
           entry: {
@@ -662,6 +665,7 @@ export function useShelfRows(
         headers: review.manifest.readHeaders,
       });
       if (!bulkReviewIsCurrent(review)) return;
+      if (result.outcomes.some((outcome) => outcome.status === 'changed')) summaryAcknowledged?.();
       updateBulkStatusReview({
         ...review,
         operation: result.operation,
@@ -894,6 +898,7 @@ export function useShelfRows(
       if (restored.ok || ['occupied', 'stale', 'expired'].includes(restored.reason)) operation.response = restored;
       if (!isCurrent() || restoreIntent.current !== operation || !operation.alive() || !latestRestoreCurrent.current())
         return;
+      if (restored.ok) summaryAcknowledged?.();
       if (restored.ok || restored.reason === 'occupied') {
         if (restored.entry)
           updateRows((current) => [
@@ -939,6 +944,7 @@ export function useShelfRows(
         headers: new Headers(requestHeaders),
       });
       if (!isCurrent() || !removeCurrent()) return;
+      if (result.ok) summaryAcknowledged?.();
       if (result.ok || result.reason === 'missing') {
         patch(subjectId, () => null);
         if (result.ok && result.undo && restoreCurrent()) {

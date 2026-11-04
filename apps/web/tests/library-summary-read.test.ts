@@ -14,7 +14,7 @@ mock.module('@tanstack/react-start/server', () => ({
   setResponseHeader: (name: string, value: string) => headers.push(`${name}: ${value}`),
 }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { loadShelfSummaryCurrent, validShelfSummary, validateShelfSummaryInput } =
+const { loadShelfSummaryCurrent, validShelfSummary, validateShelfSummaryInput, shelfSummarySource } =
   await import('../src/library/shelf-summary-read');
 const zero = () => ({
   tabs: Object.fromEntries(
@@ -104,4 +104,15 @@ test('one typed summary request carries exact long Type and only Entry list cred
     state: 'signed-out',
   });
   expect(calls).toHaveLength(before);
+});
+
+test('server-function provenance uses only a same-origin Library page referrer', () => {
+  const source = 'https://web.test/ja/library?type=schema%3ABook&layout=list';
+  expect(shelfSummarySource(new Request('https://web.test/_server/summary', { headers: { referer: source } }))).toBe(
+    source,
+  );
+  for (const referer of ['https://foreign.test/en/library', 'https://web.test/en/search', 'bad'])
+    expect(shelfSummarySource(new Request('https://web.test/_server/summary', { headers: { referer } }))).toBe(
+      'https://web.test/_server/summary',
+    );
 });

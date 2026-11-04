@@ -8405,5 +8405,11 @@
   "library_copy_filters_active": "Filtres de copies actifs",
   "library_copy_matching_empty": "Aucune copie ne correspond à ces filtres.",
   "library_copies_address_filter_invalid": "Ce filtre de type ou de statut est invalide. Aucune copie n’a été chargée. Corrigez-le ou recommencez cette vue.",
-  "library_copies_address_filter_label": "Filtre de type ou de statut"
+  "library_copies_address_filter_label": "Filtre de type ou de statut",
+  "library_summary_heading": "Nombre d’entrées de la bibliothèque",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "Préparation du nombre d’entrées…",
+  "library_summary_stale": "Votre bibliothèque a changé. Actualisez les nombres.",
+  "library_summary_unavailable": "Les nombres sont indisponibles. Les entrées restent accessibles.",
+  "library_summary_retry": "Actualiser les nombres"
 }

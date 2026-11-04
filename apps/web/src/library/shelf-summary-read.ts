@@ -70,6 +70,15 @@ export function validShelfSummary(value: unknown, type?: string): value is Shelf
   );
 }
 
+/** Server-function GETs inherit the page address through the same-origin referrer. */
+export function shelfSummarySource(request: Request): string {
+  try {
+    const source = new URL(request.headers.get('referer') ?? request.url);
+    if (source.origin === new URL(request.url).origin && /\/library\/?$/.test(source.pathname)) return source.href;
+  } catch {}
+  return request.url;
+}
+
 /** One native GET; the caller owns retirement of this independent admitted observation. */
 export async function loadShelfSummaryCurrent(
   client: KernelClient,
@@ -81,7 +90,7 @@ export async function loadShelfSummaryCurrent(
   const provenance = {
     sessionSubject: null as string | null,
     authorizationAgrees: false,
-    requested: { type: type ?? null, locale: requestLocale(request) ?? 'en', source: request.url },
+    requested: { type: type ?? null, locale: requestLocale(request) ?? 'en', source: shelfSummarySource(request) },
   };
   let authorization: string | null = null;
   const agrees = () =>

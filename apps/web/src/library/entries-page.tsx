@@ -23,10 +23,19 @@ import { ShelfTypes } from './shelf-types';
 import { SaveQueryLink } from './save-query';
 import { admitSavedQuerySelection } from './saved-query-editor/selection';
 
+import {
+  ShelfSummaryCount,
+  ShelfSummaryNavigation,
+  ShelfSummaryFirstUseLinks,
+  shelfSummaryFirstUse,
+  type ShelfSummaryPresentation,
+} from './shelf-summary-view';
+
 type Display = ShelfDisplay;
 
 export function PersonalLibraryPage({
   page,
+  summary,
   locale,
   display,
   cursor,
@@ -45,6 +54,7 @@ export function PersonalLibraryPage({
   isCurrent,
 }: {
   page: PersonalLibraryView;
+  summary?: ShelfSummaryPresentation;
   locale: string;
   display: Display;
   cursor?: string;
@@ -106,13 +116,17 @@ export function PersonalLibraryPage({
     ...(display.layoutExplicit !== false ? { layout } : {}),
   });
   const typeLabel = page.typeLabel ?? m.library_type_unnamed();
+  const firstUse = shelfSummaryFirstUse(summary?.page, page, effectiveCursor);
   const heading = page.state
     ? m.library_tracked_entries_state({ status: page.stateLabel ?? m.library_other() })
     : m.library_tracked_entries();
   return (
     <div className="w-full min-w-0 space-y-5">
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <PageHeading>{m.library_heading()}</PageHeading>
+        <PageHeading>
+          {m.library_heading()}
+          {summary ? <ShelfSummaryCount page={summary.page} locale={locale} /> : null}
+        </PageHeading>
         <Exposure operation="library_label.list">
           <a href={`/${locale}/library/labels`} className={buttonVariants({ variant: 'outline', size: 'lg' })}>
             {m.library_nav_labels()}
@@ -126,6 +140,7 @@ export function PersonalLibraryPage({
         collections={currentNavigation?.collections ?? []}
         collectionsState={currentNavigation?.collectionsState ?? (navigation.isError ? 'unavailable' : 'preparing')}
       />
+      {summary ? <ShelfSummaryNavigation summary={summary} locale={locale} view={{ ...firstPage }} /> : null}
       {undo ? (
         <EntryUndoForm
           undo={undo}
@@ -250,7 +265,7 @@ export function PersonalLibraryPage({
             locale={locale}
             {...display}
             empty={
-              effectiveCursor || page.next ? (
+              effectiveCursor || page.next || (!page.type && !page.state && !firstUse) ? (
                 <Empty role="status">
                   <EmptyHeader>
                     <EmptyTitle>{m.library_entries_page_empty()}</EmptyTitle>
@@ -259,7 +274,7 @@ export function PersonalLibraryPage({
                 </Empty>
               ) : (
                 <ShelfEmpty
-                  kind={page.type || page.state ? 'no-match' : 'library'}
+                  kind={firstUse ? 'library' : 'no-match'}
                   title={
                     page.type
                       ? m.library_type_empty_title({ type: typeLabel })
@@ -275,6 +290,8 @@ export function PersonalLibraryPage({
                       <a href={clearTypeHref} className={buttonVariants({ variant: 'outline' })}>
                         {m.library_type_clear()}
                       </a>
+                    ) : firstUse ? (
+                      <ShelfSummaryFirstUseLinks locale={locale} />
                     ) : (
                       <a href={`/${locale}/search`} className={buttonVariants({ variant: 'outline' })}>
                         {m.library_browse()}

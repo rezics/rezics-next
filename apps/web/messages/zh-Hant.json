@@ -8405,5 +8405,11 @@
   "library_copy_filters_active": "目前的複本篩選條件",
   "library_copy_matching_empty": "沒有符合這些篩選條件的複本。",
   "library_copies_address_filter_invalid": "複本類型或狀態篩選條件無效。尚未載入任何複本。請修正條件或重新開啟此檢視。",
-  "library_copies_address_filter_label": "類型或狀態篩選條件"
+  "library_copies_address_filter_label": "類型或狀態篩選條件",
+  "library_summary_heading": "書庫數量",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "正在準備書庫數量…",
+  "library_summary_stale": "書庫已變更，請重新整理數量。",
+  "library_summary_unavailable": "無法取得數量，仍可使用條目。",
+  "library_summary_retry": "重新整理數量"
 }

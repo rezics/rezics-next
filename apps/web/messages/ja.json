@@ -8405,5 +8405,11 @@
   "library_copy_filters_active": "適用中のコピーのフィルター",
   "library_copy_matching_empty": "条件に一致するコピーはありません。",
   "library_copies_address_filter_invalid": "種類または状態のフィルターが無効です。コピーは読み込まれていません。修正するか、この表示を最初から開いてください。",
-  "library_copies_address_filter_label": "種類または状態のフィルター"
+  "library_copies_address_filter_label": "種類または状態のフィルター",
+  "library_summary_heading": "ライブラリの件数",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "ライブラリの件数を準備しています…",
+  "library_summary_stale": "ライブラリが変更されました。件数を更新してください。",
+  "library_summary_unavailable": "件数を取得できません。エントリーは引き続き利用できます。",
+  "library_summary_retry": "件数を更新"
 }

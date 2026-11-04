@@ -8405,5 +8405,11 @@
   "library_copy_filters_active": "Aktive Exemplarfilter",
   "library_copy_matching_empty": "Keine Exemplare entsprechen diesen Filtern.",
   "library_copies_address_filter_invalid": "Dieser Art- oder Statusfilter ist ungültig. Es wurden keine Exemplare geladen. Korrigieren Sie ihn oder starten Sie diese Ansicht neu.",
-  "library_copies_address_filter_label": "Art- oder Statusfilter"
+  "library_copies_address_filter_label": "Art- oder Statusfilter",
+  "library_summary_heading": "Bibliothekszahlen",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "Bibliothekszahlen werden vorbereitet…",
+  "library_summary_stale": "Deine Bibliothek hat sich geändert. Aktualisiere die Zahlen.",
+  "library_summary_unavailable": "Bibliothekszahlen sind nicht verfügbar. Einträge können weiterhin genutzt werden.",
+  "library_summary_retry": "Zahlen aktualisieren"
 }

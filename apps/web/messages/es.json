@@ -8405,5 +8405,11 @@
   "library_copy_filters_active": "Filtros de copias activos",
   "library_copy_matching_empty": "No hay copias que coincidan con estos filtros.",
   "library_copies_address_filter_invalid": "Este filtro de tipo o estado no es válido. No se cargaron copias. Corrígelo o reinicia esta vista.",
-  "library_copies_address_filter_label": "Filtro de tipo o estado"
+  "library_copies_address_filter_label": "Filtro de tipo o estado",
+  "library_summary_heading": "Recuentos de la biblioteca",
+  "library_summary_count": "{shown} / {total}",
+  "library_summary_preparing": "Preparando los recuentos de la biblioteca…",
+  "library_summary_stale": "Tu biblioteca ha cambiado. Actualiza los recuentos.",
+  "library_summary_unavailable": "Los recuentos no están disponibles. Puedes seguir usando las entradas.",
+  "library_summary_retry": "Actualizar recuentos"
 }
