@@ -14,6 +14,11 @@ import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
+
+registerCommandHistoryKind('subject.propose', 3022);
+registerCommandHistoryKind('subject.decide', 3023);
+registerCommandHistoryKind('subject.adopt', 3024);
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -194,7 +199,12 @@ export async function proposeStatement(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
-      return writeProposal(tx, transactionId, { ...options, statement });
+      const result = await writeProposal(tx, transactionId, { ...options, statement });
+      await declareCommandHistory(tx, 'subject.propose', {
+        response: { artifactType: 'command-receipt/v1', accounts: [] },
+        events: result.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+      });
+      return result;
     },
   );
   return {
@@ -594,6 +604,24 @@ export async function decideCandidate(
             });
         }
         await sealSemanticRecordSourceSet(tx, sourceSet);
+        const events = [
+          ...linkEvents,
+          {
+            type: SUBJECT_REVISED,
+            subject: options.subject,
+            data: { id: options.subject, revision, kind: options.decision },
+          },
+          {
+            type:
+              options.decision === 'accept' ? 'com.rezics.statement.accepted.v1' : 'com.rezics.statement.rejected.v1',
+            subject: options.subject,
+            data: { candidate: options.candidate, context: options.context, revision, head },
+          },
+        ];
+        await declareCommandHistory(tx, 'subject.decide', {
+          response: { artifactType: 'command-receipt/v1', accounts: [] },
+          events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+        });
         return {
           value: {
             acceptance: {
@@ -604,20 +632,7 @@ export async function decideCandidate(
             },
             revision,
           },
-          events: [
-            ...linkEvents,
-            {
-              type: SUBJECT_REVISED,
-              subject: options.subject,
-              data: { id: options.subject, revision, kind: options.decision },
-            },
-            {
-              type:
-                options.decision === 'accept' ? 'com.rezics.statement.accepted.v1' : 'com.rezics.statement.rejected.v1',
-              subject: options.subject,
-              data: { candidate: options.candidate, context: options.context, revision, head },
-            },
-          ],
+          events,
         };
       } catch (error) {
         retryEditorialUniqueness(error);
@@ -927,6 +942,10 @@ export async function adoptCandidates(
           }
         }
         await sealSemanticRecordSourceSet(tx, sourceSet);
+        await declareCommandHistory(tx, 'subject.adopt', {
+          response: { artifactType: 'command-receipt/v1', accounts: [] },
+          events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+        });
         return {
           value: {
             adoption: {
