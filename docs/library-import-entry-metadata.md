@@ -55,8 +55,12 @@ field mapping and currentness checks; storage adapters retain owner-scoped reads
 byte limits and mutation receipts. Native annotation and source-observation commands remain the only write authorities.
 VNDB continues to store metadata in its bounded upload document and preserves its native-admission receipt marker;
 older confirmations without that marker keep their original receipt input. Bangumi keeps its header and per-row review
-records, row locks, cancellation and expiry owner. MAL's whole-document deadline behavior and AniList's per-row
-load/save and profile-digest check remain unchanged in this delivery.
+records, row locks, cancellation and expiry owner. MAL and AniList use this same coordinator. MAL retains its
+request-scoped deadline, whole-document mutation receipts and 48 MiB encoded JSON limit; AniList retains addressed-row
+load/save, its complete live matching/profile observation and 4 MiB row limit. Their request digests still include
+`{sourceReviewToken,key}`; existing tokens, immutable confirmation inputs and native receipt keys are never rewritten.
+Both adapters prepare live authority outside local transactions and fence the retained source and entry incarnation
+inside each fresh native command. Admission adds no operand to old native receipt inputs.
 
 Each importer adds a bounded metadata review, read and apply method to its existing upload. Review requires the row's
 current provider review token and an explicit Subject choice. It returns a fresh metadata token; the private read shows
