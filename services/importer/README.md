@@ -2351,7 +2351,7 @@ aliases use `und`. A malformed field is withheld as a whole while independent
 source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@11+bangumi@12` registration, record bindings,
+uses its existing `cross-media-entities@11+bangumi@13` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh
@@ -2416,7 +2416,7 @@ positive integer or inclusive range; a lone count invents no minimum.
 ### Bangumi Game platforms and software engine
 
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox `平台`
-and `游戏引擎` on type 4 through `bangumi@11`, preserving Game names, player-count,
+and `游戏引擎` on type 4 through `bangumi@13`, preserving Game names, player-count,
 Book grain and TVAnime work-evidence mapping. Selected-family type
 4 rows use that same converter.
 Current reviewed Concept reads supply the only native targets; a configuration
@@ -2425,7 +2425,7 @@ withhold that occurrence and keep the VideoGame identity and sealed retry
 candidates. Top-level `platform` remains the profile selector. Engine version,
 platform or edition text is withheld because `wdt:P408` admits no qualifiers.
 No second vocabulary publisher or taxonomy release is introduced.
-Decision: Game environment admission stays on the combined `bangumi@11` revision; book
+Decision: Game environment admission stays on the combined `bangumi@13` revision; book
 grain stays on that combined revision. No infobox-field scheme URI is minted
 from `平台` or `游戏引擎`.
 
