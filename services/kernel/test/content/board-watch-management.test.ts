@@ -425,6 +425,10 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   await f.accounts.grant(reader, 'realm:read', { route, id: realm });
   await f.accounts.grant(reader, 'realm:participate', { route, id: realm });
   await f.accounts.grant(reader, 'board:read', { route, id: secondaryBoard });
+  await f.accounts.grant(f.accounts.recipient, 'realm:read', { route, id: realm });
+  await f.accounts.grant(f.accounts.recipient, 'realm:participate', { route, id: realm });
+  await f.accounts.grant(f.accounts.recipient, 'board:read', { route, id: secondaryBoard });
+  await f.accounts.grant(f.accounts.recipient, 'board:participate', { route, id: secondaryBoard });
   await f.accounts.grant(f.accounts.recipient, 'thread:create', { route, id: secondaryBoard });
   const realmThread = await f.thread(f.accounts.recipient, 'published', secondaryBoard);
   const later = await f.thread();
