@@ -12,6 +12,7 @@ import {
   readAvatarUploadAdvice,
   readReservation,
   reserveMedia,
+  type AvatarUploadAdvice,
   type MediaReservationInput,
 } from '../../src/content/media.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -385,7 +386,7 @@ for (const name of ['avatar summaries', 'avatar check'] as const)
     60000,
   );
 
-const expectedAdvice = (actions: ['upload'] | []) => ({
+const expectedAdvice = (actions: ['upload'] | []): AvatarUploadAdvice => ({
   viewerState: 'signed_in',
   viewer: { accountId },
   target: { containerId: accountId, purpose: 'avatar' },
@@ -427,7 +428,9 @@ test('avatar upload advice is the current self media:create observation and rese
   expect(replay.replayed).toBe(true);
   expect(replay.value).toEqual(first.value);
   expect(await nativeEffects()).toEqual(before);
-  expect(await readReservation(dependencies(), first.value.mediaId, { actor: owner, deadline: Date.now() + 30000 })).toMatchObject({
+  expect(
+    await readReservation(dependencies(), first.value.mediaId, { actor: owner, deadline: Date.now() + 30000 }),
+  ).toMatchObject({
     id: first.value.mediaId,
     reservationRequestId: request.idempotencyKey,
     state: 'reserved',
@@ -461,31 +464,27 @@ test('avatar upload advice is the current self media:create observation and rese
   await db.admin.query('UPDATE access.account SET authn_fenced=false WHERE account_id=$1', [accountId]);
 });
 
-test(
-  'avatar upload advice',
-  async () => {
-    const targetRoute = 0x4910;
-    const report = await checkGrowth(db, {
-      name: 'avatar upload advice',
-      scales: [64, 512, 4096],
-      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      async grow(_database, scale, previous) {
-        const added = scale - Math.max(64, previous);
-        if (added > 0)
-          await seedMedia(
-            targetRoute,
-            Array.from({ length: added }, () => newId(targetRoute)),
-            false,
-          );
-      },
-      async operation() {
-        expect(await readAvatarUploadAdvice(dependencies(), owner, Date.now() + 30000)).toEqual(
-          expectedAdvice(['upload']),
+test('avatar upload advice', async () => {
+  const targetRoute = 0x4910;
+  const report = await checkGrowth(db, {
+    name: 'avatar upload advice',
+    scales: [64, 512, 4096],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(_database, scale, previous) {
+      const added = scale - Math.max(64, previous);
+      if (added > 0)
+        await seedMedia(
+          targetRoute,
+          Array.from({ length: added }, () => newId(targetRoute)),
+          false,
         );
-      },
-    });
-    expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
-    for (const sample of report.samples) expect(sample.cost.statements).toBeGreaterThan(0);
-  },
-  60000,
-);
+    },
+    async operation() {
+      expect(await readAvatarUploadAdvice(dependencies(), owner, Date.now() + 30000)).toEqual(
+        expectedAdvice(['upload']),
+      );
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
+  for (const sample of report.samples) expect(sample.cost.statements).toBeGreaterThan(0);
+}, 60000);
