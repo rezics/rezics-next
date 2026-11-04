@@ -38,18 +38,12 @@ const { createRoot } = await import('react-dom/client');
 const { creatorId, identity, publicationFixture } =
   await import('../src/stories/patterns/edition-publication/edition-publication-fixtures');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-  useLocation,
-} = await import('@tanstack/react-router');
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useLocation } =
+  await import('@tanstack/react-router');
 const { EditionCreateRoute } = await import('../src/routes/editions/new');
 const { CreatorEditionsOriginView } = await import('../src/content-editions/creator-editions-view');
-const { CreatorOfferOriginAddressPanel, CreatorOfferOriginScope } = await import('../src/checkout/creator-offer-editor');
+const { CreatorOfferOriginAddressPanel, CreatorOfferOriginScope } =
+  await import('../src/checkout/creator-offer-editor');
 const { editionCreateSearch, editionCreateNavigationContext, editionCreateHref } =
   await import('../src/content-editions/edition-create');
 const { creatorEditionSearch } = await import('../src/checkout/creator-offer-address');
@@ -128,13 +122,23 @@ test('Stay preserves the uncertain publication intent; Discard returns to the or
   document.body.append(host);
   const root = createRoot(host);
   try {
-    await act(async () => root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>));
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      ),
+    );
     const { button, click } = controls();
     await click(m.creator_edition_origin_return());
-    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(m.edition_publication_leave_pending());
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      m.edition_publication_leave_pending(),
+    );
     await click(m.thread_authoring_stay());
     expect(fixture.controller.snapshot().intent).toBe(originalIntent);
-    expect(fixture.calls.filter((call) => call.path === '/v1/contentEditions' && call.method === 'POST')).toHaveLength(1);
+    expect(fixture.calls.filter((call) => call.path === '/v1/contentEditions' && call.method === 'POST')).toHaveLength(
+      1,
+    );
     expect(router.state.location.pathname).toBe('/editions/new');
 
     await click(m.creator_edition_origin_return());
@@ -151,7 +155,9 @@ test('Stay preserves the uncertain publication intent; Discard returns to the or
     expect(returnUrl.searchParams.get('editionOrigin')).toBe(token);
     expect(returnUrl.searchParams.has('postId')).toBe(false);
     expect(returnUrl.searchParams.has('revisionId')).toBe(false);
-    expect(fixture.calls.filter((call) => call.path === '/v1/contentEditions' && call.method === 'POST')).toHaveLength(1);
+    expect(fixture.calls.filter((call) => call.path === '/v1/contentEditions' && call.method === 'POST')).toHaveLength(
+      1,
+    );
     expect(button(m.creator_edition_origin_restart())).toBeDefined();
   } finally {
     await act(async () => root.unmount());
@@ -205,8 +211,16 @@ test('published Edition hands off its exact current identity and locale without 
   document.body.append(host);
   const root = createRoot(host);
   try {
-    await act(async () => root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>));
-    const offer = [...host.querySelectorAll('a')].find((link) => link.textContent === m.edition_publication_create_offer());
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      ),
+    );
+    const offer = [...host.querySelectorAll('a')].find(
+      (link) => link.textContent === m.edition_publication_create_offer(),
+    );
     expect(offer?.getAttribute('href')).toBe(`/ja/creator/offers/new?editionId=${edition.editionId}`);
     expect(offer?.getAttribute('href')).not.toContain('editionOrigin');
     await act(async () => offer!.click());

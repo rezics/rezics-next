@@ -107,7 +107,16 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
     const target = event.target;
     if (!(target instanceof Element)) return;
     const anchor = target.closest('a');
-    if (!anchor || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (
+      !anchor ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
     if (anchor.target && anchor.target !== '_self') return;
     const destination = new URL(anchor.href, window.location.href);
     if (destination.origin !== window.location.origin) return;
@@ -136,7 +145,9 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
         if (receipt) {
           preserveOriginOnLeave.current = true;
           event.preventDefault();
-          void router.navigate({ href: addCreatorEditionOriginToken(anchor.getAttribute('href') ?? creatorEditionsHref(), originToken) });
+          void router.navigate({
+            href: addCreatorEditionOriginToken(anchor.getAttribute('href') ?? creatorEditionsHref(), originToken),
+          });
           return;
         }
       }

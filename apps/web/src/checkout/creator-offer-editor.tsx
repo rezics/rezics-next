@@ -1,4 +1,14 @@
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -9,7 +19,11 @@ import { m } from '../paraglide/messages.js';
 import { localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { useSession } from '../session/query';
-import { CreatorOfferDraftNavigation, CreatorOfferDraftState, useCreatorOfferDraftNavigation } from './creator-offer-draft-navigation';
+import {
+  CreatorOfferDraftNavigation,
+  CreatorOfferDraftState,
+  useCreatorOfferDraftNavigation,
+} from './creator-offer-draft-navigation';
 import {
   creatorEditionOriginReturnHref,
   readCreatorEditionOrigin,
@@ -125,11 +139,7 @@ function CreatorOfferOriginPanelSlot() {
   };
   const currentReceipt = () => {
     if (context.resolution?.kind !== 'current') return null;
-    const resolution = readCreatorEditionOrigin(
-      context.token,
-      session.subject,
-      context.resolution.receipt.editionId,
-    );
+    const resolution = readCreatorEditionOrigin(context.token, session.subject, context.resolution.receipt.editionId);
     return resolution.kind === 'current' ? resolution.receipt : null;
   };
   const restart = () => {

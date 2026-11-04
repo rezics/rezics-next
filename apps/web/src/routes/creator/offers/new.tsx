@@ -1,9 +1,6 @@
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { CreatorOfferEditorCurrent } from '../../../checkout/creator-offers-current';
-import {
-  CreatorOfferOriginAddressPanel,
-  CreatorOfferOriginScope,
-} from '../../../checkout/creator-offer-editor';
+import { CreatorOfferOriginAddressPanel, CreatorOfferOriginScope } from '../../../checkout/creator-offer-editor';
 import { readCreatorOfferEditorCurrent } from '../../../checkout/creator-offers';
 import { creatorEditionSearch } from '../../../checkout/creator-offer-address';
 import { CreatorOfferAddressPage } from '../../../checkout/creator-offer-address-page';

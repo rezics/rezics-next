@@ -280,8 +280,11 @@ export function EditionPublication({
   const originEditionId = state.edition?.editionId ?? initialEditionId ?? null;
   const originSource = useRef<{ token: string; identity: string } | null>(null);
   const originCredential = useRef(session.csrfToken);
-  const sourceIdentity =
-    state.identity ? `${state.identity.postId}:${state.identity.revisionId}` : initialSource ? `${initialSource.postId}:${initialSource.revisionId}` : null;
+  const sourceIdentity = state.identity
+    ? `${state.identity.postId}:${state.identity.revisionId}`
+    : initialSource
+      ? `${initialSource.postId}:${initialSource.revisionId}`
+      : null;
   useEffect(() => {
     if (!originToken) {
       originSource.current = null;
@@ -443,9 +446,7 @@ export function EditionPublication({
           onRestart={restartInventory}
           editionId={origin.kind === 'current' ? origin.receipt.editionId : undefined}
           sourceRevisionId={
-            origin.kind === 'current'
-              ? state.identity?.revisionId ?? initialSource?.revisionId ?? null
-              : undefined
+            origin.kind === 'current' ? (state.identity?.revisionId ?? initialSource?.revisionId ?? null) : undefined
           }
         />
       ) : null}

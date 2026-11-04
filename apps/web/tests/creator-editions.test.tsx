@@ -126,14 +126,25 @@ test('continued inventory resumes its exact Edition and returns to only that re-
     expect(document.activeElement?.id).toBe(`creator-edition-${exactEditionId}`);
     expect(host.textContent).toContain(m.creator_edition_origin_present());
 
-    await act(async () => root.render(tree(returnRouter, client, { kind: 'ready', editions: [], next: null }, 'continued/+=')));
+    await act(async () =>
+      root.render(tree(returnRouter, client, { kind: 'ready', editions: [], next: null }, 'continued/+=')),
+    );
     expect(host.textContent).toContain(m.creator_edition_origin_missing());
-    expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.creator_edition_origin_restart())).toBe(true);
-    expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.creator_edition_origin_return())).toBe(false);
+    expect(
+      [...host.querySelectorAll('button')].some((button) => button.textContent === m.creator_edition_origin_restart()),
+    ).toBe(true);
+    expect(
+      [...host.querySelectorAll('button')].some((button) => button.textContent === m.creator_edition_origin_return()),
+    ).toBe(false);
 
     const replacement = createCreatorEditionOrigin({ accountId, cursor: 'continued/+=', editionId: exactEditionId });
     expect(replacement).toBeTruthy();
-    expect(bindCreatorEditionOriginEdition(replacement!, fixture.controller.snapshot().edition!.editionId.replace(/.$/, '1'))).toBe(false);
+    expect(
+      bindCreatorEditionOriginEdition(
+        replacement!,
+        fixture.controller.snapshot().edition!.editionId.replace(/.$/, '1'),
+      ),
+    ).toBe(false);
     expect(readCreatorEditionOrigin(replacement, accountId, exactEditionId).kind).toBe('lost');
   } finally {
     await act(async () => root.unmount());
