@@ -22,7 +22,6 @@ import {
   type KernelDependencies,
 } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
-import type { SearchService } from '../../src/search/http/routes.ts';
 
 const TEST_KEY = 0x6b;
 const testIssuer = 'https://test-auth.example.test';
@@ -139,7 +138,7 @@ export type TestKernelOptions = TestRuntimeOptions & {
   workClient?: WorkClient;
   content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
   commerce?: CommerceDependencies;
-  search?: SearchService;
+  search?: KernelDependencies['search'];
   reports?: { anonymousVerifier?: NonNullable<ContentRuntime['anonymousVerifier']> };
 };
 
