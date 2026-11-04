@@ -81,10 +81,12 @@ test('the editor offers mixed separately from automatic cover selection and reta
           }),
         );
         expect(html).toContain(m.library_collection_mixed_label());
-        expect(html).toContain(m.library_collection_mixed_help());
+        expect(html).toContain(
+          kind === null ? m.collection_choice_automatic_type_help() : m.collection_choice_retained_type_help(),
+        );
         expect(html).toContain(m.library_collection_auto());
         expect(html).toContain(
-          `<option value="${kind ?? ''}" selected="">${kind ?? m.library_collection_mixed_label()}</option>`,
+          `<option value="${kind ?? ''}" selected="">${kind === null ? m.library_collection_mixed_label() : m.collection_choice_type_unavailable()}</option>`,
         );
         expect(html).toContain('<option value="schema:Book">Book</option>');
       }
