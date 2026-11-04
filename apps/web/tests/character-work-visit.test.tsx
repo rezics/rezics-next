@@ -12,10 +12,10 @@ import type {
   ConnectionStream,
   ConnectionWork,
 } from '../src/features/pages/subject-connections';
-import { characterWorkRows } from '../src/features/catalogue/character-work-visit/model';
 import { connectionReturnWindow, subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { readConnectionVisit } = await import('../src/features/pages/subject-connections');
+const { characterWorkRows } = await import('../src/features/catalogue/character-work-visit/model');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const { SubjectConnections } = await import('../src/features/pages/subject-connections-view');
 const { subjectBody } = await import('../src/features/pages/subject');
