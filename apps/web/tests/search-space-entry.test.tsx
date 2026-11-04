@@ -207,18 +207,23 @@ test('mounted Search preserves visit on failed follow, refreshes one aggregate o
     following = false,
     pending = deferred<FollowWriteResult>();
   const writes: unknown[] = [];
-  const late = deferred<DiscoveryBoundPage>();
+  const late: ReturnType<typeof deferred<DiscoveryBoundPage>>[] = [];
   let delayRead = false;
-  function Live() {
+  function Live({ locale = 'en' }: { locale?: string }) {
     const personal = useDiscoveryPersonalResults({
       enabled: true,
       source,
       request: { representation: 'discovery-v1', text: 'reading', limit: 100 },
-      locale: 'en',
+      locale,
       returnTo,
       read: async () => {
         reads++;
-        return delayRead ? late.promise : { state: { status: 'ready', page: fixture(following) }, capabilities: null };
+        if (delayRead) {
+          const request = deferred<DiscoveryBoundPage>();
+          late.push(request);
+          return request.promise;
+        }
+        return { state: { status: 'ready', page: fixture(following) }, capabilities: null };
       },
       writeSpaceFollow: async (command) => {
         writes.push(command);
@@ -229,7 +234,7 @@ test('mounted Search preserves visit on failed follow, refreshes one aggregate o
       <section ref={personal.regionRef} tabIndex={-1}>
         <DiscoveryResults
           state={personal.state ?? source}
-          locale="en"
+          locale={locale}
           restartHref={returnTo}
           renderPersonal={personal.renderPersonal}
         />
@@ -269,14 +274,34 @@ test('mounted Search preserves visit on failed follow, refreshes one aggregate o
     pending = deferred();
     delayRead = true;
     await act(async () => follow().click());
+    await act(async () => pending.resolve({ ok: true, following: false }));
+    expect(reads).toBe(3);
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <Live locale="de" />
+        </QueryClientProvider>,
+      ),
+    );
+    expect(reads).toBe(4);
+    const retired = fixture(false);
+    const oldHit = retired.hits[0]!;
+    if (oldHit.summary.kind !== 'space') throw new Error('Space fixture');
+    oldHit.summary.value.presentation!.identity.name = 'Retired response';
+    await act(async () => late[0]!.resolve({ state: { status: 'ready', page: retired }, capabilities: null }));
+    expect(host.textContent).not.toContain('Retired response');
+    await act(async () => late[1]!.resolve({ state: { status: 'ready', page: fixture(true) }, capabilities: null }));
+    expect(follow().disabled).toBe(false);
+    pending = deferred();
+    await act(async () => follow().click());
     await act(async () =>
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null }),
     );
     await act(async () => pending.resolve({ ok: true, following: false }));
-    expect(reads).toBe(2);
-    expect(host.textContent).not.toContain('Unfollow');
+    expect(reads).toBe(4);
+    expect(host.textContent).not.toContain('Retired response');
     expect(host.querySelector(`a[href*="return_to=${encodeURIComponent(returnTo)}"]`)).not.toBeNull();
-    late.resolve({ state: source, capabilities: null });
+    expect(scroll).toBe(200);
   } finally {
     await act(async () => root.unmount());
     client.clear();

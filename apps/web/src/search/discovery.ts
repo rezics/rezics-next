@@ -406,12 +406,15 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
       if (hit.summary.kind !== 'space') return;
       const value = hit.summary.value;
       if (
+        !value.presentation ||
         row.id !== hit.key.id ||
         (row.destination.kind === 'realm' && row.destination.realmId !== value.realm?.id) ||
         (row.destination.kind === 'space' &&
           (value.realm || row.destination.spaceId !== value.id || row.destination.address !== value.address)) ||
         (row.entry === 'allowed' && row.destination.kind === 'unavailable') ||
-        (result.spaceEntries.reader === null ? row.follow.state !== 'sign-in' : row.follow.state === 'sign-in')
+        (result.spaceEntries.reader === null
+          ? row.follow.state !== 'sign-in'
+          : row.follow.state === 'sign-in' || (row.follow.state === 'current' && row.follow.action === 'sign-in'))
       )
         return;
     }

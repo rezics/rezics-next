@@ -157,3 +157,31 @@ test('stale indexed hints cannot authorize identity, association or a fallback',
     observeSearchSpaceEntries({ page: other.page, actor, deadline: Date.now() + 10000, read: async () => other.cards }),
   ).rejects.toThrow();
 });
+
+test('declined media remains explicit while entry and follow advice have independent unavailable or disabled states', async () => {
+  for (const state of ['withheld', 'unavailable'] as const) {
+    const f = fixture();
+    f.cards.set(id, {
+      ...f.card,
+      presentation: { ...f.card.presentation, avatar: { state } },
+      actions: { status: 'unavailable' },
+      destination: { kind: 'unavailable' },
+    });
+    const result = await observeSearchSpaceEntries({
+      page: f.page,
+      actor,
+      deadline: Date.now() + 10000,
+      read: async () => f.cards,
+      follow: async () => ({
+        rows: new Map([[id, { state: 'current', following: false, action: 'disabled' }]]),
+        current: async () => true,
+      }),
+    });
+    expect(result.page.hits[0]!.summary).toMatchObject({ value: { presentation: { avatar: { state } } } });
+    expect(result.page.spaceEntries?.rows[0]).toMatchObject({
+      entry: 'unavailable',
+      admission: 'unavailable',
+      follow: { state: 'current', following: false, action: 'disabled' },
+    });
+  }
+});

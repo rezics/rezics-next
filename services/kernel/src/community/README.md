@@ -2163,7 +2163,7 @@ following, infers an absent edge or introduces another generic adapter or writer
 Every observation reads at most 100 exact Space keys, grouped by native partition, and at most one
 carried Realm per Space. The existing owner round uses full-key Space/head and occupied-slot seeks
 (each `LIMIT 1`), full-key carried Realm/head seeks (`LIMIT 1`) and current source gates. Active
-address claims are grouped by their own native home, with one exact claim seek per address. Action
+address claims use batched exact address/native-route seeks, with one claim key per address. Action
 resources contain at most 2S references, split into at most two 100-resource batches; the native
 viewer-action producer retains its 64-action/256-operation binding limits per resource. Up to R
 selected Realm avatars use the existing native media producer (one selected media identity, at most

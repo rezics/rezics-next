@@ -349,12 +349,15 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
       if (hit.summary.kind !== 'space') return unavailable();
       const value = hit.summary.value;
       if (
+        !value.presentation ||
         row.id !== hit.key.id ||
         (row.destination.kind === 'realm' && row.destination.realmId !== value.realm?.id) ||
         (row.destination.kind === 'space' &&
           (value.realm || row.destination.spaceId !== value.id || row.destination.address !== value.address)) ||
         (row.entry === 'allowed' && row.destination.kind === 'unavailable') ||
-        (page.spaceEntries!.reader === null ? row.follow.state !== 'sign-in' : row.follow.state === 'sign-in')
+        (page.spaceEntries!.reader === null
+          ? row.follow.state !== 'sign-in'
+          : row.follow.state === 'sign-in' || (row.follow.state === 'current' && row.follow.action === 'sign-in'))
       )
         unavailable();
     });
