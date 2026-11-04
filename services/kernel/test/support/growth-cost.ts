@@ -23,6 +23,7 @@ import {
   relationRecordKeys,
   type RelationIdentity,
 } from './growth-relation-identity.ts';
+import type { CostFoldedCapture } from './growth-cost-fold.ts';
 
 export type Capture = {
   readonly statements: readonly string[];
@@ -117,6 +118,10 @@ export type PlanCostProjection = {
   readonly node?: string;
 };
 
+export type PlanCostEvidence = PlanCostProjection & {
+  readonly relationCosts: readonly RelationCost[];
+};
+
 const rowScans = new Set([
   'Seq Scan',
   'Index Scan',
@@ -148,7 +153,7 @@ function optionalNumber(node: PlanNode, field: string, fallback = 0): number {
   return value;
 }
 
-function isCatalogOnlyPlan(root: PlanNode, location: string, session: PlanWalkSession): boolean {
+export function isCatalogOnlyPlan(root: PlanNode, location: string, session: PlanWalkSession): boolean {
   let hasRelation = false;
   let catalogOnly = true;
   for (const { node } of walkPlanTree(root, location, 'preorder', session)) {
@@ -177,6 +182,66 @@ function isFreshnessProbeText(text: string): boolean {
 }
 
 const reyloFreshnessIntervalMs = 60_000;
+
+function isCostFoldedCapture(capture: Capture | CostFoldedCapture): capture is CostFoldedCapture {
+  return 'kind' in capture && capture.kind === 'growth-cost-folded';
+}
+
+function classifyFoldedCatalogStatements(capture: CostFoldedCapture): CatalogClassification {
+  const backendAware = capture.statementBackends !== undefined;
+  const catalogIndexes = new Set(
+    capture.foregroundOccurrences
+      .filter(({ catalogOnly, index }) => catalogOnly && !isControlStatement(capture.statements[index] ?? ''))
+      .map(({ index }) => index),
+  );
+  const catalogTexts = new Set<string>();
+  const catalogKeys = new Set<string>();
+  const catalogOnlyByText = new Map<string, boolean>();
+  const catalogOnlyByKey = new Map<string, boolean>();
+  const textByKey = new Map<string, string>();
+  const nonCatalogTexts = new Set<string>();
+  const nonCatalogTextsByBackend = new Map<number | undefined, Set<string>>();
+  for (let index = 0; index < capture.statements.length; index++) {
+    const text = capture.statements[index]!;
+    if (isControlStatement(text)) continue;
+    const backend = capture.statementBackends?.[index];
+    const key = catalogKey(backendAware, backend, text);
+    const catalogOnly = catalogIndexes.has(index);
+    catalogOnlyByText.set(text, (catalogOnlyByText.get(text) ?? true) && catalogOnly);
+    catalogOnlyByKey.set(key, (catalogOnlyByKey.get(key) ?? true) && catalogOnly);
+    textByKey.set(key, text);
+    if (!catalogOnly) {
+      nonCatalogTexts.add(text);
+      const texts = nonCatalogTextsByBackend.get(backendAware ? backend : undefined) ?? new Set<string>();
+      texts.add(text);
+      nonCatalogTextsByBackend.set(backendAware ? backend : undefined, texts);
+    }
+  }
+  for (const [key, catalogOnly] of catalogOnlyByKey) if (catalogOnly) catalogKeys.add(key);
+  for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
+  if (capture.elapsedMs !== undefined) requireNonNegativeFiniteNumber(capture.elapsedMs, 'Capture duration');
+  const freshnessWindows = Math.floor(capture.elapsedMs / reyloFreshnessIntervalMs) + 1;
+  const freshnessAllowance = [...nonCatalogTextsByBackend.values()].reduce(
+    (total, texts) => checkedAdd(total, checkedMultiply(texts.size, freshnessWindows, 'Reylo freshness allowance'), 'Allowed catalog statements'),
+    0,
+  );
+  const catalogStatements = capture.statements.filter((_, index) => catalogIndexes.has(index)).length;
+  const freshnessProbes = capture.statements.filter(
+    (text, index) => catalogIndexes.has(index) && isFreshnessProbeText(text),
+  ).length;
+  const firstCatalogStatement = capture.statements.find((_, index) => catalogIndexes.has(index));
+  const classification: CatalogClassification = {
+    catalogTexts,
+    catalogKeys,
+    backendAware,
+    catalogStatements,
+    freshnessProbes,
+    allowedStatements: checkedAdd(nonCatalogTexts.size, freshnessAllowance, 'Allowed catalog statements'),
+    firstCatalogStatement,
+  };
+  nativeCatalogOccurrences.set(classification, catalogIndexes);
+  return classification;
+}
 
 function classifyCatalogStatements(
   capture: Capture,
@@ -325,7 +390,8 @@ function hasMatchingStatement(
   return keys.has(catalogKey(true, backend, queryText));
 }
 
-export function catalogStatementBound(capture: Capture): CatalogClassification {
+export function catalogStatementBound(capture: Capture | CostFoldedCapture): CatalogClassification {
+  if (isCostFoldedCapture(capture)) return classifyFoldedCatalogStatements(capture);
   validateCaptureEvidence(capture);
   return classifyCatalogStatements(capture);
 }
@@ -570,7 +636,29 @@ export function costOfPlan(
   database?: string,
   session = createPlanWalkSession(),
 ): PlanCostProjection {
-  return projectPlanCost(root, location, new Map(), session, database);
+  const { relationCosts: _relationCosts, ...projection } = costOfPlanEvidence(root, location, database, session);
+  return projection;
+}
+
+/** Foldable per-plan evidence from the same numeric, CTE and relation walker used by costOf. */
+export function costOfPlanEvidence(
+  root: PlanNode,
+  location: string,
+  database?: string,
+  session = createPlanWalkSession(),
+): PlanCostEvidence {
+  const relations = new Map<string, MutableRelationCost>();
+  const projection = projectPlanCost(root, location, relations, session, database);
+  return {
+    ...projection,
+    relationCosts: [...relations.values()].map((relation) => ({
+      rows: relation.rows,
+      blocks: relation.blocks,
+      nodes: relation.nodes,
+      sequentialScans: relation.sequentialScans,
+      identity: relation.identity,
+    })),
+  };
 }
 
 function projectPlanCost(
@@ -609,7 +697,7 @@ type BackgroundStatementCost = {
   relationIdentities: readonly RelationIdentity[];
 };
 
-function backgroundPlanBounded(relations: Cost['relations']): boolean {
+export function backgroundPlanBounded(relations: Cost['relations']): boolean {
   // DBOS history is not seeded by grow(), so its accumulated rows do not represent scale growth.
   return Object.entries(relations).some(([relation, cost]) =>
     cost.identity?.schema === undefined
@@ -693,7 +781,8 @@ function validateByteMeasurements(values: readonly number[] | undefined, expecte
     requireNonNegativeFiniteNumber(values[index], `${label} at index ${index}`);
 }
 
-export function costOf(capture: Capture): Cost {
+export function costOf(capture: Capture | CostFoldedCapture): Cost {
+  if (isCostFoldedCapture(capture)) return capture.cost;
   return costOfAt(capture, 'plans');
 }
 

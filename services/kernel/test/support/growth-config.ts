@@ -30,6 +30,7 @@ export type GrowthCheckConfiguration = {
   readonly slack?: Partial<Record<GrowthMetric, Slack>>;
   readonly indexProbes?: number;
   readonly counted?: CountedCheck;
+  readonly captureMode?: 'raw' | 'cost-folded';
   readonly attempts?: { readonly commands: number };
   readonly repetitions?: number;
   readonly warmups?: number;
@@ -44,6 +45,7 @@ export type AdmittedGrowthCheck = {
   readonly slack?: Readonly<Partial<Record<GrowthMetric, Slack>>>;
   readonly indexProbes?: number;
   readonly counted?: CountedCheck;
+  readonly captureMode?: 'raw' | 'cost-folded';
   readonly attempts?: { readonly commands: number };
   readonly repetitions: number;
   readonly warmups: number;
@@ -61,6 +63,8 @@ function wrap(name: string, field: string, error: unknown): never {
 /** Snapshot a complete growth-check configuration before grow, warmup or operation. */
 export function admitGrowthCheck(check: GrowthCheckConfiguration): AdmittedGrowthCheck {
   const growthRule = process.env.GROWTH_RULE;
+  if (check.captureMode !== undefined && check.captureMode !== 'raw' && check.captureMode !== 'cost-folded')
+    throw new TypeError(`${check.name}: captureMode must be 'raw' or 'cost-folded'`);
   if (growthRule !== undefined && growthRule !== 'series')
     throw new TypeError(`${check.name}: GROWTH_RULE must be 'series' when set`);
   const listed = GROWTH_BASELINE.some(({ name }) => name === check.name);
@@ -195,5 +199,6 @@ export function admitGrowthCheck(check: GrowthCheckConfiguration): AdmittedGrowt
           }),
         }),
     ...(check.attempts === undefined ? {} : { attempts: Object.freeze({ commands: check.attempts.commands }) }),
+    ...(check.captureMode === undefined ? {} : { captureMode: check.captureMode }),
   });
 }

@@ -12,8 +12,13 @@ import {
 } from './growth-capture.ts';
 import { quotedRelationIdentity } from './growth-relation-identity.ts';
 import type { Capture } from './growth-cost.ts';
-import { statementOccurrences } from './growth-report.ts';
-import { checkGrowth } from './growth.ts';
+import {
+  captureWithFoldedCost,
+  checkGrowth,
+  costOf,
+  statementAttributions,
+  statementOccurrences,
+} from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -332,38 +337,132 @@ test('name-only prepared reuse reserves its own occurrence before the first queu
 
 test('nested plans from failed and successful same-SQL producers keep their own occurrence custody', async () => {
   const database = db!;
-  await database.admin.query('ALTER SEQUENCE growth_capture_test.failure_sequence RESTART WITH 1');
   const query = 'SELECT growth_capture_test.fail_after_nested($1::integer) AS result';
-  const result = await capture(
-    database,
-    () =>
-      withConnection(database.pool, async (client) => {
+  const cteQuery =
+    'WITH folded_rows AS MATERIALIZED (SELECT id FROM growth_capture_test.binding_rows WHERE id <= 2) SELECT count(*)::integer AS count FROM folded_rows';
+  const operation = () =>
+    withConnection(database.pool, async (client) => {
         const failed = client.query<{ result: number }>(query, [99]).then(
           () => null,
           (error: Error & { code?: string }) => error.code ?? 'unknown',
         );
         const successful = client.query<{ result: number }>(query, [2]).then(({ rows }) => rows[0]?.result);
-        return Promise.all([failed, successful]);
-      }),
-    { includeBackends: true },
-  );
+        const results = await Promise.all([failed, successful]);
+        const cte = await client.query<{ count: number }>(cteQuery);
+        return { results, cteCount: cte.rows[0]?.count };
+      });
+  await database.admin.query('ALTER SEQUENCE growth_capture_test.failure_sequence RESTART WITH 1');
+  const result = await capture(database, operation, { includeBackends: true });
+  await database.admin.query('ALTER SEQUENCE growth_capture_test.failure_sequence RESTART WITH 1');
+  const folded = await captureWithFoldedCost(database, operation, { includeBackends: true });
 
-  expect(result.value).toEqual(['40001', 2]);
-  expect(result.capture.statements).toEqual([query, query]);
-  expect(result.capture.statementErrors).toEqual(['40001', null]);
-  expect(result.capture.statementBackends).toHaveLength(2);
+  expect(result.value).toEqual({ results: ['40001', 2], cteCount: 2 });
+  expect(folded.value).toEqual(result.value);
+  expect(result.capture.statements).toEqual([query, query, cteQuery]);
+  expect(result.capture.statementErrors?.slice(0, 2)).toEqual(['40001', null]);
+  expect(result.capture.statementBackends).toHaveLength(3);
   expect(result.capture.planBackends).toHaveLength(result.capture.plans.length);
   const nested = nativePlanEntries(result.capture).filter(({ queryText }) =>
-    queryText?.includes('growth_capture_test.binding_rows'),
+    queryText?.includes('WHERE id = wanted'),
   );
   expect(nested.map(({ owner, plan }) => [owner, plan['Actual Rows']])).toEqual([
     [0, 0],
     [1, 1],
   ]);
   const occurrences = statementOccurrences(result.capture).statements;
-  expect(occurrences).toHaveLength(2);
+  const foldedOccurrences = statementOccurrences(folded.capture).statements;
+  expect(occurrences).toHaveLength(3);
+  expect(foldedOccurrences).toHaveLength(3);
   expect(occurrences[0]).toMatchObject({ index: 0, error: { code: '40001' }, plans: [0], rows: 0 });
   expect(occurrences[1]).toMatchObject({ index: 1, error: null, plans: expect.arrayContaining([1]), rows: 1 });
+  expect(
+    foldedOccurrences.map(({ index, statement, backend, error, plans, rows, blocks, relationIdentities }) => ({
+      index,
+      statement,
+      backend,
+      error,
+      plans,
+      rows,
+      blocks,
+      relationIdentities,
+    })),
+  ).toEqual(
+    occurrences.map(({ index, statement, backend, error, plans, rows, blocks, relationIdentities }) => ({
+      index,
+      statement,
+      backend,
+      error,
+      plans,
+      rows,
+      blocks,
+      relationIdentities,
+    })),
+  );
+  expect(foldedOccurrences[0]).toMatchObject({ planDocumentAvailability: 'cost-folded' });
+  expect(foldedOccurrences[0]).not.toHaveProperty('planDocuments');
+  expect(costOf(folded.capture)).toEqual(costOf(result.capture));
+  expect(statementAttributions(folded.capture)).toEqual(statementAttributions(result.capture));
+});
+
+test('one composed caller folds repeated native notices within the retained telemetry cap', async () => {
+  const database = db!;
+  const sql = `SELECT 1 AS value /*${'x'.repeat(600 * 1024)}*/`;
+  const operation = () =>
+    withConnection(database.pool, async (client) => {
+      const values: number[] = [];
+      for (let index = 0; index < 8; index++) values.push((await client.query<{ value: number }>(sql)).rows[0]!.value);
+      return values;
+    });
+
+  const rawFailure = await capture(database, operation).then(
+    () => undefined,
+    (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
+  );
+  expect(rawFailure).toBeInstanceOf(Error);
+  expect(rawFailure?.message).toMatch(
+    /telemetry byte capacity \(33554432 charged bytes\); current \d+, requested \d+, total \d+ charged bytes .*evidence entries current \d+, requested \d+, total \d+\./,
+  );
+  expect(rawFailure?.message).toContain(`${Buffer.byteLength(sql, 'utf8')} UTF-8 bytes`);
+  expect(rawFailure?.message).toMatch(/foreground statement occurrence \d+.*native notice \d+ UTF-8 bytes/);
+  const folded = await captureWithFoldedCost(database, operation, { includeBackends: true });
+  expect(folded.value).toEqual(Array(8).fill(1));
+  expect(folded.capture.rawPlansRetained).toBe(false);
+  expect(folded.capture.planNotices).toHaveLength(8);
+  expect(folded.capture.statements).toEqual(Array(8).fill(sql));
+  expect(folded.capture.telemetry.chargedBytes).toBeLessThan(32 * 1024 * 1024);
+  expect(costOf(folded.capture)).toMatchObject({
+    statements: 8,
+    requestBytes: 8 * Buffer.byteLength(sql, 'utf8'),
+  });
+  expect(statementOccurrences(folded.capture).statements).toHaveLength(8);
+});
+
+test('checkGrowth uses the folded capture path for reports and scalar verdicts', async () => {
+  const database = db!;
+  const check = {
+    name: 'folded capture API',
+    scales: [1, 4, 16],
+    repetitions: 1,
+    captureMode: 'cost-folded',
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: async () => {},
+    operation: async () => withConnection(database.pool, (client) => client.query('SELECT 1 AS value')),
+  } as const;
+  const report = await checkGrowth(database, check);
+
+  expect(report.samples).toHaveLength(3);
+  expect(report.samples[0]!.repetitions[0]).toMatchObject({ statements: 1 });
+  expect(report.samples[0]!.occurrenceRepetitions[0]!.statements[0]).toMatchObject({
+    statement: 'SELECT 1 AS value',
+    planDocumentAvailability: 'cost-folded',
+    plans: [0],
+  });
+  await expect(
+    checkGrowth(database, {
+      ...check,
+      aggregateCaptures: (capture) => ({ capture, databases: [{ name: 'application', capture }] }),
+    }),
+  ).rejects.toThrow('aggregateCaptures is unavailable with cost-folded capture');
 });
 
 test('failed and unplanned statements retain backend and error details without plans', async () => {

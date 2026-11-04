@@ -550,6 +550,11 @@ test can still use `SET LOCAL` for a planner option inside its transaction.
 
 Use `includeBackends` for captures spanning multiple connections; it records the backend PID on every statement and
 plan so reports can retain connection identity.
+`captureWithFoldedCost` and `checkGrowth`'s `captureMode: 'cost-folded'` run one complete caller through that same
+attribution, drain and transaction lifecycle while retaining bounded occurrence costs and plan provenance. The result
+is a distinct `CostFoldedCapture`: it omits raw plan documents and marks occurrence diagnostics as cost-folded.
+Multi-database `aggregateCaptures` is rejected during check admission for this mode; scalar profiles and growth
+violations use the retained summaries.
 Each captured statement is also an occurrence: one execution of a client statement, including failed executions.
 The harness attaches that occurrence at node-postgres's wire dispatch boundary: simple queries at `Connection.query`,
 and extended queries at `Parse` or `Bind`/`Execute`, including named prepared statement reuse. It retains custody
@@ -976,7 +981,10 @@ Every module README keeps one such table, checked by `test/support/growth-cost-t
 
 ## Native growth capture memory
 
-Each capture has hard caps of 20,000 evidence entries and 128 MiB of charged bytes shared by foreground and background
+Decision: keep the shared capture cap at 32 MiB; folded captures release each eight-times notice reservation only
+after bounded cost and provenance summaries are charged, while raw captures retain native documents.
+
+Each capture has hard caps of 20,000 evidence entries and 32 MiB of charged bytes shared by foreground and background
 evidence. Entries count statement text, retained statement error messages, native notice envelopes and plan nodes
 visited by the bounded plan walker. Statement and error strings use their UTF-8 byte size; native plan notices are
 charged at eight times their UTF-8 size to account for parsed-object expansion. A native notice is limited to 1 MiB,
