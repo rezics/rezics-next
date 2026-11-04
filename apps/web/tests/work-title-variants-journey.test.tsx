@@ -145,7 +145,7 @@ test('current release ancestry is required; failed advice, refusal and retired c
 
 test('both actual consumers return through Terms to the original Realm, expanded language window, filter and focus', async () => {
   for (const people of [false, true])
-    await mounted(async (host, draw) => {
+    await mounted(async (host, draw, client) => {
       const s = subject();
       s.aliases.en = Array.from({ length: 40 }, (_, i) => `Variant ${i}`);
       const href = `/en/subjects/${s.id}/title?realm=${realm}`;
@@ -224,6 +224,20 @@ test('both actual consumers return through Terms to the original Realm, expanded
           'en',
         ),
       ).toBeUndefined();
+      // Recreating the session query with identical timestamp/count must not reuse its former return.
+      await act(async () => host.querySelector<HTMLAnchorElement>('[data-names-terms] a')!.click());
+      const priorSession = client.getQueryState(['session'])!;
+      await act(async () => {
+        client.removeQueries({ queryKey: ['session'], exact: true });
+        client.setQueryData(
+          ['session'],
+          { state: 'signed-in', subject: 'reader', csrfToken: 'recreated' },
+          { updatedAt: priorSession.dataUpdatedAt },
+        );
+      });
+      await act(async () => host.querySelector('a')!.click());
+      expect(host.querySelector('input')?.value).toBe('');
+      expect(host.querySelector('details')?.open).toBe(false);
       history.destroy();
     });
 });
