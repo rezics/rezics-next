@@ -2016,7 +2016,11 @@ writer, asset picker or upload/lifecycle engine here.
   current Realm revision, one selected host identity, one exact host revision,
   and the exact binding/home rows projected by the two source rounds. The
   existing source-prefix assertion proves only the routed exact Community
-  revision condition. For rules, each of four snapshots follows at most 33
+  revision condition. The source eligibility producers have nine Realm, seven
+  Space and seven binding projection nodes; protected-ban work receives at
+  most two facts and expands to `2*n+2<=6` exact candidates. Each point lookup
+  is charged for its index probe and residual owner/host equality even when it
+  returns no row. For rules, each of four snapshots follows at most 33
   ancestry posts, with exact route/post and route/revision lookups for the
   selected thread, board, Realm, pin and body. The maximum ancestry population
   is therefore `4*33=132` post candidates across the two full rules calls; each
