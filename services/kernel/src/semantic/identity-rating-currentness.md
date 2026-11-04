@@ -8,8 +8,9 @@ Visibility repair uses `IdentityRatingParent` as the native Performance boundary
 
 Decision: native acknowledgement retains the exact page checkpoint; the consumer resumes after an acknowledged nonterminal page and verifies a native tombstone before replaying a reclaimed terminal page.
 
-`IdentityRatingParent` is the minimal native seam on this source. Its concrete native
-storage, consumer transaction wrapper and moderation scheduling remain producer work.
+`IdentityRatingParent` is the minimal native seam on this source. The journal below
+supplies retained-page storage; producer inventory storage, the consumer transaction
+wrapper and moderation scheduling remain producer work.
 The consumer does not create another rating or erasure writer. Existing parents without
 checkpoint support keep their receipt-based behavior; durable continuations require all
 three native methods described below and `native` metadata on their selected pages.
