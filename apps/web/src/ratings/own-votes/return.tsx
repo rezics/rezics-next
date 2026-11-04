@@ -59,14 +59,22 @@ function routePath(pathname: string) {
   return pathname.replace(localePrefix, '').replace(/\/$/, '') || '/';
 }
 
+function locationKey(location: { state: unknown }): string | null {
+  if (!location.state || typeof location.state !== 'object') return null;
+  const key = (location.state as { key?: unknown }).key;
+  return typeof key === 'string' ? key : null;
+}
+
 function sameReturnAddress(
-  location: { pathname: string; search: Record<string, unknown>; state: { key: string } },
+  location: { pathname: string; search: unknown; state: unknown },
   receipt: OwnVotesReturnReceipt,
 ) {
-  const cursor = typeof location.search.cursor === 'string' ? location.search.cursor : null;
+  const search =
+    location.search && typeof location.search === 'object' ? (location.search as Record<string, unknown>) : {};
+  const cursor = typeof search.cursor === 'string' ? search.cursor : null;
   return (
     routePath(location.pathname) === '/library/ratings' &&
-    location.state.key === receipt.historyKey &&
+    locationKey(location) === receipt.historyKey &&
     cursor === receipt.owner.cursor
   );
 }
@@ -116,7 +124,7 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
       if (!current) return;
       if (
         current.phase === 'departed' &&
-        current.historyKey === fromLocation.key &&
+        current.historyKey === locationKey(fromLocation) &&
         routePath(fromLocation.pathname) === '/library/ratings' &&
         routePath(toLocation.pathname).startsWith('/subjects/')
       )
@@ -140,7 +148,7 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
       const current = receiptRef.current;
       if (!event.persisted || current?.phase !== 'bfcache-away') return;
       if (
-        current.historyKey === router.state.location.state.key &&
+        current.historyKey === locationKey(router.state.location) &&
         current.owner.locale === getLocale() &&
         current.owner.eligible()
       )
@@ -222,15 +230,17 @@ export function useOwnVotesReturn({
         return;
       }
       const activeOwner = latestOwner.current();
-      const addressCursor = typeof fromLocation.search.cursor === 'string' ? fromLocation.search.cursor : null;
-      if (activeOwner.cursor !== addressCursor || !activeOwner.eligible()) {
+      const search = fromLocation.search as Record<string, unknown>;
+      const addressCursor = typeof search.cursor === 'string' ? search.cursor : null;
+      const historyKey = locationKey(fromLocation);
+      if (!historyKey || activeOwner.cursor !== addressCursor || !activeOwner.eligible()) {
         state.clear();
         return;
       }
       const selected = pair.current.visitKey === visitKey ? pair.current.value : null;
       state.depart(
         {
-          historyKey: fromLocation.state.key,
+          historyKey,
           pair: selected,
           owner: activeOwner,
         },
@@ -241,11 +251,13 @@ export function useOwnVotesReturn({
       const activeOwner = latestOwner.current();
       if (!activeOwner.eligible()) return;
       const location = router.state.location;
-      const addressCursor = typeof location.search.cursor === 'string' ? location.search.cursor : null;
-      if (activeOwner.cursor !== addressCursor) return;
+      const search = location.search as Record<string, unknown>;
+      const addressCursor = typeof search.cursor === 'string' ? search.cursor : null;
+      const historyKey = locationKey(location);
+      if (!historyKey || activeOwner.cursor !== addressCursor) return;
       state.depart(
         {
-          historyKey: location.state.key,
+          historyKey,
           pair: pair.current.visitKey === visitKey ? pair.current.value : null,
           owner: activeOwner,
         },

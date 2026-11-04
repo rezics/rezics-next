@@ -75,7 +75,7 @@ const Context = createContext<Harness | null>(null);
 function RatingsScreen() {
   const value = useContext(Context)!;
   const heading = useRef<HTMLHeadingElement>(null);
-  const historyKey = useRouterState({ select: (state) => state.location.state.key });
+  const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
   const receipt = useOwnVotesReturnReceipt(historyKey, value.cursor, 'en');
   const [outcome, setOutcome] = useState<OwnVotesReturnOutcome | null>(null);
   const owner = (): OwnVotesReturnOwner => ({
