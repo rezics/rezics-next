@@ -323,8 +323,7 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
         (declarations.native.some((item) =>
           SELECTED_AXES.some((axis) => !Number.isSafeInteger(item.cost[axis]) || item.cost[axis] < 0),
         ) ||
-          (sourceCost &&
-            SELECTED_AXES.some((axis) => !Number.isSafeInteger(sourceCost[axis]) || sourceCost[axis] < 0)))
+          (sourceCost && SELECTED_AXES.some((axis) => !Number.isSafeInteger(sourceCost[axis]) || sourceCost[axis] < 0)))
       )
         throw new TypeError('Invalid selected native declaration');
       const lifecycle: Lifecycle = {
