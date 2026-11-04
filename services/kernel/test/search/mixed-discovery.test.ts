@@ -124,9 +124,9 @@ test('one real mixed request returns an imported Book and matching Character/Per
   const imported = mixed.find(({ id }) => id === importedWork);
   expect(imported?.key).toMatchObject({ owner: 'semantic', kind: 'schema:Book', route: routeOf(importedWork) });
   const importedLabel = imported?.summary.label;
-  expect(record(importedLabel) && typeof importedLabel.value === 'string' && importedLabel.value.includes('BASTARD')).toBe(
-    true,
-  );
+  expect(
+    record(importedLabel) && typeof importedLabel.value === 'string' && importedLabel.value.includes('BASTARD'),
+  ).toBe(true);
   for (const changed of [
     { ...request(), languages: ['ja'] },
     { ...request(), text: marker },
