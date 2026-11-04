@@ -1005,3 +1005,7 @@ admissions; it is not a skipped success. Minimal source delivery defers this acc
 release to normal control-plane validation before consumer use. `scripts/` has no workspace manifest or supported
 scripts TypeScript compiler route; the root `scripts/typecheck.ts` orchestrates application/package workspaces and
 does not typecheck these producer scripts. No scripts compiler command is implied by source delivery.
+
+## Documentation checks
+
+Run `bun scripts/docs-check.ts` to check byte budgets, their ratchet baseline, research registration, owner-document rules, Markdown links and tracked temporary files. Run `bun scripts/docs-check.ts --changed <base>` to check changed Markdown and inbound links to deleted or renamed files. Run `bun scripts/docs-check.ts --update-baseline` after a shrink to lower existing baseline entries; this mode never raises them. Briefs can be checked at dispatch with `bun scripts/docs-check.ts --brief <file>`.

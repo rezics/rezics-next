@@ -1,10 +1,1894 @@
 {
   "reports": [
-    { "path": "docs/research/access-model-gpt-6-astra.md", "topic": "access-model", "researcher": "gpt-6-astra", "state": "adopted", "decision": "docs/architecture.md#modules-and-boundaries" },
-    { "path": "docs/research/access-model-opus-5-5.md", "topic": "access-model", "researcher": "claude-opus-5-5", "state": "adopted", "decision": "docs/architecture.md#modules-and-boundaries" },
-    { "path": "docs/research/engineering-modularity-gpt-6-astra.md", "topic": "engineering-modularity", "researcher": "gpt-6-astra", "state": "adopted", "decision": "docs/architecture.md#modules-and-boundaries" },
-    { "path": "docs/research/engineering-modularity-opus-5-5.md", "topic": "engineering-modularity", "researcher": "claude-opus-5-5", "state": "adopted", "decision": "docs/architecture.md#modules-and-boundaries" },
-    { "path": "docs/research/prompt-and-docs-architecture-gpt-6-astra.md", "topic": "prompt-and-docs-architecture", "researcher": "gpt-6-astra", "state": "adopted", "decision": "docs/development/documentation.md" },
-    { "path": "docs/research/prompt-and-docs-architecture-opus-5-5.md", "topic": "prompt-and-docs-architecture", "researcher": "claude-opus-5-5", "state": "adopted", "decision": "docs/development/documentation.md" }
+    {
+      "path": "docs/research/access-model-gpt-6-astra.md",
+      "topic": "access-model",
+      "researcher": "gpt-6-astra",
+      "state": "adopted",
+      "decision": "docs/architecture.md#modules-and-boundaries"
+    },
+    {
+      "path": "docs/research/access-model-opus-5-5.md",
+      "topic": "access-model",
+      "researcher": "claude-opus-5-5",
+      "state": "adopted",
+      "decision": "docs/architecture.md#modules-and-boundaries"
+    },
+    {
+      "path": "docs/research/account-deletion.md",
+      "topic": "account-deletion",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/account-handles.md",
+      "topic": "account-handles",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/accounts-design-accounts-auth-deletion.md",
+      "topic": "accounts-design-accounts-auth-deletion",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/accounts-design-agents-profiles.md",
+      "topic": "accounts-design-agents-profiles",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/accounts-design-follows.md",
+      "topic": "accounts-design-follows",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/accounts-design-notification-preferences.md",
+      "topic": "accounts-design-notification-preferences",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/accounts-design-realms-spaces.md",
+      "topic": "accounts-design-realms-spaces",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/accounts-done-when-audit-current.md",
+      "topic": "accounts-done-when-audit",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/accounts-done-when-audit-independent.md",
+      "topic": "accounts-done-when-audit",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/accounts-erasure-participants.md",
+      "topic": "accounts-erasure-participants",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/accounts-next-outcomes.md",
+      "topic": "accounts-next-outcomes",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/agent-token-efficiency.md",
+      "topic": "agent-token-efficiency",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/agent-verification.md",
+      "topic": "agent-verification",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/agent-work-systems.md",
+      "topic": "agent-work-systems",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/anime-release-profile-grain.md",
+      "topic": "anime-release-profile-grain",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/api-acceptance-gaps.md",
+      "topic": "api-acceptance-gaps",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/api-first-platform-coverage.md",
+      "topic": "api-first-platform-coverage",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/architecture-duplication-audit.md",
+      "topic": "architecture-duplication-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/backend-architecture-current.md",
+      "topic": "backend-architecture",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/backend-architecture-deep.md",
+      "topic": "backend-architecture",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/backend-design-catalogue-search.md",
+      "topic": "backend-design-catalogue-search",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/backend-design-community.md",
+      "topic": "backend-design-community",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/backend-design-library-commerce.md",
+      "topic": "backend-design-library-commerce",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/catalogue-editorial-journey-design.md",
+      "topic": "catalogue-editorial-journey-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/catalogue-family-quality-followup.md",
+      "topic": "catalogue-family-quality-followup",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/catalogue-filter-data-mappings.md",
+      "topic": "catalogue-filter-data-mappings",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/catalogue-schema-org-mapping.md",
+      "topic": "catalogue-schema-org-mapping",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/check-capacity-plan-high.md",
+      "topic": "check-capacity-plan",
+      "researcher": "high",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/check-cost.md",
+      "topic": "check-cost",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/check-host-direct-route.md",
+      "topic": "check-host-direct-route",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/collections-and-covers.md",
+      "topic": "collections-and-covers",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/collections-outcomes-quality.md",
+      "topic": "collections-outcomes-quality",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-cost-lifecycle-quality.md",
+      "topic": "commerce-cost-lifecycle-quality",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-currency-units.md",
+      "topic": "commerce-currency-units",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-gap-journeys-plan.md",
+      "topic": "commerce-gap-journeys-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-integrated-done-review.md",
+      "topic": "commerce-integrated-done-review",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-outcomes-quality.md",
+      "topic": "commerce-outcomes-quality",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-ownership-entitlements-benefits.md",
+      "topic": "commerce-ownership-entitlements-benefits",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-page-review-quality.md",
+      "topic": "commerce-page-review-quality",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-payment-evidence-settlement.md",
+      "topic": "commerce-payment-evidence-settlement",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-second-scope-plan.md",
+      "topic": "commerce-second-scope-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-session-refresh-recovery-current.md",
+      "topic": "commerce-session-refresh-recovery",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/commerce-session-refresh-recovery-deep.md",
+      "topic": "commerce-session-refresh-recovery",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/community-done-when-review.md",
+      "topic": "community-done-when-review",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-account-erasure-participant-growth.md",
+      "topic": "content-account-erasure-participant-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-anonymous-report-admission-growth.md",
+      "topic": "content-anonymous-report-admission-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-appeal-boundary-growth.md",
+      "topic": "content-appeal-boundary-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-community-presentation-contract.md",
+      "topic": "content-community-presentation-contract",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-continuation-plan.md",
+      "topic": "content-continuation-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-done-when-review.md",
+      "topic": "content-done-when-review",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-edition-candidate-projection-growth.md",
+      "topic": "content-edition-candidate-projection-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-edition-draft-growth.md",
+      "topic": "content-edition-draft-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-edition-inventory-growth.md",
+      "topic": "content-edition-inventory-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-edition-metadata-growth.md",
+      "topic": "content-edition-metadata-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-edition-publication-growth.md",
+      "topic": "content-edition-publication-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-edition-revision-delivery-growth.md",
+      "topic": "content-edition-revision-delivery-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-edition-sale-authority-growth.md",
+      "topic": "content-edition-sale-authority-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-empty-media-collection-growth.md",
+      "topic": "content-empty-media-collection-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-gap-journeys-plan.md",
+      "topic": "content-gap-journeys-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-interface-quality-review.md",
+      "topic": "content-interface-quality-review",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-liked-membership-growth.md",
+      "topic": "content-liked-membership-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-membership-interval-growth.md",
+      "topic": "content-membership-interval-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-moderation-appeals-design.md",
+      "topic": "content-moderation-appeals-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-moderation-realm-personas.md",
+      "topic": "content-moderation-realm-personas",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-notifications-design.md",
+      "topic": "content-notifications-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-post-first-publication-growth.md",
+      "topic": "content-post-first-publication-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-public-figure-view-growth.md",
+      "topic": "content-public-figure-view-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-publication-driver-binding.md",
+      "topic": "content-publication-driver-binding",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-publication-notice-binding.md",
+      "topic": "content-publication-notice-binding",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-quality-community.md",
+      "topic": "content-quality-community",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-quality-media.md",
+      "topic": "content-quality-media",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-quality-moderation.md",
+      "topic": "content-quality-moderation",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-quality-notices.md",
+      "topic": "content-quality-notices",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-quality-ratings.md",
+      "topic": "content-quality-ratings",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-question-directory-growth.md",
+      "topic": "content-question-directory-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-rating-segment-terminal-growth.md",
+      "topic": "content-rating-segment-terminal-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-ratings-reviews-design.md",
+      "topic": "content-ratings-reviews-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-asset-collection-growth.md",
+      "topic": "content-realm-asset-collection-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-asset-publication-growth.md",
+      "topic": "content-realm-asset-publication-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-claim-approval-growth.md",
+      "topic": "content-realm-claim-approval-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-claim-review-growth.md",
+      "topic": "content-realm-claim-review-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-discovery-design.md",
+      "topic": "content-realm-discovery-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-erasure-continuity-growth.md",
+      "topic": "content-realm-erasure-continuity-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-exact-rules-growth.md",
+      "topic": "content-realm-exact-rules-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-image-download-growth.md",
+      "topic": "content-realm-image-download-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-image-summary-growth.md",
+      "topic": "content-realm-image-summary-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-media-completion-growth.md",
+      "topic": "content-realm-media-completion-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-media-reservation-growth.md",
+      "topic": "content-realm-media-reservation-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-member-count-initialization-growth.md",
+      "topic": "content-realm-member-count-initialization-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-member-count-maintenance-growth.md",
+      "topic": "content-realm-member-count-maintenance-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-member-count-read-growth.md",
+      "topic": "content-realm-member-count-read-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-presentation-claim-growth.md",
+      "topic": "content-realm-presentation-claim-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realm-presentation-settings-growth.md",
+      "topic": "content-realm-presentation-settings-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-realms-spaces-design.md",
+      "topic": "content-realms-spaces-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-report-candidate-queue-growth.md",
+      "topic": "content-report-candidate-queue-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-report-relay-growth.md",
+      "topic": "content-report-relay-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-review-restoration-growth.md",
+      "topic": "content-review-restoration-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-second-scope-plan.md",
+      "topic": "content-second-scope-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-subject-reaction-boundary-growth.md",
+      "topic": "content-subject-reaction-boundary-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-subject-reaction-merge-completion-growth.md",
+      "topic": "content-subject-reaction-merge-completion-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-subject-report-queue-growth.md",
+      "topic": "content-subject-report-queue-growth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/content-threads-boards-design.md",
+      "topic": "content-threads-boards-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/critical-path-attempts-review.md",
+      "topic": "critical-path-attempts-review",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/definition-validation-cpu-current.md",
+      "topic": "definition-validation-cpu",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/definition-validation-cpu-deep.md",
+      "topic": "definition-validation-cpu",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/delivery-tooling.md",
+      "topic": "delivery-tooling",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/design-status-accounts.md",
+      "topic": "design-status-accounts",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/design-status-commerce.md",
+      "topic": "design-status-commerce",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/design-status-content.md",
+      "topic": "design-status-content",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/design-status-imports.md",
+      "topic": "design-status-imports",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/design-status-performance.md",
+      "topic": "design-status-performance",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/design-status-search.md",
+      "topic": "design-status-search",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/design-status-semantic.md",
+      "topic": "design-status-semantic",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/design-status-web.md",
+      "topic": "design-status-web",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/engineering-modularity-gpt-6-astra.md",
+      "topic": "engineering-modularity",
+      "researcher": "gpt-6-astra",
+      "state": "adopted",
+      "decision": "docs/architecture.md#modules-and-boundaries"
+    },
+    {
+      "path": "docs/research/engineering-modularity-opus-5-5.md",
+      "topic": "engineering-modularity",
+      "researcher": "claude-opus-5-5",
+      "state": "adopted",
+      "decision": "docs/architecture.md#modules-and-boundaries"
+    },
+    {
+      "path": "docs/research/first-scope-remaining-backlog.md",
+      "topic": "first-scope-remaining-backlog",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/follow-counts-simplest.md",
+      "topic": "follow-counts-simplest",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/growth-bare-vacuum-sites.md",
+      "topic": "growth-bare-vacuum-sites",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/growth-check-plan-stability.md",
+      "topic": "growth-check-plan-stability",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/growth-classification.md",
+      "topic": "growth-classification",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/growth-shadow-triage-access.md",
+      "topic": "growth-shadow-triage-access",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/growth-shadow-triage-content-a.md",
+      "topic": "growth-shadow-triage-content-a",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/growth-shadow-triage-content-b.md",
+      "topic": "growth-shadow-triage-content-b",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/growth-shadow-triage-other.md",
+      "topic": "growth-shadow-triage-other",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/growth-uncertainty-calibration.md",
+      "topic": "growth-uncertainty-calibration",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/home-and-list-items.md",
+      "topic": "home-and-list-items",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/home-feed-current.md",
+      "topic": "home-feed",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/home-feed-deep.md",
+      "topic": "home-feed",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/identity-concurrent-groups-current.md",
+      "topic": "identity-concurrent-groups",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/identity-concurrent-groups-deep.md",
+      "topic": "identity-concurrent-groups",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/identity-store-cutover-current.md",
+      "topic": "identity-store-cutover",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/identity-store-cutover-deep.md",
+      "topic": "identity-store-cutover",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/importer-bulk-backpressure.md",
+      "topic": "importer-bulk-backpressure",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/api-boundaries.md",
+      "topic": "api-boundaries",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/api-unversioned.md",
+      "topic": "api-unversioned",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/bangumi-cli-media.md",
+      "topic": "bangumi-cli-media",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/bangumi-meta-tags-fixture.md",
+      "topic": "bangumi-meta-tags-fixture",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/bangumi-native-scope-verification.md",
+      "topic": "bangumi-native-scope-verification",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/bangumi-native-scope.md",
+      "topic": "bangumi-native-scope",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/bangumi-scope.md",
+      "topic": "bangumi-scope",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/bangumi.md",
+      "topic": "bangumi",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-ack-recovery.md",
+      "topic": "cli-ack-recovery",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-bangumi-scope-transition.md",
+      "topic": "cli-bangumi-scope-transition",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-counted-evidence.md",
+      "topic": "cli-counted-evidence",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-file-admission.md",
+      "topic": "cli-file-admission",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-key-rotation.md",
+      "topic": "cli-key-rotation",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-midrun-authority-resume.md",
+      "topic": "cli-midrun-authority-resume",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-native-auth.md",
+      "topic": "cli-native-auth",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-native-backpressure.md",
+      "topic": "cli-native-backpressure",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-rejected-cover-recovery.md",
+      "topic": "cli-rejected-cover-recovery",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-reviewed-source-reduction.md",
+      "topic": "cli-reviewed-source-reduction",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-sealed-source-resume.md",
+      "topic": "cli-sealed-source-resume",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cli-source-reappearance.md",
+      "topic": "cli-source-reappearance",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/client-counted-costs.md",
+      "topic": "client-counted-costs",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/community-converter-caller.md",
+      "topic": "community-converter-caller",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/concurrent-cli-owners.md",
+      "topic": "concurrent-cli-owners",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cover-native-recovery.md",
+      "topic": "cover-native-recovery",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/cover-recovery-pixels.md",
+      "topic": "cover-recovery-pixels",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/deferred-cover-recovery.md",
+      "topic": "deferred-cover-recovery",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/discovery-user-cases.md",
+      "topic": "discovery-user-cases",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/erasure-participant.md",
+      "topic": "erasure-participant",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/exact-quantity-qualifiers.md",
+      "topic": "exact-quantity-qualifiers",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/known-reference-matcher-type-probe.md",
+      "topic": "known-reference-matcher-type-probe",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/known-reference-refresh.md",
+      "topic": "known-reference-refresh",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/local-store-counted-costs.md",
+      "topic": "local-store-counted-costs",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/native-composed-counted-costs.md",
+      "topic": "native-composed-counted-costs",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/open-library-native-fields.md",
+      "topic": "open-library-native-fields",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/open-library.md",
+      "topic": "open-library",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/openlibrary-cli-edition-media.md",
+      "topic": "openlibrary-cli-edition-media",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/own-reference-refresh-verification.md",
+      "topic": "own-reference-refresh-verification",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/probe-key-counted-costs.md",
+      "topic": "probe-key-counted-costs",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/reconciliation.md",
+      "topic": "reconciliation",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/released-book-search-demo.md",
+      "topic": "released-book-search-demo",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/remaining-cost-unit-ports.md",
+      "topic": "remaining-cost-unit-ports",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/revision-fence-refresh.md",
+      "topic": "revision-fence-refresh",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/run-store-counted-evidence.md",
+      "topic": "run-store-counted-evidence",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/source-only-provenance-refresh.md",
+      "topic": "source-only-provenance-refresh",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/toolchain-compatibility.md",
+      "topic": "toolchain-compatibility",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/toolchain-tmpfs-comparison.md",
+      "topic": "toolchain-tmpfs-comparison",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-admission-counted-costs.md",
+      "topic": "vndb-admission-counted-costs",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-chunk-counted-costs.md",
+      "topic": "vndb-chunk-counted-costs",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-empty-latin.md",
+      "topic": "vndb-empty-latin",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-local-counted-costs.md",
+      "topic": "vndb-local-counted-costs",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-materialization-native.md",
+      "topic": "vndb-materialization-native",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-optional-latin-acceptance.md",
+      "topic": "vndb-optional-latin-acceptance",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-optional-latin-verification.md",
+      "topic": "vndb-optional-latin-verification",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-portable-counted-costs.md",
+      "topic": "vndb-portable-counted-costs",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-statistics-contract.md",
+      "topic": "vndb-statistics-contract",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-statistics-native-verification.md",
+      "topic": "vndb-statistics-native-verification",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb-tables-binding-seams.md",
+      "topic": "vndb-tables-binding-seams",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/vndb.md",
+      "topic": "vndb",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/wikidata-native-fields.md",
+      "topic": "wikidata-native-fields",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/wikidata-rich-cli.md",
+      "topic": "wikidata-rich-cli",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-audit/wikidata.md",
+      "topic": "wikidata",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/imports-gap-journeys-plan.md",
+      "topic": "imports-gap-journeys-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/kernel-bounded-work-source-gaps.md",
+      "topic": "kernel-bounded-work-source-gaps",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/kind-type-audience-current.md",
+      "topic": "kind-type-audience",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/kind-type-audience-independent.md",
+      "topic": "kind-type-audience",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-abstraction.md",
+      "topic": "library-abstraction",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-account-retention.md",
+      "topic": "library-account-retention",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-builtin-set-support-current.md",
+      "topic": "library-builtin-set-support",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-bulk-bound-selection.md",
+      "topic": "library-bulk-bound-selection",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-entry-lifecycle-native-audit.md",
+      "topic": "library-entry-lifecycle-native-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-entry-undo-independent-current.md",
+      "topic": "library-entry-undo-independent",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-entry-undo-independent-deep.md",
+      "topic": "library-entry-undo-independent",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-growth-quality.md",
+      "topic": "library-growth-quality",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-headerless-cache-current.md",
+      "topic": "library-headerless-cache",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-label-cap-independent-current.md",
+      "topic": "library-label-cap-independent",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-label-cap-independent-deep.md",
+      "topic": "library-label-cap-independent",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-outcomes-quality.md",
+      "topic": "library-outcomes-quality",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-owner-index-observation-current.md",
+      "topic": "library-owner-index-observation",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-owner-index-observation-deep.md",
+      "topic": "library-owner-index-observation",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-page-review-quality.md",
+      "topic": "library-page-review-quality",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-progress-structure-journey.md",
+      "topic": "library-progress-structure-journey",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-query-bulk.md",
+      "topic": "library-query-bulk",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-scoped-title-plan-current.md",
+      "topic": "library-scoped-title-plan",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-scoped-title-plan-deep.md",
+      "topic": "library-scoped-title-plan",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-shelf-activity.md",
+      "topic": "library-shelf-activity",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-shelf-maintenance.md",
+      "topic": "library-shelf-maintenance",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-shelves.md",
+      "topic": "library-shelves",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-terminal-native-implementation-review.md",
+      "topic": "library-terminal-native-implementation-review",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/library-type-keys.md",
+      "topic": "library-type-keys",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/limits-inventory.md",
+      "topic": "limits-inventory",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/merge-queue-throughput.md",
+      "topic": "merge-queue-throughput",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/native-eligible-key-index-design.md",
+      "topic": "native-eligible-key-index-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/native-long-value-staging.md",
+      "topic": "native-long-value-staging",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/native-retention-discovery-resolution-constructive.md",
+      "topic": "native-retention-discovery-resolution-constructive",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/native-retention-discovery-resolution-independent.md",
+      "topic": "native-retention-discovery-resolution",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/native-scheduler-funded-design-independent.md",
+      "topic": "native-scheduler-funded-design",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/native-scheduler-funded-design-primary.md",
+      "topic": "native-scheduler-funded-design-primary",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/page-needs-api-render-audit.md",
+      "topic": "page-needs-api-render-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/partitioned-sitemap-feeds.md",
+      "topic": "partitioned-sitemap-feeds",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/performance-cost-audit.md",
+      "topic": "performance-cost-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/performance-growth-harness-design.md",
+      "topic": "performance-growth-harness-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/profiles-labels-quality.md",
+      "topic": "profiles-labels-quality",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/prompt-and-docs-architecture-gpt-6-astra.md",
+      "topic": "prompt-and-docs-architecture",
+      "researcher": "gpt-6-astra",
+      "state": "adopted",
+      "decision": "docs/development/documentation.md"
+    },
+    {
+      "path": "docs/research/prompt-and-docs-architecture-opus-5-5.md",
+      "topic": "prompt-and-docs-architecture",
+      "researcher": "claude-opus-5-5",
+      "state": "adopted",
+      "decision": "docs/development/documentation.md"
+    },
+    {
+      "path": "docs/research/public-filter-native-cut-current.md",
+      "topic": "public-filter-native-cut",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/public-filter-native-cut-deep.md",
+      "topic": "public-filter-native-cut",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/quality-round3-backlog.md",
+      "topic": "quality-round3-backlog",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/realm-subject-candidates.md",
+      "topic": "realm-subject-candidates",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-api-proof-audit.md",
+      "topic": "search-api-proof-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-bulk-confirmation-capture-independent.md",
+      "topic": "search-bulk-confirmation-capture",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-bulk-confirmation-capture.md",
+      "topic": "search-bulk-confirmation-capture",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-canonical-coverage-deep.md",
+      "topic": "search-canonical-coverage",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-canonical-coverage-independent.md",
+      "topic": "search-canonical-coverage",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-end-to-end-design.md",
+      "topic": "search-end-to-end-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-gap-journeys-plan.md",
+      "topic": "search-gap-journeys-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-header-and-scopes.md",
+      "topic": "search-header-and-scopes",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-index-protocol-audit.md",
+      "topic": "search-index-protocol-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-multileaf-final-proof-deep.md",
+      "topic": "search-multileaf-final-proof",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-multileaf-final-proof-independent.md",
+      "topic": "search-multileaf-final-proof",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-multileaf-final-proof-pinned-sol.md",
+      "topic": "search-multileaf-final-proof-pinned",
+      "researcher": "sol",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-native-rating-phases-current-sol.md",
+      "topic": "search-native-rating-phases-current",
+      "researcher": "sol",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-native-rating-phases-default.md",
+      "topic": "search-native-rating-phases",
+      "researcher": "default",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-native-rating-phases-independent-sol.md",
+      "topic": "search-native-rating-phases-independent",
+      "researcher": "sol",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-native-rating-phases-sol.md",
+      "topic": "search-native-rating-phases",
+      "researcher": "sol",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-pages-completion-audit.md",
+      "topic": "search-pages-completion-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-rating-epochs.md",
+      "topic": "search-rating-epochs",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-second-scope-plan.md",
+      "topic": "search-second-scope-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-visibility-witnesses.md",
+      "topic": "search-visibility-witnesses",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/search-worker-outcome-harness.md",
+      "topic": "search-worker-outcome-harness",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/seeded-core-page-review.md",
+      "topic": "seeded-core-page-review",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/semantic-gap-journeys-plan.md",
+      "topic": "semantic-gap-journeys-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/semantic-integration-audit-core-catalogue.md",
+      "topic": "semantic-integration-audit-core-catalogue",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/semantic-integration-audit-publication-aggregates.md",
+      "topic": "semantic-integration-audit-publication-aggregates",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/semantic-integration-audit-zone-composition.md",
+      "topic": "semantic-integration-audit-zone-composition",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/semantic-native-leaf-access-current.md",
+      "topic": "semantic-native-leaf-access",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/semantic-native-leaf-access-independent.md",
+      "topic": "semantic-native-leaf-access",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/semantic-next-outcomes.md",
+      "topic": "semantic-next-outcomes",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/shared-history-erasure.md",
+      "topic": "shared-history-erasure",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/sitemaps-at-scale.md",
+      "topic": "sitemaps-at-scale",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/storybook-features.md",
+      "topic": "storybook-features",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/storybook-practice.md",
+      "topic": "storybook-practice",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/subject-page-ia-current.md",
+      "topic": "subject-page-ia",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/subject-page-ia-deep.md",
+      "topic": "subject-page-ia",
+      "researcher": "deep",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/subject-sitemap-publication.md",
+      "topic": "subject-sitemap-publication",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/system-inventory.md",
+      "topic": "system-inventory",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/terra-period-quality-review.md",
+      "topic": "terra-period-quality-review",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/test-deadlines-under-load-a.md",
+      "topic": "test-deadlines-under-load-a",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/test-deadlines-under-load-b.md",
+      "topic": "test-deadlines-under-load-b",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/test-value-audit.md",
+      "topic": "test-value-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/throughput-audit-high.md",
+      "topic": "throughput-audit",
+      "researcher": "high",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/throughput-audit-xhigh.md",
+      "topic": "throughput-audit",
+      "researcher": "xhigh",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/universal-search.md",
+      "topic": "universal-search",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/viewer-actions.md",
+      "topic": "viewer-actions",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-backend-research-synthesis.md",
+      "topic": "web-backend-research-synthesis",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-completeness-audit.md",
+      "topic": "web-completeness-audit",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-component-parity.md",
+      "topic": "web-component-parity",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-gap-journeys-plan.md",
+      "topic": "web-gap-journeys-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-library-design.md",
+      "topic": "web-library-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-review-library.md",
+      "topic": "web-review-library",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-review-site.md",
+      "topic": "web-review-site",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-second-scope-plan.md",
+      "topic": "web-second-scope-plan",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-seo-design.md",
+      "topic": "web-seo-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-shared-workspace.md",
+      "topic": "web-shared-workspace",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/web-subject-design.md",
+      "topic": "web-subject-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/work-client-bounded-legacy-lookup.md",
+      "topic": "work-client-bounded-legacy-lookup",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/work-client-exact-key-resolution-constructive.md",
+      "topic": "work-client-exact-key-resolution-constructive",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/work-client-exact-key-resolution-independent.md",
+      "topic": "work-client-exact-key-resolution",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/work-client-exact-reservation-key-independent.md",
+      "topic": "work-client-exact-reservation-key",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/work-client-exact-reservation-key-primary.md",
+      "topic": "work-client-exact-reservation-key-primary",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/work-client-private-heap-complete-design.md",
+      "topic": "work-client-private-heap-complete-design",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/zone-scopes-and-mounts.md",
+      "topic": "zone-scopes-and-mounts",
+      "researcher": "unknown",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/zone-type-list-order-current.md",
+      "topic": "zone-type-list-order",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/zone-type-list-order-independent.md",
+      "topic": "zone-type-list-order",
+      "researcher": "independent",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/zone-type-list-order-sol-xhigh.md",
+      "topic": "zone-type-list-order",
+      "researcher": "sol-xhigh",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/zone-union-independent-current.md",
+      "topic": "zone-union-independent",
+      "researcher": "current",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/zone-union-independent-default.md",
+      "topic": "zone-union-independent",
+      "researcher": "default",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/zone-union-independent-sol.md",
+      "topic": "zone-union-independent",
+      "researcher": "sol",
+      "state": "open"
+    },
+    {
+      "path": "docs/research/zones-site-journey-design.md",
+      "topic": "zones-site-journey-design",
+      "researcher": "unknown",
+      "state": "open"
+    }
   ]
 }

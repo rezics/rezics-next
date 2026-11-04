@@ -100,6 +100,8 @@ worker needs is in an owner document, or quoted in the brief within its budget.
 
 ### Budgets
 
+Budget rules use versioned path, kind and byte entries; the baseline maps those exact file paths or directory globs to observed bytes. Existing research decisions keep their state while newly indexed reports start open. Generated blocks use `<!-- generated: path -->` and `<!-- /generated -->` markers and must match the source bytes.
+
 Budgets are bytes. A file or directory already over its cap is recorded in the baseline. It may not grow, and
 shrinking it lowers the baseline. Raising a baseline requires a `Budget-Raise:` commit trailer giving the reason.
 
