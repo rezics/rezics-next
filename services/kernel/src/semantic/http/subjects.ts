@@ -817,7 +817,7 @@ function subjectRoutes(
           'x-action': 'statement:propose',
           'x-resource-types': ['semantic.revision'],
           'x-authority-resource-types': ['semantic.context'],
-          'x-authority-resource-id': GLOBAL_CONTEXT.id,
+          'x-authority-resource-id': GLOBAL_CONTEXT,
           security: [{ bearerAuth: [] }],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
         },
