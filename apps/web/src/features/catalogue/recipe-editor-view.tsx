@@ -36,11 +36,7 @@ import { CandidateValue } from '../pages/data';
 import { newAuthoredField, authoredFieldValue, type AuthoredField } from './authored-field';
 import { catalogueEntries } from './catalogue-entry';
 import type { CreateFailure, CreateResult } from './create-subject';
-import {
-  isAllowedCreateAuthority,
-  observedCreateAuthority,
-  type CreateAuthority,
-} from './identity-intake';
+import { isAllowedCreateAuthority, observedCreateAuthority, type CreateAuthority } from './identity-intake';
 import { CreateAuthorityStatus } from './identity-intake-view';
 import {
   recipeDraft,
@@ -287,8 +283,7 @@ function RecipeEditorLive({
     target.focus();
   }, [busy, query.isFetching, read, readUnavailable, readEpoch, lifetime]);
   const locked = busy || !!pending.current || failure?.refreshDefinitions === true;
-  const eligibilityBlocksNewCreate =
-    observesCreate && !pending.current && !isAllowedCreateAuthority(observedAuthority);
+  const eligibilityBlocksNewCreate = observesCreate && !pending.current && !isAllowedCreateAuthority(observedAuthority);
   const fieldAdmission = useRef({ read, locked, created, session, rows, property, terms });
   fieldAdmission.current = { read, locked, created, session, rows, property, terms };
   const termAdditionAllowed = () => {
