@@ -67,7 +67,15 @@ async function snapshot(results: boolean) {
     }),
     review: async () => ({
       kind: 'reviewed',
-      value: { reviewId: uploadId, status: 'reviewed', targetId, state: 'playing', baseline: null, replace: false },
+      value: {
+        reviewId: uploadId,
+        status: 'reviewed',
+        targetId,
+        state: 'playing',
+        baseline: null,
+        replace: false,
+        action: 'state' as const,
+      },
     }),
     apply: async () => ({
       kind: 'applied',

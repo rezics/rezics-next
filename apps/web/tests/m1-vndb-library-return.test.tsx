@@ -240,7 +240,15 @@ test('refused apply and foreign receipts retain original operands; source replac
   const commands: unknown[] = [];
   const selected = {
     ...source,
-    decision: { reviewId, status: 'reviewed' as const, targetId, state: 'playing', baseline: null, replace: false },
+    decision: {
+      reviewId,
+      status: 'reviewed' as const,
+      targetId,
+      state: 'playing',
+      baseline: null,
+      replace: false,
+      action: 'state' as const,
+    },
   };
   const journey = createVndbJourney({
     visit: visit(),
