@@ -233,6 +233,8 @@ export function HomeFeed({
                 signedIn={signedIn}
                 verification={verification}
                 origin={reactions.origin}
+                onRetry={onRetry}
+                busy={busy}
                 reactionsAsOf={page?.reactionsAsOf}
                 hasReactionFreshness={page !== undefined && Object.hasOwn(page, 'reactionsAsOf')}
               >

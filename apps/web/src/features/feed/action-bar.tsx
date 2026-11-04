@@ -10,7 +10,18 @@ import {
   type ReactNode,
 } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
-import { CheckIcon, EllipsisIcon, LibraryBigIcon, ReplyIcon, Share2Icon } from 'lucide-react';
+import {
+  CheckIcon,
+  EllipsisIcon,
+  FrownIcon,
+  HeartIcon,
+  LaughIcon,
+  LibraryBigIcon,
+  LightbulbIcon,
+  ReplyIcon,
+  Share2Icon,
+  ThumbsUpIcon,
+} from 'lucide-react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -22,7 +33,7 @@ import type { FeedItem, FeedPage } from '../pages/home-feed-read';
 import { homeFeedDestination, homeFeedTitle } from '../pages/home-feed-destination';
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
-import { homeFeedReaction } from './home-feed-reaction';
+import { homeFeedReaction, homeFeedSubjectReactionProjection } from './home-feed-reaction';
 import { admittedFeedWorkId } from './home-work-library/contract';
 import { HomeWorkLibraryAction } from './home-work-library/view';
 import { HomePublicOwnerActions } from './home-public-owner/view';
@@ -51,9 +62,114 @@ export type FeedActionBarProps = {
   layout?: 'row' | 'detail';
   /** Source owners retire retained actions synchronously when a page visit is replaced. */
   origin?: { key: string; reader?: string | null; isCurrent(): boolean } | undefined;
+  /** Refresh the owning page after a source-local projection becomes available. */
+  onRetry?: (() => void) | undefined;
+  pageBusy?: boolean | undefined;
+  /** Feed-local source value, still typed by the mounted page schema at publication time. */
+  subjectReactionProjection?: unknown;
+  subjectTarget?: boolean | undefined;
 };
 
 const actionClass = 'min-h-11 max-w-full whitespace-normal break-words sm:min-h-8 pointer-coarse:min-h-11';
+
+const subjectReactionControls = [
+  ['like', ThumbsUpIcon, () => m.reaction_like()],
+  ['love', HeartIcon, () => m.reaction_love()],
+  ['laugh', LaughIcon, () => m.reaction_laugh()],
+  ['insightful', LightbulbIcon, () => m.reaction_insightful()],
+  ['sad', FrownIcon, () => m.reaction_sad()],
+] as const;
+
+function subjectReactionFallback(
+  projection: unknown,
+  locale: string,
+  signedIn: boolean,
+  href: string | undefined,
+  onRetry: (() => void) | undefined,
+  busy: boolean,
+  current: () => boolean,
+) {
+  const options = { locale: locale as Locale };
+  const source = projection && typeof projection === 'object' ? (projection as Record<string, unknown>) : undefined;
+  const counts =
+    source?.counts && typeof source.counts === 'object' ? (source.counts as Record<string, unknown>) : undefined;
+  const knownValues =
+    counts?.state === 'available' && counts.values && typeof counts.values === 'object'
+      ? (counts.values as Record<string, unknown>)
+      : undefined;
+  const viewer =
+    source?.viewer && typeof source.viewer === 'object' ? (source.viewer as Record<string, unknown>) : undefined;
+  const viewerKnown = current() && viewer?.state === 'available';
+  const selected = viewerKnown ? viewer.kind : undefined;
+  const signIn = `/${locale}/auth/sign-in?return_to=${encodeURIComponent(href ?? `/${locale}/`)}`;
+  const format = (kind: string) => {
+    const raw = knownValues?.[kind];
+    const count =
+      knownValues && (!Object.hasOwn(knownValues, kind) || raw === undefined)
+        ? 0
+        : typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0
+          ? raw
+          : undefined;
+    if (count === undefined) return { visible: '—', exact: '—' };
+    return {
+      visible: new Intl.NumberFormat(locale, { notation: 'compact' }).format(count),
+      exact: new Intl.NumberFormat(locale).format(count),
+    };
+  };
+  return (
+    <div role="group" aria-label={m.reaction_reactions({}, options)} data-slot="subject-reaction-unavailable">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
+        {subjectReactionControls.map(([kind, Icon, label]) => {
+          const count = format(kind);
+          const accessibleCount = count.visible === count.exact ? count.visible : `${count.visible} (${count.exact})`;
+          const name = `${label()} ${accessibleCount}`;
+          const pressed = viewerKnown ? selected === kind : undefined;
+          const className = `${buttonVariants({ variant: 'outline', size: 'sm' })} min-h-11 rounded-full pointer-coarse:min-h-11`;
+          const content = (
+            <>
+              <Icon aria-hidden className="size-4" />
+              <span aria-hidden className="tabular-nums">
+                {count.visible}
+              </span>
+            </>
+          );
+          return signedIn || !href ? (
+            <Button
+              key={kind}
+              type="button"
+              variant="outline"
+              size="sm"
+              className={className}
+              disabled
+              aria-label={name}
+              {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
+            >
+              {content}
+            </Button>
+          ) : (
+            <a key={kind} href={signIn} className={className} aria-label={name}>
+              {content}
+            </a>
+          );
+        })}
+        {onRetry ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={actionClass}
+            disabled={busy || !current()}
+            onClick={() => {
+              if (!busy && current()) onRetry();
+            }}
+          >
+            {m.subject_section_retry({}, options)}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 /** Native feedback commands are not installed. Keep their absence explicit in the shared menu. */
 export function feedFeedbackEntries(locale: string, signedIn: boolean, href: string): MenuEntry[] {
@@ -76,6 +192,8 @@ export function HomeFeedActions({
   origin,
   reactionsAsOf,
   hasReactionFreshness = false,
+  onRetry,
+  busy = false,
 }: {
   item: FeedItem;
   locale: string;
@@ -85,6 +203,8 @@ export function HomeFeedActions({
   origin?: FeedActionBarProps['origin'];
   reactionsAsOf?: FeedPage['reactionsAsOf'];
   hasReactionFreshness?: boolean;
+  onRetry?: (() => void) | undefined;
+  busy?: boolean;
 }) {
   const href = homeFeedDestination(item, locale);
   const kind = item.destination.kind;
@@ -116,6 +236,11 @@ export function HomeFeedActions({
       title={homeFeedTitle(item, locale)}
       signedIn={signedIn}
       reaction={reaction}
+      reactionPresentation={kind === 'subject' ? 'chips' : undefined}
+      subjectReactionProjection={homeFeedSubjectReactionProjection(item)}
+      subjectTarget={kind === 'subject'}
+      onRetry={onRetry}
+      pageBusy={busy}
       plain={kind === 'post'}
       origin={origin}
       overflow={
@@ -166,6 +291,8 @@ export function FeedActionBar(props: FeedActionBarProps) {
     props.signedIn,
     props.origin?.key,
     props.reaction?.target,
+    JSON.stringify(props.subjectReactionProjection ?? null),
+    props.subjectTarget ?? false,
     revision,
     provider.visit,
   ]);
@@ -197,6 +324,10 @@ function ActionVisit({
   children,
   layout = 'row',
   origin,
+  onRetry,
+  pageBusy = false,
+  subjectReactionProjection,
+  subjectTarget = false,
   isCurrent,
 }: FeedActionBarProps & { isCurrent(): boolean }) {
   const options = { locale: locale as Locale };
@@ -416,14 +547,27 @@ function ActionVisit({
       className={`relative z-10 flex min-w-0 max-w-full flex-wrap items-center gap-1 ${layout === 'detail' ? 'justify-end' : ''}`}
     >
       <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1" data-slot="feed-reaction-cluster">
-        <VoteControl
-          reaction={reaction}
-          signedIn={signedIn}
-          href={href}
-          locale={locale}
-          plain={plain}
-          presentation={reactionPresentation}
-        />
+        {reaction ? (
+          <VoteControl
+            reaction={reaction}
+            signedIn={signedIn}
+            href={href}
+            locale={locale}
+            plain={plain}
+            presentation={reactionPresentation}
+          />
+        ) : subjectTarget ? (
+          subjectReactionFallback(subjectReactionProjection, locale, signedIn, href, onRetry, busy || pageBusy, current)
+        ) : (
+          <VoteControl
+            reaction={reaction}
+            signedIn={signedIn}
+            href={href}
+            locale={locale}
+            plain={plain}
+            presentation={reactionPresentation}
+          />
+        )}
         {layout === 'detail'
           ? (activeOverflow ?? (
               <Menu

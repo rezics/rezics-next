@@ -420,9 +420,28 @@ remain their existing authorities.
 `prepareFeedSubjectReactions(dependencies: ContentReadDependencies, actor: Actor, items: readonly FeedItem[],
 deadline: number): Promise<FeedSubjectReactionComposition>` prepares at most 20 displayed rows. Its `finish()`
 returns `Promise<readonly FeedItem[]>` after rechecking exact native Subject identity and the prepared Access/account
-observations. It is a page composition seam; feed assembly and Home controls still need to install it. The page
-owner must finish it after foreign hydration, repeat its own source witnesses, and rewind every affected lane on
-failure. It does not replace `projectFeedReactions` or its thread/post/review fields.
+observations. The bounded mixed Home composer installs it after foreign hydration for selected discovery, Following
+and Continue rows, repeats source and selected Space witnesses, and rewinds every represented lane to its exact input
+frontier on dependency failure. It does not replace `projectFeedReactions` or its thread/post/review fields.
+
+Operation-local cost uses `S` for the displayed feed page (`S <= 20`), `D` for distinct selected Semantic Subject IDs,
+`G` for their native partitions (`D <= S`, `G <= D`), and `A` for an authenticated reader. Preparation makes `D`
+native `subject:read` Access preparations and, when `A = 1`, one Global Context `reaction:set` preparation. Each
+prepared check is re-evaluated in both identity snapshots: each snapshot owns one pool checkout and repeatable-read
+transaction, one partition metadata read, one selected-identity seek per partition, at most `D` resource permission
+formulae, and at most one Global Context formula. The ordinary Access preparations retain their own bounded account,
+time, inverse, candidate, assignment and role reads/checkouts; they are not folded into the two page transactions or
+counted as one statement. The native Access owner bounds remain those in its [native work contract](../services/kernel/src/access/README.md#native-work-admission).
+
+After the first identity snapshot, aggregate coverage costs one native pool checkout and one `reaction_total` query
+per selected partition. Its lateral lookup is keyed by the selected target ID and yields at most five Subject kind
+rows. An authenticated viewer adds one `viewer_reactions` seek on the actor partition; anonymous composition adds
+none. The second identity snapshot repeats the exact identity and permission witnesses after these checkouts. There
+are no worker or external runner phases in this composer. The only retained native data are the bounded feed-row
+copies, selected identity observations and sparse five-kind projections; it does not load Subject document bodies.
+Measure retained/copy bytes from the actual selected summaries and measure response bytes with UTF-8 serialization of
+the mounted feed page. Output bytes and omitted zero counts do not establish the identity, Access, SQL, pool or
+transaction bounds.
 
 Only the three feed-local Semantic summary variants admit optional `subjectReactions: FeedSubjectReactions`.
 Semantic's `SubjectSummarySchema` and shared public summaries remain unchanged. `target` uses the native
@@ -468,7 +487,7 @@ Dependency failure propagates to the page owner rather than returning a guessed 
   producer bounds; these are not zero-cost booleans. Concealed/redirected rows consume their selected slots and
   reduce output without refill. Retained projection rows/bytes are O(S * 5) plus the already-admitted Subject
   summaries and their copies; sparse serialized output does not prove examined-row bounds.
-- **Growth check:** the remaining mounted-page acceptance must hold S, H, limits and admitted bytes fixed while
+- **Growth check:** the mounted-page acceptance must hold S, H, limits and admitted bytes fixed while
   independently growing unrelated reactions, selected identity/merge history and account/authority history at
   256/1024/4096. Capture actual plans, examined rows/blocks, SQL/control work, all native pool/runner phases and
   materialized/serialized bytes for covered zero, unavailable, stale, denied and same-input retry. The composition's

@@ -86,6 +86,8 @@ export interface ReactionsProps {
   collapse?: number;
   /** Turns the chips and the React trigger off, for example until the page has hydrated. */
   disabled?: boolean;
+  /** Keep aggregate counts unchanged until the caller reconciles an authoritative read. */
+  optimistic?: boolean;
   /** The same one-slot queue, presented as up / score / down. Other admitted kinds keep their chips and picker. */
   presentation?: 'chips' | 'vote' | 'vote-plain';
 }
@@ -116,6 +118,7 @@ interface CurrentReactionProps {
   disabled: boolean | undefined;
   signInHref: string | undefined;
   kinds: readonly ReactionKind[] | undefined;
+  optimistic: boolean | undefined;
 }
 
 interface ReactionVisit {
@@ -127,6 +130,7 @@ interface AdmissionSignal {
   disabled: boolean;
   signInHref: string | undefined;
   kinds: string;
+  optimistic: boolean;
 }
 
 function admittedKinds(kinds?: readonly ReactionKind[]): ReactionKind[] {
@@ -138,11 +142,17 @@ function admissionSignal(props: ReactionsProps): AdmissionSignal {
     disabled: props.disabled === true,
     signInHref: props.signInHref,
     kinds: admittedKinds(props.kinds).join('\u001f'),
+    optimistic: props.optimistic !== false,
   };
 }
 
 function sameAdmission(left: AdmissionSignal, right: AdmissionSignal): boolean {
-  return left.disabled === right.disabled && left.signInHref === right.signInHref && left.kinds === right.kinds;
+  return (
+    left.disabled === right.disabled &&
+    left.signInHref === right.signInHref &&
+    left.kinds === right.kinds &&
+    left.optimistic === right.optimistic
+  );
 }
 
 function newReactionQueue(): ReactionQueue {
@@ -216,6 +226,7 @@ export const Reactions = (props: ReactionsProps) => {
     disabled: props.disabled,
     signInHref: props.signInHref,
     kinds: props.kinds,
+    optimistic: props.optimistic,
   });
   const failedLabelRef = React.useRef(labels.failed);
 
@@ -240,9 +251,10 @@ export const Reactions = (props: ReactionsProps) => {
       disabled: props.disabled,
       signInHref: props.signInHref,
       kinds: props.kinds,
+      optimistic: props.optimistic,
     };
     failedLabelRef.current = labels.failed;
-  }, [props.counts, props.value, props.disabled, props.signInHref, props.kinds, labels.failed]);
+  }, [props.counts, props.value, props.disabled, props.signInHref, props.kinds, props.optimistic, labels.failed]);
 
   const isCurrent = (candidate: ReactionQueue, kind?: ReactionKind) => {
     const current = currentPropsRef.current;
@@ -320,17 +332,17 @@ export const Reactions = (props: ReactionsProps) => {
       const current = currentPropsRef.current;
       const base = previous ?? { counts: current.counts, value: current.value };
       const next = base.value === kind ? null : kind;
-      const pending: ReactionView = {
-        counts: applyReactionChange(base.counts, base.value, next),
-        value: next,
-      };
-      queue.overlay = pending;
+      const pending =
+        current.optimistic === false
+          ? undefined
+          : { counts: applyReactionChange(base.counts, base.value, next), value: next };
+      queue.overlay = pending ?? previous;
       queue.failure = null;
       publish(queue);
       try {
         await onChange(next);
       } catch {
-        if (isCurrent(queue) && queue.overlay === pending) {
+        if (isCurrent(queue) && queue.overlay === (pending ?? previous)) {
           queue.overlay = previous;
           queue.failure = failedLabelRef.current;
           publish(queue);

@@ -7,7 +7,7 @@ import { createWorkClient } from '../../src/work/client.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { CANONICAL_SOURCE_WORKFLOW } from '../../src/library/canonical-source-store.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
-import type { FeedPage } from '../../src/content/feed-contract.ts';
+import type { FeedItem, FeedPage } from '../../src/content/feed-contract.ts';
 import { createSemanticDriver } from '../semantic/outcome-driver.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { startOutcomeWorkerProcess } from '../search/support/outcome-rpc.ts';
@@ -24,6 +24,12 @@ async function eventually<T>(read: () => Promise<T | undefined>): Promise<T> {
     await Bun.sleep(100);
   }
   throw new Error('Default feed native sources did not become ready');
+}
+
+function subjectReactions(item: FeedItem | undefined) {
+  return item?.key.owner === 'semantic' && 'subjectReactions' in item.summary
+    ? item.summary.subjectReactions
+    : undefined;
 }
 
 test('Default mixed feed composes real discovery, current Following and Continue while keeping private activity out of anonymous responses and withholding revoked references', async () => {
@@ -53,6 +59,16 @@ test('Default mixed feed composes real discovery, current Following and Continue
     );
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const book = (created.body.subject as { id: string }).id;
+    const followedSubject = await driver.fixtures.send(viewer, 'PUT', `/v1/follows/${book}`, undefined, key());
+    expect(followedSubject.status, JSON.stringify(followedSubject.body)).toBe(200);
+    const nativeReaction = await driver.fixtures.send(
+      viewer,
+      'PUT',
+      `/v1/subjects/${book}/reaction`,
+      { kind: 'love' },
+      key(),
+    );
+    expect(nativeReaction.status, JSON.stringify(nativeReaction.body)).toBe(200);
     const metadata = bundledRelease.types['schema:Book']!.library!;
     const active = bundledRelease.libraryProfiles![metadata.profileId]!.entryStateSet!.states.find(
       (state) => state.role === 'active',
@@ -114,12 +130,19 @@ test('Default mixed feed composes real discovery, current Following and Continue
     }
     const anonymous = await eventually(async () => {
       const result = await page(null);
-      return result.sources.discovery === 'ready' && result.feedItems.some((item) => item.key.id === book)
+      const row = result.feedItems.find((item) => item.source === 'discovery' && item.key.id === book);
+      const projection = subjectReactions(row);
+      return result.sources.discovery === 'ready' &&
+        projection?.counts.state === 'available' &&
+        projection.counts.values.love === 1
         ? result
         : undefined;
     });
     expect(anonymous.sources).toEqual({ discovery: 'ready', following: 'not_requested', continue: 'not_requested' });
     expect(anonymous.feedItems.every((item) => item.source === 'discovery' && !('continue' in item))).toBe(true);
+    const anonymousSubject = anonymous.feedItems.find((item) => item.key.id === book)!;
+    expect(subjectReactions(anonymousSubject)).toMatchObject({ action: 'sign_in', counts: { state: 'available' } });
+    expect(subjectReactions(anonymousSubject)).not.toHaveProperty('viewer');
     const mixed = await eventually(async () => {
       const result = await page(viewer);
       return result.sources.continue === 'ready' &&
@@ -136,6 +159,22 @@ test('Default mixed feed composes real discovery, current Following and Continue
       subjectId: book,
       state: active,
       activeProgressSession: null,
+    });
+    const continuedSubject = mixed.feedItems.find((item) => item.source === 'continue')!;
+    expect(subjectReactions(continuedSubject)).toMatchObject({
+      counts: { state: 'available', values: { love: 1 } },
+      viewer: { state: 'available', kind: 'love' },
+      action: 'allowed',
+    });
+    const following = await eventually(async () => {
+      const result = await page(viewer, 'following');
+      const row = result.feedItems.find((item) => item.source === 'following' && item.key.id === book);
+      return subjectReactions(row)?.action === 'allowed' ? result : undefined;
+    });
+    expect(subjectReactions(following.feedItems.find((item) => item.key.id === book))).toMatchObject({
+      counts: { state: 'available', values: { love: 1 } },
+      viewer: { state: 'available', kind: 'love' },
+      action: 'allowed',
     });
     const unfollow = await driver.fixtures.send(viewer, 'DELETE', `/v1/follows/${collectionId}`, undefined, key());
     expect(unfollow.status).toBe(200);

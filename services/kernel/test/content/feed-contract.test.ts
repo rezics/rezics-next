@@ -6,6 +6,18 @@ test('the mounted Kernel publishes closed review and immediate-parent context wi
   expect(paths['/v1/libraryShelfScorePreparation'].post.operationId).toBe('library_shelf_score.prepare');
   const page = paths['/v1/feedItems'].get.responses['200'].content['application/json'].schema;
   const variants = page.properties.feedItems.items.anyOf.map((schema: any) => schema.properties);
+  const subject = variants.filter((variant: any) => variant.summary.properties.subjectReactions);
+  expect(subject).toHaveLength(3);
+  for (const { summary } of subject) {
+    const projection = summary.properties.subjectReactions;
+    const counts = projection.properties.counts.anyOf;
+    expect(projection.additionalProperties).toBe(false);
+    expect(projection.properties.target.properties.targetKind.const).toBe('subject');
+    expect(projection.properties.target.properties.targetId.format).toBe('uuid');
+    expect(counts[0].properties.state.const).toBe('available');
+    expect(Object.keys(counts[0].properties.values.properties)).toEqual(['like', 'love', 'laugh', 'insightful', 'sad']);
+    expect(projection.properties).toHaveProperty('viewer');
+  }
   const content = variants.filter((variant: any) => variant.summary.properties.reviewContext);
   expect(content.map((variant: any) => [variant.source.const, variant.key.properties.kind.const])).toEqual([
     ['discovery', 'review'],
