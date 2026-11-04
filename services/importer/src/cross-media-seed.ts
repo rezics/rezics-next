@@ -49,6 +49,9 @@ import { createImportTransport, type ReviewedSubjectRead } from './import-client
 import { createPublicBulkClient } from './public-bulk-client.ts';
 import { captureShowcaseCommands, publishShowcase, ShowcaseJournal } from './showcase-publication.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
+import { createMediaResolver } from './media-resolver.ts';
+import type { BangumiCoverSource, CrossMediaMediaOutcome } from './showcase-media.ts';
+import { acquireBangumiCoverSources } from './showcase-media.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
@@ -232,6 +235,7 @@ export type CrossMediaPlan = {
   relationSnapshotComplete: boolean;
   /** Selected-family VNDB release dates/states for the common showcase publisher. */
   releaseFacts?: CrossMediaReleaseFacts;
+  coverSources?: readonly BangumiCoverSource[];
 };
 const VNDB_EXPECTED_HEADERS: Readonly<Record<string, string>> = {
   producers_relations: 'id\tpid\trelation',
@@ -1655,7 +1659,8 @@ export type CrossMediaPort = Pick<
   | 'writeSourceStatistic'
   | 'clearSourceStatistic'
   | 'readReviewedSubject'
->;
+> &
+  Partial<Pick<ReturnType<typeof createImportTransport>, 'requestMedia' | 'mediaStatus'>>;
 export type CrossMediaReading = {
   source: Provider;
   externalId: string;
@@ -1669,6 +1674,7 @@ export type CrossMediaSeedResult = {
   members: CrossMediaMember[];
   runs: Partial<Record<Provider, ImportRunResult>> & { bangumiCharacterFidelity?: ImportRunResult };
   readings: CrossMediaReading[];
+  mediaOutcomes: CrossMediaMediaOutcome[];
   workLinks: ShowcaseWorkLinkHandoff[];
   gaps: CrossMediaGap[];
   creditGaps: BangumiCreatorCreditGap[];
@@ -1762,7 +1768,7 @@ export async function seedCrossMedia(
         },
       }
     : undefined;
-  importer = createImporter({
+  const importerOptions: ImporterOptions = {
     path,
     ...(destination ? { destination } : {}),
     ...(identifierLookup ? { identifierLookup } : {}),
@@ -1782,10 +1788,166 @@ export async function seedCrossMedia(
       writeSourceStatistic: (request, signal) => port.writeSourceStatistic(request, signal),
       clearSourceStatistic: (request, signal) => port.clearSourceStatistic(request, signal),
     },
-  });
+  };
+  importer = createImporter(importerOptions);
   const runs: CrossMediaSeedResult['runs'] = {};
   const readings: CrossMediaReading[] = [];
+  const mediaAttempts = new Map<string, CrossMediaMediaOutcome>();
+  const onlyPendingBangumiCovers = (provider: Provider, result: ImportRunResult): boolean => {
+    if (
+      provider !== 'bangumi' ||
+      result.status !== 'bulk-failed' ||
+      result.diagnostic !== 'Durable operations remain unresolved' ||
+      !result.runId
+    )
+      return false;
+    const alias = crossMediaAliases.bangumi;
+    const store = importer.session.store;
+    const active = store.peekActive(alias);
+    if (!active || active.run.id !== result.runId || active.status !== 'ready') return false;
+    const resume = store.stagingResumeState(active.run);
+    if (resume.status !== 'ready' || resume.pending || !resume.covers || store.hasUnresolvedAggregates(active.run))
+      return false;
+    const coverKeys = new Set<string>();
+    let after: string | undefined;
+    for (;;) {
+      const page = store.pageDeferredCovers(active.run, { ...(after ? { after } : {}), limit: 100 });
+      for (const deferred of page) {
+        const key = deferred.row.recordKey;
+        const outcome = mediaAttempts.get(`${alias}\0${key}`);
+        const claim = importer.session.bindings.claim({ source: alias, external_id: key });
+        if (
+          !outcome ||
+          (outcome.status !== 'pending' && outcome.status !== 'fenced') ||
+          claim?.state !== 'bound' ||
+          outcome.containerId !== claim.subject ||
+          store.key(alias, key, active.run).resolved ||
+          !store.key(alias, key, active.run).coverPending
+        )
+          return false;
+        coverKeys.add(key);
+      }
+      if (page.length) after = page.at(-1)!.row.recordKey;
+      if (page.length < 100) break;
+    }
+    if (!coverKeys.size) return false;
+    const unresolved = new Set<string>();
+    after = undefined;
+    for (;;) {
+      const page = store.pageStaged(active.run, { ...(after ? { after } : {}), limit: 100 });
+      for (const staged of page) {
+        const state = store.key(alias, staged.row.recordKey, active.run);
+        if (state.resolved) continue;
+        if (!state.coverPending || !coverKeys.has(staged.row.recordKey)) return false;
+        unresolved.add(staged.row.recordKey);
+      }
+      if (page.length) after = page.at(-1)!.row.recordKey;
+      if (page.length < 100) break;
+    }
+    return unresolved.size === coverKeys.size;
+  };
   try {
+    if (port.requestMedia && port.mediaStatus) {
+      const resolver = createMediaResolver({
+        bindings: importer.session.bindings,
+        port: {
+          readFence: (tuple, signal) =>
+            port.fence({ source: tuple.source, externalId: tuple.externalId, fieldGroup: tuple.fieldGroup }, signal),
+          importFromUrl: (bytes, key, signal) => port.requestMedia!(bytes, key, signal),
+          importStatus: (id, signal) => port.mediaStatus!(id, signal),
+        },
+        sleep: async (ms, signal) => {
+          signal.throwIfAborted();
+          await new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(() => {
+              signal.removeEventListener('abort', aborted);
+              resolve();
+            }, ms);
+            const aborted = () => {
+              clearTimeout(timer);
+              reject(signal.reason);
+            };
+            signal.addEventListener('abort', aborted, { once: true });
+          });
+          signal.throwIfAborted();
+        },
+      });
+      importerOptions.mediaResolver = {
+        async resolve(input) {
+          const source = plan.coverSources?.find(
+            (item) => item.sourceAlias === input.owner.source && item.externalId === input.owner.external_id,
+          );
+          ensure(source?.sourceStatus === 'available' && source.sourceUrl, 'Media intent has no admitted Bangumi cover source');
+          ensure(input.mediaImportIntents.length === 1, 'Unexpected Bangumi showcase media asset count');
+          const intent = input.mediaImportIntents[0]!;
+          const sourceRecord = [...plan.records.bangumi, ...plan.entities.bangumi].find(
+            (row) => row.key === source.externalId,
+          );
+          ensure(sourceRecord, 'Bangumi cover source record is missing');
+          const conversion = createSourceRegistration('bangumi', {
+            source: source.sourceAlias,
+            converterRevision: entityRevision,
+          }).convert(
+            {
+              external_id: sourceRecord.key,
+              record_revision: sourceRecord.revision ?? 'unversioned',
+              record: sourceRecord.payload,
+            },
+            { source: source.sourceAlias, subjectId: input.subject },
+          );
+          const expectedIntent = (conversion as typeof conversion & { mediaImportIntents?: typeof input.mediaImportIntents })
+            .mediaImportIntents?.[0];
+          ensure(
+            expectedIntent && JSON.stringify(expectedIntent) === JSON.stringify(intent) &&
+            intent.containerId === input.subject &&
+              intent.sourceUrl === source.sourceUrl &&
+              intent.provenance.source === source.sourceAlias &&
+              intent.provenance.external_id === source.externalId &&
+              intent.provenance.record_revision === source.sourceRevision &&
+              intent.provenance.field_group === 'cover' &&
+              intent.provenance.digest === conversion.digest &&
+              intent.credit.rightsHolder === '(c) rights holder' &&
+              intent.credit.via.name === 'Bangumi' &&
+              intent.credit.via.url === bangumiRecordUrl(source.externalId) &&
+              intent.credit.license === 'LicenseRef-unknown' &&
+              intent.provenance.references.some((reference) =>
+                reference.parts.some(
+                  (part) => part.value.type === 'value' && part.value.content === source.sourceUrl,
+                ),
+              ),
+            'Bangumi cover intent does not match its admitted source evidence',
+          );
+          const resolution = await resolver.resolve({
+            owner: input.owner,
+            containerId: input.subject,
+            mediaImportIntents: input.mediaImportIntents,
+            signal: input.signal,
+            ...(input.deferPending === undefined ? {} : { deferPending: input.deferPending }),
+          });
+          const recordKey = `${source.sourceAlias}\0${source.externalId}`;
+          if (resolution.outcome === 'fenced') {
+            mediaAttempts.set(recordKey, { ...source, status: 'fenced', containerId: input.subject });
+            return { status: 'pending' };
+          }
+          const asset = resolution.assets[0]!;
+          const mediaId = asset.outcome === 'available' ? resolution.mediaIds[asset.sourceUrl] : undefined;
+          const observed: CrossMediaMediaOutcome = {
+            ...source,
+            status: asset.outcome,
+            containerId: input.subject,
+            mediaKey: asset.key,
+            ...(mediaId ? { mediaId } : {}),
+            credit: intent.credit,
+            provenance: intent.provenance,
+          };
+          mediaAttempts.set(recordKey, observed);
+          if (asset.outcome === 'rejected') return { status: 'rejected' };
+          if (asset.outcome === 'pending') return { status: 'pending' };
+          ensure(mediaId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(mediaId), 'Available media identity is invalid');
+          return { status: 'available', mediaIds: resolution.mediaIds };
+        },
+      };
+    }
     const nativeTypes = new Map<string, string>();
     for (const provider of providers) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
@@ -1816,17 +1978,23 @@ export async function seedCrossMedia(
         }
       }
       const run = await importer.runRecords(registration, records());
-      ensure(run.status === 'committed', `Cross-media ${provider} import failed: ${run.status}`);
+      ensure(
+        run.status === 'committed' || onlyPendingBangumiCovers(provider, run),
+        `Cross-media ${provider} import failed: ${run.status}`,
+      );
       runs[provider] = run;
     }
-    const hasBangumiInput = plan.records.bangumi.length > 0 || plan.entities.bangumi.length > 0;
+    const bangumiFidelityRecords = [...plan.records.bangumi, ...plan.entities.bangumi];
+    const hasBangumiFidelityInput =
+      (plan.characterAppearances?.length ?? 0) > 0 ||
+      bangumiFidelityRecords.some((record) => record.key.startsWith('character:'));
     const fidelity =
-      providers.includes('bangumi') && hasBangumiInput
+      providers.includes('bangumi') && hasBangumiFidelityInput
         ? await runBangumiCharacterFidelity({
             importer,
             port,
             sourceAlias: crossMediaAliases.bangumi,
-            records: [...plan.records.bangumi, ...plan.entities.bangumi],
+            records: bangumiFidelityRecords,
             appearances: plan.characterAppearances ?? [],
             ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
           })
@@ -1935,6 +2103,75 @@ export async function seedCrossMedia(
             lookupDiagnostics: genreAdapter.diagnostics(),
           })
         : undefined;
+    const mediaOutcomes: CrossMediaMediaOutcome[] = [];
+    for (const source of plan.coverSources ?? []) {
+      const owner = { source: source.sourceAlias, external_id: source.externalId };
+      const prior = mediaAttempts.get(`${source.sourceAlias}\0${source.externalId}`);
+      const claim = importer.session.bindings.claim(owner);
+      const containerId = claim?.state === 'bound' ? claim.subject : null;
+      if (source.sourceStatus !== 'available') {
+        mediaOutcomes.push({ ...source, status: source.sourceStatus, containerId });
+        continue;
+      }
+      if (containerId) {
+        try {
+          const fence = await port.fence({ source: source.sourceAlias, externalId: source.externalId, fieldGroup: 'cover' });
+          if (fence.fenced) {
+            mediaOutcomes.push({ ...source, status: 'fenced', containerId });
+            continue;
+          }
+          ensure(fence.securityRevision === null, 'Unexpected Bangumi cover fence revision');
+        } catch {
+          mediaOutcomes.push({ ...source, status: 'unavailable', containerId, code: 'cover-fence-unavailable' });
+          continue;
+        }
+      }
+      const mediaId = containerId ? importer.session.bindings.mediaIds(owner).cover : undefined;
+      let storedIntent: CrossMediaMediaOutcome | undefined;
+      if (containerId && mediaId) {
+        const row = [...plan.records.bangumi, ...plan.entities.bangumi].find((candidate) => candidate.key === source.externalId);
+        if (row) {
+          const converted = createSourceRegistration('bangumi', {
+            source: source.sourceAlias,
+            converterRevision: entityRevision,
+          }).convert(
+            {
+              external_id: row.key,
+              record_revision: row.revision ?? 'unversioned',
+              record: row.payload,
+            },
+            { source: source.sourceAlias, subjectId: containerId },
+          ) as { mediaImportIntents?: Array<{ credit: CrossMediaMediaOutcome['credit']; provenance: CrossMediaMediaOutcome['provenance'] }> };
+          const intent = converted.mediaImportIntents?.[0];
+          if (intent)
+            storedIntent = {
+              ...source,
+              status: 'available',
+              containerId,
+              mediaId,
+              ...(intent.credit ? { credit: intent.credit } : {}),
+              ...(intent.provenance ? { provenance: intent.provenance } : {}),
+            };
+        }
+      }
+      const outcome =
+        prior ??
+        storedIntent ?? {
+          ...source,
+          status: 'unavailable' as const,
+          containerId,
+          code: 'media-intent-not-delivered' as const,
+        };
+      if (outcome.status === 'available' && (!mediaId || outcome.mediaId !== mediaId)) {
+        const { mediaId: _mediaId, mediaKey: _mediaKey, credit: _credit, provenance: _provenance, ...sourceEvidence } = outcome;
+        mediaOutcomes.push({
+          ...sourceEvidence,
+          status: 'unavailable',
+          containerId,
+          code: 'media-intent-not-delivered',
+        });
+      } else mediaOutcomes.push(outcome);
+    }
     const unresolved = delivered.unresolved.map((edge) => ({
       holder: edge.holder,
       target: edge.target,
@@ -1950,13 +2187,16 @@ export async function seedCrossMedia(
         credits.fenced.length ||
         (vndbCredits?.diagnostics.length ?? 0) ||
         (fidelity?.gaps.length ?? 0) ||
-        episodeDiagnostics.length
+        episodeDiagnostics.length ||
+        (bangumiGenrePublication?.diagnostics.length ?? 0) ||
+        mediaOutcomes.some((outcome) => outcome.status !== 'available')
           ? ('imported-with-gaps' as const)
           : ('imported' as const),
       franchises: plan.franchises,
       members: plan.members,
       runs,
       readings,
+      mediaOutcomes,
       workLinks,
       gaps: [
         ...plan.gaps,
@@ -2043,7 +2283,7 @@ export async function runCrossMediaSeedCli(
   const api = normalizeCrossMediaSeedOrigin(values.get('--api')!),
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
-  const plan = await planCrossMediaSeed(input, { deferVndbCharacterAppearances: true });
+  let plan = await planCrossMediaSeed(input, { deferVndbCharacterAppearances: true });
   const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
   const { seedShowcaseVndbReleases } = await import('./showcase-vndb-releases.ts');
@@ -2117,6 +2357,7 @@ export async function runCrossMediaSeedCli(
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   try {
+    if (journal) plan = await acquireBangumiCoverSources(plan, { journal });
     const result = await seedShowcaseVndbReleases({
       tables: input,
       plan,
