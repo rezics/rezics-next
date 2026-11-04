@@ -827,7 +827,17 @@ test('PostActions retains the original report body, sender, key and credential f
         </QueryClientProvider>,
       );
     });
-    await clickButton(node, m.report_more());
+    const more = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (candidate) => candidate.getAttribute('aria-label') === m.report_more(),
+    );
+    expect(more).toBeDefined();
+    await act(async () => {
+      more!.focus();
+      more!.dispatchEvent(
+        new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     await clickButton(node, m.report_action());
     const other = node.querySelector<HTMLButtonElement>('[role="radio"][value="other"]');
     expect(other).toBeDefined();
