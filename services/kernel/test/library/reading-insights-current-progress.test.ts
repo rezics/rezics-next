@@ -36,7 +36,9 @@ async function insightsRelease() {
     },
     {
       mode: 'cursor_position',
-      units: [{ ...unitData('chapter', 'cursor_position'), maximum: '999999999999999999999999999.999999', precision: 6 }],
+      units: [
+        { ...unitData('chapter', 'cursor_position'), maximum: '999999999999999999999999999.999999', precision: 6 },
+      ],
     },
     { mode: 'completed_units', units: [unitData('episode', 'completed_units')] },
   ];
@@ -219,8 +221,11 @@ test('native receiving keeps exact heterogeneous values, replay, backlog movemen
     total_value: '900719925474099312345.999999',
   });
   const reopened = await transition(first, 'reopen', abandoned.progressSession.revision);
-  expect((await values()).filter((row) => row.mode === 'scalar_amount' && row.current_value === '900719925474099312345.123456'))
-    .toHaveLength(1);
+  expect(
+    (await values()).filter(
+      (row) => row.mode === 'scalar_amount' && row.current_value === '900719925474099312345.123456',
+    ),
+  ).toHaveLength(1);
   const retired = await transition(first, 'retire', reopened.progressSession.revision);
   expect((await values()).filter((row) => row.current_value === '900719925474099312345.123456')).toHaveLength(0);
   await native.pool.query(
