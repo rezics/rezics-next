@@ -2,8 +2,29 @@ import { createRequire } from 'node:module';
 import { expect, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import type { LocaleNavigationContextValue } from '../src/shell/locale-navigation/context';
+import type { Locale, LocaleNavigationLocation } from '../src/shell/locale-navigation/routing';
 
 const entry = '/en/subjects/reader-01?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88#chapter-4';
+const localeCodes = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
+
+function visit(
+  location: { pathname: string; searchStr: string; hash: string; href: string; state: unknown },
+  supported: boolean,
+): LocaleNavigationLocation {
+  const routeState = location.state;
+  const key =
+    routeState !== null && typeof routeState === 'object' ? (routeState as { __TSR_key?: unknown }).__TSR_key : undefined;
+  const pathLocale = location.pathname.split('/')[1];
+  const locale = localeCodes.find((candidate) => candidate === pathLocale);
+  return {
+    pathname: location.pathname,
+    searchStr: location.searchStr,
+    hash: location.hash,
+    locale: (locale ?? 'en') as Locale,
+    visitKey: typeof key === 'string' ? key : location.href,
+    supported,
+  };
+}
 
 type ReaderFixture = {
   window: any;
