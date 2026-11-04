@@ -543,11 +543,15 @@ test('work expansions keep independent child progress and resume their own respo
   const expand = (id: string) => work(id).querySelector('summary')!.click();
   const continueButton = (id: string) => work(id).querySelector('button') as HTMLButtonElement;
   try {
-    await act(async () => root.render(createElement(ReleaseSearchPage, {
-      locale: 'en',
-      parsed,
-      state: { status: 'ready', page },
-    })));
+    await act(async () =>
+      root.render(
+        createElement(ReleaseSearchPage, {
+          locale: 'en',
+          parsed,
+          state: { status: 'ready', page },
+        }),
+      ),
+    );
     await act(async () => expand(firstWork));
     expect(work(firstWork).querySelector('details')!.open).toBe(true);
     expect(work(secondWork).querySelector('details')!.open).toBe(false);
