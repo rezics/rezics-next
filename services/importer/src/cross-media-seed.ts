@@ -16,7 +16,7 @@ import {
 import { subjectSlug } from '@rezics/definitions/slug';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
-import { CrossMediaGraph, citedProviderBinding, type GraphEdgeDraft } from './cross-media-bindings.ts';
+import { CrossMediaGraph, citedProviderBinding, graphEdgeKey, type GraphEdgeDraft } from './cross-media-bindings.ts';
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';

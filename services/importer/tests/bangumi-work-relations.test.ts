@@ -153,10 +153,12 @@ test('production graph journals immutable relation commands and retries without 
   expect((await deliver(initialSnapshot)).proposed).toHaveLength(0);
   expect(sent).toHaveLength(1);
 
+  const changedRelation = { ...draft.relation! };
+  delete changedRelation.reciprocalCode;
   const changed = {
     ...draft,
     property: 'wdt:P361',
-    relation: { ...draft.relation!, reciprocalCode: undefined, mappingRevision: 'bangumi-relation-2@2:12:one-sided', evidence: [draft.relation!.evidence[0]!] },
+    relation: { ...changedRelation, mappingRevision: 'bangumi-relation-2@2:12:one-sided', evidence: [draft.relation!.evidence[0]!] },
   };
   reopened.remember([changed]);
   const changedSnapshot = { currentKeys: [graphEdgeKey(changed)], scope: ['10', '11'], digest: 'e'.repeat(64), complete: true };
