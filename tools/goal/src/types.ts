@@ -110,6 +110,8 @@ export type Settings = {
   affectedTests?: AffectedTestCheck[];
   /** The command prefix for sibling tests selected by the independent verifier. */
   siblingTests?: SiblingTests;
+  /** Repository boot tests the verifier runs on each newest dev head before queued checks. */
+  bootSmoke?: { tests: string[] };
   derivedFiles?: DerivedFile[];
   terminationGraceMs: number;
   /** How long a worker may write nothing before it counts as never started; START_GRACE_MS by default. */

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
 import { defaultPolicy, readControlPolicy } from './policy.ts';
@@ -32,8 +32,10 @@ import { readRouting } from './routing.ts';
 import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote } from './promotion.ts';
 import { preparePromotionGate } from './promotion-placement.ts';
-import { verifyDev } from './dev-verifier.ts';
+import { bootSmokeRepairBrief, verifyDev, type BootSmokeRepair } from './dev-verifier.ts';
 import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
+import { bootSmokeEnvironment } from './verification.ts';
+import { randomUUID } from 'node:crypto';
 import { codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
@@ -117,6 +119,14 @@ function readSiblingTests(value: unknown = defaults.siblingTests, label = 'sibli
   )
     throw new Error(`${label}.command must be a command array`);
   return { command: [...sibling.command] as string[] };
+}
+function readBootSmoke(value: unknown = defaults.bootSmoke, label = 'bootSmoke', policy = defaultPolicy.brief) {
+  const smoke = object(value, label);
+  keys(smoke, ['tests'], label);
+  if (!Array.isArray(smoke.tests) || smoke.tests.some((path) => typeof path !== 'string' || !path.trim()))
+    throw new Error(`${label}.tests must be a path list`);
+  for (const path of smoke.tests as string[]) validatePath(path, policy);
+  return { tests: [...(smoke.tests as string[])] };
 }
 
 function uniqueChecks(checks: readonly IntegrationCheck[]): IntegrationCheck[] {
@@ -259,6 +269,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
       'affectedTests',
       'verifierChecks',
       'siblingTests',
+      'bootSmoke',
       'derivedFiles',
       'codex',
       'routingFile',
@@ -348,6 +359,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
         )
       : readIntegrationChecks(local.verifierChecks, 'verifierChecks', policy.brief);
   const siblingTests = readSiblingTests(local.siblingTests === undefined ? defaults.siblingTests : local.siblingTests);
+  const bootSmoke = readBootSmoke(local.bootSmoke === undefined ? defaults.bootSmoke : local.bootSmoke);
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
   const compact = { ...defaults.codex.compactTokens, ...object(codex.compactTokens, 'compactTokens') };
@@ -393,6 +405,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     integrationChecks,
     verifierChecks,
     siblingTests,
+    bootSmoke,
     affectedTests,
     derivedFiles: readDerivedFiles(
       local.derivedFiles === undefined ? defaults.derivedFiles : local.derivedFiles,
@@ -512,6 +525,40 @@ function backlogManagerActor(db: Database, managerId: string): AuthenticatedMana
   }
 }
 
+function dispatchBootSmokeRepair(
+  tasks: WorkerTasks,
+  store: WorkerStore,
+  inbox: SqliteManagerInbox,
+  settings: Settings,
+  repair: BootSmokeRepair,
+): void {
+  const markdown = bootSmokeRepairBrief(repair, settings.policy?.verifier);
+  if (repair.existingTaskId) {
+    const task = store.task(repair.existingTaskId);
+    writeFileSync(task.briefPath, markdown);
+    store.updateTask({ taskId: task.id, attempt: task.currentAttempt }, (item) => {
+      item.brief = { ...item.brief, markdown, urgent: true };
+    });
+    inbox.deliver({
+      managerId: repair.owner.brief.manager,
+      taskId: task.id,
+      kind: 'instruction',
+      summary: `Boot smoke still fails on ${repair.test} at ${repair.commit}.`,
+    });
+    return;
+  }
+  const briefPath = join(settings.stateDirectory, 'boot-smoke-repairs', `${randomUUID()}.md`);
+  mkdirSync(dirname(briefPath), { recursive: true });
+  writeFileSync(briefPath, markdown);
+  const task = tasks.dispatch(briefPath, null, true, 'verifier');
+  inbox.deliver({
+    managerId: repair.owner.brief.manager,
+    taskId: task.id,
+    kind: 'instruction',
+    summary: `Urgent boot-smoke repair for ${repair.test} at ${repair.commit}.`,
+  });
+}
+
 /** The only production composition: every module shares this database connection and worker fence. */
 export const LANDING_CHECK_ENVIRONMENT = { REMOTE_CHECK_PRIORITY: 'landing' } as const;
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
@@ -580,6 +627,16 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       undefined,
       {},
       checkResultOptions,
+      settings.policy?.merge,
+    );
+  // Boot smoke is local: it never enters remote check-host or worker-slot admission, and never holds the train lease.
+  const bootSmokeGate: GateRunner =
+    options.runGate ??
+    processGroupRunner(
+      (settings.policy ?? defaultPolicy).verifier.bootSmokeTimeoutMs,
+      undefined,
+      bootSmokeEnvironment(),
+      false,
       settings.policy?.merge,
     );
   // The prelanding compiler guard is a direct process group. It never enters remote check-host slot admission.
@@ -877,7 +934,15 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         cancel: (taskId) => tasks.cancel(taskId),
       }),
     promote: () => promoteNow(),
-    verify: () => verifyDev({ settings, store, inbox, runGate: verifierGate }),
+    verify: () =>
+      verifyDev({
+        settings,
+        store,
+        inbox,
+        runGate: verifierGate,
+        runBootSmoke: bootSmokeGate,
+        dispatchRepair: (repair) => dispatchBootSmokeRepair(tasks, store, inbox, settings, repair),
+      }),
     async evaluateFlow() {
       const flowInbox = new SqliteManagerInbox(
         db,

@@ -4,13 +4,17 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { acquireDirectoryLease } from './lease.ts';
+import { bootSmokeEnvironment } from './verification.ts';
 import {
+  bootSmokeRepairBrief,
   classifyRun,
   devVerificationState,
   placeInWorkspace,
   VERIFY_CONCURRENCY,
   verifyDev,
   withTreeBun,
+  type BootSmokeRepair,
 } from './dev-verifier.ts';
 import type { DevVerifierFinding, DevVerifierRun, Settings, Task } from './types.ts';
 
@@ -371,6 +375,90 @@ test.each([undefined, 1])('runs every check within verifier concurrency %s', asy
   expect(highest).toBe(concurrency ?? VERIFY_CONCURRENCY);
   for (let index = 0; index < 8; index++) expect(commands).toContain(`acceptance task-${index}`);
   expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
+});
+
+const KERNEL_BOOT = 'services/kernel/test/boot/kernel-boots.test.ts';
+function bootRepo() {
+  const root = repo();
+  commit(root, KERNEL_BOOT, 'test("boot", () => {});\n', 'boot test');
+  git(root, 'branch', '-f', 'dev');
+  git(root, 'branch', '-f', 'dev-verified');
+  return root;
+}
+
+test('A new dev head whose Kernel entry throws on import gets a boot finding within one verifier cycle, even while older heads are still queued, and the owner of the breaking commit receives an urgent repair dispatch.', async () => {
+  const root = bootRepo(),
+    base = git(root, 'rev-parse', 'dev-verified');
+  const older = commit(root, 'services/kernel/good.ts', 'export const good = true;\n', 'older landing');
+  const breaking = commit(root, 'services/kernel/broken.ts', 'throw new Error("import");\n', 'kernel import throw');
+  git(root, 'branch', '-f', 'dev', breaking);
+  const tasks = [landedTask(base, older, 'older'), landedTask(base, breaking, 'breaking')];
+  const ctx = setup(root, tasks);
+  ctx.settings.bootSmoke = { tests: [KERNEL_BOOT] };
+  const repairs: BootSmokeRepair[] = [];
+  const order: string[] = [];
+  const run = async (command: readonly string[], cwd: string) => {
+    if (command.some((part) => part.includes('kernel-boots'))) {
+      order.push('boot');
+      const files = git(cwd, 'ls-files');
+      return files.includes('services/kernel/broken.ts')
+        ? { passed: false, output: 'error: Kernel entry threw on import', timedOut: false }
+        : { passed: true, output: '', timedOut: false };
+    }
+    if (command[0] === 'acceptance') order.push('queued');
+    return { passed: true, output: '', timedOut: false };
+  };
+  const dispatchRepair = (repair: BootSmokeRepair) => {
+    repairs.push(repair);
+    if (!repair.existingTaskId)
+      tasks.push({
+        id: 'boot-repair',
+        state: 'ready',
+        brief: { urgent: true, markdown: `Boot-smoke repair for \`${repair.test}\``, goal: 'kernel', manager: 'kernel-manager' },
+      } as Task);
+  };
+  await verifyDev({ ...ctx, runGate: run, dispatchRepair });
+  expect(order[0]).toBe('boot');
+  expect(order).toContain('queued');
+  expect(ctx.store.devVerifierFindings().some((finding) => finding.status === 'new' && finding.reason.includes('Boot smoke'))).toBe(
+    true,
+  );
+  expect(repairs).toHaveLength(1);
+  expect(repairs[0]).toMatchObject({ test: KERNEL_BOOT, commit: breaking });
+  expect(repairs[0]!.existingTaskId).toBeUndefined();
+  expect(repairs[0]!.owner.id).toBe('breaking');
+  expect(repairs[0]!.error).toContain('Kernel entry threw on import');
+  expect(bootSmokeRepairBrief(repairs[0]!).includes('"urgent": true')).toBe(true);
+  expect(git(root, 'rev-parse', 'dev')).toBe(breaking);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
+  await verifyDev({ ...ctx, runGate: run, dispatchRepair });
+  expect(repairs).toHaveLength(2);
+  expect(repairs[1]!.existingTaskId).toBe('boot-repair');
+});
+
+test('Boot smoke runs outside worker slots and never delays a landing.', async () => {
+  const root = bootRepo();
+  const landing = commit(root, 'services/kernel/ok.ts', 'export const ok = true;\n', 'landing');
+  git(root, 'branch', '-f', 'dev', landing);
+  const ctx = setup(root, [landedTask(git(root, 'rev-parse', 'dev-verified'), landing)]);
+  ctx.settings.bootSmoke = { tests: [KERNEL_BOOT] };
+  const train = join(ctx.settings.stateDirectory, 'train.lease');
+  let trainFree = false;
+  await verifyDev({
+    ...ctx,
+    runBootSmoke: async () => {
+      const env = bootSmokeEnvironment({ KERNEL_CHECK_REMOTE: 'hosts.json', REMOTE_CHECK_PRIORITY: 'landing' });
+      expect(env.KERNEL_CHECK_REMOTE).toBeUndefined();
+      expect(env.REMOTE_CHECK_PRIORITY).toBeUndefined();
+      acquireDirectoryLease(train).release();
+      trainFree = true;
+      expect(existsSync(join(ctx.settings.stateDirectory, 'capacity-queue'))).toBe(false);
+      return { passed: true, output: '', timedOut: false };
+    },
+    runGate: async () => ({ passed: true, output: '', timedOut: false }),
+  });
+  expect(trainFree).toBe(true);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(landing);
 });
 
 test('one existing-failure probe leaves unsampled prefixes unproven without reverting a landing', async () => {

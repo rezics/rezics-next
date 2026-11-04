@@ -1121,6 +1121,23 @@ export class ProofCapacityQueuedError extends Error {
   }
 }
 
+/** Boot smoke is local: it never reserves proof/worker slots or check-host admission. */
+export function bootSmokeEnvironment(parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return {
+    ...Object.fromEntries(
+      Object.entries(parent).filter(
+        ([name]) =>
+          !name.startsWith('GOAL_') &&
+          name !== 'CODEX_THREAD_ID' &&
+          name !== 'KERNEL_CHECK_REMOTE' &&
+          name !== 'KERNEL_CHECK_ON_REMOTE' &&
+          name !== 'REMOTE_CHECK_PRIORITY',
+      ),
+    ),
+    NODE_DISABLE_COMPILE_CACHE: '1',
+  };
+}
+
 function originalCommandHasInputs(argv: string[]): boolean {
   if (/(?:^|[\s/])(?:gate(?:857)?|root-check|remote-check)(?:\.[cm]?[jt]s)?(?:\s|$)/i.test(argv.join(' ')))
     return false;

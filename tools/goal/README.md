@@ -771,6 +771,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.verifier.diagnosticCharacters`                | `6000`                      | Maximum output characters in a verifier revert notification.                                    |
 | `policy.verifier.gitBufferBytes`                      | `33554432`                  | Native Git revert and commit output buffer limit (bytes).                                       |
 | `policy.verifier.residentPollMs`                      | `60000`                     | Pause between completed resident verifier passes (ms).                                          |
+| `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                    | Newest-head boot-smoke deadline (ms); about two minutes for the tests in `bootSmoke.tests`.     |
 | `policy.routing.implementation.maxSteps`              | `300`                       | Implementation route step limit.                                                                |
 | `policy.routing.implementation.maxMs`                 | `7200000`                   | Implementation route attempt time budget (ms).                                                  |
 | `policy.routing.interface.maxSteps`                   | `300`                       | Interface route step limit.                                                                     |
@@ -1301,7 +1302,8 @@ are included in the checked tree. No affected, sibling, acceptance, native, impo
 before the dev ref advances. Infrastructure failures may retry the same compiler command once; compiler errors leave
 dev unchanged and go to their owner. Promotion continues to run the full gate.
 
-`verifierChecks` is the canonical `{ paths: string[], command: string[] }` selection for checks that run after dev
+`bootSmoke.tests` lists repository boot tests the verifier runs on each newest `dev` head before those queued checks;
+absent files are skipped. `verifierChecks` is the canonical `{ paths: string[], command: string[] }` selection for checks that run after dev
 integration. The defaults cover kernel affected mode, workspace imports, the Personal Library page, Web remote-browser
 regressions and the client page-story/component check. Local `affectedTests` and `integrationChecks` remain compatible
 inputs to this verifier when `verifierChecks` is not explicitly set; `bun install` and old typecheck entries are
@@ -2182,12 +2184,17 @@ always gates its own frozen integration candidate.
 ### Development verification
 
 Landing on `dev` is a mechanical integration step. A single leased verifier checks each new `dev` head independently
-after the merge train has landed its batch; it cannot hold the train lease or block later ready landings. It starts
-from `dev-verified`, runs the root typecheck with the exact `TYPECHECK_CHANGED` closure, matching `verifierChecks`,
-non-spec sibling tests and each landed task's acceptance command (except specification and research tasks). Checks
-use normal remote admission. Passing verification advances `dev-verified` with a compare-and-swap. Workers, retries
-and rebases use that verified ref as their base, and promotion cuts stabilize candidates from it. `status` reports the
-verified commit, how many landings `dev` is ahead, and whether verification is pending, running or current.
+after the merge train has landed its batch; it cannot hold the train lease or block later ready landings. On each new
+dev head it first runs the repository boot smoke named in `bootSmoke.tests` (Kernel and Web client-graph boot tests by
+default; a missing file is skipped until it lands). Heads that arrive while that smoke runs coalesce onto the newest
+head; older heads are skipped for this stage. The smoke uses a local process group with `policy.verifier.bootSmokeTimeoutMs`
+and never takes a worker slot, check-host admission, or the train lease. A product failure records a boot finding,
+bisects with the existing-failure probes, and dispatches one urgent repair brief to the breaking commit's Goal (a later
+failure on the same test updates that repair). It does not revert. Queued typecheck, `verifierChecks`, sibling tests and
+acceptance then run as before. Passing verification advances `dev-verified` with a compare-and-swap unless boot smoke
+still fails. Workers, retries and rebases use that verified ref as their base, and promotion cuts stabilize candidates
+from it. `status` reports the verified commit, how many landings `dev` is ahead, and whether verification is pending,
+running or current.
 
 When a check fails, the verifier narrows suspects by the failing command's workspace closure and bisects only those
 landings. For an affected-check failure after a conflict resolution, it attributes the failing integrated resolution
@@ -2427,7 +2434,8 @@ quota-parser exports remain available for historical imports. Test an adapter th
 ## Baseline findings and release gates
 
 This policy supersedes the earlier `Development verification` overview above. `dev-verified` records verifier progress
-and known findings; it is not a green release gate. For every captured `dev` head, the verifier compares every selected
+and known findings; it is not a green release gate. Before those queued checks, each newest `dev` head runs `bootSmoke.tests`
+locally under `policy.verifier.bootSmokeTimeoutMs`. For every captured `dev` head, the verifier then compares every selected
 head check with the exact previous `dev-verified` commit under the same command selection, environment and concurrency
 limit. Selection uses `verifierChecks` (or legacy `affectedTests` when unset), the root typecheck with its exact
 `TYPECHECK_CHANGED` paths, candidate sibling tests for non-specification files, and landed task acceptance commands
