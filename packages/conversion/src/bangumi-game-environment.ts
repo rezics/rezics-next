@@ -218,15 +218,6 @@ export function bangumiGameEnvironment(
     return empty(false);
   }
 
-  const iterator = sourceLines(infobox);
-  let header: Line | undefined;
-  for (const line of iterator) {
-    if (!line.text.trim()) continue;
-    header = line;
-    break;
-  }
-  if (!header || !isBangumiGameTemplateHead(header.text)) return empty(false);
-
   const fields: StagedField[] = [];
   let active: StagedField | undefined;
   let fieldCount = 0;
@@ -235,6 +226,7 @@ export function bangumiGameEnvironment(
   let trailing = false;
   let fieldOverflow = false;
   let depthExceeded = false;
+  let seenHeader = false;
 
   const finish = (field: StagedField | undefined, complete = true) => {
     if (!field) return;
@@ -242,9 +234,14 @@ export function bangumiGameEnvironment(
     if (field.key === platformKey || field.key === engineKey) fields.push(field);
   };
 
-  for (const row of iterator) {
+  for (const row of sourceLines(infobox)) {
     const trimmed = cleanHorizontal(row.text);
     if (!trimmed) continue;
+    if (!seenHeader) {
+      if (!isBangumiGameTemplateHead(row.text)) return empty(false);
+      seenHeader = true;
+      continue;
+    }
     if (closed) {
       if (trimmed) trailing = true;
       continue;
@@ -317,7 +314,7 @@ export function bangumiGameEnvironment(
       const consumed = key === platformKey || key === engineKey;
       active = {
         key,
-        pointer: consumed ? infoboxPointer(key) : pointer,
+        pointer: infoboxPointer(key),
         form: 'empty',
         items: [],
         nested: false,
@@ -383,6 +380,7 @@ export function bangumiGameEnvironment(
     depth = nested.depth;
   }
   finish(active, closed);
+  if (!seenHeader) return empty(false);
   if (!closed && !depthExceeded) sink.add('/infobox', 'unsupported_infobox_structure');
   if (trailing) sink.add('/infobox', 'unsupported_infobox_structure');
   if (fieldOverflow || depthExceeded || !closed || trailing) return empty(true);

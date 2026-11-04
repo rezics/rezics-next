@@ -1,17 +1,11 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { converter_revision } from '@rezics/conversion/bangumi';
-import {
-  CrossMediaDumpFiles,
-  planCrossMediaSeed,
-  seedCrossMedia,
-  type CrossMediaPort,
-  type CrossMediaTables,
-} from '../src/cross-media-seed.ts';
+import { emptyCrossMediaPlan, seedCrossMedia, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import {
   bangumiGameEnvironmentReferenceKey,
@@ -21,7 +15,6 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { Importer } from '../src/importer.ts';
 
 const targetId = 990401;
-const roots = resolve(import.meta.dir, '../../..');
 /** Authored Game infobox; not an observation of a public Bangumi record. */
 const authoredInfobox = `{{Infobox Game
 |中文名=中文题名
@@ -40,30 +33,18 @@ const target = () => ({
   platform: '4001',
   infobox: authoredInfobox,
 });
-const supportSubjects = [
-  { id: 990303, type: 2, name: 'STEINS;GATE' },
-  { id: 990304, type: 2, name: 'Fate/stay night' },
-];
 
-async function plan(directory: string) {
-  await writeFile(
-    join(directory, 'subject.jsonlines'),
-    [target(), ...supportSubjects].map((row) => JSON.stringify(row)).join('\n') + '\n',
-  );
-  const dump = new CrossMediaDumpFiles(directory, directory);
-  const vnIds = ['v101', 'v102', 'v103'];
-  const titles = ['STEINS;GATE', 'CLANNAD', 'Fate/stay night'];
-  const tables: CrossMediaTables = {
-    async *rows(provider, table) {
-      if (provider === 'bangumi' && table === 'subject') yield* dump.rows(provider, table);
-      if (provider === 'vndb' && table === 'vn_titles')
-        yield* vnIds.map((id, index) => ({ id, lang: 'ja', official: 't', title: titles[index]!, latin: null }));
-      if (provider === 'vndb' && table === 'vn') yield* vnIds.map((id) => ({ id, olang: 'ja', alias: null }));
-      if (provider === 'vndb' && table === 'entry_meta')
-        yield* vnIds.map((id) => ({ id, revision: '1', lastmod: '2026-10-25 00:00:00+00' }));
-    },
-  };
-  return planCrossMediaSeed(tables);
+function selectedPlan() {
+  const plan = emptyCrossMediaPlan();
+  plan.records.bangumi.push({ source: 'bangumi', key: String(targetId), revision: null, payload: target() });
+  plan.members.push({
+    source: 'bangumi',
+    key: String(targetId),
+    kind: 'work',
+    membership: 'family',
+    franchise: 'clannad',
+  });
+  return plan;
 }
 
 function environmentCommands(commands: readonly BatchCommand[]) {
@@ -82,7 +63,6 @@ function proposedValue(command: BatchCommand) {
 }
 
 test('selected authored Game proposes reviewed platform and engine Concepts and withholds only concealed or wrong-source items', async () => {
-  const sourceDir = await mkdtemp(join(roots, '.temp/bangumi-game-environment-'));
   const stateDir = await mkdtemp(join(tmpdir(), 'bangumi-game-environment-state-'));
   const pc = randomUUID();
   const playstation = randomUUID();
@@ -164,7 +144,7 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
   ];
   try {
     expect(converter_revision).toBe('bangumi@9');
-    const selected = await plan(sourceDir);
+    const selected = selectedPlan();
     expect(selected.records.bangumi.map((row) => row.key)).toContain(String(targetId));
     const first = await seedCrossMedia(selected, join(stateDir, 'state.sqlite'), port, undefined, {
       providers: ['bangumi'],
@@ -250,7 +230,6 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
       await importer.close();
     }
   } finally {
-    await rm(sourceDir, { recursive: true, force: true });
     await rm(stateDir, { recursive: true, force: true });
   }
 }, 30_000);
