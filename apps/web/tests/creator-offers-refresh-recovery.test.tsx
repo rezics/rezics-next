@@ -248,8 +248,10 @@ async function mount() {
       button(label).click();
     });
   const refresh = async () => {
+    const query = client.getQueryCache().find({ queryKey: ['creator-offers-current'] });
+    if (!query) throw new Error('Expected the mounted seller read');
     await act(async () => {
-      void client.refetchQueries({ queryKey: ['creator-offers-current'], type: 'active' });
+      void query.fetch();
     });
     await tick();
   };
