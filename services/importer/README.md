@@ -1548,6 +1548,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: O((P+E) log R) indexed importer work for admitted parents P and episodes E≤64, with the existing per-record converter, candidate (≤300) and journal budgets. Vocabulary bindings are re-read on each convert so unchanged source bytes cannot hide missing or retracted kind availability. Duration admits only explicit ISO-8601 or named second/minute/hour units as seconds (`wd:Q11574`); clock-style and unitless values stay unknown review gaps.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Import authored VNDB release dates and completeness
+
+- Touches: one bounded authored VNDB COPY set (cap 64 works and 64 releases) plus current native scheme/concept point reads, the existing seed/importer caller and ordinary public batch/fence/candidate commands. A source release stays one native release; platform and language lists do not form a Cartesian product.
+- Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, with the existing per-record converter, candidate (≤300) and journal budgets. Vocabulary bindings are re-read on each convert so unchanged dump bytes cannot hide missing or retracted Concepts. Completeness remains a review gap on `wdt:P31`; supersession is not proposed.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
 ### Import run (processor)
 
 - Touches: per record, its conversion, its journal rows and its request bodies, each once. Every SQL text is prepared once per connection, the cover intent, batch and result bodies are validated once however many modules they cross (a small memory of accepted bodies, bounded in entries and bytes), a record's journals are written in one commit and its receipts in one commit, and a page of staged records shares one commit. Per record: at most five converter calls, 165 statements and 3 commits; no statement is prepared per call.
@@ -1929,6 +1935,11 @@ Exact unresolved values and descriptor admission failures are returned both as
 `sourceVocabularyGaps` and structured conversion diagnostics, including provider,
 source path, code or endpoint, required profile and property where applicable.
 VNDB release supersession remains a release-to-release `wdt:P155` gap while the
-released VNDB Release profile lacks that property. TBA and absent release dates
-remain distinct outcomes; date precision is never guessed. These proposals do
-not contain VNDB votes, personal lists or score-derived facts.
+released VNDB Release profile lacks that property. The production release-fidelity
+operator now supplies `release-date`, `development-status` and `release-work` rows
+from authored COPY `releases.released`, `vn.devstatus` and `releases_vn.rtype`.
+TBA, unknown and absent release dates remain distinct outcomes; date precision is
+never guessed. Completeness stays a `wdt:P31` qualifier gap on the release-to-work
+fact. These proposals do not contain VNDB votes, personal lists or score-derived
+facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to TBA
+and 00/99 omitted components to year or month precision.

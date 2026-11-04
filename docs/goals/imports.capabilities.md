@@ -626,6 +626,18 @@ not additional check requests.
   withholds the association as a false-positive rather than publishing a trait or writing VNDB classification
   (`ODbL-1.0` remains unadmitted); `chars_vns.rid` withholds the appearance rather than asserting an unqualified
   work-level fact; `chars.main` stays a referenced endpoint.
+- `production operator imports authored VNDB release dates, states and work completeness through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-release-fidelity.test.ts`.
+  Frozen scenario names:
+  `production VNDB release caller admits exact, month and year dates, TBA, unknown and absent dates, and two completeness states`;
+  `unsupported completeness, missing Concepts and withheld release states remain visible review gaps`;
+  `operator plans authored VNDB COPY releases without mixing work and release grains and imports through the seed caller`;
+  `production operator imports authored VNDB release dates, states and work completeness through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: COPY integer YYYYMMDD
+  keeps 0/00000000 as unknown, 99999999 as TBA and 00/99 components omitted; completeness stays a `wdt:P31` qualifier
+  gap; `schema:exampleOfWork` is the release-to-work fact; supersession stays unproposed until the Release profile
+  admits `wdt:P155`.
 - `Ordinary operator exact ACK interruption and restart recovery`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-ack-recovery.test.ts`.
   The [ACK report](../research/imports-audit/cli-ack-recovery.md#native-receipt) records one native case,

@@ -400,6 +400,10 @@ function project(
       };
     type = live;
   }
+  if (kind === 'vndb-release') {
+    const released = own(raw, 'released', '/released');
+    if (released !== undefined) normalized.released = released;
+  }
   if (kind === 'bangumi-episode') {
     const sort = own(raw, 'sort', '/sort');
     if (sort !== undefined) normalized.sort = sort;
