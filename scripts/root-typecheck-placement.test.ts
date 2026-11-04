@@ -243,8 +243,11 @@ test('root uses the admitted compiler entrypoint declared by a mapped workspace'
       scripts: { check: 'true', typecheck: 'bun wrong.ts', 'typecheck:root': 'bun root.ts' },
     }),
   );
-  writeFileSync(join(web, 'tsconfig.json'), JSON.stringify({ contentMappers: [{ package: 'reylo', extensions: ['.sql'] }] }));
-  writeFileSync(join(web, 'wrong.ts'), "process.exit(23);\n");
+  writeFileSync(
+    join(web, 'tsconfig.json'),
+    JSON.stringify({ contentMappers: [{ package: 'reylo', extensions: ['.sql'] }] }),
+  );
+  writeFileSync(join(web, 'wrong.ts'), 'process.exit(23);\n');
   writeFileSync(
     join(web, 'root.ts'),
     `import { appendFileSync, existsSync } from 'node:fs';
