@@ -196,96 +196,43 @@ test('temporary read failure keeps the original until fresh advice is reviewed a
 });
 
 const withNow = async (start: number, run: (advance: (ms: number) => void) => Promise<void>) => {
-  const realNow = Date.now;
-  let now = start;
-  Date.now = () => now;
-  try {
-    await run((ms) => (now += ms));
-  } finally {
-    Date.now = realNow;
-  }
+  const realNow = Date.now; let now = start; Date.now = () => now;
+  try { await run((ms) => (now += ms)); } finally { Date.now = realNow; }
 };
 
-test('command Retry-After survives reads and edits, then retries the same original only after expiry', async () =>
-  withNow(1_000_000, async (advance) => {
+test('Reading Retry-After waits survive edits and reads, then allow deliberate retry only', async () =>
+  withNow(Date.UTC(2026, 10, 5), async (advance) => {
     const receipt = { spoilerLevel: 0 as const, suitability: 'blur' as const, version: 4, advice: readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' }) };
-    const calls: unknown[] = [];
-    let reads = 0;
+    const calls: unknown[] = []; let reads = 0;
     const editor = createEditor({
-      save: async (input) => (calls.push(input), calls.length === 1
-        ? { ok: false as const, reason: 'unavailable' as const, failure: { status: 429, retryAfter: '2' } }
-        : { ok: true as const, preferences: receipt }),
+      save: async (input) => (calls.push(input), calls.length === 1 ? { ok: false as const, reason: 'unavailable' as const, failure: { status: 429, retryAfter: '2' } } : { ok: true as const, preferences: receipt }),
       read: async () => ({ signedIn: true as const, preferences: reads++ === 0 ? initial : receipt, securityHref: null }),
     });
     const retry = () => editor.retry(false);
-    await editor.edit({ spoilerLevel: 0 });
-    const original = editor.snapshot().pending;
-    await editor.reload(false);
-    await editor.edit({ suitability: 'show' });
+    await editor.edit({ spoilerLevel: 0 }); const original = editor.snapshot().pending;
+    await editor.reload(false); await editor.edit({ suitability: 'show' });
     expect(editor.snapshot().pending).toBe(original);
     expect(editor.snapshot().commandRetryAt).toBe(Date.now() + 2_000);
-    await retry();
-    expect(calls).toHaveLength(1);
-    advance(2_000);
-    expect(calls).toHaveLength(1);
-    await retry();
-    expect(calls[1]).toBe(original);
+    await retry(); expect(calls).toHaveLength(1);
+    advance(2_000); expect(calls).toHaveLength(1);
+    await retry(); expect(calls[1]).toBe(original);
     expect(editor.snapshot()).toMatchObject({ phase: 'review', pending: null, draft: { spoilerLevel: 0, suitability: 'show' }, known: { spoilerLevel: 0, suitability: 'blur', version: 4 } });
-  })
-);
 
-test('HTTP-date read deadlines survive edits and fence retained reload callbacks without automatic reads', async () =>
-  withNow(Date.UTC(2026, 10, 5), async (advance) => {
-    const deadline = Date.now() + 5_000;
-    let reads = 0;
-    const editor = createEditor({
+    const deadline = Date.now() + 5_000; reads = 0;
+    const current = createEditor({
       save: async () => ({ ok: false as const, reason: 'unavailable' as const }),
-      read: async () => reads++ === 0
-        ? { signedIn: true as const, state: 'unavailable' as const, failure: { status: 503, retryAfter: new Date(deadline).toUTCString() }, securityHref: null }
-        : { signedIn: true as const, preferences: initial, securityHref: null },
+      read: async () => reads++ === 0 ? { signedIn: true as const, state: 'unavailable' as const, failure: { status: 503, retryAfter: new Date(deadline).toUTCString() }, securityHref: null } : { signedIn: true as const, preferences: initial, securityHref: null },
     });
-    const reload = () => editor.reload(false);
-    await reload();
-    await editor.edit({ spoilerLevel: 0 });
-    await reload();
-    advance(4_999);
-    await reload();
-    expect([reads, editor.snapshot().readRetryAt]).toEqual([1, deadline]);
-    advance(1);
-    expect(reads).toBe(1);
-    await reload();
-    expect([reads, editor.snapshot().readRetryAt, editor.snapshot().draft.spoilerLevel]).toEqual([2, 0, 0]);
+    const reload = () => current.reload(false);
+    await reload(); await current.edit({ spoilerLevel: 0 }); advance(4_999); await reload();
+    expect([reads, current.snapshot().readRetryAt]).toEqual([1, deadline]);
+    advance(1); expect(reads).toBe(1); await reload();
+    expect([reads, current.snapshot().readRetryAt, current.snapshot().draft.spoilerLevel]).toEqual([2, 0, 0]);
+
+    let active = true, finish!: (page: SettingsPage) => void;
+    const retired = createEditor({ save: async () => ({ ok: false, reason: 'unavailable' }), read: () => new Promise((resolve) => (finish = resolve)) }, () => active);
+    const pending = retired.reload(); active = false;
+    finish({ signedIn: true, state: 'unavailable', failure: { status: 503, retryAfter: '60' }, securityHref: null });
+    await pending; expect(retired.snapshot().readRetryAt).toBe(0);
   })
 );
-
-test('retirement fences a late read retry deadline', async () => {
-  let active = true, finish!: (page: SettingsPage) => void;
-  const editor = createEditor({ save: async () => ({ ok: false, reason: 'unavailable' }), read: () => new Promise((resolve) => (finish = resolve)) }, () => active);
-  const loading = editor.reload();
-  active = false;
-  finish({ signedIn: true, state: 'unavailable', failure: { status: 503, retryAfter: '60' }, securityHref: null });
-  await loading;
-  expect(editor.snapshot().readRetryAt).toBe(0);
-});
-
-test('a late read refusal after retirement cannot install its retry deadline', async () => {
-  let active = true;
-  let finish!: (page: SettingsPage) => void;
-  const editor = createEditor(
-    {
-      save: async () => ({ ok: false as const, reason: 'unavailable' as const }),
-      read: () => new Promise((resolve) => (finish = resolve)),
-    },
-    () => active,
-  );
-  const pending = editor.reload();
-  active = false;
-  finish({
-    signedIn: true,
-    state: 'unavailable',
-    failure: { status: 503, retryAfter: '60' },
-    securityHref: null,
-  });
-  await pending;
-  expect(editor.snapshot().readRetryAt).toBe(0);
-});
