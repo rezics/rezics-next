@@ -873,7 +873,7 @@ function PrivateEntryReview({
                     <SourceCorrectionEditor
                       key={`${subject.id}:${viewer}:${origin.lifetime}:${observation.provider}:${observation.recordId}`}
                       baseline={sourceBaseObservation}
-                      current={displayedSource}
+                      current={displayedSource ?? null}
                       notice={sourceNotice}
                       conflictRevision={sourceConflictRevision}
                       pending={sourceCommand !== null}
