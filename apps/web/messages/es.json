@@ -8820,5 +8820,22 @@
   "music_location_previous": "Dirección aceptada anterior",
   "music_location_start": "Inicio de la relación seleccionada",
   "music_location_boundary": "Esta es la dirección más antigua conservada. Usa Inicio para volver al principio de esta relación.",
-  "music_location_time_evidence": "Evidencia temporal original"
+  "music_location_time_evidence": "Evidencia temporal original",
+  "people_facts_scope": "Estos son los hechos actuales suministrados en esta lectura del perfil; no constituyen un catálogo, conjunto de propuestas o inventario de fuentes completo.",
+  "people_facts_filter": "Filtrar el texto mostrado en esta ventana local",
+  "people_facts_reset": "Restablecer el filtro",
+  "people_facts_empty": "Ningún hecho mostrado coincide en esta ventana. Restablece el filtro para volver a sus filas.",
+  "people_facts_window": "Ventana local de hechos",
+  "people_facts_previous": "Hechos anteriores",
+  "people_facts_next": "Hechos siguientes",
+  "people_facts_collapse": "Contraer hechos",
+  "people_facts_browse": "Explorar los hechos suministrados",
+  "people_facts_overflow": "Solo se muestra la primera ventana local. Explora los hechos suministrados para continuar.",
+  "people_facts_unavailable": "La consulta local no está disponible para esta lectura. Los hechos independientes del perfil siguen siendo legibles.",
+  "people_facts_return": "Volver a este hecho del perfil",
+  "people_facts_changed": "Este hecho cambió o ya no está seleccionado. Vuelve al campo y actualiza el perfil.",
+  "people_facts_route_return": "Las correcciones y fuentes usan sus páginas existentes. La posición local detallada no puede restaurarse al salir de esta página; vuelve a este campo del perfil.",
+  "people_facts_unsupported": "El tipo de datos de este campo no es compatible.",
+  "people_facts_suppressed": "Este campo está suprimido en el contexto actual.",
+  "people_facts_unresolved": "Este campo no está resuelto en el contexto actual."
 }

@@ -8820,5 +8820,22 @@
   "music_location_previous": "Adresse acceptée précédente",
   "music_location_start": "Début de la relation sélectionnée",
   "music_location_boundary": "C’est la plus ancienne adresse conservée. Revenez au début pour lire cette relation depuis le commencement.",
-  "music_location_time_evidence": "Données temporelles d’origine"
+  "music_location_time_evidence": "Données temporelles d’origine",
+  "people_facts_scope": "Ces faits actuels proviennent de cette lecture du profil ; ils ne constituent pas un catalogue, un ensemble de propositions ou un inventaire de sources complet.",
+  "people_facts_filter": "Filtrer le texte affiché dans cette fenêtre locale",
+  "people_facts_reset": "Réinitialiser le filtre",
+  "people_facts_empty": "Aucun fait affiché ne correspond dans cette fenêtre. Réinitialisez le filtre pour retrouver les lignes.",
+  "people_facts_window": "Fenêtre locale de faits",
+  "people_facts_previous": "Faits précédents",
+  "people_facts_next": "Faits suivants",
+  "people_facts_collapse": "Réduire les faits",
+  "people_facts_browse": "Parcourir les faits fournis",
+  "people_facts_overflow": "Seule la première fenêtre locale est affichée. Parcourez les faits fournis pour continuer.",
+  "people_facts_unavailable": "La consultation locale est indisponible pour cette lecture. Les autres faits du profil restent lisibles.",
+  "people_facts_return": "Revenir à ce fait du profil",
+  "people_facts_changed": "Ce fait a changé ou n’est plus sélectionné. Revenez au champ et actualisez le profil.",
+  "people_facts_route_return": "Les corrections et les sources utilisent leurs pages existantes. La position détaillée ne peut pas être restaurée après avoir quitté cette page ; revenez à ce champ du profil.",
+  "people_facts_unsupported": "Le type de données de ce champ n’est pas pris en charge.",
+  "people_facts_suppressed": "Ce champ est supprimé de la sélection dans le contexte actuel.",
+  "people_facts_unresolved": "Ce champ est non résolu dans le contexte actuel."
 }

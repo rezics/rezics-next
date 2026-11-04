@@ -8820,5 +8820,22 @@
   "music_location_previous": "Vorherige angenommene Adresse",
   "music_location_start": "Anfang der ausgewählten Beziehung",
   "music_location_boundary": "Dies ist die früheste gespeicherte Adresse. Gehe zum Anfang, um diese Beziehung von Beginn an zu lesen.",
-  "music_location_time_evidence": "Ursprünglicher Zeitbeleg"
+  "music_location_time_evidence": "Ursprünglicher Zeitbeleg",
+  "people_facts_scope": "Dies sind die gelieferten aktuellen Fakten dieser Profilansicht, kein vollständiger Katalog, Vorschlagssatz oder Quellenbestand.",
+  "people_facts_filter": "Angezeigten Text in diesem lokalen Fenster filtern",
+  "people_facts_reset": "Fensterfilter zurücksetzen",
+  "people_facts_empty": "Keine angezeigten Fakten in diesem Fenster passen. Setzen Sie den Filter zurück, um zu den Zeilen zurückzukehren.",
+  "people_facts_window": "Lokales Faktenfenster",
+  "people_facts_previous": "Vorherige Fakten",
+  "people_facts_next": "Nächste Fakten",
+  "people_facts_collapse": "Fakten einklappen",
+  "people_facts_browse": "Gelieferte Fakten ansehen",
+  "people_facts_overflow": "Nur das erste lokale Fenster wird angezeigt. Öffnen Sie die gelieferten Fakten, um fortzufahren.",
+  "people_facts_unavailable": "Die lokale Faktenansicht ist für diese Lesung nicht verfügbar. Unabhängige Profilfakten bleiben lesbar.",
+  "people_facts_return": "Zu diesem Profilfakt zurückkehren",
+  "people_facts_changed": "Dieser Fakt wurde geändert oder ist nicht mehr ausgewählt. Kehren Sie zum Feld zurück und aktualisieren Sie das Profil.",
+  "people_facts_route_return": "Korrekturen und Quellen verwenden ihre bestehenden Seiten. Die genaue lokale Position kann nach dem Verlassen nicht wiederhergestellt werden; kehren Sie zu diesem Profilfeld zurück.",
+  "people_facts_unsupported": "Der Datentyp dieses Feldes wird nicht unterstützt.",
+  "people_facts_suppressed": "Dieses Feld wird im aktuellen Kontext unterdrückt.",
+  "people_facts_unresolved": "Dieses Feld ist im aktuellen Kontext ungeklärt."
 }
