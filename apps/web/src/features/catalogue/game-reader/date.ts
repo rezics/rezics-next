@@ -17,7 +17,7 @@ export function gameDatePresentation(statement: GameStatement, digest: string, l
   if (reading.kind === 'tba') return { kind: 'tba', text: m.release_fidelity_date_tba({}, o) };
   if (reading.kind === 'none') return { kind: 'none', text: timePresentation(statement.value, locale).text };
 
-  const content: unknown = statement.value.content;
+  const content: unknown = statement.value.type === 'value' ? statement.value.content : undefined;
   const value = content !== null && typeof content === 'object' && !Array.isArray(content) ? content : undefined;
   // Native Release values historically omit the calendar for Gregorian dates. Normalize only that absence;
   // an explicit foreign calendar is never converted into an admitted Gregorian value.
