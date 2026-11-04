@@ -171,7 +171,7 @@ test('cancelled, changed, expired and concurrent confirmations refuse new phases
     );
     const recovered = persistListImportMetadata(
       original,
-      { ...original, annotationStatus: 'unattempted', provenanceStarted: true },
+      { ...original, annotationStatus: 'unattempted' },
       facts,
     );
     expect(recovered.ok).toBe(true);
