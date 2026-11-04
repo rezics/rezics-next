@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { loadAccountSession, accountOperationSessionMatches } from './account-operations';
+import { loadAccountSession } from './account-operations';
+import { accountOperationSessionMatches } from './account-operation-step-up';
 import { loadManagementSession, managementProfileSessionMatches, managementSessionMatches } from './management-operations';
 import { organizationDeleteSessionMatches } from './organization-delete-step-up';
 import { loadRecoveryPage, type RecoveryPageResult } from './recovery-page';
