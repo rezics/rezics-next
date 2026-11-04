@@ -146,8 +146,15 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
     },
     async choose(select: HTMLSelectElement, values: string[]) {
       await act(async () => {
-        for (const option of select.options) option.selected = values.includes(option.value);
-        select.dispatchEvent(new window.Event('input', { bubbles: true }) as unknown as Event);
+        const setValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
+        if (select.multiple) {
+          for (const option of select.options) option.selected = false;
+          if (values[0] !== undefined) setValue?.call(select, values[0]);
+          for (const value of values.slice(1)) {
+            const option = [...select.options].find((candidate) => candidate.value === value);
+            if (option) option.selected = true;
+          }
+        } else setValue?.call(select, values[0] ?? '');
         select.dispatchEvent(new window.Event('change', { bubbles: true }) as unknown as Event);
       });
     },
