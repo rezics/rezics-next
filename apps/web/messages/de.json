@@ -4008,6 +4008,7 @@
   "board_reading_restart_help": "Die angehefteten Diskussionen haben sich geändert. Lade dieses Board und diese Reihenfolge ohne die vorherige Seite.",
   "board_reading_invalid_cursor": "Diese Seite des Boards ist nicht mehr aktuell. Lade diese Reihenfolge von vorn.",
   "board_reading_return": "Zurück zu diesem Board",
+  "board_reading_return_unavailable": "Die ursprüngliche Boardseite ist nicht verfügbar. Lade diese Sortierung von Anfang an neu.",
   "board_reading_malformed": "Diese Board-Adresse konnte nicht gelesen werden. Das ist kein Berechtigungsproblem.",
   "board_community_members": "{count} Mitglieder",
   "board_community_members_unknown": "Mitgliederzahl nicht verfügbar",

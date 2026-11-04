@@ -19,7 +19,8 @@ import { BoardFeed } from './board-feed';
 import type { BoardOpeningReactionOrigin } from './board-opening';
 import type { CommunityBoardPage } from './board-feed-data';
 import type { BoardSort } from './board-sort';
-import { boardReadingRestartHref } from './board-reading';
+import { boardRequestHref } from './board-navigation';
+import type { BoardPreparedNavigation } from './board-navigation';
 
 /** One owned community region, reused by the actual route and Patterns. The shell owns surrounding navigation. */
 export function BoardCommunity({
@@ -32,6 +33,7 @@ export function BoardCommunity({
   overflow,
   postingInterval,
   reactionOrigin,
+  navigation,
 }: {
   page: CommunityBoardPage;
   sort: BoardSort;
@@ -42,6 +44,7 @@ export function BoardCommunity({
   overflow?: ReactNode;
   postingInterval?: ReactNode;
   reactionOrigin?: BoardOpeningReactionOrigin;
+  navigation?: BoardPreparedNavigation;
 }) {
   const [replacement, setReplacement] = useState<{
     source: CommunityBoardPage;
@@ -96,6 +99,8 @@ export function BoardCommunity({
           sort={sort}
           page={threads}
           openingCards={page.openingCards}
+          openingRows={page.openingRows}
+          {...(navigation ? { navigation } : {})}
           {...(reactionOrigin === undefined ? {} : { reactionOrigin })}
           authors={authors}
           now={now}
@@ -183,7 +188,7 @@ export function BoardCommunityStatus({
 }: {
   state: 'loading' | 'error' | 'closed' | 'restart';
   onRetry?: () => void;
-  restart?: { boardId: string; sort: BoardSort };
+  restart?: { boardId: string; sort: BoardSort; returnTo?: string | undefined };
 }) {
   return (
     <section className="w-full max-w-6xl rounded-3xl bg-card p-6 sm:p-10" aria-busy={state === 'loading'}>
@@ -207,7 +212,10 @@ export function BoardCommunityStatus({
       </p>
       {state === 'restart' && restart ? (
         <a
-          href={boardReadingRestartHref({ boardId: restart.boardId, sort: restart.sort, locale: getLocale() })}
+          href={boardRequestHref(getLocale(), restart.boardId, {
+            ...(restart.sort === 'active' ? {} : { sort: restart.sort }),
+            ...(restart.returnTo ? { returnTo: restart.returnTo } : {}),
+          })}
           className={buttonVariants({
             variant: 'outline',
             className: 'mt-4 h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal',

@@ -1,4 +1,5 @@
 import { slug } from '@rezics/definitions/slug';
+import { admittedBoardReturn } from './board-navigation';
 import { parseHistoryReturnToken } from './revision-return/history-return';
 
 const memoryKey = '__rezicsThreadSlugs';
@@ -25,6 +26,7 @@ export function threadLocation(
   cursor?: string,
   post?: string,
   historyReturn?: { token?: string; revisionId?: string },
+  boardReturn?: string,
 ): string {
   // With no title projection, use the ID route so its normal reader can canonicalize after reading.
   const route =
@@ -35,6 +37,8 @@ export function threadLocation(
   const search: string[] = [];
   if (cursor !== undefined) search.push(`cursor=${encodeURIComponent(cursor)}`);
   if (post !== undefined) search.push(`post=${encodeURIComponent(post)}`);
+  const origin = admittedBoardReturn(boardReturn);
+  if (origin) search.push(`boardReturn=${encodeURIComponent(origin)}`);
   const token = parseHistoryReturnToken(historyReturn?.token);
   const revisionId = historyReturn?.revisionId;
   if (token && revisionId && revisionId.length <= 128) {
@@ -49,8 +53,11 @@ export function threadSearch(search: Record<string, unknown>): {
   post?: string;
   historyReturn?: string;
   historyRevision?: string;
+  boardReturn?: string;
 } {
+  const boardReturn = admittedBoardReturn(search.boardReturn);
   return {
+    ...(boardReturn ? { boardReturn } : {}),
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
     ...(typeof search.post === 'string' && search.post.length <= 128 ? { post: search.post } : {}),
     ...(parseHistoryReturnToken(search.historyReturn)

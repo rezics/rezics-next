@@ -4008,6 +4008,7 @@
   "board_reading_restart_help": "置顶讨论已更改。请不带上一页、按此排序重新加载此版面。",
   "board_reading_invalid_cursor": "此版面页已不是当前内容。请按此排序从头重新加载。",
   "board_reading_return": "返回此版面",
+  "board_reading_return_unavailable": "原来的看板页面已无法还原。请从这个排序的开头重新加载。",
   "board_reading_malformed": "无法读取此版面地址。这不是权限问题。",
   "board_community_members": "{count} 位成员",
   "board_community_members_unknown": "成员人数暂不可用",

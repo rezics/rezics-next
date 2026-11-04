@@ -18,7 +18,15 @@ const linkClass =
 const currentClass = 'bg-muted text-foreground';
 
 // Plain links, one address per sort, so the control works without JavaScript. Changing the sort drops the cursor.
-export function BoardSortNav({ boardId, sort }: { boardId: string; sort: BoardSort }) {
+export function BoardSortNav({
+  boardId,
+  sort,
+  returnTo,
+}: {
+  boardId: string;
+  sort: BoardSort;
+  returnTo?: string | undefined;
+}) {
   return (
     <nav aria-label={m.board_sort_label()} className="flex min-w-0 max-w-full flex-wrap gap-1">
       {boardSorts.map((option) => (
@@ -26,7 +34,7 @@ export function BoardSortNav({ boardId, sort }: { boardId: string; sort: BoardSo
           key={option}
           to="/boards/$id"
           params={{ id: boardId }}
-          search={option === 'active' ? {} : { sort: option }}
+          search={{ ...(option === 'active' ? {} : { sort: option }), ...(returnTo ? { returnTo } : {}) }}
           aria-current={option === sort ? 'page' : undefined}
           className={option === sort ? `${linkClass} ${currentClass}` : linkClass}
         >

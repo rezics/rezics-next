@@ -4011,6 +4011,7 @@
   "board_reading_restart_help": "ピン留めされた議論が変わりました。前のページなしで、このボードとこの並びを読み直してください。",
   "board_reading_invalid_cursor": "このボードのページはもう現在の内容ではありません。この並びを先頭から読み直してください。",
   "board_reading_return": "このボードに戻る",
+  "board_reading_return_unavailable": "元の掲示板ページを復元できません。この並び順の先頭から読み込み直してください。",
   "board_reading_malformed": "このボードのアドレスを読めませんでした。権限の問題ではありません。",
   "board_community_members": "メンバー {count} 人",
   "board_community_members_unknown": "メンバー数を取得できません",

@@ -4008,6 +4008,7 @@
   "board_reading_restart_help": "Les discussions épinglées ont changé. Rechargez ce forum et cet ordre sans la page précédente.",
   "board_reading_invalid_cursor": "Cette page du forum n’est plus actuelle. Rechargez cet ordre depuis le début.",
   "board_reading_return": "Retour à ce forum",
+  "board_reading_return_unavailable": "La page d’origine du forum est indisponible. Rechargez ce classement depuis le début.",
   "board_reading_malformed": "Cette adresse de forum n’a pas pu être lue. Ce n’est pas un problème d’autorisation.",
   "board_community_members": "{count} membres",
   "board_community_members_unknown": "Nombre de membres indisponible",

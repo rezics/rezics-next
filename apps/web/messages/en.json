@@ -4015,6 +4015,7 @@
   "board_reading_restart_help": "Pinned discussions changed. Reload this board and order without the previous page.",
   "board_reading_invalid_cursor": "This page of the board is no longer current. Reload from the start of this order.",
   "board_reading_return": "Back to this board",
+  "board_reading_return_unavailable": "The original board visit is unavailable. Reload its order from the start.",
   "board_reading_malformed": "This board address could not be read. It is not a permission problem.",
   "board_community_members": "{count} members",
   "board_community_members_unknown": "Member count unavailable",

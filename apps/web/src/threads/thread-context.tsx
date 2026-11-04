@@ -3,6 +3,8 @@ import { ChevronRightIcon } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { m } from '../paraglide/messages.js';
 import type { BoardRealm } from './board-context';
+import { admittedBoardReturn, boardReturnMatches } from './board-navigation';
+import { getLocale } from '../paraglide/runtime.js';
 import { initials } from './initials';
 
 const linkClass =
@@ -13,12 +15,16 @@ export function BoardContext({
   realm,
   board,
   prominent = false,
+  boardReturn,
 }: {
   realm?: BoardRealm | undefined;
   board?: { id: string; title: string | null } | undefined;
   prominent?: boolean;
+  boardReturn?: string | undefined;
 }) {
   if (!realm && !board) return null;
+  const origin = admittedBoardReturn(boardReturn);
+  const boardHref = origin && boardReturnMatches(origin, board?.id, getLocale()) ? origin : undefined;
   return (
     <nav
       aria-label={m.board_context_label()}
@@ -35,7 +41,11 @@ export function BoardContext({
         </Link>
       ) : null}
       {realm && board ? <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0" /> : null}
-      {board ? (
+      {board && boardHref ? (
+        <a href={boardHref} className={linkClass}>
+          <span className="min-w-0">{board.title ?? m.threads_untitled()}</span>
+        </a>
+      ) : board ? (
         <Link to="/boards/$id" params={{ id: board.id }} className={linkClass}>
           <span className="min-w-0">{board.title ?? m.threads_untitled()}</span>
         </Link>

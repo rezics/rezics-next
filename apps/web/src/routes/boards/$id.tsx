@@ -1,6 +1,5 @@
 import { useSession } from '../../session/query';
 import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
-import * as v from 'valibot';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { boardPageHead } from '../../threads/thread-head';
@@ -13,7 +12,7 @@ import { BoardWatchControl } from '../../threads/board-watch/control';
 import { SlowModeSetting } from '../../threads/slow-mode';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { isBoardPageCursorError } from '../../threads/board-reading';
-import { subjectCommunityVisitReturn } from '../../features/pages/subject-visit-navigation';
+import { boardSearch, boardRequestHref } from '../../threads/board-navigation';
 import {
   BoardPageCallerHost,
   createBoardPageCaller,
@@ -21,20 +20,7 @@ import {
   type BoardPageLoadResult,
 } from '../../threads/board-page-caller';
 
-export function boardSearch(search: Record<string, unknown>): {
-  cursor?: string;
-  sort?: 'hot' | 'new';
-  returnTo?: string;
-} {
-  const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
-  const sort = boardSortFromSearch(v.parse(v.fallback(v.optional(v.string()), undefined), search.sort));
-  const returnTo = subjectCommunityVisitReturn(search.returnTo, getLocale());
-  return {
-    ...(typeof cursor === 'string' ? { cursor } : {}),
-    ...(sort ? { sort } : {}),
-    ...(returnTo ? { returnTo } : {}),
-  };
-}
+export { boardSearch } from '../../threads/board-navigation';
 
 export const Route = createFileRoute('/boards/$id')({
   staticData: { publicCache: true },
@@ -88,11 +74,7 @@ function BoardPage() {
   const id = Route.useParams().id;
   const search = Route.useSearch();
   const sort = boardSortFromSearch(search.sort);
-  const boardQuery = new URLSearchParams();
-  if (search.cursor !== undefined) boardQuery.set('cursor', search.cursor);
-  if (sort !== undefined) boardQuery.set('sort', sort);
-  if (search.returnTo) boardQuery.set('returnTo', search.returnTo);
-  const returnTo = `${location.pathname}${boardQuery.size ? `?${boardQuery}` : ''}`;
+  const returnTo = boardRequestHref(getLocale(), id, boardSearch(search));
   return (
     <BoardPageCallerHost
       result={page}
@@ -109,6 +91,7 @@ function BoardPage() {
           page={currentPage}
           sort={sort ?? 'active'}
           reactionOrigin={reactionOrigin}
+          navigation={{ href: returnTo }}
           {...(search.cursor === undefined ? {} : { cursor: search.cursor })}
           participation={(page) => <BoardParticipation community={page.community} returnTo={returnTo} />}
           watch={<BoardWatchControl boardId={id} returnTo={returnTo} session={session} authority={reactionOrigin} />}
@@ -162,7 +145,7 @@ function BoardPageError({ error }: { error: unknown }) {
               ? 'closed'
               : 'error'
       }
-      {...(restart ? { restart: { boardId: id, sort: sort ?? 'active' } } : {})}
+      {...(restart ? { restart: { boardId: id, sort: sort ?? 'active', returnTo: search.returnTo } } : {})}
       {...(canRetry && !restart ? { onRetry: () => void lifecycle.retry(() => void router.invalidate()) } : {})}
     />
   );
