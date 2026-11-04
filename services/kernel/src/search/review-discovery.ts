@@ -161,6 +161,8 @@ function nativeSummary(value: unknown, partition: number): ReviewDiscoveryRecord
       (field) => !['id', 'subjectId', 'authorId', 'title', 'excerpt', 'revisionId', 'sourceVersion'].includes(field),
     ) ||
     !['id', 'subjectId', 'authorId', 'title', 'revisionId'].every((field) => Object.hasOwn(value, field)) ||
+    typeof value.subjectId !== 'string' ||
+    routeOf(value.subjectId) === null ||
     typeof value.authorId !== 'string' ||
     routeOf(value.authorId) === null
   )
