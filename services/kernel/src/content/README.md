@@ -3570,7 +3570,11 @@ The Web transport factory is
 `createKernelClient(origin: string, options?: KernelClientOptions): KernelClient` from `@rezics/client`.
 Its options are `{fetch?, headers?, session?, onSession?}`. Create one instance per viewer; `session` is the initial
 session token and `onSession(token)` receives replacements. The package exports `WatchManagementKind`,
-`WatchManagementItem` and `WatchManagementPage` from the generated mounted schema declarations.
+`WatchManagementItem` and `WatchManagementPage` from its narrow source contract at
+`packages/client/src/kernel/content/watch-management-contract.ts`, mirrored from the closed Kernel schema above.
+Mounted route call types use a narrow source adapter for the paths above until the supported complete-input
+generator can publish the complete route type; replace that adapter only through supported generation, never by
+editing emitted declarations.
 Use `client.accounts({accountId}).watches.get({query:{kind,limit,cursor}})` to list and
 `client.accounts({accountId}).watches({watchId}).delete({expectedRevision},{query:{kind},headers:{'idempotency-key':key}})`
 to remove the personal row. Board state uses `client.boards({id}).watch.get()` and
@@ -3627,7 +3631,13 @@ existing mandatory path.
   creation time and revision; the page stores compact native context witnesses, not first-post bodies or copied Realm
   authority.
 - Bound: `Q_self + Q_home + Q_range(R) + R*(Q_native_initial + Q_episode) + P*(Q_native_final + Q_episode) + Q_self_final + Q_home_final`, where R≤100 raw keys are examined and P≤20 are retained. The range is one statement/at most 100 physical subscription rows; each `Q_episode` is one statement/at most one physical source row. Native calls include their actual preparations, evaluations, board/Realm disclosure, transaction controls and thread's selected first-post read. They release all checkouts between calls; Access uses its configured pools, and no cross-home atomic snapshot is implied. The inventory retains only compact target witnesses and the returned title, not native first-post bodies or copied authority. A failed request returns no partial page or cursor; a same-cursor retry repeats the dispatched read work. GET has no registered runner phase; removals remain on the existing `runCommand` receipt/history phases below. Memory is O(R+P+D), with D bounded by the existing native reader limits; output contains at most 20 closed DTOs and a cursor of at most 4096 characters. There is no refill or all-partition query.
-- Growth check: `board-watch-growth.test.ts` continues to execute both mounted selections at 256/1024/4096 histories, with the repeated native disclosures and source observations included in captured SQL, rows, blocks, controls and actual UTF-8 request/response bytes. It rejects large sequential scans. Controller acceptance owns independent inactive-source, selected-target and authority-history growth, retained/materialized byte caps, cold-retry and registered-runner measurements.
+- Growth check: `board-watch-growth.test.ts` executes both mounted selections at 256/1024/4096 with fixed selected
+  identities, homes and page limits while separately seeding unrelated identities, selected identity rows, selected
+  post revision history and expired selected/unrelated Access grants. Captures retain actual SQL, transaction
+  controls, physical rows/blocks, pool background work and request/response bytes; the fixture also counts Access
+  preparations/evaluations and materialized DTO, retained item and serialized UTF-8 bytes. It repeats an unavailable
+  read with the exact same cursor, rejects large scans of watch, revision and grant histories, and records zero
+  registered runner phases for these direct calls. Broader native acceptance remains with integration.
 
 ### Cost: native command envelope used above
 

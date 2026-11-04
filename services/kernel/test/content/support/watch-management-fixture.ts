@@ -1,7 +1,60 @@
 import type { Pool, PoolClient } from 'pg';
+import type { Access } from '../../../src/request/access.ts';
 import { ProblemError } from '../../../src/http/problem.ts';
 
 type InterceptMode = 'pause' | 'fail';
+
+export type WatchAccessCounts = Readonly<{ preparations: number; evaluations: number }>;
+
+/** Count real Access preparations and evaluations around mounted watch requests. */
+export function captureWatchAccess(access: Access) {
+  const counts = { preparations: 0, evaluations: 0 };
+  const originals = new Map<string, PropertyDescriptor | undefined>();
+  const prepare = new Set(['prepareReadDecisions', 'prepare', 'preparePage']);
+  const evaluate = new Set(['authorize', 'authorizePage', 'authorizeExplicit']);
+  for (const name of [...prepare, ...evaluate]) {
+    const original = Object.getOwnPropertyDescriptor(access, name);
+    const method = (access as unknown as Record<string, unknown>)[name];
+    if (typeof method !== 'function') continue;
+    originals.set(name, original);
+    Object.defineProperty(access, name, {
+      configurable: true,
+      writable: true,
+      value: function (this: unknown, ...args: unknown[]) {
+        if (prepare.has(name)) counts.preparations++;
+        else counts.evaluations++;
+        return Reflect.apply(method, this, args);
+      },
+    });
+  }
+  return {
+    reset() {
+      counts.preparations = 0;
+      counts.evaluations = 0;
+    },
+    snapshot(): WatchAccessCounts {
+      return { ...counts };
+    },
+    restore() {
+      for (const [name, descriptor] of originals) {
+        if (descriptor) Object.defineProperty(access, name, descriptor);
+        else Reflect.deleteProperty(access, name);
+      }
+    },
+  };
+}
+
+export function watchPageByteEvidence(page: unknown) {
+  const value = page as { items?: readonly unknown[] };
+  const serialized = JSON.stringify(page);
+  const retained = JSON.stringify(value.items ?? []);
+  if (serialized === undefined || retained === undefined) throw new TypeError('Watch page is not JSON serializable');
+  return {
+    materializedDtoBytes: Buffer.byteLength(serialized, 'utf8'),
+    retainedItemBytes: Buffer.byteLength(retained, 'utf8'),
+    serializedUtf8Bytes: Buffer.byteLength(serialized, 'utf8'),
+  };
+}
 
 /** Pause or fail one native thread snapshot after earlier page rows have finished disclosure. */
 export function interceptThreadSnapshot(pool: Pool, threadId: string, mode: InterceptMode) {

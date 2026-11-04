@@ -139,19 +139,27 @@ async function loadPage(pool: Pool, input: Input, opening: Opening, deadline: nu
         ]);
         return { done: true, rows: [] as Recipient[] };
       }
-      const rows = await client.query<Recipient>(
-        `SELECT route,watch_id::text,watcher_account_id::text,created_at::text FROM content.board_watch
-       WHERE board_id=$1 AND watching AND created_at<$2::timestamptz
-         AND ($3::timestamptz IS NULL OR (created_at,watch_id)>($3::timestamptz,$4::uuid))
-       ORDER BY created_at,watch_id LIMIT $5`,
-        [
-          opening.board_id,
-          opening.published_at,
-          work.cursor_created_at,
-          work.cursor_watch_id,
-          BOARD_WATCH_RECIPIENT_BUDGET,
-        ],
-      );
+      const rows =
+        work.cursor_created_at === null
+          ? await client.query<Recipient>(
+              `SELECT route,watch_id::text,watcher_account_id::text,created_at::text FROM content.board_watch
+           WHERE board_id=$1 AND watching AND created_at<$2::timestamptz
+           ORDER BY created_at,watch_id LIMIT $3`,
+              [opening.board_id, opening.published_at, BOARD_WATCH_RECIPIENT_BUDGET],
+            )
+          : await client.query<Recipient>(
+              `SELECT route,watch_id::text,watcher_account_id::text,created_at::text FROM content.board_watch
+           WHERE board_id=$1 AND watching AND created_at<$2::timestamptz
+             AND (created_at,watch_id)>($3::timestamptz,$4::uuid)
+           ORDER BY created_at,watch_id LIMIT $5`,
+              [
+                opening.board_id,
+                opening.published_at,
+                work.cursor_created_at,
+                work.cursor_watch_id,
+                BOARD_WATCH_RECIPIENT_BUDGET,
+              ],
+            );
       return { done: false, rows: rows.rows };
     },
     deadline,
