@@ -74,8 +74,10 @@ export async function run(
         await installService({
           mainCheckout: settings.mainCheckout,
           localConfig: settingsFile(),
-          maintenanceBudgetMs: settings.policy?.maintenance.budgetMs,
-          regenerationBudgetMs: settings.policy?.maintenance.regenerationBudgetMs,
+          ...(settings.policy ? {
+            maintenanceBudgetMs: settings.policy.maintenance.budgetMs,
+            regenerationBudgetMs: settings.policy.maintenance.regenerationBudgetMs,
+          } : {}),
         });
         // Past oneshot failures remain visible in status without making installation depend on maintenance.
         await reportServices('status', undefined, undefined, settings.policy?.service);
