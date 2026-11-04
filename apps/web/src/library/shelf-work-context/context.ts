@@ -13,7 +13,7 @@ export type ShelfContextSource = {
   id?: string;
   labelId?: string;
   subject: LibrarySubject | null;
-  facts?: ShelfFacts;
+  facts?: ShelfFacts | undefined;
 };
 export type ShelfWorkContext = {
   identity: string;
