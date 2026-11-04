@@ -25,7 +25,7 @@ type Candidate = {
 function selectedVn() {
   const rows: Record<string, Record<string, unknown>[]> = {
     vn: [{ id: 'v1', olang: 'en', alias: null }],
-    vn_titles: [{ id: 'v1', lang: 'en', official: true, title: 'CLANNAD', latin: null }],
+    vn_titles: [{ id: 'v1', lang: 'en', official: 't', title: 'CLANNAD', latin: null }],
     entry_meta: [{ id: 'v1', revision: '7', lastmod: '2026-10-25 00:00:00+00' }],
     vn_staff: [
       { id: 'v1', aid: '10', role: 'scenario', note: 'Writer Alias' },
