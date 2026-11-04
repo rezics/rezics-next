@@ -4,6 +4,8 @@ import { act, createElement, useEffect, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type { MembershipResult } from '../src/community/space';
+import type { NativeRealmHomeObservation } from '../src/community/realm-home-native';
+import type { RealmJoinAdvice } from '../src/community/native-operations';
 import type { RealmViewer } from '../src/community/realm-membership-queries';
 import { realmMembershipQuery } from '../src/community/realm-membership-queries';
 import { useRealmMembershipCaller } from '../src/community/realm-membership-lifetime';
@@ -19,8 +21,10 @@ type MembershipCommand = {
 };
 
 const standingReads: string[] = [];
+const joinAdviceReads: string[] = [];
 const membershipCommands: MembershipCommand[] = [];
 let readMembership: (realmId: string) => Promise<RealmViewer | null> = async () => viewer('member');
+let readJoinAdvice: (realmId: string) => Promise<RealmJoinAdvice> = async () => ({ state: 'current', allowed: true });
 let sendMembership: (input: MembershipCommand) => Promise<MembershipResult> = async () => ({
   outcome: 'accepted',
   workflowId: 'lifetime-workflow',
@@ -30,6 +34,10 @@ mock.module('../src/community/realm-membership-actions', () => ({
   readRealmMembership: ({ data }: { data: { realmId: string } }) => {
     standingReads.push(data.realmId);
     return readMembership(data.realmId);
+  },
+  readRealmJoinAdvice: ({ data }: { data: { realmId: string } }) => {
+    joinAdviceReads.push(data.realmId);
+    return readJoinAdvice(data.realmId);
   },
 }));
 mock.module('../src/community/space-actions', () => ({
@@ -70,12 +78,31 @@ function deferred<T>() {
 
 type SurfaceConfig = {
   realmId: string;
+  nativeObservation?: NativeRealmHomeObservation;
 };
 
 function MembershipSurface({ config }: { config: SurfaceConfig }) {
   const id = config.realmId;
   const realm = { id, visibility: 'public' as const, viewer: null };
-  return createElement(RealmMembership, { realm, returnTo: '/spaces/atlas', spaceId });
+  return createElement(RealmMembership, {
+    realm,
+    returnTo: '/spaces/atlas',
+    spaceId,
+    ...(config.nativeObservation ? { nativeObservation: config.nativeObservation } : {}),
+  });
+}
+
+function nativeHome(membership: 'none' | 'pending' | 'member' = 'none'): NativeRealmHomeObservation {
+  return {
+    viewer: { state: 'member', membership },
+    actions: {
+      participate: 'admitted',
+      join: 'unavailable',
+      leave: membership === 'member' ? 'admitted' : 'denied',
+      claim: 'unavailable',
+      manage: 'denied',
+    },
+  };
 }
 
 /** A real caller starts the production shared query, then publishes several authority notifications in one effect. */
@@ -196,8 +223,10 @@ async function makeSurface(
 
 function resetFixtures() {
   standingReads.length = 0;
+  joinAdviceReads.length = 0;
   membershipCommands.length = 0;
   readMembership = async () => viewer('member');
+  readJoinAdvice = async () => ({ state: 'current', allowed: true });
   sendMembership = async () => ({ outcome: 'accepted', workflowId: 'lifetime-workflow' });
 }
 
@@ -485,5 +514,143 @@ test('Realm and QueryClient replacement plus unmount prevent late standing cache
   } finally {
     nextClient.clear();
     if (surface.host.isConnected) await surface.dispose();
+  }
+});
+
+test('native join advice retries and retires across fetching, equal observations, remount and A-B-A', async () => {
+  resetFixtures();
+  const oldA = deferred<RealmJoinAdvice>();
+  const oldB = deferred<RealmJoinAdvice>();
+  const replacement = deferred<RealmJoinAdvice>();
+  const equalReplacement = deferred<RealmJoinAdvice>();
+  const remountRead = deferred<RealmJoinAdvice>();
+  let read = 0;
+  readJoinAdvice = async () => {
+    read++;
+    if (read === 1) return { state: 'unavailable' };
+    if (read === 2) return oldA.promise;
+    if (read === 3) return oldB.promise;
+    if (read === 4) return { state: 'current', allowed: true };
+    if (read === 5) return replacement.promise;
+    if (read === 6) return equalReplacement.promise;
+    if (read === 7) return remountRead.promise;
+    return { state: 'current', allowed: false };
+  };
+  const config = { realmId, nativeObservation: nativeHome('none') };
+  const surface = await makeSurface(config);
+  let remounted: Awaited<ReturnType<typeof makeSurface>> | undefined;
+  try {
+    await surface.until(
+      () => joinAdviceReads.length === 1 && surface.hasText(m.realm_membership_unavailable()),
+      'unavailable advice',
+    );
+    expect(surface.host.textContent).not.toContain(m.realm_join());
+    await click(surface, m.realm_membership_retry());
+    await surface.until(
+      () => joinAdviceReads.length === 2 && surface.hasText(m.realm_membership_loading()),
+      'a retried pending read',
+    );
+    expect(surface.host.textContent).not.toContain(m.realm_join());
+
+    await surface.setSessions(signedIn(replacementSubject, 'csrf-other'));
+    await surface.until(
+      () => joinAdviceReads.length === 3 && surface.hasText(m.realm_membership_loading()),
+      'replacement account advice',
+    );
+    await surface.setSessions(signedIn());
+    await surface.until(() => joinAdviceReads.length === 4 && surface.hasText(m.realm_join()), 'fresh A advice');
+    oldA.resolve({ state: 'current', allowed: false });
+    oldB.resolve({ state: 'current', allowed: false });
+    await surface.settle();
+    expect(surface.hasText(m.realm_join())).toBe(true);
+
+    const key = ['realm-membership-advice', realmId] as const;
+    void surface.client.invalidateQueries({ queryKey: key });
+    await surface.until(
+      () => joinAdviceReads.length === 5 && surface.hasText(m.realm_membership_loading()),
+      'advice invalidation',
+    );
+    expect(surface.host.textContent).not.toContain(m.realm_join());
+    replacement.resolve({ state: 'current', allowed: true });
+    await surface.until(() => surface.hasText(m.realm_join()), 'advice after invalidation');
+
+    await surface.updateConfig({ realmId, nativeObservation: nativeHome('none') });
+    expect(surface.host.textContent).not.toContain(m.realm_join());
+    await surface.until(
+      () => joinAdviceReads.length === 6 && surface.hasText(m.realm_membership_loading()),
+      'equal observation replacement',
+    );
+    equalReplacement.resolve({ state: 'current', allowed: true });
+    await surface.until(() => surface.hasText(m.realm_join()), 'replacement observation advice');
+
+    const sameClient = surface.client;
+    await surface.dispose();
+    remounted = await makeSurface(config, sameClient);
+    await remounted.until(
+      () => joinAdviceReads.length === 7 && remounted!.hasText(m.realm_membership_loading()),
+      'remount advice read',
+    );
+    expect(remounted.host.textContent).not.toContain(m.realm_join());
+    remountRead.resolve({ state: 'current', allowed: true });
+    await remounted.until(() => remounted!.hasText(m.realm_join()), 'advice after remount');
+  } finally {
+    await surface.dispose();
+    if (remounted) await remounted.dispose();
+  }
+});
+
+test('native uncertain join retains its original command through A-B-A and remount for retry or discard', async () => {
+  resetFixtures();
+  const staleB = deferred<RealmJoinAdvice>();
+  let adviceReads = 0;
+  readJoinAdvice = async () => {
+    adviceReads++;
+    return adviceReads === 2 ? staleB.promise : { state: 'current', allowed: true };
+  };
+  sendMembership = async () => ({ outcome: 'refused', effect: 'unknown' });
+  const config = { realmId, nativeObservation: nativeHome('none') };
+  const surface = await makeSurface(config);
+  let remounted: Awaited<ReturnType<typeof makeSurface>> | undefined;
+  try {
+    await surface.until(() => surface.hasText(m.realm_join()), 'native join advice');
+    await click(surface, m.realm_join());
+    await surface.until(() => surface.hasText(m.realm_membership_command_uncertain()), 'uncertain native join');
+    expect(membershipCommands).toHaveLength(1);
+    expect(membershipCommands[0]).toEqual({
+      data: { realmId, action: 'join', idempotencyKey: expect.any(String) },
+      headers: { 'X-CSRF-Token': 'csrf-original' },
+    });
+
+    await surface.setSessions(signedIn(replacementSubject, 'csrf-other'));
+    await surface.until(() => joinAdviceReads.length === 2, 'replacement account read');
+    await surface.setSessions(signedIn(subject, 'csrf-rotated'));
+    await surface.until(() => surface.hasText(m.realm_membership_command_uncertain()), 'returned actor recovery');
+    staleB.resolve({ state: 'current', allowed: false });
+    await surface.settle();
+    expect(surface.hasText(m.realm_membership_command_uncertain())).toBe(true);
+    expect(membershipCommands).toHaveLength(1);
+
+    const sameClient = surface.client;
+    await surface.dispose();
+    remounted = await makeSurface(config, sameClient);
+    await remounted.setSessions(signedIn(subject, 'csrf-final'));
+    await remounted.until(
+      () => remounted!.hasText(m.realm_membership_command_uncertain()) && !!remounted!.host.querySelector('button'),
+      'retained command after remount',
+    );
+    const retry = [...remounted.host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.realm_membership_command_retry(),
+    );
+    expect(retry).toBeDefined();
+    await click(remounted, m.realm_membership_command_retry());
+    await remounted.until(() => membershipCommands.length === 2, 'deliberate same-key retry');
+    expect(membershipCommands[1]).toEqual(membershipCommands[0]);
+    expect(membershipCommands[1].headers['X-CSRF-Token']).toBe('csrf-original');
+    await click(remounted, m.realm_membership_command_discard());
+    await remounted.until(() => remounted!.hasText(m.realm_join()), 'join control after discard');
+    expect(membershipCommands).toHaveLength(2);
+  } finally {
+    await surface.dispose();
+    if (remounted) await remounted.dispose();
   }
 });

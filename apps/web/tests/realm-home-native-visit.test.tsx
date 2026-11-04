@@ -2,6 +2,7 @@ import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createContext, useContext, type ReactNode } from 'react';
 import type { NativeRealmHomeOperations, NativeRealmHomePage } from '../src/community/realm-home-native';
+import type { RealmJoinAdvice } from '../src/community/native-operations';
 import type { SpacePageData } from '../src/community/space';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import type { SpacePageAdmission } from '../src/community/space-page-lifetime';
@@ -31,8 +32,17 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const sessionModule = await import('../src/session/query');
 let session = { state: 'signed-in' as 'signed-in' | 'signed-out', subject: 'reader', csrfToken: 'one' };
 mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => session }));
+let joinAdvice: RealmJoinAdvice = { state: 'current', allowed: true };
+const joinAdviceReads: string[] = [];
+mock.module('../src/community/realm-membership-actions', () => ({
+  readRealmJoinAdvice: ({ data }: { data: { realmId: string } }) => {
+    joinAdviceReads.push(data.realmId);
+    return Promise.resolve(joinAdvice);
+  },
+}));
 const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelves } =
   await import('../src/community/realm-home-native');
+const { readRealmJoinAdvice: readInstalledRealmJoinAdvice } = await import('../src/community/native-operations');
 const { loadSpacePageWithOrigin } = await import('../src/community/space');
 const { SpacePage } = await import('../src/community/space-page');
 const { bindSpacePageResult, captureSpacePageAdmission, SpacePageLifetimeHost } =
@@ -171,9 +181,8 @@ const operations: NativeRealmHomeOperations = {
   },
 };
 
-test('default Space reads bind the composed home after address resolution and preserve concealed versus failed carriers', async () => {
+test('public Space reading remains available while the official Realm Home transport is absent', async () => {
   const calls: string[] = [];
-  let homeStatus = 200;
   const client = {
     spaceAddresses: () => ({
       get: async () => {
@@ -198,16 +207,6 @@ test('default Space reads bind the composed home after address resolution and pr
         };
       },
     }),
-    realms: () => ({
-      home: {
-        get: async ({ query }: { query: { languages: string[] } }) => {
-          calls.push(`home:${query.languages.join(',')}`);
-          return homeStatus === 200
-            ? { status: 200, data: fixture(1, 'anonymous') }
-            : { status: homeStatus, error: { status: homeStatus } };
-        },
-      },
-    }),
   } as unknown as KernelClient;
   const request = new Request('https://site.test/en/spaces/realm');
   const loaded = await loadSpacePageWithOrigin(
@@ -217,21 +216,12 @@ test('default Space reads bind the composed home after address resolution and pr
     { address: 'realm', languages: ['en', 'ja'] },
     'anonymous',
   );
-  expect(calls).toEqual(['address', 'space', 'home:en,ja']);
-  expect(loaded.value.realmCarrier).toBe('available');
-  expect(loaded.value.realm?.nativeObservation?.viewer.state).toBe('anonymous');
-
-  homeStatus = 404;
-  expect(
-    (await loadSpacePageWithOrigin(client, request, {}, { address: 'realm' }, 'anonymous')).value.realmCarrier,
-  ).toBe('concealed');
-  homeStatus = 503;
-  expect(
-    (await loadSpacePageWithOrigin(client, request, {}, { address: 'realm' }, 'anonymous')).value.realmCarrier,
-  ).toBe('unavailable');
+  expect(calls).toEqual(['address', 'space']);
+  expect(loaded.value.space?.title).toBe('Carrying Space');
+  expect(loaded.value.realmCarrier).toBe('unavailable');
 });
 
-test('installed KernelClient binds home and independent raw shelves to one prepared reader', async () => {
+test('Realm Home and shelves stay unavailable until the official root-derived client contract is installed', async () => {
   const requests: {
     method: string;
     path: string;
@@ -255,32 +245,52 @@ test('installed KernelClient binds home and independent raw shelves to one prepa
   });
   const bound = bindNativeRealmHomeOperations(client, { headers: { authorization: 'Bearer prepared' } });
   const home = await bound.home({ realmId: id(1), languages: ['zh-Hant', 'en'] });
-  await bound.boardShelf({ realmId: id(1), cursor: 'boards-raw' });
-  await bound.publicationShelf({ realmId: id(1), languages: ['ja'], cursor: 'publications-raw' });
-  expect(requests).toEqual([
-    {
-      method: 'GET',
-      path: `/v1/realms/${id(1)}/home`,
-      languages: ['zh-Hant', 'en'],
-      cursor: null,
-      authorization: 'Bearer prepared',
+  const boards = await bound.boardShelf({ realmId: id(1), cursor: 'boards-raw' });
+  const publications = await bound.publicationShelf({ realmId: id(1), languages: ['ja'], cursor: 'publications-raw' });
+  expect(requests).toEqual([]);
+  expect([home.status, boards.status, publications.status]).toEqual([503, 503, 503]);
+  expect((home.error as Error).message).toContain('official Realm Home client contract');
+});
+
+test('Realm join advice needs both the exact action and mounted operation', async () => {
+  const answers = [
+    [],
+    [{ action: 'realm:join', operations: ['realm.leave'] }],
+    [{ action: 'realm:manage', operations: ['realm.join'] }],
+    [{ action: 'realm:join', operations: ['realm.join'] }],
+  ];
+  const requests: { method: string; path: string; authorization: string | null; body: unknown }[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      requests.push({
+        method: request.method,
+        path: new URL(request.url).pathname,
+        authorization: request.headers.get('authorization'),
+        body: await request.json(),
+      });
+      const viewerActions = answers.shift()!;
+      return Response.json({ resources: [{ type: 'community.realm', id: id(1), viewerActions }] });
     },
-    {
-      method: 'GET',
-      path: `/v1/realms/${id(1)}/boardShelf`,
-      languages: [],
-      cursor: 'boards-raw',
-      authorization: 'Bearer prepared',
-    },
-    {
-      method: 'GET',
-      path: `/v1/realms/${id(1)}/publicationShelf`,
-      languages: ['ja'],
-      cursor: 'publications-raw',
-      authorization: 'Bearer prepared',
-    },
+  });
+
+  const results = [];
+  for (let n = 0; n < 4; n++) results.push(await readInstalledRealmJoinAdvice(client, id(1), 'Bearer personal'));
+
+  expect(results).toEqual([
+    { state: 'current', allowed: false },
+    { state: 'current', allowed: false },
+    { state: 'current', allowed: false },
+    { state: 'current', allowed: true },
   ]);
-  expect(home.data).toMatchObject({ viewer: { state: 'anonymous' }, actions: { state: 'sign-in' } });
+  expect(requests).toEqual(
+    Array.from({ length: 4 }, () => ({
+      method: 'POST',
+      path: '/v1/viewerActions',
+      authorization: 'Bearer personal',
+      body: { resources: [{ type: 'community.realm', id: id(1) }] },
+    })),
+  );
 });
 const Frame = createContext<ReactNode>(null);
 const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
@@ -335,6 +345,8 @@ afterEach(async () => {
   root = createRoot(host);
   client.clear();
   calls.length = 0;
+  joinAdviceReads.length = 0;
+  joinAdvice = { state: 'current', allowed: true };
   session = { state: 'signed-in', subject: 'reader', csrfToken: 'one' };
   setLocale('en', { reload: false });
 });
@@ -361,6 +373,29 @@ test('one typed native page renders 0/1/6/12 works and explicit nonmember advice
     expect(host.textContent).not.toContain(m.community_manage());
     if (!count) expect(host.textContent).toContain(m.realm_published_empty());
   }
+});
+
+test('unavailable, refused and empty Realm advice never hide public reading or invent a join control', async () => {
+  native = fixture(0, 'none');
+  joinAdvice = { state: 'unavailable' };
+  await paint(await readNativeRealmHome(operations, input));
+  expect(joinAdviceReads).toEqual([id(1)]);
+  expect(host.textContent).toContain('Native Realm');
+  expect(host.textContent).toContain(m.realm_membership_unavailable());
+  expect(host.textContent).toContain(m.realm_membership_retry());
+  expect(host.textContent).not.toContain(m.realm_join());
+
+  joinAdvice = { state: 'refused' };
+  await paint(await readNativeRealmHome(operations, input));
+  expect(host.textContent).toContain(m.realm_membership_advice_refused());
+  expect(host.textContent).not.toContain(m.realm_join());
+  expect(host.querySelector('a[href*="auth/sign-in"]')).toBeNull();
+
+  joinAdvice = { state: 'current', allowed: false };
+  await paint(await readNativeRealmHome(operations, input));
+  expect(host.textContent).toContain(m.realm_native_access_denied());
+  expect(host.textContent).not.toContain(m.realm_join());
+  expect(host.textContent).toContain(m.realm_published_empty());
 });
 
 test('native sparse continuation retries the same board cursor and leaves publication continuation independent', async () => {

@@ -45,6 +45,14 @@ type ActiveRead = {
   retire(cancel: boolean): void;
 };
 
+export type RealmMembershipCommandAttempt = Readonly<{
+  realmId: string;
+  actor: string;
+  credential: string;
+  body: Readonly<{ realmId: string; action: 'join' | 'leave'; idempotencyKey: string }>;
+  observation: number;
+}>;
+
 function readSessionSnapshot(client: QueryClient): SessionSnapshot | null {
   const data = client.getQueryData<Partial<SessionSnapshot>>(['session']);
   if (!data || typeof data.state !== 'string') return null;
@@ -76,6 +84,7 @@ export class RealmMembershipLifetimeStore {
   private readonly listeners = new Set<() => void>();
   private readonly reads = new Set<ActiveRead>();
   private readonly owners = new Map<string, Set<{ owner: CallerOwner; scope: CallerScope }>>();
+  private readonly nativeCommands = new Map<string, RealmMembershipCommandAttempt>();
 
   readonly subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -95,6 +104,25 @@ export class RealmMembershipLifetimeStore {
 
   currentRevision(): number {
     return this.revision;
+  }
+
+  nativeCommand(realmId: string, actor: string): RealmMembershipCommandAttempt | null {
+    return this.nativeCommands.get(this.commandKey(realmId, actor)) ?? null;
+  }
+
+  retainNativeCommand(attempt: RealmMembershipCommandAttempt): RealmMembershipCommandAttempt {
+    const key = this.commandKey(attempt.realmId, attempt.actor);
+    const existing = this.nativeCommands.get(key);
+    if (existing) return existing;
+    const retained = Object.freeze({ ...attempt, body: Object.freeze({ ...attempt.body }) });
+    this.nativeCommands.set(key, retained);
+    return retained;
+  }
+
+  discardNativeCommand(realmId: string, actor: string, expected?: RealmMembershipCommandAttempt): void {
+    const key = this.commandKey(realmId, actor);
+    const current = this.nativeCommands.get(key);
+    if (current && (!expected || current === expected)) this.nativeCommands.delete(key);
   }
 
   addRead(read: ActiveRead): void {
@@ -174,12 +202,26 @@ export class RealmMembershipLifetimeStore {
   private ownerKey(scope: CallerScope): string {
     return JSON.stringify([scope.realmId, scope.subject, scope.csrfToken, scope.revision]);
   }
+
+  private commandKey(realmId: string, actor: string): string {
+    return JSON.stringify([realmId, actor]);
+  }
 }
 
 // These are deliberately weakly keyed by the client and Query objects: authority history follows the existing
 // session/query lifetime and does not become a second cache or retain evicted Realm keys.
 const stores = new WeakMap<QueryClient, RealmMembershipLifetimeStore>();
 const standingRevisions = new WeakMap<object, number | null>();
+const observationVersions = new WeakMap<object, number>();
+let nextObservationVersion = 1;
+
+export function realmMembershipObservationVersion(observation: object): number {
+  const existing = observationVersions.get(observation);
+  if (existing !== undefined) return existing;
+  const version = nextObservationVersion++;
+  observationVersions.set(observation, version);
+  return version;
+}
 
 function storeFor(client: QueryClient): RealmMembershipLifetimeStore {
   let store = stores.get(client);
