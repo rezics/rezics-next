@@ -19,7 +19,7 @@ import { SuppliedNames } from './names';
 
 /** Public composition of supplied character facts. Appearances remain in the producer's bounded reader. */
 export function CharacterReader(input: ProfileReading) {
-  const reading = { ...input, documents: input.documents ?? input.public.documents };
+  const reading = { ...input, documents: input.documents ?? Reflect.get(input.public, 'documents') };
   const groups = characterGroups(reading.release);
   const fields = [
     ...Object.values(groups).flat(),

@@ -376,7 +376,6 @@ export type { InboxNoticeSelection } from './kernel/content/notice-inbox-selecti
 export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
   ((...args: Parameters<SubjectsClient>) => ClassificationCompatibility<SubjectPath>);
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
-export type CharacterPublicDocuments = NonNullable<SubjectRead['documents']>;
 
 type SubjectSourceStatisticsRoute = Routes['subjects'][':id']['source-statistics'];
 export type SourceStatisticListResponse = SubjectSourceStatisticsRoute['get']['response'][200];
