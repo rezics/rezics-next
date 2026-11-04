@@ -1,33 +1,31 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement as h } from 'react';
+import { act, createElement as h, useMemo, useRef, useState } from 'react';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import type { Release } from '@rezics/definitions';
 import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
 import {
+  musicContextCreateControl,
   musicContextCreateDraft,
   musicContextCreateFields,
+  musicContextCreateHolders,
+  musicContextCreatePreparedFacts,
   musicContextCreateTypes,
 } from '../src/features/catalogue/music-context-create';
 import { musicContextKind } from '../src/features/catalogue/music-context-profile';
 import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { CreateResult, CreatedReader, InitialSubject } from '../src/features/catalogue/create-subject';
+import type { StatementInput } from '../src/features/catalogue/statement-editor';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const release = bundledRelease;
-const digest = 'sha256:music-context-create-eligibility';
 const offered = musicContextCreateTypes(release, 'en');
 const typeId = offered.some((entry) => entry.id === 'schema:Place') ? 'schema:Place' : offered[0]!.id;
 const typeMeaning = offered.find((entry) => entry.id === typeId);
-const admittedFields = musicContextCreateFields(release, typeId);
-const urlFact = admittedFields.find((id) => id === 'schema:sameAs' || id === 'schema:url');
-type Viewer = {
-  state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
-  subject: string | null;
-  csrfToken: string | null;
-};
-const signedIn: Viewer = { state: 'signed-in', subject: 'alice', csrfToken: 'csrf-alice' };
-let viewer: Viewer = signedIn;
+const urlFact = musicContextCreateFields(release, typeId).find((id) => id === 'schema:sameAs' || id === 'schema:url');
+type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+let session: Session = 'signed-in';
 let observe: () => Promise<CreateAuthority> = async () => allowedCreateAuthority;
 const commands: { item: InitialSubject; key: string }[] = [];
 let submitImpl: (command: { item: InitialSubject; key: string }) => Promise<CreateResult> = async () => ({
@@ -35,7 +33,6 @@ let submitImpl: (command: { item: InitialSubject; key: string }) => Promise<Crea
   reason: 'unavailable',
 });
 let readImpl: (id: string) => Promise<CreatedReader> = async () => ({ state: 'unavailable' });
-let sessionMocks = false;
 
 test('music-context creation exposes only real released grains and emitted fields', () => {
   expect(offered.map(({ id }) => id).sort()).toEqual(
@@ -45,9 +42,9 @@ test('music-context creation exposes only real released grains and emitted field
   );
   for (const type of offered) {
     expect(type.bases).toEqual(release.types[type.id]!.bases);
-    expect(musicContextCreateFields(release, type.id).every((id) => release.types[type.id]!.properties.includes(id))).toBe(
-      true,
-    );
+    expect(
+      musicContextCreateFields(release, type.id).every((id) => release.types[type.id]!.properties.includes(id)),
+    ).toBe(true);
   }
   const unsupported = musicContextCreateDraft(release, { type: 'schema:Book', labels: { en: 'Not a place' } }, []);
   expect(unsupported.errors.some((error) => error.pointer === '/type' && error.code === 'unsupported')).toBe(true);
@@ -63,7 +60,9 @@ test('music-context creation exposes only real released grains and emitted field
     },
   ]);
   expect(
-    extra.errors.some((error) => error.pointer === '/statements/rezics:not-admitted-field' && error.code === 'unsupported'),
+    extra.errors.some(
+      (error) => error.pointer === '/statements/rezics:not-admitted-field' && error.code === 'unsupported',
+    ),
   ).toBe(true);
 });
 
@@ -74,31 +73,7 @@ test('generic creation links to the localized music-context visit', () => {
   });
 });
 
-async function musicContextSession(locale = 'en') {
-  if (!sessionMocks) {
-    const start = await import('../.storybook/react-start');
-    mock.module('cloudflare:workers', () => ({ env: {} }));
-    mock.module('@tanstack/react-start', () => start);
-    mock.module('@tanstack/react-start/server', () => start);
-    mock.module('../src/kernel/client', () => ({
-      kernelClient: () => ({}),
-      requestLocale: () => 'en',
-    }));
-    mock.module('../src/session/query', () => ({ useSession: () => viewer }));
-    mock.module('../src/features/catalogue/create-subject-actions', () => ({
-      readCatalogueCreateEligibility: () => observe(),
-      readCreatedCatalogueSubject: async ({ data }: { data: string }) => readImpl(data),
-    }));
-    mock.module('../src/features/catalogue/music-context-create-actions', () => ({
-      loadMusicContextCreate: async () => ({ ok: true as const, digest, release }),
-      createCatalogueMusicContext: async ({ data }: { data: { item: InitialSubject; key: string } }) => {
-        commands.push({ item: data.item, key: data.key });
-        return submitImpl(data);
-      },
-    }));
-    mock.module('../src/features/catalogue/relation-editor-search', () => ({ relationTargetSearch: async () => [] }));
-    sessionMocks = true;
-  }
+async function musicContextVisit(locale = 'en') {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -122,39 +97,125 @@ async function musicContextSession(locale = 'en') {
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
   const { within, waitFor } = await import(Bun.resolveSync('@testing-library/dom', storybook));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
-  const { MusicContextCreateSession } = await import('../src/features/catalogue/music-context-create-session');
+  const { CreateSubjectForm } = await import('../src/features/catalogue/create-subject-form');
+  const { MusicContextCreateFields } = await import('../src/features/catalogue/music-context-create-fields');
+  const { MusicContextCreateReview } = await import('../src/features/catalogue/music-context-create-review');
   const { m } = await import('../src/paraglide/messages.js');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  client.setQueryData(['session'], viewer);
-  window.location.assign = () => undefined;
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const canvas = within(host as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document, delay: null });
-  function Harness({ currentLocale }: { currentLocale: string }) {
+  const factsId = 'music-context-initial-facts';
+  type Fact = { key: string; statement: StatementInput };
+  function Harness({ currentLocale, currentSession }: { currentLocale: string; currentSession: Session }) {
+    const [factsByType, setFactsByType] = useState<Record<string, Fact[]>>({});
+    const prepared = useRef<{
+      release: Release;
+      holders: ReturnType<typeof musicContextCreateHolders>;
+    }>();
+    const types = musicContextCreateTypes(release, currentLocale);
+    const profile = useMemo(
+      () => ({
+        title: m.music_context_create_title({}, { locale: currentLocale as never }),
+        intro: m.music_context_create_intro({}, { locale: currentLocale as never }),
+        href: `/${currentLocale}/catalogue/music-context`,
+        scope: 'music-context-create',
+        metadata: { ready: true, pending: false, failure: null, types },
+        retainTypeDrafts: true,
+        initialLanguage: '',
+        canEditType: (type: string) =>
+          types.some((entry) => entry.id === type) && musicContextKind(release, type) !== 'unsupported',
+        canCreateType: (type: string) => types.some((entry) => entry.id === type),
+        fields: (type: string, disabled: boolean, canEdit: () => boolean, invalidate?: () => void) =>
+          h(MusicContextCreateFields, {
+            type,
+            release,
+            locale: currentLocale,
+            search: async () => [],
+            facts: factsByType[type] ?? [],
+            disabled,
+            canEdit,
+            invalidate: invalidate ?? (() => undefined),
+            discardTypeDraft: () => undefined,
+            change: (next: Fact[]) =>
+              setFactsByType((current) => {
+                const copy = { ...current };
+                if (next.length) copy[type] = next;
+                else delete copy[type];
+                return copy;
+              }),
+          }),
+        prepare: (initial: InitialSubject) => {
+          const facts = musicContextCreatePreparedFacts(factsByType[initial.type] ?? [], release);
+          const result = musicContextCreateDraft(release, initial, facts);
+          prepared.current = { release, holders: musicContextCreateHolders(facts) };
+          return result;
+        },
+        control: (pointer: string, type: string) => {
+          const snapshot = prepared.current;
+          if (!snapshot) return undefined;
+          return musicContextCreateControl(
+            pointer,
+            snapshot.holders,
+            factsByType[type] ?? [],
+            type,
+            snapshot.release,
+            currentLocale,
+            factsId,
+          );
+        },
+        review: (state: { item: InitialSubject; stale: boolean }) => {
+          const snapshot = prepared.current;
+          if (!snapshot) return null;
+          return h(MusicContextCreateReview, {
+            item: state.item as InitialSubject & { statements: Record<string, StatementInput[]> },
+            holders: snapshot.holders,
+            release: snapshot.release,
+            locale: currentLocale,
+            stale: state.stale,
+            factsId,
+            onJump: (id: string) => host.querySelector<HTMLElement>(`[id="${id}"]`)?.focus(),
+          });
+        },
+      }),
+      [currentLocale, factsByType, types],
+    );
     return h(QueryClientProvider, {
       client,
-      children: h(MusicContextCreateSession, { locale: currentLocale, initial: { ok: true, digest, release } }),
+      children: h(CreateSubjectForm, {
+        locale: currentLocale,
+        session: currentSession,
+        transport: {
+          eligibility: () => observe(),
+          submit: async (command: { item: InitialSubject; key: string }) => {
+            commands.push(command);
+            return submitImpl(command);
+          },
+          read: (id: string) => readImpl(id),
+        },
+        onNavigate: () => undefined,
+        profile,
+      }),
     });
   }
-  await act(async () => root.render(h(Harness, { currentLocale: locale })));
+  await act(async () => root.render(h(Harness, { currentLocale: locale, currentSession: session })));
   return {
     host,
     canvas,
     user,
     waitFor,
-    client,
     m,
     window,
     async refresh(nextLocale = locale) {
-      client.setQueryData(['session'], viewer);
-      await act(async () => root.render(h(Harness, { currentLocale: nextLocale })));
+      await act(async () => root.render(h(Harness, { currentLocale: nextLocale, currentSession: session })));
     },
     async close() {
       await act(async () => root.unmount());
@@ -165,13 +226,9 @@ async function musicContextSession(locale = 'en') {
   };
 }
 
-async function chooseTypeAndName(
-  page: Awaited<ReturnType<typeof musicContextSession>>,
-  label: string,
-  type = typeId,
-) {
+async function chooseTypeAndName(page: Awaited<ReturnType<typeof musicContextVisit>>, label: string) {
   await act(async () =>
-    page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() }), type),
+    page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() }), typeId),
   );
   await act(async () =>
     page.user.type(page.canvas.getByRole('textbox', { name: page.m.catalogue_create_language() }), 'en'),
@@ -183,9 +240,9 @@ async function chooseTypeAndName(
 
 test('the mounted music-context visit keeps admitted Types when eligibility is refused, unknown, or guest', async () => {
   commands.length = 0;
-  viewer = signedIn;
+  session = 'signed-in';
   observe = async () => ({ state: 'refused', reason: 'permission' });
-  const page = await musicContextSession();
+  const page = await musicContextVisit();
   try {
     await page.waitFor(() =>
       expect(page.canvas.getByRole('alert').textContent).toContain(
@@ -212,7 +269,7 @@ test('the mounted music-context visit keeps admitted Types when eligibility is r
       (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
     ).toBe(true);
 
-    viewer = { state: 'signed-out', subject: null, csrfToken: null };
+    session = 'signed-out';
     await page.refresh();
     await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_guest()));
     expect(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
@@ -227,7 +284,7 @@ test('the mounted music-context visit keeps admitted Types when eligibility is r
 
 test('an admitted Type is reviewed, repaired, created once and opened at the exact returned identity', async () => {
   const createdId = '00000000-0000-4000-8000-00000000c401';
-  viewer = signedIn;
+  session = 'signed-in';
   observe = async () => allowedCreateAuthority;
   commands.length = 0;
   submitImpl = async (command) => ({
@@ -239,7 +296,7 @@ test('an admitted Type is reviewed, repaired, created once and opened at the exa
       identity: { id: createdId, type: command.item.type, label: command.item.labels.en ?? '' },
     },
   });
-  const page = await musicContextSession();
+  const page = await musicContextVisit();
   try {
     await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
     await chooseTypeAndName(page, 'Reviewed place');
@@ -285,10 +342,10 @@ test('an admitted Type is reviewed, repaired, created once and opened at the exa
 });
 
 test('revoking create grant after an allowed read cannot prepare a fresh music-context create', async () => {
-  viewer = signedIn;
+  session = 'signed-in';
   observe = async () => allowedCreateAuthority;
   commands.length = 0;
-  const page = await musicContextSession();
+  const page = await musicContextVisit();
   try {
     await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
     await chooseTypeAndName(page, 'Stale grant place');
@@ -310,9 +367,9 @@ test('revoking create grant after an allowed read cannot prepare a fresh music-c
   }
 });
 
-test('viewer or locale replacement drops a late allowed observation; uncertain retry keeps the exact command', async () => {
+test('locale replacement drops a late allowed observation; uncertain retry keeps the exact command', async () => {
   const createdId = '00000000-0000-4000-8000-00000000c411';
-  viewer = signedIn;
+  session = 'signed-in';
   commands.length = 0;
   let pending: ((value: CreateAuthority) => void) | undefined;
   let calls = 0;
@@ -321,11 +378,10 @@ test('viewer or locale replacement drops a late allowed observation; uncertain r
     if (calls === 1) return new Promise<CreateAuthority>((resolve) => (pending = resolve));
     return Promise.resolve({ state: 'refused', reason: 'permission' });
   };
-  const page = await musicContextSession();
+  const page = await musicContextVisit();
   try {
     await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_reading()));
     expect(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
-    viewer = { state: 'signed-in', subject: 'bob', csrfToken: 'csrf-bob' };
     await page.refresh('fr');
     await page.waitFor(() =>
       expect(page.canvas.getByRole('alert').textContent).toContain(
@@ -338,15 +394,15 @@ test('viewer or locale replacement drops a late allowed observation; uncertain r
       page.m.identity_intake_authority_refused_permission({}, { locale: 'fr' }),
     );
     expect(
-      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit({}, { locale: 'fr' }) }) as HTMLButtonElement)
-        .disabled,
+      (page.canvas.getByRole('button', {
+        name: page.m.catalogue_create_submit({}, { locale: 'fr' }),
+      }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(commands).toHaveLength(0);
   } finally {
     await page.close();
   }
 
-  viewer = signedIn;
   observe = async () => allowedCreateAuthority;
   commands.length = 0;
   let lost = true;
@@ -367,7 +423,7 @@ test('viewer or locale replacement drops a late allowed observation; uncertain r
       identity: { id: createdId, type: typeId, label: 'Recovered place' },
     };
   };
-  const retryPage = await musicContextSession();
+  const retryPage = await musicContextVisit();
   try {
     await retryPage.waitFor(() =>
       expect(retryPage.host.textContent).toContain(retryPage.m.identity_intake_authority_allowed()),
