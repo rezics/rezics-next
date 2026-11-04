@@ -66,7 +66,7 @@ import { createImporter, type ImporterOptions, type ImportRunResult } from './im
 import { createMediaResolver } from './media-resolver.ts';
 import type { BangumiCoverSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
-import { createSourceRegistration } from './source-registry.ts';
+import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
 import {
@@ -1633,10 +1633,7 @@ export async function planCrossMediaSeed(
   for (const family of Object.keys(patterns) as Franchise[])
     ensure(anime.has(family) && plan.franchises[family].vndb.length, `Missing anime/VN pair for ${family}`);
   for (const provider of ['bangumi', 'vndb'] as const) {
-    const registration = createSourceRegistration(provider, {
-      source: crossMediaAliases[provider],
-      converterRevision: entityRevision,
-    });
+    const registration = createSelectedFamilySourceRegistration(provider, crossMediaAliases[provider]);
     for (const row of [...plan.records[provider], ...plan.entities[provider]])
       registration.convert(
         { external_id: row.key, record_revision: row.revision, record: row.payload },
@@ -2006,10 +2003,7 @@ export async function seedCrossMedia(
             (row) => row.key === source.externalId,
           );
           ensure(sourceRecord, 'Bangumi cover source record is missing');
-          const conversion = createSourceRegistration('bangumi', {
-            source: source.sourceAlias,
-            converterRevision: entityRevision,
-          }).convert(
+          const conversion = createSelectedFamilySourceRegistration('bangumi', source.sourceAlias).convert(
             {
               external_id: sourceRecord.key,
               record_revision: sourceRecord.revision ?? 'unversioned',
@@ -2085,10 +2079,7 @@ export async function seedCrossMedia(
     };
     for (const provider of providers) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
-      const registration = createSourceRegistration(provider, {
-        source: crossMediaAliases[provider],
-        converterRevision: entityRevision,
-      });
+      const registration = createSelectedFamilySourceRegistration(provider, crossMediaAliases[provider]);
       for (const record of [...plan.records[provider], ...plan.entities[provider]]) {
         const conversion = registration.convert(
           {
@@ -2266,10 +2257,7 @@ export async function seedCrossMedia(
       extras?.sourceVocabulary,
       vocabulary?.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
     );
-    const bangumiRegistration = createSourceRegistration('bangumi', {
-      source: crossMediaAliases.bangumi,
-      converterRevision: entityRevision,
-    });
+    const bangumiRegistration = createSelectedFamilySourceRegistration('bangumi', crossMediaAliases.bangumi);
     const credits = await deliverBangumiCreatorCredits({
       alias: crossMediaAliases.bangumi,
       converterRevision: entityRevision,
@@ -2358,10 +2346,7 @@ export async function seedCrossMedia(
           (candidate) => candidate.key === source.externalId,
         );
         if (row) {
-          const converted = createSourceRegistration('bangumi', {
-            source: source.sourceAlias,
-            converterRevision: entityRevision,
-          }).convert(
+          const converted = createSelectedFamilySourceRegistration('bangumi', source.sourceAlias).convert(
             {
               external_id: row.key,
               record_revision: row.revision ?? 'unversioned',
