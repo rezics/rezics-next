@@ -654,3 +654,126 @@ for (const provider of ['mal', 'anilist'] as const) {
     );
   }, 120_000);
 }
+
+for (const provider of ['mal', 'anilist'] as const) {
+  test(`${provider} refuses changed authority and binds concurrent selections to one confirmation`, async () => {
+    const target = provider === 'mal' ? await f.createSubject('game') : anilistSubjectId;
+    await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey());
+    const root = `/v1/libraryImports/${provider}`;
+    const deps = { pool: f.pool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() };
+    const mal = createMalImport({ ...deps, journal: createSessionCommands(deps) }),
+      anilist = createAniListImport(deps);
+    const setup = async () => {
+      const payload =
+        provider === 'mal'
+          ? {
+              xml: '<myanimelist><anime><series_animedb_id>18</series_animedb_id><series_title>Authority</series_title><my_status>Plan to Watch</my_status><my_comments>Fresh note</my_comments></anime></myanimelist>',
+            }
+          : { upload: JSON.stringify([{ mediaId: providerId, notes: 'Fresh note' }]) };
+      const id = (await body(await send('POST', `${root}:preview`, payload))).id as string;
+      const sourceKey = entryKey();
+      const source = await body(
+        await f.send(
+          'owner',
+          'POST',
+          provider === 'mal' ? `${root}/${id}/review` : `${root}/${id}:review`,
+          provider === 'mal' ? { row: 0, target, replace: false, skip: false } : { ordinal: 0, fields: ['status'] },
+          sourceKey,
+        ),
+      );
+      const reviewed = await body(
+        await send('POST', provider === 'mal' ? `${root}/${id}/metadata/review` : `${root}/${id}:reviewMetadata`, {
+          ...(provider === 'mal' ? { row: 0 } : { ordinal: 0 }),
+          sourceReviewToken: provider === 'mal' ? sourceKey : source.review.id,
+        }),
+      );
+      const fields = [{ field: 'note', action: 'adopt' }];
+      const apply = (selections = fields) =>
+        send('POST', provider === 'mal' ? `${root}/${id}/metadata/apply` : `${root}/${id}:applyMetadata`, {
+          ...(provider === 'mal' ? { row: 0 } : { ordinal: 0 }),
+          reviewToken: reviewed.reviewToken,
+          fields: selections,
+        });
+      const remove = () =>
+        bodySend(
+          provider === 'mal' ? 'DELETE' : 'POST',
+          provider === 'mal' ? `${root}/${id}` : `${root}/${id}:cancel`,
+          provider === 'mal' ? undefined : { remove: true },
+        );
+      return { id, token: reviewed.reviewToken as string, fields, apply, remove };
+    };
+    const bodySend = async (method: string, path: string, input?: unknown) => body(await send(method, path, input));
+    const personal = async () => (await bodySend('GET', `/v1/libraryEntries/${target}/personal`)).personalEntry;
+    const profile = await setup(),
+      baseline = await personal();
+    await f.activate(f.replacementDigest);
+    try {
+      expect((await body(await profile.apply())).fields).toEqual([{ field: 'note', status: 'stale' }]);
+      expect(await personal()).toEqual(baseline);
+    } finally {
+      await f.activate(f.originalDigest);
+    }
+    await profile.remove();
+
+    const incarnation = await setup();
+    await bodySend('DELETE', `/v1/libraryEntries/${target}`);
+    await bodySend('PUT', `/v1/libraryEntries/${target}`, { state: 'planned' });
+    const afterRecreation = await personal();
+    expect((await body(await incarnation.apply())).fields).toEqual([{ field: 'note', status: 'stale' }]);
+    expect(await personal()).toEqual(afterRecreation);
+    await incarnation.remove();
+
+    const account = await setup();
+    const changedClient = { ...f.owner.actor, clientId: randomUUID() };
+    const view =
+      provider === 'mal'
+        ? await mal.metadata(changedClient, account.id, 0, account.token, Date.now() + 30_000)
+        : await anilist.metadata(changedClient, account.id, 0, account.token);
+    expect(view.status).toBe('stale');
+    const denied =
+      provider === 'mal'
+        ? mal.applyMetadata(
+            { ...f.owner.actor, authnEpoch: 0 },
+            account.id,
+            0,
+            account.token,
+            account.fields,
+            Date.now() + 30_000,
+          )
+        : anilist.applyMetadata({ ...f.owner.actor, authnEpoch: 0 }, account.id, 0, account.token, account.fields);
+    await expect(denied).rejects.toThrow();
+    expect(await personal()).toEqual(afterRecreation);
+    await account.remove();
+
+    const concurrent = await setup();
+    const replies = await Promise.all([concurrent.apply(), concurrent.apply([{ field: 'note', action: 'clear' }])]);
+    expect(replies.map((reply) => reply.status).sort()).toEqual([200, 409]);
+    const winner = replies[0]!.status === 200 ? concurrent.fields : [{ field: 'note', action: 'clear' }];
+    const outcome = await body(await concurrent.apply(winner));
+    expect(outcome.fields).toEqual([{ field: 'note', status: 'applied' }]);
+    const saved = await personal();
+    expect(saved.note).toBe(winner[0]!.action === 'adopt' ? 'Fresh note' : null);
+    const same = await Promise.all([concurrent.apply(winner), concurrent.apply(winner)]);
+    expect(await body(same[0]!)).toEqual(outcome);
+    expect(await body(same[1]!)).toEqual(outcome);
+    expect(await personal()).toEqual(saved);
+    await concurrent.remove();
+
+    const expired = await setup();
+    if (provider === 'mal') {
+      await f.pool.query(
+        'UPDATE library.list_import_mal SET expires_at=clock_timestamp() WHERE account_id=$1 AND id=$2',
+        [f.owner.actor.accountId, expired.id],
+      );
+      expect((await expired.apply()).status).toBe(404);
+      await f.pool.query('DELETE FROM library.list_import_mal WHERE account_id=$1 AND id=$2', [
+        f.owner.actor.accountId,
+        expired.id,
+      ]);
+    } else {
+      await expired.remove();
+      expect((await expired.apply()).status).toBe(404);
+    }
+    expect(await personal()).toEqual(saved);
+  }, 120_000);
+}

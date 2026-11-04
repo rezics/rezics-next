@@ -144,10 +144,12 @@ export function mergeListImportMetadataConfirmation(
     current.sourceObservationDigest !== next.sourceObservationDigest
   )
     throw new ProblemError('conflict');
-  return {
+  const merged: EntryImportMetadataConfirmation = {
     ...current,
     annotationStarted: current.annotationStarted || next.annotationStarted,
     provenanceStarted: current.provenanceStarted || next.provenanceStarted,
+  };
+  const progress = {
     annotationInput: current.annotationInput ?? next.annotationInput,
     provenanceInput: current.provenanceInput ?? next.provenanceInput,
     sourceObservationDigest: current.sourceObservationDigest ?? next.sourceObservationDigest,
@@ -155,6 +157,10 @@ export function mergeListImportMetadataConfirmation(
     provenanceStatus: mergePhaseStatus(current.provenanceStatus, next.provenanceStatus),
     outcome: current.outcome ?? next.outcome,
   };
+  for (const [key, value] of Object.entries(progress)) {
+    if (value !== undefined) Object.assign(merged, { [key]: value });
+  }
+  return merged;
 }
 
 function currentReview(review: EntryImportMetadataReview, observation: ListImportMetadataObservation): boolean {

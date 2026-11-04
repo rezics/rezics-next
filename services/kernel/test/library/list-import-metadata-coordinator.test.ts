@@ -118,3 +118,16 @@ test('pending effects block refresh and byte limits include the complete review 
   expect(appendListImportMetadataReview([], retained).history).toEqual([retained]);
   expect(() => appendListImportMetadataReview([retained], oversized)).toThrow();
 });
+
+test('two individual maximum reviews also obey the encoded history limit', () => {
+  const sized = (token: string, bytes: number) => {
+    const item = review(token, token);
+    item.sourceReviewToken = '';
+    item.sourceReviewToken = 'x'.repeat(bytes - Buffer.byteLength(JSON.stringify(item)));
+    return item;
+  };
+  const first = sized('first', 32768);
+  expect(appendListImportMetadataReview([], first).history).toEqual([first]);
+  expect(() => appendListImportMetadataReview([first], sized('second', 32768))).toThrow();
+  expect(appendListImportMetadataReview([sized('first', 32766)], sized('second', 32766)).history).toHaveLength(2);
+});
