@@ -106,7 +106,7 @@
   "settings_shelf_uncertain": "L’enregistrement a peut-être abouti. Réessayez la commande d’origine ou rechargez pour vérifier ; vos choix sont conservés.",
   "settings_shelf_use_current": "Abandonner mes choix non enregistrés",
   "settings_shelf_choices_unavailable_title": "Choix de vue par défaut indisponibles",
-  "settings_shelf_choices_unavailable_text": "Les options de vue par défaut de la bibliothèque n’ont pas pu être lues. Rechargez pour réessayer. L’apparence dans ce navigateur est inchangée.",
+  "settings_shelf_choices_unavailable_text": "Les options par défaut actuelles de la bibliothèque n’ont pas pu être confirmées. Vérifiez ci-dessous le motif de la réponse et tout délai avant de recharger. L’apparence dans ce navigateur est inchangée.",
   "settings_shelf_read_only_title": "Les vues par défaut ne peuvent pas être modifiées",
   "settings_shelf_read_only_text": "Vous voyez les valeurs confirmées. Les modifier n’est pas autorisé pour cette connexion.",
   "settings_shelf_saved": "Valeur enregistrée du compte : {value}",

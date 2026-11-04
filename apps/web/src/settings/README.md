@@ -74,6 +74,8 @@ The existing shelf editor adds exact type-URI layouts to its versioned dirty-fie
 
 **Decision:** Shelf-only departure names the retained Library view choices and recovery information; mixed drafts use the shared Settings warning. Leaving discards only local recovery, and an already-sent command may still finish.
 
+**Decision:** A refused current Shelf read clears actionable advice and marks retained values unconfirmed; dirty choices and any unresolved original command remain until a deliberate admitted read or exact retry resolves them.
+
 ## Account safety
 
 The managed directory retains one successful page of at most 20 rows per feed; Next replaces only that feed and the first duplicate identity within the native page wins. A failed cursor-free restart retries cursor-free, while Retry-After keeps either recovery action unavailable until its original deadline. Successful replacement focuses that feed's heading. Credential, viewer or client replacement retires both feeds before late callbacks can install.

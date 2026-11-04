@@ -106,7 +106,7 @@
   "settings_shelf_uncertain": "保存可能已完成。请重试原始保存或重新加载确认；你的选择仍保留在这里。",
   "settings_shelf_use_current": "舍弃我的未保存选择",
   "settings_shelf_choices_unavailable_title": "无法读取书库视图默认选项",
-  "settings_shelf_choices_unavailable_text": "当前书库视图默认选项无法读取。请重新加载后再试。此浏览器的外观不变。",
+  "settings_shelf_choices_unavailable_text": "无法确认当前书库视图默认选项。重新加载前，请查看下方的响应原因和等待时间。此浏览器的外观不变。",
   "settings_shelf_read_only_title": "无法更改书库默认视图",
   "settings_shelf_read_only_text": "你可以查看已确认的默认值。此次登录不允许更改。",
   "settings_shelf_saved": "已保存的账户默认值：{value}",

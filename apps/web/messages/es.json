@@ -106,7 +106,7 @@
   "settings_shelf_uncertain": "Es posible que el guardado se haya completado. Reintenta el guardado original o recarga para comprobarlo; tus elecciones siguen aquí.",
   "settings_shelf_use_current": "Descartar mis elecciones sin guardar",
   "settings_shelf_choices_unavailable_title": "Opciones predeterminadas de la biblioteca no disponibles",
-  "settings_shelf_choices_unavailable_text": "No se pudieron leer las opciones predeterminadas actuales. Vuelva a cargar para intentarlo. La apariencia en este navegador no cambia.",
+  "settings_shelf_choices_unavailable_text": "No se pudieron confirmar las opciones predeterminadas actuales de la biblioteca. Consulte abajo el motivo de la respuesta y cualquier tiempo de espera antes de volver a cargar. La apariencia en este navegador no cambia.",
   "settings_shelf_read_only_title": "No se pueden cambiar los valores predeterminados de la biblioteca",
   "settings_shelf_read_only_text": "Puede ver los valores confirmados. Cambiarlos no está permitido en esta sesión.",
   "settings_shelf_saved": "Valor predeterminado de la cuenta: {value}",

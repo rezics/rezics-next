@@ -106,7 +106,7 @@
   "settings_shelf_uncertain": "저장이 완료되었을 수 있습니다. 원래 저장을 다시 시도하거나 다시 불러와 확인하세요. 선택한 값은 그대로 남아 있습니다.",
   "settings_shelf_use_current": "저장하지 않은 선택 버리기",
   "settings_shelf_choices_unavailable_title": "라이브러리 보기 기본값을 읽을 수 없음",
-  "settings_shelf_choices_unavailable_text": "현재 라이브러리 보기 기본값을 읽지 못했습니다. 다시 불러와 시도하세요. 이 브라우저의 모양은 그대로입니다.",
+  "settings_shelf_choices_unavailable_text": "현재 라이브러리 보기 기본값을 확인할 수 없습니다. 다시 불러오기 전에 아래의 응답 이유와 대기 시간을 확인하세요. 이 브라우저의 모양은 그대로입니다.",
   "settings_shelf_read_only_title": "라이브러리 기본값을 바꿀 수 없음",
   "settings_shelf_read_only_text": "확인된 기본값은 볼 수 있습니다. 이 로그인에서는 바꿀 수 없습니다.",
   "settings_shelf_saved": "계정에 저장된 기본값: {value}",
