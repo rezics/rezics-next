@@ -14,6 +14,7 @@ import { openGrowthDatabase, seed, type CountedValues, type Row } from '../../su
 import { createRealAccess } from '../../semantic/real-access.ts';
 import { configureTestReceiptKeys } from '../../support/receipt-keys.ts';
 import { createAccess } from '../../../src/access/index.ts';
+import { GLOBAL_CONTEXT as accessGlobal } from '../../../src/access/gates/catalogue.ts';
 import { accessCommandAuthorization } from '../../../src/request/access.ts';
 
 export const countedAxes = [
@@ -65,7 +66,7 @@ export async function createCountedGrowthFixture() {
     });
     const global = { route: 0, id: GLOBAL_CONTEXT };
     await real.grant(global, 'voter', 'subject:create');
-    await real.grant(global, 'voter', 'definitions:read');
+    await real.grant(accessGlobal, 'voter', 'definitions:read');
     const actor = await access.authenticate(real.bearer('voter'), { pool: db.pool, deadline: Date.now() + 120_000 });
     const subject = async (route: number) => {
       const key = crypto.randomUUID();
@@ -98,6 +99,12 @@ export async function createCountedGrowthFixture() {
     const sourceRoute = routeOf(original!)!;
     const controlHome = partitionOf(routeOf(terminal!)!);
     const missing = newId(routeOf(absent!)!);
+    const otherQuestion = newId(sourceRoute);
+    await db.admin.query(
+      `INSERT INTO rating.question(id,revision,label,grain,minimum_units,maximum_units,step_units)
+       VALUES($1,1,'Unselected fixture question','work',0,100,1)`,
+      [otherQuestion],
+    );
     const request = { actor, targetIds: [original!, clear!, absent!, missing, original!] };
     const transaction = newId(voterRoute);
     const pendingJob = newId(sourceRoute);
@@ -132,6 +139,14 @@ export async function createCountedGrowthFixture() {
       counted_target: counted,
       changed_at: at,
       transaction_id: transaction,
+    });
+    const storedSubject = (id: string) => ({
+      route: sourceRoute,
+      subject_id: id,
+      type: 'schema:Book',
+      recorded_transaction_id: transaction,
+      current_facts: 0,
+      current_release: bundledDigest,
     });
     await seed(
       db,
@@ -360,7 +375,7 @@ export async function createCountedGrowthFixture() {
                 return {
                   'rating.vote': [
                     { ...vote(id, 11), voter_id: newId(voterRoute) },
-                    { ...vote(id, 11), question_id: newId(sourceRoute) },
+                    { ...vote(id, 11), question_id: otherQuestion },
                     vote(id, 11),
                   ],
                 };
@@ -369,16 +384,7 @@ export async function createCountedGrowthFixture() {
                   'rating.vote': [vote(id, 7, null)],
                   // These are losing original slots of this selected destination, rather than arbitrary nulls.
                   // Their original identities grow, while the supplied source's own history stays fixed.
-                  'semantic.subject': [
-                    {
-                      route: sourceRoute,
-                      subject_id: id,
-                      type: 'schema:Book',
-                      recorded_transaction_id: transaction,
-                      current_facts: 0,
-                      current_release: bundledDigest,
-                    },
-                  ],
+                  'semantic.subject': [storedSubject(id)],
                   'semantic.redirect': [
                     {
                       route: sourceRoute,
@@ -432,7 +438,7 @@ export async function createCountedGrowthFixture() {
                     {
                       partition_no: controlHome,
                       job_id: id,
-                      epoch: 2,
+                      epoch: ordinal + 2,
                       intent: { kind: 'merge', survivor: terminal, redirected: id },
                       receipt_key: id,
                       receipt: {},
@@ -443,6 +449,7 @@ export async function createCountedGrowthFixture() {
                   ],
                 };
               return {
+                'semantic.subject': [storedSubject(id)],
                 'access.resource_role_grant': [
                   {
                     route: sourceRoute,
