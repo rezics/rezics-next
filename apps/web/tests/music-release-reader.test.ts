@@ -87,6 +87,13 @@ test('TBA, partial month/year, absent, explicit none and unknown precision remai
   });
   statement.value = { type: 'value', content: { time: '+2024-00-00T00:00:00Z', precision: 9 } };
   expect(musicReleaseDate(statement, fixture.release.digest, 'en')).toMatchObject({ kind: 'partial', text: '2024' });
+  statement.value = { type: 'value', content: { time: '+2024-05-02T00:00:00Z', precision: 11 } };
+  expect(musicReleaseDate(statement, fixture.release.digest, 'en')).toMatchObject({
+    kind: 'exact',
+    text: 'May 2, 2024',
+  });
+  statement.value = { type: 'value', content: { time: '+2024-02-31T00:00:00Z', precision: 11 } };
+  expect(musicReleaseDate(statement, fixture.release.digest, 'en').kind).toBe('unknown');
   statement.value = { type: 'somevalue' };
   expect(musicReleaseDate(statement, fixture.release.digest, 'en').kind).toBe('tba');
   statement.value = { type: 'novalue' };

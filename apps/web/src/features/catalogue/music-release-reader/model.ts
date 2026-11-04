@@ -137,6 +137,18 @@ export function musicReleaseDate(statement: Statement, digest: string, locale: s
       ![9, 10, 11].includes(time.precision)
     )
       return { kind: 'unknown' as const };
+    const parts = /^\+?(-?\d{4,})-(\d{2})-(\d{2})T/.exec(time.time);
+    if (!parts) return { kind: 'unknown' as const };
+    const year = Number(parts[1]);
+    const month = Number(parts[2]);
+    const day = Number(parts[3]);
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (
+      (time.precision >= 10 && (month < 1 || month > 12)) ||
+      (time.precision === 11 && (day < 1 || day > (days[month - 1] ?? 0)))
+    )
+      return { kind: 'unknown' as const };
   }
   const reading = dateReading([statement], statement.property.id, digest, locale);
   return value.type === 'value' && reading.kind === 'tba' ? { kind: 'unknown' as const } : reading;

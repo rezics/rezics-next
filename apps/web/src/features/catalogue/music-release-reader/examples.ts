@@ -24,7 +24,8 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
       ['schema:exampleOfWork', 'schema:datePublished', 'wdt:P437', 'schema:contentLocation', 'bf:hasPart'],
     ],
     ['rezics:MusicMedium', 'Music medium', ['wdt:P361']],
-    ['schema:MusicRecording', 'Recording', ['wdt:P361']],
+    ['schema:MusicRecording', 'Recording', ['wdt:P361]],
+    ['schema:Place', 'Place', []],
   ] as const)
     release.types[id] = {
       iri: `https://example.test/${id}`,
@@ -53,7 +54,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
     property: {
       id: property,
-      data_type: property === 'schema:datePublished' ? 'time' : property === 'wdt:P437' ? 'string' : 'wikibase-item',
+      data_type: property === 'schema:datePublished' ? 'time' : 'wikibase-item',
     },
     value,
     rank: 'normal',
