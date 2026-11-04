@@ -23,7 +23,7 @@ const state = searchLoaderDeps({
   filter: JSON.stringify({ and: [{ realm: { id: realm } }, { not: { type: { in: ['schema:Movie'] } } }] }),
   condition: JSON.stringify({ statement: { property: 'schema:inLanguage', in: ['en'] } }),
   'f.schema:genre': ['fiction', 'mystery'],
-  'r.schema:datePublished': JSON.stringify({ gte: 1900, unit: '1' }),
+  'r.schema:datePublished': JSON.stringify({ gte: 1900 }),
 });
 const labels = {
   typeLabels: { en: 'Book' },
@@ -102,5 +102,23 @@ test('the mounted empty recovery panel renders its editable query and current ac
     expect(html).toContain('#search-filter-entry');
     expect(html).toContain(`/${locale}/search`);
     expect(html).not.toContain('Global');
+  }
+
+  for (const status of ['preparing', 'unavailable'] as const) {
+    const html = renderToStaticMarkup(
+      createElement(EmptySearchRecovery, {
+        recovery: { status, alternatives: [], actions },
+        state,
+        locale: 'en',
+        labels,
+        onRetry() {},
+      }),
+    );
+    expect(html).toContain(
+      status === 'preparing' ? m.search_empty_alternatives_preparing() : m.search_empty_alternatives_unavailable(),
+    );
+    expect(html).toContain('id="empty-recovery-query"');
+    expect(html).toContain(m.search_facet_retry());
+    expect(html).not.toContain('Pride and Prejudice');
   }
 });

@@ -133,9 +133,15 @@ export async function readEmptyRecovery(input: {
   const prefixes = emptyRecoveryPrefixes(input.query).slice(0, EMPTY_RECOVERY_LIMITS.reads);
   if (!prefixes.length) return boundedEnvelope('unavailable', [], input.actions);
   try {
-    const pages = await Promise.all(
+    const reads = await Promise.allSettled(
       prefixes.map((prefix) => input.read(prefix, EMPTY_RECOVERY_LIMITS.candidatesPerRead)),
     );
+    const failed = reads.find((read): read is PromiseRejectedResult => read.status === 'rejected');
+    if (failed) throw failed.reason;
+    const pages = reads.map((read) => {
+      if (read.status !== 'fulfilled') throw new Error('Empty recovery read did not settle');
+      return read.value;
+    });
     if (pages.some((page) => page.asOf !== input.asOf)) return boundedEnvelope('unavailable', [], input.actions);
     const threshold = tolerance(input.query);
     const candidates = new Map<string, { candidate: EmptyRecoveryCandidate; distance: number; order: number }>();

@@ -202,6 +202,9 @@ test('recovery offers appropriate manual actions, honors Retry-After, and never 
   }
   expect(render({ status: 'source-not-ready' })).toContain(m.search_reader_results_unavailable());
   expect(render({ status: 'unavailable' })).toContain(m.search_reader_results_unavailable());
+  expect(render({ status: 'sparse' })).toContain(m.search_recovery_sparse());
+  expect(render({ status: 'exhausted' })).toContain(m.search_recovery_exhausted());
+  expect(render({ status: 'invalid' })).toContain(m.discovery_invalid());
   expect(render({ status: 'unavailable' })).not.toMatch(/0 results|No results|progressbar|%/);
   expect(searchRetryAt('1', 1000)).toBe(2000);
   expect(searchRetryAt('Thu, 01 Jan 1970 00:00:03 GMT', 1000)).toBe(3000);

@@ -1280,6 +1280,9 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 Decision: a confirmed-empty first page may offer at most three current public near-title queries from two native Suggest reads of at most eight candidates each; only phrase editing and removal of URL-owned type, kind, facet or range selections are offered, while opaque filters, scope, rating population, ordered languages and principal stay unchanged. Each suggestion keeps the admitted filter and scope, and freshness mismatch or unavailable native authority yields an explicit component state without a global fallback. The recovery envelope is capped at 16 KiB UTF-8 and eight action projections.
 
+- Bound: At most two Suggest reads return eight candidate ids each. Every read retains Suggest's existing native index and source checks and the batched current summary authorization for its candidate ids; there is no per-result refetch or automatic refill. The component returns at most three alternatives and eight actions within a 16 KiB UTF-8 envelope.
+- Evidence: `test/search/empty-recovery.test.ts` pins two reads, the eight-candidate limit, three-alternative cap, shared freshness cut, preparing/unavailable states and serialized byte bound.
+
 ### Suggest
 
 The request-only Realm and Collection prefix path uses the same operation and retained native prefix producer; its
