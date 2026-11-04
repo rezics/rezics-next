@@ -25,20 +25,20 @@ export const RealmHomeBoardQuerySchema = t.Object(
 );
 export const RealmHomeBoardPageSchema = t.Unsafe<RealmHomeBoardPage>(
   t.Object(
-  {
-    items: t.Array(
-      t.Object(
-        {
-          ...BoardRecordSchema.properties,
-          recent: t.Union([RealmCommunityRecentSchema, t.Object({ state: t.Literal('unavailable') }, closed)]),
-        },
-        closed,
+    {
+      items: t.Array(
+        t.Object(
+          {
+            ...BoardRecordSchema.properties,
+            recent: t.Union([RealmCommunityRecentSchema, t.Object({ state: t.Literal('unavailable') }, closed)]),
+          },
+          closed,
+        ),
+        { maxItems: REALM_HOME_BOARD_LIMIT },
       ),
-      { maxItems: REALM_HOME_BOARD_LIMIT },
-    ),
-    next: t.Union([t.String(), t.Null()]),
-  },
-  closed,
+      next: t.Union([t.String(), t.Null()]),
+    },
+    closed,
   ),
 );
 

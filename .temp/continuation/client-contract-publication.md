@@ -63,11 +63,11 @@ inseparable: true
 criticalPath: false
 acceptance:
   tests:
-    - "Official complete-input compiler, construction, schema, migration, placement, output-tree and generator gates succeed without declaration filtering or hand-edited output."
-    - "Existing client installed-callable/root-import checks cover Collection structure and metadata history, complete member personal actions, FULL Copies/Following inputs, Progress discovery, selected-account bans, and Reading Insights."
-    - "Keep diary, counted, preparation, watch, feed, reporter-history, preference decoding, Reading/notification/shelf envelopes, malformed-shelf isolation and actual update advice."
-    - "Retain verification-stall-recovery and notification-preference-page receiving with their current owners; deliver generated callable/root types independently of consumer completion."
-    - "The exact frozen acceptance remains controller-owned after integration."
+    - 'Official complete-input compiler, construction, schema, migration, placement, output-tree and generator gates succeed without declaration filtering or hand-edited output.'
+    - 'Existing client installed-callable/root-import checks cover Collection structure and metadata history, complete member personal actions, FULL Copies/Following inputs, Progress discovery, selected-account bans, and Reading Insights.'
+    - 'Keep diary, counted, preparation, watch, feed, reporter-history, preference decoding, Reading/notification/shelf envelopes, malformed-shelf isolation and actual update advice.'
+    - 'Retain verification-stall-recovery and notification-preference-page receiving with their current owners; deliver generated callable/root types independently of consumer completion.'
+    - 'The exact frozen acceptance remains controller-owned after integration.'
 ---
 
 # Complete the retained native client publication
