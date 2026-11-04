@@ -697,7 +697,13 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       ),
       runControlPlaneGate:
         options.runGate ??
-        gateRunner(latest.integration.gateTimeoutMs, latest.stateDirectory, LANDING_CHECK_ENVIRONMENT, undefined, latest.policy?.merge),
+        gateRunner(
+          latest.integration.gateTimeoutMs,
+          latest.stateDirectory,
+          LANDING_CHECK_ENVIRONMENT,
+          undefined,
+          latest.policy?.merge,
+        ),
     };
     return { ...configuration, configurationRevision: trainConfigurationRevision(configuration) };
   };
