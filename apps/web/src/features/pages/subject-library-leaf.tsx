@@ -196,15 +196,34 @@ export function SubjectLibraryLeaf({
         data={current}
       />
       <RichPrivateEntry
-        key={
-          frame.id +
-          ':' +
-          (session.state === 'signed-in' ? session.subject + ':' + (session.csrfToken ?? '') : session.state)
-        }
         subject={{ id: frame.id, label: frame.title.text }}
         session={session}
         admitted={admitted && query.enabled === true}
         returnTo={returnTo}
+        entryGuard={
+          current.entry?.incarnationId && current.entry.subjectId === frame.id
+            ? { incarnationId: current.entry.incarnationId, currentRevision: current.entry.revision }
+            : null
+        }
+        origin={{
+          lifetime: JSON.stringify([observation.owner, addressScope, observation.value.entrySeed]),
+          isCurrent: () => {
+            const latest = observation.read();
+            return (
+              observation.isMounted() &&
+              latest.scope === observation.value.scope &&
+              latest.entrySeed === observation.value.entrySeed &&
+              latest.viewer === session.subject &&
+              latest.sessionReady &&
+              latest.entryAdmitted
+            );
+          },
+          refreshEntry: async () => {
+            if (!isCurrent()) return false;
+            const fresh = await refetch();
+            return isCurrent() && !fresh.isError && fresh.data?.entryAvailable === true;
+          },
+        }}
       />
       {isMangaLibrarySubject(frame.type) ? (
         <ConfiguredProfileControls

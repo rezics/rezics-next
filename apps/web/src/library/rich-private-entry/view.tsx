@@ -12,7 +12,12 @@ import {
   type PrivateEntryReadResult,
   type SourcePrivacyCommandResult,
 } from './server';
-import type { PersonalEntry, PersonalEntryObservation, PersonalEntryPrivacyValue } from '@rezics/client';
+import type {
+  PersonalEntry,
+  PersonalEntryGuard,
+  PersonalEntryObservation,
+  PersonalEntryPrivacyValue,
+} from '@rezics/client';
 
 type ReaderSession = ReturnType<typeof useSession>;
 
@@ -21,6 +26,7 @@ type AnnotationCommand = {
   viewer: string;
   csrfToken: string;
   key: string;
+  credential: string;
   body: NonNullable<ReturnType<typeof annotationWrite>>;
 };
 
@@ -66,26 +72,63 @@ function validDraft(draft: AnnotationDraft) {
   return /^[0-9]{1,3}$/.test(draft.priority) && Number(draft.priority) >= 1 && Number(draft.priority) <= 100;
 }
 
-export function RichPrivateEntry({
-  subject,
-  session,
-  admitted,
-  returnTo,
-}: {
+type PrivateEntryTransport = {
+  read: (input: Parameters<typeof readPrivateEntryForSubject>[0]) => Promise<PrivateEntryReadResult>;
+  annotations: (input: Parameters<typeof savePrivateAnnotations>[0]) => Promise<PrivateEntryCommandResult>;
+  privacy: (input: Parameters<typeof savePrivateSourcePrivacy>[0]) => Promise<SourcePrivacyCommandResult>;
+};
+const nativeTransport: PrivateEntryTransport = {
+  read: readPrivateEntryForSubject,
+  annotations: savePrivateAnnotations,
+  privacy: savePrivateSourcePrivacy,
+};
+type Review = { entry: PersonalEntry; guard: PersonalEntryGuard };
+const reviewVersion = (entry: PersonalEntry, guard: PersonalEntryGuard | null) =>
+  JSON.stringify([entry.annotationRevision, guard?.incarnationId, guard?.currentRevision]);
+type PrivateEntryProps = {
   subject: { id: string; label: string };
   session: ReaderSession;
   admitted: boolean;
   returnTo: string;
-}) {
+  entryGuard: PersonalEntryGuard | null;
+  origin: { lifetime: string; isCurrent: () => boolean; refreshEntry: () => Promise<boolean> };
+  transport?: PrivateEntryTransport;
+};
+
+export function RichPrivateEntry(props: PrivateEntryProps) {
+  return (
+    <PrivateEntryReview
+      key={JSON.stringify([props.subject.id, props.session.subject, props.origin.lifetime, props.returnTo])}
+      {...props}
+    />
+  );
+}
+
+function PrivateEntryReview({
+  subject,
+  session,
+  admitted,
+  returnTo,
+  entryGuard,
+  origin,
+  transport = nativeTransport,
+}: PrivateEntryProps) {
   const readAllowed = useOperation('library_entry.get');
   const writeAllowed = useOperation('library_entry.put');
   const queryClient = useQueryClient();
   const viewer = session.state === 'signed-in' ? session.subject : null;
   const csrfToken = session.state === 'signed-in' ? session.csrfToken : null;
   const enabled = readAllowed && admitted && viewer !== null && csrfToken !== null;
+  const mounted = useRef(true);
+  const retired = useRef(false);
+  const generation = useRef(0);
+  const current = useRef({ origin, enabled });
+  current.current = { origin, enabled };
+  const currentResult = () =>
+    mounted.current && !retired.current && current.current.enabled && current.current.origin.isCurrent();
   const queryKey = useMemo(
-    () => ['library', 'rich-private-entry', subject.id, viewer, csrfToken] as const,
-    [subject.id, viewer, csrfToken],
+    () => ['library', 'rich-private-entry', subject.id, viewer, origin.lifetime] as const,
+    [subject.id, viewer, origin.lifetime],
   );
   const query = useQuery<PrivateEntryReadResult>({
     queryKey,
@@ -93,34 +136,29 @@ export function RichPrivateEntry({
     staleTime: 0,
     gcTime: 0,
     retry: false,
-    queryFn: () => readPrivateEntryForSubject({ data: { subjectId: subject.id } }),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    queryFn: async ({ signal }) => {
+      const episode = generation.current;
+      if (!currentResult()) throw new Error('Private entry review retired');
+      const result = await transport.read({ data: { subjectId: subject.id } });
+      signal.throwIfAborted();
+      if (!currentResult() || episode !== generation.current) throw new Error('Private entry review retired');
+      return result;
+    },
   });
   const result = query.data;
-  const ready =
-    result?.kind === 'ready' &&
-    result.entry.subjectId === subject.id &&
-    result.viewer === viewer &&
-    result.csrfToken === csrfToken;
-  const [acceptedEntry, setAcceptedEntry] = useState<{
-    subjectId: string;
-    viewer: string;
-    csrfToken: string;
-    entry: PersonalEntry;
-  } | null>(null);
-  const entry = ready
-    ? acceptedEntry?.subjectId === subject.id &&
-      acceptedEntry.viewer === viewer &&
-      acceptedEntry.csrfToken === csrfToken
-      ? acceptedEntry.entry
-      : result.entry
-    : null;
+  const entry =
+    result?.kind === 'ready' && result.entry.subjectId === subject.id && result.viewer === viewer ? result.entry : null;
   const [draft, setDraft] = useState<AnnotationDraft | null>(null);
+  const [review, setReview] = useState<Review | null>(null);
   const [annotationCommand, setAnnotationCommand] = useState<AnnotationCommand | null>(null);
   const [annotationNotice, setAnnotationNotice] = useState<'conflict' | 'uncertain' | 'denied' | 'missing' | null>(
     null,
   );
-  const [annotationConflictRevision, setAnnotationConflictRevision] = useState<number | null>(null);
-  const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
+  const [annotationRefreshing, setAnnotationRefreshing] = useState(false);
+  const [conflictRefreshed, setConflictRefreshed] = useState(false);
+  const annotationBusy = useRef(false);
   const [sourceEditor, setSourceEditor] = useState<string | null>(null);
   const [sourceChoice, setSourceChoice] = useState('keep');
   const [sourceReviewed, setSourceReviewed] = useState(false);
@@ -128,82 +166,143 @@ export function RichPrivateEntry({
   const [sourceNotice, setSourceNotice] = useState<'conflict' | 'uncertain' | 'denied' | 'missing' | null>(null);
   const [sourceConflictRevision, setSourceConflictRevision] = useState<number | null>(null);
   const [privateAuthorityRetired, setPrivateAuthorityRetired] = useState(false);
-  const mounted = useRef(true);
-  const current = useRef({ subjectId: subject.id, viewer, csrfToken });
-  current.current = { subjectId: subject.id, viewer, csrfToken };
   useEffect(() => {
     mounted.current = true;
+    const stop = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'removed' && JSON.stringify(event.query.queryKey) === JSON.stringify(queryKey)) {
+        retired.current = true;
+        generation.current++;
+        setPrivateAuthorityRetired(true);
+      }
+    });
     return () => {
       mounted.current = false;
+      generation.current++;
+      stop();
     };
-  }, []);
-
-  const currentResult = () =>
-    mounted.current &&
-    current.current.subjectId === subject.id &&
-    current.current.viewer === viewer &&
-    current.current.csrfToken === csrfToken;
+  }, [queryClient, queryKey]);
 
   const workingDraft = draft ?? (entry ? draftOf(entry) : { note: '', priority: '' });
-  const write = entry ? annotationWrite(entry, workingDraft) : null;
-  const conflictWaiting = annotationNotice === 'conflict';
+  const write = entry ? annotationWrite(review?.entry ?? entry, workingDraft, review?.guard ?? entryGuard) : null;
+  const staleReview = !!(
+    entry &&
+    review &&
+    reviewVersion(review.entry, review.guard) !== reviewVersion(entry, entryGuard)
+  );
+  const conflictWaiting = annotationNotice === 'conflict' || staleReview;
+  const reviewAvailable =
+    !!entryGuard &&
+    !query.isFetching &&
+    !annotationRefreshing &&
+    (annotationNotice !== 'conflict' || conflictRefreshed);
+
+  function editDraft(next: AnnotationDraft) {
+    if (
+      !currentResult() ||
+      !writeAllowed ||
+      sourceCommand ||
+      annotationCommand ||
+      annotationBusy.current ||
+      !entry ||
+      !entryGuard
+    )
+      return;
+    if (!review) setReview({ entry, guard: entryGuard });
+    setDraft(next);
+  }
+
+  function acceptEntry(next: PersonalEntry) {
+    queryClient.setQueryData<PrivateEntryReadResult>(queryKey, (previous) =>
+      previous?.kind === 'ready' ? { ...previous, entry: next } : previous,
+    );
+  }
 
   async function sendAnnotation(command: AnnotationCommand) {
-    if (!currentResult() || !writeAllowed) return;
+    if (!currentResult() || !writeAllowed || annotationBusy.current) return;
+    const episode = generation.current;
+    annotationBusy.current = true;
+    setAnnotationCommand(command);
     setAnnotationNotice(null);
-    const outcome: PrivateEntryCommandResult = await savePrivateAnnotations({ data: command });
-    if (!currentResult()) return;
+    let outcome: PrivateEntryCommandResult;
+    try {
+      outcome = await transport.annotations({ data: command });
+    } catch {
+      outcome = { kind: 'uncertain' };
+    }
+    annotationBusy.current = false;
+    if (!currentResult() || episode !== generation.current) return;
     if (outcome.kind === 'saved') {
-      setAcceptedEntry({
-        subjectId: subject.id,
-        viewer: command.viewer,
-        csrfToken: command.csrfToken,
-        entry: outcome.entry,
-      });
+      acceptEntry(outcome.entry);
       setDraft(null);
+      setReview(null);
       setAnnotationCommand(null);
       setAnnotationNotice(null);
-      setAnnotationConflictRevision(null);
-      setReviewedRevision(null);
       return;
     }
     if (outcome.kind === 'conflict') {
-      setAcceptedEntry(null);
       setAnnotationCommand(null);
       setAnnotationNotice('conflict');
-      setAnnotationConflictRevision(command.body.revision);
-      setReviewedRevision(null);
-      void query.refetch();
+      setConflictRefreshed(false);
+      setAnnotationRefreshing(true);
+      try {
+        const [fresh, currentEntry] = await Promise.all([query.refetch(), origin.refreshEntry()]);
+        if (currentResult() && episode === generation.current)
+          setConflictRefreshed(!fresh.isError && fresh.data?.kind === 'ready' && currentEntry);
+      } finally {
+        if (currentResult() && episode === generation.current) setAnnotationRefreshing(false);
+      }
       return;
     }
     if (outcome.kind === 'uncertain') {
-      setAnnotationCommand(command);
       setAnnotationNotice('uncertain');
       return;
     }
     setAnnotationCommand(null);
-    if (outcome.kind === 'retired') {
+    if (outcome.kind === 'retired' || outcome.kind === 'signed-out') {
+      retired.current = true;
       setPrivateAuthorityRetired(true);
       queryClient.removeQueries({ queryKey });
       setDraft(null);
       setSourceEditor(null);
       return;
     }
-    setAnnotationNotice(outcome.kind === 'denied' ? 'denied' : outcome.kind === 'missing' ? 'missing' : null);
+    setAnnotationNotice(outcome.kind === 'denied' ? 'denied' : 'missing');
   }
 
   function submitAnnotation(event: FormEvent) {
     event.preventDefault();
-    if (!entry || !write || !validDraft(workingDraft) || !writeAllowed || annotationCommand) return;
-    if (conflictWaiting && reviewedRevision !== entry.annotationRevision) return;
-    const command: AnnotationCommand = {
+    if (
+      !currentResult() ||
+      !entry ||
+      !write ||
+      !validDraft(workingDraft) ||
+      !writeAllowed ||
+      annotationCommand ||
+      annotationBusy.current ||
+      conflictWaiting ||
+      result?.kind !== 'ready'
+    )
+      return;
+    void sendAnnotation({
       subjectId: subject.id,
-      viewer: viewer!,
-      csrfToken: csrfToken!,
+      viewer: result.viewer,
+      csrfToken: result.csrfToken,
+      credential: result.credential,
       key: crypto.randomUUID(),
-      body: { ...write, revision: entry.annotationRevision },
-    };
-    void sendAnnotation(command);
+      body: write,
+    });
+  }
+
+  function reviewLatest() {
+    if (!currentResult() || !entry || !entryGuard || !reviewAvailable) return;
+    // An unchanged operand stays unchanged even if the latest private note or rank has changed.
+    setDraft({
+      note: write?.note.op === 'unchanged' ? (entry.note ?? '') : workingDraft.note,
+      priority: write?.priority.op === 'unchanged' ? draftOf(entry).priority : workingDraft.priority,
+    });
+    setReview({ entry, guard: entryGuard });
+    setAnnotationNotice(null);
+    setConflictRefreshed(false);
   }
 
   function openSource(observation: PersonalEntryObservation) {
@@ -218,15 +317,10 @@ export function RichPrivateEntry({
   async function sendSource(command: PrivacyCommand) {
     if (!currentResult() || !writeAllowed) return;
     setSourceNotice(null);
-    const outcome: SourcePrivacyCommandResult = await savePrivateSourcePrivacy({ data: command });
+    const outcome: SourcePrivacyCommandResult = await transport.privacy({ data: command });
     if (!currentResult()) return;
     if (outcome.kind === 'saved') {
-      setAcceptedEntry({
-        subjectId: subject.id,
-        viewer: command.viewer,
-        csrfToken: command.csrfToken,
-        entry: outcome.entry,
-      });
+      acceptEntry(outcome.entry);
       setSourceCommand(null);
       setSourceEditor(null);
       setSourceReviewed(false);
@@ -235,7 +329,6 @@ export function RichPrivateEntry({
       return;
     }
     if (outcome.kind === 'conflict') {
-      setAcceptedEntry(null);
       setSourceCommand(null);
       setSourceNotice('conflict');
       setSourceConflictRevision(command.revision);
@@ -353,8 +446,8 @@ export function RichPrivateEntry({
             className="min-h-28 w-full rounded-md border bg-background p-3"
             value={workingDraft.note}
             maxLength={PRIVATE_NOTE_BYTES}
-            disabled={!writeAllowed || annotationCommand !== null}
-            onChange={(event) => setDraft({ ...workingDraft, note: event.currentTarget.value })}
+            readOnly={!writeAllowed || !entryGuard || annotationCommand !== null || sourceCommand !== null}
+            onChange={(event) => editDraft({ ...workingDraft, note: event.currentTarget.value })}
           />
           <p className="text-sm text-muted-foreground">
             {m.library_rich_entry_note_bytes({ count: new TextEncoder().encode(workingDraft.note).byteLength })}
@@ -363,8 +456,8 @@ export function RichPrivateEntry({
             <button
               type="button"
               className="min-h-11 rounded-md border px-3"
-              disabled={!writeAllowed || annotationCommand !== null}
-              onClick={() => setDraft({ ...workingDraft, note: '' })}
+              disabled={!writeAllowed || !entryGuard || annotationCommand !== null || sourceCommand !== null}
+              onClick={() => editDraft({ ...workingDraft, note: '' })}
             >
               {m.library_rich_entry_clear_note()}
             </button>
@@ -382,8 +475,8 @@ export function RichPrivateEntry({
             max={100}
             inputMode="numeric"
             value={workingDraft.priority}
-            disabled={!writeAllowed || annotationCommand !== null}
-            onChange={(event) => setDraft({ ...workingDraft, priority: event.currentTarget.value })}
+            readOnly={!writeAllowed || !entryGuard || annotationCommand !== null || sourceCommand !== null}
+            onChange={(event) => editDraft({ ...workingDraft, priority: event.currentTarget.value })}
           />
           <p className="text-sm text-muted-foreground">
             {entry.priority === null
@@ -393,8 +486,8 @@ export function RichPrivateEntry({
           <button
             type="button"
             className="min-h-11 rounded-md border px-3"
-            disabled={!writeAllowed || annotationCommand !== null}
-            onClick={() => setDraft({ ...workingDraft, priority: '' })}
+            disabled={!writeAllowed || !entryGuard || annotationCommand !== null || sourceCommand !== null}
+            onClick={() => editDraft({ ...workingDraft, priority: '' })}
           >
             {m.library_rich_entry_clear_priority()}
           </button>
@@ -408,12 +501,14 @@ export function RichPrivateEntry({
               !write ||
               !validDraft(workingDraft) ||
               annotationCommand !== null ||
-              (conflictWaiting && reviewedRevision !== entry.annotationRevision)
+              conflictWaiting ||
+              !entryGuard ||
+              sourceCommand !== null
             }
           >
             {m.library_rich_entry_save()}
           </button>
-          {annotationCommand ? (
+          {annotationCommand && annotationNotice === 'uncertain' ? (
             <button
               type="button"
               className="min-h-11 rounded-md border px-3"
@@ -439,22 +534,43 @@ export function RichPrivateEntry({
           className="space-y-2 rounded-md border border-amber-600 p-3"
         >
           <p>{m.library_rich_entry_conflict()}</p>
-          {query.isFetching ? (
+          <dl className="grid gap-2 break-words sm:grid-cols-2">
+            <div>
+              <dt>{m.library_rich_entry_note()}</dt>
+              <dd className="whitespace-pre-wrap">{entry.note ?? ''}</dd>
+            </div>
+            <div>
+              <dt>{m.library_rich_entry_priority()}</dt>
+              <dd>
+                {entry.priority === null
+                  ? m.library_rich_entry_unranked()
+                  : m.library_rich_entry_priority_value({ value: entry.priority })}
+              </dd>
+            </div>
+          </dl>
+          {query.isFetching || annotationRefreshing ? (
             <p>{m.library_rich_entry_refreshing()}</p>
-          ) : entry.annotationRevision !== annotationConflictRevision ? (
+          ) : reviewAvailable ? (
+            <button type="button" className="min-h-11 rounded-md border px-3" onClick={reviewLatest}>
+              {m.library_rich_entry_review_latest()}
+            </button>
+          ) : (
             <button
               type="button"
               className="min-h-11 rounded-md border px-3"
               onClick={() => {
-                setReviewedRevision(entry.annotationRevision);
-                setAnnotationNotice(null);
-                setAnnotationConflictRevision(null);
+                if (!currentResult()) return;
+                setAnnotationRefreshing(true);
+                void Promise.all([query.refetch(), origin.refreshEntry()])
+                  .then(([fresh, currentEntry]) => {
+                    if (currentResult())
+                      setConflictRefreshed(!fresh.isError && fresh.data?.kind === 'ready' && currentEntry);
+                  })
+                  .finally(() => {
+                    if (currentResult()) setAnnotationRefreshing(false);
+                  });
               }}
             >
-              {m.library_rich_entry_review_latest()}
-            </button>
-          ) : (
-            <button type="button" className="min-h-11 rounded-md border px-3" onClick={() => void query.refetch()}>
               {m.library_selection_retry()}
             </button>
           )}

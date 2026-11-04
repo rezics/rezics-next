@@ -1,5 +1,6 @@
 import type {
   PersonalEntry,
+  PersonalEntryAnnotationWrite,
   PersonalEntryFieldChange,
   PersonalEntryPrivacyValue,
   PersonalEntrySourceAdmission,
@@ -21,6 +22,8 @@ import {
   type SourceAdmissionResult,
   type SourceCorrectionResult,
 } from './native';
+
+import { captureAnnotationCredential, originalAnnotationCredential } from './credential';
 
 const keyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -63,13 +66,32 @@ function priorityField(value: unknown): PersonalEntryFieldChange<number> | null 
   return null;
 }
 
-function annotationInput(value: unknown) {
+export function annotationInput(value: unknown): PersonalEntryAnnotationWrite | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
   const note = textField(item.note);
   const priority = priorityField(item.priority);
   if (!note || !priority || !Number.isSafeInteger(item.revision) || (item.revision as number) < 0) return null;
-  return { revision: item.revision as number, note, priority };
+  const guard = item.entryGuard;
+  if (
+    !guard ||
+    typeof guard !== 'object' ||
+    Array.isArray(guard) ||
+    !('incarnationId' in guard) ||
+    typeof guard.incarnationId !== 'string' ||
+    !keyPattern.test(guard.incarnationId) ||
+    !('currentRevision' in guard) ||
+    typeof guard.currentRevision !== 'number' ||
+    !Number.isSafeInteger(guard.currentRevision) ||
+    guard.currentRevision < 1
+  )
+    return null;
+  return {
+    revision: item.revision as number,
+    note,
+    priority,
+    entryGuard: { incarnationId: guard.incarnationId, currentRevision: guard.currentRevision },
+  };
 }
 
 function privacyValue(value: unknown): PersonalEntryPrivacyValue | null {
@@ -122,7 +144,7 @@ function expectedSession(value: Record<string, unknown>, identity: SessionIdenti
 }
 
 export type PrivateEntryReadResult =
-  | { kind: 'ready'; viewer: string; csrfToken: string; entry: PersonalEntry }
+  | { kind: 'ready'; viewer: string; csrfToken: string; credential: string; entry: PersonalEntry }
   | { kind: 'signed-out' | 'unavailable' };
 
 export const readPrivateEntryForSubject = createServerFn({ method: 'GET' })
@@ -138,7 +160,18 @@ export const readPrivateEntryForSubject = createServerFn({ method: 'GET' })
     try {
       const result = await readPrivateEntry(kernelClient(), data.subjectId, identity.authorization);
       if (result.kind !== 'ready') return { kind: 'unavailable' };
-      return { kind: 'ready', viewer: identity.viewer, csrfToken: identity.csrfToken, entry: result.entry };
+      return {
+        kind: 'ready',
+        viewer: identity.viewer,
+        csrfToken: identity.csrfToken,
+        credential: await captureAnnotationCredential(
+          getRequest(),
+          env as Partial<SessionEnv>,
+          identity,
+          data.subjectId,
+        ),
+        entry: result.entry,
+      };
     } catch {
       return { kind: 'unavailable' };
     }
@@ -155,19 +188,23 @@ export const savePrivateAnnotations = createServerFn({ method: 'POST' })
     const key = typeof item.key === 'string' && annotationKey(item.key) ? item.key : null;
     const viewer = typeof item.viewer === 'string' ? item.viewer : null;
     const csrfToken = typeof item.csrfToken === 'string' ? item.csrfToken : null;
-    if (!id || !body || !key || !viewer || !csrfToken) throw new Error('Invalid annotation command');
-    return { subjectId: id, body, key, viewer, csrfToken };
+    const credential =
+      typeof item.credential === 'string' && /^[A-Za-z0-9_-]{1,6400}$/.test(item.credential) ? item.credential : null;
+    if (!id || !body || !key || !viewer || !csrfToken || !credential) throw new Error('Invalid annotation command');
+    return { subjectId: id, body, key, viewer, csrfToken, credential };
   })
   .handler(async ({ data }): Promise<PrivateEntryCommandResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const identity = await currentIdentity();
-    if (!identity || !expectedSession(data, identity)) return { kind: 'signed-out' };
+    if (!identity) return { kind: 'signed-out' };
+    const authorization = await originalAnnotationCredential(getRequest(), env as Partial<SessionEnv>, identity, data);
+    if (!authorization) return { kind: 'retired' };
     try {
       return await writePrivateAnnotations(kernelClient(), {
         subjectId: data.subjectId,
         body: data.body,
         key: data.key,
-        authorization: identity.authorization,
+        authorization,
       });
     } catch {
       return { kind: 'uncertain' };
