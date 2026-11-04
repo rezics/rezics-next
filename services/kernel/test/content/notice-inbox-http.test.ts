@@ -345,6 +345,7 @@ test('native inbox keeps readable public notices, hides a revoked protected noti
 
     const exact = await driver.readNotice(people.author.id, publicNotice.id, people.author);
     expect(exact.response.status).toBe(200);
+    expect(exact.response.headers.get('cache-control')).toContain('no-store');
     expect(exact.value).toMatchObject({
       viewer: { state: 'current' },
       notice: {
