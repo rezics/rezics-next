@@ -1,5 +1,6 @@
 import { prepareQueryShare, unavailableQueryShare } from '../query-share.ts';
 import { QueryShareSchema } from './query-share-schemas.ts';
+import { SearchFreshnessSchema } from '../search-context.ts';
 import { createTrendingSearchesService } from '../trending-searches.ts';
 import { requiresAdvancedDiscoverySearch } from '../discovery-request.ts';
 import type { DiscoverySearch } from '../discovery-service.ts';
@@ -127,6 +128,7 @@ const searchResponse = t.Object(
     kinds: t.Optional(kindPage),
     next: t.Union([t.String(), t.Null()]),
     as_of: t.String({ format: 'date-time' }),
+    freshness: t.Optional(SearchFreshnessSchema),
   },
   object,
 );

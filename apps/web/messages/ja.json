@@ -8106,5 +8106,21 @@
   "search_share_close": "プレビューを閉じる",
   "relation_actions_unavailable": "現在の関係操作を取得できませんでした。再読み込みしてお試しください。",
   "relation_actions_read_only": "関係を比較できます。提案には現在の権限が必要です。",
-  "relation_participants_unreadable": "関係する対象を現在読み取れません。読み取り可能な対象を選ぶか、再読み込みしてください。"
+  "relation_participants_unreadable": "関係する対象を現在読み取れません。読み取り可能な対象を選ぶか、再読み込みしてください。",
+  "search_context_about": "この検索結果について",
+  "search_context_refresh_help": "更新すると、現在の閲覧者で同じ検索を最初のページから実行します。範囲とフィルターを保持し、以前のカーソルを破棄します。",
+  "search_context_unavailable": "インデックスの鮮度は確認できません。",
+  "search_context_query": "実行した検索：{query}",
+  "search_context_current": "ネイティブ観測ではインデックス作成の遅延は報告されていません。",
+  "search_context_kinds": "結果の種類：{kinds}",
+  "search_context_catching_up": "更新内容をインデックスに反映中です。",
+  "search_context_rating_question": "評価の質問：{id}",
+  "search_context_languages": "結果の言語設定：{languages}",
+  "search_context_default_languages": "既定の言語設定",
+  "search_context_scope": "検索範囲：{scope}",
+  "search_context_filtered_scope": "選択したリソース範囲",
+  "search_context_predicates": "実行した詳細条件と保存済みフィルターが適用されています。未適用の編集はこの結果を変更しません。",
+  "search_context_owner": "現在の閲覧者が選択した非公開条件が適用されます。",
+  "search_context_refresh": "この検索結果を更新",
+  "search_context_limits": "表示結果や件数はインデックスの完全性を示しません。空のページや最終ページも完全性を保証しません。現在の公開判定で結果が除外される場合があります。インデックスはアクセス権を与えません。"
 }

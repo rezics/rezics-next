@@ -8106,5 +8106,21 @@
   "search_share_close": "关闭预览",
   "relation_actions_unavailable": "无法读取当前关系操作。请重新加载后重试。",
   "relation_actions_read_only": "你可以比较关系。提出建议需要当前有效的权限。",
-  "relation_participants_unreadable": "当前无法读取一个关系参与者。请选择可读取的身份或重新加载。"
+  "relation_participants_unreadable": "当前无法读取一个关系参与者。请选择可读取的身份或重新加载。",
+  "search_context_about": "关于这些结果",
+  "search_context_refresh_help": "刷新会以当前读者从第一页重新执行相同搜索，保留范围和筛选条件，并丢弃旧游标。",
+  "search_context_unavailable": "无法确认索引的新鲜度。",
+  "search_context_query": "已执行的查询：{query}",
+  "search_context_current": "原生观测未报告索引延迟。",
+  "search_context_kinds": "结果类型：{kinds}",
+  "search_context_catching_up": "更新仍在编入索引。",
+  "search_context_rating_question": "评分问题：{id}",
+  "search_context_languages": "结果语言偏好：{languages}",
+  "search_context_default_languages": "默认语言偏好",
+  "search_context_scope": "搜索范围：{scope}",
+  "search_context_filtered_scope": "已选资源范围",
+  "search_context_predicates": "已执行的高级条件和已保存筛选器适用于这些结果。待应用的编辑不会改变这些结果。",
+  "search_context_owner": "适用当前读者所选的私有条件。",
+  "search_context_refresh": "刷新这些结果",
+  "search_context_limits": "可见结果及类型计数不能证明索引完整。空页或没有下一页也不保证完整。当前公开状态检查可移除索引命中；索引进度不授予访问权限。"
 }

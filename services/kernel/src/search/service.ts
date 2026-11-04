@@ -37,6 +37,7 @@ import { checkHits, type FactClause } from './disclosure/check.ts';
 import { admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
+import { searchObservation, type SearchFreshness } from './search-context.ts';
 import {
   admitProperties,
   projectFacts,
@@ -136,6 +137,7 @@ export type PublicSearchPage = {
   kinds?: { values: KindValue[]; next: string | null };
   next: string | null;
   as_of: string;
+  freshness?: SearchFreshness;
 };
 
 export type PublicSearchReadContext = Readonly<{
@@ -607,13 +609,17 @@ export function createSearchService({
     return generation;
   }
 
-  async function asOf(generation: number): Promise<string> {
+  async function observation(generation: number) {
     const reader = retainCurrent(freshness, generation, () =>
       createFreshness(pool, subjectConsumer(prefix, generation)),
     );
     const observed = await reader.current();
     if (publicFilters && observed.behind > 0 && Date.now() - observed.asOf.getTime() > 300_000) throw indexNotReady();
-    return observed.asOf.toISOString();
+    return searchObservation(observed);
+  }
+
+  async function asOf(generation: number): Promise<string> {
+    return (await observation(generation)).as_of;
   }
 
   async function admitQuery(
@@ -1011,6 +1017,7 @@ export function createSearchService({
           subjects: await sourceRequest(() => publicHitFigures(pool, results)),
           next: ordered.next,
           as_of: ordered.as_of,
+          freshness: { state: 'unavailable' },
         };
         await readContext?.complete(response);
         await ordered.finalize();
@@ -1094,7 +1101,7 @@ export function createSearchService({
             results.forEach((hit, index) => (hit.facts = facts[index]!));
           }
           const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
-          const as_of = await asOf(generation);
+          const observed = await observation(generation);
           const witnesses = new Map<string, number>();
           if (request.cursor === undefined && request.kindCursor === undefined)
             for (const subject of shown.slice(0, 2))
@@ -1118,7 +1125,7 @@ export function createSearchService({
             next: page.exhausted
               ? null
               : await encodeSearchCursor(cursors, binding, { generation, after: [...nextAfter!] }, now),
-            as_of,
+            ...observed,
           };
           await readContext?.complete(response);
           const currentHits = await sourceRequest(() => checkHits(source, page.hits, new Map()));
@@ -1450,7 +1457,7 @@ export function createSearchService({
         const shown = nativeHits.map((hit) => checked.get(hit)!);
         const results = shown.map((subject) => projectHit(subject, hitOptions));
         const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
-        const as_of = await asOf(generation!);
+        const observed = await observation(generation!);
         const witnesses = new Map<string, number>();
         for (const subject of shown.slice(0, 2)) witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
         const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
@@ -1470,7 +1477,7 @@ export function createSearchService({
           next: exhausted
             ? null
             : await encodeSearchCursor(cursors, binding, { generation: generation!, after: after ?? [] }, now),
-          as_of,
+          ...observed,
         };
         await readContext?.complete(response);
         const finalValues = await evaluateScope(shown.map((subject) => subject.id));
@@ -1580,7 +1587,7 @@ export function createSearchService({
         }
         const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
         // Exactly one freshness observation; verify dynamic context after all response work, even for empty pages.
-        const as_of = await asOf(generation!);
+        const observed = await observation(generation!);
         if (rating) {
           const currentRating = await ratingEpoch();
           if (
@@ -1618,7 +1625,7 @@ export function createSearchService({
                     now,
                   )
                 : await encodeSearchCursor(cursors, cursorBinding, { generation: generation!, after: after! }, now),
-          as_of,
+          ...observed,
         };
         // This operation's final observation must follow all query and source work;
         // another request's in-flight alias read cannot bracket this response.

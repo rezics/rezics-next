@@ -8198,5 +8198,21 @@
   "search_share_close": "Close preview",
   "relation_actions_unavailable": "Current relationship actions could not be read. Reload to try again.",
   "relation_actions_read_only": "You can compare relationships. Proposing requires current permission.",
-  "relation_participants_unreadable": "A relationship participant cannot currently be read. Choose a readable identity or reload."
+  "relation_participants_unreadable": "A relationship participant cannot currently be read. Choose a readable identity or reload.",
+  "search_context_about": "About these results",
+  "search_context_refresh_help": "Refresh repeats this executed search under the current reader from the first page. It keeps scope and filters and discards old cursors.",
+  "search_context_unavailable": "Index freshness is unavailable.",
+  "search_context_query": "Executed query: {query}",
+  "search_context_current": "No delayed indexing reported by the native observation.",
+  "search_context_kinds": "Result kinds: {kinds}",
+  "search_context_catching_up": "Updates are still being indexed.",
+  "search_context_rating_question": "Rating question: {id}",
+  "search_context_languages": "Result language preferences: {languages}",
+  "search_context_default_languages": "Default language preferences",
+  "search_context_scope": "Searched scope: {scope}",
+  "search_context_filtered_scope": "Selected resource scope",
+  "search_context_predicates": "The executed advanced conditions and saved filters apply. Pending edits do not change these results.",
+  "search_context_owner": "Current reader’s selected private conditions apply.",
+  "search_context_refresh": "Refresh these results",
+  "search_context_limits": "Visible results and kind counts do not prove indexing is complete. An empty page or no next page is not a completeness guarantee. Current disclosure can remove indexed hits; indexing never grants access."
 }

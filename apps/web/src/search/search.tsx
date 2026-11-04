@@ -1,5 +1,6 @@
 import { QuerySharePreview } from './query-share-preview';
 import { parseQueryShare, shareUnavailable } from './query-share';
+import { SearchCoverage } from './search-context/coverage';
 import { facetProperties, FILTER_LIMITS, parseFilter, type FilterDocument, type FilterRange } from '@rezics/filter';
 import * as v from 'valibot';
 import { Link, useRouter } from '@tanstack/react-router';
@@ -1411,6 +1412,20 @@ function renderResults(
           />
         )}
       </div>
+      {data?.queryState &&
+        (data.discovery?.status === 'ready' || result) &&
+        (!data.recovery || data.recovery.status === 'ready') && (
+          <SearchCoverage
+            state={retryState ?? data.queryState}
+            data={data}
+            observation={data.discovery?.status === 'ready' ? data.discovery.page : result!}
+            locale={locale}
+            refreshHref={discoverySearchHref(locale, { ...(retryState ?? data.queryState), cursor: undefined })}
+            onRefresh={onRetry}
+            refreshRef={retryFocus?.retryRef}
+            onFocus={retryFocus?.captureRetryFocus}
+          />
+        )}
       {data?.staleCursorRestarted && (
         <p role="status" className="text-sm text-muted-foreground">
           {m.search_stale_cursor_restarted({}, options)}

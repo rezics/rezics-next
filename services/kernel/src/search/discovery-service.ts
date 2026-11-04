@@ -64,7 +64,7 @@ type DiscoveryConfiguration = {
     digest: string;
   }>;
   now(): number;
-  asOf(queried: PublicFilterQueriedObservation): Promise<string>;
+  asOf(queried: PublicFilterQueriedObservation): Promise<string | import('./search-context.ts').SearchObservation>;
   prepare?(job: PublicFilterConsumerJob): Promise<void>;
 };
 
@@ -454,11 +454,14 @@ function executeDiscoverySearch(
               ? { count: { kind: entry.kind, unavailable: true as const } }
               : { count: { kind: entry.kind, value: witnesses.get(entry.kind)!, exact: false as const } }),
           }));
+          const observed = await config.asOf(queried);
           const projected: DiscoveryPage = {
             hits,
             kinds: { values, next: null },
             next: null,
-            as_of: await config.asOf(queried),
+            ...(typeof observed === 'string'
+              ? { as_of: observed, freshness: { state: 'unavailable' as const } }
+              : observed),
           };
           // Owner replies and metadata must pass the actual transport contract before any token is signed.
           admitDiscoveryPage(projected);

@@ -8106,5 +8106,21 @@
   "search_share_close": "Vorschau schließen",
   "relation_actions_unavailable": "Die aktuellen Beziehungsaktionen konnten nicht geladen werden. Bitte erneut laden.",
   "relation_actions_read_only": "Sie können Beziehungen vergleichen. Für Vorschläge ist eine aktuelle Berechtigung erforderlich.",
-  "relation_participants_unreadable": "Ein Beziehungsteilnehmer kann derzeit nicht gelesen werden. Wählen Sie eine lesbare Identität oder laden Sie erneut."
+  "relation_participants_unreadable": "Ein Beziehungsteilnehmer kann derzeit nicht gelesen werden. Wählen Sie eine lesbare Identität oder laden Sie erneut.",
+  "search_context_about": "Über diese Ergebnisse",
+  "search_context_refresh_help": "Aktualisieren wiederholt diese Suche für den aktuellen Leser ab der ersten Seite, behält Bereich und Filter und verwirft alte Cursor.",
+  "search_context_unavailable": "Die Aktualität des Index ist nicht verfügbar.",
+  "search_context_query": "Ausgeführte Suche: {query}",
+  "search_context_current": "Die native Beobachtung meldet keine verzögerte Indexierung.",
+  "search_context_kinds": "Ergebnisarten: {kinds}",
+  "search_context_catching_up": "Aktualisierungen werden noch indexiert.",
+  "search_context_rating_question": "Bewertungsfrage: {id}",
+  "search_context_languages": "Sprachpräferenzen für Ergebnisse: {languages}",
+  "search_context_default_languages": "Standardsprachpräferenzen",
+  "search_context_scope": "Durchsuchter Bereich: {scope}",
+  "search_context_filtered_scope": "Gewählter Ressourcenbereich",
+  "search_context_predicates": "Die ausgeführten erweiterten Bedingungen und gespeicherten Filter gelten. Ausstehende Änderungen ändern diese Ergebnisse nicht.",
+  "search_context_owner": "Die ausgewählten privaten Bedingungen des aktuellen Lesers gelten.",
+  "search_context_refresh": "Diese Ergebnisse aktualisieren",
+  "search_context_limits": "Sichtbare Ergebnisse und Anzahlen beweisen keine vollständige Indexierung. Auch eine leere oder letzte Seite garantiert das nicht. Aktuelle Sichtbarkeitsprüfungen können Treffer entfernen; Indexierung gewährt keinen Zugriff."
 }
