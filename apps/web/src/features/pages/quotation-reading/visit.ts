@@ -78,7 +78,10 @@ export function useQuotationVisit(props: {
   });
   const safeOrigin = safePath(props.returnTo) ?? restoration?.origin;
   const [visit, setVisit] = useState<Visit>(() => ({
-    intent: restoration?.page ?? { quote },
+    intent: restoration?.page ?? {
+      quote: quote ?? (initial?.ok ? initial.selected?.id : undefined),
+      session: initial?.ok ? initial.session : undefined,
+    },
     previous: restoration?.previous,
     phase: restoration === null ? 'failed' : initial === undefined ? 'loading' : initial.ok ? 'ready' : 'failed',
     result: restoration === null ? { ok: false, reason: 'stale' } : initial,
@@ -117,7 +120,10 @@ export function useQuotationVisit(props: {
     }
     if (!mounted.current || !work.active() || owner !== sequence.current || source.current !== address) return;
     publish({
-      intent: { ...intent, ...(result.ok ? { session: result.session } : {}) },
+      intent: {
+        ...intent,
+        ...(result.ok ? { session: result.session, quote: result.selected?.id ?? intent.quote } : {}),
+      },
       previous,
       phase: result.ok ? 'ready' : 'failed',
       result,
