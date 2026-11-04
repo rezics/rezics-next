@@ -793,6 +793,7 @@ export function PageData({
   continuation,
   viewer,
   releaseDigest,
+  propertyLabels,
   listTarget,
   fullList,
   listCursor,
@@ -828,6 +829,7 @@ export function PageData({
     actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
   };
   releaseDigest?: string;
+  propertyLabels?: Record<string, { labels?: Record<string, string> }> | undefined;
   listTarget?: TypeListTarget | undefined;
   fullList?: string | undefined;
   listCursor?: string | undefined;
@@ -1007,10 +1009,15 @@ export function PageData({
             />
           ),
           candidatePropertyLabel: (propertyId: string) => {
-            const propertyLabels = Object.hasOwn(overviewRelated!, propertyId)
+            const released =
+              propertyLabels && Object.hasOwn(propertyLabels, propertyId)
+                ? pageText(propertyLabels[propertyId]?.labels, locale)
+                : undefined;
+            if (released?.text) return fieldLabel(released, locale).text;
+            const relatedLabels = Object.hasOwn(overviewRelated!, propertyId)
               ? overviewRelated![propertyId]?.labels
               : {};
-            return fieldLabel(pageText(propertyLabels, locale), locale).text || resolved.unlabelled;
+            return fieldLabel(pageText(relatedLabels, locale), locale).text || resolved.unlabelled;
           },
         }
       : {}),

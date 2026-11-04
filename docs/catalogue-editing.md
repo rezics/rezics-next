@@ -291,6 +291,22 @@ no fabricated ordering, music role or live-action binding is introduced.
   populations grow. Native Subject points and Context anchors use their existing partition-leading indexes; target
   disclosure preparation and decision/selection readback are part of the work, not just rendered candidate rows.
 
+## Browser flow: reading work relationships
+
+Every returned admitted work relation stream has its own released forward or inverse label, bounded preview and
+exact Connections continuation. Reverse rows retain the original holder and assertion, including qualifier values,
+Context, revision, release and citation groups. Evidence supports that assertion alone. Targets, artwork, evidence
+and accessible names remain inside its spoiler gate. Empty requires a current complete native window; refused,
+concealed, unavailable, unsupported and truncated readings stay distinct. Reading never grants curation authority.
+Decision: allocate at most twelve preview assertions overall, round-robin across returned streams with at most three
+per stream; return from evidence, Sources or a target to the admitted overview row, then continue its exact stream.
+
+The projection examines only G already returned windows and their native capped rows and B response bytes, renders
+at most min(12, G × 3) originals and their admitted Q qualifier/reference parts, and never fetches targets or cursors.
+The producer retains native caps, admission, currentness and growth obligations. A truncated or locally omitted row
+always exposes continuation, without a total, chronological ordering or complete-franchise claim. The no-window
+compatibility preview uses the same total cap. Existing Connections owns its native projection and pagination.
+
 ## Browser flow: missing related work
 
 A released work-to-work relation in the relation editor (derivation, world, association, or order groups

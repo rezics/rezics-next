@@ -9270,5 +9270,10 @@
   "work_tags_more_in_read": "Diese Vorschau zeigt die ersten 24 zugelassenen Aussagen. Öffne Details für den Rest dieser Ansicht oder den Relationsleser der Eigenschaft für weitere Seiten.",
   "work_tags_page_boundary": "Dies ist eine bereitgestellte Seite, kein vollständiger Schlagwortkatalog. Details zeigt ihre Fakten und Belege; der Relationsleser verwaltet weitere Seiten und deren Verfügbarkeit.",
   "work_tags_details": "Fakten und Schlagwortbelege in Details öffnen",
-  "work_tags_relation_reader": "{role} weiterlesen"
+  "work_tags_relation_reader": "{role} weiterlesen",
+  "work_franchise_preview_scope": "Eine begrenzte Vorschau zugelassener Aussagen, keine vollständige Werkreihe oder Lesereihenfolge.",
+  "work_franchise_preview_more": "In diesem Datenstrom können weitere Einträge verfügbar sein. Unter Verbindungen fortfahren.",
+  "work_franchise_stream_unsupported": "Die veröffentlichten Definitionen unterstützen diese Beziehungsrichtung nicht.",
+  "work_franchise_stream_refused": "Diese Beziehungsabfrage wurde abgelehnt.",
+  "work_franchise_stream_concealed": "Es werden keine Beziehungsdaten offengelegt."
 }

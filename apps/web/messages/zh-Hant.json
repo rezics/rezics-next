@@ -9273,5 +9273,10 @@
   "work_tags_more_in_read": "此預覽顯示前 24 筆可見陳述。開啟詳細資料可檢視本次閱讀的其餘內容，或前往該屬性的原生關聯閱讀器繼續瀏覽。",
   "work_tags_page_boundary": "這是已提供的頁面，不代表完整標籤目錄。詳細資料保留此次閱讀的事實與證據；後續頁面及其可用狀態由關聯閱讀器提供。",
   "work_tags_details": "在詳細資料開啟事實與標籤證據",
-  "work_tags_relation_reader": "繼續閱讀：{role}"
+  "work_tags_relation_reader": "繼續閱讀：{role}",
+  "work_franchise_preview_scope": "此處僅預覽有限的已獲准斷言，不代表完整系列或閱讀順序。",
+  "work_franchise_preview_more": "此關係串流可能還有更多內容。可在「關聯」中繼續查看。",
+  "work_franchise_stream_unsupported": "已發布的定義不支援此關係方向。",
+  "work_franchise_stream_refused": "此關係的讀取請求已被拒絕。",
+  "work_franchise_stream_concealed": "此關係的讀取內容未披露。"
 }

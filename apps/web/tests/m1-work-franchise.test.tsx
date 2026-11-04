@@ -219,7 +219,7 @@ test('Subject composition joins the VN, anime and book with localized, disclosed
   expect(vnHtml).toContain('data-slot="game-reader"');
   expect(vnHtml).toContain('映像作品');
   expect(animeUrl.pathname).toMatch(new RegExp(`^/ja/subjects/${animeId}/`));
-  expect(animeUrl.searchParams.get('via')).toMatch(new RegExp(`^/ja/subjects/${vnId}/.*#connections\\?stream=`));
+  expect(animeUrl.searchParams.get('via')).toMatch(new RegExp(`^/ja/subjects/${vnId}/.*#work-franchise\\?stream=`));
   expect(link(vnHtml, animeId)?.[0]).not.toContain('target="_blank"');
 
   const animeHtml = await render(anime);

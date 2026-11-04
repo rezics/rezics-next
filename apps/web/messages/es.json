@@ -9270,5 +9270,10 @@
   "work_tags_more_in_read": "Esta vista muestra las primeras 24 afirmaciones admitidas. Abre Detalles para el resto de esta lectura o continúa en el lector de relaciones de la propiedad.",
   "work_tags_page_boundary": "Esta es una página proporcionada, no el catálogo completo de etiquetas. Detalles conserva sus hechos y pruebas; el lector de relaciones gestiona las páginas siguientes y su disponibilidad.",
   "work_tags_details": "Abrir hechos y pruebas de etiquetas en Detalles",
-  "work_tags_relation_reader": "Continuar leyendo {role}"
+  "work_tags_relation_reader": "Continuar leyendo {role}",
+  "work_franchise_preview_scope": "Vista previa limitada de afirmaciones admitidas; no es una franquicia completa ni un orden de lectura.",
+  "work_franchise_preview_more": "Puede haber más entradas en esta relación. Continúa en Conexiones.",
+  "work_franchise_stream_unsupported": "Las definiciones publicadas no admiten esta dirección de relación.",
+  "work_franchise_stream_refused": "Se ha rechazado la consulta de esta relación.",
+  "work_franchise_stream_concealed": "No se muestran datos de esta relación."
 }

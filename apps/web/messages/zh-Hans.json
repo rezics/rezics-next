@@ -9270,5 +9270,10 @@
   "work_tags_more_in_read": "此预览显示前 24 条可见陈述。打开详情可查看本次读取的其余内容，或前往该属性的原生关联阅读器继续浏览。",
   "work_tags_page_boundary": "这是已提供的页面，不代表完整标签目录。详情保留此次读取的事实与证据；后续页面及其可用状态由关联阅读器提供。",
   "work_tags_details": "在详情打开事实与标签证据",
-  "work_tags_relation_reader": "继续阅读：{role}"
+  "work_tags_relation_reader": "继续阅读：{role}",
+  "work_franchise_preview_scope": "这里只预览有限的已获准断言，不代表完整系列或阅读顺序。",
+  "work_franchise_preview_more": "此关系流可能还有更多内容。可在“关联”中继续查看。",
+  "work_franchise_stream_unsupported": "已发布的定义不支持此关系方向。",
+  "work_franchise_stream_refused": "此关系的读取请求已被拒绝。",
+  "work_franchise_stream_concealed": "此关系的读取内容未披露。"
 }

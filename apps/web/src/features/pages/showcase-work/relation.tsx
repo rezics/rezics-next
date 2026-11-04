@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { CandidateValue } from '../data';
@@ -33,14 +33,17 @@ export function WorkRelation({
   value,
   label,
   returnHref,
+  connectionsHref,
 }: {
   relation: DirectedWorkRelation;
   item: Item;
   value: OverviewValue;
   label: string;
   returnHref?: string;
+  connectionsHref?: string;
 }) {
   const heading = useId();
+  const explanation = useRef<HTMLDetailsElement>(null);
   const o = { locale: value.locale as never };
   const holderLabel = relation.direction === 'in' ? relation.label : (value.subjectLabel ?? value.unlabelled);
   const holderHref = subjectHref({ id: relation.holder, label: holderLabel }, value.locale).href;
@@ -54,34 +57,80 @@ export function WorkRelation({
         }
       : {}),
   };
+  const propertyLabel = (property: string) => {
+    const released = value.candidatePropertyLabel?.(property);
+    return (
+      (released && released !== value.unlabelled ? released : '') ||
+      pageText(related[property]?.labels, value.locale).text ||
+      value.unlabelled
+    );
+  };
   const part = (snak: Snak, index: number) => (
     <div key={index} className="min-w-0 space-y-1">
-      <dt className="text-sm text-muted-foreground">
-        {pageText(related[snak.property.id]?.labels, value.locale).text || snak.property.id}
-      </dt>
+      <dt className="text-sm text-muted-foreground">{propertyLabel(snak.property.id)}</dt>
       <dd>
-        <CandidateValue snak={snak} related={related} locale={value.locale} link={Link} />
+        <CandidateValue snak={snak} related={related} locale={value.locale} subject={relation.holder} link={Link} />
       </dd>
     </div>
   );
   const content = (
-    <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]" data-original-holder={relation.holder}>
+    <div
+      className="min-w-0 space-y-3 [overflow-wrap:anywhere]"
+      data-original-holder={relation.holder}
+      data-work-statement={relation.statement.id}
+      data-work-holder={relation.holder}
+    >
       <p className="text-sm text-muted-foreground">
         {label} · {relation.direction === 'in' ? m.subject_connections_in({}, o) : m.subject_connections_out({}, o)}
       </p>
       <p className="text-sm text-muted-foreground">{kindLabel(relation.kind, value.locale)}</p>
-      <CoverList items={[{ ...item, qualified: [], gated: false }]} value={value} label={label} />
-      <details name="work-relation-explanation" className="min-w-0 space-y-3 rounded-lg border border-border p-3">
+      <CoverList
+        items={[
+          {
+            ...item,
+            label: pageText(related[relation.id]?.labels, value.locale).text
+              ? pageText(related[relation.id]?.labels, value.locale)
+              : item.label,
+            qualified: [],
+            gated: false,
+          },
+        ]}
+        value={value}
+        label={label}
+      />
+      {relation.statement.qualifiers.length > 0 && (
+        <section className="space-y-2" aria-label={m.value_qualifiers({}, o)}>
+          <h5 className="font-medium">{m.value_qualifiers({}, o)}</h5>
+          <dl className="space-y-3">{relation.statement.qualifiers.map(part)}</dl>
+        </section>
+      )}
+      <details
+        ref={explanation}
+        className="min-w-0 space-y-3 rounded-lg border border-border p-3"
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || !explanation.current?.open) return;
+          event.preventDefault();
+          event.stopPropagation();
+          explanation.current.open = false;
+          explanation.current.querySelector('summary')?.focus();
+        }}
+      >
         <summary className={`${action} cursor-pointer`}>{m.value_why({}, o)}</summary>
         <h4 id={heading} className="font-semibold">
-          {label} <span className="text-sm">({relation.property})</span>
+          {label}
         </h4>
         <p>
           <Link href={holderHref} className={action}>
             {holderLabel}
           </Link>
         </p>
-        <CandidateValue snak={relation.statement} related={related} locale={value.locale} link={Link} />
+        <CandidateValue
+          snak={relation.statement}
+          related={related}
+          locale={value.locale}
+          subject={relation.holder}
+          link={Link}
+        />
         {isRecord(metadata) && typeof metadata.release === 'string' && typeof metadata.revision === 'number' && (
           <dl className="space-y-2 text-sm">
             <div>
@@ -93,12 +142,6 @@ export function WorkRelation({
               <dd>{metadata.release}</dd>
             </div>
           </dl>
-        )}
-        {relation.statement.qualifiers.length > 0 && (
-          <section className="space-y-2" aria-label={m.value_qualifiers({}, o)}>
-            <h5 className="font-medium">{m.value_qualifiers({}, o)}</h5>
-            <dl className="space-y-3">{relation.statement.qualifiers.map(part)}</dl>
-          </section>
         )}
         <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
           <h5 className="font-medium">{m.sources_citations({}, o)}</h5>
@@ -119,6 +162,12 @@ export function WorkRelation({
           )}
           <p className="text-sm text-muted-foreground">{m.value_citation_scope({}, o)}</p>
         </section>
+        <details>
+          <summary className={action}>{m.catalogue_technical_details({}, o)}</summary>
+          <p>
+            <code>{relation.property}</code> · <code>{relation.statement.id}</code>
+          </p>
+        </details>
         <nav className="flex min-w-0 flex-wrap gap-3" aria-labelledby={heading}>
           <Link href={`${holderHref}/details`} className={action}>
             {m.subject_details({}, o)}
@@ -127,6 +176,8 @@ export function WorkRelation({
             {m.subject_sources({}, o)}
           </Link>
           <ValueExplanationEntry
+            link={Link}
+            {...(returnHref ? { returnTo: returnHref } : {})}
             id={relation.holder}
             title={holderLabel}
             property={relation.property}
@@ -134,8 +185,8 @@ export function WorkRelation({
             locale={value.locale}
             {...(value.context ? { context: value.context.id } : {})}
           />
-          {returnHref && (
-            <Link href={returnHref} className={action}>
+          {connectionsHref && (
+            <Link href={connectionsHref} className={action}>
               {m.subject_connections_title({}, o)}
             </Link>
           )}
