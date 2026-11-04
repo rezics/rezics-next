@@ -8710,5 +8710,13 @@
   "shell_client_unavailable": "Die interaktiven Bedienelemente konnten nicht geladen werden. Die Serverantwort bleibt unten verfügbar. Lade diese Seite erneut.",
   "shell_client_reload": "Diese Seite neu laden",
   "work_relation_citations_undisclosed": "In dieser Ansicht werden keine Quellenangaben offengelegt.",
-  "work_relations_unsupported": "Für diesen veröffentlichten Typ ist keine Werkbeziehungsliste eingerichtet."
+  "work_relations_unsupported": "Für diesen veröffentlichten Typ ist keine Werkbeziehungsliste eingerichtet.",
+  "library_copy_filter_any": "Alle",
+  "library_copy_filter_apply": "Exemplarfilter anwenden",
+  "library_copy_filter_available": "Historische Bedeutung verfügbar",
+  "library_copy_filter_unsupported": "Historische Bedeutung nicht unterstützt",
+  "library_copy_filter_unavailable": "Historische Bedeutung nicht verfügbar",
+  "library_copy_filter_history": "Die Auswahl beschreibt gespeicherte Exemplare, einschließlich historischer Werte.",
+  "library_copy_filter_none": "Für diesen Filter sind keine Werte gespeichert.",
+  "library_copy_filter_options_unavailable": "Filteroptionen sind vorübergehend nicht verfügbar. Ausgewählte IDs bleiben erhalten."
 }

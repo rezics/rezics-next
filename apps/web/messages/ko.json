@@ -8710,5 +8710,13 @@
   "shell_client_unavailable": "대화형 컨트롤을 불러오지 못했습니다. 아래 서버 응답은 계속 볼 수 있습니다. 페이지를 새로고침해 다시 시도하세요.",
   "shell_client_reload": "이 페이지 새로고침",
   "work_relation_citations_undisclosed": "이 읽기에서 공개된 인용은 없습니다.",
-  "work_relations_unsupported": "이 배포된 유형에는 작품 관계 목록이 설정되어 있지 않습니다."
+  "work_relations_unsupported": "이 배포된 유형에는 작품 관계 목록이 설정되어 있지 않습니다.",
+  "library_copy_filter_any": "전체",
+  "library_copy_filter_apply": "소장 사본 필터 적용",
+  "library_copy_filter_available": "과거 의미 확인 가능",
+  "library_copy_filter_unsupported": "과거 의미 지원 안 됨",
+  "library_copy_filter_unavailable": "과거 의미 확인 불가",
+  "library_copy_filter_history": "과거 값을 포함하여 저장된 소장 사본의 값입니다.",
+  "library_copy_filter_none": "이 필터에 저장된 선택 항목이 없습니다.",
+  "library_copy_filter_options_unavailable": "필터 선택 항목을 일시적으로 불러올 수 없습니다. 선택한 ID는 유지됩니다."
 }

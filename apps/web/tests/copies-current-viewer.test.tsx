@@ -33,6 +33,10 @@ const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPr
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
+const filterOptions = {
+  kinds: { state: 'available', choices: [{ id: 'print', label: 'Historical print', meaning: 'available' }] },
+  statuses: { state: 'unavailable', choices: [] },
+};
 const profile = { kinds: [{ id: 'print', label: 'Print', statuses: [{ id: 'shelf', label: 'On shelf' }] }] };
 const release = {
   types: { Book: { library: { profileId: 'books' } } },
@@ -213,7 +217,7 @@ test('Actual server exports certify only the exact native preparation, preserve 
     const url = new URL(call.url);
     if (url.pathname === '/v1/copies') {
       if (url.searchParams.has('cursor')) return Response.json({ code: 'invalid_cursor' }, { status: 400 });
-      return Response.json({ copies: [{ ...copy('A'), subject: null }], next: 'next-A' });
+      return Response.json({ copies: [{ ...copy('A'), subject: null }], next: 'next-A', filterOptions });
     }
     if (url.pathname === `/v1/copies/${id(1)}`) return Response.json({ copy: { ...copy('A'), subject: null } });
     if (url.pathname === `/v1/subjects/${id(10)}`)
@@ -231,7 +235,7 @@ test('Actual server exports certify only the exact native preparation, preserve 
     expect(value).toMatchObject({
       sessionSubject: 'A',
       requested: { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'bad/keyset+cursor', locale: 'en' },
-      page: { kind: 'print', status: 'shelf', csrfToken: 'csrf-A', next: 'next-A' },
+      page: { kind: 'print', status: 'shelf', csrfToken: 'csrf-A', next: 'next-A', filterOptions },
     });
     expect(value.page.copies[0]?.subject?.label).toBe('Prepared A edition');
     expect(prepareCalls - before).toBe(1);

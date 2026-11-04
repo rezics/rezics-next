@@ -8710,5 +8710,13 @@
   "shell_client_unavailable": "交互控件加载失败。下方仍可查看服务器响应；请重新加载此页重试。",
   "shell_client_reload": "重新加载此页",
   "work_relation_citations_undisclosed": "本次阅读未公开引文。",
-  "work_relations_unsupported": "此已发布类型未配置作品关系流。"
+  "work_relations_unsupported": "此已发布类型未配置作品关系流。",
+  "library_copy_filter_any": "全部",
+  "library_copy_filter_apply": "应用副本筛选",
+  "library_copy_filter_available": "历史含义可用",
+  "library_copy_filter_unsupported": "历史含义不受支持",
+  "library_copy_filter_unavailable": "历史含义不可用",
+  "library_copy_filter_history": "选项来自已保存的馆藏，包括历史值。",
+  "library_copy_filter_none": "此筛选没有已保存的选项。",
+  "library_copy_filter_options_unavailable": "筛选选项暂时不可用。已选择的 ID 会保留。"
 }
