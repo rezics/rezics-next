@@ -135,6 +135,60 @@ export const RatingQuestionDirectoryResponseSchema = t.Object(
   closed,
 );
 
+export const QuestionManagementQuerySchema = t.Object(
+  {
+    selectedQuestionId: t.Optional(id),
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+  },
+  closed,
+);
+
+const managementHref = t.String({ minLength: 1, maxLength: 128 });
+const managementQuestion = t.Object(
+  {
+    ...RatingQuestionResponseSchema.properties,
+    realmId: id,
+    meaning: t.String({ minLength: 1, maxLength: 2000 }),
+    canonicalLabel: t.String({ minLength: 1, maxLength: 200 }),
+    labelRevision: revision,
+    lifecycle: RatingQuestionLifecycleSchema,
+  },
+  closed,
+);
+
+export const QuestionManagementResponseSchema = t.Object(
+  {
+    viewer: t.Object({ accountId: id }, closed),
+    realmId: id,
+    directory: t.Object({
+      ratingQuestions: t.Array(managementQuestion, { maxItems: 20 }),
+      next: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
+    }, closed),
+    actions: t.Object({
+      create: t.Union([t.Object({ method: t.Literal('POST'), href: managementHref }, closed), t.Null()]),
+    }, closed),
+    selected: t.Union([
+      t.Object({
+        question: managementQuestion,
+        readback: managementHref,
+        history: managementHref,
+        actions: t.Object({
+          caption: t.Union([
+            t.Object({ method: t.Literal('PUT'), href: managementHref, expectedLabelRevision: revision }, closed),
+            t.Null(),
+          ]),
+          lifecycle: t.Union([
+            t.Object({ method: t.Literal('POST'), href: managementHref, expectedLifecycleRevision: revision }, closed),
+            t.Null(),
+          ]),
+        }, closed),
+      }, closed),
+      t.Null(),
+    ]),
+  },
+  closed,
+);
+
 const RatingFreshnessSchema = t.Object(
   {
     asOf: t.Union([t.String({ format: 'date-time' }), t.Null()]),

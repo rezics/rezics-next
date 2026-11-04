@@ -23,6 +23,7 @@ import { LibraryNotFoundError } from '../library/command-support.ts';
 import { createRealmRatingQuestion, QuestionDefinitionInvalidError } from './question-authoring.ts';
 import { ratingQuestionView, readVisibleRatingQuestion, readSelectedQuestionDirectory } from './question-directory.ts';
 import { updateQuestionLabel, readQuestionLabel, readQuestionLabelHistory } from './question-label.ts';
+import { readQuestionManagementPage } from './question-management.ts';
 import {
   QuestionLifecycleConflictError,
   QuestionLifecycleNotFoundError,
@@ -76,6 +77,8 @@ import {
   RatingQuestionDirectoryQuerySchema,
   RatingQuestionDirectoryResponseSchema,
   RatingQuestionResponseSchema,
+  QuestionManagementQuerySchema,
+  QuestionManagementResponseSchema,
   RatingVoteInputSchema,
   RatingVoteResponseSchema,
 } from './schemas.ts';
@@ -571,6 +574,33 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         requireRoutableIds(params.id, params.associationId);
         return admission.run('normal', job, () =>
           command(() => classificationBallots().readAggregate(actor, params.id, params.associationId, job.deadline)),
+        );
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/rating-questions/management',
+      {
+        params: t.Object({ realmId: id }, closed),
+        query: QuestionManagementQuerySchema,
+        transform: ({ request }) => {
+          const parameters = new URL(request.url).searchParams;
+          for (const name of parameters.keys())
+            if (!['selectedQuestionId', 'cursor'].includes(name) || parameters.getAll(name).length !== 1)
+              throw new ProblemError('invalid_request');
+        },
+        response: { 200: QuestionManagementResponseSchema, ...aggregateFailures, 409: problemSchema('conflict') },
+        detail: {
+          ...publicReadDetail('rating.question_management', 'realm:read'),
+          security: bearer,
+          'x-resource-types': ['community.realm'],
+        },
+      },
+      async ({ actor, params, query, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          readQuestionManagementPage(
+            { ...config(), tokens: dependencies.tokens }, actor, { ...query, realmId: params.realmId }, job.deadline,
+          ),
         );
       },
     )
