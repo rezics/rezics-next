@@ -28,6 +28,10 @@ import { openApiRuntime } from './api-runtime.ts';
 
 const globalContext = GLOBAL_CONTEXT;
 
+function valueContent(statement: { value: BatchStatement['value'] } | undefined): unknown {
+  return statement?.value.type === 'value' ? statement.value.content : undefined;
+}
+
 test('default anime staff and voice publication adopts exact cited endpoints and keeps identities across refresh', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-credits-native-'));
   let journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
@@ -132,30 +136,30 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     const workRead = await publicClient.readSubject(workId);
     const workSubject = workRead.subject as { id: string; type: string; statements: Record<string, readonly BatchStatement[]> };
     const work = workSubject;
-    const staff = work.statements['schema:director']?.find((statement) => statement.value.content === directorId);
-    const voice = work.statements['wdt:P725']?.find((statement) => statement.value.content === performerId);
+    const staff = work.statements['schema:director']?.find((statement) => valueContent(statement) === directorId);
+    const voice = work.statements['wdt:P725']?.find((statement) => valueContent(statement) === performerId);
     expect(first.publication.published.some((record) => record.subjectId === workId)).toBe(true);
     expect(work.id).toBe(workId);
     expect(work.type).toBe('schema:TVSeries');
-    expect(work.statements['wdt:P5732']?.[0]?.value.content).toBe('101');
-    expect(staff?.qualifiers).toContainEqual({ property: { id: 'wdt:P3831' }, value: { type: 'value', content: role.conceptId } });
-    expect(staff?.qualifiers).toContainEqual({ property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Chief Director' } });
-    expect(staff?.references?.flatMap((reference) => reference.parts).some((part) => part.value.content === 'https://bgm.tv/subject/101#/subject-persons/101/11/position')).toBe(true);
-    expect(voice?.qualifiers).toContainEqual({ property: { id: 'wdt:P453' }, value: { type: 'value', content: characterId } });
+    expect(valueContent(work.statements['wdt:P5732']?.[0])).toBe('101');
+    expect(staff?.qualifiers?.some((qualifier) => qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === role.conceptId)).toBe(true);
+    expect(staff?.qualifiers?.some((qualifier) => qualifier.property.id === 'wdt:P1932' && valueContent(qualifier) === 'Chief Director')).toBe(true);
+    expect(staff?.references?.flatMap((reference) => reference.parts).some((part) => valueContent(part) === 'https://bgm.tv/subject/101#/subject-persons/101/11/position')).toBe(true);
+    expect(voice?.qualifiers?.some((qualifier) => qualifier.property.id === 'wdt:P453' && valueContent(qualifier) === characterId)).toBe(true);
     expect(JSON.stringify(voice)).not.toContain('Association commentary');
     const performerRead = await publicClient.readSubject(performerId);
     const characterRead = await publicClient.readSubject(characterId);
     const performer = performerRead.subject as { id: string; type: string; statements: Record<string, readonly BatchStatement[]> };
     const character = characterRead.subject as { id: string; type: string; statements: Record<string, readonly BatchStatement[]> };
     expect(performer).toMatchObject({ id: performerId, type: 'schema:Person' });
-    expect(performer.statements['wdt:P6298']?.[0]?.value.content).toBe('12');
+    expect(valueContent(performer.statements['wdt:P6298']?.[0])).toBe('12');
     expect(character).toMatchObject({ id: characterId, type: 'wd:Q95074' });
-    expect(character.statements['wdt:P6296']?.[0]?.value.content).toBe('21');
+    expect(valueContent(character.statements['wdt:P6296']?.[0])).toBe('21');
     const roleRead = await publicClient.readSubject(role.conceptId);
     const roleStatements = (roleRead.subject as { statements: Record<string, readonly BatchStatement[]> }).statements;
-    expect(roleStatements['schema:url']?.[0]?.value.content).toBe('https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_staffs.yml');
-    expect(roleStatements['schema:sameAs']?.[0]?.value.content).toBe(role.uri);
-    expect(roleStatements['skos:inScheme']?.[0]?.value.content).toBe(role.schemeId);
+    expect(valueContent(roleStatements['schema:url']?.[0])).toBe('https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_staffs.yml');
+    expect(valueContent(roleStatements['schema:sameAs']?.[0])).toBe(role.uri);
+    expect(valueContent(roleStatements['skos:inScheme']?.[0])).toBe(role.schemeId);
 
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
