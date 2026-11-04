@@ -76,6 +76,48 @@ test('missing or denied shelf advice cannot edit, while an original uncertain co
   expect(commands[0]).toBe(original);
 });
 
+test('changed native advice fences a captured type callback and its dispatch', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const initial = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 1,
+    shelf: { layouts: { all: 'list' } },
+  });
+  const advice = initial.advice!;
+  const restricted: ReadingPreferences = {
+    ...initial,
+    advice: {
+      ...advice,
+      shelfAdvice: {
+        ...advice.shelfAdvice!,
+        supported: { ...advice.shelfAdvice!.supported, layouts: ['grid'] },
+      },
+    },
+  };
+  const commands: Readonly<PreferenceChange>[] = [];
+  const draft = new ShelfPreferenceDraftRecovery(
+    initial,
+    {
+      read: async () => ({ signedIn: true, preferences: restricted, securityHref: null }),
+      save: async (input) => {
+        commands.push(input);
+        return { ok: false, reason: 'unavailable' };
+      },
+    },
+    owner,
+  );
+  const captured = draft.editTypeLayout.bind(draft);
+  captured('schema:Book', 'table');
+  await draft.reload();
+  captured('schema:Movie', 'table');
+  expect(draft.snapshot().phase).toBe('review');
+  expect(draft.snapshot().draft.layouts['schema:Movie']).toBeUndefined();
+  expect(draft.snapshot().draft.layouts['schema:Book']).toBe('table');
+  await draft.submit();
+  expect(commands).toHaveLength(0);
+});
+
 test('structured refusals retain the original intent and one absolute retry deadline', async () => {
   const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
   const realNow = Date.now;

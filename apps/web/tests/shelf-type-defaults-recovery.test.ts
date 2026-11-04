@@ -156,3 +156,52 @@ test('the native merged map bound includes preserved scopes, while removing one 
   await draft.submit();
   expect(commands[0]?.shelf).toEqual({ layouts: { 'schema:Extra': 'table', 'schema:Type0': null } });
 });
+
+test('grid-only advice rejects a new table while stored tables stay inspectable and removable', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const book = 'schema:Book';
+  const movie = 'schema:Movie';
+  const initial = withShelfAdvice({
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 1,
+    shelf: { layouts: { all: 'list', [book]: 'table', [movie]: 'table' }, gridSize: 'medium' },
+  });
+  const advice = initial.advice!;
+  let current: ReadingPreferences = {
+    ...initial,
+    advice: {
+      ...advice,
+      shelfAdvice: {
+        ...advice.shelfAdvice!,
+        supported: { ...advice.shelfAdvice!.supported, layouts: ['grid'] },
+      },
+    },
+  };
+  const commands: Readonly<PreferenceChange>[] = [];
+  const draft = new ShelfPreferenceDraftRecovery(
+    current,
+    {
+      read: async () => ({ signedIn: true, preferences: current, securityHref: null }),
+      save: async (input) => {
+        commands.push(input);
+        current = {
+          ...current,
+          version: 2,
+          shelf: { layouts: { all: 'list', [movie]: 'table' }, gridSize: 'small' },
+        };
+        return { ok: true, preferences: current };
+      },
+    },
+    { canRead: () => true, canWrite: () => true, version: () => 1, onVersionChange() {} },
+  );
+  draft.editTypeLayout('schema:New', 'table');
+  expect(draft.snapshot().dirty.has('layout:schema:New')).toBe(false);
+  draft.editTypeLayout(book, undefined);
+  draft.edit({ gridSize: 'small' }, 'gridSize');
+  expect(draft.snapshot().draft.layouts[book]).toBeUndefined();
+  expect(draft.snapshot().draft.layouts[movie]).toBe('table');
+  await draft.submit();
+  expect(commands[0]?.shelf).toEqual({ layouts: { [book]: null }, gridSize: 'small' });
+  expect(draft.snapshot().draft.layouts[movie]).toBe('table');
+});
