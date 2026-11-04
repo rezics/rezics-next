@@ -25,7 +25,8 @@ const target = (changed = false) => ({
   infobox: `{{Infobox animanga/TVAnime
 |中文名=中文题名
 |中文名=中文题名
-|别名=CLANNAD After Story
+|别名=${changed ? 'Recovered title' : 'Mixed scalar alias'}
+${changed ? '' : '* Mixed list alias\n'}|别名=CLANNAD After Story
 |别名=
 * クラナド
 * Alternate title
@@ -170,7 +171,18 @@ test('selected-family Bangumi TVAnime imports bounded names through the register
         },
       ]);
     }
+    expect(
+      firstNames.some(
+        (command) =>
+          command.op === 'propose' &&
+          command.statement.value.type === 'value' &&
+          ['Mixed scalar alias', 'Mixed list alias'].includes(
+            (command.statement.value.content as { text?: string }).text ?? '',
+          ),
+      ),
+    ).toBe(false);
     expect(sent.some((command) => command.source.external_id === String(neighbor.id))).toBe(false);
+    const acknowledgedSubject = identities.get(String(targetId));
 
     const unchangedStart = sent.length;
     const unchanged = await run(selected);
@@ -180,7 +192,7 @@ test('selected-family Bangumi TVAnime imports bounded names through the register
     const changedStart = sent.length;
     const changed = await run(await plan(sourceDir, target(true)));
     expect(changed.runs.bangumi?.counts.changed).toBe(1);
-    expect(identities.get(String(targetId))).toBeDefined();
+    expect(identities.get(String(targetId))).toBe(acknowledgedSubject);
     expect(created).toEqual(selected.records.bangumi.map((row) => row.key));
     const refreshedNames = nameCommands(sent.slice(changedStart));
     expect(refreshedNames.every((command) => !firstNames.some((previous) => previous.key === command.key))).toBe(true);
@@ -190,6 +202,14 @@ test('selected-family Bangumi TVAnime imports bounded names through the register
           command.op === 'propose' &&
           command.statement.value.type === 'value' &&
           (command.statement.value.content as { text?: string }).text === 'Updated title',
+      ),
+    ).toBe(true);
+    expect(
+      refreshedNames.some(
+        (command) =>
+          command.op === 'propose' &&
+          command.statement.value.type === 'value' &&
+          (command.statement.value.content as { text?: string }).text === 'Recovered title',
       ),
     ).toBe(true);
 
@@ -202,6 +222,10 @@ test('selected-family Bangumi TVAnime imports bounded names through the register
       { source: crossMediaAliases.bangumi, subjectId: identities.get(String(targetId))! },
     );
     expect(conversion.diagnostics?.map((diagnostic) => diagnostic.code)).toContain('unsupported_infobox_key');
+    expect(conversion.diagnostics).toContainEqual({
+      pointer: '/infobox/fields/2',
+      code: 'unsupported_infobox_name_form',
+    });
     expect(JSON.stringify(conversion.diagnostics)).not.toContain('PRIVATE_MARKER');
     expect(conversion.diagnostics!.length).toBeLessThanOrEqual(16);
   } finally {
