@@ -183,9 +183,6 @@ export function RecipeCreateReview({
       <ContentItemHeading level={2} className="text-lg font-semibold">
         {m.recipe_review_title({}, o)}
       </ContentItemHeading>
-      <p className="text-sm text-muted-foreground">
-        <DefinitionMeaning values={row.definition.descriptions} locale={locale} />
-      </p>
       <p className="text-sm text-muted-foreground">{m.recipe_review_intro({}, o)}</p>
       {stale && (
         <p role="status" className="text-sm">
