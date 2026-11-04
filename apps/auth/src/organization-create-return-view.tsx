@@ -33,8 +33,7 @@ export function OrganizationCreateReturnView({
   focusRef,
 }: OrganizationCreateReturnViewProps) {
   const currentSuccess = phase === 'acknowledged' && Boolean(handle);
-  const hasUnknownHistory =
-    history === 'unconfirmed' && !['preflight', 'approval', 'execution'].includes(phase);
+  const hasUnknownHistory = history === 'unconfirmed' && !['preflight', 'approval', 'execution'].includes(phase);
   const hasAcknowledgedHistory = history === 'acknowledged';
   const showUnknown = phase === 'unknown' || phase === 'unresumable' || hasUnknownHistory;
   const view = (() => {
@@ -43,7 +42,11 @@ export function OrganizationCreateReturnView({
       case 'refused':
         return null;
       case 'preflight':
-        return <Alert role="status"><AlertDescription>{m.auth_organization_creation_checking()}</AlertDescription></Alert>;
+        return (
+          <Alert role="status">
+            <AlertDescription>{m.auth_organization_creation_checking()}</AlertDescription>
+          </Alert>
+        );
       case 'approval':
         return (
           <Alert role="status">
@@ -53,13 +56,29 @@ export function OrganizationCreateReturnView({
           </Alert>
         );
       case 'execution':
-        return <Alert role="status"><AlertDescription>{m.auth_organization_creation_sending()}</AlertDescription></Alert>;
+        return (
+          <Alert role="status">
+            <AlertDescription>{m.auth_organization_creation_sending()}</AlertDescription>
+          </Alert>
+        );
       case 'unknown':
-        return <Alert role="status"><AlertDescription>{m.auth_organization_creation_unknown()}</AlertDescription></Alert>;
+        return (
+          <Alert role="status">
+            <AlertDescription>{m.auth_organization_creation_unknown()}</AlertDescription>
+          </Alert>
+        );
       case 'unavailable':
-        return <Alert role="alert"><AlertDescription>{m.auth_account_operation_unavailable()}</AlertDescription></Alert>;
+        return (
+          <Alert role="alert">
+            <AlertDescription>{m.auth_account_operation_unavailable()}</AlertDescription>
+          </Alert>
+        );
       case 'unresumable':
-        return <Alert role="alert"><AlertDescription>{m.auth_organization_return_unresumable()}</AlertDescription></Alert>;
+        return (
+          <Alert role="alert">
+            <AlertDescription>{m.auth_organization_return_unresumable()}</AlertDescription>
+          </Alert>
+        );
       case 'acknowledged':
         return currentSuccess ? (
           <div className="auth-account-operation-success" role="status">
@@ -74,7 +93,9 @@ export function OrganizationCreateReturnView({
             <a href="/security">{m.auth_security_heading()}</a>
           </div>
         ) : (
-          <Alert role="status"><AlertDescription>{m.auth_organization_return_acknowledged()}</AlertDescription></Alert>
+          <Alert role="status">
+            <AlertDescription>{m.auth_organization_return_acknowledged()}</AlertDescription>
+          </Alert>
         );
     }
   })();
@@ -83,10 +104,14 @@ export function OrganizationCreateReturnView({
   return (
     <div ref={focusRef} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-organization-create-return>
       {hasUnknownHistory && phase !== 'unknown' ? (
-        <Alert role="status"><AlertDescription>{m.auth_organization_creation_unknown()}</AlertDescription></Alert>
+        <Alert role="status">
+          <AlertDescription>{m.auth_organization_creation_unknown()}</AlertDescription>
+        </Alert>
       ) : null}
       {hasAcknowledgedHistory && phase !== 'acknowledged' ? (
-        <Alert role="status"><AlertDescription>{m.auth_organization_return_acknowledged()}</AlertDescription></Alert>
+        <Alert role="status">
+          <AlertDescription>{m.auth_organization_return_acknowledged()}</AlertDescription>
+        </Alert>
       ) : null}
       {view}
       {showUnknown || phase === 'unavailable' || signedOut ? (

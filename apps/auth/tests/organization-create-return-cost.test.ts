@@ -9,13 +9,15 @@ const initial = session('organization');
 const body = { account_id: initial.accountId, client_id: initial.clientId, scope: initial.scopes };
 
 test('return and read Retry make bounded session reads but no approval or execution writes', async () => {
-  expect(storePendingAccountOperationStepUp({
-    kind: 'organization',
-    accountId: initial.accountId,
-    operationKey: '0123456789abcdef0123456789abcdef',
-    operation: { kind: 'organization', handle: 'private-team' },
-    submitted: true,
-  })).toBe(true);
+  expect(
+    storePendingAccountOperationStepUp({
+      kind: 'organization',
+      accountId: initial.accountId,
+      operationKey: '0123456789abcdef0123456789abcdef',
+      operation: { kind: 'organization', handle: 'private-team' },
+      submitted: true,
+    }),
+  ).toBe(true);
   storePendingOrganizationHandle('private-team');
   const page = await open(
     createElement(NewOrganizationPage, { initial: { kind: 'failure', message: 'Unavailable' } }),

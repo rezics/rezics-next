@@ -148,9 +148,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   }, []);
   const depart = useCallback(() => {
     const descriptorHandle =
-      unresolvedAttempt.current?.operation.kind === 'organization'
-        ? unresolvedAttempt.current.operation.handle
-        : '';
+      unresolvedAttempt.current?.operation.kind === 'organization' ? unresolvedAttempt.current.operation.handle : '';
     const draft = review.current.handle || descriptorHandle;
     const marker = pendingAccountOperationStepUpState();
     // Retire authority and force private DOM removal before the browser can cache this document.
@@ -176,8 +174,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       recordReturn({ type: 'return' });
     });
     // A retained command, including one whose outcome is unknown, keeps its exact identity.
-    if (marker.kind === 'absent' && readPendingOrganizationHandle() === draft)
-      storePendingOrganizationHandle('');
+    if (marker.kind === 'absent' && readPendingOrganizationHandle() === draft) storePendingOrganizationHandle('');
   }, [recordReturn]);
   const departure = router ? (
     <OrganizationDeparture shouldWarn={shouldWarn} leave={depart} focus={() => handleInput.current?.focus()} />
@@ -256,11 +253,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
           (pendingOperation.kind !== 'organization' ||
             pendingOperation.returnTo !== '/organizations/new' ||
             !accountOperationSessionMatches(result, pendingOperation));
-        if (
-          pendingState.kind === 'invalid' ||
-          attemptMismatch ||
-          sessionMismatch
-        ) {
+        if (pendingState.kind === 'invalid' || attemptMismatch || sessionMismatch) {
           authority.current = result;
           setAccountId(result.accountId);
           const expected = accountOperationProfile('organization');
@@ -599,11 +592,12 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
           ? 'acknowledged'
           : 'review';
   } else if (loadState === 'loading') {
-    returnPhase = returnState.history === 'unconfirmed'
-      ? 'unknown'
-      : returnState.history === 'acknowledged'
-        ? 'acknowledged'
-        : 'preflight';
+    returnPhase =
+      returnState.history === 'unconfirmed'
+        ? 'unknown'
+        : returnState.history === 'acknowledged'
+          ? 'acknowledged'
+          : 'preflight';
   } else if (pending && ['preflight', 'approval', 'execution'].includes(returnState.phase)) {
     returnPhase = returnState.phase;
   } else if (returnState.history === 'unconfirmed') returnPhase = 'unknown';

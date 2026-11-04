@@ -33,14 +33,15 @@ export const PendingExecution = {
 
 export const UnknownSameAccount = {
   parameters: desktopViewport,
-  render: () => example({
-    phase: 'unknown',
-    history: 'unconfirmed',
-    canRetryRead: true,
-    canRetryCreation: true,
-    readRetry: () => {},
-    creationRetry: () => {},
-  }),
+  render: () =>
+    example({
+      phase: 'unknown',
+      history: 'unconfirmed',
+      canRetryRead: true,
+      canRetryCreation: true,
+      readRetry: () => {},
+      creationRetry: () => {},
+    }),
 };
 
 export const SignedOutUnknown = {
@@ -55,7 +56,8 @@ export const AccountChanged = {
 
 export const RecoveryStorageReplaced = {
   parameters: phoneViewport,
-  render: () => example({ phase: 'unresumable', history: 'unconfirmed', canRetryRead: true, readRetry: () => {} }, 'dark'),
+  render: () =>
+    example({ phase: 'unresumable', history: 'unconfirmed', canRetryRead: true, readRetry: () => {} }, 'dark'),
 };
 
 export const AcknowledgedReturn = {
@@ -65,10 +67,14 @@ export const AcknowledgedReturn = {
 
 export const AcknowledgedCreation = {
   parameters: phoneViewport,
-  render: () => example({
-    phase: 'acknowledged',
-    history: 'acknowledged',
-    handle: 'reading-group',
-    accountId: '20000000-0000-7000-8000-000000000002',
-  }, 'dark'),
+  render: () =>
+    example(
+      {
+        phase: 'acknowledged',
+        history: 'acknowledged',
+        handle: 'reading-group',
+        accountId: '20000000-0000-7000-8000-000000000002',
+      },
+      'dark',
+    ),
 };

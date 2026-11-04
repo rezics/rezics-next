@@ -41,9 +41,7 @@ test('a first current refusal remains known and releases its own continuation', 
   await flush(() => fill(page.host.querySelector('input')!, 'team-alpha'));
   await flush(() => send(page.host));
   await flush(() => page.calls[0]!.resolve(approval()));
-  await flush(() =>
-    page.calls[1]!.resolve(Response.json({ error: 'account_operation_denied' }, { status: 403 })),
-  );
+  await flush(() => page.calls[1]!.resolve(Response.json({ error: 'account_operation_denied' }, { status: 403 })));
   expect(page.host.textContent).toContain('Creation was refused');
   expect(page.host.textContent).not.toContain('creation result is still unknown');
   expect(readPendingAccountOperationStepUp()).toBeNull();

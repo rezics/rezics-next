@@ -6,7 +6,18 @@ import {
   createRouter,
   RouterContextProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, flush, leave, open, send, session } from './creation-page-fixture';
+import {
+  creationFixture,
+  approval,
+  button,
+  dom,
+  fill,
+  flush,
+  leave,
+  open,
+  send,
+  session,
+} from './creation-page-fixture';
 import { NewOrganizationPage } from '../src/routes/organizations.new';
 import { readPendingAccountOperationStepUp } from '../src/account-operation-step-up';
 import { readPendingOrganizationHandle } from '../src/account-operations';
