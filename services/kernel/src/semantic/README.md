@@ -915,6 +915,9 @@ writes admit one work per edition. The producer still proves a three-plus-
 lookahead window so a later multi-valued release does not guess a primary
 work. Identity mapping `absent` uses the requested id as the current
 terminal; `pending` and `unavailable` refuse the item.
+Decision: an unpublished merge mapping, a redirect on the observed terminal,
+or two different partition cuts for one home during assembly answers
+`unavailable` rather than a mixed old/new membership or a leaked terminal.
 
 ### Copy and release work disclosure Cost
 

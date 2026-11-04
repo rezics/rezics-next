@@ -68,7 +68,7 @@ async function locators(
 }
 
 test('native Book edition disclosure returns selected work labels and exact empty withheld overflow and denied states', async () => {
-  const f = await createListPresentationFixture({ poolMax: 1 });
+  const f = await createListPresentationFixture({ poolMax: 2 });
   try {
     expect(copyWorkDisclosureOverlay(bundledRelease, 'bf:Instance', 'en')?.unavailable).toEqual([]);
     expect(copyWorkDisclosureOverlay(bundledRelease, 'schema:Book', 'en')).toBeUndefined();
@@ -92,9 +92,19 @@ test('native Book edition disclosure returns selected work labels and exact empt
     await locators(f.pool, partial, extra.slice(0, 1));
 
     const deps = { ...(await f.deps('anonymous')), deadline: Date.now() + 180_000 };
-    await expect(
-      readCopyWorkDisclosure(deps, { identities: Array(COPY_WORK_DISCLOSURE_MAX_RAW + 1).fill(edition) }),
-    ).rejects.toBeInstanceOf(RangeError);
+    let acquired = 0;
+    const acquire = () => {
+      acquired++;
+    };
+    f.pool.on('acquire', acquire);
+    try {
+      await expect(
+        readCopyWorkDisclosure(deps, { identities: Array(COPY_WORK_DISCLOSURE_MAX_RAW + 1).fill(edition) }),
+      ).rejects.toBeInstanceOf(RangeError);
+      expect(acquired).toBe(0);
+    } finally {
+      f.pool.off('acquire', acquire);
+    }
 
     const duplicates = [edition, empty, edition, person];
     const observed = await readCopyWorkDisclosure(deps, { identities: duplicates, languages: ['zh-Hans'] });
@@ -115,6 +125,36 @@ test('native Book edition disclosure returns selected work labels and exact empt
     expect(hiddenMember.results.get(partial)).toEqual({ state: 'withheld' });
     expect(JSON.stringify(hiddenMember.results.get(partial))).not.toContain(extra[0]);
     expect(JSON.stringify(hiddenMember.results.get(partial))).not.toContain(work);
+
+    const assemblyWork = await f.create('schema:Book', {}, { en: 'Assembly work' });
+    const assemblyEdition = await f.create('bf:Instance', {}, { en: 'Assembly edition' });
+    await adoptWork(f, assemblyEdition, assemblyWork);
+    let hidDuringPrepare = false;
+    const assemblyAccess = deriveAccess(deps.access, {
+      async prepare(actor, action, resource, context) {
+        if (!hidDuringPrepare && resource.id === assemblyWork) {
+          hidDuringPrepare = true;
+          await f.hide(assemblyWork);
+        }
+        return deps.access.prepare!(actor, action, resource, context);
+      },
+    });
+    const during = await readCopyWorkDisclosure(
+      { ...deps, access: assemblyAccess },
+      { identities: [assemblyEdition], languages: ['en'] },
+    );
+    expect(['withheld', 'unavailable']).toContain(during.results.get(assemblyEdition)?.state);
+    expect(JSON.stringify(during.results.get(assemblyEdition))).not.toContain(assemblyWork);
+
+    const mergeWork = await f.create('schema:Book', {}, { en: 'Redirected work' });
+    const survivor = await f.create('schema:Book', {}, { en: 'Survivor work' });
+    const mergeEdition = await f.create('bf:Instance', {}, { en: 'Redirect edition' });
+    await adoptWork(f, mergeEdition, mergeWork);
+    const [redirected, kept] = [mergeWork, survivor].sort() as [string, string];
+    await f.checked('POST', '/v1/subjects:merge', { subjects: [redirected, kept] });
+    const merged = await readCopyWorkDisclosure(deps, { identities: [mergeEdition] });
+    expect(JSON.stringify(merged.results.get(mergeEdition))).not.toContain(redirected);
+    expect(['available', 'unavailable']).toContain(merged.results.get(mergeEdition)?.state);
 
     await f.hide(work);
     expect(await observed.current()).toBe(false);
@@ -139,6 +179,43 @@ test('native Book edition disclosure returns selected work labels and exact empt
     const again = await readCopyWorkDisclosure(deps, { identities: duplicates, languages: ['zh-Hans'] });
     expect(again.results.get(empty)).toEqual({ state: 'available', works: [] });
     expect(again.results.get(person)).toEqual({ state: 'scope' });
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('native multi-valued disclosure keeps three works and an unsupported property distinct', async () => {
+  const f = await createListPresentationFixture({ poolMax: 1 });
+  try {
+    const release = structuredClone(bundledRelease);
+    release.properties['schema:exampleOfWork']!.multivalued = true;
+    await f.publish(release);
+    const works = [
+      await f.create('schema:Book', {}, { en: 'First' }),
+      await f.create('schema:Book', {}, { en: 'Second' }),
+      await f.create('schema:Book', {}, { en: 'Third' }),
+    ];
+    const edition = await f.create('bf:Instance', {}, { en: 'Native omnibus' });
+    const candidates = [];
+    for (const work of works) candidates.push(await f.propose(edition, 'schema:exampleOfWork', work));
+    await f.adopt(edition, 'schema:exampleOfWork', candidates);
+    const deps = { ...(await f.deps('anonymous')), deadline: Date.now() + 180_000 };
+    const observed = await readCopyWorkDisclosure(deps, { identities: [edition], languages: ['en'] });
+    const found = observed.results.get(edition);
+    expect(found?.state).toBe('available');
+    if (found?.state === 'available') {
+      expect(found.works).toHaveLength(3);
+      expect(found.works.map((item) => item.id).sort()).toEqual([...works].sort());
+    }
+    const broken = structuredClone(release);
+    broken.properties['schema:exampleOfWork']!.relation = {
+      ...broken.properties['schema:exampleOfWork']!.relation!,
+      group: 'association',
+    };
+    await f.publish(broken);
+    expect((await readCopyWorkDisclosure(deps, { identities: [edition] })).results.get(edition)).toEqual({
+      state: 'unsupported',
+    });
   } finally {
     await f.close();
   }

@@ -76,7 +76,8 @@ const denied: CopyWorkDisclosureState = { state: 'denied' };
 const scoped: CopyWorkDisclosureState = { state: 'scope' };
 const unsupported: CopyWorkDisclosureState = { state: 'unsupported' };
 const emptyAvailable: CopyWorkDisclosureState = { state: 'available', works: [] };
-const json = (value: unknown) => JSON.stringify(value);
+const json = (value: unknown) =>
+  JSON.stringify(value, (_key, entry) => (typeof entry === 'bigint' ? entry.toString() : entry));
 
 function isType(release: Pick<Release, 'types'>, type: string, target: string, seen = new Set<string>()): boolean {
   if (type === target) return true;
@@ -96,6 +97,25 @@ function groups(ids: readonly string[]) {
     result.set(home, list);
   }
   return result;
+}
+
+function sameCut(left: PartitionCut, right: PartitionCut) {
+  return left.epoch === right.epoch && left.position === right.position;
+}
+
+/** Distinct homes only. Two positions for one home is a mixed old/new assembly. */
+function collectCuts(cuts: readonly PartitionCut[]): PartitionCut[] | null {
+  const byHome = new Map<number, PartitionCut>();
+  for (const cut of cuts) {
+    const previous = byHome.get(cut.partition);
+    if (previous && !sameCut(previous, cut)) return null;
+    byHome.set(cut.partition, cut);
+  }
+  return [...byHome.values()];
+}
+
+function mappingKey(mapping: Awaited<ReturnType<typeof readIdentityMappings>>[number] | undefined) {
+  return json(mapping ?? null);
 }
 
 function admittedCopyWork(release: Release, type: string): 'admitted' | 'scope' | 'unsupported' {
@@ -211,10 +231,8 @@ async function observeHome(
       const allowed = check ? await check(client) : false;
       found.set(id, { header, allowed, membership: null });
       if (header.visibility !== 'visible' || !allowed) continue;
-      if (header.redirect) {
-        found.get(id)!.membership = { kind: 'concealed' };
-        continue;
-      }
+      // A redirect on the observed terminal is unpublished mapping, not hidden membership.
+      if (header.redirect) continue;
       if (admittedCopyWork(release, header.type) !== 'admitted') continue;
       if (header.revision === null || header.release === null) throw new AccessUnavailableError('contention');
       visible.push(id);
@@ -544,6 +562,23 @@ export async function readCopyWorkDisclosure(
         else if (works.length > COPY_WORK_DISCLOSURE_MAX_WORKS) classified.set(original, unsupported);
         else classified.set(original, works.length ? { state: 'available', works } : emptyAvailable);
       }
+      const remappedSources = await mapIdentities(deps, routed);
+      for (const id of routed) {
+        if (mappingKey(mappings.get(id)) !== mappingKey(remappedSources.get(id))) classified.set(id, unavailable);
+      }
+      if (uniqueTargets.length) {
+        const remappedTargets = await mapIdentities(deps, uniqueTargets);
+        for (const [original, plan] of plans) {
+          const source = observedSources.get(plan.terminal);
+          if (source?.membership?.kind !== 'works') continue;
+          if (
+            source.membership.ids.some(
+              (id) => mappingKey(mappedTargets.get(id)) !== mappingKey(remappedTargets.get(id)),
+            )
+          )
+            classified.set(original, unavailable);
+        }
+      }
     });
   } catch (error) {
     if (!(error instanceof AccessUnavailableError) && classifyUnavailability(error) === undefined) throw error;
@@ -552,7 +587,28 @@ export async function readCopyWorkDisclosure(
 
   for (const [id, state] of classified) results.set(id, state);
   for (const id of routed) if (!results.has(id)) results.set(id, unavailable);
-  return observation(deps, results, cuts, releaseDigest, releaseHead);
+  const components = collectCuts(cuts);
+  if (components === null) {
+    for (const id of routed) results.set(id, unavailable);
+    return observation(deps, results, [], releaseDigest, releaseHead);
+  }
+  const observed = observation(deps, results, components, releaseDigest, releaseHead);
+  try {
+    const membership = [...results.values()].some(
+      (state) => state.state === 'available' || state.state === 'withheld' || state.state === 'unsupported',
+    );
+    if (membership && !(await observed.current())) {
+      for (const [id, state] of results)
+        if (state.state === 'available' || state.state === 'withheld' || state.state === 'unsupported')
+          results.set(id, unavailable);
+      return observation(deps, results, components, releaseDigest, releaseHead);
+    }
+  } catch (error) {
+    if (!(error instanceof AccessUnavailableError) && classifyUnavailability(error) === undefined) throw error;
+    for (const id of routed) results.set(id, unavailable);
+    return observation(deps, results, components, releaseDigest, releaseHead);
+  }
+  return observed;
 }
 
 function observation(
@@ -562,7 +618,7 @@ function observation(
   digest: string | null,
   head: number | null,
 ): CopyWorkDisclosureObservation {
-  const components = [...new Map(cuts.map((cut) => [cut.partition, cut] as const)).values()];
+  const components = cuts;
   const disclosed = [...results.entries()].flatMap(([id, state]) => {
     if (state.state === 'available') return [id, ...state.works.map((work) => work.id)];
     return state.state === 'scope' || state.state === 'unsupported' ? [id] : [];

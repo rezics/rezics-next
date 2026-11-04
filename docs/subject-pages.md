@@ -401,7 +401,8 @@ work and an unreadable work identity are separate states. Work, edition, alterna
 distinct objects.
 Decision: native `readCopyWorkDisclosure` is the completeness-aware copy/release-to-work batch; the ordinary
 Subject relation adapter shows complete-empty and withheld work controls without leaking hidden members, and
-Commerce keeps FullCopies and inventory adaptation.
+Commerce keeps FullCopies and inventory adaptation. Unpublished merge mapping and mixed home cuts stay
+`unavailable` on that batch; they do not leak a terminal or mixed membership.
 
 Release date uses the released time property. Exact day, partial year/month, explicit TBA (`somevalue`), explicit
 no-value, an absent statement, invalid concrete values and unsupported precision or calendars remain distinct. Only
