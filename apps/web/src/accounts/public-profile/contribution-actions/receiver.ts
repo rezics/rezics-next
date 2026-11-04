@@ -60,7 +60,8 @@ export function contributionActionsInput(
     !Array.isArray(selection.references) ||
     !selection.references.length ||
     selection.references.length > 20
-  ) return;
+  )
+    return;
   const references: ContributionReference[] = [];
   const seen = new Set<string>();
   for (const value of selection.references) {
@@ -69,14 +70,30 @@ export function contributionActionsInput(
     if (seen.has(identity)) return;
     seen.add(identity);
     if (value.type === 'content.thread' && view !== 'posts') {
-      references.push(Object.freeze({
-        type: value.type, id: value.id, placeId: value.placeId, sourceRevisionId: value.sourceRevisionId,
-      }));
-    } else if (value.type === 'content.post' && view === 'posts' && uuid(value.threadId) && revision(value.threadRevisionId)) {
-      references.push(Object.freeze({
-        type: value.type, id: value.id, threadId: value.threadId, placeId: value.placeId,
-        threadRevisionId: value.threadRevisionId, sourceRevisionId: value.sourceRevisionId,
-      }));
+      references.push(
+        Object.freeze({
+          type: value.type,
+          id: value.id,
+          placeId: value.placeId,
+          sourceRevisionId: value.sourceRevisionId,
+        }),
+      );
+    } else if (
+      value.type === 'content.post' &&
+      view === 'posts' &&
+      uuid(value.threadId) &&
+      revision(value.threadRevisionId)
+    ) {
+      references.push(
+        Object.freeze({
+          type: value.type,
+          id: value.id,
+          threadId: value.threadId,
+          placeId: value.placeId,
+          threadRevisionId: value.threadRevisionId,
+          sourceRevisionId: value.sourceRevisionId,
+        }),
+      );
     } else return;
   }
   return Object.freeze({ accountId, view, cursor, proof: selection.proof, references: Object.freeze(references) });
@@ -106,10 +123,12 @@ export class ContributionActionsReceiver<T> {
   ) {}
 
   isCurrent = (): boolean => !this.retired && this.originCurrent();
-  snapshot = (): ContributionActionsState<T> => this.isCurrent() ? this.current : { state: 'retired' };
+  snapshot = (): ContributionActionsState<T> => (this.isCurrent() ? this.current : { state: 'retired' });
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
   private publish(value: ContributionActionsState<T>) {
     this.current = value;
