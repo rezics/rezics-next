@@ -432,7 +432,7 @@ export type CollectionPrivacyPageRead = (cursor: string | null) => Promise<Colle
 export class CollectionPrivacyPager extends Observable<PageState> {
   private rows = new Set<() => boolean>();
   private failedRequest: { cursor: string | null; replace: boolean } | null = null;
-  private retryWait: { cursor: string | null; deadline: number } | null = null;
+  private retryWait = 0;
   constructor(
     private read: CollectionPrivacyPageRead,
     isCurrent: () => boolean = () => true,
@@ -440,17 +440,11 @@ export class CollectionPrivacyPager extends Observable<PageState> {
   ) {
     super({ collections: [], next: null, window: 0, loaded: false, loading: false, failure: null }, isCurrent);
   }
-  retryDeadline = () => {
-    const cursor = this.failedRequest ? this.failedRequest.cursor : this.state.next;
-    return this.deadlineFor(cursor);
-  };
-  restartDeadline = () => this.deadlineFor(null);
-  private deadlineFor = (cursor: string | null) => (this.retryWait?.cursor === cursor ? this.retryWait.deadline : 0);
-  private waitingFor = (cursor: string | null) => this.deadlineFor(cursor) > this.now();
-  private retainRetryWait = (cursor: string | null, failure: NativePreferenceFailure | undefined) => {
-    const previous = this.retryWait?.cursor === cursor ? this.retryWait.deadline : 0;
-    const deadline = Math.max(previous, preferenceRetryDeadline(failure?.retryAfter, this.now()));
-    this.retryWait = deadline > this.now() ? { cursor, deadline } : null;
+  retryDeadline = () => this.retryWait;
+  restartDeadline = () => this.retryWait;
+  private waitingFor = () => this.retryWait > this.now();
+  private retainRetryWait = (failure: NativePreferenceFailure | undefined) => {
+    this.retryWait = Math.max(this.retryWait, preferenceRetryDeadline(failure?.retryAfter, this.now()));
   };
   override dispose = () => {
     this.state = {
@@ -464,7 +458,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
       restartBlocked: false,
     };
     this.failedRequest = null;
-    this.retryWait = null;
+    this.retryWait = 0;
     this.rows.clear();
     this.disposed = true;
     this.generation++;
@@ -499,7 +493,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
     await this.requestPage({ cursor: null, replace: true });
   }
   private async requestPage(request: { cursor: string | null; replace: boolean }) {
-    if (!this.live() || this.waitingFor(request.cursor)) return;
+    if (!this.live() || this.waitingFor()) return;
     if (this.state.loading || this.hasUnresolvedRows()) return;
     const generation = this.generation;
     this.update({
@@ -512,7 +506,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
       const read = await this.read(request.cursor);
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
-        this.retainRetryWait(request.cursor, read.failure);
+        this.retainRetryWait(read.failure);
         this.failedRequest = isCollectionPrivacyReadRefusal(read.reason) ? null : request;
         this.update(
           isCollectionPrivacyReadRefusal(read.reason)
@@ -532,11 +526,9 @@ export class CollectionPrivacyPager extends Observable<PageState> {
       // A row can become dirty while the native page read is in flight. Keep its window and retry this cursor.
       if (this.hasUnresolvedRows()) {
         this.failedRequest = request;
-        this.retryWait = null;
         return;
       }
       this.failedRequest = null;
-      this.retryWait = null;
       // The first occurrence from one native page wins; later duplicate identities are ignored.
       const rows = new Map<string, OwnedCollection>();
       for (const row of read.value.collections.slice(0, 20)) if (!rows.has(row.id)) rows.set(row.id, row);
@@ -549,7 +541,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
     } catch (error) {
       if (this.live() && generation === this.generation) {
         const nativeFailure = collectionPrivacyFailureMetadata(error);
-        this.retainRetryWait(request.cursor, nativeFailure);
+        this.retainRetryWait(nativeFailure);
         this.failedRequest = request;
         this.update({ failure: 'unavailable', nativeFailure });
       }
