@@ -8369,5 +8369,21 @@
   "own_media_recovery_heading": "원래 미디어 삭제",
   "own_media_recovery_browsing": "다른 행을 확인해도 이 삭제는 취소되지 않습니다. 재시도하면 원래 요청을 보냅니다.",
   "own_media_recovery_withheld": "원래 미디어 또는 권한을 더 이상 사용할 수 없어 복구를 진행할 수 없습니다.",
-  "own_media_recovery_return": "원래 미디어로 돌아가기"
+  "own_media_recovery_return": "원래 미디어로 돌아가기",
+  "board_watch_start": "새 토론 구독",
+  "board_watch_stop": "구독 중지",
+  "board_watch_sign_in": "새 토론을 구독하려면 로그인하세요",
+  "board_watch_checking": "게시판 구독 상태 확인 중…",
+  "board_watch_current_watching": "새 토론을 구독 중입니다",
+  "board_watch_current_not_watching": "이 게시판을 구독하지 않습니다",
+  "board_watch_command_acknowledged": "구독 변경을 확인했습니다. 현재 상태를 확인하는 중입니다.",
+  "board_watch_outcome_unknown": "구독 변경을 확인할 수 없습니다.",
+  "board_watch_conflict": "구독 설정이 변경되었습니다. 다시 시도하기 전에 현재 상태를 확인하세요.",
+  "board_watch_access_lost": "이 게시판의 구독 제어를 더 이상 사용할 수 없습니다.",
+  "board_watch_unavailable": "지금은 구독 상태를 사용할 수 없습니다.",
+  "board_watch_read_only": "게시판은 볼 수 있지만 구독 설정을 변경할 수 없습니다.",
+  "board_watch_retry_exact": "같은 변경 다시 시도",
+  "board_watch_check_again": "현재 상태 확인",
+  "board_watch_inspect_conflict": "다른 변경을 하기 전에 현재 상태를 확인하세요.",
+  "board_watch_sending": "구독 변경 전송 중…"
 }

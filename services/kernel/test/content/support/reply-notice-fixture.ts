@@ -77,8 +77,14 @@ export async function replyNoticeFixture() {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
     );
-    const value = response.status === 204 ? null : await response.json();
-    return { status: response.status, value };
+    const body = response.status === 204 ? null : await response.text();
+    const value = body === null ? null : JSON.parse(body);
+    return {
+      status: response.status,
+      value,
+      headers: response.headers,
+      responseBytes: body === null ? 0 : Buffer.byteLength(body, 'utf8'),
+    };
   }
   async function thread(author = accounts.recipient, visibility: 'published' | 'draft' = 'published', board = boardId) {
     const result = await call(author, 'POST', '/v1/threads', {

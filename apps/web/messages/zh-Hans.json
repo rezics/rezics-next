@@ -8369,5 +8369,21 @@
   "own_media_recovery_heading": "原媒体删除操作",
   "own_media_recovery_browsing": "查看其他行不会取消此删除操作。重试会发送原始请求。",
   "own_media_recovery_withheld": "原媒体或权限已不可用，暂无法恢复此操作。",
-  "own_media_recovery_return": "返回原媒体"
+  "own_media_recovery_return": "返回原媒体",
+  "board_watch_start": "关注新的讨论",
+  "board_watch_stop": "停止关注",
+  "board_watch_sign_in": "登录以关注新的讨论",
+  "board_watch_checking": "正在检查版块关注状态…",
+  "board_watch_current_watching": "正在关注新的讨论",
+  "board_watch_current_not_watching": "未关注此版块",
+  "board_watch_command_acknowledged": "关注变更已确认，正在检查当前状态。",
+  "board_watch_outcome_unknown": "无法确认关注变更是否完成。",
+  "board_watch_conflict": "关注设置已变更。请先检查当前状态再重试。",
+  "board_watch_access_lost": "此版块的关注控制已不可用。",
+  "board_watch_unavailable": "目前无法获取关注状态。",
+  "board_watch_read_only": "您可以浏览此版块，但目前无法变更关注设置。",
+  "board_watch_retry_exact": "重试这项完全相同的变更",
+  "board_watch_check_again": "检查当前状态",
+  "board_watch_inspect_conflict": "请先检查当前状态再进行其他变更。",
+  "board_watch_sending": "正在提交关注变更…"
 }

@@ -8369,5 +8369,21 @@
   "own_media_recovery_heading": "元のメディアの削除",
   "own_media_recovery_browsing": "別の行を確認しても、この削除はキャンセルされません。再試行すると元のリクエストを送信します。",
   "own_media_recovery_withheld": "元のメディアまたは権限が利用できないため、再試行できません。",
-  "own_media_recovery_return": "元のメディアに戻る"
+  "own_media_recovery_return": "元のメディアに戻る",
+  "board_watch_start": "新しい議論をウォッチ",
+  "board_watch_stop": "ウォッチを停止",
+  "board_watch_sign_in": "新しい議論をウォッチするにはログインしてください",
+  "board_watch_checking": "ボードのウォッチ状態を確認中…",
+  "board_watch_current_watching": "新しい議論をウォッチ中",
+  "board_watch_current_not_watching": "このボードをウォッチしていません",
+  "board_watch_command_acknowledged": "ウォッチ変更を確認しました。現在の状態を確認しています。",
+  "board_watch_outcome_unknown": "ウォッチ変更を確認できませんでした。",
+  "board_watch_conflict": "ウォッチ設定が変更されました。再試行する前に現在の状態を確認してください。",
+  "board_watch_access_lost": "このボードのウォッチ操作は利用できなくなりました。",
+  "board_watch_unavailable": "現在ウォッチ状態を取得できません。",
+  "board_watch_read_only": "このボードは閲覧できますが、ウォッチ設定は変更できません。",
+  "board_watch_retry_exact": "同じ変更を再試行",
+  "board_watch_check_again": "現在の状態を確認",
+  "board_watch_inspect_conflict": "別の変更を行う前に現在の状態を確認してください。",
+  "board_watch_sending": "ウォッチ変更を送信中…"
 }

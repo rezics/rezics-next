@@ -8369,5 +8369,21 @@
   "own_media_recovery_heading": "原媒體刪除操作",
   "own_media_recovery_browsing": "查看其他列不會取消此刪除操作。重試會送出原始請求。",
   "own_media_recovery_withheld": "原媒體或權限已無法使用，暫時無法恢復此操作。",
-  "own_media_recovery_return": "返回原媒體"
+  "own_media_recovery_return": "返回原媒體",
+  "board_watch_start": "追蹤新的討論",
+  "board_watch_stop": "停止追蹤",
+  "board_watch_sign_in": "登入以追蹤新的討論",
+  "board_watch_checking": "正在檢查看板追蹤狀態…",
+  "board_watch_current_watching": "正在追蹤新的討論",
+  "board_watch_current_not_watching": "未追蹤此看板",
+  "board_watch_command_acknowledged": "追蹤變更已確認，正在檢查目前狀態。",
+  "board_watch_outcome_unknown": "無法確認追蹤變更是否完成。",
+  "board_watch_conflict": "追蹤設定已變更。請先檢查目前狀態再重試。",
+  "board_watch_access_lost": "此看板的追蹤控制已無法使用。",
+  "board_watch_unavailable": "目前無法取得追蹤狀態。",
+  "board_watch_read_only": "您可以瀏覽此看板，但目前無法變更追蹤設定。",
+  "board_watch_retry_exact": "重試這項完全相同的變更",
+  "board_watch_check_again": "檢查目前狀態",
+  "board_watch_inspect_conflict": "請先檢查目前狀態再進行其他變更。",
+  "board_watch_sending": "正在送出追蹤變更…"
 }

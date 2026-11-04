@@ -8369,5 +8369,21 @@
   "own_media_recovery_heading": "Ursprüngliche Medienentfernung",
   "own_media_recovery_browsing": "Das Öffnen einer anderen Zeile bricht diese Entfernung nicht ab. Erneutes Versuchen sendet die ursprüngliche Anfrage.",
   "own_media_recovery_withheld": "Die Wiederaufnahme ist nicht verfügbar, da die ursprünglichen Medien oder die Berechtigung nicht mehr verfügbar sind.",
-  "own_media_recovery_return": "Zu den ursprünglichen Medien"
+  "own_media_recovery_return": "Zu den ursprünglichen Medien",
+  "board_watch_start": "Neue Diskussionen verfolgen",
+  "board_watch_stop": "Nicht mehr verfolgen",
+  "board_watch_sign_in": "Melde dich an, um neue Diskussionen zu verfolgen",
+  "board_watch_checking": "Board-Abonnement wird geprüft…",
+  "board_watch_current_watching": "Du verfolgst neue Diskussionen",
+  "board_watch_current_not_watching": "Du verfolgst dieses Board nicht",
+  "board_watch_command_acknowledged": "Änderung bestätigt. Aktueller Status wird geprüft.",
+  "board_watch_outcome_unknown": "Die Änderung konnte nicht bestätigt werden.",
+  "board_watch_conflict": "Die Einstellung wurde geändert. Prüfe den aktuellen Status, bevor du es erneut versuchst.",
+  "board_watch_access_lost": "Die Watch-Steuerung für dieses Board ist nicht mehr verfügbar.",
+  "board_watch_unavailable": "Der Watch-Status ist derzeit nicht verfügbar.",
+  "board_watch_read_only": "Du kannst dieses Board ansehen, aber die Watch-Einstellung nicht ändern.",
+  "board_watch_retry_exact": "Dieselbe Änderung erneut versuchen",
+  "board_watch_check_again": "Aktuellen Status prüfen",
+  "board_watch_inspect_conflict": "Prüfe den aktuellen Status, bevor du eine weitere Änderung vornimmst.",
+  "board_watch_sending": "Watch-Änderung wird gesendet…"
 }

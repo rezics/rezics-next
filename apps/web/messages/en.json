@@ -8481,5 +8481,21 @@
   "own_media_recovery_heading": "Original media removal",
   "own_media_recovery_browsing": "Inspecting another row does not cancel this removal. Retry sends the original request.",
   "own_media_recovery_withheld": "Recovery is withheld because the original media or authority is no longer available.",
-  "own_media_recovery_return": "Return to original media"
+  "own_media_recovery_return": "Return to original media",
+  "board_watch_start": "Watch new discussions",
+  "board_watch_stop": "Stop watching",
+  "board_watch_sign_in": "Sign in to watch new discussions",
+  "board_watch_checking": "Checking Board watch status…",
+  "board_watch_current_watching": "Watching new discussions",
+  "board_watch_current_not_watching": "Not watching this Board",
+  "board_watch_command_acknowledged": "Watch change acknowledged. Checking current status.",
+  "board_watch_outcome_unknown": "We could not confirm the watch change.",
+  "board_watch_conflict": "The watch setting changed. Check its current status before trying again.",
+  "board_watch_access_lost": "Watch controls are no longer available for this Board.",
+  "board_watch_unavailable": "Watch status is unavailable right now.",
+  "board_watch_read_only": "You can view this Board, but watch changes are unavailable.",
+  "board_watch_retry_exact": "Retry this exact change",
+  "board_watch_check_again": "Check current status",
+  "board_watch_inspect_conflict": "Review the current status before making another change.",
+  "board_watch_sending": "Sending watch change…"
 }
