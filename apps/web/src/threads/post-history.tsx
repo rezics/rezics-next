@@ -134,7 +134,9 @@ function HistoryDisclosure({
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
   const [continuationStatus, setContinuationStatus] = useState<string | null>(null);
   const [additionStatus, setAdditionStatus] = useState<string | null>(null);
-  const [returnState, setReturnState] = useState<'none' | 'loading' | 'failed' | 'lost' | 'missing' | 'restored'>('none');
+  const [returnState, setReturnState] = useState<
+    'none' | 'loading' | 'failed' | 'lost' | 'missing' | 'restored' | 'unsupported'
+  >('none');
   const [returnSelection, setReturnSelection] = useState<{
     postId: string;
     revisionId: string;
@@ -194,7 +196,10 @@ function HistoryDisclosure({
       pathname,
       search: locationSearch,
     });
-    if (!token) return;
+    if (!token) {
+      setReturnState('unsupported');
+      return;
+    }
     navigateToExactRevision({ postId, revisionId }, token);
   }
 
@@ -550,6 +555,21 @@ function HistoryDisclosure({
           <p role="alert" className="text-sm text-muted-foreground">
             {m.revision_return_failed()}
           </p>
+        ) : null}
+        {returnState === 'unsupported' ? (
+          <div className="space-y-2">
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.revision_return_unsupported()}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              onClick={restartHistory}
+            >
+              {m.revision_return_restart()}
+            </Button>
+          </div>
         ) : null}
         {returnState === 'missing' ? (
           <div className="space-y-2">

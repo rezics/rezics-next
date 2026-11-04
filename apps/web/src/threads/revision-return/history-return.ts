@@ -253,8 +253,13 @@ export function historyReturnTargetCurrent(
   const receipt = currentReceipt;
   if (!receipt || receipt.token !== value.token) return false;
   const origin = currentThreadOrigin(pathname, search, locale);
+  if (!origin) {
+    retire(value.token);
+    return false;
+  }
   const valid =
     value.locale === receipt.locale &&
+    receipt.postId === postId &&
     value.postId === postId &&
     value.revisionId === revisionId &&
     receipt.revisionId === revisionId &&
@@ -264,7 +269,7 @@ export function historyReturnTargetCurrent(
     value.historyCursor === receipt.historyCursor &&
     value.readerId === receipt.readerId &&
     value.pageGeneration === receipt.pageGeneration &&
-    origin?.threadId === value.threadId &&
+    origin.threadId === value.threadId &&
     origin.slug === value.slug &&
     origin.threadCursor === value.threadCursor &&
     current(receipt, source, locale, credentialMode);
@@ -282,6 +287,15 @@ export function markHistoryReturnCommand(
     !receipt ||
     receipt.token !== value.token ||
     receipt.postId !== value.postId ||
+    receipt.revisionId !== value.revisionId ||
+    receipt.locale !== value.locale ||
+    receipt.threadId !== value.threadId ||
+    receipt.slug !== value.slug ||
+    receipt.threadCursor !== value.threadCursor ||
+    receipt.historyCursor !== value.historyCursor ||
+    receipt.readerId !== value.readerId ||
+    receipt.pageGeneration !== value.pageGeneration ||
+    value.revisionId !== revisionId ||
     receipt.revisionId !== revisionId ||
     !current(receipt, receipt.source, receipt.locale, receipt.credentialMode)
   )
@@ -307,9 +321,12 @@ export function consumeHistoryReturnCommand(input: {
     command.token !== input.intent.token ||
     command.postId !== input.intent.postId ||
     command.revisionId !== input.intent.revisionId ||
+    receipt.token !== input.intent.token ||
+    receipt.token !== command.token ||
     receipt.postId !== input.intent.postId ||
     receipt.revisionId !== input.intent.revisionId ||
-    origin?.threadId !== receipt.threadId ||
+    !origin ||
+    origin.threadId !== receipt.threadId ||
     origin.slug !== receipt.slug ||
     origin.threadCursor !== receipt.threadCursor ||
     new URLSearchParams(input.search).get('post') !== receipt.postId ||

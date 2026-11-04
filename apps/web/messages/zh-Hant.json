@@ -7450,6 +7450,7 @@
   "revision_return_retry": "重試此歷史頁",
   "revision_return_to_history": "返回修訂歷史",
   "revision_return_unavailable": "此分頁沒有此修訂對應的歷史選擇。無法還原舊選擇；只有在安全可用時才會顯示目前討論串連結。",
+  "revision_return_unsupported": "此歷史來源目前不支援在此分頁返回。開啟精確修訂前，請從目前討論串重新開始歷史記錄。",
   "revision_history_navigator": "瀏覽已載入的修訂",
   "revision_history_choose": "選擇已載入的修訂",
   "revision_history_choose_placeholder": "選擇已載入歷史中的位置",

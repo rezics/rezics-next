@@ -7450,6 +7450,7 @@
   "revision_return_retry": "Diese Verlaufsseite erneut laden",
   "revision_return_to_history": "Zurück zum Versionsverlauf",
   "revision_return_unavailable": "Für diese Version gibt es in diesem Tab keine Verlaufsauswahl. Die frühere Auswahl kann nicht wiederhergestellt werden; der aktuelle Themenlink erscheint nur, wenn er sicher verfügbar ist.",
+  "revision_return_unsupported": "Diese Verlaufsquelle unterstützt hier keine Rückkehr im selben Tab. Starte den Verlauf beim aktuellen Thema neu, bevor du eine exakte Version öffnest.",
   "revision_history_navigator": "Geladene Revisionen durchsuchen",
   "revision_history_choose": "Geladene Revision auswählen",
   "revision_history_choose_placeholder": "Position im geladenen Verlauf auswählen",
