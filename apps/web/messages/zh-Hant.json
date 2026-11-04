@@ -1,4 +1,7 @@
 {
+  "credit_return_unavailable": "此演職員資料或目前視窗已變更，或無法讀取。請選取目前的資料以檢視。",
+  "credit_technical": "技術詳細資料",
+  "credit_label_unavailable": "欄位名稱無法讀取",
   "credit_refresh_window": "重新整理此署名視窗",
   "credit_inspect": "檢視署名",
   "credit_original": "這是此作品上的原始陳述。已公開的目標會在另一個分頁開啟，以保留目前的署名視窗。",

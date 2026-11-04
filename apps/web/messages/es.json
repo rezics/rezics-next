@@ -1,4 +1,7 @@
 {
+  "credit_return_unavailable": "Este crédito o su ventana actual ha cambiado o no está disponible. Selecciona un crédito actual para examinarlo.",
+  "credit_technical": "Detalles técnicos",
+  "credit_label_unavailable": "Etiqueta del campo no disponible",
   "credit_refresh_window": "Actualizar esta lista de créditos",
   "credit_inspect": "Inspeccionar crédito",
   "credit_original": "La afirmación original de esta obra. Los destinos divulgados se abren en otra pestaña para conservar esta lista de créditos.",

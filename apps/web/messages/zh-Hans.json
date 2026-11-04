@@ -1,4 +1,7 @@
 {
+  "credit_return_unavailable": "此演职员资料或当前窗口已变更，或无法读取。请选择当前资料以查看。",
+  "credit_technical": "技术详情",
+  "credit_label_unavailable": "字段名称不可用",
   "credit_refresh_window": "刷新此署名窗口",
   "credit_inspect": "查看署名",
   "credit_original": "这是此作品上的原始陈述。已公开的目标会在另一个标签页打开，以保留当前的署名窗口。",

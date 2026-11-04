@@ -1,4 +1,7 @@
 {
+  "credit_return_unavailable": "This credit or its current window changed or is unavailable. Select a current credit to inspect it.",
+  "credit_technical": "Technical details",
+  "credit_label_unavailable": "Field label unavailable",
   "credit_refresh_window": "Refresh this exact credit window",
   "credit_inspect": "Inspect credit",
   "credit_original": "The original assertion on this work. Disclosed targets open in another tab so this credit window stays available.",

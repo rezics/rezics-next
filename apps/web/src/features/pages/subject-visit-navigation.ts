@@ -1,3 +1,4 @@
+import { creditReturn } from '../catalogue/credit-inspection/navigation';
 import { realmReadingReturn } from '../../community/realm-reading-return';
 import { workFranchiseReturn } from '../catalogue/work-franchise-reading/navigation';
 import { subjectHref } from '../../subject/subject-href';
@@ -490,6 +491,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       return;
     const fragment = url.hash === '' ? '#connections' : url.hash;
     if (
+      !(subject?.[2] === 'works' && creditReturn(fragment)) &&
       fragment !== '#literary-reader' &&
       !(subject && !subject[2] && workFranchiseReturn(fragment)) &&
       fragment !== '#connections' &&

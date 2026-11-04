@@ -1,4 +1,7 @@
 {
+  "credit_return_unavailable": "Dieser Credit oder sein aktueller Ausschnitt hat sich geändert oder ist nicht verfügbar. Wähle einen aktuellen Credit zur Prüfung aus.",
+  "credit_technical": "Technische Details",
+  "credit_label_unavailable": "Feldbezeichnung nicht verfügbar",
   "credit_refresh_window": "Diese Mitwirkungsliste aktualisieren",
   "credit_inspect": "Mitwirkung prüfen",
   "credit_original": "Die ursprüngliche Aussage zu diesem Werk. Offengelegte Ziele öffnen in einem weiteren Tab; diese Mitwirkungsliste bleibt erhalten.",
