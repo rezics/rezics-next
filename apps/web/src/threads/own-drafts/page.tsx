@@ -627,7 +627,7 @@ function BoundOwnDraftsPage({
         aria-labelledby={`${controlId}-erase-recovery`}
         className="space-y-2 rounded-lg border border-border p-4"
       >
-        <h2 id={`${controlId}-erase-recovery`} className="font-semibold">
+        <h2 id={`${controlId}-erase-recovery`} className="font-semibold [overflow-wrap:anywhere]">
           {m.own_drafts_erase({}, { locale })}
           {'intent' in eraseState ? `: ${eraseState.intent.title}` : null}
         </h2>
