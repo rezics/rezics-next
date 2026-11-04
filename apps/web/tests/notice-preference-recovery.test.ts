@@ -164,6 +164,7 @@ test('A generic503/deadline/dependency failure renders unavailable with retry ra
     const page = await loadSettingsPage(client, owner.request(), owner.env);
     expect(page).toEqual({
       signedIn: true,
+      accountId: 'alice',
       state: 'unavailable',
       failure,
       securityHref: 'https://auth.example.test/security',

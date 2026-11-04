@@ -38,7 +38,7 @@ const { SettingsNavigationDrafts } = await import('../src/settings/reading-navig
 const { m } = await import('../src/paraglide/messages.js');
 
 const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'original-token' };
-const notifications = { reply: true, mention: false };
+const notifications = { reply: true, mention: false, thread_watch: true, board_activity: true };
 const page = {
   signedIn: true as const,
   accountId: 'alice',
@@ -128,7 +128,7 @@ for (const [name, transition] of Object.entries(transitions)) {
           },
           saveNotifications: async () => {
             dispatches++;
-            return { ok: true, notifications: page.notifications, version: 5 };
+            return { ok: true, notifications: page.notifications, version: 5, page: page.page };
           },
         },
       );
@@ -245,7 +245,7 @@ test('late Reading and Notifications receipts cannot confirm versions; exact dis
   const original = readingMutation(page.preferences, { spoilerLevel: 1, suitability: 'blur' })!;
   const result = sendReading(io.reading, original, true, () => 4);
   const editor = new NotificationEditor(
-    { notifications: page.notifications, version: 4 },
+    page.page,
     io.notifications,
     false,
     () => 4,
@@ -258,7 +258,12 @@ test('late Reading and Notifications receipts cannot confirm versions; exact dis
   try {
     transitions['token rotation and back'](h.client);
     reading.resolve({ ok: true, preferences: { spoilerLevel: 1, suitability: 'blur', version: 5 } });
-    notices.resolve({ ok: true, notifications: { reply: false, mention: false }, version: 5 });
+    notices.resolve({
+      ok: true,
+      notifications: page.notifications,
+      version: 5,
+      page: settingsPreferencePage(page.notifications, 5),
+    });
     expect(await result).toMatchObject({ kind: 'uncertain' });
     await sending;
     await editor.retry();
@@ -297,7 +302,7 @@ test('late preference and privacy page reads cannot replace old snapshots or rel
     },
   );
   const editor = new NotificationEditor(
-    { notifications: page.notifications, version: 4 },
+    page.page,
     io.notifications,
     false,
     () => 4,
@@ -795,7 +800,7 @@ test('Signed-in Settings readers work without CSRF while native writes and retir
     },
   });
   const notifications = new NotificationEditor(
-    { notifications: page.notifications, version: 4 },
+    page.page,
     io.notifications,
     false,
     () => 4,
@@ -885,7 +890,7 @@ for (const [name, transition] of Object.entries(transitions)) {
       h.owner.readCurrent,
     );
     const notices = new NotificationEditor(
-      { notifications: page.notifications, version: 4 },
+      page.page,
       preferences.notifications,
       false,
       () => 4,
@@ -987,7 +992,7 @@ test('a fresh token owner can write only with its own explicit credential after 
         },
         saveNotifications: async (_, token) => {
           tokens.push(token);
-          return { ok: true, notifications: page.notifications, version: 4 };
+          return { ok: true, notifications: page.notifications, version: 4, page: page.page };
         },
       },
       fresh.readCurrent,
