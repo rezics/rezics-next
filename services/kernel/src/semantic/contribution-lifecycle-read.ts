@@ -73,7 +73,6 @@ export async function readContributionLifecycle(
     // Both compact and expanded identities retain the original revision's author witness.
     const owner = await readOwner.run(client, {
       ...parameters,
-      partition_no: partitionOf(route),
       revision: located.revision,
     });
     if (!owner?.visible) throw new ContributionLifecycleNotFoundError();
