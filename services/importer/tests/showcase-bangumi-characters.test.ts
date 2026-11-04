@@ -31,6 +31,8 @@ function tables(): CrossMediaTables {
       { id: 101, name: 'STEINS;GATE', type: 2 },
       { id: 102, name: 'STEINS;GATE 0', type: 2 },
       { id: 103, name: 'STEINS;GATE Game', type: 4 },
+      { id: 104, name: 'CLANNAD', type: 2 },
+      { id: 105, name: 'Fate/stay night', type: 2 },
       { id: 201, name: 'Unrelated anime', type: 2 },
     ],
     'bangumi/subject-characters': [
@@ -40,6 +42,21 @@ function tables(): CrossMediaTables {
       { subject_id: 201, character_id: 903, type: 1 },
     ],
     'bangumi/character': [{ id: 901, name: 'Okabe Rintaro', type: 1 }],
+    'vndb/vn': [
+      { id: 'v1', olang: 'ja', alias: null },
+      { id: 'v2', olang: 'ja', alias: null },
+      { id: 'v3', olang: 'ja', alias: null },
+    ],
+    'vndb/vn_titles': [
+      { id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null },
+      { id: 'v2', lang: 'ja', official: 't', title: 'CLANNAD', latin: null },
+      { id: 'v3', lang: 'ja', official: 't', title: 'Fate/stay night', latin: null },
+    ],
+    'vndb/entry_meta': [
+      { id: 'v1', revision: '1' },
+      { id: 'v2', revision: '1' },
+      { id: 'v3', revision: '1' },
+    ],
   };
   return {
     async *rows(provider, table) {
