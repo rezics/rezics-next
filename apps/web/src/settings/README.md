@@ -66,6 +66,14 @@ Retry-After is captured once on receipt as an absolute deadline in the mounted e
 remain separate: editing or reading current values does not clear a command wait. Expiry only enables deliberate
 recovery; it never sends automatically, and a retired viewer episode cannot pass its deadline to a new one.
 
+A refreshed choice list can stop admitting a retained draft value. The editor keeps and labels that local intent, then
+requires every changed value in a new patch to be admitted before sending. A singleton suitability choice is shown as
+read-only while the native effective and default values remain visible. This admission check never changes an
+uncertain original patch or its retry.
+
+**Decision:** Retained unsupported choices stay local until explicitly changed or discarded; new patches are admitted
+as a whole against current advice, uncertain originals retry unchanged, and a singleton suitability choice is read-only.
+
 **Decision:** Reset PATCHes the admitted native defaults with the reviewed version; missing or malformed choice/default
 advice leaves reset unavailable. Viewer state and read/update actions live as additive siblings of the notification
 catalogue `page` on the same preference 200, without a second preference version. Catalogue `page.actions` use the same

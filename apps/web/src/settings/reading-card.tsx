@@ -28,6 +28,7 @@ import { readingNeedsNavigationDecision, useSettingsNavigationDraft } from './re
 import {
   ownerMayChangeReading,
   readingAdviceReady,
+  readingChangeAdmitted,
   readingDefaults,
   readingMutation,
   readingReset,
@@ -134,6 +135,16 @@ export class ReadingDraftRecovery {
   private async send(recovering: boolean) {
     const input = this.state.pending;
     if (!input || !this.canWrite() || this.commandWaiting()) return;
+    if (!recovering && !readingChangeAdmitted(input, this.state.advice!.reading.supported)) {
+      this.update({
+        pending: null,
+        phase: 'review',
+        reason: undefined,
+        failure: undefined,
+        failureOrigin: undefined,
+      });
+      return;
+    }
     this.update({
       phase: 'saving',
       reason: undefined,
@@ -339,8 +350,12 @@ export class ReadingDraftRecovery {
 function readingLabel(values: ReadingValues) {
   return {
     spoilers: levels[values.spoilerLevel]!.title(),
-    images: values.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
+    images: suitabilityLabel(values.suitability),
   };
+}
+
+function suitabilityLabel(value: ReadingValues['suitability']) {
+  return value === 'blur' ? m.settings_reading_blur() : m.settings_reading_show();
 }
 
 function ReadingPreview({ ids, draft, confirmed }: { ids: string; draft: ReadingValues; confirmed: ReadingValues }) {
@@ -463,6 +478,16 @@ export function ReadingCard({
   const mayWrite = credentialed && ownerMayChange;
   const offered = adviceReady ? state.advice!.reading.supported.spoilerLevels : [];
   const offeredImages = adviceReady ? state.advice!.reading.supported.suitability : [];
+  const draftMutation = readingMutation(state.known, state.draft);
+  const draftAdmitted =
+    !draftMutation || (adviceReady && readingChangeAdmitted(draftMutation, state.advice!.reading.supported));
+  const retainedChoices = adviceReady
+    ? [
+        ...(!offered.includes(state.draft.spoilerLevel) ? [levels[state.draft.spoilerLevel]!.title()] : []),
+        ...(!offeredImages.includes(state.draft.suitability) ? [suitabilityLabel(state.draft.suitability)] : []),
+      ]
+    : [];
+  const suitabilityToggleOffered = offeredImages.includes('blur') && offeredImages.includes('show');
   const choicesReady = defaults !== undefined && offered.length > 0 && offeredImages.length > 0;
   useSettingsNavigationDraft(
     'reading',
@@ -559,7 +584,7 @@ export function ReadingCard({
                     ))}
                 </RadioGroup>
               </FieldSet>
-              {offeredImages.includes('blur') || offeredImages.includes('show') ? (
+              {suitabilityToggleOffered ? (
                 <FieldLabel htmlFor={`${ids}-suitability`}>
                   <Field orientation="horizontal">
                     <FieldContent>
@@ -578,8 +603,21 @@ export function ReadingCard({
                     />
                   </Field>
                 </FieldLabel>
-              ) : null}
+              ) : (
+                <FieldSet aria-describedby={`${ids}-suitability-text ${ids}-suitability-availability`}>
+                  <FieldLegend id={`${ids}-suitability-title`}>{m.settings_suitability_title()}</FieldLegend>
+                  <FieldDescription id={`${ids}-suitability-text`}>{m.settings_suitability_text()}</FieldDescription>
+                  <p id={`${ids}-suitability-availability`} className="text-sm text-muted-foreground">
+                    {m.settings_reading_suitability_single({ choice: suitabilityLabel(offeredImages[0]!) })}
+                  </p>
+                </FieldSet>
+              )}
             </FieldGroup>
+            {retainedChoices.map((choice, index) => (
+              <p key={`${index}:${choice}`} className="text-sm text-muted-foreground">
+                {m.settings_reading_retained_choice({ choice })}
+              </p>
+            ))}
             {state.knownCurrent && defaults ? (
               <p className="text-sm text-muted-foreground">
                 {m.settings_reading_effective({
@@ -701,7 +739,7 @@ export function ReadingCard({
                     <Button
                       className={preferenceActionClassName}
                       type="button"
-                      disabled={!mayWrite || commandWaiting || sameReading(state.known, state.draft)}
+                      disabled={!mayWrite || commandWaiting || sameReading(state.known, state.draft) || !draftAdmitted}
                       onClick={() => void editor.submit()}
                     >
                       {m.settings_reading_save_draft()}

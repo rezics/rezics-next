@@ -2498,6 +2498,8 @@
   "settings_reading_preview_cover_blur": "Cover withheld for suitability",
   "settings_reading_reset": "Use native defaults",
   "settings_reading_effective": "Current: {spoilers}; {images}. Native default: {defaultSpoilers}; {defaultImages}.",
+  "settings_reading_retained_choice": "Dein beibehaltener Entwurf lautet „{choice}“. Diese lokale Auswahl wird von den aktuellen Leseeinstellungen nicht mehr angeboten. Wähle eine verfügbare Option oder übernimm die bestätigten Einstellungen.",
+  "settings_reading_suitability_single": "Derzeit ist nur {choice} verfügbar. Diese Einstellung ist schreibgeschützt.",
   "settings_reading_read_only_title": "Reading settings cannot be changed",
   "settings_reading_read_only_text": "You can see the confirmed settings. Changing them is not allowed for this sign-in.",
   "settings_reading_choices_unavailable_title": "Reading choices unavailable",
