@@ -12,6 +12,9 @@ command; uncertain results keep the original same-key intent and current readbac
 Decision: inventory resume stays guidance unless the original browser composer still owns the matching reservation
 identity and file; the Library never recreates or reuploads either one.
 
+Decision: browser admission uses the existing `library_entry.list` personal-library group; native `media.own`
+authorization remains decisive when reading the inventory.
+
 Library presentation resolves explicit valid URL choices first, then the current account's native shelf defaults, then
 the existing application defaults. Layouts use an exact absolute-IRI type scope when the address type is an IRI and
 otherwise use `all`. Settings edits `all` and individual admitted types. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`

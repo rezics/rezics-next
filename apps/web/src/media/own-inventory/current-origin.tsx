@@ -9,11 +9,11 @@ import {
   useHistoryCurrentOrigin,
   useHistoryReadOrigin,
 } from '../../library/history-current-origin';
-import { OWN_MEDIA_OPERATION, OWN_MEDIA_SOURCE } from './inventory';
+import { OWN_MEDIA_ADMISSION_OPERATION, OWN_MEDIA_OPERATION, OWN_MEDIA_SOURCE } from './inventory';
 import { readOwnMediaInventoryForViewer, type OwnMediaRead } from './actions';
 import type { OwnMediaInventoryPage } from './wire';
 
-const operations = [OWN_MEDIA_OPERATION] as const;
+const operations = [OWN_MEDIA_ADMISSION_OPERATION] as const;
 
 export function ownMediaQuery(
   subject: string,

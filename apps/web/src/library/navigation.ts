@@ -56,7 +56,7 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     href: '/library/media',
     match: 'exact',
     signedIn: true,
-    operation: 'media.own',
+    operation: 'library_entry.list',
     label: ({ locale }) => m.own_media_nav({}, { locale }),
     icon: Image,
   },

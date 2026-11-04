@@ -2,6 +2,7 @@ import { coverSrc, validVariant } from '../cover-src';
 import type { OwnMediaInventoryEntry, OwnMediaInventoryPage } from './wire';
 
 export const OWN_MEDIA_OPERATION = 'media.own' as const;
+export const OWN_MEDIA_ADMISSION_OPERATION = 'library_entry.list' as const;
 export const OWN_MEDIA_SOURCE = 'media.own/v1' as const;
 export const OWN_MEDIA_CURSOR_LIMIT = 2048;
 
