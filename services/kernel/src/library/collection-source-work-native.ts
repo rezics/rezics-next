@@ -58,6 +58,9 @@ const pointBound = (rows: number, bytes: number) =>
     bytes,
   });
 
+/** The indexed canonical group page's fixed LIMIT. Selected Source reads cannot raise it. */
+export const COLLECTION_SOURCE_WORK_GROUP_LIMIT = 100;
+
 const metadataBound = bounded({
   candidateKeys: 0,
   nativeRows: 24,
@@ -89,7 +92,7 @@ export const COLLECTION_SOURCE_WORK_COST = Object.freeze({
     bytes: 2_304,
   }),
   group(limit: number): Bound {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > COLLECTION_SOURCE_WORK_GROUP_LIMIT)
       throw new RangeError('Invalid work group limit');
     return bounded({
       candidateKeys: limit,

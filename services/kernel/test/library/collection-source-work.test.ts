@@ -171,6 +171,7 @@ test('selected Collection source refuses an undeclared context before IO and see
           deadline,
           allowance,
           afterSubjectId: null,
+          candidateLimit: 2,
         });
         return { state, first, prepared, result, statements };
       },

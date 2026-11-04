@@ -130,9 +130,25 @@ export function createSearchScopeOrder(
       await currentWork(collection.order, page.observation, admitted);
       return page;
     },
-    async prefix(collection: SearchScopeCollection, afterSubjectId: string | null, allowance: WorkAllowance) {
+    async prefix(
+      collection: SearchScopeCollection,
+      afterSubjectId: string | null,
+      allowance: WorkAllowance,
+      candidateLimit?: number,
+    ) {
+      if (
+        options.work &&
+        (!Number.isSafeInteger(candidateLimit) || candidateLimit! < 1 || candidateLimit! > 100)
+      )
+        throw new RangeError('Selected Collection Source candidate limit required');
       const admitted = await currentWork(collection.order, collection.observation);
-      const page = await native.prefix({ ...context(), source: collection.source, afterSubjectId, allowance });
+      const page = await native.prefix({
+        ...context(),
+        source: collection.source,
+        afterSubjectId,
+        allowance,
+        ...(candidateLimit === undefined ? {} : { candidateLimit }),
+      });
       if (!isDeepStrictEqual(page.observation, collection.observation)) throw new ProblemError('semantic_not_ready');
       await currentWork(collection.order, page.observation, admitted);
       return page;

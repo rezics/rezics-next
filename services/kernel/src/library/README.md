@@ -63,6 +63,9 @@ questions explicitly return vote unavailable/question without rescaling. No gene
 existing viewer-facts and counted-client generation remain with their existing owners. No shelf score-ordering
 installation is claimed.
 
+Selected Collection prefixes use fixed caps of 2 candidate groups for Members preparation and 16 for publication;
+their state, group and seek SQL dispatch uses the declared static bounds instead of CollectionSourceLedger allowances.
+
 `test/library/viewer-facts.test.ts` uses actual native vote and merge commands and the existing figure worker to
 exercise survivor/redirected/duplicate rows, Entry precedence, zero/clear/absence, pending identity and late selected
 row, account/scope and disclosure changes. The personal-action cases cover duplicate rows, allowed and denied mounted

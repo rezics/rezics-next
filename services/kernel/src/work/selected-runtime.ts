@@ -558,6 +558,7 @@ export const workExecutionPort: WorkExecutionPort = Object.freeze({
   claimOriginal: claimWorkExecutionOriginal,
   debitAttempt: debitWorkExecutionAttempt,
   bindOriginal: bindWorkExecutionOriginal,
+  assertOriginal: assertWorkExecutionOriginal,
   finishTransaction: finishWorkExecutionTransaction,
   openSelectedPhase(pool: Pool, options: unknown) {
     return openSelectedOperationalPhase(pool, options as OperationalOptions) as SelectedExecutionPhase | undefined;

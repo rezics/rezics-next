@@ -16,6 +16,7 @@ import {
   readCollectionSourceWorkState,
   readCollectionSourceWorkGroup,
   seekCollectionSourceWorkGroup,
+  COLLECTION_SOURCE_WORK_GROUP_LIMIT,
   type CollectionSourceWorkState,
 } from './collection-source-work-native.ts';
 
@@ -203,7 +204,9 @@ export type ContainsCollectionSubject = CollectionSourceCall & {
 
 export interface CollectionSource {
   prepare(input: PrepareCollectionSource): Promise<{ source: PreparedCollectionSource; work: WorkReceipt }>;
-  prefix(input: CollectionSourceCall & { readonly afterSubjectId: string | null }): Promise<CanonicalCollectionPrefix>;
+  prefix(
+    input: CollectionSourceCall & { readonly afterSubjectId: string | null; readonly candidateLimit?: number },
+  ): Promise<CanonicalCollectionPrefix>;
   containsSubject(input: ContainsCollectionSubject): Promise<CollectionSubjectMembership>;
   readRawStoredPrefix(
     input: CollectionSourceCall & { readonly afterStoredSubjectId: string | null },
@@ -438,7 +441,9 @@ export function createCollectionSource(dependencies: {
         : null,
       work: l.receipt(),
     });
-    const raw = Math.min(100, Math.floor(l.allowance().remaining.candidateKeys / 4));
+    const raw = input.work && current
+      ? COLLECTION_SOURCE_WORK_GROUP_LIMIT
+      : Math.min(COLLECTION_SOURCE_WORK_GROUP_LIMIT, Math.floor(l.allowance().remaining.candidateKeys / 4));
     if (!raw) return partial('allowance');
     const window =
       input.work && current
@@ -556,7 +561,14 @@ export function createCollectionSource(dependencies: {
     containsSubject(input) {
       return guarded(input, async (l, current) => membership(input, await revalidate(input, l, current), l, current));
     },
-    prefix(input) {
+    prefix(input: CollectionSourceCall & { afterSubjectId: string | null; candidateLimit?: number }) {
+      if (
+        input.candidateLimit !== undefined &&
+        (!Number.isSafeInteger(input.candidateLimit) || input.candidateLimit < 1 || input.candidateLimit > 100)
+      )
+        throw new RangeError('Invalid Collection Source candidate limit');
+      if (input.work && input.candidateLimit === undefined)
+        throw new RangeError('Selected Collection Source candidate limit required');
       return guarded(input, async (l, current) => {
         const saved = await revalidate(input, l, current),
           obs = current?.observation ?? observation(saved.metadata, saved.basis);
@@ -564,8 +576,13 @@ export function createCollectionSource(dependencies: {
           throw new ProblemError('invalid_cursor');
         const candidates: CanonicalCollectionCandidate[] = [];
         let coveredThrough = input.afterSubjectId,
-          exhausted = false;
-        while (l.allowance().remaining.candidateKeys > 0 && candidates.length < 100) {
+          exhausted = false,
+          groups = 0;
+        const selectedLimit = input.work ? input.candidateLimit! : 100;
+        while (
+          (input.work ? groups < selectedLimit : l.allowance().remaining.candidateKeys > 0) &&
+          candidates.length < 100
+        ) {
           const seek =
             input.work && current
               ? await seekCollectionSourceWorkGroup(input.work, current, coveredThrough, {
@@ -587,9 +604,10 @@ export function createCollectionSource(dependencies: {
             exhausted = true;
             break;
           }
+          groups++;
           // Keep the last settled frontier when the seek leaves too little for a native group proof.
           // An empty Source can still prove exhaustion with the single seek key above.
-          if (l.allowance().remaining.candidateKeys < 4) break;
+          if (!input.work && l.allowance().remaining.candidateKeys < 4) break;
           const result = await membership({ ...input, subjectId: seek.subjectId }, saved, l, current);
           if (result.result === 'not_proven') throw new ProblemError('dependency_unavailable');
           coveredThrough = seek.subjectId;

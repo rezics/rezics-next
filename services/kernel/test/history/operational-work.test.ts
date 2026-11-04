@@ -23,6 +23,7 @@ import { verifyOperationalWorkReplay } from '../../src/history/operational-work-
 import { minimizeHistoryWork } from '../../src/history/durable.ts';
 import { HistoryRegistry } from '../../src/history/registry.ts';
 import { OPERATIONAL_WORK_LOCAL_DECLARATION } from '../../src/history/operational-work-budget.ts';
+import { SELECTED_LOCAL_DECLARATION } from '../../src/work/selected-runtime-cost.ts';
 import { encodeLocator } from '../../src/history/locator.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkIntent } from '../../src/work/client.ts';
@@ -47,6 +48,7 @@ test('shared bounds compose finite History declarations and refuse invalid or ov
   expect(composed).toMatchObject({ candidateKeys: 4, statements: 2, bytes: 512 });
   expect(repeatBound(page, 3)).toMatchObject({ candidateKeys: 6, statements: 3, bytes: 768 });
   expect(OPERATIONAL_WORK_LOCAL_DECLARATION.engineRequests).toBe(0);
+  expect(SELECTED_LOCAL_DECLARATION.engineRequests).toBe(0);
   expect(withinCeiling(composed, declareBound({ ...composed, statements: 2 }))).toBe(true);
   expect(withinCeiling(composed, page)).toBe(false);
   expect(() => declareBound({ ...zero, unsupported: 1 })).toThrow('Invalid bound declaration axes');

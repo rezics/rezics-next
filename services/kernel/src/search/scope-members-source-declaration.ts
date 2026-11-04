@@ -1,6 +1,9 @@
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from '../library/collection-source.ts';
-import { COLLECTION_SOURCE_WORK_COST } from '../library/collection-source-work-native.ts';
+import {
+  COLLECTION_SOURCE_WORK_COST,
+  COLLECTION_SOURCE_WORK_GROUP_LIMIT,
+} from '../library/collection-source-work-native.ts';
 import { MEMBERS_PREPARATION_BRANCH_COST, MEMBERS_PREPARATION_STEP_CEILING } from '../library/members-preparation-cost.ts';
 import { SELECTED_COST } from '../work/selected-runtime-cost.ts';
 
@@ -20,6 +23,9 @@ export const MEMBERS_PREPARATION_SOURCE_PATHS = Object.freeze({
     sourcePrefix: 1,
     evaluatedSubjects: 1,
     candidatePrefixMaximum: 2,
+    sourceSeekQueriesMaximum: 2,
+    sourceGroupQueriesMaximum: 2,
+    sourceGroupRowsPerQueryMaximum: COLLECTION_SOURCE_WORK_GROUP_LIMIT,
     closurePasses: 2,
     distinctGroupQueries: 1,
     terminalQueriesPerClosureMaximum: 49,
@@ -74,12 +80,20 @@ const sourceStatesPerInvocation = Math.max(
 const metadataPrefix = asBound(MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata);
 const searchBody = asBound(MEMBERS_PREPARATION_STEP_CEILING);
 const collectionState = repeatBound(COLLECTION_SOURCE_WORK_COST.state, sourceStatesPerInvocation);
+const collectionPrefix = repeatBound(
+  sumBounds(
+    COLLECTION_SOURCE_WORK_COST.seek,
+    COLLECTION_SOURCE_WORK_COST.group(MEMBERS_PREPARATION_SOURCE_PATHS.id.sourceGroupRowsPerQueryMaximum),
+  ),
+  MEMBERS_PREPARATION_SOURCE_PATHS.id.candidatePrefixMaximum,
+);
 const sourceTransaction = sumBounds(SELECTED_COST.transaction, SELECTED_COST.rollback);
 
 export const MEMBERS_PREPARATION_SOURCE_TERMS = Object.freeze({
   metadataPrefix,
   searchBody,
   collectionState,
+  collectionPrefix,
   sourceTransaction,
 });
 
@@ -87,6 +101,7 @@ export const MEMBERS_PREPARATION_SOURCE_COST = sumBounds(
   metadataPrefix,
   searchBody,
   collectionState,
+  collectionPrefix,
   sourceTransaction,
 );
 

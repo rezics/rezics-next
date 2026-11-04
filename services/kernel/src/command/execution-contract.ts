@@ -28,6 +28,7 @@ export type WorkExecutionPort = Readonly<{
   ): WorkExecutionOriginal;
   debitAttempt(original: WorkExecutionOriginal): void;
   bindOriginal(tx: ExecutionTransaction, original: WorkExecutionOriginal): void;
+  assertOriginal(tx: ExecutionTransaction, original: WorkExecutionOriginal): void;
   finishTransaction(tx: ExecutionTransaction): void;
   openSelectedPhase(pool: Pool, options: unknown): SelectedExecutionPhase | undefined;
   selectedEnqueue(tx: ExecutionTransaction, intent: WorkIntent): EnqueueCapture | undefined;

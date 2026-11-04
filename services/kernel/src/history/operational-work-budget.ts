@@ -2,7 +2,6 @@ import type { Pool, PoolClient } from 'pg';
 import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import { currentOperationalResources, type OperationalTransaction } from '../command/operational.ts';
 import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
-import { assertWorkExecutionOriginal } from '../work/selected-runtime.ts';
 import { OPERATIONAL_WORK_AXES } from './operational-work-axes.ts';
 
 /** Complete native dimensions used by the operational History producer. */
@@ -138,6 +137,13 @@ export class OperationalWorkUnavailable extends Error {
     super(gap);
   }
 }
+
+/** Validate Work-owned original authority through the service contract, not a concrete Work implementation. */
+export function assertOperationalWorkOriginal(tx: OperationalTransaction, original: WorkExecutionOriginal): void {
+  const port = currentOperationalResources(tx).workClient.executionContract?.work;
+  if (!port) throw new OperationalWorkUnavailable('operational-work-original-not-opted-in');
+  port.assertOriginal(tx, original);
+}
 /** Query adapter over the SAME checked-out client. A wait for a connection/lock never
  * extends the original deadline. Cleanup uses the raw client so expiry cannot prevent rollback. */
 export function operationalWorkDeadlineClient(client: PoolClient, deadline: number): Pick<PoolClient, 'query'> {
@@ -173,7 +179,7 @@ export function issueOperationalWorkTransfer(
   const resources = currentOperationalResources(tx);
   if (resources.deadline <= Date.now())
     throw new OperationalWorkUnavailable('operational-work-native-transfer-unavailable');
-  assertWorkExecutionOriginal(tx, original);
+  assertOperationalWorkOriginal(tx, original);
   const issued = byTransaction.get(tx) ?? new Set<OperationalWorkTransfer>();
   if ([...issued].some((token) => transfers.get(token)?.phase === phase))
     throw new TypeError('Operational work phase already transferred');

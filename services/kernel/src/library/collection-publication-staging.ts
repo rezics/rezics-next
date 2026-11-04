@@ -419,14 +419,8 @@ export async function stageCollectionPublicationStep(
       const page = await work.compose((allowance) =>
         scope.sourcePrefix(prepared.prepared, {
           afterSubjectId: frontier.after,
-          // A narrowed slice of the SAME root, preserving room for the evaluator and its original/terminal work.
-          allowance: {
-            ...allowance,
-            remaining: {
-              ...allowance.remaining,
-              candidateKeys: Math.min(16, Math.floor(allowance.remaining.candidateKeys / 4)),
-            },
-          },
+          candidateLimit: 16,
+          allowance,
         }),
       );
       if (!isDeepStrictEqual(page.basis, row.scope_basis) || !isDeepStrictEqual(page.observation, native.observation))

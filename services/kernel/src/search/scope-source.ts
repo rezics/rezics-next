@@ -1545,20 +1545,27 @@ export function createSearchScopeSource({
       request: {
         afterSubjectId: string | null;
         allowance: WorkAllowance;
+        candidateLimit?: number;
       },
     ) {
       if (request.afterSubjectId !== null) subjectPartition(request.afterSubjectId);
       const value = state(prepared);
       if (!value.collection || value.collection.order.kind !== 'id') unavailable();
+      const selected = value.members !== undefined || value.workDefinition !== undefined;
+      if (
+        selected &&
+        (!Number.isSafeInteger(request.candidateLimit) || request.candidateLimit! < 1 || request.candidateLimit! > 100)
+      )
+        unavailable();
       const work = new ScopeWork(request.allowance);
       await current(value, work);
       const page = value.members
         ? await runMembersWork(value.members.input, work, (budget) =>
             membersSource(budget, 4, (allowance) =>
-              order!.prefix(value.collection!, request.afterSubjectId, allowance),
+              order!.prefix(value.collection!, request.afterSubjectId, allowance, request.candidateLimit),
             ),
           )
-        : await order!.prefix(value.collection, request.afterSubjectId, work.remaining());
+        : await order!.prefix(value.collection, request.afterSubjectId, work.remaining(), request.candidateLimit);
       if (!value.members) work.native(page.work);
       await current(value, work);
       return { ...page, basis: value.basis, work: work.receipt() };

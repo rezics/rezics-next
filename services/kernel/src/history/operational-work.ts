@@ -9,7 +9,6 @@ import type {
   HistoryExecutionPort,
   WorkExecutionOriginal,
 } from '../command/execution-contract.ts';
-import { assertWorkExecutionOriginal } from '../work/selected-runtime.ts';
 import { receiveOperationalHistoryWork } from '../work/history-enqueue.ts';
 import { guardHistoryAccounts } from './gates.ts';
 import { encodeLocator, validateScope, type HistoryScope } from './locator.ts';
@@ -20,6 +19,7 @@ import {
   finishOperationalWorkTransfers,
   OperationalWorkUnavailable,
   operationalWorkDeadlineClient,
+  assertOperationalWorkOriginal,
   type OperationalWorkPhase,
   type OperationalWorkTransfer,
 } from './operational-work-budget.ts';
@@ -77,7 +77,7 @@ const attempts = new WeakMap<OperationalTransaction, Attempt>();
 export function beginOperationalHistoryAttempt(tx: OperationalTransaction, original: WorkExecutionOriginal): void {
   const resources = currentOperationalResources(tx);
   if (attempts.has(tx)) throw new TypeError('Operational History attempt already open');
-  assertWorkExecutionOriginal(tx, original);
+  assertOperationalWorkOriginal(tx, original);
   attempts.set(tx, {
     original,
     pool: resources.pool,

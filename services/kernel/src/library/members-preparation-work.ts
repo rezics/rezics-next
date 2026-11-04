@@ -40,7 +40,10 @@ import { collectionPublicationScopeRuntime } from '../search/work.ts';
 import { scopeAllowance } from '../search/scope-execution.ts';
 import { meterMembersDefinition, withMembersWorkBudget } from '../search/scope-members-work-cost.ts';
 import { MEMBERS_PREPARATION_STEP_CEILING, MEMBERS_PREPARATION_LOCAL_COST } from './members-preparation-cost.ts';
-import { MEMBERS_PREPARATION_SOURCE_COST } from '../search/scope-members-source-declaration.ts';
+import {
+  MEMBERS_PREPARATION_SOURCE_COST,
+  MEMBERS_PREPARATION_SOURCE_PATHS,
+} from '../search/scope-members-source-declaration.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import {
@@ -221,13 +224,8 @@ async function advancePreparation(
     const page = await work.compose((allowance) =>
       source.sourcePrefix(prepared.value, {
         afterSubjectId: checkpoint.id,
-        allowance: {
-          ...allowance,
-          remaining: {
-            ...allowance.remaining,
-            candidateKeys: Math.min(2, allowance.remaining.candidateKeys),
-          },
-        },
+        candidateLimit: MEMBERS_PREPARATION_SOURCE_PATHS.id.candidatePrefixMaximum,
+        allowance,
       }),
     );
     const candidate = page.candidates[0];
