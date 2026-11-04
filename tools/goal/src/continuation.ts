@@ -473,8 +473,7 @@ export function harvestContinuations(
         store.event(ref, 'continuation-dropped', { file: name, reason });
         if (failedPath) {
           const summary = `Continuation ${name} kept at failed/${basename(failedPath)}: ${reason}`
-            .replace(/\s+/g, ' ')
-            .slice(0, 600);
+            .replace(/\s+/g, ' ');
           new SqliteManagerInbox(store.db, settings.stateDirectory).deliver({
             managerId: task.brief.manager,
             goalId: task.brief.goal,
