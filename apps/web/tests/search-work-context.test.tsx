@@ -85,7 +85,7 @@ test('missing metadata never supplies a creator role or a date', () => {
           type: 'schema:Book',
           labels: { en: 'Echo' },
           facts: { 'schema:contributor': [{ kind: 'item', id: 'creator', labels: { en: 'Mira' } }] },
-        listPresentation: { imageAspect: 'portrait', keyFacts: ['schema:contributor'] },
+          listPresentation: { imageAspect: 'portrait', keyFacts: ['schema:contributor'] },
         },
       ],
     }),
