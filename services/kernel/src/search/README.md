@@ -1335,6 +1335,8 @@ Qualified suggestion dates in [suggestion-context.ts](suggestion-context.ts) ret
 stay absent. Signed or extended years and timestamps are rejected. After that bounded grammar check, the public
 `@rezics/filter` `isCalendarDate` pure rule owns Gregorian validity, including leap centuries and year zero; the
 broader `readCalendarDate` parser does not define this wire format.
+Both date adapters do constant work on at most three privately parsed numeric components. Validation introduces
+no source read, native call, cache or observation.
 
 The request-only Realm and Collection prefix path uses the same operation and retained native prefix producer; its
 predicate, readiness, caller and finite refill bounds are specified in [scoped suggestions](./scoped-suggestion.md).
