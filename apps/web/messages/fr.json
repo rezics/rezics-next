@@ -9218,5 +9218,12 @@
   "game_reader_current_subject": "Ouvrir le Subject actuel",
   "game_reader_retired": "Cette lecture est périmée. Ses preuves et sa sélection ne sont plus actuelles.",
   "game_reader_recover": "Recharger le Subject actuel",
-  "game_reader_recovery_failed": "Le Subject actuel n’a pas pu être rechargé. Réessayez ou ouvrez ses détails."
+  "game_reader_recovery_failed": "Le Subject actuel n’a pas pu être rechargé. Réessayez ou ouvrez ses détails.",
+  "concept_visit_identity": "Identité et version originales",
+  "concept_visit_assertion": "Assertion originale",
+  "concept_visit_holder": "Sujet porteur",
+  "concept_visit_property": "Propriété",
+  "concept_visit_inverse_evidence": "Cette ligne inverse ne contient aucune assertion consultable dans la lecture limitée.",
+  "concept_visit_oversized": "La source ou ses preuves dépassent la limite de lecture. Réessayez cette page.",
+  "concept_visit_follow_sign_in": "Se connecter pour suivre ce concept"
 }

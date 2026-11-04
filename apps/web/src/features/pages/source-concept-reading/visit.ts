@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import type { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { appendChangePage, firstChangePage, type ChangePageHistory } from '../../catalogue/subject-changes-navigation';
-import { validConceptCursor, type ConceptRead } from '../../catalogue/source-concept-explorer';
+import { conceptSourceFits, validConceptCursor, type ConceptRead } from '../../catalogue/source-concept-explorer';
 
 export type ConceptPage = Extract<ConceptRead, { ok: true }>;
 export type ConceptInput = { cursor?: string | undefined; session?: string | undefined };
@@ -79,6 +79,8 @@ function publish(
       result.narrower.cursor !== destination.input.cursor)
   )
     result = candidateFailure(400);
+  if (result.ok && (!conceptSourceFits(result.public) || result.narrower.rows.length > 20))
+    result = { ok: false, reason: 'unavailable', oversized: true };
   const done = { loading: false, busy: false, completed: state.completed + 1 };
   if (!result.ok)
     return {

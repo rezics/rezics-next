@@ -2,13 +2,16 @@ import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { subjectHref } from '../../subject/subject-href';
+import { useMemo } from 'react';
+import { defaultReader, type Reader } from '../../subject/reader';
+import { useSession } from '../../session/query';
+import { FollowTargetControl } from '../../library/follow-target-control';
+import { ConceptAssociations, ConceptAliases } from './source-concept-reading/associations';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
 import type { ConceptRead } from '../catalogue/source-concept-explorer';
 import {
   actionClass,
   linkClass,
-  HierarchyLinks,
   ConceptHierarchy,
   visitAnnouncement,
 } from './source-concept-reading/hierarchy';
@@ -19,7 +22,6 @@ import {
   type ConceptWorksRoutePatch,
   type ConceptWorksRouteState,
 } from '../catalogue/concept-works/view';
-import { ViewHeading } from './view-heading';
 
 export type { ConceptTransport } from './source-concept-reading/visit';
 
@@ -31,6 +33,7 @@ type Props = {
   pinUnsupported?: boolean;
   transport: ConceptTransport;
   initial?: ConceptRead | undefined;
+  reader?: Reader | undefined;
   worksRoute?: ConceptWorksRouteState | undefined;
   onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
 };
@@ -48,6 +51,7 @@ function ConceptVisitView({
   pinUnsupported = false,
   transport,
   initial,
+  reader = defaultReader,
   admission,
   worksRoute,
   onWorksChange,
@@ -59,6 +63,7 @@ function ConceptVisitView({
   pinUnsupported?: boolean;
   transport: ConceptTransport;
   initial?: ConceptRead | undefined;
+  reader?: Reader | undefined;
   admission: ReturnType<typeof useCatalogueLifetime>;
   worksRoute?: ConceptWorksRouteState | undefined;
   onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
@@ -67,6 +72,12 @@ function ConceptVisitView({
   const returnTo = originatingReturn(suppliedReturn);
   const visit = useConceptVisit({ id, role, transport, initial, admission });
   const { read, error, busy } = visit;
+  const source = useCatalogueLifetime(JSON.stringify([
+    read?.public.subject.id, read?.public.subject.context, read?.public.subject.release,
+    read?.public.subject.revision, read?.session,
+  ]), admission);
+  const followOrigin = useMemo(() => ({ lifetime: source, isCurrent: source.active }), [source]);
+  const { state: sessionState } = useSession();
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const factsHref = catalogueEntries.facts({ id, label: title.text, locale }).href;
   const correctionReturn = returnTo ? `${factsHref}?${new URLSearchParams({ returnTo })}` : factsHref;
@@ -80,8 +91,17 @@ function ConceptVisitView({
       className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
       aria-busy={visit.loading || busy}
     >
-      <ViewHeading label={m.concept_explore_title({}, o)} headingClassName="font-sans" />
-      <p className="max-w-prose text-muted-foreground">{m.concept_explore_intro({}, o)}</p>
+      <header className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 lang={title.lang ?? undefined} className="font-sans text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{title.text || m.concept_explore_title({}, o)}</h1>
+          {read?.admitted && <FollowTargetControl targetId={read.public.subject.id} origin={followOrigin} />}
+        </div>
+        {read?.definition && <p className="max-w-prose whitespace-pre-line" lang={read.definition.lang ?? undefined}>{read.definition.text}</p>}
+        {read?.admitted && sessionState === 'signed-out' && <a className={linkClass}
+          href={`/auth/sign-in?return_to=${encodeURIComponent(catalogueEntries.concepts({ id, label: title.text, locale }).href)}`}>
+          {m.concept_visit_follow_sign_in({}, o)}
+        </a>}
+      </header>
       {pinUnsupported && <p role="status">{m.concept_explore_pin_unsupported({}, o)}</p>}
       <p ref={visit.statusRef} role="status" tabIndex={-1} aria-live="polite" aria-atomic="true">
         {visitAnnouncement(visit, locale)}
@@ -89,7 +109,7 @@ function ConceptVisitView({
       {error && (
         <div className="space-y-2">
           <p role="alert" tabIndex={-1}>
-            {error.reason === 'denied' ? m.concept_explore_denied({}, o) : m.concept_explore_unreadable({}, o)}
+            {'oversized' in error && error.oversized ? m.concept_visit_oversized({}, o) : error.reason === 'denied' ? m.concept_explore_denied({}, o) : m.concept_explore_unreadable({}, o)}
           </p>
           <Button
             type="button"
@@ -105,39 +125,25 @@ function ConceptVisitView({
       {read && (
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="font-sans text-lg font-semibold" lang={title.lang ?? undefined}>
-              {title.text || id}
-            </h2>
-            <p>
-              {m.concept_explore_identity({}, o)}: <code>{read.public.subject.id}</code>
-            </p>
-            <p>
-              {m.concept_explore_type({}, o)}: <code>{read.public.subject.type}</code>
-            </p>
-            <p>
-              {m.concept_explore_source_release({}, o)}: <code>{read.public.subject.release}</code>
-            </p>
+            <details className="space-y-2">
+              <summary className={linkClass}>{m.concept_visit_identity({}, o)}</summary>
+              <label className="block">{m.concept_explore_identity({}, o)}
+                <input className="block w-full font-mono" readOnly value={read.public.subject.id}
+                  onFocus={(event) => event.currentTarget.select()} />
+              </label>
+              <p>{m.concept_explore_type({}, o)}: <code>{read.public.subject.type}</code></p>
+              <p>{m.concept_explore_source_release({}, o)}: <code>{read.public.subject.release}</code></p>
+              <p>{m.own_drafts_revision({}, o)}: {read.public.subject.revision}</p>
+              <p>{m.prq_context({}, o)}: <code>{read.public.subject.context}</code></p>
+            </details>
             {read.retired === true && <p role="status">{m.concept_explore_retired({}, o)}</p>}
             {read.retired === null && <p>{m.concept_explore_release_unknown({}, o)}</p>}
             {!read.admitted && <p role="status">{m.concept_explore_unsupported({}, o)}</p>}
             {pinUnsupported && <p>{m.concept_explore_pin_unsupported_detail({}, o)}</p>}
-            {read.spoiler && <p role="status">{m.concept_explore_spoiler({}, o)}</p>}
-            {read.definition && (
-              <p lang={read.definition.lang ?? undefined}>
-                <strong>{m.concept_explore_definition({}, o)}:</strong> {read.definition.text}
-              </p>
-            )}
-            {read.aliases.length > 0 && (
-              <p>
-                <strong>{m.concept_explore_aliases({}, o)}:</strong>{' '}
-                {read.aliases.map((alias, index) => (
-                  <span key={`${alias.lang}:${alias.text}`} lang={alias.lang ?? undefined}>
-                    {index ? ' · ' : ''}
-                    {alias.text}
-                  </span>
-                ))}
-              </p>
-            )}
+            {read.aliases.length > 0 && <section className="space-y-2">
+              <h2 className="font-sans text-lg font-semibold">{m.concept_explore_aliases({}, o)}</h2>
+              <ConceptAliases aliases={read.aliases} locale={locale} />
+            </section>}
           </section>
 
           {role !== undefined && (
@@ -154,77 +160,8 @@ function ConceptVisitView({
 
           {read.admitted && (
             <>
-              <section className="space-y-2">
-                <h2 className="font-sans text-lg font-semibold">{m.concept_explore_scheme({}, o)}</h2>
-                {read.schemes.length ? (
-                  <ul className="list-disc space-y-1 pl-5">
-                    {read.schemes.map((scheme) => (
-                      <li key={scheme.id}>
-                        {scheme.readable && scheme.conceptPage ? (
-                          <a
-                            className={linkClass}
-                            href={`${catalogueEntries.concepts({ id: scheme.id, label: scheme.label, locale }).href}${
-                              returnTo ? `?${new URLSearchParams({ returnTo })}` : ''
-                            }`}
-                            lang={scheme.lang ?? undefined}
-                          >
-                            {scheme.label || scheme.id}
-                          </a>
-                        ) : scheme.readable ? (
-                          <a
-                            className={linkClass}
-                            href={`${subjectHref({ id: scheme.id, label: scheme.label }, locale).href}${
-                              returnTo ? `?${new URLSearchParams({ returnTo })}` : ''
-                            }`}
-                          >
-                            {scheme.label || scheme.id}
-                          </a>
-                        ) : (
-                          <span>{m.concept_explore_scheme_withheld({}, o)}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>{m.concept_explore_no_schemes({}, o)}</p>
-                )}
-              </section>
-
-              <section className="space-y-2">
-                <h2 className="font-sans text-lg font-semibold">{m.concept_explore_source_code({}, o)}</h2>
-                {read.codes.length ? (
-                  <ul className="list-disc space-y-1 pl-5">
-                    {read.codes.map((code) => (
-                      <li key={`${code.property}:${code.value}`}>
-                        <span lang={code.labelLang ?? undefined}>{code.label}</span> <code>{code.property}</code>:{' '}
-                        <code>{code.value}</code>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>{m.concept_explore_no_codes({}, o)}</p>
-                )}
-              </section>
-
-              <section className="space-y-2" aria-labelledby="concept-broader-heading">
-                <h2 id="concept-broader-heading" className="font-sans text-lg font-semibold">
-                  {m.concept_explore_broader({}, o)}
-                </h2>
-                {read.broader.rows.length ? (
-                  <HierarchyLinks
-                    rows={read.broader.rows}
-                    locale={locale}
-                    {...(returnTo === undefined ? {} : { returnTo })}
-                  />
-                ) : read.broader.withheld ? (
-                  <p role="status">{m.concept_explore_broader_withheld({}, o)}</p>
-                ) : (
-                  <p>{m.concept_explore_no_broader({}, o)}</p>
-                )}
-                {!!read.broader.rows.length && read.broader.withheld > 0 && (
-                  <p role="status">{m.concept_explore_broader_withheld({}, o)}</p>
-                )}
-              </section>
+              <ConceptAssociations key={JSON.stringify([source.generation, reader, visit.completed])}
+                read={read.public} codes={read.codes} locale={locale} reader={reader} returnTo={returnTo} />
 
               <ConceptHierarchy visit={visit} locale={locale} returnTo={returnTo} />
 

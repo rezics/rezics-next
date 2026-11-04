@@ -18,6 +18,7 @@ const originalRelease = `sha256:${'a'.repeat(64)}`;
 const activeRelease = `sha256:${'b'.repeat(64)}`;
 type State =
   | 'current'
+  | 'spoiler'
   | 'loading'
   | 'not-concept'
   | 'unsupported'
@@ -73,6 +74,9 @@ function fixture(state: State, locale: string) {
     account: null,
     summary: null,
   };
+  const assertion = source.subject.statements['skos:inScheme']![0]!;
+  assertion.references = [{ parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://vndb.org/g1' } }] }];
+  if (state === 'spoiler') assertion.qualifiers = [{ property: { id: 'rezics:spoilerLevel', data_type: 'quantity' }, value: { type: 'value', content: { amount: '1' } } }];
   Object.assign(source, {
     viewerActions: { state: 'available', actions: [{ action: 'statement:propose', operations: ['subject.propose'] }] },
   });
@@ -177,6 +181,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const CurrentHierarchy: Story = {};
 export const DesktopHierarchy: Story = { globals: { viewport: { value: 'desktop1280' } } };
+export const SpoilerAssociation: Story = { args: { state: 'spoiler' } };
 export const InitialLoading: Story = { args: { state: 'loading' } };
 export const NoAdmittedConcept: Story = { args: { state: 'not-concept' } };
 export const UnsupportedInverse: Story = { args: { state: 'unsupported' } };

@@ -9218,5 +9218,12 @@
   "game_reader_current_subject": "Aktuelles Subject öffnen",
   "game_reader_retired": "Diese Lesung ist beendet. Ihre Belege und Auswahl sind nicht mehr aktuell.",
   "game_reader_recover": "Aktuelles Subject neu laden",
-  "game_reader_recovery_failed": "Das aktuelle Subject konnte nicht neu geladen werden. Versuche es erneut oder öffne seine Details."
+  "game_reader_recovery_failed": "Das aktuelle Subject konnte nicht neu geladen werden. Versuche es erneut oder öffne seine Details.",
+  "concept_visit_identity": "Originalidentität und Release",
+  "concept_visit_assertion": "Originalaussage",
+  "concept_visit_holder": "Träger",
+  "concept_visit_property": "Eigenschaft",
+  "concept_visit_inverse_evidence": "Diese inverse Zeile enthält im begrenzten Leseergebnis keine prüfbare Aussage.",
+  "concept_visit_oversized": "Die Quelle oder ihre Belege überschreiten das Leselimit. Versuche diese Seite erneut.",
+  "concept_visit_follow_sign_in": "Anmelden, um diesem Begriff zu folgen"
 }

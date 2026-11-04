@@ -9218,5 +9218,12 @@
   "game_reader_current_subject": "打开当前Subject",
   "game_reader_retired": "本次读取已退役。其证据和选择不再有效。",
   "game_reader_recover": "重新加载当前Subject",
-  "game_reader_recovery_failed": "无法重新加载当前Subject。请重试或打开其详情。"
+  "game_reader_recovery_failed": "无法重新加载当前Subject。请重试或打开其详情。",
+  "concept_visit_identity": "原始身份与发布版本",
+  "concept_visit_assertion": "原始断言",
+  "concept_visit_holder": "所属主体",
+  "concept_visit_property": "属性",
+  "concept_visit_inverse_evidence": "此反向行的有界读取未提供可检查的断言。",
+  "concept_visit_oversized": "来源或其证据超过读取上限。请重试此页。",
+  "concept_visit_follow_sign_in": "登录以关注此概念"
 }

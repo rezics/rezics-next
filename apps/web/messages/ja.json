@@ -9218,5 +9218,12 @@
   "game_reader_current_subject": "現在のSubjectを開く",
   "game_reader_retired": "この読み取りは終了しました。証拠と選択は現在のものではありません。",
   "game_reader_recover": "現在のSubjectを再読み込み",
-  "game_reader_recovery_failed": "現在のSubjectを再読み込みできませんでした。再試行するか、詳細を開いてください。"
+  "game_reader_recovery_failed": "現在のSubjectを再読み込みできませんでした。再試行するか、詳細を開いてください。",
+  "concept_visit_identity": "元の識別情報とリリース",
+  "concept_visit_assertion": "元の主張",
+  "concept_visit_holder": "保持する主題",
+  "concept_visit_property": "プロパティ",
+  "concept_visit_inverse_evidence": "この逆方向の行には、範囲を限定した読み取りで検証できる主張がありません。",
+  "concept_visit_oversized": "出典またはその根拠が読み取り上限を超えています。このページを再試行してください。",
+  "concept_visit_follow_sign_in": "ログインしてこの概念をフォロー"
 }
