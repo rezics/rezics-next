@@ -311,11 +311,22 @@ test('current native actions govern create/add/reorder; review precedes sending 
     expect(button(m.library_collection_add_items())).toBeUndefined();
     await show(page);
     await click(button(m.library_collection_add_items()));
-    await input(host.querySelector('input[role=combobox]')!, 'Disclosed');
+    const picker = host.querySelector<HTMLInputElement>('input[role=combobox]')!;
+    await click(picker);
+    await input(picker, 'Disclosed');
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 400));
     });
     expect(search).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      picker.dispatchEvent(
+        new window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }) as unknown as Event,
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(document.body.innerHTML).toContain('role="option"');
     await click(
       [...document.querySelectorAll('[role=option]')].find((node) => node.textContent?.includes('Disclosed work')),
     );
