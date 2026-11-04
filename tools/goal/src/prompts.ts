@@ -135,7 +135,10 @@ function splitFrontMatter(text: string): { data: Record<string, unknown>; body: 
 }
 
 function collapse(text: string): string {
-  return text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return text
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function bytes(text: string): number {
@@ -231,7 +234,8 @@ export function selectConditions(input: {
   const { task } = input;
   const selected: ConditionId[] = [];
   const brief = task.brief;
-  const proofRun = input.proofRun ?? (task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined);
+  const proofRun =
+    input.proofRun ?? (task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined);
   const authorization = input.authorization ?? task.proofAuthorization;
   if (proofProtocolAuthorized(brief, proofRun)) selected.push('proof-run');
   else if (registeredProof(brief, authorization)) selected.push('registered-proof');
@@ -282,12 +286,11 @@ function promptView(input: WorkerPromptInput): PromptView {
   const proofRun =
     input.proofRun ?? (task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined);
   const authorization = input.authorization ?? task.proofAuthorization;
-  const proofSource =
-    proofRun?.binding.sourceCommit ??
-    brief.proof?.sourceCommit ??
-    '';
+  const proofSource = proofRun?.binding.sourceCommit ?? brief.proof?.sourceCommit ?? '';
   const proofCheckId = proofRun?.binding.checkId ?? '';
-  const proofObservation = JSON.stringify(proofRun?.observation ?? { status: 'unknown', cause: 'Await controller evidence' });
+  const proofObservation = JSON.stringify(
+    proofRun?.observation ?? { status: 'unknown', cause: 'Await controller evidence' },
+  );
   const proofInvocation = registeredProof(brief, authorization)
     ? ordinaryProofCommand(brief.acceptance.command).invocation.map(shellQuote).join(' ')
     : '';
@@ -361,7 +364,9 @@ function promptView(input: WorkerPromptInput): PromptView {
 function budgetMessage(layers: { name: string; bytes: number; budget?: number }[]): string {
   return layers
     .map((layer) =>
-      layer.budget === undefined ? `${layer.name} ${layer.bytes} bytes` : `${layer.name} ${layer.bytes}/${layer.budget} bytes`,
+      layer.budget === undefined
+        ? `${layer.name} ${layer.bytes} bytes`
+        : `${layer.name} ${layer.bytes}/${layer.budget} bytes`,
     )
     .join(', ');
 }
@@ -406,7 +411,10 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
     : collapse(fillTemplate(roleFile.text, view, policy));
   const selected = selectConditions(input);
   const renderedConditions = selected.map((id) => loadCondition(directory, id, view, policy));
-  const conditionText = renderedConditions.map((item) => item.text).filter(Boolean).join('\n\n');
+  const conditionText = renderedConditions
+    .map((item) => item.text)
+    .filter(Boolean)
+    .join('\n\n');
   const conditionBodyBytes = renderedConditions.reduce((sum, item) => sum + item.bodyBytes, 0);
   const required = acceptanceRequirements(task.brief);
   const deferred = [
@@ -437,16 +445,7 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
     deferredSentence(deferred),
   ].filter(Boolean);
   const prompt = collapse(
-    [
-      roleText,
-      prefixText,
-      'The task contract follows:',
-      briefText,
-      ...extras,
-      suffixText,
-    ]
-      .filter(Boolean)
-      .join('\n\n'),
+    [roleText, prefixText, 'The task contract follows:', briefText, ...extras, suffixText].filter(Boolean).join('\n\n'),
   );
   const roleBytes = bytes(roleText);
   const conditionBytes = conditionBodyBytes;
@@ -458,7 +457,11 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
     { name: 'brief', bytes: briefBytes },
     { name: 'total', bytes: totalBytes, budget: policy.prompt.workerTotalBytes },
   ];
-  if (roleBytes > roleBudget || conditionBytes > policy.prompt.conditionBytes || totalBytes > policy.prompt.workerTotalBytes)
+  if (
+    roleBytes > roleBudget ||
+    conditionBytes > policy.prompt.conditionBytes ||
+    totalBytes > policy.prompt.workerTotalBytes
+  )
     throw new Error(`prompt exceeds budget: ${budgetMessage(layers)}`);
   return {
     prompt,
@@ -501,7 +504,15 @@ export function renderCheckProtocol(
   const selected = selectConditions({ task, stateDirectory, proofRun, authorization });
   const check = selected.find((id) => CHECK_CONDITIONS.has(id));
   if (!check) return '';
-  const view = promptView({ task, mainCheckout: worktree, stateDirectory, policy, promptDirectory, proofRun, authorization });
+  const view = promptView({
+    task,
+    mainCheckout: worktree,
+    stateDirectory,
+    policy,
+    promptDirectory,
+    proofRun,
+    authorization,
+  });
   return loadCondition(promptDirectory, check, view, policy).text;
 }
 
@@ -533,7 +544,8 @@ export function renderManagerOpening(input: {
     continuationRef: input.continuationFile ? `the continuation ${input.continuationFile}` : 'continuation',
     continuationPath,
     continuationCharacters: policy.manager.continuationCharacters.toLocaleString('en-US'),
-    stoppedLimit: policy.backlog.stoppedTaskLimitMs === 3_600_000 ? 'an hour' : `${policy.backlog.stoppedTaskLimitMs} ms`,
+    stoppedLimit:
+      policy.backlog.stoppedTaskLimitMs === 3_600_000 ? 'an hour' : `${policy.backlog.stoppedTaskLimitMs} ms`,
     idleRule:
       input.spec.engine === 'codex'
         ? 'When no decision is pending, end the turn; do not use clock.sleep or poll: the controller resumes this thread when an inbox event arrives.'
@@ -542,9 +554,7 @@ export function renderManagerOpening(input: {
   const roleText = collapse(fillTemplate(roleFile.text, view, policy));
   const goalPath = join(input.spec.cwd, 'docs', 'goals', `${input.spec.goal}.md`);
   const goalText = existsSync(goalPath) ? readFileSync(goalPath, 'utf8').trim() : '';
-  const prompt = collapse(
-    [roleText, goalText, input.spec.brief, input.continuationText].filter(Boolean).join('\n\n'),
-  );
+  const prompt = collapse([roleText, goalText, input.spec.brief, input.continuationText].filter(Boolean).join('\n\n'));
   const roleBytes = bytes(roleText);
   const openingBytes = bytes(prompt);
   if (roleBytes > policy.prompt.managerRoleBytes)
@@ -555,7 +565,9 @@ export function renderManagerOpening(input: {
       ])}`,
     );
   if (openingBytes > policy.prompt.managerOpeningBytes)
-    (input.warn ?? console.warn)(`manager opening is ${openingBytes} bytes; budget is ${policy.prompt.managerOpeningBytes}`);
+    (input.warn ?? console.warn)(
+      `manager opening is ${openingBytes} bytes; budget is ${policy.prompt.managerOpeningBytes}`,
+    );
   return { prompt, roleBytes, openingBytes };
 }
 

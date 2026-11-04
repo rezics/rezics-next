@@ -15,12 +15,14 @@ export const SUPERSEDED_CHECK_HINT = 'remove superseded check instructions from 
 const ACCEPTANCE_REQUIREMENTS: readonly AcceptanceRequirement[] = ['browser', 'native', 'root'];
 
 export function supersededCheckInstructionParagraph(markdown: string): boolean {
-  return markdown.split(/\n\s*\n/).some(
-    (section) =>
-      /\b(?:saved|historical|previous|older)\b/i.test(section) &&
-      /\b(?:prompt|instructions?|manifest|session)\b/i.test(section) &&
-      /(?:worker-check|--wait)/i.test(section),
-  );
+  return markdown
+    .split(/\n\s*\n/)
+    .some(
+      (section) =>
+        /\b(?:saved|historical|previous|older)\b/i.test(section) &&
+        /\b(?:prompt|instructions?|manifest|session)\b/i.test(section) &&
+        /(?:worker-check|--wait)/i.test(section),
+    );
 }
 
 export function assertBriefDispatchable(markdown: string, mainCheckout?: string): void {

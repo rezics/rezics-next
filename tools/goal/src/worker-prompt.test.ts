@@ -170,7 +170,9 @@ test('every worker can ask for research, and a research worker is told how to do
   expect(research).toContain('This is a research task');
   expect(research).toContain('.reference/<topic>/<project>/');
   expect(research).toContain('never install, build or run anything from them');
-  expect(research).toContain('write only inside /work/trees/t1 and the reference clones under that checkout\'s .reference/.');
+  expect(research).toContain(
+    "write only inside /work/trees/t1 and the reference clones under that checkout's .reference/.",
+  );
   expect(implementation).not.toContain('and the reference clones');
 });
 

@@ -19,11 +19,7 @@ import {
   renderWorkerPrompt,
   type RenderedPrompt,
 } from './prompts.ts';
-import {
-  assertBriefDispatchable,
-  BRIEF_AUTHORITY_HINT,
-  SUPERSEDED_CHECK_HINT,
-} from './briefs.ts';
+import { assertBriefDispatchable, BRIEF_AUTHORITY_HINT, SUPERSEDED_CHECK_HINT } from './briefs.ts';
 import type { Attempt, Brief, PromptManifest, Task } from './types.ts';
 import type { ProofReservation } from './verification.ts';
 import { openDb } from './db.ts';
@@ -238,9 +234,7 @@ test('dispatch refuses a brief that references .temp/goal/, an absolute main-che
   expect(() => assertBriefDispatchable('See `.temp/goal/notes.md`.')).toThrow(BRIEF_AUTHORITY_HINT);
   expect(() => assertBriefDispatchable(`Keep files under ${MAIN}.`, MAIN)).toThrow(BRIEF_AUTHORITY_HINT);
   expect(() =>
-    assertBriefDispatchable(
-      'A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.',
-    ),
+    assertBriefDispatchable('A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.'),
   ).toThrow(SUPERSEDED_CHECK_HINT);
 });
 

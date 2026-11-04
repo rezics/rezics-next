@@ -6,16 +6,16 @@ Long, append-only documents dilute the current rules.
 
 ## Instruction layers
 
-| Layer | Holds | Single authority | Delivered | Budget as received |
-| --- | --- | --- | --- | --- |
-| Global | Precedence, language, one authority, legacy, temporary files, IDs, where each role's text lives | `AGENTS.md` | Loaded natively by Codex, Claude Code and Cursor | 3,000 bytes |
-| Role | How a worker, manager, researcher or supermanager works | `tools/goal/prompts/<role>.md` | Rendered by the control plane; for the supermanager, by a session-start hook | worker 3,500; manager 5,000; researcher 2,500; supermanager 8,000 |
-| Condition | Text for one mode: retry, rebase, proof run, shared workspace, deferred checks | `tools/goal/prompts/conditions/<id>.md` | Added by the control plane when the condition holds | 1,500 in total |
-| Goal | Outcome, Done when, scope, ownership, links to adopted decisions | `docs/goals/<goal>.md` | Manager opening | 12,000 |
-| Goal state | Live tasks, open decisions, next actions; no rules | The manager's continuation, with fixed headings | Manager opening and renewal | 8,000 |
-| Task | Outcome, paths, acceptance, decisions made for this task, owner sections | The brief | Worker prompt | 12,288 |
-| Reference | Owner documents, module READMEs, runbooks, skill stages | Tracked files | Read on demand, by section | [Budgets](#budgets) |
-| Memory | Local facts: accounts, allowances, hosts, credential locations, people, machine quirks | The supermanager's memory directory | Index loaded natively | Index 12,000; total 60,000 |
+| Layer      | Holds                                                                                           | Single authority                                | Delivered                                                                    | Budget as received                                                |
+| ---------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Global     | Precedence, language, one authority, legacy, temporary files, IDs, where each role's text lives | `AGENTS.md`                                     | Loaded natively by Codex, Claude Code and Cursor                             | 3,000 bytes                                                       |
+| Role       | How a worker, manager, researcher or supermanager works                                         | `tools/goal/prompts/<role>.md`                  | Rendered by the control plane; for the supermanager, by a session-start hook | worker 3,500; manager 5,000; researcher 2,500; supermanager 8,000 |
+| Condition  | Text for one mode: retry, rebase, proof run, shared workspace, deferred checks                  | `tools/goal/prompts/conditions/<id>.md`         | Added by the control plane when the condition holds                          | 1,500 in total                                                    |
+| Goal       | Outcome, Done when, scope, ownership, links to adopted decisions                                | `docs/goals/<goal>.md`                          | Manager opening                                                              | 12,000                                                            |
+| Goal state | Live tasks, open decisions, next actions; no rules                                              | The manager's continuation, with fixed headings | Manager opening and renewal                                                  | 8,000                                                             |
+| Task       | Outcome, paths, acceptance, decisions made for this task, owner sections                        | The brief                                       | Worker prompt                                                                | 12,288                                                            |
+| Reference  | Owner documents, module READMEs, runbooks, skill stages                                         | Tracked files                                   | Read on demand, by section                                                   | [Budgets](#budgets)                                               |
+| Memory     | Local facts: accounts, allowances, hosts, credential locations, people, machine quirks          | The supermanager's memory directory             | Index loaded natively                                                        | Index 12,000; total 60,000                                        |
 
 Session-start totals: worker 20,000 bytes, manager 30,000, researcher 15,000, supermanager 30,000. These numbers are
 starting values for removing contradictions, history and repetition. They are not a claim about current models'
@@ -106,19 +106,19 @@ worker needs is in an owner document, or quoted in the brief within its budget.
 Budgets are bytes. A file or directory already over its cap is recorded in the baseline. It may not grow, and
 shrinking it lowers the baseline. Raising a baseline requires a `Budget-Raise:` commit trailer giving the reason.
 
-| Path | Per file | Per directory |
-| --- | ---: | ---: |
-| `AGENTS.md` | 3,000 | |
-| `docs/development/*.md` | 16,000 | 120,000 |
-| `docs/goals/<goal>.md` | 12,000 | |
-| `docs/goals/*.capabilities.*` | 40,000 | 300,000 |
-| `docs/*.md` product owners | 40,000 | |
-| Module `README.md` and its contract leaves | 40,000 | |
-| `tools/goal/README.md` | 80,000 | |
-| `tools/goal/prompts/**` | Role budgets above | 30,000 |
-| New `docs/research/*.md` | 100,000 | |
-| `.agents/skills/**` | `SKILL.md` 5,000; references 6,000 | 30,000 |
-| Tracked `.temp/**` | 0 | 0 |
+| Path                                       |                           Per file | Per directory |
+| ------------------------------------------ | ---------------------------------: | ------------: |
+| `AGENTS.md`                                |                              3,000 |               |
+| `docs/development/*.md`                    |                             16,000 |       120,000 |
+| `docs/goals/<goal>.md`                     |                             12,000 |               |
+| `docs/goals/*.capabilities.*`              |                             40,000 |       300,000 |
+| `docs/*.md` product owners                 |                             40,000 |               |
+| Module `README.md` and its contract leaves |                             40,000 |               |
+| `tools/goal/README.md`                     |                             80,000 |               |
+| `tools/goal/prompts/**`                    |                 Role budgets above |        30,000 |
+| New `docs/research/*.md`                   |                            100,000 |               |
+| `.agents/skills/**`                        | `SKILL.md` 5,000; references 6,000 |        30,000 |
+| Tracked `.temp/**`                         |                                  0 |             0 |
 
 ### The documentation check
 
