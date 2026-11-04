@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:2d984ead9d128012123bed3f34481f703df84070edcd139f3615441e61ff1de7",
+  "digest": "sha256:085ce689e886123ba2fb4e58353abeab23c29b4d0c80d4196f913678e51f855b",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -1545,6 +1545,7 @@
           "rezics:summaryOf",
           "schema:abstract",
           "schema:alternateName",
+          "schema:associatedMedia",
           "schema:author",
           "schema:contributor",
           "schema:copyrightNotice",
@@ -1724,6 +1725,99 @@
           "ko": "독서 도구처럼 개별적으로 식별되는 응용 프로그램입니다. 게임 작품과 출시판에는 별도 유형이 있습니다.",
           "zh-Hans": "可独立识别的软件应用，如阅读工具；游戏作品及其发行版使用各自的类型。",
           "zh-Hant": "可獨立識別的軟體應用程式，例如閱讀工具；遊戲作品與其發行版各有專用類型。"
+        }
+      },
+      "schema:MediaObject": {
+        "iri": "http://schema.org/MediaObject",
+        "labels": {
+          "de": "Medienobjekt",
+          "en": "media object",
+          "es": "objeto multimedia",
+          "fr": "objet média",
+          "ja": "メディアオブジェクト",
+          "ko": "미디어 개체",
+          "zh-Hans": "媒体对象",
+          "zh-Hant": "媒體物件"
+        },
+        "mappings": [],
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "properties": [
+          "rezics:alternativeSetting",
+          "rezics:alternativeVersion",
+          "rezics:artbookCounterpart",
+          "rezics:bangumiLegacyVersion",
+          "rezics:bangumiRelatedTo",
+          "rezics:codec",
+          "rezics:collaborationWith",
+          "rezics:crossMediaCounterpart",
+          "rezics:editionCounterpart",
+          "rezics:expansionCounterpart",
+          "rezics:fileQuality",
+          "rezics:releaseGroup",
+          "rezics:sameCharacters",
+          "rezics:sameSetting",
+          "rezics:sideStoryOf",
+          "rezics:spinOffOf",
+          "rezics:storyArc",
+          "rezics:summaryOf",
+          "schema:author",
+          "schema:contributor",
+          "schema:encodesCreativeWork",
+          "schema:genre",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P155",
+          "wdt:P179",
+          "wdt:P3575",
+          "wdt:P361",
+          "wdt:P4092"
+        ],
+        "facets": [],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
+        "schemaOrgType": "https://schema.org/MediaObject",
+        "descriptions": {
+          "de": "Eine unabhängig identifizierte Katalogdatei. Ihre Metadaten belegen weder Besitz noch Downloadberechtigung, Wiedergabe oder gesehenen Fortschritt.",
+          "en": "An independently identified catalogue file. Its metadata does not establish possession, permission to download, playback availability or watched progress.",
+          "es": "Un archivo de catálogo identificado de forma independiente. Sus metadatos no prueban posesión, permiso de descarga, disponibilidad de reproducción ni progreso visto.",
+          "fr": "Un fichier de catalogue identifié séparément. Ses métadonnées ne prouvent ni possession, ni droit de téléchargement, ni disponibilité de lecture, ni progression de visionnage.",
+          "ja": "独立して識別されるカタログ上のファイルです。メタデータは所持、ダウンロード権限、再生可能性、視聴進捗を証明しません。",
+          "ko": "독립적으로 식별되는 카탈로그 파일입니다. 메타데이터는 소유, 다운로드 권한, 재생 가능 여부 또는 시청 진행을 증명하지 않습니다.",
+          "zh-Hans": "独立标识的目录文件。其元数据不证明拥有文件、下载权限、可播放状态或观看进度。",
+          "zh-Hant": "獨立識別的目錄檔案。其詮釋資料不證明擁有檔案、下載權限、可播放狀態或觀看進度。"
+        }
+      },
+      "rezics:ReleaseGroup": {
+        "iri": "https://rezics.com/vocab/ReleaseGroup",
+        "labels": {
+          "de": "Release-Gruppe",
+          "en": "release group",
+          "es": "grupo de publicación",
+          "fr": "groupe de diffusion",
+          "ja": "リリースグループ",
+          "ko": "릴리스 그룹",
+          "zh-Hans": "发布组",
+          "zh-Hant": "發佈組"
+        },
+        "mappings": [],
+        "bases": ["schema:Organization", "schema:Thing"],
+        "properties": ["rezics:penNameOf", "schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
+        "facets": [],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
+        "descriptions": {
+          "de": "Eine von AniDB identifizierte Quellgruppe, die mit den von ihr veröffentlichten Dateien verknüpft ist. Ihre Identität bleibt von jeder Datei und Veröffentlichung getrennt.",
+          "en": "An AniDB source group linked to the files it releases. Its identity remains separate from each file and publication release.",
+          "es": "Un grupo de origen identificado por AniDB y vinculado a los archivos que publica. Su identidad se mantiene separada de cada archivo y de cada lanzamiento.",
+          "fr": "Un groupe source identifié par AniDB et associé aux fichiers qu’il diffuse. Son identité reste distincte de chaque fichier et de chaque publication.",
+          "ja": "AniDB が識別し、配布するファイルと関連付けるソースグループです。各ファイルや刊行リリースとは別の識別対象です。",
+          "ko": "AniDB가 식별하고 배포 파일과 연결하는 출처 그룹입니다. 각 파일 및 발행 릴리스와 별개의 식별 대상입니다.",
+          "zh-Hans": "由 AniDB 标识并与其发布的文件关联的来源组。其身份与每个文件及出版发行版分别保留。",
+          "zh-Hant": "由 AniDB 識別並與其發佈的檔案關聯的來源群組。其身分與各檔案及出版發行版分開保留。"
         }
       }
     },
@@ -2247,7 +2341,7 @@
       "schema": "http://schema.org/",
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.1" },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.2" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {
@@ -6300,6 +6394,289 @@
           "ko": "의미가 매우 가까운 별개의 개념입니다. 동일성이나 필터의 자동 확장을 뜻하지 않습니다.",
           "zh-Hans": "含义相近的另一个独立概念，不表示等同，也不会自动扩展筛选条件。",
           "zh-Hant": "意義相近的另一個獨立概念，不表示等同，也不會自動擴展篩選條件。"
+        }
+      },
+      "schema:associatedMedia": {
+        "iri": "http://schema.org/associatedMedia",
+        "labels": {
+          "de": "zugehörige Medien",
+          "en": "associated media",
+          "es": "contenido multimedia asociado",
+          "fr": "média associé",
+          "ja": "関連メディア",
+          "ko": "관련 미디어",
+          "zh-Hans": "关联媒体",
+          "zh-Hant": "相關媒體"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:includedInRelease",
+          "inverseLabels": {
+            "de": "Veröffentlichungen mit dieser Datei",
+            "en": "releases containing this file",
+            "es": "lanzamientos que incluyen este archivo",
+            "fr": "publications contenant ce fichier",
+            "ja": "このファイルを含む刊行物",
+            "ko": "이 파일을 포함한 발행물",
+            "zh-Hans": "包含此文件的发行版",
+            "zh-Hant": "包含此檔案的發行版"
+          }
+        },
+        "targets": ["schema:MediaObject"],
+        "descriptions": {
+          "de": "Eine Katalogdatei, die dieser identifizierten Anime-Veröffentlichung zugeordnet ist; die Verknüpfung macht die Datei nicht zur Veröffentlichung.",
+          "en": "A catalogue file associated with this identified anime publication release; the link does not make the file the release.",
+          "es": "Un archivo de catálogo asociado a este lanzamiento de anime identificado; el vínculo no convierte el archivo en el lanzamiento.",
+          "fr": "Un fichier de catalogue associé à cette publication d’anime identifiée ; ce lien ne transforme pas le fichier en publication.",
+          "ja": "識別されたアニメ刊行リリースに関連付けられたカタログファイルです。この関係はファイルを刊行物と同一にしません。",
+          "ko": "식별된 애니메이션 발행 릴리스와 연결된 카탈로그 파일입니다. 이 연결이 파일을 발행물과 동일하게 만들지는 않습니다.",
+          "zh-Hans": "与此已标识动画出版发行版关联的目录文件；此关联不会使文件等同于发行版。",
+          "zh-Hant": "與此已識別動畫出版發行版關聯的目錄檔案；此關聯不會使檔案等同於發行版。"
+        }
+      },
+      "schema:encodesCreativeWork": {
+        "iri": "http://schema.org/encodesCreativeWork",
+        "labels": {
+          "de": "kodiert diese Episode",
+          "en": "encodes episode",
+          "es": "codifica el episodio",
+          "fr": "encode cet épisode",
+          "ja": "このエピソードを収録",
+          "ko": "이 에피소드를 인코딩",
+          "zh-Hans": "编码的单集",
+          "zh-Hant": "編碼的單集"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:encodedByFile",
+          "inverseLabels": {
+            "de": "Dateien mit dieser Episode",
+            "en": "files encoding this episode",
+            "es": "archivos que codifican este episodio",
+            "fr": "fichiers encodant cet épisode",
+            "ja": "このエピソードを収録するファイル",
+            "ko": "이 에피소드를 인코딩한 파일",
+            "zh-Hans": "编码此单集的文件",
+            "zh-Hant": "編碼此單集的檔案"
+          }
+        },
+        "targets": ["schema:Episode"],
+        "descriptions": {
+          "de": "Die Episode, die diese genaue Katalogdatei enthält; die Beziehung belegt weder Besitz noch einen Gesehen-Status.",
+          "en": "The episode encoded by this exact catalogue file; the relation does not establish possession or watched state.",
+          "es": "El episodio codificado por este archivo de catálogo exacto; la relación no demuestra posesión ni que se haya visto.",
+          "fr": "L’épisode encodé par ce fichier précis ; cette relation ne prouve ni possession ni visionnage.",
+          "ja": "このカタログファイルが収録するエピソードです。この関係は所持や視聴状態を証明しません。",
+          "ko": "이 정확한 카탈로그 파일에 인코딩된 에피소드입니다. 이 관계는 소유나 시청 상태를 증명하지 않습니다.",
+          "zh-Hans": "此精确目录文件所编码的单集；该关系不证明拥有文件或已观看。",
+          "zh-Hant": "此精確目錄檔案所編碼的單集；此關係不證明擁有檔案或已觀看。"
+        }
+      },
+      "wdt:P4092": {
+        "iri": "http://www.wikidata.org/prop/direct/P4092",
+        "labels": {
+          "de": "Prüfsumme",
+          "en": "checksum",
+          "es": "suma de comprobación",
+          "fr": "somme de contrôle",
+          "ja": "チェックサム",
+          "ko": "체크섬",
+          "zh-Hans": "校验和",
+          "zh-Hant": "校驗和"
+        },
+        "mappings": [],
+        "datatype": "string",
+        "multivalued": true,
+        "qualifiers": ["rezics:hashAlgorithm"],
+        "value": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "descriptions": {
+          "de": "Exakter Prüfsummentext. Der Hashalgorithmus wird separat gespeichert; gleiche Werte identifizieren oder vereinen keine Dateien.",
+          "en": "Exact checksum text. The hash algorithm is stored separately; equality does not identify or merge files.",
+          "es": "Texto exacto de la suma de comprobación. El algoritmo hash se guarda por separado; la igualdad no identifica ni fusiona archivos.",
+          "fr": "Texte exact de la somme de contrôle. L’algorithme de hachage est stocké séparément ; une égalité n’identifie ni ne fusionne les fichiers.",
+          "ja": "チェックサムの正確な文字列です。ハッシュアルゴリズムは別に保存し、同じ値でもファイルを識別または統合しません。",
+          "ko": "정확한 체크섬 문자열입니다. 해시 알고리즘은 별도로 저장하며, 값이 같아도 파일을 식별하거나 병합하지 않습니다.",
+          "zh-Hans": "校验和的精确文本。哈希算法单独保存；数值相同不会识别或合并文件。",
+          "zh-Hant": "校驗和的精確文字。雜湊演算法另行保存；數值相同不會識別或合併檔案。"
+        }
+      },
+      "rezics:codec": {
+        "iri": "https://rezics.com/vocab/codec",
+        "labels": {
+          "de": "Codec",
+          "en": "codec",
+          "es": "códec",
+          "fr": "codec",
+          "ja": "コーデック",
+          "ko": "코덱",
+          "zh-Hans": "编解码器",
+          "zh-Hant": "編解碼器"
+        },
+        "mappings": [],
+        "datatype": "string",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "descriptions": {
+          "de": "Der genaue von der Quelle gemeldete Codec-Code, auch wenn er noch nicht erkannt wird.",
+          "en": "The exact codec code reported by the source, including codes not yet recognized.",
+          "es": "El código de códec exacto indicado por la fuente, incluidos los que aún no se reconocen.",
+          "fr": "Code de codec exact indiqué par la source, y compris les codes encore inconnus.",
+          "ja": "ソースが示したコーデックコードをそのまま保存し、未認識のコードも保持します。",
+          "ko": "출처가 보고한 코덱 코드를 그대로 저장하며 아직 인식되지 않은 코드도 보존합니다.",
+          "zh-Hans": "原样保存来源给出的编解码器代码，包括尚未识别的代码。",
+          "zh-Hant": "原樣保存來源提供的編解碼器代碼，包括尚未識別的代碼。"
+        }
+      },
+      "rezics:fileQuality": {
+        "iri": "https://rezics.com/vocab/fileQuality",
+        "labels": {
+          "de": "Dateiqualität",
+          "en": "file quality",
+          "es": "calidad del archivo",
+          "fr": "qualité du fichier",
+          "ja": "ファイル品質",
+          "ko": "파일 품질",
+          "zh-Hans": "文件质量",
+          "zh-Hant": "檔案品質"
+        },
+        "mappings": [],
+        "datatype": "string",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "descriptions": {
+          "de": "Der genaue von der Quelle gemeldete Qualitätscode, auch wenn er noch nicht erkannt wird.",
+          "en": "The exact file quality code reported by the source, including codes not yet recognized.",
+          "es": "El código de calidad exacto indicado por la fuente, incluidos los que aún no se reconocen.",
+          "fr": "Code de qualité exact indiqué par la source, y compris les codes encore inconnus.",
+          "ja": "ソースが示した品質コードをそのまま保存し、未認識のコードも保持します。",
+          "ko": "출처가 보고한 품질 코드를 그대로 저장하며 아직 인식되지 않은 코드도 보존합니다.",
+          "zh-Hans": "原样保存来源给出的质量代码，包括尚未识别的代码。",
+          "zh-Hant": "原樣保存來源提供的品質代碼，包括尚未識別的代碼。"
+        }
+      },
+      "wdt:P3575": {
+        "iri": "http://www.wikidata.org/prop/direct/P3575",
+        "labels": {
+          "de": "Dateigröße",
+          "en": "file size",
+          "es": "tamaño del archivo",
+          "fr": "taille du fichier",
+          "ja": "ファイルサイズ",
+          "ko": "파일 크기",
+          "zh-Hans": "文件大小",
+          "zh-Hant": "檔案大小"
+        },
+        "mappings": [],
+        "datatype": "quantity",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "additionalProperties": false,
+          "properties": {
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "lowerBound": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "upperBound": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "unit": { "enum": ["http://www.wikidata.org/entity/Q8799"] }
+          }
+        },
+        "units": ["http://www.wikidata.org/entity/Q8799"],
+        "descriptions": {
+          "de": "Dateigröße als exakte Dezimalmenge in Byte, entsprechend der Quelle.",
+          "en": "File size as a decimal quantity in bytes, preserving the source amount exactly.",
+          "es": "Tamaño del archivo como cantidad decimal exacta en bytes, tal como lo indica la fuente.",
+          "fr": "Taille du fichier sous forme de quantité décimale exacte en octets, selon la source.",
+          "ja": "ソースが示したファイルサイズを、バイト単位の正確な十進数量で保存します。",
+          "ko": "출처가 보고한 파일 크기를 바이트 단위의 정확한 십진 수량으로 저장합니다.",
+          "zh-Hans": "按来源记录的单位字节精确十进制数量保存文件大小。",
+          "zh-Hant": "依來源記錄的位元組單位精確十進位數量保存檔案大小。"
+        }
+      },
+      "rezics:hashAlgorithm": {
+        "iri": "https://rezics.com/vocab/hashAlgorithm",
+        "labels": {
+          "de": "Hashalgorithmus",
+          "en": "hash algorithm",
+          "es": "algoritmo hash",
+          "fr": "algorithme de hachage",
+          "ja": "ハッシュアルゴリズム",
+          "ko": "해시 알고리즘",
+          "zh-Hans": "哈希算法",
+          "zh-Hant": "雜湊演算法"
+        },
+        "mappings": [],
+        "datatype": "string",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "descriptions": {
+          "de": "Der genaue Quellcode des Prüfsummenalgorithmus; unbekannte Codes bleiben zur Prüfung erhalten.",
+          "en": "The exact source code naming the checksum algorithm; unknown codes remain available for review.",
+          "es": "El código exacto de la fuente para el algoritmo de suma; los códigos desconocidos quedan disponibles para revisión.",
+          "fr": "Code exact de la source indiquant l’algorithme de la somme ; les codes inconnus restent disponibles pour examen.",
+          "ja": "チェックサムのアルゴリズムを示すソースコードをそのまま保存し、未知のコードも確認用に残します。",
+          "ko": "체크섬 알고리즘을 나타내는 출처 코드를 그대로 저장하며 알 수 없는 코드도 검토용으로 보존합니다.",
+          "zh-Hans": "原样保存校验算法的来源代码，未知代码也保留以供审查。",
+          "zh-Hant": "原樣保存校驗演算法的來源代碼，未知代碼也保留以供審查。"
+        }
+      },
+      "rezics:releaseGroup": {
+        "iri": "https://rezics.com/vocab/releaseGroup",
+        "labels": {
+          "de": "Release-Gruppe",
+          "en": "release group",
+          "es": "grupo de publicación",
+          "fr": "groupe de diffusion",
+          "ja": "リリースグループ",
+          "ko": "릴리스 그룹",
+          "zh-Hans": "发布组",
+          "zh-Hant": "發佈組"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:groupFiles",
+          "inverseLabels": {
+            "de": "Dateien dieser Release-Gruppe",
+            "en": "files from this release group",
+            "es": "archivos de este grupo de publicación",
+            "fr": "fichiers de ce groupe de diffusion",
+            "ja": "このリリースグループのファイル",
+            "ko": "이 릴리스 그룹의 파일",
+            "zh-Hans": "此发布组的文件",
+            "zh-Hant": "此發佈組的檔案"
+          }
+        },
+        "targets": ["rezics:ReleaseGroup"],
+        "descriptions": {
+          "de": "Die unabhängig lesbare AniDB-Quellgruppe dieser Datei, getrennt von Veröffentlichung und persönlicher Kopie.",
+          "en": "The independently readable AniDB source group associated with this file, separate from a publication release and personal copy.",
+          "es": "El grupo de origen de AniDB, legible de forma independiente, asociado a este archivo y separado de un lanzamiento y una copia personal.",
+          "fr": "Groupe source AniDB lisible séparément et associé à ce fichier, distinct d’une publication et d’une copie personnelle.",
+          "ja": "このファイルに関連付けられた AniDB のソースグループです。刊行リリースや個人の所有物とは別に読めます。",
+          "ko": "이 파일과 연결된 AniDB 출처 그룹입니다. 발행 릴리스 및 개인 사본과 구별되며 독립적으로 읽을 수 있습니다.",
+          "zh-Hans": "与此文件关联的 AniDB 来源组，可独立读取，并与出版发行版和个人副本区分。",
+          "zh-Hant": "與此檔案關聯的 AniDB 來源群組，可獨立讀取，並與出版發行版及個人副本區分。"
         }
       }
     },
