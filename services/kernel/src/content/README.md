@@ -3746,4 +3746,4 @@ fail closed for retry.
   query remain charged even though they are not serialized in this projection. Cross-home observations are
   independent. A later command remains the final authority check.
 
-Decision: public reading, watch inventory, ban review, publication preparation and classification receivers use the emitted mounted route declarations; client-only route mirrors are removed when source publication is available.
+Decision: the thread reading receiver and its public response alias use the emitted mounted reading-page declaration, including the existing native post locator; broader client mirrors remain until the full source publication succeeds.
