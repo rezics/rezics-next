@@ -105,7 +105,15 @@ export function createAccountDeletionPageAccess(deps: {
             { route, id: descriptor.target },
             { ...context, time },
           );
-          await deps.accessTokenForProof(human);
+          try {
+            await deps.accessTokenForProof(human);
+          } catch (error) {
+            // A moved home can also invalidate Auth's currentness read. Preserve
+            // the safe changed-review outcome without disclosing the target.
+            const after = await withReadTransaction(deps.pool, snapshot, deadline);
+            if (after.admitted && before.stamp !== after.stamp) return { kind: 'changed' };
+            throw error;
+          }
           return await withReadTransaction(
             deps.pool,
             async (client): Promise<AccountDeletionAdvice> => {

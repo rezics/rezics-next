@@ -58,9 +58,10 @@ export function accountDeletionPageTransport(
             return { kind: 'authentication-required', accountId: human.account_id };
           if (!access) return { kind: 'unavailable' };
           const advice = await access.readAccountDeletionAdvice({ human, deadline });
+          if (advice.kind === 'changed') return { kind: 'changed' };
           await service.internal.accessTokenForProof(human);
           if (Date.now() >= deadline) return { kind: 'unavailable' };
-          if (advice.kind === 'changed' || advice.kind === 'unavailable') return { kind: advice.kind };
+          if (advice.kind === 'unavailable') return { kind: 'unavailable' };
           if (advice.kind !== 'available' && advice.kind !== 'refused') return { kind: 'unavailable' };
           // Privileged display is read only after exact native human admission.
           const identity = await readNativeAccountIdentity(database, human.account_id);
