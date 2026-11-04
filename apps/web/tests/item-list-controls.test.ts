@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
 mock.module('../src/kernel/query', () => ({ personalRead: { enabled: true } }));
+mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/query', () => ({
   sessionQuery: { queryKey: ['session'] },
   exposureQuery: { queryKey: ['exposure'] },

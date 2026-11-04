@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { OwnedCollection } from '../src/settings/preferences';
 
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
+mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/query', () => ({
   sessionQuery: { queryKey: ['session'] },
   exposureQuery: { queryKey: ['exposure'] },
