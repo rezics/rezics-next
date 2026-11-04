@@ -183,13 +183,7 @@ test('reaction names expose exact localized operands and the signed score', asyn
 test('lower-bound reply counts retain the plus sign, exact operand, and reply destination', async () => {
   const value = 987654321012;
   const replyHref = '/en/threads/thread/reading#reply';
-  await paint(
-    <FeedActionBar
-      {...props()}
-      replyCount={{ kind: 'lower-bound', value }}
-      reply={{ href: replyHref }}
-    />,
-  );
+  await paint(<FeedActionBar {...props()} replyCount={{ kind: 'lower-bound', value }} reply={{ href: replyHref }} />);
   const action = host.querySelector<HTMLAnchorElement>('[data-slot="feed-reply-action"]');
   const exact = new Intl.NumberFormat('en').format(value);
   const compact = new Intl.NumberFormat('en', { notation: 'compact' }).format(value);
