@@ -527,6 +527,8 @@ export function BoardPinThreadControls({
             variant: 'outline',
             className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
             ...{ 'data-board-pin-focus': 'toggle' },
+            'aria-haspopup': 'dialog',
+            'aria-expanded': pending !== null,
             onClick: () => setPending(action),
           },
           action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
