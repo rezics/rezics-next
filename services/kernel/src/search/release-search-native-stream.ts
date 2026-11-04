@@ -341,6 +341,8 @@ export function createReleaseSearchCandidateStreams(input: {
     const expected = binding(request, cut, work);
     const cursor = position(after, expected, work !== undefined);
     await assertCurrent();
+    const relevancePage =
+      request.sort === 'relevance' ? await input.relevance!(request, cursor.namesAfter, size) : undefined;
     const page =
       request.sort === 'name'
         ? await readReleaseSearchNames({
@@ -350,7 +352,7 @@ export function createReleaseSearchCandidateStreams(input: {
             size,
             context: nameContext(context),
           })
-        : await input.relevance!(request, cursor.namesAfter, size);
+        : relevancePage!;
     if (
       !Array.isArray(page.keys) ||
       page.keys.length > size ||
@@ -359,8 +361,8 @@ export function createReleaseSearchCandidateStreams(input: {
       typeof page.exhausted !== 'boolean'
     )
       return unavailable();
-    if (request.sort === 'relevance')
-      for (const key of page.keys) {
+    if (relevancePage)
+      for (const key of relevancePage.keys) {
         if (
           typeof key.id !== 'string' ||
           !canonicalId(key.id) ||
@@ -374,7 +376,7 @@ export function createReleaseSearchCandidateStreams(input: {
         )
           return unavailable();
       }
-    const currentMatches = request.sort === 'relevance' ? await input.currentMatches?.(request, page.keys) : undefined;
+    const currentMatches = relevancePage ? await input.currentMatches?.(request, relevancePage.keys) : undefined;
     const classified = new Map((await classify(page.keys)).map((key) => [key.id, key]));
     const keys: Candidate[] = [];
     let namesAfter = cursor.namesAfter;
