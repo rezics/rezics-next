@@ -82,7 +82,7 @@ export async function fetchInboxUnreadCount(viewer: InboxViewer, signal?: AbortS
   }
   return forInboxViewer(
     viewer,
-    async () => rememberUnreadCount(viewer, await readUnreadCount({ signal })),
+    async () => rememberUnreadCount(viewer, await readUnreadCount(signal ? { signal } : {})),
     signal,
   );
 }
