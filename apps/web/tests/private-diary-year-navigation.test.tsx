@@ -506,15 +506,19 @@ test('bucket return restores exact frontier/focus and rejects old bucket or chan
       expect(h.host.querySelector('ol')).not.toBeNull();
 
       h.host.querySelector('details')!.open = true;
+      const receivedPage = value.diary.kind === 'ready' ? value.diary.page : undefined;
       await h.navigate({ year: 2020, month: 'unallocated' });
-      await h.show({ ...value, address: { year: 2020, month: 'unallocated' } });
+      await h.show({
+        ...value,
+        address: { year: 2020, month: 'unallocated' },
+        diary: receivedPage ? { kind: 'ready', page: { ...receivedPage, occurrences: [] } } : value.diary,
+      });
       expect(h.host.querySelector('details')).toBeNull();
       await h.navigate(returned);
       await h.show({ ...value, address: returned });
       expect(h.host.querySelector('details')?.open).toBe(false);
 
       h.host.querySelector('details')!.open = true;
-      const receivedPage = value.diary.kind === 'ready' ? value.diary.page : undefined;
       await h.show({
         ...value,
         address: returned,
