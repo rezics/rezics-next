@@ -218,7 +218,7 @@ export const NewThreadLong: Story = {
     await longThreadPlay(context);
     const view = within(context.canvasElement);
     const attach = async (name: string) => {
-      await userEvent.click(view.getByRole('button', { name: m.editor_image(), exact: true }));
+      await userEvent.click(view.getByRole('button', { name: m.editor_image() }));
       const dialog = await screen.findByRole('dialog', { name: m.editor_image() });
       const bytes = Uint8Array.from(
         atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/F5sAAAAASUVORK5CYII='),

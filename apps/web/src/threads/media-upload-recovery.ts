@@ -50,7 +50,7 @@ type Pending = {
 /** One mounted editor's original Files, never media IDs inferred from a document or another draft. */
 export class ReplyImageUploadRecovery {
   private readonly pending = new Map<File, Pending>();
-  private episode?: { context: ReplyUploadContext; identity: FutureThreadUploadEpisode };
+  private episode: { context: ReplyUploadContext; identity: FutureThreadUploadEpisode } | undefined;
 
   private retireEpisode(): void {
     this.episode?.identity.retire();
