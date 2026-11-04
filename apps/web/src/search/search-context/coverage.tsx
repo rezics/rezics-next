@@ -22,7 +22,7 @@ export function SearchCoverage({
   onFocus,
 }: {
   state: SearchLoaderDeps;
-  data: SearchPageData;
+  data: Pick<SearchPageData, 'conditionMetadata' | 'hitTypes' | 'selectedFacetLabels'>;
   observation: { as_of: string; freshness?: unknown };
   locale: string;
   refreshHref: string;
