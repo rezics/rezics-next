@@ -22,6 +22,8 @@ export type CatalogueConsentFixture = {
   own: CatalogueConsentAddress;
   uncertain: CatalogueConsentAddress;
   sourced: CatalogueConsentAddress;
+  revokeStatementProposal(): Promise<void>;
+  restoreStatementProposal(): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -83,6 +85,20 @@ async function grant(stack: NativeWebStack, accountId: string, actions: string[]
   });
 }
 
+async function revoke(stack: NativeWebStack, accountId: string, actions: string[]): Promise<void> {
+  await write(
+    stack,
+    'governor',
+    '/v1/grants:revoke',
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: accountId },
+      actions,
+      valid: '(,)',
+    },
+  );
+}
+
 async function waitForAgent(
   stack: NativeWebStack,
   accountId: string,
@@ -142,6 +158,7 @@ export async function startCatalogueConsentFixture(): Promise<CatalogueConsentFi
       stack.authPersona('editor'),
     ]);
     await grant(stack, aliceIdentity.accountId, ['subject:create', 'statement:propose']);
+    await grant(stack, bobIdentity.accountId, ['statement:propose', 'moderation:hide']);
     const agent = await waitForAgent(stack, aliceIdentity.accountId);
     const [own, uncertain, sourcedSubject] = await Promise.all([
       proposeUnsourced(stack, 'River Ink', agent.id, 'editor'),
@@ -175,6 +192,8 @@ export async function startCatalogueConsentFixture(): Promise<CatalogueConsentFi
         slot: { target: agent.id },
         href: consentHref(sourcedId, 'Cited River', sourcedCandidate, agent.id),
       },
+      revokeStatementProposal: () => revoke(stack, aliceIdentity.accountId, ['statement:propose']),
+      restoreStatementProposal: () => grant(stack, aliceIdentity.accountId, ['statement:propose']),
       async close() {
         await auth?.stop();
         await stack.stop();

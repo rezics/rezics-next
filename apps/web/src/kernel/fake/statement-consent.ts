@@ -28,6 +28,8 @@ export type ConsentScenario =
   | 'unavailable'
   | 'pending'
   | 'read-unavailable'
+  | 'actions-unavailable'
+  | 'actions-refused'
   | 'deleted'
   | 'lagging-deletion'
   | 'retracted'
@@ -141,6 +143,16 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
       return json(current);
     }
     if (path === `/v1/definitions/releases/${encodeURIComponent(definitions.digest)}`) return json(definitions);
+    if (path === `/v1/statements/${candidateId}/consent` && request.method === 'GET') {
+      if (scenario === 'actions-unavailable') return json({ code: 'dependency_unavailable' }, 503);
+      if (scenario === 'actions-refused' || authorization !== 'Bearer target-owner') return json({ state: 'refused' });
+      if (retracted) return json({ state: 'terminal' });
+      return json({
+        state: 'available',
+        disclosed,
+        operations: [...(!disclosed ? ['statement.disclose'] : []), 'statement.retract'],
+      });
+    }
     if (path === `/v1/subjects/${id}/candidates`) {
       if (scenario === 'read-denied') return json({ code: 'forbidden' }, 403);
       if (scenario === 'empty') return json({ candidates: [], adoption: null, next: null });
@@ -200,9 +212,17 @@ export function consentFixture(scenario: ConsentScenario = 'private') {
 }
 
 // Until actual native evidence is configured in development, these ports remain truthfully unserved.
-export const routes: FakeRoute[] = ['disclose', 'retract'].map((operation) => ({
-  method: 'POST',
-  path: new RegExp(`^/v1/statements/[^/]+/${operation}$`),
-  fixture: () => ({ status: 503, body: { code: 'partition_unavailable' } }),
-  story: () => ({ status: 503, body: { code: 'partition_unavailable' } }),
-}));
+export const routes: FakeRoute[] = [
+  ...['disclose', 'retract'].map((operation) => ({
+    method: 'POST',
+    path: new RegExp(`^/v1/statements/[^/]+/${operation}$`),
+    fixture: () => ({ status: 503, body: { code: 'partition_unavailable' } }),
+    story: () => ({ status: 503, body: { code: 'partition_unavailable' } }),
+  })),
+  {
+    method: 'GET',
+    path: /^\/v1\/statements\/[^/]+\/consent$/,
+    fixture: () => ({ status: 503, body: { code: 'partition_unavailable' } }),
+    story: () => ({ status: 503, body: { code: 'partition_unavailable' } }),
+  },
+];

@@ -149,6 +149,9 @@ function StatementConsentPageLive({
   const publicRead = result?.public ?? current?.public;
   const candidate = current?.candidate;
   const attempt = candidate && current?.disclosure && !candidate.statement.references.length && !terminal;
+  const operations = current?.actions.state === 'available' ? current.actions.operations : [];
+  const canDisclose = !!attempt && operations.includes('statement.disclose');
+  const canRetract = !!attempt && operations.includes('statement.retract');
   const uncertain = !!request.current;
   const assertion = current ? consentAssertion(current, address, locale) : undefined;
   const observedAtRender = observation.current;
@@ -178,16 +181,6 @@ function StatementConsentPageLive({
     setConfirmation(undefined);
     setOwn(false);
   }
-  function renewAction() {
-    const epoch = ++actionEpoch.current;
-    const active = confirmationRef.current;
-    if (active) {
-      const renewed = { ...active, epoch };
-      confirmationRef.current = renewed;
-      setConfirmation(renewed);
-    }
-    return epoch;
-  }
   function isCurrentConfirmation(action: ConsentConfirmation | undefined, expectedEpoch: number) {
     return (
       !!action &&
@@ -214,6 +207,7 @@ function StatementConsentPageLive({
       reload ||
       uncertain ||
       !attempt ||
+      !(operation === 'disclose' ? canDisclose : canRetract) ||
       !assertion?.identified
     )
       return;
@@ -321,6 +315,7 @@ function StatementConsentPageLive({
       (!isCurrentConfirmation(action, expectedEpoch) || !ownRef.current || !attempt || !assertion?.identified || reload)
     )
       return;
+    if (action && !(action.operation === 'disclose' ? canDisclose : canRetract)) return;
     if (isCurrentConfirmation(action, expectedEpoch)) {
       orient(event, () => recoveryFocusTarget.current ?? readFocusTarget.current);
       confirmationOrigin.current = null;
@@ -377,8 +372,9 @@ function StatementConsentPageLive({
       !current
     )
       return;
-    renewAction();
+    revokeConfirmation();
     focus.cancel();
+    confirmationOrigin.current = null;
     running.current = true;
     setBusy(true);
     try {
@@ -392,7 +388,6 @@ function StatementConsentPageLive({
       setRead((previous) => (previous?.ok ? { ...previous, public: { state: 'unavailable' } } : previous));
     } finally {
       if (!lifetime.active()) return;
-      renewAction();
       running.current = false;
       setBusy(false);
     }
@@ -528,18 +523,26 @@ function StatementConsentPageLive({
                 {attempt && (
                   <>
                     <p className="text-sm text-muted-foreground">{m.statement_consent_authority({}, options)}</p>
+                    {current.actions.state === 'refused' && (
+                      <p role="status">{m.statement_consent_denied({}, options)}</p>
+                    )}
+                    {current.actions.state === 'unavailable' && (
+                      <p role="status">{m.statement_consent_actions_unavailable({}, options)}</p>
+                    )}
+                    {canDisclose && <p role="status">{m.statement_consent_share_available({}, options)}</p>}
+                    {canRetract && <p role="status">{m.statement_consent_retract_available({}, options)}</p>}
                     {!confirmation && !uncertain && (
                       <div className="flex min-w-0 flex-col items-start gap-3">
-                        <p>{m.statement_consent_share_help({}, options)}</p>
-                        <p>{m.statement_consent_retract_help({}, options)}</p>
+                        {canDisclose && <p>{m.statement_consent_share_help({}, options)}</p>}
+                        {canRetract && <p>{m.statement_consent_retract_help({}, options)}</p>}
                         <div className="flex min-w-0 flex-wrap gap-2">
-                          {result?.kind !== 'disclosed' && (
+                          {canDisclose && result?.kind !== 'disclosed' && (
                             <Button
                               className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                               ref={(node) => {
                                 actionButtons.current.disclose = node;
                               }}
-                              disabled={busy || reload || !assertion?.identified}
+                              disabled={busy || reload || !assertion?.identified || !canDisclose}
                               onClick={(event) =>
                                 openConfirmation('disclose', event, observedAtRender, actionEpochAtRender)
                               }
@@ -547,19 +550,21 @@ function StatementConsentPageLive({
                               {m.statement_consent_share({}, options)}
                             </Button>
                           )}
-                          <Button
-                            variant="outline"
-                            className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                            ref={(node) => {
-                              actionButtons.current.retract = node;
-                            }}
-                            disabled={busy || reload || !assertion?.identified}
-                            onClick={(event) =>
-                              openConfirmation('retract', event, observedAtRender, actionEpochAtRender)
-                            }
-                          >
-                            {m.statement_consent_retract({}, options)}
-                          </Button>
+                          {canRetract && (
+                            <Button
+                              variant="outline"
+                              className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                              ref={(node) => {
+                                actionButtons.current.retract = node;
+                              }}
+                              disabled={busy || reload || !assertion?.identified || !canRetract}
+                              onClick={(event) =>
+                                openConfirmation('retract', event, observedAtRender, actionEpochAtRender)
+                              }
+                            >
+                              {m.statement_consent_retract({}, options)}
+                            </Button>
+                          )}
                         </div>
                       </div>
                     )}
@@ -610,7 +615,12 @@ function StatementConsentPageLive({
                             <div className="flex min-w-0 flex-wrap gap-2">
                               <Button
                                 className="min-h-11 min-w-11 h-auto max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                                disabled={busy || !own || !assertion?.identified}
+                                disabled={
+                                  busy ||
+                                  !own ||
+                                  !assertion?.identified ||
+                                  !(confirmation.operation === 'disclose' ? canDisclose : canRetract)
+                                }
                                 onClick={(event) => void change(event, confirmation, actionEpochAtRender)}
                               >
                                 {m.statement_consent_confirm({}, options)}
@@ -628,7 +638,10 @@ function StatementConsentPageLive({
                         </ContentItemFrame>
                       </section>
                     )}
-                    {(reload || !assertion?.identified) && (
+                    {(reload ||
+                      !assertion?.identified ||
+                      current.actions.state === 'unavailable' ||
+                      current.actions.state === 'refused') && (
                       <Button
                         variant="outline"
                         className="min-h-11 min-w-11 h-auto max-w-full self-start py-2 whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
