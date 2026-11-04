@@ -184,3 +184,32 @@ test('ordinary direct navigation authenticates without private facts, then renew
     assign.mockRestore();
   }
 });
+
+test('a replaced continuation during released review retires controls and preserves its replacement without sending', async () => {
+  const { storeOrganizationDeleteStepUp, readOrganizationDeleteStepUp } =
+    await import('../src/organization-delete-step-up');
+  const delayed = Promise.withResolvers<OrganizationDeletionRead>();
+  let reads = 0;
+  const page = await open(
+    content(first, async () => (++reads === 2 ? delayed.promise : ready(first))),
+    body,
+  );
+  await confirm(page.host, '@first');
+  const replacement = { humanAccountId: human, organizationId: second, operationKey: 'b'.repeat(32) };
+  expect(storeOrganizationDeleteStepUp(replacement)).toBe(true);
+  await flush(() => delayed.resolve(ready(first)));
+  expect(page.calls).toHaveLength(0);
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: replacement });
+});
+
+test('current native refusal has no authentication loop or destructive control', async () => {
+  const page = await open(
+    content(first, async () => ({ kind: 'denied' })),
+    body,
+  );
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(button(page.host, 'Authenticate to review')).toBeUndefined();
+  expect(page.host.textContent).toContain('cannot currently manage');
+  expect(page.calls).toHaveLength(0);
+});
