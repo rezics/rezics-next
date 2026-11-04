@@ -332,12 +332,13 @@ type CapturedIntent =
   | { kind: 'record' | 'add' | 'remove'; data: ProgressRecordInput }
   | { kind: 'finish'; data: ProgressFinishInput };
 function freezeCapturedIntent(intent: CapturedIntent): CapturedIntent {
+  if (intent.kind === 'finish')
+    return Object.freeze({ kind: 'finish', data: Object.freeze(structuredClone(intent.data)) });
   const data = structuredClone(intent.data);
-  if ('add' in data && data.add) Object.freeze(data.add);
-  if ('remove' in data && data.remove) Object.freeze(data.remove);
-  return Object.freeze({ ...intent, data: Object.freeze(data) });
+  if (data.add) Object.freeze(data.add);
+  if (data.remove) Object.freeze(data.remove);
+  return Object.freeze({ kind: intent.kind, data: Object.freeze(data) });
 }
-
 type EditorLifetime = {
   page: LoadedPage;
   originating?: ProgressDetailOrigin | undefined;
@@ -795,7 +796,6 @@ function SessionEditor({
     }
     if (recording && reason === 'unsupported_library_profile') {
       setUnsupported(true);
-      setEditing(false);
     }
   }
 
@@ -1294,7 +1294,7 @@ function SessionEditor({
 
   const editorContent = (
     <>
-      {offered ? (
+      {offered || draftOpened || pendingCommand ? (
         <fieldset disabled={busy || pendingCommand || review !== null} className="min-w-0">
           {recordForm}
         </fieldset>

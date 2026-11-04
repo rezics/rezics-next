@@ -26,7 +26,7 @@ describe('progress rules through the existing native session command', () => {
     ).value;
     const record = { revision: started.revision, amount: '12.500000' };
     const recordKey = entryKey();
-    const recorded = await sessions.recordSession(actor, started.id, record, recordKey);
+    const recorded = await sessions.recordProgress(actor, started.id, record, recordKey);
     const patch = {
       revision: 0,
       startDate: { year: 2024, month: 2 },
@@ -63,10 +63,10 @@ describe('progress rules through the existing native session command', () => {
     });
     expect((await sessions.readSession(actor, started.id)).revision).toBe(recorded.value.revision);
     await expect(
-      sessions.recordSession(actor, started.id, { revision: started.revision, amount: '15' }, entryKey()),
+      sessions.recordProgress(actor, started.id, { revision: started.revision, amount: '15' }, entryKey()),
     ).rejects.toBeInstanceOf(ProgressConflictError);
     await sessions.retireSession(actor, started.id, { revision: recorded.value.revision }, entryKey());
     expect((await sessions.patchSessionJournal(actor, started.id, patch, key)).value).toEqual(receipt.value);
-    expect((await sessions.recordSession(actor, started.id, record, recordKey)).value).toEqual(recorded.value);
+    expect((await sessions.recordProgress(actor, started.id, record, recordKey)).value).toEqual(recorded.value);
   });
 });

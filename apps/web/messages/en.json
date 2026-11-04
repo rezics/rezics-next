@@ -9401,5 +9401,9 @@
   "library_progress_total_required": "Required by this profile",
   "library_progress_total_forbidden": "Not used by this profile",
   "library_progress_total_optional": "Optional; unknown stays unknown",
-  "library_progress_completion_explicit": "Reaching a total or recording units does not complete this session. Completion is a separate action."
+  "library_progress_completion_explicit": "Reaching a total or recording units does not complete this session. Completion is a separate action.",
+  "library_journal_current_revision": "Current journal revision {revision}.",
+  "library_journal_observation_only": "These are observed current values. The original save is still unresolved; its exact retry remains available.",
+  "library_journal_show_reflection": "Read current private reflection",
+  "library_journal_reported_dates": "Reported dates describe this occurrence. They do not change its native start, completion time or lifecycle."
 }

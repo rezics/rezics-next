@@ -508,6 +508,7 @@ function OccurrenceControls({
         </div>
       ) : null}
 
+      {journal ? <JournalSavedReadout journal={journal} observedOnly={journalCommand !== null} /> : null}
       {journal ? (
         <form className="space-y-4" onSubmit={submitJournal} noValidate>
           <p className="text-sm text-muted-foreground">{m.library_occurrence_date_help()}</p>
@@ -908,6 +909,71 @@ function JournalDraftReview({
         ))}
       </dl>
       {children ? <div className="flex flex-wrap gap-2">{children}</div> : null}
+    </section>
+  );
+}
+
+/** Current read values are rendered independently of the captured write and its receipt. */
+function JournalSavedReadout({ journal, observedOnly }: { journal: PrivateJournal; observedOnly: boolean }) {
+  const datePrecision = (date: PrivateJournal['startDate']) =>
+    date === null
+      ? null
+      : date.day !== undefined
+        ? m.library_journal_precision_day()
+        : date.month !== undefined
+          ? m.library_journal_precision_month()
+          : m.library_journal_precision_year();
+  return (
+    <section className="space-y-4 rounded-lg border p-4" aria-label={m.library_journal_current_value()}>
+      <div className="space-y-1">
+        <h3 className="font-medium">{m.library_journal_current_value()}</h3>
+        <p className="text-sm text-muted-foreground">
+          {m.library_journal_current_revision({ revision: journal.revision })}
+        </p>
+        {observedOnly ? (
+          <p role="status" className="text-sm">
+            {m.library_journal_observation_only()}
+          </p>
+        ) : null}
+      </div>
+      <dl className="grid gap-4 sm:grid-cols-2">
+        {(['startDate', 'finishDate'] as const).map((field) => (
+          <div key={field} className="space-y-1">
+            <dt className="text-sm text-muted-foreground">{journalFieldLabel(field)}</dt>
+            <dd className="space-y-1">
+              <JournalValue value={journal[field] === null ? null : formatJournalDate(journal[field])} />
+              {journal[field] !== null ? (
+                <p className="text-sm text-muted-foreground">{datePrecision(journal[field])}</p>
+              ) : null}
+            </dd>
+          </div>
+        ))}
+        <div className="space-y-1">
+          <dt className="text-sm text-muted-foreground">{m.library_occurrence_assessment()}</dt>
+          <dd>
+            <JournalValue
+              value={journal.assessment.units === null ? null : formatJournalAssessment(journal.assessment.units)}
+            />
+          </dd>
+          <dd className="text-sm text-muted-foreground">{m.library_occurrence_assessment_help()}</dd>
+        </div>
+        <div className="min-w-0 space-y-1 sm:col-span-2">
+          <dt className="text-sm text-muted-foreground">{m.library_occurrence_reflection()}</dt>
+          <dd>
+            {journal.reflection !== null && journal.reflection.length > 160 ? (
+              <details className="space-y-2">
+                <summary className="min-h-10 cursor-pointer content-center">
+                  {m.library_journal_show_reflection()}
+                </summary>
+                <JournalValue value={journal.reflection} />
+              </details>
+            ) : (
+              <JournalValue value={journal.reflection} />
+            )}
+          </dd>
+        </div>
+      </dl>
+      <p className="text-sm text-muted-foreground">{m.library_journal_reported_dates()}</p>
     </section>
   );
 }
