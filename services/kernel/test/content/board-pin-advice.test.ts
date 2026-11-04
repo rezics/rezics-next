@@ -4,6 +4,8 @@ import {
   projectBoardPinAdvice,
   type BoardPinAdviceObservation,
 } from '../../src/content/board-pin-advice.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { actionCatalogue } from '../../src/http/request.ts';
 
 const boardId = '0199f001-0000-7000-8000-000000000001';
 const threadId = '0199f002-0000-7000-8000-001000000002';
@@ -18,6 +20,13 @@ const observation = (): BoardPinAdviceObservation => ({
   sourcesCurrent: true,
   sources: [{ ...selection[0]!, witness: 'original-thread' }],
   epochs: new Map([[1, 1]]),
+});
+
+test('createKernel mounts pin advice with its authenticated action, separate from board reads', () => {
+  const kernel = createKernel({ pool: {} as never, routeKey: new Uint8Array(32).fill(7) });
+  const actions = actionCatalogue(kernel);
+  expect(actions.get('board:read')?.anonymous).toBe(true);
+  expect(actions.get('board:pin-advice')?.anonymous).toBe(false);
 });
 
 // These are composition outcomes, not native authority or growth evidence.

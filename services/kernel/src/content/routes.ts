@@ -1346,7 +1346,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           description: 'Inspect current native pin actions for at most twenty-five exact displayed thread sources.',
           'x-resource-types': ['content.board', 'content.thread'],
           'x-exposure': 'public',
-          'x-action': 'board:read',
+          'x-action': 'board:pin-advice',
           security: writeSecurity,
         },
       },
