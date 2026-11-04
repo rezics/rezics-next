@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { ImportTransportError } from './import-client.ts';
 import { createReadStream } from 'node:fs';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -2149,6 +2150,7 @@ export async function seedCrossMedia(
   const runs: CrossMediaSeedResult['runs'] = {};
   const readings: CrossMediaReading[] = [];
   const mediaAttempts = new Map<string, CrossMediaMediaOutcome>();
+  const unsubmittedCovers = new Set<string>();
   const onlyPendingBangumiCovers = (provider: Provider, result: ImportRunResult): boolean => {
     if (
       provider !== 'bangumi' ||
@@ -2276,14 +2278,40 @@ export async function seedCrossMedia(
               ),
             'Bangumi cover intent does not match its admitted source evidence',
           );
-          const resolution = await resolver.resolve({
-            owner: input.owner,
-            containerId: input.subject,
-            mediaImportIntents: input.mediaImportIntents,
-            signal: input.signal,
-            ...(input.deferPending === undefined ? {} : { deferPending: input.deferPending }),
-          });
           const recordKey = `${source.sourceAlias}\0${source.externalId}`;
+          if (unsubmittedCovers.has(recordKey)) return { status: 'pending' };
+          let resolution: Awaited<ReturnType<typeof resolver.resolve>>;
+          try {
+            resolution = await resolver.resolve({
+              owner: input.owner,
+              containerId: input.subject,
+              mediaImportIntents: input.mediaImportIntents,
+              signal: input.signal,
+              ...(input.deferPending === undefined ? {} : { deferPending: input.deferPending }),
+            });
+          } catch (error) {
+            if (
+              !(error instanceof ImportTransportError) ||
+              !error.retryable ||
+              !(
+                (error.status === 503 && error.code === 'dependency_unavailable') ||
+                (error.status === 429 && error.code === 'rate_limited')
+              )
+            )
+              throw error;
+            // Keep the exact prepared intent, without claiming a reservation or image identity.
+            // The ordinary cover coordinator retries on a later invocation, never inline here.
+            unsubmittedCovers.add(recordKey);
+            mediaAttempts.set(recordKey, {
+              ...source,
+              status: 'pending',
+              containerId: input.subject,
+              credit: intent.credit,
+              provenance: intent.provenance,
+              code: 'media-intent-not-delivered',
+            });
+            return { status: 'pending' };
+          }
           if (resolution.outcome === 'fenced') {
             mediaAttempts.set(recordKey, { ...source, status: 'fenced', containerId: input.subject });
             return { status: 'pending' };

@@ -2565,6 +2565,12 @@ Decision: the local seed stores finite reviewed-catalogue journal identities in 
 
 Decision: selected Bangumi covers use the pinned subject API and keep its response receipt separate from the unchanged archive revision/digest in the existing showcase journal.
 
+If the native cover POST returns an explicitly retryable `dependency_unavailable` (503) or `rate_limited` (429),
+the showcase retains its exact prepared intent as pending without inventing a reservation or Media ID. The same
+producer invocation does not submit that refused intent again. Independently authorized text facts can finish while
+the existing pending-cover checks retain the unfinished source generation and publication records the image gap.
+Permission failures and other refusals remain failures; native admission, retry limits and all media checks stay active.
+
 Decision: `task seed:dev` uses one exact five-work selection with direct cast and episodes and at most 64 people or organizations per provider; Bangumi Organization `wdt:P6298` is omitted with an explicit conversion gap because the released Organization profile has no property that preserves Bangumi-ID semantics.
 
 `task seed:dev` elects Bangumi Steins;Gate anime/book (10380, 84148) and CLANNAD anime (51), plus VNDB Steins;Gate (v2002) and CLANNAD (v4). It adds direct cast and episodes, omits recursive work expansion and releases, and skips the separate Book Girl importer. It reuses the Accounts `dev:persona` setup and its private `.temp/local-stack/seed.env`. The local invocation gives the cross-media CLI a separate durable showcase journal. The ordinary CLI stays proposal-only unless that local publication state is explicitly supplied. The journal records exact create and proposal command bodies before send, then stores native UUIDs only after an acknowledged response. Publication derives its intent from those selected source records, current reads, and exact candidate identities. It reads only selected subject/property candidate pages, accepts each selected candidate through the review API, and adopts only those IDs while preserving any prior adoption selections. Refused steps keep their known acknowledgements; an unknown send reuses its sealed body and idempotency key on restart.
