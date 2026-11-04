@@ -6,6 +6,7 @@ import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 import { peopleFactsExample } from '../src/features/catalogue/people-facts/examples';
+import { personGroups, personScalarFields } from '../src/features/catalogue/person-reader/model';
 import { admitFacts, factVisitBounds } from '../src/features/catalogue/people-facts/model';
 import { readValueExplanation, type ValueRead, type ValueRequest } from '../src/features/catalogue/value-explanation';
 
@@ -210,64 +211,85 @@ test('exact currentness loss returns to the field; held results cannot survive s
 test('whole admission and native-compatible composition charge actual calls and bytes at three unrelated history scales', async () => {
   const charges: unknown[] = [];
   for (const scale of [64, 512, 4096]) {
-    const fixture = peopleFactsExample();
-    const reading = { public: fixture.read, release: fixture.release, locale: 'en', documents: fixture.documents };
-    const projection = admitFacts(reading, [fixture.property])!;
-    expect(projection.fields[fixture.property]).toHaveLength(43);
-    const subjects = new Map(
-      Array.from({ length: scale }, (_, index) => [`unrelated-${index}`, { obsolete: 'old'.repeat(1024) }]),
-    );
-    const history = new Map(Array.from({ length: scale }, (_, index) => [index + 100, 'obsolete'.repeat(1024)]));
-    const calls: string[] = [];
-    let decoded = 0;
-    const native = createKernelClient('https://people-facts.test', {
-      fetch: (async (input, init) => {
-        const request = input instanceof Request ? input : new Request(String(input), init);
-        const url = new URL(request.url);
-        calls.push(url.pathname);
-        let body: unknown = { code: 'overloaded' };
-        let status = 503;
-        if (url.pathname === `/v1/subjects/${fixture.read.subject.id}`) {
-          body = fixture.read;
-          status = 200;
-        } else if (url.pathname.includes('/definitions/releases/')) {
-          body = definitions;
-          status = 200;
-        } else if (url.pathname.endsWith('/candidates')) {
-          body = { candidates: [], adoption: null, next: null };
-          status = 200;
-        }
-        const encoded = JSON.stringify(body);
-        decoded += new TextEncoder().encode(encoded).byteLength;
-        return new Response(encoded, { status, headers: { 'content-type': 'application/json' } });
-      }) as typeof fetch,
-    });
-    const result = await readValueExplanation(native, {
-      id: fixture.read.subject.id,
-      property: fixture.property,
-      statement: fixture.rows[0]!.id,
-      context: fixture.read.subject.context,
-      locale: 'en',
-    });
-    expect(result.kind === 'ready' && result.page.statement?.id).toBe(fixture.rows[0]!.id);
-    expect(result.kind === 'ready' && result.page.competition?.kind).toBe('not-returned');
-    expect(calls).toHaveLength(4);
-    expect(subjects.size).toBe(scale);
-    expect(history.size).toBe(scale);
-    charges.push({
-      scale,
-      requests: calls.length,
-      decodedBytes: decoded,
-      admittedBytes: projection.bytes,
-      retainedWindows: 1,
-      maximumMountedRowsPerField: factVisitBounds.rows,
-    });
-    const overflow = structuredClone(reading);
-    overflow.public.subject.statements[fixture.property]![0]!.references[0]!.parts[0]!.value = {
-      type: 'value',
-      content: '界'.repeat(factVisitBounds.bytes / 2),
-    };
-    expect(admitFacts(overflow, [fixture.property])).toBeUndefined();
+    const page = await mounted();
+    try {
+      const fixture = page.fixture;
+      const reading = { public: fixture.read, release: fixture.release, locale: 'en', documents: fixture.documents };
+      const fields = [
+        ...personScalarFields(fixture.release, fixture.read),
+        ...personGroups(fixture.release, fixture.read, 'en').flatMap((group) => group.fields.map((field) => field.id)),
+      ];
+      const projection = admitFacts(reading, fields)!;
+      expect(projection.fields[fixture.property]).toHaveLength(43);
+      const subjects = new Map(
+        Array.from({ length: scale }, (_, index) => [`unrelated-${index}`, { obsolete: 'old'.repeat(1024) }]),
+      );
+      const history = new Map(Array.from({ length: scale }, (_, index) => [index + 100, 'obsolete'.repeat(1024)]));
+      const calls: string[] = [];
+      let decoded = 0;
+      const native = createKernelClient('https://people-facts.test', {
+        fetch: (async (input, init) => {
+          const request = input instanceof Request ? input : new Request(String(input), init);
+          const url = new URL(request.url);
+          calls.push(url.pathname);
+          let body: unknown = { code: 'overloaded' };
+          let status = 503;
+          if (url.pathname === `/v1/subjects/${fixture.read.subject.id}`) {
+            body = fixture.read;
+            status = 200;
+          } else if (url.pathname.includes('/definitions/releases/')) {
+            body = definitions;
+            status = 200;
+          } else if (url.pathname.endsWith('/candidates')) {
+            body = { candidates: [], adoption: null, next: null };
+            status = 200;
+          }
+          const encoded = JSON.stringify(body);
+          decoded += new TextEncoder().encode(encoded).byteLength;
+          return new Response(encoded, { status, headers: { 'content-type': 'application/json' } });
+        }) as typeof fetch,
+      });
+      read = (request) => readValueExplanation(native, request);
+      const field = page.host.querySelector(
+        `[id="profile-fact-${encodeURIComponent(fixture.property)}"]`,
+      )!.parentElement!;
+      await page.click(page.button(m.people_facts_browse(), field));
+      await page.click(page.button(m.people_facts_next(), field));
+      await page.click(page.button(m.people_facts_previous(), field));
+      expect(calls).toHaveLength(0);
+      const origin = field.querySelector('a[href*="/value?"]') as HTMLAnchorElement;
+      origin.focus();
+      await page.click(origin);
+      expect(page.host.textContent).toContain(m.value_not_returned());
+      expect(page.host.textContent).toContain(m.value_change_unavailable());
+      await page.click(page.button(m.people_facts_return()));
+      expect(page.window.document.activeElement).toBe(origin);
+      expect(calls).toHaveLength(4);
+      expect(subjects.size).toBe(scale);
+      expect(history.size).toBe(scale);
+      charges.push({
+        scale,
+        requests: calls.length,
+        decodedBytes: decoded,
+        admittedBytes: projection.bytes,
+        retainedWindows: page.host.querySelectorAll('[data-window-active="true"]').length,
+        mountedRows: page.host.querySelectorAll('li[data-statement]').length,
+        maximumMountedRowsPerField: Math.max(
+          ...Array.from(
+            page.host.querySelectorAll('[data-slot="people-fact-window"]'),
+            (window) => window.children.length,
+          ),
+        ),
+      });
+      const overflow = structuredClone(reading);
+      overflow.public.subject.statements[fixture.property]![0]!.references[0]!.parts[0]!.value = {
+        type: 'value',
+        content: '界'.repeat(factVisitBounds.bytes / 2),
+      };
+      expect(admitFacts(overflow, fields)).toBeUndefined();
+    } finally {
+      await page.close();
+    }
   }
   const stable = charges as { decodedBytes: number; admittedBytes: number }[];
   expect(new Set(stable.map((charge) => charge.decodedBytes)).size).toBe(1);

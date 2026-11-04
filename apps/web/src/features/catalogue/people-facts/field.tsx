@@ -70,6 +70,7 @@ export function PeopleFactField({
               <label className="block space-y-1">
                 <span>{m.people_facts_filter({}, o)}</span>
                 <input
+                  disabled={visit?.inspecting}
                   type="search"
                   maxLength={factVisitBounds.filter}
                   value={filter}
@@ -98,13 +99,18 @@ export function PeopleFactField({
                   }}
                 />
               </label>
-              <button type="button" className={factControl} onClick={reset}>
+              <button type="button" className={factControl} disabled={visit?.inspecting} onClick={reset}>
                 {m.people_facts_reset({}, o)}
               </button>
               {matches?.size === 0 && <p role="status">{m.people_facts_empty({}, o)}</p>}
             </div>
           )}
-          <ul ref={list} className="space-y-4" data-slot="people-fact-window">
+          <ul
+            ref={list}
+            className="space-y-4"
+            data-slot="people-fact-window"
+            data-window-active={expanded ? 'true' : undefined}
+          >
             {facts.map((statement) => (
               <li
                 key={statement.id}
@@ -121,7 +127,7 @@ export function PeopleFactField({
               <button
                 type="button"
                 className={factControl}
-                disabled={offset === 0}
+                disabled={visit?.inspecting || offset === 0}
                 onClick={() => move(Math.max(0, offset - factVisitBounds.rows))}
               >
                 {m.people_facts_previous({}, o)}
@@ -129,7 +135,7 @@ export function PeopleFactField({
               <button
                 type="button"
                 className={factControl}
-                disabled={offset + factVisitBounds.rows >= admitted.length}
+                disabled={visit?.inspecting || offset + factVisitBounds.rows >= admitted.length}
                 onClick={() => move(offset + factVisitBounds.rows)}
               >
                 {m.people_facts_next({}, o)}
