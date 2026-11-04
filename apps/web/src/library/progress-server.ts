@@ -184,7 +184,10 @@ export const readCurrentViewerProgressIndex = createServerFn({ method: 'GET' })
         sessions: [],
         next: null,
         emptyKind:
-          !requested.subjectId && requested.state === undefined && requested.mode === undefined && requested.profileId === undefined
+          !requested.subjectId &&
+          requested.state === undefined &&
+          requested.mode === undefined &&
+          requested.profileId === undefined
             ? 'owner-empty'
             : 'filtered-empty',
         idempotencyKey,

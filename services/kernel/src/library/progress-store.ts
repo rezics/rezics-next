@@ -425,11 +425,7 @@ export async function pageSessions(
   return rows.map((row) => asSession(row));
 }
 
-export async function progressDiscoveryGeneration(
-  client: Client,
-  route: number,
-  accountId: string,
-): Promise<string> {
+export async function progressDiscoveryGeneration(client: Client, route: number, accountId: string): Promise<string> {
   const row = await discoveryGenerationRead.run(queryClient(client), { route, account_id: accountId });
   if (!/^(0|[1-9][0-9]*)$/.test(row.generation)) throw new Error('Invalid progress discovery generation');
   return row.generation;

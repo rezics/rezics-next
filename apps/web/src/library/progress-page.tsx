@@ -614,7 +614,11 @@ function ProgressIndexPageContent({
   return (
     <article className="max-w-4xl space-y-10 text-foreground" onClickCapture={protectNavigation}>
       <PageHeading>{m.library_progress_heading()}</PageHeading>
-      {loading ? <p role="status" aria-live="polite">{m.library_progress_discovery_loading()}</p> : null}
+      {loading ? (
+        <p role="status" aria-live="polite">
+          {m.library_progress_discovery_loading()}
+        </p>
+      ) : null}
 
       <>
         <section aria-labelledby="progress-discovery-heading" className="space-y-4">
@@ -631,12 +635,7 @@ function ProgressIndexPageContent({
               />
             </div>
             {filterSubject.length ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                onClick={() => setFilterSubject([])}
-              >
+              <Button type="button" variant="outline" className="min-h-11" onClick={() => setFilterSubject([])}>
                 {m.library_progress_address_clear()}
               </Button>
             ) : null}
@@ -1254,12 +1253,12 @@ function SessionRow({
           ? m.library_progress_discovery_meaning_unavailable()
           : null;
   const actionStates = session.allowedActions
-    ? [
+    ? ([
         [m.library_progress_discovery_action_open(), session.allowedActions.open],
         [m.library_progress_discovery_edit(), session.allowedActions.edit],
         [m.library_progress_complete(), session.allowedActions.complete],
         [m.library_progress_abandon(), session.allowedActions.abandon],
-      ] as const
+      ] as const)
     : null;
   return (
     <ContentItem
@@ -1335,7 +1334,8 @@ function SessionRow({
               <ul className="mt-2 space-y-1">
                 {actionStates.map(([label, action]) => (
                   <li key={label}>
-                    {label}: {action.allowed
+                    {label}:{' '}
+                    {action.allowed
                       ? m.library_progress_discovery_action_available()
                       : action.reason === 'session_not_active'
                         ? m.library_progress_discovery_action_not_active()

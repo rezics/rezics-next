@@ -767,8 +767,14 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
                   allowedActions: {
                     open: action(readable, readable ? null : 'not_authorized'),
                     edit: action(readable && writable, readable && writable ? null : 'not_authorized'),
-                    complete: action(active && writable, !writable ? 'not_authorized' : active ? null : 'session_not_active'),
-                    abandon: action(active && writable, !writable ? 'not_authorized' : active ? null : 'session_not_active'),
+                    complete: action(
+                      active && writable,
+                      !writable ? 'not_authorized' : active ? null : 'session_not_active',
+                    ),
+                    abandon: action(
+                      active && writable,
+                      !writable ? 'not_authorized' : active ? null : 'session_not_active',
+                    ),
                   },
                 };
               }),

@@ -53,7 +53,10 @@ export function progressAddressIssue(
     const modes = ['scalar_amount', 'cursor_position', 'completed_units'];
     if (index.state !== undefined && !['active', 'completed', 'abandoned'].includes(index.state)) return 'state';
     if (index.mode !== undefined && !modes.includes(index.mode)) return 'mode';
-    if (index.profileId !== undefined && (!index.profileId.length || index.profileId.length > 128 || /[\x00-\x1f\x7f]/.test(index.profileId)))
+    if (
+      index.profileId !== undefined &&
+      (!index.profileId.length || index.profileId.length > 128 || /[\x00-\x1f\x7f]/.test(index.profileId))
+    )
       return 'profileId';
     if ([index.state, index.mode, index.profileId].filter((value) => value !== undefined).length > 1)
       return index.profileId !== undefined ? 'profileId' : 'mode';

@@ -31,9 +31,8 @@ export function ProgressAddressCorrection({
     units: m.library_progress_address_units(),
     logs: m.library_progress_address_logs(),
   };
-  const fields: ProgressAddressField[] = 'id' in address
-    ? ['id', 'changes', 'units', 'logs']
-    : ['subjectId', 'state', 'mode', 'profileId', 'cursor'];
+  const fields: ProgressAddressField[] =
+    'id' in address ? ['id', 'changes', 'units', 'logs'] : ['subjectId', 'state', 'mode', 'profileId', 'cursor'];
   const navigate = (field: ProgressAddressField, replacement?: string) => {
     const next = correctProgressAddress(address, field, replacement);
     if ('id' in next) {

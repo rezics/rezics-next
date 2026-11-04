@@ -1,40 +1,34 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "packages/client/src/**",
-    "services/kernel/test/library/progress-discovery-*",
-    "apps/web/src/library/progress-reads.ts",
-    "apps/web/src/library/progress-server.ts",
-    "apps/web/tests/library-progress-discovery*",
-    "apps/web/tests/progress-index-current-origin.test.tsx",
-    "docs/library-progress-discovery.md"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "account",
-    "deletion"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "acceptance": {
-    "tests": [
-      "Consume the Content-owned generated progress discovery client signature in Web and render the owner-wide index through the typed client; keep dependency-unavailable distinct while that delivery is absent.",
-      "Exercise native sessions across subjects and modes, bounded continuation, predicate changes, deleted anchors, membership changes, retirement and restore, owner credential changes, and existing command lost-acknowledgement recovery.",
-      "Measure independent 64, 512 and 4096 session cases and derive inclusive bounded costs across every participating pool, including authorization, SQL, hydration, serialization, locks, dispatch, receipts, maintenance, retention and cleanup.",
-      "Reconcile the six current-origin focused test failures against the base revision; preserve existing command authority and keep the combined focused Web command green for feature-caused changes."
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'packages/client/src/**',
+      'services/kernel/test/library/progress-discovery-*',
+      'apps/web/src/library/progress-reads.ts',
+      'apps/web/src/library/progress-server.ts',
+      'apps/web/tests/library-progress-discovery*',
+      'apps/web/tests/progress-index-current-origin.test.tsx',
+      'docs/library-progress-discovery.md',
     ],
-    "failing": true
-  },
-  "estimate": {
-    "lines": 900,
-    "files": 8
-  }
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'account', 'deletion'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'tests':
+        [
+          'Consume the Content-owned generated progress discovery client signature in Web and render the owner-wide index through the typed client; keep dependency-unavailable distinct while that delivery is absent.',
+          'Exercise native sessions across subjects and modes, bounded continuation, predicate changes, deleted anchors, membership changes, retirement and restore, owner credential changes, and existing command lost-acknowledgement recovery.',
+          'Measure independent 64, 512 and 4096 session cases and derive inclusive bounded costs across every participating pool, including authorization, SQL, hydration, serialization, locks, dispatch, receipts, maintenance, retention and cleanup.',
+          'Reconcile the six current-origin focused test failures against the base revision; preserve existing command authority and keep the combined focused Web command green for feature-caused changes.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 900, 'files': 8 },
 }
 ---
 

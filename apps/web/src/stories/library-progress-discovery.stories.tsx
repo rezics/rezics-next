@@ -106,14 +106,15 @@ export const OwnerWide: Story = {
 
 export const ExactSubject: Story = {
   name: 'Exact subject filter',
-  render: () =>
+  render: () => (
     <Discovery
       value={page({
         subjectId: first.subjectId,
         selectedSubject: first.subject,
         sessions: [first, repeat],
       })}
-    />,
+    />
+  ),
 };
 
 export const StateFilter: Story = {
