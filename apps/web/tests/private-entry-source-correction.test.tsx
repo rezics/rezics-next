@@ -140,11 +140,12 @@ async function renderedReader(
     return value;
   };
   const change = async (element: HTMLInputElement | HTMLSelectElement, value: string | boolean) => {
-    const key = Object.keys(element).find((name) => name.startsWith('__reactProps$'));
-    if (!key) throw new Error('React change handler not found');
-    const props = (element as unknown as Record<string, { onChange?: (event: unknown) => void }>)[key]!;
+    const property = typeof value === 'boolean' ? 'checked' : 'value';
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), property)?.set;
+    setter?.call(element, value);
+    const type = element.tagName === 'SELECT' || property === 'checked' ? 'change' : 'input';
     await act(async () => {
-      props.onChange?.({ currentTarget: typeof value === 'boolean' ? { checked: value } : { value } });
+      element.dispatchEvent(new window.Event(type, { bubbles: true }));
       await pause();
     });
   };
