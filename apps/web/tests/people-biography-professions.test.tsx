@@ -69,7 +69,9 @@ test('Person biography groups bind admitted multilingual documents, occupations 
     status: 'absent',
     editor: 'authored',
   });
-  expect(recorded.find((group) => group.kind === 'occupations')?.fields.find((field) => field.id === 'wdt:P106')).toMatchObject({
+  expect(
+    recorded.find((group) => group.kind === 'occupations')?.fields.find((field) => field.id === 'wdt:P106'),
+  ).toMatchObject({
     status: 'absent',
     editor: 'item',
     label: { text: 'occupation' },

@@ -832,9 +832,9 @@ locally without a translation service.
 | `wdt:P725`                  | [voice actor](https://www.wikidata.org/wiki/Property:P725)                                                                                                 |
 | `schema:contributor`        | [contributor](https://schema.org/contributor), mapped to [contributor to the creative work or subject (P767)](https://www.wikidata.org/wiki/Property:P767) |
 | `wdt:P106`                  | [occupation](https://www.wikidata.org/wiki/Property:P106), a Concept classifying a person                                                                  |
-| `schema:knowsLanguage`      | [knowsLanguage](https://schema.org/knowsLanguage), languages a person knows as Concepts, not proficiency or a work's language                               |
-| `wdt:P749`                  | [parent organization](https://www.wikidata.org/wiki/Property:P749), stored on the child with optional start and end dates                                   |
-| `wdt:P1365`                 | [replaces](https://www.wikidata.org/wiki/Property:P1365), the predecessor organization, independent of successor                                            |
+| `schema:knowsLanguage`      | [knowsLanguage](https://schema.org/knowsLanguage), languages a person knows as Concepts, not proficiency or a work's language                              |
+| `wdt:P749`                  | [parent organization](https://www.wikidata.org/wiki/Property:P749), stored on the child with optional start and end dates                                  |
+| `wdt:P1365`                 | [replaces](https://www.wikidata.org/wiki/Property:P1365), the predecessor organization, independent of successor                                           |
 | `wdt:P1366`                 | [replaced by](https://www.wikidata.org/wiki/Property:P1366), the successor organization, independent of predecessor                                        |
 | `wdt:P1932`                 | [object of statement named as](https://www.wikidata.org/wiki/Property:P1932), the name as credited                                                         |
 | `schema:position`           | [position](https://schema.org/position), mapped to [series ordinal (P1545)](https://www.wikidata.org/wiki/Property:P1545)                                  |

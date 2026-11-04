@@ -21,8 +21,7 @@ function ReaderStory({ state }: { state: 'unconfigured' | 'history' | 'withheld'
       const type = release.types['schema:Organization'];
       if (type)
         type.properties = type.properties.filter(
-          (id) =>
-            id !== 'schema:abstract' && id !== 'wdt:P749' && id !== 'wdt:P1365' && id !== 'wdt:P1366',
+          (id) => id !== 'schema:abstract' && id !== 'wdt:P749' && id !== 'wdt:P1365' && id !== 'wdt:P1366',
         );
     } else {
       const target = '00000000-0000-4000-8000-00000000d311';

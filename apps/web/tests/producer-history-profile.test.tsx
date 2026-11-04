@@ -23,7 +23,8 @@ function withoutProducerAdmission() {
   const closed = structuredClone(bundledRelease);
   for (const id of ['wdt:P749', 'wdt:P1365', 'wdt:P1366'] as const) delete closed.properties[id];
   const type = closed.types['schema:Organization'];
-  if (type) type.properties = type.properties.filter((id) => id !== 'wdt:P749' && id !== 'wdt:P1365' && id !== 'wdt:P1366');
+  if (type)
+    type.properties = type.properties.filter((id) => id !== 'wdt:P749' && id !== 'wdt:P1365' && id !== 'wdt:P1366');
   return closed;
 }
 
@@ -44,11 +45,9 @@ test('producer history binds admitted direction and inverse, keeps similar names
   ]);
   expect(producerHistoryUnreleased(bundledRelease, 'schema:Organization')).toEqual([]);
   expect(producerHistoryStreams(withoutProducerAdmission(), 'schema:Organization', 'en')).toEqual([]);
-  expect(producerHistoryUnreleased(withoutProducerAdmission(), 'schema:Organization').map((item) => item.meaning)).toEqual([
-    'parent',
-    'predecessor',
-    'successor',
-  ]);
+  expect(
+    producerHistoryUnreleased(withoutProducerAdmission(), 'schema:Organization').map((item) => item.meaning),
+  ).toEqual(['parent', 'predecessor', 'successor']);
   const fixture = producerHistoryFixture('partial');
   expect(
     producerHistoryStreams(fixture.release, 'schema:Organization', 'en').map((stream) => [

@@ -1,11 +1,7 @@
 import { definedViews, resolveView, type PresentationProfile, type View } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { deadlineClient } from '../access/authenticate.ts';
-import {
-  classifyUnavailability,
-  CommandUnavailableError,
-  requireAccessDeadline,
-} from '../access/unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import type { Pool } from 'pg';
@@ -305,13 +301,7 @@ const peopleProducerCorrectionActions = [
   { action: 'context:adopt', operationId: 'subject.adopt' },
 ] as const;
 
-export type PeopleProducerActionState =
-  | 'allowed'
-  | 'denied'
-  | 'unavailable'
-  | 'unsupported'
-  | 'absent'
-  | 'withheld';
+export type PeopleProducerActionState = 'allowed' | 'denied' | 'unavailable' | 'unsupported' | 'absent' | 'withheld';
 
 export async function readPeopleProducerPageAuthority(
   deps: { access: Access; pool: Pool },
