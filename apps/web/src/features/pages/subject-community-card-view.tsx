@@ -1,10 +1,6 @@
 import { m } from '../../paraglide/messages.js';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
-import {
-  conversationActivity,
-  formatConversationReplyCount,
-  threadActivity,
-} from '../../threads/activity';
+import { conversationActivity, formatConversationReplyCount, threadActivity } from '../../threads/activity';
 import { fullDateTime, timeText } from '../../threads/byline';
 import { NativeDocumentImage } from '../../threads/document-media';
 import type { CommunityCard, CommunityNativeCard } from './subject-community-card';
@@ -99,7 +95,11 @@ export function CommunityNativePresentation({
           ) : null}
         </p>
       ) : (
-        <div data-slot="community-activity" role="status" className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+        <div
+          data-slot="community-activity"
+          role="status"
+          className="flex flex-wrap gap-x-3 text-sm text-muted-foreground"
+        >
           <span>{m.board_thread_activity_unavailable({}, options)}</span>
           {retryHref ? (
             <a href={retryHref} className="text-primary underline underline-offset-4">
