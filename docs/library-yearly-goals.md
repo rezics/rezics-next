@@ -99,9 +99,12 @@ shared publication flow; no local client declaration or raw-fetch substitute is 
 
 ## Checks run
 
-- `bun run --cwd services/kernel check test/library/yearly-goal.test.ts` — the focused test phase passed all 6 tests
-  and 87 expectations. The shared compiler phase reported Kernel/client diagnostics, including the unavailable generated
-  module `packages/client/src/kernel/rating/own-votes-counted`. The overall command exited 1 when remote output collection
-  reported `error: remote-check: returned empty directory differs from its manifest: services/kernel/.temp/schema-diagnostics/schema-3aQitT`.
+- `bun run --cwd services/kernel typecheck` — exited 2 with workspace Kernel/client diagnostics, including the missing
+  generated module `packages/client/src/kernel/rating/own-votes-counted` and unrelated route/discovery type errors.
+- `bun run --cwd services/kernel check test/library/yearly-goal.test.ts` — a run on the prior base passed all 6 tests and
+  87 expectations. After rebasing onto the current base, fixture setup failed before the yearly-goal cases while
+  constructing Kernel: `error: POST /v1/boards/:id/pin-advice: board:read is declared with different security`.
+  The conflicting Content route declarations are unchanged by this branch. The command also exited 1 during remote
+  output collection with `error: remote-check: returned empty directory differs from its manifest: services/kernel/.temp/schema-diagnostics/schema-3aQitT`.
 
 No frozen acceptance, browser, root-level or worker-check suite was run; those remain with the controller.
