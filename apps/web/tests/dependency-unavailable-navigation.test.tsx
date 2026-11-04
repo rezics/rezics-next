@@ -72,7 +72,7 @@ test('a consumed callback offers a fresh sign-in and never replays callback mate
   const request = new Request('https://site.example/auth/callback?code=single-use-code&state=one-use-state', {
     headers: {
       ...documentHeaders,
-      cookie: 'rezics_login_return=%2Fzh-Hant%2Flibrary%3Ftoken%3Dcookie-secret',
+      cookie: 'rezics_login_return=/zh-Hant/library?token=cookie-secret',
     },
   });
   const source = unavailable(503);
@@ -130,6 +130,32 @@ test('document form failure preserves uncertain command intent without replay; m
 
   const media = new Request('https://site.example/media/subject-cover', { headers: documentHeaders });
   expect(documentFailureIntent(media)).toBeUndefined();
+});
+
+test('unsafe return destinations and third-party referrers fall back to localized Home', async () => {
+  for (const returnTo of ['//outside.example/path', '/\\\\outside.example/path', 'https://outside.example/path', '/auth/sign-in']) {
+    const request = new Request(`https://site.example/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, {
+      headers: documentHeaders,
+    });
+    const response = await adaptUnavailableDocument(request, unavailable(), options);
+    const html = await response.text();
+    expect(html).toContain('href="/en"');
+    expect(html).not.toContain('outside.example');
+    expect(html).not.toContain('return_to=%2Fauth');
+  }
+
+  const command = new Request('https://site.example/checkout', {
+    method: 'POST',
+    headers: {
+      ...documentHeaders,
+      'content-type': 'application/x-www-form-urlencoded',
+      referer: 'https://outside.example/en/checkout?private=1',
+    },
+    body: 'command=uncertain',
+  });
+  const html = await (await adaptUnavailableDocument(command, unavailable(), options)).text();
+  expect(html).toContain('href="/en"');
+  expect(html).not.toContain('outside.example');
 });
 
 test('typed private dependency errors use the shared route boundary and retain status', () => {
