@@ -7,7 +7,7 @@ import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 import { reviewedCatalogueSource } from './reviewed-catalogue.ts';
 import type { RecordBindings } from './record-bindings.ts';
 import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
-import type { ReviewedCandidatePage } from './import-client.ts';
+import { ImportTransportError, type ReviewedCandidatePage } from './import-client.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import type { ShowcaseAcknowledgement, ShowcaseAssertion, ShowcaseVocabularyRecord } from './showcase-manifest.ts';
 import { showcaseDigest } from './showcase-manifest.ts';
@@ -196,10 +196,19 @@ export async function prepareShowcaseBangumiGenres(input: {
         }
       });
       if (!exact.length) continue;
-      const page = await input.port.reviewedCandidates(
-        claim.subject,
-        { property: 'schema:keywords', target: current.evidence.binding.sourceConcept, context: globalContext, limit: 100 },
-      );
+      let page: ReviewedCandidatePage;
+      try {
+        page = await input.port.reviewedCandidates(
+          claim.subject,
+          { property: 'schema:keywords', target: current.evidence.binding.sourceConcept, context: globalContext, limit: 100 },
+        );
+      } catch (error) {
+        if (error instanceof ImportTransportError || error instanceof TypeError) {
+          diagnostics.set(row.key, { sourceKey: row.key, code: 'reviewed-binding-unavailable' });
+          continue;
+        }
+        throw error;
+      }
       if (page.next !== null) {
         diagnostics.set(row.key, { sourceKey: row.key, code: 'reviewed-binding-unavailable' });
         continue;
