@@ -81,9 +81,10 @@ test('reader keeps book, volume and author identities after accept, adopt and on
   expect(convertBangumi({ external_id: '499', record_revision: null, record: series }).proposals[0]).toMatchObject({
     subject: { type: 'schema:BookSeries' },
   });
-  expect(
-    convertBangumi({ external_id: '26', record_revision: null, record: volume }).diagnostics,
-  ).toContainEqual({ pointer: '/infobox/ISBN', code: 'edition_assertion_withheld_on_work' });
+  expect(convertBangumi({ external_id: '26', record_revision: null, record: volume }).diagnostics).toContainEqual({
+    pointer: '/infobox/ISBN',
+    code: 'edition_assertion_withheld_on_work',
+  });
   expect(binding('499')).toBeString();
   expect(binding('26')).toBeString();
   expect(binding('27')).toBeString();
