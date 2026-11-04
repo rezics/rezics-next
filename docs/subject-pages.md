@@ -209,8 +209,8 @@ Recording, musical work, album and release remain distinct identities. Each asso
 direction, role/time qualifiers and exact target; unsupported vocabulary keeps the existing Facts and correction path.
 A Recording has no Library profile until Commerce publishes one.
 
-Decision: A Recording overview preserves each property's declared direction and exact target identity, and carries only
-the validated single-hop `via` return address.
+Decision: A Recording overview preserves each property's declared direction and exact target identity, and carries its
+exact statement focus in the current Subject address with at most one validated nested `via` return intent.
 
 ### Recording Cost
 
