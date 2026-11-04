@@ -124,10 +124,10 @@ export function useSubjectOfferReading({
       commit({ ...live.current.selection, mode: { kind: 'inspect', operand: { offer, trigger } } });
     },
     inspected(offer: SubjectOffer) {
-      return selected.mode?.kind === 'inspect' && sameSubjectOffer(selected.mode.operand.offer, offer);
+      return current() && selected.mode?.kind === 'inspect' && sameSubjectOffer(selected.mode.operand.offer, offer);
     },
     chosen(offer: SubjectOffer) {
-      return selected.operands.some((operand) => sameSubjectOffer(operand.offer, offer));
+      return current() && selected.operands.some((operand) => sameSubjectOffer(operand.offer, offer));
     },
     toggle(offer: SubjectOffer, trigger: HTMLButtonElement) {
       if (!received(offer)) return;

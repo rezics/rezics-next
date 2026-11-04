@@ -121,6 +121,12 @@ test('current page: local choices emit no reads and retire on equal replacements
     noSelection();
     await choose();
     await flush(() => {
+      client.removeQueries({ queryKey: key, exact: true });
+      client.setQueryData(key, equal);
+    });
+    noSelection();
+    await choose();
+    await flush(() => {
       window.history.pushState({}, '', '/en/subjects/other');
       window.dispatchEvent(new window.PopStateEvent('popstate'));
       window.history.pushState({}, '', '/en/subjects/example');

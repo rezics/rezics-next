@@ -193,30 +193,33 @@ function PreparedSubjectOffersRegion({
     [context.subjectId, context.locale, credentialMode, viewer, cursor],
   );
   const query = useQuery(options);
-  // React Query may structurally share an equal successful response. Its success count still retires selection.
-  const pageSnapshot = useCallback(
-    () => client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0,
-    [client, options.queryKey],
-  );
-  const subscribePage = useCallback(
-    (changed: () => void) =>
-      client.getQueryCache().subscribe((event) => {
-        if (event.query === client.getQueryCache().find({ queryKey: options.queryKey, exact: true })) changed();
-      }),
-    [client, options.queryKey],
-  );
-  const pageVersion = useSyncExternalStore(subscribePage, pageSnapshot, () => 0);
-  // A different client or query origin may reuse an equal page and success count.
-  const origin = useMemo(() => ({}), [client, options.queryKey]);
+  // Success and removal events retire a received page even when React batches A/B/A.
+  // Counting events also covers equal structural sharing and removal/recreation with a reset data count.
+  const pageBoundary = useMemo(() => {
+    let epoch = 0;
+    const key = JSON.stringify(options.queryKey);
+    return {
+      snapshot: () => epoch,
+      subscribe: (changed: () => void) =>
+        client.getQueryCache().subscribe((event) => {
+          if (JSON.stringify(event.query.queryKey) !== key) return;
+          if (event.type !== 'removed' && !(event.type === 'updated' && event.action.type === 'success')) return;
+          epoch += 1;
+          changed();
+        }),
+    };
+  }, [client, options.queryKey]);
+  const pageVersion = useSyncExternalStore(pageBoundary.subscribe, pageBoundary.snapshot, () => 0);
+  const origin = pageBoundary;
   const pageCurrent = useCallback(() => {
     const source = client.getQueryState(options.queryKey);
     return (
       (!viewer.current || viewer.current()) &&
       source?.status === 'success' &&
       source.fetchStatus === 'idle' &&
-      source.dataUpdateCount === pageVersion
+      pageBoundary.snapshot() === pageVersion
     );
-  }, [viewer, client, options.queryKey, pageVersion]);
+  }, [viewer, client, options.queryKey, pageBoundary, pageVersion]);
   useEffect(
     () => () => {
       void client.cancelQueries({ queryKey: options.queryKey, exact: true });
