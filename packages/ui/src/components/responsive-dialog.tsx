@@ -1,5 +1,3 @@
-import type { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
-import type { Drawer as DrawerPrimitive } from '@base-ui/react/drawer';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { BottomSheet } from './bottom-sheet';
@@ -14,9 +12,7 @@ import {
   DialogTitle,
 } from '../shadcn/dialog';
 
-type DialogFocus = DialogPrimitive.Popup.Props['finalFocus'];
-type DrawerFocus = DrawerPrimitive.Popup.Props['finalFocus'];
-type ResponsiveFocus = DialogFocus & DrawerFocus;
+type ResponsiveFocus = () => HTMLElement | false;
 
 /**
  * Use the installed Dialog and Drawer primitives for one responsive, controlled interaction.
@@ -252,7 +248,5 @@ export function ResponsiveDialog({
 }
 
 function resolveFocusTarget(target: ResponsiveFocus): HTMLElement | false {
-  if (!target) return false;
-  const resolved = typeof target === 'function' ? target() : 'current' in target ? target.current : target;
-  return resolved && resolved !== false ? resolved : false;
+  return target();
 }
