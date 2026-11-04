@@ -664,7 +664,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     await settle(() => page().textContent?.includes(m.catalogue_terms_uncertain()) ?? false);
     expect(unloadBlocked()).toBe(true);
     const patchesBeforeStay = navigation.calls.filter((call) => call.method === 'PATCH').length;
-    await act(async () => router.history.back());
+    await attempt('/inbox');
     await settle(() => dialog() !== null);
     expect(dialog()!.textContent).toContain(m.thread_authoring_leave_pending());
     await click(dialog()!, m.zone_editor_stay());
