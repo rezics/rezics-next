@@ -32,6 +32,7 @@ import { createConversationActivityBatch } from './conversation-activity.ts';
 import { ReadingPageActivitySchema, selectReadingPageActivity } from './reading-page-activity.ts';
 import { prepareReadingPageReviewContext, ReadingPageReviewContextSchema } from './reading-page-context.ts';
 import { readReadingPageDocumentMedia, ReadingPageDocumentMediaSchema } from './reading-page-documents.ts';
+import { readReadingPageMentions, ReadingPageMentionsSchema } from './reading-page-mentions.ts';
 
 const closed = { additionalProperties: false } as const;
 export const READING_PAGE_REPLY_LIMIT = 20;
@@ -167,6 +168,7 @@ export const ReadingPageResponseSchema = t.Object(
       },
       closed,
     ),
+    mentions: t.Optional(ReadingPageMentionsSchema),
     actions: t.Object(
       {
         state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
@@ -1342,6 +1344,7 @@ export async function readContentReadingPage(
   );
   const replies = selected.replies;
   requireSelectedLimit(thread, replies);
+  const mentions = await readReadingPageMentions(dependencies.pool, [thread.firstPost, ...replies]);
   const reviewContextPreparation = await prepareReadingPageReviewContext(dependencies, thread, replies, {
     actor,
     deadline,
@@ -1614,6 +1617,7 @@ export async function readContentReadingPage(
     documentMedia,
     replies: { items: countedReplies.map(safeEntry), next: selected.page.nextCursor },
     authors: { state: authorState, retryable: authorState === 'unavailable', items: authors },
+    mentions,
     actions: {
       state: actionState,
       retryable: actionState === 'unavailable',
