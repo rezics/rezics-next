@@ -81,6 +81,10 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
       }
       const access = createContentWorkAccess(() => new Date(), f.db.pool);
       let source: CloudEvent;
+      if (step === 'opening') {
+        const thread = await f.thread();
+        source = (await f.envelope(thread.firstPost.id)).events.find(Boolean)!;
+      }
       const commandKey = crypto.randomUUID();
       const removeKeys = { board: crypto.randomUUID(), thread: crypto.randomUUID() };
       const hidden: Partial<Record<'board' | 'thread', { id: string; revision: number }>> = {};
@@ -88,10 +92,6 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
         if (step === 'remove') {
           hidden.board = { id: missingBoardWatchIds[0]!, revision: 1 };
           hidden.thread = { id: missingThreadWatchIds[0]!, revision: 1 };
-        }
-        if (step === 'opening') {
-          const thread = await f.thread();
-          source = (await f.envelope(thread.firstPost.id)).events.find(Boolean)!;
         }
         if (step === 'cold-thread-retry') {
           const first = await f.call(retryReader, 'GET', `/v1/accounts/${retryReader}/watches?kind=thread&limit=1`);

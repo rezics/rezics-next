@@ -388,6 +388,7 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   const setup = await f.db.admin.connect();
   try {
     await setup.query('BEGIN');
+    await setup.query("SET LOCAL plpgsql.variable_conflict = 'use_column'");
     await setup.query('SET CONSTRAINTS ALL DEFERRED');
     await setup.query(
       `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
