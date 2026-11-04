@@ -12,6 +12,7 @@ import {
   markInboxViewerSeen,
   type InboxPageLoader,
 } from './inbox-query';
+import { InboxUnreadSummary } from './unread-badge';
 import { inboxViewerCsrfToken, useInboxViewer, type InboxViewer } from './inbox-viewer';
 import { InboxEntryState, retryInboxSession } from './inbox-entry-state';
 import { m } from '../paraglide/messages.js';
@@ -672,6 +673,7 @@ export function ViewerInboxPage({
         {m.inbox_heading()}
       </h1>
       <InboxPreferencesLink />
+      <InboxUnreadSummary />
       <p role="status" aria-atomic="true" className="sr-only">
         {continuationMessage}
       </p>

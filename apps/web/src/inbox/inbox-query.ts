@@ -1,5 +1,6 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import { personalRead, readQueryKey } from '../kernel/query';
+import { preferenceRetryDeadline } from '../settings/preference-failure-retry';
 import {
   DEFAULT_INBOX_SELECTION,
   InboxSeenError,
@@ -13,6 +14,7 @@ import {
   type InboxSeenAttempt,
   type InboxSeenResult,
   type InboxSelection,
+  type UnreadCount,
 } from './inbox-read';
 import { forInboxViewer, type InboxViewer } from './inbox-viewer';
 
@@ -50,6 +52,41 @@ const unreadCountDefaults = {
   retry: false,
 } as const;
 
+const unreadCountObservations = new WeakMap<InboxViewer, { retryAt: number; last: UnreadCount }>();
+
+export function unreadCountRetryAt(viewer: InboxViewer): number {
+  return unreadCountObservations.get(viewer)?.retryAt ?? 0;
+}
+
+export function unreadCountFetchBlocked(viewer: InboxViewer, now = Date.now()): boolean {
+  return unreadCountRetryAt(viewer) > now;
+}
+
+function rememberUnreadCount(viewer: InboxViewer, result: UnreadCount, now = Date.now()) {
+  unreadCountObservations.set(viewer, {
+    retryAt:
+      result.signedIn && result.state === 'unavailable'
+        ? preferenceRetryDeadline(result.failure.retryAfter, now)
+        : 0,
+    last: result,
+  });
+  return result;
+}
+
+export async function fetchInboxUnreadCount(viewer: InboxViewer, signal?: AbortSignal): Promise<UnreadCount> {
+  if (signal?.aborted || !viewer.isCurrent()) throw new DOMException('Inbox viewer changed', 'AbortError');
+  if (unreadCountFetchBlocked(viewer)) {
+    const last = unreadCountObservations.get(viewer)?.last;
+    if (last) return last;
+    throw new DOMException('Inbox viewer unavailable', 'AbortError');
+  }
+  return forInboxViewer(
+    viewer,
+    async () => rememberUnreadCount(viewer, await readUnreadCount({ signal })),
+    signal,
+  );
+}
+
 // Retain the fixed prefix for existing cache invalidation consumers.
 export const unreadCountQuery = queryOptions({
   ...unreadCountDefaults,
@@ -58,15 +95,19 @@ export const unreadCountQuery = queryOptions({
 });
 
 export function unreadCountQueryFor(viewer: InboxViewer | null) {
+  const admitFetch = () => viewer !== null && viewer.isCurrent() && !unreadCountFetchBlocked(viewer);
   return queryOptions({
     ...unreadCountDefaults,
     queryKey: [...unreadCountQuery.queryKey, viewer?.subject ?? null, viewer?.epoch ?? null],
     queryFn: ({ signal }) => {
       if (!viewer) throw new DOMException('Inbox viewer unavailable', 'AbortError');
-      return forInboxViewer(viewer, () => readUnreadCount({ signal }), signal);
+      return fetchInboxUnreadCount(viewer, signal);
     },
     enabled: typeof globalThis.window !== 'undefined' && viewer !== null && viewer.isCurrent(),
     gcTime: 0,
+    refetchOnWindowFocus: admitFetch,
+    refetchOnReconnect: admitFetch,
+    refetchOnMount: admitFetch,
   });
 }
 
