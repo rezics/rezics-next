@@ -97,8 +97,8 @@ let activeHref = initialHref;
 let holdSeasonRead = false;
 let retryCursors: string[] = [];
 
-function Journey() {
-  const [href, setHref] = useState(initialHref);
+function Journey({ initial }: { initial: string }) {
+  const [href, setHref] = useState(initial);
   const [retryCount, setRetryCount] = useState(0);
   const generation = useRef(0);
   const lastHref = useRef(href);
@@ -202,14 +202,14 @@ async function mountedJourney(startHref = initialHref) {
   retryCursors = [];
   changeRoute = () => {};
   setLocale('en', { reload: false });
-  await act(async () => root.render(h(Journey)));
+  await act(async () => root.render(h(Journey, { initial: startHref })));
   return {
     host,
     m,
     window,
     current: () => activeHref,
     navigate: async (href: string) => act(async () => changeRoute(href)),
-    rerender: async () => act(async () => root.render(h(Journey))),
+    rerender: async () => act(async () => root.render(h(Journey, { initial: startHref }))),
     cleanup: async () => {
       await act(async () => root.unmount());
       window.happyDOM.abort();
