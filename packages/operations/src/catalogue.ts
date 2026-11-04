@@ -4,10 +4,7 @@ export type OperationMethod = (typeof OPERATION_METHODS)[number];
 export type OperationSecurityScheme = 'anonymous' | 'bearerAuth';
 export type OperationSecurity = Readonly<{ scheme: OperationSecurityScheme }>;
 export type OperationAudience = 'account' | 'public';
-export type OperationRateLimit =
-  | 'kernel.write.single'
-  | 'kernel.write.commands'
-  | 'kernel.provider.single';
+export type OperationRateLimit = 'kernel.write.single' | 'kernel.write.commands' | 'kernel.provider.single';
 
 export type OperationContractReferences = Readonly<{
   params?: string;
@@ -135,10 +132,7 @@ function snapshotDescriptor(input: unknown): OperationDescriptor {
     return invalid(label, 'path must be an absolute route template without query, fragment, or trailing slash');
   if (typeof action !== 'string' || !ACTION.test(action)) return invalid(label, 'action must be <resource>:<verb>');
   if (audience !== 'account' && audience !== 'public') return invalid(label, 'audience must be account or public');
-  if (
-    typeof exposure !== 'string' ||
-    (exposure !== 'public' && !EXPOSURE_GATE.test(exposure))
-  )
+  if (typeof exposure !== 'string' || (exposure !== 'public' && !EXPOSURE_GATE.test(exposure)))
     return invalid(label, 'exposure must be public or a named gate');
 
   const pathSegments = path.split('/');
@@ -286,9 +280,7 @@ export function createOperationCatalogue(input: readonly unknown[]): OperationCa
   for (const descriptor of descriptors) {
     const idPrior = ids.get(descriptor.operationId);
     if (idPrior)
-      throw new Error(
-        descriptorLabel(idPrior) + ' and ' + descriptorLabel(descriptor) + ': duplicate operationId',
-      );
+      throw new Error(descriptorLabel(idPrior) + ' and ' + descriptorLabel(descriptor) + ': duplicate operationId');
     ids.set(descriptor.operationId, descriptor);
 
     const routeKey = descriptor.method + ' ' + descriptor.path;

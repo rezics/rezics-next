@@ -349,33 +349,39 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     (published ??= createPublishedLogCommands({ pool, access: runtimeDependencies.access(), tokens, clock }));
   const statistics = createConsumptionStatisticsReads({ pool });
   const reportedYears = createReportedYearSummaryReads({ pool });
-  const recordOperation = bindOperation(operations, 'progress_session.record', 'POST', {
-    params: {
-      reference: 'library.progress-session.record.params',
-      schema: t.Object({ sessionId: t.String() }, closed),
-    },
-    headers: { reference: 'library.idempotency.headers', schema: idempotencyHeaders },
-    body: { reference: 'library.progress-session.record.request', schema: recordBody },
-    response: {
-      reference: 'library.progress-session.write.response',
-      schema: {
-        200: progressSessionResponse,
-        400: invalid,
-        401: unauthorized,
-        403: forbidden,
-        404: notFound,
-        409: problemSchema('conflict'),
-        422: profileConflict,
-        503: unavailable,
+  const recordOperation = bindOperation(
+    operations,
+    'progress_session.record',
+    'POST',
+    {
+      params: {
+        reference: 'library.progress-session.record.params',
+        schema: t.Object({ sessionId: t.String() }, closed),
+      },
+      headers: { reference: 'library.idempotency.headers', schema: idempotencyHeaders },
+      body: { reference: 'library.progress-session.record.request', schema: recordBody },
+      response: {
+        reference: 'library.progress-session.write.response',
+        schema: {
+          200: progressSessionResponse,
+          400: invalid,
+          401: unauthorized,
+          403: forbidden,
+          404: notFound,
+          409: problemSchema('conflict'),
+          422: profileConflict,
+          503: unavailable,
+        },
       },
     },
-  }, (schemas, detail) => ({
-    params: schemas.params.schema,
-    headers: schemas.headers.schema,
-    body: schemas.body.schema,
-    response: schemas.response.schema,
-    detail,
-  }));
+    (schemas, detail) => ({
+      params: schemas.params.schema,
+      headers: schemas.headers.schema,
+      body: schemas.body.schema,
+      response: schemas.response.schema,
+      detail,
+    }),
+  );
 
   const episodeRow = t.Object(
     {

@@ -1,9 +1,4 @@
-import type {
-  OperationCatalogue,
-  OperationDescriptor,
-  OperationMethod,
-  OperationRateLimit,
-} from '@rezics/operations';
+import type { OperationCatalogue, OperationDescriptor, OperationMethod, OperationRateLimit } from '@rezics/operations';
 import type { TSchema } from 'typebox';
 import { defineRateLimit, type RateLimitDeclaration } from './rate-limit.ts';
 
@@ -24,9 +19,7 @@ const rateLimits: Readonly<Record<OperationRateLimit, RateLimitDeclaration>> = O
 });
 
 function operationDetail(descriptor: OperationDescriptor) {
-  const security = descriptor.security.map(({ scheme }) =>
-    scheme === 'anonymous' ? {} : { bearerAuth: [] },
-  );
+  const security = descriptor.security.map(({ scheme }) => (scheme === 'anonymous' ? {} : { bearerAuth: [] }));
   return {
     operationId: descriptor.operationId,
     'x-action': descriptor.action,
@@ -70,10 +63,7 @@ export function bindOperation<const Schemas extends OperationSchemaBindings, Opt
   operationId: string,
   expectedMethod: OperationMethod,
   schemas: Schemas,
-  bindOptions: (
-    schemas: Schemas,
-    detail: ReturnType<typeof operationDetail>,
-  ) => Options,
+  bindOptions: (schemas: Schemas, detail: ReturnType<typeof operationDetail>) => Options,
 ) {
   const descriptor = catalogue.get(operationId);
   if (!descriptor) throw new Error(operationId + ': operation descriptor is not registered');

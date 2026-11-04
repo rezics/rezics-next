@@ -30,42 +30,48 @@ export function continueRoutes(
 ) {
   const { operations, ...runtimeDependencies } = deps;
   let reads: ReturnType<typeof createContinueReads> | undefined;
-  const operation = bindOperation(operations, 'library_continue.list', 'GET', {
-    query: {
-      reference: 'library.continue.query',
-      schema: t.Object(
-        {
-          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
-          cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
-          view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])),
-          spaceId: t.Optional(t.String({ format: 'uuid' })),
-        },
-        closed,
-      ),
-    },
-    response: {
-      reference: 'library.continue.page',
-      schema: {
-        200: continuePageSchema,
-        400: problemSchema('invalid_request', 'invalid_cursor'),
-        401: problemSchema('authentication_required', 'invalid_credentials'),
-        403: problemSchema('forbidden', 'platform_closed'),
-        409: problemSchema('stale_cursor'),
-        503: problemSchema(
-          'semantic_not_ready',
-          'dependency_unavailable',
-          'overloaded',
-          'partition_unavailable',
-          'transaction_retry_exhausted',
-          'deadline_exceeded',
+  const operation = bindOperation(
+    operations,
+    'library_continue.list',
+    'GET',
+    {
+      query: {
+        reference: 'library.continue.query',
+        schema: t.Object(
+          {
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+            cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+            view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])),
+            spaceId: t.Optional(t.String({ format: 'uuid' })),
+          },
+          closed,
         ),
       },
+      response: {
+        reference: 'library.continue.page',
+        schema: {
+          200: continuePageSchema,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          401: problemSchema('authentication_required', 'invalid_credentials'),
+          403: problemSchema('forbidden', 'platform_closed'),
+          409: problemSchema('stale_cursor'),
+          503: problemSchema(
+            'semantic_not_ready',
+            'dependency_unavailable',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+      },
     },
-  }, (schemas, detail) => ({
-    query: schemas.query.schema,
-    response: schemas.response.schema,
-    detail,
-  }));
+    (schemas, detail) => ({
+      query: schemas.query.schema,
+      response: schemas.response.schema,
+      detail,
+    }),
+  );
   return app.get(
     operation.path,
     {
