@@ -88,7 +88,7 @@ export const issuerSecurityRequest = createServerOnlyFn(async (path: string, bod
     return new Response(null, { status: 403 });
   // The existing issuer origin serves host.handler and owns its pools/keys and
   // immutable accountOperations binding. No credentials leave this issuer.
-  return fetch(new URL(path, nativeOrigin), {
+  const response = await fetch(new URL(path, nativeOrigin), {
     method: body === undefined ? 'GET' : 'POST',
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     headers: {
@@ -97,10 +97,13 @@ export const issuerSecurityRequest = createServerOnlyFn(async (path: string, bod
       Origin: request.headers.get('origin')!,
       Cookie: request.headers.get('cookie') ?? '',
     },
-    redirect: 'error',
+    // workerd supports manual redirects; reject them without forwarding issuer cookies.
+    redirect: 'manual',
     cache: 'no-store',
     signal: AbortSignal.any([request.signal, AbortSignal.timeout(5000)]),
   });
+  if (response.status >= 300 && response.status < 400) throw new Error('Unexpected issuer redirect');
+  return response;
 });
 
 // Browser GET cannot set Origin. Use the existing Start BFF and carry the
