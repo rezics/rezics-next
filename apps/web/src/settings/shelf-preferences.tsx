@@ -448,10 +448,7 @@ export class ShelfPreferenceDraftRecovery {
 
   edit(next: Partial<ShelfDraft>, dirtyKey: string) {
     const draft = { ...this.state.draft, ...next };
-    if (
-      !this.editable() ||
-      !choiceAdmitted(draft, this.state.advice, new Set([dirtyKey]), this.state.known.shelf)
-    )
+    if (!this.editable() || !choiceAdmitted(draft, this.state.advice, new Set([dirtyKey]), this.state.known.shelf))
       return;
     this.update({
       draft,
@@ -463,10 +460,7 @@ export class ShelfPreferenceDraftRecovery {
   editSort(tab: ShelfPreferenceTab, choice: string) {
     const dirtyKey = `sort:${tab}`;
     const draft = { ...this.state.draft, sorts: { ...this.state.draft.sorts, [tab]: choice } };
-    if (
-      !this.editable() ||
-      !choiceAdmitted(draft, this.state.advice, new Set([dirtyKey]), this.state.known.shelf)
-    )
+    if (!this.editable() || !choiceAdmitted(draft, this.state.advice, new Set([dirtyKey]), this.state.known.shelf))
       return;
     this.update({
       draft,
