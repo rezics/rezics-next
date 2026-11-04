@@ -6,7 +6,7 @@ import { browserObservation, type BrowserObservationSnapshot } from '../../../..
 const noSubscribe = () => () => {};
 const unobserved = () => 'unobserved';
 type InspectionKind = 'assertion' | 'association';
-type Selection = { key: string; group: string; kind: InspectionKind };
+type Selection = { key: string; group: string; kind: InspectionKind; part?: string | undefined };
 type Receipt = { opener?: HTMLButtonElement; fallback?: HTMLElement; keyboard: boolean };
 type Recovery = { destination: string; state: 'pending' | 'failed' };
 

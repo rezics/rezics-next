@@ -44,6 +44,7 @@ type Evidence = {
   key: string;
   kind: 'assertion' | 'association';
   group: string;
+  part?: string | undefined;
   property: string;
   label: { text: string; lang: string | null };
   statement: Statement;
@@ -88,6 +89,7 @@ function receipt(
     definition: visit.digest ?? '',
     ...(realm ? { realm } : {}),
     ...selection,
+    part: 'part' in selection && typeof selection.part === 'string' ? selection.part : 'value',
   };
 }
 
@@ -153,11 +155,13 @@ function FileValue({
   visit,
   selection,
   historical = false,
+  partKey = 'value',
 }: {
   part: FilePart;
   visit: CatalogueFileReaderVisit;
   selection: { key: string; group: string; kind: 'assertion' | 'association' };
   historical?: boolean;
+  partKey?: string;
   publicRead: SubjectRead;
   locale: string;
   link: PageLink;
@@ -176,7 +180,7 @@ function FileValue({
             subjectHref({ id: item.id, label }, locale).href,
             publicRead.subject.id,
             locale,
-            receipt(visit, selection, navigation.href),
+            { ...receipt(visit, selection, navigation.href), part: partKey },
           )
         : undefined;
     if (!href) return <span lang={picked.lang ?? undefined}>{label}</span>;
@@ -452,6 +456,7 @@ function selectedEvidence(
               key: selection.key,
               kind: 'assertion' as const,
               group,
+              part: selection.part,
               property: fact.property,
               label: fact.label,
               statement,
@@ -467,6 +472,7 @@ function selectedEvidence(
     key: selection.key,
     kind: 'association' as const,
     group: selection.group,
+    part: selection.part,
     property: association.property,
     label: association.label,
     statement: association.statement,
@@ -707,9 +713,14 @@ function InspectionPanel({
                   <dd className="min-w-0 break-words [overflow-wrap:anywhere]">
                     <ol className="space-y-1">
                       {parts.map((part, index) => (
-                        <li key={index}>
+                        <li
+                          key={index}
+                          tabIndex={-1}
+                          data-file-evidence-part={`q:${statement.qualifiers.indexOf(part)}`}
+                        >
                           <FileValue
                             part={part}
+                            partKey={`q:${statement.qualifiers.indexOf(part)}`}
                             publicRead={publicRead}
                             locale={visit.locale}
                             link={link}
@@ -745,6 +756,8 @@ function InspectionPanel({
                     return (
                       <li
                         key={partIndex}
+                        tabIndex={-1}
+                        data-file-evidence-part={`r:${referenceIndex}:${partIndex}`}
                         className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
                       >
                         <span lang={label.lang ?? undefined} className="text-muted-foreground">
@@ -753,6 +766,7 @@ function InspectionPanel({
                         <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                           <FileValue
                             part={part}
+                            partKey={`r:${referenceIndex}:${partIndex}`}
                             publicRead={publicRead}
                             locale={visit.locale}
                             link={link}
@@ -802,7 +816,7 @@ export function CatalogueFileReader({
   const readerElement = useRef<HTMLElement>(null);
   const triggers = useRef(new Map<string, HTMLButtonElement>());
   // A receipt is consumed once per address, never once per response or cache/session incarnation.
-  const attemptedReturn = useRef<string | undefined>(undefined);
+  const attemptedReturn = useRef<{ hash: string; episode: object } | undefined>(undefined);
   const [returnOutcome, setReturnOutcome] = useState<'changed' | 'historical' | 'unavailable' | 'retired'>();
   const inspectionHeading = useRef<HTMLHeadingElement>(null);
   const recoveryButton = useRef<HTMLButtonElement>(null);
@@ -840,14 +854,15 @@ export function CatalogueFileReader({
       return;
     }
     if (!reading.episode.current()) return;
-    if (attemptedReturn.current === returnHash) {
+    if (attemptedReturn.current?.hash === returnHash) {
+      if (attemptedReturn.current.episode === reading.episode) return;
       // Replacing an admitted reading must not replay the URL's old selection (including A/B/A).
       setReturnOutcome('retired');
       (groupHeadings.current.get(returned.group) ?? recoveryButton.current ?? readerElement.current)?.focus();
       return;
     }
     if (visit.state === 'loading') return;
-    attemptedReturn.current = returnHash;
+    attemptedReturn.current = { hash: returnHash, episode: reading.episode };
     const resolved = selectedEvidence(visit, returned);
     const contextMatches =
       returned.context === visit.public.subject.context &&
@@ -859,8 +874,23 @@ export function CatalogueFileReader({
       (visit.state === 'ready' || visit.state === 'empty') &&
       (!resolved?.association || resolved.association.readability === 'readable') &&
       (!resolved || spoilerLevel(resolved.statement) <= readerSpoiler);
+    const part = returned.part.split(':');
+    const partExists =
+      returned.part === 'value' ||
+      (resolved &&
+        (part[0] === 'q'
+          ? !!resolved.statement.qualifiers[Number(part[1])]
+          : !!resolved.statement.references[Number(part[1])]?.parts[Number(part[2])]));
     const opener = resolved ? triggers.current.get(resolved.key) : undefined;
-    if (contextMatches && returned.definition === visit.digest && resolved && !historical && available && opener) {
+    if (
+      contextMatches &&
+      returned.definition === visit.digest &&
+      resolved &&
+      partExists &&
+      !historical &&
+      available &&
+      opener
+    ) {
       setReturnOutcome(undefined);
       reading.select(returned, opener, groupHeadings.current.get(returned.group), true);
     } else {
@@ -869,7 +899,15 @@ export function CatalogueFileReader({
     }
   }, [reading.episode, returnHash]);
   useLayoutEffect(() => {
-    if (evidence && reading.episode.current()) inspectionHeading.current?.focus();
+    if (evidence && reading.episode.current()) {
+      const part =
+        evidence.part && evidence.part !== 'value'
+          ? readerElement.current?.querySelector<HTMLElement>(
+              `[data-slot="catalogue-file-inspection"] [data-file-evidence-part="${evidence.part}"]`,
+            )
+          : undefined;
+      (part ?? inspectionHeading.current)?.focus();
+    }
   }, [evidence?.key, reading.episode]);
 
   return (

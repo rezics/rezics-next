@@ -149,7 +149,6 @@ test('ordinary Subject separates file facts from its directed episode relation a
   if (!result.ok || !result.stream) throw new Error('Expected the admitted file read');
   const page = ordinaryPage(result.public);
   const html = renderSubject(page, result.public, result.release, result.digest);
-  const destination = catalogueFileDestinationHref(`/en/subjects/${catalogueEpisode}/episode-1`, catalogueFile, 'en');
   expect(html).toContain('data-slot="catalogue-file-reader-technical"');
   expect(html).toContain('data-slot="catalogue-file-reader-associations"');
   expect(html).toContain('data-direction="forward"');
