@@ -1,4 +1,18 @@
-import { isBangumiBookTemplateHead, isBangumiTVAnimeTemplateHead } from './bangumi-subject-profile.ts';
+import {
+  isBangumiBookTemplateHead,
+  isBangumiTVAnimeTemplateHead,
+  isBangumiTVAnimeWorkEvidenceField,
+} from './bangumi-subject-profile.ts';
+import {
+  createBangumiWorkEvidenceCollector,
+  type BangumiWorkEvidence,
+  type BangumiWorkEvidenceFieldState,
+} from './bangumi-work-evidence.ts';
+import {
+  bangumiTelevisionRun,
+  type BangumiTelevisionRunInfoboxField,
+  type TelevisionRunMapping,
+} from './bangumi-television-run.ts';
 import { bangumiTelevisionRunKeys } from './bangumi-television-run.ts';
 
 export type BangumiSubjectName = Readonly<{
@@ -11,6 +25,10 @@ export type BangumiNameDiagnostic = Readonly<{ pointer: string; code: string }>;
 export type BangumiNameExtraction = Readonly<{
   names: readonly BangumiSubjectName[];
   diagnostics: readonly BangumiNameDiagnostic[];
+}>;
+export type BangumiTVAnimeEvidenceExtraction = BangumiNameExtraction & Readonly<{
+  workEvidence: readonly BangumiWorkEvidence[];
+  televisionRun: TelevisionRunMapping;
 }>;
 
 const nameLimit = 24;
@@ -25,6 +43,7 @@ type NameField = {
   form: 'empty' | 'scalar' | 'list';
   values: string[];
   unsupported: boolean;
+  workEvidence?: BangumiWorkEvidenceFieldState;
 };
 
 function* sourceLines(text: string): Generator<{ line: string; number: number }> {
@@ -74,6 +93,19 @@ export function extractBangumiSubjectNames(
   },
   nativeType: string,
 ): BangumiNameExtraction {
+  const extraction = extractBangumiTVAnimeEvidence(record, nativeType);
+  return { names: extraction.names, diagnostics: extraction.diagnostics };
+}
+
+export function extractBangumiTVAnimeEvidence(
+  record: {
+    readonly type: number;
+    readonly name: string;
+    readonly name_cn?: string;
+    readonly infobox?: string;
+  },
+  nativeType: string,
+): BangumiTVAnimeEvidenceExtraction {
   const names: BangumiSubjectName[] = [];
   const seen = new Set<string>();
   const diagnostics: BangumiNameDiagnostic[] = [];
@@ -87,6 +119,7 @@ export function extractBangumiSubjectNames(
       diagnosticOverflow = true;
     }
   };
+  const workEvidence = createBangumiWorkEvidenceCollector(omit);
   const addTopLevel = (
     property: BangumiSubjectName['property'],
     language: BangumiSubjectName['language'],
@@ -103,7 +136,13 @@ export function extractBangumiSubjectNames(
   if (record.name_cn?.trim()) addTopLevel('schema:name', 'zh', record.name_cn);
   const book = record.type === 1 && nativeType === 'schema:Book';
   const tvAnime = record.type === 2 && nativeType === 'schema:TVSeries';
-  if ((!book && !tvAnime) || record.infobox === undefined) return { names: names.sort(compareNames), diagnostics };
+  if ((!book && !tvAnime) || record.infobox === undefined)
+    return {
+      names: names.sort(compareNames),
+      diagnostics,
+      workEvidence: [],
+      televisionRun: bangumiTelevisionRun(record),
+    };
 
   const infobox = record.infobox;
   const iterator = sourceLines(infobox);
@@ -118,16 +157,27 @@ export function extractBangumiSubjectNames(
   }
   if (!header || (book ? !isBangumiBookTemplateHead(header.line) : !isBangumiTVAnimeTemplateHead(header.line))) {
     omit('/infobox', 'unsupported_infobox_template');
-    return { names: names.sort(compareNames), diagnostics };
+    return {
+      names: names.sort(compareNames),
+      diagnostics,
+      workEvidence: [],
+      televisionRun: bangumiTelevisionRun(record),
+    };
   }
 
   let fields = 0;
   let closed = false;
   let trailing = false;
+  const televisionFields: BangumiTelevisionRunInfoboxField[] = [];
   let active: NameField | undefined;
 
   const finishField = (field: NameField | undefined, complete = true) => {
-    if (!field || (field.key !== '中文名' && field.key !== '别名')) return;
+    if (!field) return;
+    if (field.workEvidence) {
+      if (complete) workEvidence.finish(field.workEvidence);
+      else omit(field.pointer, 'unsupported_infobox_structure');
+    }
+    if (field.key !== '中文名' && field.key !== '别名') return;
     if (!complete) {
       omit(field.pointer, 'unsupported_infobox_structure');
       return;
@@ -179,13 +229,13 @@ export function extractBangumiSubjectNames(
     }
     if (line.startsWith('|')) {
       finishField(active);
-      fields++;
-      if (fields > fieldLimit) {
+      if (fields >= fieldLimit) {
         active = undefined;
         if (!fieldOverflow) omit('/infobox', 'infobox_field_limit');
         fieldOverflow = true;
-        continue;
+        break;
       }
+      fields++;
       const equals = line.indexOf('=', 1);
       const pointer = `/infobox/fields/${fields - 1}`;
       if (equals < 0) {
@@ -200,27 +250,50 @@ export function extractBangumiSubjectNames(
         continue;
       }
       const value = cleanHorizontal(line.slice(equals + 1));
+      if (tvAnime) {
+        const runEquals = row.line.startsWith('|') ? row.line.indexOf('=') : -1;
+        if (runEquals >= 2 && runEquals <= 65) {
+          const runKey = row.line.slice(1, runEquals);
+          if (runKey && !runKey.includes('|')) {
+            const runValue = row.line.slice(runEquals + 1);
+            televisionFields.push({ key: runKey, value: runValue, nested: runValue.trimStart().startsWith('{') });
+          }
+        }
+      }
       active = {
         key,
         pointer,
         form: 'empty',
         values: [],
         unsupported: false,
+        ...(tvAnime && isBangumiTVAnimeWorkEvidenceField(key)
+          ? { workEvidence: workEvidence.begin(key, pointer, value, Boolean(value)) }
+          : {}),
       };
       if (key === '中文名' || key === '别名') {
         if (value) {
           active.form = 'scalar';
           active.values.push(value);
         }
-      } else if (!(tvAnime && bangumiTelevisionRunKeys.has(key))) omit(pointer, 'unsupported_infobox_key');
+      } else if (
+        !(tvAnime && bangumiTelevisionRunKeys.has(key)) &&
+        !(tvAnime && isBangumiTVAnimeWorkEvidenceField(key))
+      ) omit(pointer, 'unsupported_infobox_key');
       continue;
     }
     if (!active) {
       omit(`/infobox/lines/${row.number}`, 'unsupported_infobox_structure');
       continue;
     }
-    if (active.key !== '中文名' && active.key !== '别名') continue;
     const continuation = cleanHorizontal(line);
+    if (active.key !== '中文名' && active.key !== '别名') {
+      if (tvAnime) {
+        if (continuation.startsWith('*'))
+          workEvidence.continuation(active.workEvidence, 'list', cleanHorizontal(continuation.slice(1)));
+        else workEvidence.continuation(active.workEvidence, 'plain', continuation);
+      }
+      continue;
+    }
     if (continuation.startsWith('*')) {
       if (active.key !== '别名' || continuation.startsWith('**') || continuation === '*' || active.form === 'scalar') {
         active.unsupported = true;
@@ -238,5 +311,10 @@ export function extractBangumiSubjectNames(
   finishField(active, closed);
   if (!closed) omit('/infobox', 'unsupported_infobox_structure');
   if (trailing) omit('/infobox', 'unsupported_infobox_structure');
-  return { names: names.sort(compareNames), diagnostics };
+  return {
+    names: names.sort(compareNames),
+    diagnostics,
+    workEvidence: workEvidence.values(),
+    televisionRun: bangumiTelevisionRun(record, tvAnime ? televisionFields : undefined),
+  };
 }

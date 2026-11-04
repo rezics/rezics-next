@@ -1466,6 +1466,29 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   and common-publication scenario is
   `services/kernel/test/imports/bangumi-character-names.test.ts`; broader native
   acceptance remains controller-owned.
+## Bangumi TVAnime work evidence
+
+Decision: see [Bangumi TVAnime work evidence](../../packages/conversion/README.md#bangumi-tv-anime-work-evidence).
+
+Ordinary conversion uses `bangumi@10`. The selected-family Bangumi caller uses
+`cross-media-entities@9+bangumi@10` so source refresh replays the new mapping
+under an honest revision without revising the VNDB adapter. Only the exact
+TVAnime `链接` and `Copyright` fields are admitted. Descriptive destinations
+retain their URL spelling and cite the Bangumi subject record; copyright
+notices retain their source text and establish no licence or media permission.
+
+- Touches: one selected TVSeries source record, exact `wdt:P973` and
+  `schema:copyrightNotice` candidates, source citations and current review/read
+  APIs.
+- Bound: 64 visited fields, 16 descriptive links, 16 copyright notices, 16
+  diagnostics, and the actual 1,500-character limits for both native values.
+  Summary, cover, official-website, identity, linked-page fetch and other
+  template ownership remain separate.
+- Growth check: `services/importer/tests/bangumi-work-evidence.test.ts` covers
+  selected-family proposals, unchanged/changed source, identity reuse and
+  repair. `services/kernel/test/imports/bangumi-work-evidence.test.ts` authors
+  ordinary independent adoption, reopen/current reads and the facts fence; no
+  real-dump walkthrough is claimed.
 
 ## Bangumi Book-template subject names
 

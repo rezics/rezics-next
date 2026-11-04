@@ -5,6 +5,20 @@ const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 export const bangumiTVAnimeTemplateHead = '{{Infobox animanga/TVAnime';
 export const bangumiBookTemplateHead = '{{Infobox animanga/Book';
 
+export const bangumiTVAnimeWorkEvidenceFields = {
+  descriptiveLink: '链接',
+  copyrightNotice: 'Copyright',
+} as const;
+
+export type BangumiTVAnimeWorkEvidenceField =
+  (typeof bangumiTVAnimeWorkEvidenceFields)[keyof typeof bangumiTVAnimeWorkEvidenceFields];
+
+export function isBangumiTVAnimeWorkEvidenceField(key: string): key is BangumiTVAnimeWorkEvidenceField {
+  return (
+    key === bangumiTVAnimeWorkEvidenceFields.descriptiveLink || key === bangumiTVAnimeWorkEvidenceFields.copyrightNotice
+  );
+}
+
 export function isBangumiTVAnimeTemplateHead(line: string): boolean {
   return line.trim() === bangumiTVAnimeTemplateHead;
 }

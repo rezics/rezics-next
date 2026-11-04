@@ -2,6 +2,7 @@ import type { ConversionDiagnostic } from './index.ts';
 import {
   bangumiSourceTime,
   gregorianMonthDays,
+  isBangumiTVAnimeWorkEvidenceField,
   isBangumiTvAnimeInfobox,
   type PublicationTime,
 } from './bangumi-subject-profile.ts';
@@ -20,6 +21,12 @@ export type TelevisionRunFact = {
   readonly field: 'datePublished' | 'endDate' | 'numberOfEpisodes';
 };
 
+export type BangumiTelevisionRunInfoboxField = Readonly<{
+  readonly key: string;
+  readonly value: string;
+  readonly nested: boolean;
+}>;
+
 export type TelevisionRunMapping = {
   readonly handledInfobox: boolean;
   readonly facts: readonly TelevisionRunFact[];
@@ -31,10 +38,10 @@ export function bangumiTelevisionRun(record: {
   readonly type: number;
   readonly infobox?: string;
   readonly date?: string;
-}): TelevisionRunMapping {
+}, scannedFields?: readonly BangumiTelevisionRunInfoboxField[]): TelevisionRunMapping {
   if (record.type !== 2 || !isBangumiTvAnimeInfobox(record.infobox))
     return { handledInfobox: false, facts: [], diagnostics: [] };
-  const fields = parseInfoboxScalars(record.infobox!);
+  const fields = scannedFields ?? parseInfoboxScalars(record.infobox!);
   const diagnostics: ConversionDiagnostic[] = [];
   const facts: TelevisionRunFact[] = [];
   const seen = new Set<string>();
@@ -50,7 +57,8 @@ export function bangumiTelevisionRun(record: {
       field.key === endKey ||
       field.key === totalKey ||
       field.key === '中文名' ||
-      field.key === '别名'
+      field.key === '别名' ||
+      isBangumiTVAnimeWorkEvidenceField(field.key)
     )
       continue;
     diagnostics.push({
@@ -85,7 +93,7 @@ export function bangumiTelevisionRun(record: {
 }
 
 function parseRunDate(
-  field: InfoboxScalar,
+  field: BangumiTelevisionRunInfoboxField,
   key: string,
   diagnostics: ConversionDiagnostic[],
 ): PublicationTime | undefined {
@@ -102,7 +110,7 @@ function parseRunDate(
 }
 
 function parseEpisodeTotal(
-  field: InfoboxScalar,
+  field: BangumiTelevisionRunInfoboxField,
   diagnostics: ConversionDiagnostic[],
 ): { amount: string; unit: '1' } | undefined {
   const pointer = infoboxPointer(totalKey);
@@ -120,10 +128,8 @@ function parseEpisodeTotal(
   diagnostics.push({ pointer, code: 'unsupported_episode_total' });
 }
 
-type InfoboxScalar = { readonly key: string; readonly value: string; readonly nested: boolean };
-
-function parseInfoboxScalars(infobox: string): InfoboxScalar[] {
-  const fields: InfoboxScalar[] = [];
+function parseInfoboxScalars(infobox: string): BangumiTelevisionRunInfoboxField[] {
+  const fields: BangumiTelevisionRunInfoboxField[] = [];
   for (const line of infobox.split('\n')) {
     if (fields.length >= 64) break;
     if (!line.startsWith('|')) continue;
@@ -137,7 +143,7 @@ function parseInfoboxScalars(infobox: string): InfoboxScalar[] {
   return fields;
 }
 
-function first(fields: readonly InfoboxScalar[], key: string): InfoboxScalar | undefined {
+function first(fields: readonly BangumiTelevisionRunInfoboxField[], key: string): BangumiTelevisionRunInfoboxField | undefined {
   return fields.find((field) => field.key === key);
 }
 

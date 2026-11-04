@@ -2267,15 +2267,14 @@ for these source Concepts.
 
 ### Bangumi TVAnime subject names
 
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@10` revision while the ordinary caller uses `bangumi@9`.
-Both use one pure TVAnime name extractor and the existing journal, source
-metadata admission, citations, candidate acceptance and adoption flow. No
-additional seed publisher or identity lookup is involved. The importer keeps the
-exact Bangumi subject alias and key, unversioned record state where no provider
-revision exists, the normalized digest and the acknowledged native UUID.
-
+Ordinary Bangumi registration and selected-family type 2 rows reach
+`convertBangumi`; the ordinary caller uses `bangumi@10` and the selected-family
+registration uses `cross-media-entities@10+bangumi@10`. Both share the pure TVAnime
+field extraction and existing journal, source metadata admission, citations,
+candidate review, adoption and current-read flow. No additional seed publisher or
+identity lookup is involved. The importer keeps the exact Bangumi subject alias
+and key, unversioned record state where no provider revision exists, normalized
+digest and acknowledged native UUID.
 - Touches: one selected source record, at most 24 name statements and 16 bounded
   omission diagnostics; each name carries its exact Bangumi subject citation.
 - Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
@@ -2290,8 +2289,8 @@ revision exists, the normalized digest and the acknowledged native UUID.
 ### Bangumi television original run
 
 Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@9`, advancing the
-`bangumi@7` name extraction. Selected-family seed uses that same converter; this
+`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@10`,
+retaining the original-run mapping alongside newer TVAnime evidence. Selected-family seed uses that same converter; this
 journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
 schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
 date is not completion or access authority.
@@ -2310,9 +2309,9 @@ date is not completion or access authority.
 ### Bangumi Game player count
 
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
-`游玩人数` on type 4 through `bangumi@9`, advancing the `bangumi@8` TVAnime
-original-run mapping. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@10` registration; this journey adds no
+`游玩人数` on type 4 through current `bangumi@10`, retaining original-run and
+work-evidence mappings. Selected-family seed uses that same converter under its
+existing combined `cross-media-entities@10+bangumi@10` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
@@ -2543,16 +2542,14 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 
 ### Bangumi TVAnime subject names
 
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
-`cross-media-entities@10` revision while the ordinary caller uses `bangumi@6`.
-Both use one pure TVAnime name extractor and the existing journal, source
-metadata admission, citations, candidate acceptance and adoption flow. No
-additional seed publisher or identity lookup is involved. The importer keeps the
-exact Bangumi subject alias and key, unversioned record state where no provider
-revision exists, the normalized digest and the acknowledged native UUID.
-
+Ordinary Bangumi registration and selected-family type 2 rows reach
+`convertBangumi`; the ordinary caller uses `bangumi@10` and the selected-family
+registration uses `cross-media-entities@10+bangumi@10`. Both share the pure TVAnime
+field extraction and existing journal, source metadata admission, citations,
+candidate review, adoption and current-read flow. No additional seed publisher or
+identity lookup is involved. The importer keeps the exact Bangumi subject alias
+and key, unversioned record state where no provider revision exists, normalized
+digest and acknowledged native UUID.
 - Touches: one selected source record, at most 24 name statements and 16 bounded
   omission diagnostics; each name carries its exact Bangumi subject citation.
 - Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
@@ -2603,7 +2600,7 @@ aliases use `und`. A malformed field is withheld as a whole while independent
 source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@9` registration, record bindings,
+uses its existing `cross-media-entities@10+bangumi@10` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh
@@ -2619,3 +2616,13 @@ source digest and field-pointer command identity remain attached.
   refresh and same-title source identity separation. The native publication and
   public-read scenario is `services/kernel/test/imports/bangumi-book-names.test.ts`;
   its execution remains controller-owned.
+
+### Bangumi TVAnime work evidence
+
+Decision: trim only horizontal template/list-boundary whitespace; `链接` remains a cited `wdt:P973` descriptive page and `官方网站` remains the separate `schema:url` mapping.
+
+Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` are admitted. Descriptive destinations preserve their source spelling and cite the Bangumi subject record; notices remain verbatim `schema:copyrightNotice` values and grant no licence or media permission. Malformed neighbors are bounded, source-free omissions; summary and cover rights remain separate.
+
+- Touches: ordinary `bangumi@10` and selected-family `cross-media-entities@10+bangumi@10` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
+- Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
+- Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.
