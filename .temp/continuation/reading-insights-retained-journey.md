@@ -24,8 +24,8 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Existing page journey keeps reported-year navigation, independent available/unavailable/failed panels, historical meaning, exact values and accessible table/chart counterparts; original Summary and Diary navigation remain intact."
-    - "Existing page receiving cases: reported year, exact native values and meaning, independent panels and response-owned actions through the current owner/origin/locale visit; retired replies cannot hydrate another visit."
+    - 'Existing page journey keeps reported-year navigation, independent available/unavailable/failed panels, historical meaning, exact values and accessible table/chart counterparts; original Summary and Diary navigation remain intact.'
+    - 'Existing page receiving cases: reported year, exact native values and meaning, independent panels and response-owned actions through the current owner/origin/locale visit; retired replies cannot hydrate another visit.'
   failing: true
   workerOwned: true
 estimate:
