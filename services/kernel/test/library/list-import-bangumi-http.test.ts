@@ -172,6 +172,104 @@ test('metadata review uses explicit field consent and keeps one selection per co
   expect(entry.note).toBe('private note sentinel');
   expect(entry.sourceObservations.some((item: { provider: string }) => item.provider === 'bangumi')).toBe(false);
 }, 120000);
+
+test('mounted metadata retries recover only exact receipts after evidence expiry and never admit a started intent', async () => {
+  const { uploadId } = await preview([record()]),
+    sourceReview = await review(uploadId, 0),
+    metadata = await ok(await send('POST', `/${uploadId}:reviewMetadata`, {
+      ordinal: 0,
+      sourceReviewToken: sourceReview.token,
+    })),
+    fields = [{ field: 'note', action: 'adopt' }],
+    request = { ordinal: 0, reviewToken: metadata.reviewToken, fields };
+  const accepted = await ok(await send('POST', `/${uploadId}:applyMetadata`, request));
+  expect(accepted.fields).toEqual([{ field: 'note', status: 'applied' }]);
+  const personalEntry = async () =>
+    (await ok(await f.send('owner', 'GET', `/v1/libraryEntries/${matched}/personal`))).personalEntry;
+  expect((await personalEntry()).note).toBe('private note sentinel');
+
+  // Model a committed native annotation whose result checkpoint and HTTP response were lost.
+  await f.pool.query(
+    `UPDATE library.bangumi_upload_row r SET review=jsonb_set(r.review,'{metadata}',
+       (SELECT jsonb_agg(CASE WHEN m->>'token'=$5
+         THEN m #- '{confirmation,outcome}' #- '{confirmation,annotationStatus}' ELSE m END)
+        FROM jsonb_array_elements(r.review->'metadata') m),true)
+     WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.ordinal=0`,
+    [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, uploadId, 0, metadata.reviewToken],
+  );
+  const expires = await f.pool.query<{ route: number; expiresAt: string }>(
+    `UPDATE library.bangumi_upload SET expires_at=clock_timestamp()-interval '1 second'
+     WHERE route=$1 AND account_id=$2 AND upload_id=$3
+     RETURNING route,expires_at::text AS "expiresAt"`,
+    [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, uploadId],
+  );
+  expect((await send('GET', `/${uploadId}/metadata/0?reviewToken=${metadata.reviewToken}`)).status).toBe(404);
+  expect(
+    (await f.send('other', 'POST', `${root}/${uploadId}:applyMetadata`, request)).status,
+  ).toBe(404);
+  expect(await ok(await send('POST', `/${uploadId}:applyMetadata`, request))).toEqual(accepted);
+
+  const page = {
+    ...expires.rows[0]!,
+    accountId: f.owner.actor.accountId,
+    uploadId,
+    stage: 'source' as const,
+    dueAt: expires.rows[0]!.expiresAt,
+    page: 0,
+  };
+  expect(await purgeExpiredBangumiUploadPage({ pool: f.pool }, page)).toEqual({ removed: 1, complete: true });
+  const scrubbed = await f.pool.query<{ evidence: string; review: string }>(
+    `SELECT evidence::text AS evidence,review::text AS review FROM library.bangumi_upload_row
+     WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=0`,
+    [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, uploadId],
+  );
+  expect(scrubbed.rows[0]?.evidence).toBe('{}');
+  expect(scrubbed.rows[0]?.review).not.toContain('private note sentinel');
+  expect(scrubbed.rows[0]?.review).not.toContain('annotationInput');
+  expect(scrubbed.rows[0]?.review).toContain('annotationReceiptDigest');
+  expect(await ok(await send('POST', `/${uploadId}:applyMetadata`, request))).toEqual(accepted);
+
+  const { uploadId: unresolvedId } = await preview([{ ...record(), comment: 'unadmitted private note' }]),
+    unresolvedSource = await review(unresolvedId, 0),
+    unresolved = await ok(await send('POST', `/${unresolvedId}:reviewMetadata`, {
+      ordinal: 0,
+      sourceReviewToken: unresolvedSource.token,
+    })),
+    controller = new AbortController();
+  controller.abort();
+  const engine = createBangumiImport({
+    pool: f.pool,
+    access: f.access,
+    tokens: f.tokens,
+    routeKey: testRouteKey(),
+    votes: createVoteCommands({ pool: f.pool, access: f.access }),
+  });
+  const unresolvedFields = [{ field: 'note', action: 'adopt' }];
+  expect((await engine.applyMetadata(f.owner.actor, unresolvedId, 0, unresolved.reviewToken, unresolvedFields, controller.signal)).fields)
+    .toEqual([{ field: 'note', status: 'unattempted' }]);
+  await f.pool.query(
+    `UPDATE library.bangumi_upload_row r SET review=jsonb_set(r.review,'{metadata}',
+       (SELECT jsonb_agg(CASE WHEN m->>'token'=$5
+         THEN jsonb_set(m,'{confirmation,annotationStarted}','true'::jsonb) ELSE m END)
+        FROM jsonb_array_elements(r.review->'metadata') m),true)
+     WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.ordinal=0`,
+    [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, unresolvedId, 0, unresolved.reviewToken],
+  );
+  await f.pool.query(
+    "UPDATE library.bangumi_upload SET expires_at=clock_timestamp()-interval '1 second' WHERE route=$1 AND account_id=$2 AND upload_id=$3",
+    [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, unresolvedId],
+  );
+  expect(
+    await ok(
+      await send('POST', `/${unresolvedId}:applyMetadata`, {
+        ordinal: 0,
+        reviewToken: unresolved.reviewToken,
+        fields: unresolvedFields,
+      }),
+    ),
+  ).toMatchObject({ fields: [{ field: 'note', status: 'unattempted' }] });
+  expect((await personalEntry()).note).toBe('private note sentinel');
+}, 120000);
 test('conflict preservation, guarded replacement, stale review refresh and original command retry', async () => {
   const { uploadId } = await preview([{ ...record(), type: 2 }]);
   const initial = await review(uploadId, 0);
@@ -289,7 +387,7 @@ test('partial state application can stop after one accepted row and cancellation
   expect((await f.commands.readEntry(f.owner.actor, targets[0]!)).state).toBe('planned');
   await expect(f.commands.readEntry(f.owner.actor, targets[1]!)).rejects.toThrow();
 });
-test('absolute expiry denies review and apply while scheduled cleanup deletes bounded pages with receipt replay', async () => {
+test('absolute expiry denies fresh source work while scheduled cleanup scrubs then deletes bounded pages with receipt replay', async () => {
   const expire = async (id: string) =>
     f.pool.query(
       "UPDATE library.bangumi_upload SET expires_at=clock_timestamp()-interval '1 second' WHERE route=$1 AND account_id=$2 AND upload_id=$3",
@@ -334,11 +432,31 @@ test('absolute expiry denies review and apply while scheduled cleanup deletes bo
       [f.owner.actor.accountId, many.uploadId],
     )
   ).rows[0]!;
-  const page = { ...cursor, accountId: f.owner.actor.accountId, uploadId: many.uploadId };
+  const page = {
+    ...cursor,
+    accountId: f.owner.actor.accountId,
+    uploadId: many.uploadId,
+    dueAt: cursor.expiresAt,
+    stage: 'source' as const,
+  };
   const first = await purgeExpiredBangumiUploadPage({ pool: f.pool }, { ...page, page: 0 });
   expect(first).toEqual({ removed: 99, complete: false });
   expect(await purgeExpiredBangumiUploadPage({ pool: f.pool }, { ...page, page: 0 })).toEqual(first);
   expect(await purgeExpiredBangumiUploadPage({ pool: f.pool }, { ...page, page: 1 })).toEqual({
+    removed: 1,
+    complete: true,
+  });
+  const recovery = await f.pool.query<{ recoveryUntil: string }>(
+    `UPDATE library.bangumi_upload SET recovery_until=clock_timestamp()-interval '1 second'
+     WHERE account_id=$1 AND upload_id=$2 RETURNING recovery_until::text AS "recoveryUntil"`,
+    [f.owner.actor.accountId, many.uploadId],
+  );
+  const finalPage = { ...page, dueAt: recovery.rows[0]!.recoveryUntil, stage: 'recovery' as const };
+  expect(await purgeExpiredBangumiUploadPage({ pool: f.pool }, { ...finalPage, page: 0 })).toEqual({
+    removed: 99,
+    complete: false,
+  });
+  expect(await purgeExpiredBangumiUploadPage({ pool: f.pool }, { ...finalPage, page: 1 })).toEqual({
     removed: 2,
     complete: true,
   });

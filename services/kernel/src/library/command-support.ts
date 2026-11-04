@@ -14,6 +14,7 @@ import {
   type CommandOutcome,
   type CommandResult,
   type CommandTransaction,
+  type PrincipalCommandIdentity,
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { accessCommandAuthorization, type Access, type AccountActor, type Actor } from '../request/access.ts';
@@ -72,6 +73,14 @@ function digest(identity: unknown, kind: string, input: unknown): Buffer {
   return createHash('sha256').update(canonical).digest();
 }
 
+export function libraryCommandReceiptDigest(identity: PrincipalCommandIdentity, kind: string, input: unknown): string {
+  return digest(identity, kind, input).toString('hex');
+}
+
+export function libraryCommandReceiptDigestForActor(actor: Actor, kind: string, input: unknown): string {
+  return libraryCommandReceiptDigest(principalCommandIdentity(ownActor(actor)), kind, input);
+}
+
 function ownActor(actor: Actor): AccountActor {
   if (actor.kind !== 'account' || routeOf(actor.accountId) === null) throw new GrantDeniedError();
   return actor;
@@ -100,12 +109,15 @@ function activeAccountAuthorization(accountId: string, route: number): CommandAu
 export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelClock; access?: Access }) {
   const { pool, clock } = config;
 
+  class ReceiptNotFoundError extends Error {}
+
   async function runOwnAccount<T>(
     actor: Actor,
     request: OwnAccountCommand,
     body: LibraryCommandBody<T>,
     prepare?: CommandAuthorization['prepare'],
     authorizePrepared?: (tx: CommandTransaction, attempt: CommandAttempt) => Promise<void>,
+    receiptOnly?: Buffer,
   ): Promise<CommandOutcome<T>> {
     const owner = ownActor(actor);
     const route = routeOf(owner.accountId);
@@ -124,7 +136,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     const authorization: CommandAuthorization = {
       action: request.action,
       resource: Object.freeze({ route, id: owner.accountId }),
-      denied: () => new GrantDeniedError(),
+      denied: () => (receiptOnly ? new ReceiptNotFoundError() : new GrantDeniedError()),
       async prepare(attempt) {
         const evidence = await native?.prepare?.(attempt);
         await prepare?.(attempt);
@@ -149,6 +161,11 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           !owner.scopes.includes(request.action)
         )
           throw new GrantDeniedError();
+        if (receiptOnly) {
+          if (native && (await native.authorize(tx, attempt, evidence)) !== 'execute') throw new GrantDeniedError();
+          await authorizePrepared?.(tx, attempt);
+          return 'receipt-only';
+        }
         await authorizePrepared?.(tx, attempt);
         if (native && (await native.authorize(tx, attempt, evidence)) !== 'execute') throw new GrantDeniedError();
         return 'execute';
@@ -165,7 +182,7 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
         receipt: {
           kind: request.kind,
           key: request.requestKey,
-          digest: digest(identity, request.kind, request.input),
+          digest: receiptOnly ?? digest(identity, request.kind, request.input),
         },
         authorization,
       },
@@ -215,6 +232,42 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     );
   }
 
+  async function ownAccountReceiptOnly<P, T>(
+    actor: Actor,
+    request: {
+      action: string;
+      kind: string;
+      requestKey: string;
+      digest: string;
+      prepare: (attempt: CommandAttempt) => Promise<P>;
+      authorize: (tx: CommandTransaction, attempt: CommandAttempt, prepared: P) => Promise<void>;
+    },
+  ): Promise<CommandOutcome<T> | null> {
+    if (!/^[0-9a-f]{64}$/.test(request.digest)) throw new TypeError('Invalid native receipt digest');
+    const preparations = new WeakMap<AuthoritativeTime, { value: P }>();
+    try {
+      return await runOwnAccount(
+        actor,
+        { action: request.action, kind: request.kind, requestKey: request.requestKey, input: null },
+        async () => {
+          throw new TypeError('A receipt-only Library command cannot execute a body');
+        },
+        async (attempt) => {
+          preparations.set(attempt.time, { value: await request.prepare(attempt) });
+        },
+        async (tx, attempt) => {
+          const prepared = preparations.get(attempt.time);
+          if (!prepared) throw new TypeError('Missing Library receipt preparation');
+          await request.authorize(tx, attempt, prepared.value);
+        },
+        Buffer.from(request.digest, 'hex'),
+      );
+    } catch (error) {
+      if (error instanceof ReceiptNotFoundError) return null;
+      throw error;
+    }
+  }
+
   async function trustedAccount<T>(
     accountId: string,
     request: TrustedAccountCommand,
@@ -249,5 +302,5 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
     );
   }
 
-  return { ownAccount, ownAccountPrepared, trustedAccount };
+  return { ownAccount, ownAccountPrepared, ownAccountReceiptOnly, trustedAccount };
 }
