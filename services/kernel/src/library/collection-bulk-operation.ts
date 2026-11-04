@@ -254,14 +254,14 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
         counts.reconciling > 0
           ? 'reconciling'
           : cancelled && stopReason === 'execution_expired'
-          ? 'expired'
-          : stopReason === 'authority_lost'
-            ? 'stopped'
-            : cancelled
-              ? 'cancelled'
-              : operation.phase === 'completed' && counts.conflict + counts.denied + counts.failed > 0
-                ? 'completed_with_errors'
-                : operation.phase,
+            ? 'expired'
+            : stopReason === 'authority_lost'
+              ? 'stopped'
+              : cancelled
+                ? 'cancelled'
+                : operation.phase === 'completed' && counts.conflict + counts.denied + counts.failed > 0
+                  ? 'completed_with_errors'
+                  : operation.phase,
       selectionComplete: true,
       occurrencesComplete: true,
       cancelRequested: cancelled,

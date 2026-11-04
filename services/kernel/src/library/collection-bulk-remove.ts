@@ -272,7 +272,14 @@ export async function executeCollectionRemoveTarget(
             `UPDATE library.bulk_target SET state=$4,reason=$5,evidence=$6::jsonb
               WHERE route=$1 AND operation_id=$2 AND ordinal=$3
                 AND state IN ('pending','reconciling') RETURNING ordinal`,
-            [command.source.route, command.source.id, target.ordinal, value.outcome, value.reason, JSON.stringify(value)],
+            [
+              command.source.route,
+              command.source.id,
+              target.ordinal,
+              value.outcome,
+              value.reason,
+              JSON.stringify(value),
+            ],
           );
           if (updated.rowCount !== 1) throw new Error('Captured removal target is no longer active');
           await tx.query(

@@ -1,14 +1,32 @@
 ---
-goal: "commerce"
-manager: "commerce"
-kind: "implementation"
-paths: ["services/kernel/src/library/collection-bulk-*", "services/kernel/src/library/bulk-*", "services/kernel/test/library/*bulk*", "services/kernel/db/library/migrations/*", "docs/library-and-collections.md", "docs/goals/library.capabilities.md", "services/kernel/src/library/README.md"]
-riskAreas: ["authorization", "disclosure", "rights", "account", "deletion"]
+goal: 'commerce'
+manager: 'commerce'
+kind: 'implementation'
+paths:
+  [
+    'services/kernel/src/library/collection-bulk-*',
+    'services/kernel/src/library/bulk-*',
+    'services/kernel/test/library/*bulk*',
+    'services/kernel/db/library/migrations/*',
+    'docs/library-and-collections.md',
+    'docs/goals/library.capabilities.md',
+    'services/kernel/src/library/README.md',
+  ]
+riskAreas: ['authorization', 'disclosure', 'rights', 'account', 'deletion']
 criticalPath: false
-after: ["a04a37f9-755a-4c76-917d-f0d7f20ba142"]
+after: ['a04a37f9-755a-4c76-917d-f0d7f20ba142']
 waiting: []
-acceptance: {"tests": ["Mounted Collection capture accepts a currently authorized filtered source and binds the complete native target set to review without page narrowing.", "Native status and Collection writers preserve exact receipts, effects and mixed result groups through replay, authority loss and partial cancellation.", "Bounded operation status and result cursors restore the existing Web flows and retention cleanup without a new selection engine."], "failing": true}
-estimate: {"lines": 1400, "files": 12}
+acceptance:
+  {
+    'tests':
+      [
+        'Mounted Collection capture accepts a currently authorized filtered source and binds the complete native target set to review without page narrowing.',
+        'Native status and Collection writers preserve exact receipts, effects and mixed result groups through replay, authority loss and partial cancellation.',
+        'Bounded operation status and result cursors restore the existing Web flows and retention cleanup without a new selection engine.',
+      ],
+    'failing': true,
+  }
+estimate: { 'lines': 1400, 'files': 12 }
 ---
 
 # Finish mounted native bulk review and result continuity

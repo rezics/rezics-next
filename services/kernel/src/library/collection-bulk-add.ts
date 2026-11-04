@@ -207,7 +207,12 @@ export async function reconcileCollectionAddTarget(
         command.receipt.partition,
         command.receipt.principalId,
         command.receipt.commandKind,
-        nativeReceiptKeyCandidates(client, command.receipt.commandKind, command.receipt.principalId, command.receipt.key),
+        nativeReceiptKeyCandidates(
+          client,
+          command.receipt.commandKind,
+          command.receipt.principalId,
+          command.receipt.key,
+        ),
       ],
     );
     const receipt = found.rows[0];

@@ -1,5 +1,8 @@
 /** Common bulk wire and executor contracts; native composition lives in collection-bulk-* modules. */
-import { executeCollectionRemoveTarget as removeCapturedOccurrence, reconcileCollectionRemoveTarget } from './collection-bulk-remove.ts';
+import {
+  executeCollectionRemoveTarget as removeCapturedOccurrence,
+  reconcileCollectionRemoveTarget,
+} from './collection-bulk-remove.ts';
 import { reconcileCollectionAddTarget } from './collection-bulk-add.ts';
 import { reconcileLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
 import type { Pool } from 'pg';
@@ -410,7 +413,9 @@ export async function reconcileBulkTarget(
     accountId: command.receipt.principalId,
     operationId: command.source.id,
   };
-  const operation = await withConnection(dependencies.pool, (client) => readCollectionBulk(client as CommandTransaction, key));
+  const operation = await withConnection(dependencies.pool, (client) =>
+    readCollectionBulk(client as CommandTransaction, key),
+  );
   if (
     !operation ||
     operation.phase === 'preview' ||
