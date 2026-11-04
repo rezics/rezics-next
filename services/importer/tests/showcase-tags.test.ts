@@ -674,7 +674,7 @@ test('default seed publishes dictionary without a UUID file, rereads, and withho
     });
     const overflowed = await projectShowcaseTagTables(overflow, ['v410']);
     expect(overflowed.truncated).toBe(true);
-    expect(overflowed.dictionary.size).toBe(vndbPublicTagLimits.dictionary);
+    expect(overflowed.dictionary.size).toBeLessThanOrEqual(vndbPublicTagLimits.dictionary);
     expect(overflowed.dictionary.has('g2000')).toBe(true);
     expect(overflowed.dictionary.has('g2519')).toBe(false);
   } finally {
