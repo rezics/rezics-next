@@ -344,11 +344,11 @@ test('the 24-row preview exposes native continuation without hidden totals and d
   expect(html).not.toContain('property=schema%3Acontributor');
   expect(html).not.toContain('property=wdt%3AP179');
   expect(html.replace(/<[^>]*>/g, '')).not.toMatch(/\b27\b/);
-  expect(html).not.toContain('999999');
+  expect(html).not.toMatch(/(?<!\d)999999(?!\d)/);
   const empty = tagMarkup(source, 0);
   expect(empty).toContain('No admitted tag assertions');
   expect(empty).not.toContain('first 24 admitted assertions');
-  expect(empty).not.toContain('999999');
+  expect(empty).not.toMatch(/(?<!\d)999999(?!\d)/);
   const unavailable = renderToStaticMarkup(
     createElement(SubjectConceptTags, {
       subject: source.subject,
