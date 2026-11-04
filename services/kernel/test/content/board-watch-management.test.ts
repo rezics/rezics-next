@@ -41,11 +41,36 @@ test('mounted board state uses CAS and exact retry, and delayed first opening se
     status: 200,
     value: { watching: true, revision: 1 },
   });
+  const firstWatchId = (
+    await f.db.admin.query<{ watch_id: string }>(
+      'SELECT watch_id FROM content.board_watch WHERE board_id=$1 AND watcher_account_id=$2',
+      [f.boardId, reader],
+    )
+  ).rows[0]!.watch_id;
   expect(await f.call(reader, 'PUT', path(), input, key)).toMatchObject({
     status: 200,
     value: { watching: true, revision: 1 },
   });
   expect((await f.call(reader, 'PUT', path(), { watching: false, expectedRevision: 0 })).status).toBe(409);
+  expect(
+    await f.call(reader, 'PUT', path(), { watching: false, expectedRevision: 1 }, crypto.randomUUID()),
+  ).toMatchObject({
+    status: 200,
+    value: { watching: false, revision: 2 },
+  });
+  expect(
+    await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 2 }, crypto.randomUUID()),
+  ).toMatchObject({
+    status: 200,
+    value: { watching: true, revision: 3 },
+  });
+  const restartedWatchId = (
+    await f.db.admin.query<{ watch_id: string }>(
+      'SELECT watch_id FROM content.board_watch WHERE board_id=$1 AND watcher_account_id=$2',
+      [f.boardId, reader],
+    )
+  ).rows[0]!.watch_id;
+  expect(restartedWatchId).not.toBe(firstWatchId);
   expect(
     (
       await f.call(reader, 'PATCH', `/v1/accounts/${reader}/preferences`, {

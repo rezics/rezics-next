@@ -162,7 +162,7 @@ export async function listWatches(
   return { items: finalItems, next };
 }
 
-async function watchGeneration(deps: WatchDependencies, route: number, deadline: number): Promise<string> {
+async function watchGeneration(deps: WatchDependencies, route: number, deadline: number): Promise<number> {
   return within(deadline, () =>
     withConnection(deps.pool, async (connection) => {
       const state = await readPartition(deadlineClient(connection, deadline), partitionOf(route));
