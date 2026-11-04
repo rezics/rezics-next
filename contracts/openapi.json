@@ -413659,6 +413659,146 @@
                                 },
                                 "type": "object"
                               },
+                              "matchEvidence": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unsupported",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "query": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      },
+                                      "reasons": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "field": {
+                                              "enum": [
+                                                "title",
+                                                "alias",
+                                                "description"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "language": {
+                                              "maxLength": 35,
+                                              "minLength": 2,
+                                              "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                              "type": "string"
+                                            },
+                                            "spans": {
+                                              "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "end": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "start": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "start",
+                                                  "end"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "maxItems": 8,
+                                              "minItems": 1,
+                                              "type": "array"
+                                            },
+                                            "text": {
+                                              "maxLength": 256,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "field",
+                                            "language",
+                                            "text",
+                                            "spans"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 3,
+                                        "minItems": 1,
+                                        "type": "array"
+                                      },
+                                      "source": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "revision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "state": {
+                                        "const": "current",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "source",
+                                      "query",
+                                      "reasons"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
                               "summary": {
                                 "additionalProperties": false,
                                 "properties": {
@@ -413851,6 +413991,7 @@
                               "base",
                               "labels",
                               "summary",
+                              "matchEvidence",
                               "figure"
                             ],
                             "type": "object"
@@ -414392,6 +414533,146 @@
                                       "keyFacts"
                                     ],
                                     "type": "object"
+                                  },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "summary": {
                                     "additionalProperties": false,
@@ -416674,7 +416955,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               },
@@ -416709,6 +416991,146 @@
                                       "id"
                                     ],
                                     "type": "object"
+                                  },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "summary": {
                                     "additionalProperties": false,
@@ -416892,7 +417314,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               },
@@ -416927,6 +417350,146 @@
                                       "id"
                                     ],
                                     "type": "object"
+                                  },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "summary": {
                                     "additionalProperties": false,
@@ -417424,7 +417987,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               },
@@ -417459,6 +418023,146 @@
                                       "id"
                                     ],
                                     "type": "object"
+                                  },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "summary": {
                                     "additionalProperties": false,
@@ -417551,7 +418255,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               },
@@ -417586,6 +418291,146 @@
                                       "id"
                                     ],
                                     "type": "object"
+                                  },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "summary": {
                                     "additionalProperties": false,
@@ -417654,7 +418499,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               }
@@ -418464,6 +419310,146 @@
                                           },
                                           "type": "object"
                                         },
+                                        "matchEvidence": {
+                                          "anyOf": [
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "state": {
+                                                  "const": "absent",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "state": {
+                                                  "const": "unsupported",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "state": {
+                                                  "const": "unavailable",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "query": {
+                                                  "pattern": "^[0-9a-f]{64}$",
+                                                  "type": "string"
+                                                },
+                                                "reasons": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "field": {
+                                                        "enum": [
+                                                          "title",
+                                                          "alias",
+                                                          "description"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "language": {
+                                                        "maxLength": 35,
+                                                        "minLength": 2,
+                                                        "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                        "type": "string"
+                                                      },
+                                                      "spans": {
+                                                        "items": {
+                                                          "additionalProperties": false,
+                                                          "properties": {
+                                                            "end": {
+                                                              "minimum": 1,
+                                                              "type": "integer"
+                                                            },
+                                                            "start": {
+                                                              "minimum": 0,
+                                                              "type": "integer"
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "start",
+                                                            "end"
+                                                          ],
+                                                          "type": "object"
+                                                        },
+                                                        "maxItems": 8,
+                                                        "minItems": 1,
+                                                        "type": "array"
+                                                      },
+                                                      "text": {
+                                                        "maxLength": 256,
+                                                        "minLength": 1,
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "field",
+                                                      "language",
+                                                      "text",
+                                                      "spans"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 3,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "source": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "id": {
+                                                      "format": "uuid",
+                                                      "type": "string"
+                                                    },
+                                                    "revision": {
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id",
+                                                    "revision"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "state": {
+                                                  "const": "current",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state",
+                                                "source",
+                                                "query",
+                                                "reasons"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
                                         "summary": {
                                           "additionalProperties": false,
                                           "properties": {
@@ -418656,6 +419642,7 @@
                                         "base",
                                         "labels",
                                         "summary",
+                                        "matchEvidence",
                                         "figure"
                                       ],
                                       "type": "object"
@@ -419034,6 +420021,146 @@
                                         },
                                         "type": "object"
                                       },
+                                      "matchEvidence": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "absent",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unsupported",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "query": {
+                                                "pattern": "^[0-9a-f]{64}$",
+                                                "type": "string"
+                                              },
+                                              "reasons": {
+                                                "items": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "field": {
+                                                      "enum": [
+                                                        "title",
+                                                        "alias",
+                                                        "description"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "language": {
+                                                      "maxLength": 35,
+                                                      "minLength": 2,
+                                                      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                      "type": "string"
+                                                    },
+                                                    "spans": {
+                                                      "items": {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "end": {
+                                                            "minimum": 1,
+                                                            "type": "integer"
+                                                          },
+                                                          "start": {
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "start",
+                                                          "end"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      "maxItems": 8,
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    },
+                                                    "text": {
+                                                      "maxLength": 256,
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "field",
+                                                    "language",
+                                                    "text",
+                                                    "spans"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "maxItems": 3,
+                                                "minItems": 1,
+                                                "type": "array"
+                                              },
+                                              "source": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "id": {
+                                                    "format": "uuid",
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "revision"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "state": {
+                                                "const": "current",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "source",
+                                              "query",
+                                              "reasons"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
                                       "summary": {
                                         "additionalProperties": false,
                                         "properties": {
@@ -419226,6 +420353,7 @@
                                       "base",
                                       "labels",
                                       "summary",
+                                      "matchEvidence",
                                       "figure"
                                     ],
                                     "type": "object"
@@ -419621,6 +420749,146 @@
                                         },
                                         "type": "object"
                                       },
+                                      "matchEvidence": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "absent",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unsupported",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "query": {
+                                                "pattern": "^[0-9a-f]{64}$",
+                                                "type": "string"
+                                              },
+                                              "reasons": {
+                                                "items": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "field": {
+                                                      "enum": [
+                                                        "title",
+                                                        "alias",
+                                                        "description"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "language": {
+                                                      "maxLength": 35,
+                                                      "minLength": 2,
+                                                      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                      "type": "string"
+                                                    },
+                                                    "spans": {
+                                                      "items": {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "end": {
+                                                            "minimum": 1,
+                                                            "type": "integer"
+                                                          },
+                                                          "start": {
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "start",
+                                                          "end"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      "maxItems": 8,
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    },
+                                                    "text": {
+                                                      "maxLength": 256,
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "field",
+                                                    "language",
+                                                    "text",
+                                                    "spans"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "maxItems": 3,
+                                                "minItems": 1,
+                                                "type": "array"
+                                              },
+                                              "source": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "id": {
+                                                    "format": "uuid",
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "revision"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "state": {
+                                                "const": "current",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "source",
+                                              "query",
+                                              "reasons"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
                                       "summary": {
                                         "additionalProperties": false,
                                         "properties": {
@@ -419813,6 +421081,7 @@
                                       "base",
                                       "labels",
                                       "summary",
+                                      "matchEvidence",
                                       "figure"
                                     ],
                                     "type": "object"
@@ -420241,6 +421510,146 @@
                                 },
                                 "type": "object"
                               },
+                              "matchEvidence": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unsupported",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "query": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      },
+                                      "reasons": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "field": {
+                                              "enum": [
+                                                "title",
+                                                "alias",
+                                                "description"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "language": {
+                                              "maxLength": 35,
+                                              "minLength": 2,
+                                              "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                              "type": "string"
+                                            },
+                                            "spans": {
+                                              "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "end": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "start": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "start",
+                                                  "end"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "maxItems": 8,
+                                              "minItems": 1,
+                                              "type": "array"
+                                            },
+                                            "text": {
+                                              "maxLength": 256,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "field",
+                                            "language",
+                                            "text",
+                                            "spans"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 3,
+                                        "minItems": 1,
+                                        "type": "array"
+                                      },
+                                      "source": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "revision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "state": {
+                                        "const": "current",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "source",
+                                      "query",
+                                      "reasons"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
                               "summary": {
                                 "additionalProperties": false,
                                 "properties": {
@@ -420433,6 +421842,7 @@
                               "base",
                               "labels",
                               "summary",
+                              "matchEvidence",
                               "figure"
                             ],
                             "type": "object"

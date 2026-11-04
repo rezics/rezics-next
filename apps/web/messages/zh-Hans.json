@@ -8287,5 +8287,11 @@
   "library_progress_discovery_action_available": "可用",
   "library_progress_discovery_action_not_active": "无法使用：此会话当前未启用。",
   "library_progress_discovery_action_not_authorized": "无法使用：你没有执行此操作的权限。",
-  "search_review_historical_question_unavailable": "无法获取当时的问题名称和量表。这里显示的是已记录的引用，并非当前评分。"
+  "search_review_historical_question_unavailable": "无法获取当时的问题名称和量表。这里显示的是已记录的引用，并非当前评分。",
+  "search_match_title": "匹配的标题",
+  "search_match_alias": "匹配的别名",
+  "search_match_description": "匹配的描述",
+  "search_match_explanation": "更多匹配详情",
+  "search_match_unavailable": "匹配详情暂不可用。",
+  "search_match_unsupported": "此结果不支持匹配详情。"
 }

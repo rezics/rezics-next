@@ -12,6 +12,7 @@ export const discoveryExample: DiscoveryPage = {
   hits: [
     {
       key: { owner: 'semantic', kind: 'schema:Person', route: 0, id: sameId },
+      matchEvidence: { state: 'unavailable' },
       summary: {
         kind: 'subject',
         value: {
@@ -26,6 +27,7 @@ export const discoveryExample: DiscoveryPage = {
     },
     {
       key: { owner: 'accounts', kind: 'account', route: 0, id: sameId },
+      matchEvidence: { state: 'unsupported' },
       summary: {
         kind: 'account',
         value: {
@@ -42,6 +44,7 @@ export const discoveryExample: DiscoveryPage = {
     },
     {
       key: { owner: 'accounts', kind: 'account', route: 0, id: handlelessId },
+      matchEvidence: { state: 'unsupported' },
       summary: {
         kind: 'account',
         value: {
@@ -58,6 +61,7 @@ export const discoveryExample: DiscoveryPage = {
     },
     {
       key: { owner: 'semantic', kind: 'schema:Book', route: 0, id: bookId },
+      matchEvidence: { state: 'unavailable' },
       summary: {
         kind: 'subject',
         value: {
@@ -88,7 +92,7 @@ export function typedSearchDiscoveryExample(languages: readonly string[]): Disco
   const recorded = parseLegacySearchPage(typedSearch);
   if (!recorded) throw new Error('The typed Search recording is invalid.');
   return {
-    hits: recorded.subjects.map(({ id, type, summary, labels, descriptions, facts }) => {
+    hits: recorded.subjects.map(({ id, type, summary, labels, descriptions, facts, matchEvidence }) => {
       if (
         !summary ||
         !summary.label ||
@@ -107,6 +111,7 @@ export function typedSearchDiscoveryExample(languages: readonly string[]): Disco
           kind: 'subject',
           value: { ...summary, label: languages.length ? { value: selected[language]!, language } : summary.label },
         },
+        matchEvidence: matchEvidence ?? { state: 'unavailable' as const },
         labels: selected,
         ...(descriptions
           ? {
@@ -137,6 +142,7 @@ export function currentLinkRefusal(): DiscoveryPage {
       if (hit.summary.kind !== 'account' || hit.key.owner !== 'accounts') return hit;
       return {
         key: hit.key,
+        matchEvidence: { state: 'unsupported' },
         summary: { ...hit.summary, value: { ...hit.summary.value, handle: null, verifiedAgent: null } },
       };
     });
@@ -148,6 +154,7 @@ export function factualDiscoveryExample(): DiscoveryPage {
   const result = structuredClone(discoveryExample);
   result.hits.push({
     key: { owner: 'semantic', kind: 'catalogue:Atlas', route: 0, id: '00000000-0000-4000-8000-000000000814' },
+    matchEvidence: { state: 'unavailable' },
     summary: {
       kind: 'subject',
       value: {

@@ -2,6 +2,8 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
+import { compileText } from './text.ts';
+import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
 import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
@@ -248,6 +250,9 @@ function executeDiscoverySearch(
   const execute: DiscoverySearch = async (principal, request, context) => {
     const { registry, release, digest } = await config.resolve(request);
     const admitted = admitDiscoveryRequest(request, registry, release);
+    const matchEvidencePlan = admitted.text
+      ? compileMatchEvidence(compileText(admitted.text, { field: 'search_text', prefix: 't' }))
+      : undefined;
     const spacePopulation = (context as DiscoveryContextWithSpace).spacePopulation;
     if (
       (request.spaceId === undefined) !== (spacePopulation === undefined) ||
@@ -395,13 +400,10 @@ function executeDiscoverySearch(
                 inSpace.has(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`),
               )
             : result.hits;
-          const current = await currentDiscoveryCandidates(
-            registry,
-            selectedCandidates,
-            admitted.filter,
-            release,
-            context,
-          );
+          const current = await currentDiscoveryCandidates(registry, selectedCandidates, admitted.filter, release, {
+            ...context,
+            ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
+          });
           consumed = window.examined;
           for (let index = 0; index < result.hits.length; index++) {
             const candidate = result.hits[index]!;
@@ -456,7 +458,14 @@ function executeDiscoverySearch(
           }));
           const observed = await config.asOf(queried);
           const projected: DiscoveryPage = {
-            hits,
+            hits: boundMatchEvidencePage(
+              hits.map((hit) => ({
+                ...hit,
+                matchEvidence:
+                  hit.matchEvidence ??
+                  (hit.summary.kind === 'subject' ? { state: 'absent' as const } : { state: 'unsupported' as const }),
+              })),
+            ),
             kinds: { values, next: null },
             next: null,
             ...(typeof observed === 'string'

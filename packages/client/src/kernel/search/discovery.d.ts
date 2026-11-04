@@ -6,7 +6,12 @@ export { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import type { Release } from '@rezics/definitions';
 import type { AvatarSummary } from '../content/avatar.ts';
 import type { SubjectSummary, SummaryReaderDependencies } from '../semantic/summaries.ts';
+import type { PublicCollectionDiscoverySummary as CollectionDiscoveryCard } from '../library/collection-discovery-summaries.ts';
+import type { ViewerFactsPage } from '../library/viewer-facts.ts';
+import type { PublicFigureView } from '../rating/public-figure-http.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { Fact } from './hits.ts';
+import type { EngineMatchEvidence, MatchEvidence, MatchEvidenceQuery } from './match-evidence.ts';
 import type { SubjectDocument } from './document.ts';
 import type { SearchRequest } from './service.ts';
 import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts';
@@ -146,12 +151,21 @@ export type DiscoveryHit = {
     summary: DiscoverySummary;
     labels?: Record<string, string>;
     aliases?: Record<string, string[]>;
+    descriptions?: Record<string, string>;
+    facts?: Record<string, Fact[]>;
+    figure?: PublicFigureView;
+    listPresentation?: {
+        imageAspect: 'portrait' | 'landscape' | 'square';
+        keyFacts: string[];
+    };
     contexts?: CharacterPersonDiscoveryContexts;
+    matchEvidence?: MatchEvidence;
 };
 export type PublicCollectionDiscoverySummary = Readonly<{
     id: string;
     title: string;
     description: string | null;
+    card: CollectionDiscoveryCard;
 }>;
 export type PublicReviewDiscoverySummary = Readonly<{
     id: string;
@@ -187,12 +201,23 @@ export type DiscoveryOwnerSummary = {
     kind: 'space';
     value: PublicSpaceDiscoverySummary;
 };
-export type DiscoveryOwnerHit = {
-    key: DiscoveryPublicOwnerKey;
-    summary: DiscoveryOwnerSummary;
+type DiscoveryOwnerHitOf<K extends DiscoveryOwnerKind> = {
+    key: Extract<DiscoveryPublicOwnerKey, {
+        kind: K;
+    }>;
+    summary: Extract<DiscoveryOwnerSummary, {
+        kind: K;
+    }>;
+    matchEvidence?: MatchEvidence;
 };
+export type DiscoveryOwnerHit = DiscoveryOwnerHitOf<'collection'> | DiscoveryOwnerHitOf<'review'> | DiscoveryOwnerHitOf<'space'>;
 export type DiscoveryUnionSummary = DiscoverySummary | DiscoveryOwnerSummary;
-export type DiscoveryUnionHit = DiscoveryHit | DiscoveryOwnerHit;
+type DiscoveryHitOf<K extends DiscoverySummary['kind']> = Omit<DiscoveryHit, 'summary'> & {
+    summary: Extract<DiscoverySummary, {
+        kind: K;
+    }>;
+};
+export type DiscoveryUnionHit = DiscoveryHitOf<'subject'> | DiscoveryHitOf<'account'> | DiscoveryOwnerHit;
 export type KindCountEvidence = {
     kind: string;
     value: number;
@@ -219,6 +244,18 @@ export type DiscoveryPage = {
     };
     next: string | null;
     as_of: string;
+    /** One current private envelope, present on the installed HTTP response and never cached publicly. */
+    viewerFacts?: Exclude<ViewerFactsPage, {
+        state: 'current';
+    }> | (Omit<Extract<ViewerFactsPage, {
+        state: 'current';
+    }>, 'rows'> & {
+        rows: readonly (Extract<ViewerFactsPage, {
+            state: 'current';
+        }>['rows'][number] & {
+            resolvedSubjectId?: string;
+        })[];
+    }) | null;
 };
 /** Opt-in wire; omitted representation retains the Subject response. */
 export type DiscoveryRequest = SearchRequest & {
@@ -230,12 +267,14 @@ export type DiscoveryRequest = SearchRequest & {
 /** Reuse native reader authorization/deadline and token custody, never a caller-supplied permission flag. */
 export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'> & {
     languages?: readonly string[];
+    descriptions?: boolean;
     spoilerThreshold?: 0 | 1 | 2;
     observeRelationRelease?: () => Promise<{
         digest: string;
         head: number;
         release: import('@rezics/filter').FilterRelease;
     } | null>;
+    matchEvidencePlan?: MatchEvidenceQuery;
 };
 export type DiscoveryCursorKeys = KeyRing;
 export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';
@@ -417,6 +456,7 @@ export type DiscoveryEngineHit = Readonly<{
     revision: string;
     sourceVersion?: string | null;
     matched: readonly string[];
+    engineEvidence?: EngineMatchEvidence;
     sort: readonly (string | number | null)[];
 }>;
 export type DiscoveryEngineResult = Readonly<{
