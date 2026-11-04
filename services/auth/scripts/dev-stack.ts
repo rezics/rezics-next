@@ -29,7 +29,6 @@ const personaClient = 'rezics-dev-importer';
 export type DevelopmentKeys = {
   secret: string;
   staging: string;
-  reference: string;
   signing: JWK;
   website: JWK;
   importer: JWK;
@@ -41,7 +40,7 @@ async function privateKey(): Promise<JWK> {
   return { ...await exportJWK(pair.privateKey), kid: randomUUID(), alg: 'ES256', use: 'sig' };
 }
 export function publicKey(key: JWK): JWK {
-  const { d: _private, ...publicPart } = key;
+  const { d: _private, key_ops: _operations, ...publicPart } = key;
   return publicPart;
 }
 async function privateFile(path: string, value: string) {
@@ -58,7 +57,7 @@ export async function developmentKeys(directory = state): Promise<DevelopmentKey
   }
   const keys: DevelopmentKeys = {
     secret: randomBytes(48).toString('base64url'), staging: randomBytes(32).toString('base64url'),
-    reference: randomBytes(32).toString('base64url'), signing: await privateKey(), website: await privateKey(),
+    signing: await privateKey(), website: await privateKey(),
     importer: await privateKey(), password: randomBytes(24).toString('base64url'),
   };
   // Exclusive creation makes concurrent first-run commands converge on one key set.
@@ -140,7 +139,7 @@ async function assemble() {
   const proofs = auth.createNativeWorkflowProofPorts({ database });
   const bindings = createNativeAccountBindings({
     pool: kernelPool, access, actions, routeKey: config.routeKey,
-    referenceKeys: { current: 1, keys: new Map([[1, Buffer.from(keys.reference, 'base64url')]]) },
+    referenceKeys: config.tokens,
     auth: () => service,
     proofs: { workflow: proofs, provisioning: auth.createProvisioningEvidenceVerifier({ database }),
       barriers: auth.createBarrierProofVerifier({ database }) },
@@ -289,5 +288,5 @@ if (import.meta.main) {
     } else if (action === 'pages' || action === 'web') await launch(action, process.argv.slice(3));
     else if (action === 'start') await start();
     else throw new Error('Use setup, start, host, pages, web or persona');
-  } catch (error) { console.error(error); process.exitCode = 1; }
+  } catch (error) { console.error(error); process.exit(1); }
 }

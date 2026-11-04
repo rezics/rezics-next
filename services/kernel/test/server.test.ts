@@ -552,6 +552,7 @@ test('db up writes development secrets once and keeps them across restarts', () 
     'KERNEL_RECEIPT_KEYS',
     'KERNEL_ROUTE_KEY',
     'KERNEL_SESSION_KEYS',
+    'KERNEL_WRITE_RATE_SECRET',
   ]);
   expect(values.AUTH_ISSUER).toBe('http://127.0.0.1:4200');
   expect(values.AUTH_JWKS_URL).toBe(`${values.AUTH_ISSUER}/.well-known/jwks.json`);

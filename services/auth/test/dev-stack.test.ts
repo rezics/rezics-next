@@ -61,11 +61,12 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
     await page.locator('input[name="password"]').fill(password);
     await page.locator('button[type="submit"]').click();
     await page.waitForURL('http://127.0.0.1:3000/**');
-    expect((await page.context().cookies()).some((cookie: { name: string }) => cookie.name.includes('session'))).toBe(true);
-    // Submit Web's own sign-out form even when its account menu is collapsed.
-    await page.locator('form[action="/auth/sign-out"]').evaluate((form: HTMLFormElement) => form.requestSubmit());
+    expect((await page.context().cookies()).some((cookie: { name: string }) => cookie.name === '__Host-rezics_session')).toBe(true);
+    await page.locator('#account-menu-button').click();
+    await page.locator('form[action="/auth/sign-out"] button[type="submit"]').click();
     await page.waitForURL('http://127.0.0.1:3000/**');
-    expect(await page.locator('a[href^="/auth/sign-in"]').first().isVisible()).toBe(true);
+    await browserExpect(page.locator('a[href^="/auth/sign-in"]').first()).toBeVisible();
+    expect((await page.context().cookies()).some((cookie: { name: string }) => cookie.name === '__Host-rezics_session')).toBe(false);
     const discovery = await fetch('http://127.0.0.1:3100/.well-known/openid-configuration');
     expect((await discovery.json() as { issuer: string }).issuer).toBe('http://127.0.0.1:4200');
   } finally {
