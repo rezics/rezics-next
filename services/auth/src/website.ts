@@ -573,9 +573,16 @@ export function websiteRoutes(input: {
             const prompt = fields.get('prompt');
             fields.set('prompt', prompt ? `${prompt} login` : 'login');
           }
+          if (current && !stepUp) {
+            // Materialization commits after its issuance barrier is released.
+            // Complete that phase before requiring the actual consent row.
+            await input.withIssuance(WEBSITE_CLIENT_ID, () =>
+              input.materialize(current.session.userId, WEBSITE_CLIENT_ID, registered.scopes, true),
+            );
+          }
           return input.withIssuance(WEBSITE_CLIENT_ID, async () => {
             if (current && !stepUp) {
-              await input.materialize(current.session.userId, WEBSITE_CLIENT_ID, registered.scopes, true);
+              await input.sessionProof(request.headers);
               await proof(current.session, scopes);
             }
             const response = await input.native().handler(nativeRequest(request, '/oauth2/authorize', fields));

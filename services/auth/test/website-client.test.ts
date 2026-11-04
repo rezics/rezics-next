@@ -112,7 +112,7 @@ async function token(fields: Record<string, string>) {
   });
 }
 
-test('website code and rotated refresh preserve each real uploader with confidential proof and S256', async () => {
+test('website first authorization materializes standing consent before code issuance and refresh preserves uploader proof', async () => {
   service = await authModule.createAuthService(options);
   await registerWebsite();
   const discoveryResponse = await fetch(`${issuer}/.well-known/openid-configuration`);
@@ -166,7 +166,15 @@ test('website code and rotated refresh preserve each real uploader with confiden
       code_challenge_method: 'S256',
       resource: audience,
     }).toString();
+    expect(
+      (await pool.query('SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2', [accountId, clientId]))
+        .rowCount,
+    ).toBe(0);
     const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
+    expect(
+      (await pool.query('SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2', [accountId, clientId]))
+        .rows[0]?.scopes,
+    ).toEqual(expect.arrayContaining(scopes));
     expect([302, 303]).toContain(authorization.status);
     const location = new URL(authorization.headers.get('location')!);
     expect(`${location.origin}${location.pathname}`).toBe(redirectUri);
