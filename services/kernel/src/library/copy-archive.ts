@@ -1462,7 +1462,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
             step = steps[stepIndex];
           let command = storedStepCommand(app.active_command);
           if (app.active_step === null) {
-            command = step && makeStepCommand(reviewId, stepIndex, step, plan, app.session_id, app.session_revision);
+            command = step ? makeStepCommand(reviewId, stepIndex, step, plan, app.session_id, app.session_revision) : null;
             if (!command) {
               await tx.query(
                 `UPDATE library.copy_archive_progress_apply SET state='failed',error_code='recovery_operands_unavailable',
@@ -1537,10 +1537,11 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           reservation.error,
           reservation.acceptedSteps,
         );
+      const activeReservation = reservation;
       signal?.throwIfAborted();
-      const { command } = reservation,
-        expected = nativeBinding(reservation.evidence.binding!);
-      let sessionId = reservation.sessionId,
+      const { command } = activeReservation,
+        expected = nativeBinding(activeReservation.evidence.binding!);
+      let sessionId = activeReservation.sessionId,
         sessionRevision: number | null = null,
         nativeReceipt: { partition: number; epoch: number; position: bigint } | null = null;
       try {
@@ -1622,8 +1623,9 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
               ).rows[0];
               const active = storedStepCommand(current?.active_command);
               if (
-                current?.next_step === reservation.step &&
-                current.active_step === reservation.step &&
+                current &&
+                current.next_step === activeReservation.step &&
+                current.active_step === activeReservation.step &&
                 active?.key === command.key
               ) {
                 await tx.query(
@@ -1644,9 +1646,9 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
               reviewId,
               failure.state,
               sessionId,
-              reservation.totalSteps,
+              activeReservation.totalSteps,
               failure.code,
-              reservation.step,
+              activeReservation.step,
             );
           reservation = await reserve();
           continue;
@@ -1677,7 +1679,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
             )
           ).rows[0];
           if (!current || !current.request_key_hash.equals(requestKeyHash)) throw missing();
-          if (current.next_step > reservation.step) {
+          if (current.next_step > activeReservation.step) {
             if (current.state !== 'applying')
               return {
                 state: current.state,
@@ -1701,25 +1703,26 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           }
           const active = storedStepCommand(current.active_command);
           if (
-            current.next_step !== reservation.step ||
-            current.active_step !== reservation.step ||
+            current.next_step !== activeReservation.step ||
+            current.active_step !== activeReservation.step ||
             active?.key !== command.key
           )
             throw new ProblemError('conflict');
           if (current.session_id && current.session_id !== sessionId) throw new ProblemError('conflict');
-          const next = reservation.step + 1,
-            state = next >= reservation.totalSteps ? 'applied' : h.cancelled ? 'partial' : 'applying',
-            nextCommand =
-              state === 'applying'
-                ? makeStepCommand(
-                    reviewId,
-                    next,
-                    recoverySteps(reservation.plan)[next]!,
-                    reservation.plan,
-                    sessionId,
-                    sessionRevision,
-                  )
-                : null;
+          const next = activeReservation.step + 1;
+          const state: CopyArchiveProgressState =
+            next >= activeReservation.totalSteps ? 'applied' : h.cancelled ? 'partial' : 'applying';
+          const nextCommand =
+            state === 'applying'
+              ? makeStepCommand(
+                  reviewId,
+                  next,
+                  recoverySteps(activeReservation.plan)[next]!,
+                  activeReservation.plan,
+                  sessionId,
+                  sessionRevision,
+                )
+              : null;
           if (state === 'applying' && !nextCommand)
             throw new Error('Archive progress checkpoint could not prepare the next command');
           await tx.query(
@@ -1758,13 +1761,17 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           reviewId,
           checkpoint.state,
           checkpoint.sessionId,
-          reservation.totalSteps,
+          activeReservation.totalSteps,
           checkpoint.error,
           checkpoint.acceptedSteps,
         );
       if (checkpoint.step === null || !checkpoint.command)
         throw new Error('Archive progress checkpoint omitted its next command');
-      reservation = await claimNext(reservation.evidence, reservation.plan, reservation.totalSteps);
+      reservation = await claimNext(
+        activeReservation.evidence,
+        activeReservation.plan,
+        activeReservation.totalSteps,
+      );
     }
   }
   function applicationResult(
