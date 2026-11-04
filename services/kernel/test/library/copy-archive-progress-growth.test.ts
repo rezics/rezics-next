@@ -76,6 +76,7 @@ test.serial(
           );
           expect(pending.rows[0]?.bytes ?? 0).toBeLessThanOrEqual(COMMAND_JSON_CAP);
         },
+        bounds: { rows: 'logarithmic' },
       },
     );
     expectNoGrownScans(report);

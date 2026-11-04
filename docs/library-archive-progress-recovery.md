@@ -158,7 +158,8 @@ Session/unit/History population is U.
   (index). Change-linear in N and accepted steps, not in U.
 - Retry from a lost ack before checkpoint of step k: the retry caller still pays remaining checkpoints and
   cancellation gates; L such replays add L archive reloads. Across first attempt plus retries, A≤20+L. Nested
-  native rollback is inside N, never omitted from the journey.
+  native rollback is inside N, never omitted from the journey. Retry rows are logarithmic in U (reserve plus
+  nested native index probes); statements stay constant.
 - Rejection after native currentness/conflict failure: N includes the rolled-back command; one extra archive write
   records `stale`/`failed`. Envelope in U remains constant/log.
 - Result: R=2, S=1, E=1 if unit IDs else 0. Scalar recovery here has E=0. Envelope in U: constant/log.
@@ -173,9 +174,9 @@ Native64/512/4096 whole-caller statements, returned/affected rows and shared hit
 rejection/rollback, `progressResult` and owner-remove cleanup are executed by
 `services/kernel/test/library/copy-archive-progress-growth.test.ts` against an isolated native stack and a bounded
 fixture. Unrelated same-owner Session/unit/History rows are seeded as planner population; measured callers remain
-the production apply, result and owner-remove paths. A sequential scan of a tiny archive upload/child table is a planner
-choice and is not growth in U; Session/unit/History stay index-only. Native growth capture admits 128 MiB of
-charged plan evidence so a ten-step composed apply can retain its nested notices. The installed export currently emits V4, which the archive
+the production apply, result and owner-remove paths. Sequential scans are allowed only while a relation stays within the shared eight-page tiny-heap
+limit; Session/unit/History and archive child tables must be index-only once they exceed it. Native growth
+capture admits 128 MiB of charged plan evidence so a ten-step composed apply can retain its nested notices. The installed export currently emits V4, which the archive
 parser does not accept; the growth fixture encodes a V2 artifact from the native Session rather than the live
 producer. Native Session writes require `advance_progress_discovery_generation_update` to alias transition tables as
 `previous_row`/`next_row`; PL/pgSQL `OLD`/`NEW` make `old.route` and `new.route` ambiguous. Until that check records a scale, that scale stays unmeasured. The focused owner-outcome test in
