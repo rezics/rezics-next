@@ -1,27 +1,33 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DEFAULT_NOTIFICATIONS } from '../../src/access/notification-kinds.ts';
+import { withReadingPreferencePage, type AccountPreferences } from '../../src/access/preferences.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { projectPreferencePage } from '../../src/access/preferences.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { cookies, nativeFixture, scopes } from './native-account-bindings-fixture.ts';
 
-function shown(value: {
-  spoilerLevel?: 0 | 1 | 2;
-  suitability?: 'blur' | 'show';
-  shelf?: unknown;
-  notifications?: typeof DEFAULT_NOTIFICATIONS;
-  version: number;
-}) {
-  const preferences = {
-    spoilerLevel: value.spoilerLevel ?? 0,
-    suitability: value.suitability ?? 'blur',
-    shelf: value.shelf ?? {},
-    notifications: value.notifications ?? DEFAULT_NOTIFICATIONS,
-    version: value.version,
-  };
-  return { ...preferences, page: projectPreferencePage(preferences) };
+function shown(
+  value: {
+    spoilerLevel?: 0 | 1 | 2;
+    suitability?: 'blur' | 'show';
+    shelf?: AccountPreferences['shelf'];
+    notifications?: AccountPreferences['notifications'];
+    version: number;
+  },
+  writable = true,
+) {
+  return withReadingPreferencePage(
+    {
+      spoilerLevel: value.spoilerLevel ?? 0,
+      suitability: value.suitability ?? 'blur',
+      shelf: value.shelf ?? {},
+      notifications: { ...DEFAULT_NOTIFICATIONS, ...value.notifications },
+      version: value.version,
+    },
+    { writable },
+  );
 }
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
@@ -59,6 +65,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens: fixture.referenceKeys,
+    receiptKeys: testReceiptKeys(),
     access: () => fixture.access,
     writeRate: limiter(),
   });
@@ -182,6 +189,7 @@ test('PATCH passes through write-rate admission before a preference or receipt w
     pool: db.pool,
     routeKey,
     tokens: fixture.referenceKeys,
+    receiptKeys: testReceiptKeys(),
     access: () => fixture.access,
     writeRate: limiter(1),
   });
@@ -401,4 +409,41 @@ test('another account cannot read or set a shelf, and an operator-opened session
   expect(result.response.status).toBe(200);
   expect(result.value.shelf).toEqual({ gridSize: 'small' });
   expect((await call(bot.accountId, other.bearer)).response.status).toBe(403);
+});
+
+test('a readable owner whose update is disallowed still returns current reading advice', async () => {
+  const person = await fixture.person('preferences-read-only');
+  const access = fixture.access;
+  const restricted = new Proxy(access, {
+    get(target, prop, receiver) {
+      if (prop === 'authorize')
+        return async (
+          client: Parameters<typeof access.authorize>[0],
+          actor: Parameters<typeof access.authorize>[1],
+          action: Parameters<typeof access.authorize>[2],
+          resource: Parameters<typeof access.authorize>[3],
+          evidence: Parameters<typeof access.authorize>[4],
+          time: Parameters<typeof access.authorize>[5],
+        ) => {
+          if (action === 'account:update' && resource.id === person.accountId) return false;
+          return target.authorize(client, actor, action, resource, evidence, time);
+        };
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+  const app = createKernel({
+    pool: db.pool,
+    routeKey,
+    tokens: fixture.referenceKeys,
+    receiptKeys: testReceiptKeys(),
+    access: () => restricted,
+    writeRate: limiter(),
+  });
+  const read = await call(person.accountId, person.bearer, undefined, Bun.randomUUIDv7(), app);
+  expect(read.response.status).toBe(200);
+  expect(read.value).toEqual(shown({ spoilerLevel: 0, suitability: 'blur', version: 0 }, false));
+  expect(
+    (await call(person.accountId, person.bearer, { expectedVersion: 0, spoilerLevel: 1 }, Bun.randomUUIDv7(), app))
+      .response.status,
+  ).toBe(403);
 });

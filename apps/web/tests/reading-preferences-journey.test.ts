@@ -36,7 +36,7 @@ test('Reading changes preserve the exact in-flight key and payload across respon
   expect(reviewed.idempotencyKey).not.toBe(original.idempotencyKey);
   expect(reviewed).toMatchObject({ expectedVersion: 2, spoilerLevel: 1, suitability: 'show' });
   expect(await sendReading(fixture.io, reviewed, false, () => 2)).toMatchObject({ kind: 'confirmed' });
-  expect(fixture.current()).toEqual({
+  expect(fixture.current()).toMatchObject({
     spoilerLevel: 1,
     suitability: 'show',
     version: 3,
@@ -49,7 +49,7 @@ test('A concurrent preference update produces reviewable conflict rather than ov
   const draft: ReadingValues = { spoilerLevel: 1, suitability: 'blur' };
   const pending = readingMutation(fixture.initial, draft)!;
   expect(await sendReading(fixture.io, pending, false, latest)).toMatchObject({ kind: 'rejected', reason: 'conflict' });
-  expect(fixture.current()).toEqual({
+  expect(fixture.current()).toMatchObject({
     spoilerLevel: 2,
     suitability: 'show',
     version: 1,
@@ -176,7 +176,7 @@ test('a definite conflict resolves an original attempt whose request was lost be
   expect(await sendReading(io, original, false, latest)).toMatchObject({ kind: 'uncertain' });
   fixture.concurrent({ spoilerLevel: 2 });
   expect(await sendReading(io, original, true, latest)).toMatchObject({ kind: 'rejected', reason: 'conflict' });
-  expect(fixture.current()).toEqual({
+  expect(fixture.current()).toMatchObject({
     spoilerLevel: 2,
     suitability: 'blur',
     version: 1,

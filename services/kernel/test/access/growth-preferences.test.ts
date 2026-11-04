@@ -3,6 +3,7 @@ import { NOTIFICATION_KINDS, type Notifications } from '../../src/access/notific
 import {
   createPreferenceCommands,
   notificationAllowed,
+  projectReadingAdvice,
   readAccountPreferences,
   type Shelf,
 } from '../../src/access/preferences.ts';
@@ -92,12 +93,17 @@ test('preferences read stays constant as accounts with stored preferences grow',
       );
     },
     async operation() {
-      expect(await readAccountPreferences(db.pool, accountId)).toEqual({
+      const values = await readAccountPreferences(db.pool, accountId);
+      expect(values).toEqual({
         spoilerLevel: 1,
         suitability: 'show',
         shelf: maximalShelf(),
         notifications,
         version: 1,
+      });
+      expect(projectReadingAdvice(values, { writable: true }).reading.effective).toEqual({
+        spoilerLevel: 1,
+        suitability: 'show',
       });
     },
   });
@@ -189,6 +195,60 @@ test('setting a maximal shelf stays constant as accounts with stored preferences
     expect(cost.relations?.['access.account_preferences']?.rows).toBe(1);
   }
 }, 120000);
+
+test('preference page projection stays constant as unrelated preference rows and receipts grow', async () => {
+  const pageRoute = 0x456a;
+  const selected = newId(pageRoute);
+  const report = await checkGrowth(db, {
+    name: 'account preference page projection',
+    scales: [256, 1024, 4096],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(database, scale, previous) {
+      if (previous === 0) {
+        await database.admin.query(
+          `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+           VALUES ($1,$2,'actor','active',$2)`,
+          [pageRoute, selected],
+        );
+        await database.admin.query(
+          `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,notifications,version)
+           VALUES ($1,$2,1,'show',$3::jsonb,$4::jsonb,1)`,
+          [pageRoute, selected, JSON.stringify(maximalShelf()), JSON.stringify(notifications)],
+        );
+      }
+      const ids = Array.from({ length: (scale - previous) * 16 }, () => newId(pageRoute));
+      await database.admin.query(
+        `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+        SELECT $1,id,'actor','active',id FROM unnest($2::uuid[]) id`,
+        [pageRoute, ids],
+      );
+      await database.admin.query(
+        `INSERT INTO access.account_preferences(route,account_id,spoiler_level,suitability,shelf,notifications,version)
+        SELECT $1,id,2,'blur',$3::jsonb,$4::jsonb,1 FROM unnest($2::uuid[]) id`,
+        [pageRoute, ids, JSON.stringify(maximalShelf()), JSON.stringify(notifications)],
+      );
+      await database.admin.query(
+        `INSERT INTO core.receipt
+          (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+        SELECT $1,'account',id,'access.account.preferences',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
+        FROM unnest($2::uuid[]) id`,
+        [partitionOf(pageRoute), ids],
+      );
+    },
+    async operation() {
+      const values = await readAccountPreferences(db.pool, selected);
+      expect(projectReadingAdvice(values, { writable: false }).allowedActions.update).toEqual({
+        allowed: false,
+        reason: 'not_authorized',
+      });
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
+  for (const { cost } of report.samples) {
+    expect(cost.rows).toBe(1);
+    expect(cost.statements).toBe(1);
+  }
+}, 60000);
 
 test('notificationAllowed stays constant as accounts grow', async () => {
   const permissionRoute = 0x4569;

@@ -19,6 +19,25 @@ original patch and key. A confirmed matching recovery drops the spent intent.
 
 **Decision:** A successful self-read advertises edit and reset; PATCH still checks `account:update` at command time.
 
+## Reading
+
+`/settings#reading` inspects the confirmed spoiler and suitability pair, changes an allowed setting, and recovers a
+lost acknowledgement or conflict against the current confirmed result. The page decodes the native preference-page
+envelope: viewer state, bounded supported choices, effective/default values, and owner `read`/`update` actions. Missing
+or malformed choice data is unavailable; the form does not guess the enum. Signed-out local display appearance stays on
+the Display section. A small inert sample shows the selected spoiler/image policy and labels draft versus confirmed
+behavior. Reset, when shown, PATCHes native defaults with the reviewed shared version.
+
+Write authority is the owner `update` action composed with the current session credential, re-evaluated at send and
+after the response. An unresolved original patch and key stay until acknowledgement is certain. A readable-but-not-editable
+result can refresh current values without clearing that original. Session retirement clears private drafts; a stale
+response cannot restore edit authority.
+
+**Decision:** Reset PATCHes `spoilerLevel` 0 and `suitability` `blur` with the reviewed version. Viewer state and
+read/update actions live as additive siblings of the notification catalogue `page` on the same preference 200, without
+a second preference version. Catalogue `page.actions` still advertise edit/reset on a self-read; Reading writability
+is `allowedActions.update`. 409 still returns catalogue `page` only.
+
 ## Watches
 
 `/settings#watches` is the existing private destination for a signed-in viewer. It reads one replaceable page for the selected `thread` or `board` kind through the generated `accounts({accountId}).watches.get` operation, with the exact opaque cursor and a limit of 20. The page supplies the current viewer, page-level remove advice and the command identity for each row. Available rows link through existing localized thread or board routes. A withheld row omits target identity, title and destination; removal still uses the owned subscription command when advice is available.

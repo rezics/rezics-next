@@ -99,6 +99,40 @@ export const DEFAULT_ACCOUNT_PREFERENCES: Readonly<AccountPreferences> = Object.
   notifications: DEFAULT_NOTIFICATIONS,
   version: 0,
 });
+export const READING_SPOILER_LEVELS = [0, 1, 2] as const;
+export const READING_SUITABILITY = ['blur', 'show'] as const;
+export const READING_DEFAULTS = Object.freeze({ spoilerLevel: 0, suitability: 'blur' } as const);
+export type PreferenceActionAdvice =
+  | { readonly allowed: true }
+  | { readonly allowed: false; readonly reason: 'not_authorized' };
+export type PreferenceReadingAdvice = {
+  viewerState: 'current';
+  allowedActions: { read: PreferenceActionAdvice; update: PreferenceActionAdvice };
+  reading: {
+    supported: { spoilerLevels: Array<0 | 1 | 2>; suitability: Array<'blur' | 'show'> };
+    effective: { spoilerLevel: 0 | 1 | 2; suitability: 'blur' | 'show' };
+    defaults: { spoilerLevel: 0; suitability: 'blur' };
+  };
+};
+
+/** Display guidance for Reading. Command authorization still runs at write time. */
+export function projectReadingAdvice(
+  values: Pick<AccountPreferences, 'spoilerLevel' | 'suitability'>,
+  input: { writable: boolean },
+): PreferenceReadingAdvice {
+  return {
+    viewerState: 'current',
+    allowedActions: {
+      read: { allowed: true },
+      update: input.writable ? { allowed: true } : { allowed: false, reason: 'not_authorized' },
+    },
+    reading: {
+      supported: { spoilerLevels: [...READING_SPOILER_LEVELS], suitability: [...READING_SUITABILITY] },
+      effective: { spoilerLevel: values.spoilerLevel, suitability: values.suitability },
+      defaults: { spoilerLevel: READING_DEFAULTS.spoilerLevel, suitability: READING_DEFAULTS.suitability },
+    },
+  };
+}
 export type PreferenceChange = {
   expectedVersion: number;
   spoilerLevel?: 0 | 1 | 2;
@@ -168,6 +202,17 @@ export function withPreferencePage<T extends Pick<AccountPreferences, 'notificat
   actions: readonly PreferencePageActionName[] = preferencePageActions,
 ): T & { page: PreferencePage } {
   return { ...preferences, page: projectPreferencePage(preferences, actions) };
+}
+
+/** One 200 envelope: catalogue `page` plus Reading viewer/actions. */
+export function withReadingPreferencePage(
+  preferences: AccountPreferences,
+  input: { writable: boolean } = { writable: true },
+): AccountPreferences & { page: PreferencePage } & PreferenceReadingAdvice {
+  return {
+    ...withPreferencePage(preferences),
+    ...projectReadingAdvice(preferences, input),
+  };
 }
 
 /** One joined account/preference seek on the recipient's route, including suspended accounts. */
