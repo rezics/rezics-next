@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { StatementSummary } from '../features/catalogue/statement-summary';
 import { CatalogueFileStatementSummary } from '../features/catalogue/catalogue-file-create-review';
