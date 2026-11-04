@@ -199,7 +199,7 @@ test('selected-family Bangumi TVAnime imports bounded names through the register
       { external_id: String(targetId), record_revision: null, record: target() },
       { source: crossMediaAliases.bangumi, subjectId: identities.get(String(targetId))! },
     );
-    expect(conversion.diagnostics?.map((diagnostic) => diagnostic.code)).toContain('unsupported_infobox_field');
+    expect(conversion.diagnostics?.map((diagnostic) => diagnostic.code)).toContain('unsupported_infobox_key');
     expect(JSON.stringify(conversion.diagnostics)).not.toContain('PRIVATE_MARKER');
     expect(conversion.diagnostics!.length).toBeLessThanOrEqual(16);
   } finally {
