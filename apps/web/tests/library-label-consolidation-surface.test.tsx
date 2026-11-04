@@ -195,12 +195,15 @@ test('the real shelf selects exact visible assignments, reviews all pages, repla
           refreshAssignments={(...ids) => refreshes.push(ids)}
           canUndo={() => true}
           csrfToken={() => 'csrf'}
-          catalogue={async () => ({
-            state: 'loaded',
-            provenance: { viewer: 'owner', csrfToken: 'csrf', query: '' },
-            labels: [label, target],
-            next: null,
-          })}
+          catalogue={async ({ data }) => {
+            catalogueCalls.push(structuredClone(data));
+            const provenance = { viewer: 'owner', csrfToken: 'csrf', ...data };
+            if (data.cursor && staleTargetPage) {
+              staleTargetPage = false;
+              return { state: 'unavailable', labels: [], reason: 'stale_cursor', provenance };
+            }
+            return { state: 'loaded', provenance, labels: [label, target], next: data.cursor ? null : 'next-target' };
+          }}
         >
           <LabelShelfEntries entries={entries} label={label} locale="en" layout="table" size="m" csrfToken="csrf" />
         </ConsolidationWorkspace>
