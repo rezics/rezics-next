@@ -261,7 +261,7 @@ async function resolveSubject(
   id: string,
   capture: (origin: Preparation | undefined) => void,
   current = false,
-  locale?: string,
+  requestedLocale?: string,
 ): Promise<CopySubjectResult> {
   if (!copiesSubjectId(id)) return { state: 'unavailable' };
   try {
@@ -270,7 +270,7 @@ async function resolveSubject(
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'forbidden' };
     capture(prepared(request, authorization));
-    const result = await kernelClient(locale)
+    const result = await kernelClient(requestedLocale)
       .subjects({ id })
       .get({
         headers: { authorization },

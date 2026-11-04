@@ -334,9 +334,9 @@ async function readCopyPage(
     return readLibraryResult(result);
   };
   try {
-    return await read(cursor);
+    return await read(input.cursor);
   } catch (error) {
-    if (!(error instanceof StaleCursorError) || !cursor) throw error;
+    if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
     recovered?.();
     return read();
   }
