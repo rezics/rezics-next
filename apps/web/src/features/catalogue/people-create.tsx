@@ -377,6 +377,7 @@ export function PeopleCreate({
             if (!next?.ok) return { ok: false };
             return { ok: true, types: next.profiles.map(({ id, label, description }) => ({ id, label, description })) };
           },
+          eligibility: () => transport.eligibility(),
           submit: async (command) => {
             const result = await transport.create(command);
             if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };

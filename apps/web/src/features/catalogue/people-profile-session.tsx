@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-actions';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import { submitFactCorrection } from './subject-facts-actions';
 import { RelationEditorSession } from './relation-editor-session';
 import { relationTargetSearch } from './relation-editor-search';
@@ -36,6 +36,7 @@ function PeopleProfileSessionLive({
       session={state}
       transport={{
         load: () => loadPeopleProfile({ data: { ...(id ? { id } : {}), ...(work !== undefined ? { work } : {}) } }),
+        eligibility: () => readCatalogueCreateEligibility(),
         create: (data) =>
           createCataloguePeopleProfile({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
