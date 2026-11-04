@@ -129,7 +129,9 @@ export async function loadPublicAccountJourney(
       : null;
     const identity = profile?.operatorId ? identities?.[profile.operatorId] : undefined;
     const operatorHandle =
-      identity && 'handle' in identity && typeof identity.handle === 'string' && identity.handle ? identity.handle : null;
+      identity && 'handle' in identity && typeof identity.handle === 'string' && identity.handle
+        ? identity.handle
+        : null;
     const displayName =
       identity && 'displayName' in identity && typeof identity.displayName === 'string' && identity.displayName
         ? identity.displayName

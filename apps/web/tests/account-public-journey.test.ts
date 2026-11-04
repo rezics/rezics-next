@@ -150,10 +150,7 @@ test('denied, preparing, invalid continuation and unavailable are distinct from 
 
 test('composed public pages keep automation visible when operator hydration is unavailable or has no handle', () => {
   const page = profilePage({ profile: { automated: true, operatorId: accountId } });
-  const render = (
-    operator?: { id: string; handle: string | null; displayName: string | null },
-    target = page,
-  ) => {
+  const render = (operator?: { id: string; handle: string | null; displayName: string | null }, target = page) => {
     const cache = new QueryClient();
     cache.setQueryData(['exposure', 'anonymous'], []);
     return renderToString(
