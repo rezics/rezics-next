@@ -210,6 +210,46 @@ test('a successful activity write shares readback without submitting or discardi
   expect(editor.snapshot().known?.publicViews.reviews).toBe(false);
 });
 
+test('an acknowledged command uses a deliberate current read and keeps only later edits', async () => {
+  const newer = { ...initial(), displayName: 'Another writer', biography: 'Current native biography' };
+  const writes: ProfileAttempt[] = [];
+  let reads = 0;
+  const editor = new ProfileEditor(
+    {
+      save: async (attempt) => {
+        writes.push(attempt);
+        return { ok: true, profile: attempt.after };
+      },
+      read: async () => {
+        if (++reads === 1) throw new Error('Current profile unavailable');
+        return newer;
+      },
+    },
+    initial(),
+  );
+  editor.edit({ displayName: 'Acknowledged name' });
+  const capturedRetry = editor.retry.bind(editor);
+  await editor.submit('profile');
+  const ackAfterFailedRead = editor.snapshot().acknowledged === true;
+  editor.edit({ biography: 'Later local edit' });
+  await capturedRetry();
+  const writesAfterCapturedRetry = writes.length;
+  await editor.reload();
+  expect({
+    ackAfterFailedRead,
+    writesAfterCapturedRetry,
+    known: editor.snapshot().known,
+    draft: editor.snapshot().draft,
+    attempt: editor.snapshot().attempt,
+  }).toMatchObject({
+    ackAfterFailedRead: true,
+    writesAfterCapturedRetry: 1,
+    known: newer,
+    draft: { ...newer, biography: 'Later local edit' },
+    attempt: null,
+  });
+});
+
 test('a receipt never claims success when current readback differs or is unavailable', async () => {
   for (const unreadable of [false, true]) {
     const editor = new ProfileEditor(
