@@ -17,6 +17,7 @@ import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 setDefaultTimeout(600_000);
 
 const property = 'schema:abstract';
+const globalContext = '00000000-0000-8000-8000-000000000000';
 const title = 'Authored document preview';
 const currentText = 'The current public document remains selected until an explicit decision.';
 const citation = 'https://example.org/authored-preview';
@@ -157,6 +158,123 @@ test('a contributor previews, edits, submits and explicitly selects the exact au
     const finalReview = page.getByRole('region', { name: m.authored_review_contribution() });
     await expect(finalReview).toContainText('fr');
     await expect(finalReview).toContainText(currentText);
+
+    await stack.syncKernelRequests();
+    const permissionCheckFrom = stack.kernelRequests().length;
+    await stack.injectKernelFailureOnce({
+      method: 'POST',
+      path: '/v1/viewerActions',
+      status: 503,
+      body: JSON.stringify({ code: 'dependency_unavailable' }),
+    });
+    await finalReview.getByRole('button', { name: m.authored_submit_contribution() }).click();
+    await expect(page.getByText(m.authored_actions_unavailable())).toBeVisible();
+    await expect(page.getByRole('button', { name: m.authored_check_actions() })).toBeVisible();
+    await stack.syncKernelRequests();
+    const unavailableActionReads = stack
+      .kernelRequests()
+      .slice(permissionCheckFrom)
+      .filter((request) => request.method === 'POST' && new URL(request.url, stack.kernelOrigin).pathname === '/v1/viewerActions');
+    expect(unavailableActionReads.at(-1)?.failure?.status).toBe(503);
+    expect(
+      stack
+        .kernelRequests()
+        .slice(permissionCheckFrom)
+        .some(
+          (request) =>
+            request.method === 'POST' &&
+            new URL(request.url, stack.kernelOrigin).pathname === `/v1/subjects/${subjectId}/candidates`,
+        ),
+    ).toBe(false);
+    await page.getByRole('button', { name: m.authored_check_actions() }).click();
+    await expect(finalReview.getByRole('button', { name: m.authored_submit_contribution() })).toBeVisible();
+
+    const aliceIdentity = await stack.authPersona('alice');
+    const grantHeaders = () => ({ 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) });
+    const grant = await stack.kernel(
+      '/v1/grants',
+      {
+        method: 'POST',
+        headers: grantHeaders(),
+        body: JSON.stringify({
+          resource: { route: 0, id: globalContext },
+          subject: { kind: 'account', id: aliceIdentity.accountId },
+          actions: ['statement:propose'],
+          valid: '(,)',
+        }),
+      },
+      'governor',
+    );
+    expect([201, 409]).toContain(grant.status);
+    const revoked = await stack.kernel(
+      '/v1/grants:revoke',
+      {
+        method: 'POST',
+        headers: grantHeaders(),
+        body: JSON.stringify({
+          resource: { route: 0, id: globalContext },
+          subject: { kind: 'account', id: aliceIdentity.accountId },
+          actions: ['statement:propose'],
+          valid: '(,)',
+        }),
+      },
+      'governor',
+    );
+    expect(revoked.status).toBe(200);
+    try {
+      const revokedFrom = stack.kernelRequests().length;
+      await finalReview.getByRole('button', { name: m.authored_submit_contribution() }).click();
+      await expect(page.getByText(m.authored_action_denied())).toBeVisible();
+      await expect(finalReview.getByRole('button', { name: m.authored_submit_contribution() })).toHaveCount(0);
+      await stack.syncKernelRequests();
+      expect(
+        stack
+          .kernelRequests()
+          .slice(revokedFrom)
+          .some(
+            (request) =>
+              request.method === 'POST' &&
+              new URL(request.url, stack.kernelOrigin).pathname === `/v1/subjects/${subjectId}/candidates`,
+          ),
+      ).toBe(false);
+      const refused = await stack.kernel(
+        `/v1/subjects/${subjectId}/candidates`,
+        {
+          method: 'POST',
+          headers: grantHeaders(),
+          body: JSON.stringify({
+            statement: authoredStatement(property, fromPlainText(untrustedText), 'fr', 'CC-BY-4.0', [
+              {
+                parts: [
+                  { property: { id: 'schema:url' }, value: { type: 'value', content: citation } },
+                  { property: { id: 'schema:inLanguage' }, value: { type: 'value', content: 'en' } },
+                ],
+              },
+            ]),
+          }),
+        },
+        'alice',
+      );
+      expect(refused.status).toBe(403);
+    } finally {
+      const restored = await stack.kernel(
+        '/v1/grants',
+        {
+          method: 'POST',
+          headers: grantHeaders(),
+          body: JSON.stringify({
+            resource: { route: 0, id: globalContext },
+            subject: { kind: 'account', id: aliceIdentity.accountId },
+            actions: ['statement:propose'],
+            valid: '(,)',
+          }),
+        },
+        'governor',
+      );
+      expect([201, 409]).toContain(restored.status);
+    }
+    await page.getByRole('button', { name: m.authored_check_actions() }).click();
+    await expect(finalReview.getByRole('button', { name: m.authored_submit_contribution() })).toBeVisible();
 
     const candidatePath = `/v1/subjects/${subjectId}/candidates`;
     const observedFrom = stack.kernelRequests().length;

@@ -11,6 +11,20 @@ export function candidateHasPayload(candidate: NativeCandidatePage['candidates']
 }
 export type CandidateField = { id: string; label: string; multivalued?: boolean };
 export type CandidateSlot = { target?: string; sameAs?: string; key?: string };
+export type ViewerActionsObservation =
+  | { state: 'available'; actions: { action: string; operations: string[] }[] }
+  | { state: 'unavailable' };
+
+/** A missing component is unknown, while a present projection without this pair is a current denial. */
+export function viewerOperationAllowed(
+  observation: ViewerActionsObservation | undefined,
+  action: string,
+  operation: string,
+): boolean | undefined {
+  if (!observation || observation.state !== 'available') return undefined;
+  return observation.actions.some((entry) => entry.action === action && entry.operations.includes(operation));
+}
+
 export type CandidateSelection = { candidate: string; rank: 'normal' | 'preferred' };
 export type ReviewContext = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['contexts']>['get']>>['data']
@@ -32,6 +46,7 @@ export type CandidateRead =
       fields: CandidateField[];
       names: Record<string, Record<string, string>>;
       page: CandidatePage | null;
+      actions?: ViewerActionsObservation;
       contextReview?: ContextComparison;
       session?: string;
     };
@@ -64,6 +79,60 @@ export type CandidateResult =
     };
 
 export const candidateContext = '00000000-0000-8000-8000-000000000000';
+
+/** Read the exact mounted operation projection for the Global Context used by subject candidates. */
+export async function readCandidateViewerActions(
+  client: KernelClient,
+  authorization?: string,
+): Promise<ViewerActionsObservation> {
+  if (!authorization) return { state: 'unavailable' };
+  try {
+    const result = await client.viewerActions.post(
+      { resources: [{ type: 'semantic.context', id: candidateContext }] },
+      { headers: { authorization }, fetch: { cache: 'no-store' } },
+    );
+    if (result.status !== 200 || !result.data) return { state: 'unavailable' };
+    const resources = result.data.resources.filter(
+      (resource) => resource.type === 'semantic.context' && resource.id === candidateContext,
+    );
+    if (resources.length !== 1 || !('viewerActions' in resources[0]!)) return { state: 'unavailable' };
+    const nativeActions: unknown = resources[0]!.viewerActions;
+    if (!Array.isArray(nativeActions) || nativeActions.length > 64) return { state: 'unavailable' };
+    const actions: { action: string; operations: string[] }[] = [];
+    const seenActions = new Set<string>();
+    const seenOperations = new Set<string>();
+    for (const value of nativeActions) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return { state: 'unavailable' };
+      const entry = value as Record<string, unknown>;
+      if (
+        typeof entry.action !== 'string' ||
+        !entry.action ||
+        entry.action.length > 64 ||
+        seenActions.has(entry.action) ||
+        !Array.isArray(entry.operations)
+      )
+        return { state: 'unavailable' };
+      seenActions.add(entry.action);
+      const operations: string[] = [];
+      for (const operation of entry.operations) {
+        if (
+          typeof operation !== 'string' ||
+          !operation ||
+          operation.length > 128 ||
+          seenOperations.size >= 256 ||
+          seenOperations.has(`${entry.action}/${operation}`)
+        )
+          return { state: 'unavailable' };
+        seenOperations.add(`${entry.action}/${operation}`);
+        operations.push(operation);
+      }
+      actions.push({ action: entry.action, operations });
+    }
+    return { state: 'available', actions };
+  } catch {
+    return { state: 'unavailable' };
+  }
+}
 
 /** Optional producer metadata follows the existing subject Sources region's runtime compatibility read. */
 export function candidateSourceRecords(subject: object): {

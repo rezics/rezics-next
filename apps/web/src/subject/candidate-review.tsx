@@ -22,6 +22,7 @@ import {
   type CandidateRead,
   type CandidateResult,
   type CandidateSlot,
+  viewerOperationAllowed,
 } from './candidates';
 import { ContributionLifecycle } from '../features/catalogue/contribution-lifecycle-view';
 import type {
@@ -80,6 +81,7 @@ function CandidateReviewLive({
   returnHref,
   returnLabel,
   returnUnavailable,
+  requireActionObservation = false,
   documents,
   work,
 }: {
@@ -94,6 +96,8 @@ function CandidateReviewLive({
   returnHref?: string;
   returnLabel?: string;
   returnUnavailable?: boolean;
+  /** Used by the authored visit, whose commands have distinct mounted native operations. */
+  requireActionObservation?: boolean;
   slot?: CandidateSlot | undefined;
   documents?: { public: unknown; candidates: unknown };
 }) {
@@ -110,6 +114,7 @@ function CandidateReviewLive({
   const [busy, setBusy] = useState(false);
   const [requiresReload, setRequiresReload] = useState(false);
   const [failure, setFailure] = useState<CandidateFailure>();
+  const [actionFailure, setActionFailure] = useState<'denied' | 'unavailable'>();
   const [result, setResult] = useState<CandidateResult & { ok: true }>();
   const confirmationTitle = useId();
   const confirmationRegion = useRef<HTMLElement>(null);
@@ -124,6 +129,20 @@ function CandidateReviewLive({
       ? JSON.stringify([id, initialProperty, exactCandidate, context, slot?.target, slot?.sameAs, slot?.key])
       : null;
   const current = read?.ok ? read : undefined;
+  const actionAllowed = (operation: CandidateCommand['operation']) => {
+    if (!requireActionObservation) return true;
+    if (actionFailure) return false;
+    const action = operation === 'adopt' ? 'context:adopt' : 'context:accept';
+    const operationId =
+      operation === 'adopt'
+        ? 'subject.adopt'
+        : operation === 'accept'
+          ? 'subject.accept_candidate'
+          : 'subject.reject_candidate';
+    return viewerOperationAllowed(current?.actions, action, operationId) === true;
+  };
+  const actionProjectionUnavailable =
+    requireActionObservation && !!current && (!current.actions || current.actions.state === 'unavailable');
   const publicRead = context
     ? (result?.contextReview?.reading ?? current?.contextReview?.reading)
     : result
@@ -167,6 +186,7 @@ function CandidateReviewLive({
     setOpened(true);
     setBusy(true);
     setFailure(undefined);
+    setActionFailure(undefined);
     setConfirmation(null);
     setCandidate(undefined);
     setResult(undefined);
@@ -294,23 +314,68 @@ function CandidateReviewLive({
     running.current = true;
     setBusy(true);
     setFailure(undefined);
-    request.current ??= freezeCommand({
-      id,
-      expectedReader: work.reader,
-      property,
-      // Adoption uses selection; candidate is retained for compatibility with existing scalar callers.
-      candidate: candidate?.id ?? draft?.selection[0]?.candidate ?? id,
-      operation: confirmation,
-      head: confirmation === 'adopt' ? (current.page.adoption?.head ?? null) : candidate!.head,
-      key: crypto.randomUUID(),
-      ...(confirmation === 'adopt'
-        ? { selection: context && mode !== 'replace' ? [] : structuredClone(draft!.selection) }
-        : {}),
-      ...(session.current ? { session: session.current } : {}),
-      ...(slot ? { slot: structuredClone(slot) } : {}),
-      ...(context ? { context, mode } : {}),
-    });
     try {
+      let prepared = current;
+      if (requireActionObservation && !request.current) {
+        const latest = await transport.read(property, undefined, session.current, work);
+        if (!work.live()) return;
+        if (!latest.ok) {
+          setActionFailure(latest.reason === 'denied' ? 'denied' : 'unavailable');
+          restoreConfirmationFocus.current = true;
+          setConfirmation(null);
+          return;
+        }
+        session.current = latest.session ?? session.current;
+        setRead(latest);
+        setActionFailure(undefined);
+        const latestCandidate = latest.page?.candidates.find((item) => item.id === candidate?.id);
+        const changedHead =
+          confirmation === 'adopt'
+            ? latest.page?.adoption?.head !== current.page.adoption?.head
+            : !latestCandidate || latestCandidate.head !== candidate?.head || latestCandidate.retracted !== null;
+        if (changedHead) {
+          setFailure({ ok: false, reason: 'stale' });
+          setCandidate(latestCandidate);
+          setRequiresReload(true);
+          restoreConfirmationFocus.current = true;
+          setConfirmation(null);
+          return;
+        }
+        prepared = latest;
+        if (
+          viewerOperationAllowed(
+            latest.actions,
+            confirmation === 'adopt' ? 'context:adopt' : 'context:accept',
+            confirmation === 'adopt'
+              ? 'subject.adopt'
+              : confirmation === 'accept'
+                ? 'subject.accept_candidate'
+                : 'subject.reject_candidate',
+          ) !== true
+        ) {
+          const unavailable = !latest.actions || latest.actions.state === 'unavailable';
+          setActionFailure(unavailable ? 'unavailable' : 'denied');
+          restoreConfirmationFocus.current = true;
+          setConfirmation(null);
+          return;
+        }
+      }
+      request.current ??= freezeCommand({
+        id,
+        expectedReader: work.reader,
+        property,
+        // Adoption uses selection; candidate is retained for compatibility with existing scalar callers.
+        candidate: candidate?.id ?? draft?.selection[0]?.candidate ?? id,
+        operation: confirmation,
+        head: confirmation === 'adopt' ? (prepared.page?.adoption?.head ?? null) : candidate!.head,
+        key: crypto.randomUUID(),
+        ...(confirmation === 'adopt'
+          ? { selection: context && mode !== 'replace' ? [] : structuredClone(draft!.selection) }
+          : {}),
+        ...(session.current ? { session: session.current } : {}),
+        ...(slot ? { slot: structuredClone(slot) } : {}),
+        ...(context ? { context, mode } : {}),
+      });
       const next = await transport.confirm(request.current, work);
       if (!work.live()) return;
       if (!next.ok) {
@@ -486,6 +551,18 @@ function CandidateReviewLive({
                 onClick={() => void (request.current ? confirm() : load())}
               >
                 {request.current ? m.candidate_retry({}, options) : m.candidate_reload({}, options)}
+              </Button>
+            </div>
+          )}
+          {(actionFailure || actionProjectionUnavailable) && (
+            <div role="status" className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+              <p>
+                {actionFailure === 'denied'
+                  ? m.candidate_action_denied({}, options)
+                  : m.candidate_actions_unavailable({}, options)}
+              </p>
+              <Button variant="outline" className="min-h-11" disabled={busy} onClick={() => void load()}>
+                {m.candidate_reload({}, options)}
               </Button>
             </div>
           )}
@@ -681,24 +758,32 @@ function CandidateReviewLive({
                       <div className="flex flex-col gap-3">
                         <div className="flex flex-wrap gap-2">
                           {candidate.retracted === null && candidate.decision !== 'accepted' && (
-                            <Button
-                              variant="outline"
-                              className="min-h-11"
-                              disabled={locked || requiresReload}
-                              onClick={(event) => openConfirmation('accept', event.currentTarget)}
-                            >
-                              {m.candidate_accept({}, options)}
-                            </Button>
+                            actionAllowed('accept') ? (
+                              <Button
+                                variant="outline"
+                                className="min-h-11"
+                                disabled={locked || requiresReload}
+                                onClick={(event) => openConfirmation('accept', event.currentTarget)}
+                              >
+                                {m.candidate_accept({}, options)}
+                              </Button>
+                            ) : requireActionObservation && !actionProjectionUnavailable ? (
+                              <p role="status">{m.candidate_action_denied({}, options)}</p>
+                            ) : null
                           )}
                           {candidate.retracted === null && candidate.decision !== 'rejected' && (
-                            <Button
-                              variant="outline"
-                              className="min-h-11"
-                              disabled={locked || requiresReload}
-                              onClick={(event) => openConfirmation('reject', event.currentTarget)}
-                            >
-                              {m.candidate_reject({}, options)}
-                            </Button>
+                            actionAllowed('reject') ? (
+                              <Button
+                                variant="outline"
+                                className="min-h-11"
+                                disabled={locked || requiresReload}
+                                onClick={(event) => openConfirmation('reject', event.currentTarget)}
+                              >
+                                {m.candidate_reject({}, options)}
+                              </Button>
+                            ) : requireActionObservation && !actionProjectionUnavailable ? (
+                              <p role="status">{m.candidate_action_denied({}, options)}</p>
+                            ) : null
                           )}
                           <Button
                             variant="outline"
@@ -834,14 +919,17 @@ function CandidateReviewLive({
                         )}
                         {!draft.selection.length && <p>{m.candidate_clear_selection({}, options)}</p>}
                         {!valid && <p role="status">{m.candidate_selection_invalid({}, options)}</p>}
-                        <Button
+                        {actionAllowed('adopt') && <Button
                           variant="outline"
                           className="min-h-11 self-start"
                           disabled={locked || requiresReload || !valid}
                           onClick={(event) => openConfirmation('adopt', event.currentTarget)}
                         >
                           {context ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}
-                        </Button>
+                        </Button>}
+                        {requireActionObservation && !actionProjectionUnavailable && !actionAllowed('adopt') && (
+                          <p role="status">{m.candidate_action_denied({}, options)}</p>
+                        )}
                         {confirmation === 'adopt' && confirmationContent}
                       </ContentItemFrame>
                     </section>

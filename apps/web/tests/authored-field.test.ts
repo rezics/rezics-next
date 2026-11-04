@@ -8,7 +8,7 @@ import {
   validateAuthored,
   type AuthoredCommand,
 } from '../src/features/catalogue/authored-field';
-import { candidateIsPublic } from '../src/subject/candidates';
+import { candidateContext, candidateIsPublic } from '../src/subject/candidates';
 import { dirname } from 'node:path';
 import { m } from '../src/paraglide/messages.js';
 import { createElement } from 'react';
@@ -37,6 +37,15 @@ test('Write licensed original catalogue text and review its actual candidate thr
   const fixture = authoredFixture();
   const initial = await fixture.transport.read();
   if (!initial.ok) throw new Error('Expected current selected text');
+  expect(initial.actions).toMatchObject({ state: 'available' });
+  expect(
+    initial.actions.state === 'available' &&
+      initial.actions.actions.find((item) => item.action === 'statement:propose')?.operations,
+  ).toContain('subject.propose');
+  expect(fixture.calls.find((call) => call.path === '/v1/viewerActions')).toMatchObject({
+    authorization: 'Bearer fixture',
+    body: { resources: [{ type: 'semantic.context', id: candidateContext }] },
+  });
   expect(
     initial.body?.ok && initial.body.document.availability === 'available' && documentText(initial.body.document.body!),
   ).toContain('aviator');
@@ -48,7 +57,7 @@ test('Write licensed original catalogue text and review its actual candidate thr
   if (!result.ok) throw new Error('Expected proposal');
   expect(result.kind).toBe('proposed-awaiting-review');
   expect(candidateIsPublic(fixture.publicRead, authoredProperty, result.candidate)).toBe(false);
-  const posted = fixture.calls.find((call) => call.method === 'POST');
+  const posted = fixture.calls.find((call) => call.path === `/v1/subjects/${fixture.id}/candidates`);
   expect(posted).toMatchObject({
     path: `/v1/subjects/${fixture.id}/candidates`,
     key: command.key,
@@ -191,7 +200,9 @@ test('authorized authored ready and conflict states show the real form while sel
     const result = await fixture.transport.propose(command);
     if (scenario === 'stale') {
       expect(result).toEqual({ ok: false, reason: 'stale' });
-      expect(fixture.calls.find((call) => call.method === 'POST')?.body).toEqual({ statement });
+      expect(fixture.calls.find((call) => call.path === `/v1/subjects/${fixture.id}/candidates`)?.body).toEqual({
+        statement,
+      });
     } else {
       expect(result.ok && result.kind).toBe('proposed-awaiting-review');
     }
@@ -276,6 +287,25 @@ test('unsupported metadata, denied reads and an unbound production transport nev
   }
 });
 
+test('an unavailable or denied current proposal observation keeps public text readable without enabling a new command', async () => {
+  for (const [scenario, message] of [
+    ['actions-unavailable', m.authored_actions_unavailable({}, { locale: 'en' })],
+    ['actions-denied', m.authored_action_denied({}, { locale: 'en' })],
+  ] as const) {
+    const fixture = authoredFixture(scenario);
+    const initial = await fixture.transport.read();
+    if (!initial.ok || !initial.body?.ok) throw new Error('Expected independent public selected text');
+    expect(documentText(initial.body.document.body!)).toContain('aviator');
+    const html = renderToStaticMarkup(
+      createElement(AuthoredField, { initial, locale: 'en', transport: fixture.transport, confirm: fixture.confirm }),
+    );
+    expect(html).toContain(message);
+    expect(html).toContain('An aviator meets a young traveller in the desert.');
+    expect(html).not.toContain(m.authored_submit_contribution({}, { locale: 'en' }));
+    if (scenario === 'actions-unavailable') expect(html).toContain(m.authored_check_actions({}, { locale: 'en' }));
+  }
+});
+
 const { authoredState, initialAuthoredState } = await import('../src/features/catalogue/authored-field-state');
 const { CandidateValue } = await import('../src/features/pages/data');
 
@@ -338,7 +368,9 @@ test('a native stale rejection retains frozen draft and recovery while exact rea
   state = authoredState(state, { type: 'result', result: await fixture.transport.propose(state.command!) });
   expect(state.failure).toBe('stale');
   expect(state.command?.key).toBe(next.key);
-  expect(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.key)).toEqual([
+  expect(
+    fixture.calls.filter((call) => call.path === `/v1/subjects/${fixture.id}/candidates`).map((call) => call.key),
+  ).toEqual([
     command.key,
     next.key,
   ]);
