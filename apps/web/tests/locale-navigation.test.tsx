@@ -197,6 +197,8 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   const root = createRoot(host);
   await act(async () => {
     await router.load();
+    expect(router.state.location.pathname).toBe('/en/subjects/reader-01');
+    expect(router.state.matches.length).toBeGreaterThan(1);
     root.render(<RouterProvider router={router} />);
   });
   const body = within(window.document.body);
