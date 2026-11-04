@@ -84,7 +84,7 @@ export function ReporterHistoryCurrent(props: {
   }
   if (access.state !== 'ready') {
     active.current.retire?.();
-    active.current.retire = undefined;
+    delete active.current.retire;
     return <ReporterHistoryPage result={{ state: access.state }} query={props.initial.query} />;
   }
   return (
@@ -92,7 +92,7 @@ export function ReporterHistoryCurrent(props: {
       key={visitKey}
       visitKey={visitKey}
       initial={props.initial}
-      navigation={props.navigation}
+      {...(props.navigation ? { navigation: props.navigation } : {})}
       read={props.read ?? readCurrent}
       registerRetire={registerRetire}
     />

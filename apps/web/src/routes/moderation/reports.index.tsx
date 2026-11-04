@@ -17,7 +17,10 @@ export const Route = createFileRoute('/moderation/reports/')({
     await prepareExposure(args.context.queryClient);
   },
   validateSearch: reporterHistoryQuery,
-  loaderDeps: ({ search }) => ({ cursor: search.cursor, reportId: search.reportId }),
+  loaderDeps: ({ search }) => ({
+    ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+    ...(search.reportId === undefined ? {} : { reportId: search.reportId }),
+  }),
   loader: async ({ deps, context, abortController, location }) => {
     const visit = await prepareReporterHistoryVisit(
       context.queryClient,

@@ -92,7 +92,7 @@ function ReporterStatusVisit({
         isCurrent={journey.isCurrent}
         retryFocusScope={journey}
         isRetryFocusScopeCurrent={journey.isConnected}
-        returnHref={returnHref}
+        {...(returnHref ? { returnHref } : {})}
       />
     </div>
   );
