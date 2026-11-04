@@ -1,15 +1,9 @@
 import type { ConsumptionSummary } from './native';
 
-export function reportedDate(
-  value: { year: number; month?: number; day?: number } | null,
-  unknownLabel = 'unknown',
-): string {
-  if (!value) return unknownLabel;
-  const year = String(value.year).padStart(4, '0');
-  if (value.month === undefined) return year;
-  const month = String(value.month).padStart(2, '0');
-  if (value.day === undefined) return year + '-' + month;
-  return year + '-' + month + '-' + String(value.day).padStart(2, '0');
+import { formatJournalDate, type ProgressSessionJournalDate } from '@rezics/progress';
+
+export function reportedDate(value: ProgressSessionJournalDate | null, unknownLabel = 'unknown'): string {
+  return value === null ? unknownLabel : formatJournalDate(value);
 }
 
 export function privateCount(value: string): string {

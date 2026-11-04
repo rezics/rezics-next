@@ -258,6 +258,7 @@ export type ProgressSessionPage =
 export type ProgressFailure = {
   ok: false;
   reason: 'conflict' | 'invalid' | 'unsupported_library_profile' | 'closed' | 'forbidden' | 'unavailable';
+  field?: string;
 };
 
 export type ProgressSnapshot = {
@@ -456,7 +457,13 @@ function failure(status: number, body: unknown): ProgressFailure {
   )
     return { ok: false, reason: 'unsupported_library_profile' };
   if (status === 409) return { ok: false, reason: 'conflict' };
-  if (status === 400 || status === 422) return { ok: false, reason: 'unsupported_library_profile' };
+  if (status === 400 || status === 422) {
+    const field =
+      typeof body === 'object' && body !== null && 'field' in body && typeof body.field === 'string'
+        ? body.field
+        : undefined;
+    return { ok: false, reason: 'invalid', ...(field === undefined ? {} : { field }) };
+  }
   if (status === 401 || status === 403 || status === 404) return { ok: false, reason: 'forbidden' };
   return { ok: false, reason: 'unavailable' };
 }
