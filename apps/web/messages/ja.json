@@ -8030,5 +8030,10 @@
   "library_layout_source_url": "今回の閲覧で選んだレイアウトです。",
   "library_layout_source_type": "この種別の保存済みレイアウトを使用中です。",
   "library_layout_source_all": "すべての種別の保存済みレイアウトを使用中です。",
-  "library_layout_source_application": "アプリの既定レイアウトを使用中です。"
+  "library_layout_source_application": "アプリの既定レイアウトを使用中です。",
+  "home_owner_context_unavailable": "所有者の情報を利用できません。",
+  "home_owner_description_empty": "説明は提供されていません。",
+  "home_owner_description_unavailable": "説明を利用できません。",
+  "home_owner_curator_unavailable": "キュレーターの情報を利用できません。",
+  "home_owner_carrier_unavailable": "Realm の紹介を利用できません。"
 }

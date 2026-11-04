@@ -8030,5 +8030,10 @@
   "library_layout_source_url": "本次瀏覽選擇的版面。",
   "library_layout_source_type": "正在使用此類型已儲存的版面。",
   "library_layout_source_all": "正在使用所有類型已儲存的版面。",
-  "library_layout_source_application": "正在使用應用程式預設版面。"
+  "library_layout_source_application": "正在使用應用程式預設版面。",
+  "home_owner_context_unavailable": "擁有者資訊暫時無法取得。",
+  "home_owner_description_empty": "未提供說明。",
+  "home_owner_description_unavailable": "說明暫時無法取得。",
+  "home_owner_curator_unavailable": "策展者資訊暫時無法取得。",
+  "home_owner_carrier_unavailable": "Realm 展示資訊暫時無法取得。"
 }

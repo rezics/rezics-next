@@ -14,13 +14,29 @@ Collection eligibility, and Content owns review and Space populations. Feed comp
 summaries without point-read enrichment, private membership or Collection query contents as fallback data.
 Following Collection activity retains its existing meaning and does not establish discovery eligibility.
 
-The installed `FeedItemSchema` admits public discovery Subject and Account rows, plus Following thread, post and
-Collection rows. It has no public discovery Collection, review or Space variants. The Web reader keeps named
-Collection and Space seams for the eventual owner union, and renders the existing disclosed Following Collection
-and review rows through the shared ContentItem adapter. Home states visibly that public Collection, review and Space
-discovery is unavailable; it does not turn their absence into an empty result or hydrate them with point reads.
-Search/Content activation remains pending those producers; no successful empty variant or feed-local index
-substitutes for them. Unknown or mismatched summaries make discovery unavailable instead of becoming fallback
+The installed `FeedItemSchema` admits public discovery Subject, Account, Collection, review and Space rows,
+plus Following thread, post and Collection rows. Web consumes the generated union through its existing
+ContentItem adapter and canonical locale-aware owner destinations. Public owner cards show supplied description
+text, explicit empty descriptions, unavailable descriptions and unavailable curator/carrier presentation. A Space's
+disclosed Realm title remains carrier context; following is neither Realm membership nor an access grant.
+
+Decision: Home public-owner cards keep exact owner navigation usable while missing curator/presentation and bounded private follow admission remain explicitly unavailable, without per-card enrichment.
+
+The native Collection summary currently contains only `id`, `title` and nullable `description`; Space adds
+`address`, optional `summary` and optional nullable `realm: {id,title}`. These fields do not distinguish withheld
+context from dependency failure. Web does not label either an empty value or an absent field as withheld.
+Content/Search producers must supply bounded admitted curator identity/public presentation and explicit
+missing/withheld/unavailable/available-empty context states before those distinctions can render.
+
+The feed page has no native own-follow projection or directional follow actions for these owners. The producer
+handoff is a separate authenticated page/batch projection bounded to the returned 20 exact Collection/Space IDs,
+with current viewer/credential lifetime, own-edge state, independent create/remove admission and recovery
+readback. Removal admission must survive lost target disclosure without returning new target facts. Public
+feed documents stay anonymous/cache-safe. Until this producer is released in the generated client, signed-in
+cards show follow state unavailable and install no mutation callbacks. The eventual Home composition must use
+Library FollowControl and existing writers, retiring callbacks synchronously on page/selector/locale/credential
+replacement; unknown writes retain their original key and require deliberate readback/retry.
+Unknown or mismatched summaries make discovery unavailable instead of becoming fallback
 Account cards.
 `feed-discovery.ts` dispatches exhaustively on Search's summary discriminator and requires the exact owner,
 kind and summary identity. A rejected mapping retains the incoming lane position for retry. Search-omitted

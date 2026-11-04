@@ -8105,5 +8105,10 @@
   "library_layout_source_url": "Layout chosen for this visit.",
   "library_layout_source_type": "Using the saved layout for this type.",
   "library_layout_source_all": "Using the saved layout for all types.",
-  "library_layout_source_application": "Using the application layout."
+  "library_layout_source_application": "Using the application layout.",
+  "home_owner_context_unavailable": "Owner context is unavailable.",
+  "home_owner_description_empty": "No description supplied.",
+  "home_owner_description_unavailable": "Description unavailable.",
+  "home_owner_curator_unavailable": "Curator information unavailable.",
+  "home_owner_carrier_unavailable": "Realm presentation unavailable."
 }

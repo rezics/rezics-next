@@ -16,6 +16,7 @@ import {
   feedCardKind,
 } from './card-presentation';
 import type { FeedActionBarProps } from './action-bar';
+import { HomePublicOwnerContext } from './home-public-owner/view';
 
 /** A current-page projection: no hydration, retained identity, source inference or reordering. */
 export function homeFeedItemPresentation(
@@ -91,7 +92,11 @@ export function homeFeedItemPresentation(
     ),
     preview: (
       <>
-        <FeedCardPreview item={item} />
+        {kind === 'collection' || kind === 'space' ? (
+          <HomePublicOwnerContext item={item} locale={locale} />
+        ) : (
+          <FeedCardPreview item={item} />
+        )}
         <FeedCardParentContext key={parentKey} item={item} locale={locale} {...(origin ? { origin } : {})} />
       </>
     ),

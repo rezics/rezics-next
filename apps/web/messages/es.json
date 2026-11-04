@@ -8030,5 +8030,10 @@
   "library_layout_source_url": "Diseño elegido para esta visita.",
   "library_layout_source_type": "Se usa el diseño guardado para este tipo.",
   "library_layout_source_all": "Se usa el diseño guardado para todos los tipos.",
-  "library_layout_source_application": "Se usa el diseño de la aplicación."
+  "library_layout_source_application": "Se usa el diseño de la aplicación.",
+  "home_owner_context_unavailable": "El contexto del propietario no está disponible.",
+  "home_owner_description_empty": "No se ha proporcionado una descripción.",
+  "home_owner_description_unavailable": "Descripción no disponible.",
+  "home_owner_curator_unavailable": "Información del curador no disponible.",
+  "home_owner_carrier_unavailable": "Presentación del Realm no disponible."
 }

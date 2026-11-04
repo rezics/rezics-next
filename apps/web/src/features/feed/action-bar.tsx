@@ -25,6 +25,7 @@ import type { VerificationConfig } from '../../report/turnstile';
 import { homeFeedReaction } from './home-feed-reaction';
 import { admittedFeedWorkId } from './home-work-library/contract';
 import { HomeWorkLibraryAction } from './home-work-library/view';
+import { HomePublicOwnerActions } from './home-public-owner/view';
 
 export type FeedActionBarProps = {
   locale: string;
@@ -87,6 +88,12 @@ export function HomeFeedActions({
 }) {
   const href = homeFeedDestination(item, locale);
   const kind = item.destination.kind;
+  if (kind === 'collection' || kind === 'space')
+    return (
+      <HomePublicOwnerActions item={item} locale={locale} signedIn={signedIn}>
+        {children}
+      </HomePublicOwnerActions>
+    );
   if (kind !== 'thread' && kind !== 'post' && kind !== 'subject') return children;
   const workId = admittedFeedWorkId(item);
   const destination = item.destination;

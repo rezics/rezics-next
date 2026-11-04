@@ -8030,5 +8030,10 @@
   "library_layout_source_url": "Layout für diesen Besuch gewählt.",
   "library_layout_source_type": "Gespeichertes Layout für diesen Typ.",
   "library_layout_source_all": "Gespeichertes Layout für alle Typen.",
-  "library_layout_source_application": "Layout der Anwendung."
+  "library_layout_source_application": "Layout der Anwendung.",
+  "home_owner_context_unavailable": "Informationen zum Eigentümer sind nicht verfügbar.",
+  "home_owner_description_empty": "Keine Beschreibung angegeben.",
+  "home_owner_description_unavailable": "Beschreibung nicht verfügbar.",
+  "home_owner_curator_unavailable": "Informationen zum Kurator sind nicht verfügbar.",
+  "home_owner_carrier_unavailable": "Realm-Präsentation nicht verfügbar."
 }

@@ -18,6 +18,12 @@ export function homeFeedTitle(item: FeedItem, locale: string): string {
 /** Canonical local owner addresses, independent of source-provided URL strings. */
 export function homeFeedDestination(item: FeedItem, locale: string): string | undefined {
   const destination = item.destination;
+  // Public owner links must name the exact disclosed owner, including retained activity rows.
+  if (
+    (destination.kind === 'collection' || destination.kind === 'space') &&
+    (item.key.id !== destination.id || item.summary.id !== destination.id)
+  )
+    return;
   switch (destination.kind) {
     case 'subject':
       return subjectHref({ id: destination.id, label: homeFeedTitle(item, locale) }, locale).href;

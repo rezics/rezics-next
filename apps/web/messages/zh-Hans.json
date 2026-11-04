@@ -8030,5 +8030,10 @@
   "library_layout_source_url": "本次访问选择的布局。",
   "library_layout_source_type": "正在使用此类型已保存的布局。",
   "library_layout_source_all": "正在使用所有类型已保存的布局。",
-  "library_layout_source_application": "正在使用应用默认布局。"
+  "library_layout_source_application": "正在使用应用默认布局。",
+  "home_owner_context_unavailable": "所有者信息暂不可用。",
+  "home_owner_description_empty": "未提供说明。",
+  "home_owner_description_unavailable": "说明暂不可用。",
+  "home_owner_curator_unavailable": "策展者信息暂不可用。",
+  "home_owner_carrier_unavailable": "Realm 展示信息暂不可用。"
 }
