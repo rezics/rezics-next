@@ -22,11 +22,12 @@ export async function runDevelopmentSeed(
   const client = requiredEnvironment('REZICS_DEV_PERSONA_CLIENT', env);
   const auth = requiredEnvironment('AUTH_ORIGIN', env);
   const api = env.KERNEL_ORIGIN || `http://127.0.0.1:${env.KERNEL_PORT || '4100'}`;
+  const characterVocabulary = env.REZICS_DEV_VNDB_CHARACTER_VOCABULARY?.trim();
   const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();
   const root = options.root ?? resolve(import.meta.dir, '../..');
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
   const result = join(root, '.temp', 'cross-media-seed', 'result.json');
-  await (options.runSeed ?? runCrossMediaSeedCli)([
+  const args = [
     '--bangumi',
     dumps.bangumi,
     '--vndb',
@@ -45,7 +46,9 @@ export async function runDevelopmentSeed(
     account,
     '--client',
     client,
-  ]);
+  ];
+  if (characterVocabulary) args.push('--vndb-character-vocabulary', characterVocabulary);
+  await (options.runSeed ?? runCrossMediaSeedCli)(args);
 }
 
 if (import.meta.main) {

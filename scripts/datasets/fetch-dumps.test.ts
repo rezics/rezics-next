@@ -8,6 +8,7 @@ import {
   VNDB_ARCHIVE_URL,
   VNDB_DUMP_INDEX_URL,
   VNDB_DUMP_HEADERS,
+  VNDB_DUMP_REQUIRED_COLUMNS,
   VNDB_DUMP_TABLES,
   vndbDumpManifestPath,
 } from './fetch-dumps.ts';
@@ -32,7 +33,7 @@ async function packVndbArchive(archive: string): Promise<void> {
   await mkdir(join(root, 'db'));
   for (const table of VNDB_DUMP_TABLES) {
     await writeFile(join(root, 'db', table), 'v1\n');
-    const header = (VNDB_DUMP_HEADERS[table] ?? ['id']).join('\t');
+    const header = (VNDB_DUMP_HEADERS[table] ?? VNDB_DUMP_REQUIRED_COLUMNS[table] ?? ['id']).join('\t');
     await writeFile(join(root, 'db', `${table}.header`), `${header}\n`);
   }
   const proc = Bun.spawn(['tar', '--zstd', '-cf', archive, '-C', root, 'README.txt', 'schema_vndbid.sql', 'db'], {
@@ -65,6 +66,13 @@ test('VNDB dump cache requires the exact external-link tables and COPY headers',
     vn_extlinks: ['id', 'link'],
   });
   expect(VNDB_DUMP_TABLES).toContain('releases_titles');
+  expect(VNDB_DUMP_TABLES).toEqual(expect.arrayContaining(['chars_traits', 'traits', 'traits_parents']));
+  expect(VNDB_DUMP_REQUIRED_COLUMNS).toMatchObject({
+    chars_traits: ['id', 'tid', 'spoil', 'lie'],
+    chars_vns: ['id', 'vid', 'rid', 'role', 'spoil'],
+    traits: ['id', 'name'],
+    traits_parents: ['id', 'parent', 'main'],
+  });
 });
 
 test("When the pinned VNDB dump URL is gone, the fetch resolves the current dump from VNDB's published dump index (or the documented durable location), verifies it, and records the resolved file and checksum; it never silently seeds without VNDB.", async () => {
