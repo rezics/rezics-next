@@ -1,5 +1,11 @@
 import { readAuthorErasureAdmission, type AuthorErasureAdmission } from './author-erasure-admission.ts';
 import { readEditionSourceIdentity } from './edition-reads.ts';
+import { readNativeModerationDirectory } from './moderation-directory.ts';
+import {
+  ModerationDirectoryPageSchema,
+  ModerationDirectoryQuerySchema,
+  moderationDirectoryPageIssues,
+} from './moderation-directory-schemas.ts';
 import { locateThreadPost } from './post-location.ts';
 import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
@@ -477,6 +483,34 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     ),
     dependencies,
   )
+    .get(
+      '/v1/me/moderation-directory',
+      {
+        query: strictContentSchema(ModerationDirectoryQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(ModerationDirectoryPageSchema, moderationDirectoryPageIssues), {
+            ...sessionHeader,
+            'cache-control': t.String(),
+          }),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'moderation.directory',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          readNativeModerationDirectory(actor, {
+            ...query,
+            limit: query.limit === undefined ? 20 : Number(query.limit),
+          }),
+        );
+      },
+    )
     .get(
       '/v1/boards/:id/slowMode',
       {
