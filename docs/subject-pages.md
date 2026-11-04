@@ -1886,6 +1886,7 @@ link, and selecting a quotation moves focus to its detail region.
 
 Reading a quotation from a subject uses one current subject read, at most one relation page of 20 entries, one exact
 selected-quotation subject read and at most one exact document hydration. Direct quotation routes skip the relation
-page and selected-quotation read. Qualifiers and reference parts come from that same selected subject response; they
+page and selected-quotation read. Native growth measures that bounded quotation page (header, admitted text and
+speaker facts, one document) rather than the full platform overview relation widgets. Qualifiers and reference parts come from that same selected subject response; they
 add no provider or per-reference requests. Continuation replaces the visible 20-entry page. Focus revalidation repeats
 the same bounded read and hides old source controls until it completes.

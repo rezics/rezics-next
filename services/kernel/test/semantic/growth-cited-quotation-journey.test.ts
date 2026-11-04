@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { PROFILE_FORMAT, type PresentationProfile } from '@rezics/composition';
 import { bundledDigest, bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { RELEASE_LIMITS, validateRelease } from '@rezics/definitions';
 import { fromPlainText } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
-import { setupPresentation } from '../../src/presentation/setup.ts';
+import { bootstrapProfile } from '../../src/presentation/profiles.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
@@ -32,11 +33,34 @@ const routeKey = new Uint8Array(32).fill(43);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(44)]]) };
 const scales = [64, 512, 4096] as const;
 let quotationId: string;
+const profile: PresentationProfile = {
+  format: PROFILE_FORMAT,
+  generic: {
+    views: {
+      overview: {
+        root: { props: {} },
+        content: [
+          { type: 'SubjectHeader', props: { id: 'header' } },
+          {
+            type: 'Statements',
+            props: {
+              id: 'quotation-facts',
+              properties: ['schema:text', 'schema:spokenByCharacter', 'schema:about', 'schema:creator'],
+            },
+          },
+        ],
+      },
+    },
+  },
+  bases: [],
+  types: [],
+  routes: [],
+};
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
   await bootstrapRelease(db.pool, bundledRelease);
-  await setupPresentation(db.pool);
+  await bootstrapProfile(db.pool, profile);
   real = await createRealAccess(db.admin, { editor }, ['subject:create', 'subject:read', 'statement:propose']);
   await db.admin.query("UPDATE access.account SET rate_tier='trusted' WHERE route=$1 AND account_id=$2", [
     routeOf(editor),
