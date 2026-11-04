@@ -220,6 +220,29 @@ $$;
 
 
 --
+-- Name: advance_shelf_title_population(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.advance_shelf_title_population() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP <> 'INSERT' THEN
+    INSERT INTO library.shelf_title_owner AS h (route,account_id,population)
+      VALUES (OLD.route,OLD.account_id,1)
+      ON CONFLICT (route,account_id) DO UPDATE SET population=h.population+1;
+  END IF;
+  IF TG_OP = 'INSERT' OR (TG_OP='UPDATE' AND
+    (NEW.route,NEW.account_id) IS DISTINCT FROM (OLD.route,OLD.account_id)) THEN
+    INSERT INTO library.shelf_title_owner AS h (route,account_id,population)
+      VALUES (NEW.route,NEW.account_id,1)
+      ON CONFLICT (route,account_id) DO UPDATE SET population=h.population+1;
+  END IF;
+  RETURN NULL;
+END; $$;
+
+
+--
 -- Name: capture_collection_structure_before_change(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -5602,6 +5625,62 @@ CREATE TABLE library.shelf_score_head (
 
 
 --
+-- Name: shelf_title_head; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.shelf_title_head (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    population bigint NOT NULL,
+    policy text NOT NULL,
+    source_basis text NOT NULL,
+    phase text NOT NULL,
+    after_subject_id uuid,
+    CONSTRAINT shelf_title_head_phase_check CHECK ((phase = ANY (ARRAY['cleanup'::text, 'build'::text, 'ready'::text]))),
+    CONSTRAINT shelf_title_head_policy_check CHECK ((policy ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT shelf_title_head_source_basis_check CHECK (((octet_length(source_basis) >= 1) AND (octet_length(source_basis) <= 1024)))
+);
+
+
+--
+-- Name: shelf_title_key; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.shelf_title_key (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    incarnation_id uuid NOT NULL,
+    transaction_id uuid NOT NULL,
+    state text NOT NULL,
+    type_id uuid NOT NULL,
+    source_id uuid NOT NULL,
+    source_basis text NOT NULL,
+    missing boolean NOT NULL,
+    key bytea NOT NULL,
+    CONSTRAINT shelf_title_key_check CHECK (((NOT missing) OR (octet_length(key) = 0))),
+    CONSTRAINT shelf_title_key_key_check CHECK ((octet_length(key) <= 1024)),
+    CONSTRAINT shelf_title_key_source_basis_check CHECK (((octet_length(source_basis) >= 1) AND (octet_length(source_basis) <= 1024)))
+);
+
+
+--
+-- Name: shelf_title_owner; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.shelf_title_owner (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    population bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT shelf_title_owner_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT shelf_title_owner_population_check CHECK ((population >= 0)),
+    CONSTRAINT shelf_title_owner_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: shelf_type_node; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -7410,6 +7489,30 @@ ALTER TABLE ONLY library.shelf_score
 
 
 --
+-- Name: shelf_title_head shelf_title_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_title_head
+    ADD CONSTRAINT shelf_title_head_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: shelf_title_key shelf_title_key_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_title_key
+    ADD CONSTRAINT shelf_title_key_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
+-- Name: shelf_title_owner shelf_title_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_title_owner
+    ADD CONSTRAINT shelf_title_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
 -- Name: shelf_type_node shelf_type_node_parent_chunk_key; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -8987,6 +9090,62 @@ CREATE INDEX shelf_score_desc_type ON library.shelf_score USING btree (route, ac
 
 
 --
+-- Name: shelf_title_all_asc; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_title_all_asc ON library.shelf_title_key USING btree (route, account_id, generation, missing, key, subject_id);
+
+
+--
+-- Name: shelf_title_all_desc; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_title_all_desc ON library.shelf_title_key USING btree (route, account_id, generation, missing, key DESC, subject_id DESC);
+
+
+--
+-- Name: shelf_title_state_asc; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_title_state_asc ON library.shelf_title_key USING btree (route, account_id, generation, state, missing, key, subject_id);
+
+
+--
+-- Name: shelf_title_state_desc; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_title_state_desc ON library.shelf_title_key USING btree (route, account_id, generation, state, missing, key DESC, subject_id DESC);
+
+
+--
+-- Name: shelf_title_state_type_asc; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_title_state_type_asc ON library.shelf_title_key USING btree (route, account_id, generation, state, type_id, missing, key, subject_id);
+
+
+--
+-- Name: shelf_title_state_type_desc; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_title_state_type_desc ON library.shelf_title_key USING btree (route, account_id, generation, state, type_id, missing, key DESC, subject_id DESC);
+
+
+--
+-- Name: shelf_title_type_asc; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_title_type_asc ON library.shelf_title_key USING btree (route, account_id, generation, type_id, missing, key, subject_id);
+
+
+--
+-- Name: shelf_title_type_desc; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_title_type_desc ON library.shelf_title_key USING btree (route, account_id, generation, type_id, missing, key DESC, subject_id DESC);
+
+
+--
 -- Name: shelf_type_node_terminal_type; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -9320,6 +9479,20 @@ CREATE TRIGGER entry_personal_fact_source_update AFTER UPDATE ON library.entry_p
 --
 
 CREATE TRIGGER entry_profile_migration_writer BEFORE INSERT OR UPDATE ON library.entry FOR EACH ROW EXECUTE FUNCTION library.fence_profile_migration_writer();
+
+
+--
+-- Name: entry entry_shelf_title_population; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_shelf_title_population AFTER INSERT OR DELETE ON library.entry FOR EACH ROW EXECUTE FUNCTION library.advance_shelf_title_population();
+
+
+--
+-- Name: entry entry_shelf_title_population_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_shelf_title_population_update AFTER UPDATE ON library.entry FOR EACH ROW WHEN ((((((((((((old.route IS DISTINCT FROM new.route) OR (old.account_id IS DISTINCT FROM new.account_id)) OR (old.subject_id IS DISTINCT FROM new.subject_id)) OR (old.incarnation_id IS DISTINCT FROM new.incarnation_id)) OR (old.transaction_id IS DISTINCT FROM new.transaction_id)) OR (old.state IS DISTINCT FROM new.state)) OR (old.type_id IS DISTINCT FROM new.type_id)) OR (old.type_source_id IS DISTINCT FROM new.type_source_id)) OR (old.type_source_partition IS DISTINCT FROM new.type_source_partition)) OR (old.type_source_epoch IS DISTINCT FROM new.type_source_epoch)) OR (old.type_source_position IS DISTINCT FROM new.type_source_position))) EXECUTE FUNCTION library.advance_shelf_title_population();
 
 
 --
@@ -10573,83 +10746,3 @@ ALTER TABLE ONLY library.vndb_label_adoption
 --
 
 
-
-CREATE TABLE library.shelf_title_owner (
-  route integer NOT NULL CHECK (route BETWEEN 0 AND 65535),
-  account_id uuid NOT NULL,
-  population bigint NOT NULL DEFAULT 0 CHECK (population >= 0),
-  PRIMARY KEY (route, account_id),
-  CHECK (route = get_byte(uuid_send(account_id),10)*256 + get_byte(uuid_send(account_id),11))
-);
-CREATE TABLE library.shelf_title_head (
-  route integer NOT NULL,
-  account_id uuid NOT NULL,
-  generation uuid NOT NULL,
-  population bigint NOT NULL,
-  policy text NOT NULL CHECK (policy ~ '^[0-9a-f]{64}$'),
-  source_basis text NOT NULL CHECK (octet_length(source_basis) BETWEEN 1 AND 1024),
-  phase text NOT NULL CHECK (phase IN ('cleanup','build','ready')),
-  after_subject_id uuid,
-  PRIMARY KEY (route, account_id)
-);
--- Only one selected-language generation per owner. Replacing it requires bounded cleanup first.
-CREATE TABLE library.shelf_title_key (
-  route integer NOT NULL,
-  account_id uuid NOT NULL,
-  subject_id uuid NOT NULL,
-  generation uuid NOT NULL,
-  incarnation_id uuid NOT NULL,
-  transaction_id uuid NOT NULL,
-  state text NOT NULL,
-  type_id uuid NOT NULL,
-  source_id uuid NOT NULL,
-  source_basis text NOT NULL CHECK (octet_length(source_basis) BETWEEN 1 AND 1024),
-  missing boolean NOT NULL,
-  key bytea NOT NULL CHECK (octet_length(key) <= 1024),
-  PRIMARY KEY (route, account_id, subject_id),
-  CHECK (NOT missing OR octet_length(key)=0)
-);
-CREATE INDEX shelf_title_all_asc ON library.shelf_title_key
-  (route,account_id,generation,missing,key ASC,subject_id ASC);
-CREATE INDEX shelf_title_all_desc ON library.shelf_title_key
-  (route,account_id,generation,missing,key DESC,subject_id DESC);
-CREATE INDEX shelf_title_state_asc ON library.shelf_title_key
-  (route,account_id,generation,state,missing,key ASC,subject_id ASC);
-CREATE INDEX shelf_title_state_desc ON library.shelf_title_key
-  (route,account_id,generation,state,missing,key DESC,subject_id DESC);
-CREATE INDEX shelf_title_type_asc ON library.shelf_title_key
-  (route,account_id,generation,type_id,missing,key ASC,subject_id ASC);
-CREATE INDEX shelf_title_type_desc ON library.shelf_title_key
-  (route,account_id,generation,type_id,missing,key DESC,subject_id DESC);
-CREATE INDEX shelf_title_state_type_asc ON library.shelf_title_key
-  (route,account_id,generation,state,type_id,missing,key ASC,subject_id ASC);
-CREATE INDEX shelf_title_state_type_desc ON library.shelf_title_key
-  (route,account_id,generation,state,type_id,missing,key DESC,subject_id DESC);
-
--- Entry command ownership is unchanged. The trigger invalidates any prepared population atomically,
--- including restore, incarnation changes and maintenance's state/type/source rewrites.
-CREATE FUNCTION library.advance_shelf_title_population() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP <> 'INSERT' THEN
-    INSERT INTO library.shelf_title_owner AS h (route,account_id,population)
-      VALUES (OLD.route,OLD.account_id,1)
-      ON CONFLICT (route,account_id) DO UPDATE SET population=h.population+1;
-  END IF;
-  IF TG_OP = 'INSERT' OR (TG_OP='UPDATE' AND
-    (NEW.route,NEW.account_id) IS DISTINCT FROM (OLD.route,OLD.account_id)) THEN
-    INSERT INTO library.shelf_title_owner AS h (route,account_id,population)
-      VALUES (NEW.route,NEW.account_id,1)
-      ON CONFLICT (route,account_id) DO UPDATE SET population=h.population+1;
-  END IF;
-  RETURN NULL;
-END; $$;
-CREATE TRIGGER entry_shelf_title_population AFTER INSERT OR DELETE ON library.entry
-  FOR EACH ROW EXECUTE FUNCTION library.advance_shelf_title_population();
-CREATE TRIGGER entry_shelf_title_population_update AFTER UPDATE ON library.entry
-  FOR EACH ROW WHEN (
-    (OLD.route,OLD.account_id,OLD.subject_id,OLD.incarnation_id,OLD.transaction_id,OLD.state,OLD.type_id,
-      OLD.type_source_id,OLD.type_source_partition,OLD.type_source_epoch,OLD.type_source_position)
-    IS DISTINCT FROM
-    (NEW.route,NEW.account_id,NEW.subject_id,NEW.incarnation_id,NEW.transaction_id,NEW.state,NEW.type_id,
-      NEW.type_source_id,NEW.type_source_partition,NEW.type_source_epoch,NEW.type_source_position)
-  ) EXECUTE FUNCTION library.advance_shelf_title_population();
