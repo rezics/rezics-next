@@ -125,15 +125,21 @@ test.each([1, 10, 20])(
 );
 
 test('signed-in Home keeps Content reaction facts visible but disables writes without native action advice', async () => {
-  const source = row(0);
   const item: FeedItem = {
-    ...source,
+    id: 'occurrence:action-advice',
+    source: 'following',
+    occurredAt: null,
+    key: { owner: 'content', kind: 'thread', route: 0, id },
     summary: {
-      ...source.summary,
+      id,
+      kind: 'discussion',
+      title: 'Card',
+      createdAt: '2026-11-04T00:00:00Z',
       reactionTarget: { targetKind: 'thread', targetId: id },
       reactions: { upvote: 2, like: 1 },
       viewerReaction: null,
     },
+    destination: { kind: 'thread', id, title: 'Card' },
   };
   await paint(
     <HomeFeed
