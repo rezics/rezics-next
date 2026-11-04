@@ -142,10 +142,10 @@ function PointEligibility({ boardId, refusal, scopeKey, credentialMode }: Eligib
   const { visit, read, preparing, reload } = useSlowModeRead(boardId, scopeKey, credentialMode);
   const receivedAt = useRef({ refusal, at: Date.now() });
   if (receivedAt.current.refusal !== refusal) receivedAt.current = { refusal, at: Date.now() };
-  if (!visit) return null;
   const policy = read?.kind === 'available' ? read.policy : undefined;
   const waitUntil = policyWaitUntil(policy, refusal, receivedAt.current.at);
   const now = useDisplayNow(waitUntil);
+  if (!visit) return null;
   const showInterval = policy && policy.intervalSeconds > 0;
   const waiting = waitUntil !== null && waitUntil > now;
   const empty =
