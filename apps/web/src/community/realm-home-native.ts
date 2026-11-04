@@ -84,36 +84,19 @@ export type NativeRealmHomeOperations = {
   }): Promise<Result<NativeRealmPublicationPage>>;
 };
 
-type NativeRealmHomeRoute = {
-  home: {
-    get(input: {
-      query: { languages: string[] };
-      headers?: Record<string, string>;
-    }): Promise<Result<NativeRealmHomePage>>;
-  };
-  boardShelf: {
-    get(input: { query: { cursor?: string }; headers?: Record<string, string> }): Promise<Result<NativeRealmBoardPage>>;
-  };
-  publicationShelf: {
-    get(input: {
-      query: { languages: string[]; cursor?: string };
-      headers?: Record<string, string>;
-    }): Promise<Result<NativeRealmPublicationPage>>;
-  };
-};
-
-/** Prepared operations belong to one reader and retain the documented response types. */
+/** Keep receiving unavailable until the installed client exposes its root-derived Realm Home routes. */
 export function bindNativeRealmHomeOperations(
-  client: KernelClient,
-  auth: Record<string, never> | { headers: { authorization: string } },
+  _client: KernelClient,
+  _auth: Record<string, never> | { headers: { authorization: string } },
 ): NativeRealmHomeOperations {
-  // The checked-in KernelClient declaration has not yet acquired these mounted routes.
-  const route = (realmId: string) => client.realms({ realmId }) as unknown as NativeRealmHomeRoute;
+  const unavailable = async (): Promise<Result<never>> => ({
+    status: 503,
+    error: new Error('Installed Realm Home client contract is unavailable'),
+  });
   return {
-    home: ({ realmId, languages }) => route(realmId).home.get({ query: { languages }, ...auth }),
-    boardShelf: ({ realmId, cursor }) => route(realmId).boardShelf.get({ query: cursor ? { cursor } : {}, ...auth }),
-    publicationShelf: ({ realmId, languages, cursor }) =>
-      route(realmId).publicationShelf.get({ query: { languages, ...(cursor ? { cursor } : {}) }, ...auth }),
+    home: unavailable,
+    boardShelf: unavailable,
+    publicationShelf: unavailable,
   };
 }
 
@@ -193,7 +176,7 @@ function nativeObservation(page: NativeRealmHomePage): NativeRealmHomeObservatio
     viewer: { state: 'member', membership: member ? 'member' : 'none' },
     actions: {
       participate,
-      join: member ? 'unavailable' : participate === 'admitted' ? 'offered' : 'denied',
+      join: 'unavailable',
       leave: actionState(leave),
       claim: page.realm.ownershipState === 'orphaned' ? 'admitted' : 'unavailable',
       manage: actionState(manage),
