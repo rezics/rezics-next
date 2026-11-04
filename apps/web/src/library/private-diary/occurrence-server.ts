@@ -1,3 +1,4 @@
+import { parseProgressSessionJournalPatch } from '@rezics/progress';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -8,7 +9,6 @@ import { readSubjectSlotSession } from '../subject-slot';
 
 const keyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type JournalDate = { year: number; month?: number; day?: number } | null;
 export type JournalPatch = Parameters<ReturnType<KernelClient['progressSessions']>['journal']['patch']>[0];
 type Journal = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['progressSessions']>['journal']['get']>>['data']
@@ -22,66 +22,9 @@ async function currentIdentity(): Promise<Identity | null> {
     : null;
 }
 
-function validDate(value: unknown): value is JournalDate {
-  if (value === null) return true;
-  if (!value || typeof value !== 'object' || Array.isArray(value) || !('year' in value)) return false;
-  if (typeof value.year !== 'number' || !Number.isInteger(value.year) || value.year < 1 || value.year > 9999)
-    return false;
-  if (
-    'month' in value &&
-    (typeof value.month !== 'number' || !Number.isInteger(value.month) || value.month < 1 || value.month > 12)
-  )
-    return false;
-  if ('day' in value) {
-    if (typeof value.day !== 'number' || !Number.isInteger(value.day) || !('month' in value)) return false;
-    const last = new Date(Date.UTC(value.year, value.month as number, 0)).getUTCDate();
-    if (value.day < 1 || value.day > last) return false;
-  }
-  return true;
-}
-
 function parsePatch(value: unknown): JournalPatch | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const item = value as Record<string, unknown>;
-  if (!Number.isSafeInteger(item.revision) || (item.revision as number) < 0) return null;
-  const patch: JournalPatch = {
-    revision: item.revision as number,
-  };
-  let changed = false;
-  if ('startDate' in item) {
-    if (!validDate(item.startDate)) return null;
-    patch.startDate = item.startDate;
-    changed = true;
-  }
-  if ('finishDate' in item) {
-    if (!validDate(item.finishDate)) return null;
-    patch.finishDate = item.finishDate;
-    changed = true;
-  }
-  if ('reflection' in item) {
-    if (item.reflection !== null && typeof item.reflection !== 'string') return null;
-    patch.reflection = item.reflection;
-    changed = true;
-  }
-  if ('assessment' in item) {
-    const assessment = item.assessment;
-    if (assessment === null) patch.assessment = null;
-    else {
-      if (
-        !assessment ||
-        typeof assessment !== 'object' ||
-        !('units' in assessment) ||
-        typeof assessment.units !== 'number' ||
-        !Number.isInteger(assessment.units) ||
-        assessment.units < 0 ||
-        assessment.units > 20
-      )
-        return null;
-      patch.assessment = { units: assessment.units };
-    }
-    changed = true;
-  }
-  return changed ? patch : null;
+  const parsed = parseProgressSessionJournalPatch(value);
+  return parsed.ok && Object.keys(parsed.value).length > 1 ? parsed.value : null;
 }
 
 function actionInput(value: unknown) {
@@ -148,6 +91,7 @@ export const readOccurrenceJournal = createServerFn({ method: 'GET' })
 export type JournalCommandResult =
   | { kind: 'saved'; journal: Journal }
   | { kind: 'acknowledged'; revision: number }
+  | { kind: 'invalid'; field: string }
   | { kind: 'conflict' | 'missing' | 'retired' | 'uncertain' };
 
 export const correctOccurrenceJournal = createServerFn({ method: 'POST' })
@@ -180,6 +124,14 @@ export const correctOccurrenceJournal = createServerFn({ method: 'POST' })
       });
       if (result.error || !result.data?.journal || result.data.journal.sessionId !== data.sessionId) {
         if (result.status === 409) return { kind: 'conflict' };
+        if (result.status === 400 || result.status === 422) {
+          const problem: unknown = result.error?.value;
+          const field =
+            problem && typeof problem === 'object' && 'field' in problem && typeof problem.field === 'string'
+              ? problem.field
+              : 'journal';
+          return { kind: 'invalid', field };
+        }
         if (result.status === 404) return { kind: 'missing' };
         if (result.status === 401) return { kind: 'retired' };
         return { kind: 'uncertain' };

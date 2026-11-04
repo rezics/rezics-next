@@ -1,3 +1,4 @@
+import { applyJournalPatch, sameJournalValues, recordedProgressValues } from '@rezics/progress';
 import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -32,7 +33,6 @@ import type {
   ProgressMeasurePresentation,
   ProgressPresentation,
   ProgressSession,
-  ProgressSessionJournalDate,
   ProgressSessionUpdate,
 } from './progress-model.ts';
 import * as store from './progress-store.ts';
@@ -142,17 +142,6 @@ function event(session: Pick<ProgressSession, 'accountId' | 'id'>) {
     subject: session.accountId,
     data: { sessionId: session.id },
   };
-}
-
-function sameJournalDate(left: ProgressSessionJournalDate | null, right: ProgressSessionJournalDate | null): boolean {
-  return (
-    (left === null && right === null) ||
-    (left !== null &&
-      right !== null &&
-      left.year === right.year &&
-      (left.month ?? null) === (right.month ?? null) &&
-      (left.day ?? null) === (right.day ?? null))
-  );
 }
 
 /** Private progress commands and snapshot/keyset reads on the owning account's partition. */
@@ -390,16 +379,8 @@ export function createSessionCommands(config: Dependencies) {
             if (!admitted.ok) throw new ProblemError('unsupported_library_profile');
           }
           intent = changeIntent(parsed, measureId);
-          if ('amount' in parsed) {
-            if (measureId === undefined || measureId === current.unit) changes.amount = parsed.amount;
-            else if (current.measures)
-              changes.measures = current.measures.map((measure) =>
-                measure.unit === measureId ? { ...measure, amount: parsed.amount } : measure,
-              );
-            else throw new ProgressInvalidError('measureId');
-          } else if ('locator' in parsed) {
-            changes.locator = parsed.locator;
-            changes.position = parsed.position;
+          if ('amount' in parsed || 'locator' in parsed) {
+            Object.assign(changes, valid(recordedProgressValues(current, parsed, measureId)));
           } else {
             const removed = 'remove' in parsed ? await store.removeUnits(tx, route, sessionId, parsed.remove) : 0;
             const added = 'add' in parsed ? await store.addUnits(tx, route, sessionId, parsed.add, context) : 0;
@@ -529,24 +510,15 @@ export function createSessionCommands(config: Dependencies) {
         if (!current) throw new LibraryNotFoundError();
         if (current.revision !== patch.revision) throw new ProgressConflictError();
 
-        const startDate = Object.hasOwn(patch, 'startDate') ? (patch.startDate ?? null) : current.startDate;
-        const finishDate = Object.hasOwn(patch, 'finishDate') ? (patch.finishDate ?? null) : current.finishDate;
-        const reflection = Object.hasOwn(patch, 'reflection') ? (patch.reflection ?? null) : current.reflection;
+        const next = applyJournalPatch(current, patch);
         const requestedAssessmentPresence = Object.hasOwn(patch, 'assessment')
           ? patch.assessment === null
             ? ('explicit_null' as const)
             : ('value' as const)
           : undefined;
-        const assessmentPresence = requestedAssessmentPresence ?? current.assessmentPresence;
-        const assessment = Object.hasOwn(patch, 'assessment')
-          ? { meaningRevision: current.assessment.meaningRevision, units: patch.assessment?.units ?? null }
-          : current.assessment;
         const unchanged =
-          sameJournalDate(startDate, current.startDate) &&
-          sameJournalDate(finishDate, current.finishDate) &&
-          reflection === current.reflection &&
-          assessment.units === current.assessment.units &&
-          assessmentPresence === current.assessmentPresence;
+          sameJournalValues(current, next) &&
+          (requestedAssessmentPresence ?? current.assessmentPresence) === current.assessmentPresence;
         if (unchanged) return noEffect({ sessionId, revision: current.revision, changed: false });
         if (current.revision >= 2_147_483_646) throw new ProgressConflictError();
 
@@ -556,14 +528,7 @@ export function createSessionCommands(config: Dependencies) {
           owner.accountId,
           sessionId,
           current.revision,
-          {
-            sessionId,
-            revision: current.revision,
-            startDate,
-            finishDate,
-            reflection,
-            assessment,
-          },
+          next,
           requestedAssessmentPresence,
         );
         if (!updated) throw new ProgressConflictError();

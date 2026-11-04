@@ -4,8 +4,10 @@ import { createKernelClient } from '@rezics/client';
 import type { LibraryProfile } from '@rezics/definitions';
 import type { NativeProgressPresentation, NativeProgressSession } from '../src/library/progress-reads';
 import type { Release } from '../src/subject/definitions';
+import type { ProgressSessionJournal } from '@rezics/progress';
+import type { JournalCommandResult } from '../src/library/private-diary/occurrence-server';
 
-test('Record progress with title unit and explicit total semantics', async () => {
+test('Record and correct exact progress and a selected-field journal with retained retry after reader retirement', async () => {
   // Use the installed editor's DOM dependency; no browser, server or native authority is simulated here.
   const editorRequire = createRequire(import.meta.resolve('@puckeditor/core'));
   const { Window } = await import(editorRequire.resolve('happy-dom'));
@@ -163,6 +165,41 @@ test('Record progress with title unit and explicit total semantics', async () =>
     presentation,
   };
 
+  let journal: ProgressSessionJournal = {
+    sessionId: id,
+    revision: 0,
+    startDate: { year: 2024 },
+    finishDate: null,
+    reflection: 'Original private reflection',
+    assessment: { meaningRevision: 1, units: 0 },
+  };
+  type JournalCommand = {
+    sessionId: string;
+    viewer: string;
+    csrfToken: string;
+    key: string;
+    body: {
+      revision: number;
+      finishDate?: { year: number; month?: number; day?: number } | null;
+      reflection?: string | null;
+    };
+  };
+  const journalWrites: JournalCommand[] = [];
+  let resolveJournal: ((result: JournalCommandResult) => void) | undefined;
+  let refuse = false;
+  mock.module('../src/library/private-diary/occurrence-server', () => ({
+    readOccurrenceJournal: async () => ({ kind: 'ready', viewer: 'owner', csrfToken: 'recording-csrf', journal }),
+    correctOccurrenceJournal: async ({ data }: { data: JournalCommand }): Promise<JournalCommandResult> => {
+      journalWrites.push(data);
+      if (refuse) return { kind: 'conflict' };
+      if (journalWrites.length === 1)
+        return new Promise((resolve) => {
+          resolveJournal = resolve;
+        });
+      return { kind: 'saved', journal };
+    },
+    changeOccurrenceLifecycle: async () => ({ kind: 'uncertain' }),
+  }));
   const { createElement: h, act } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
@@ -177,7 +214,14 @@ test('Record progress with title unit and explicit total semantics', async () =>
   queries.setQueryData(['session'], { state: 'signed-in', csrfToken: 'recording-csrf', subject: 'owner' });
   queries.setQueryData(['exposure', 'viewer'], ['reading_progress']);
   queries.setQueryData(['exposure', 'anonymous'], []);
-  const route = createRootRoute({ component: () => h(ProgressSessionPage, { page }) });
+  const originating = {
+    viewer: 'owner',
+    address: { id },
+    lifetime: {},
+    isCurrent: () => true,
+    refresh: () => readProgressSession({ data: { id } }),
+  };
+  const route = createRootRoute({ component: () => h(ProgressSessionPage, { page, originating }) });
   const router = createRouter({
     routeTree: route,
     history: createMemoryHistory({ initialEntries: ['/en/library/progress'] }),
@@ -253,6 +297,68 @@ test('Record progress with title unit and explicit total semantics', async () =>
     expect(session.amount).toBe('0');
     expect(session.total).toBeNull();
     expect(host.textContent).toContain('0 segments');
+    const journalSection = () =>
+      [...host.querySelectorAll('section')].find(
+        (section) => section.querySelector('h2')?.textContent === m.library_occurrence_heading(),
+      )!;
+    const field = (label: string) => {
+      const element = [...journalSection().querySelectorAll('label')].find((element) => element.textContent === label)!;
+      return window.document.getElementById(element.htmlFor)! as HTMLInputElement;
+    };
+    const setField = async (label: string, value: string) => {
+      const input = field(label);
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+        input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+    };
+    expect(field(m.library_occurrence_start_date()).value).toBe('2024');
+    await setField(m.library_occurrence_finish_date(), '2024-02-30');
+    expect(journalSection().textContent).toContain(m.library_occurrence_date_invalid());
+    expect(button(m.library_journal_review()).disabled).toBe(true);
+    await setField(m.library_occurrence_finish_date(), '2024-02');
+    await act(async () => button(m.library_journal_review()).click());
+    expect(journalSection().textContent).toContain(m.library_journal_precision_month());
+    expect(journalSection().textContent).toContain(m.library_journal_untouched());
+    await act(async () => {
+      button(m.library_occurrence_save()).click();
+      button(m.library_occurrence_save()).click();
+    });
+    expect(journalWrites).toHaveLength(1);
+    const captured = structuredClone(journalWrites[0]!);
+    expect(captured.body).toEqual({ revision: 0, finishDate: { year: 2024, month: 2 } });
+    await act(async () => queries.setQueryData(['session'], { state: 'signed-out' }));
+    expect(host.textContent).not.toContain('Original private reflection');
+    journal = { ...journal, revision: 1, finishDate: { year: 2024, month: 2 } };
+    await act(async () => {
+      resolveJournal!({ kind: 'saved', journal });
+    });
+    expect(host.textContent).not.toContain('Original private reflection');
+    await act(async () =>
+      queries.setQueryData(['session'], { state: 'signed-in', csrfToken: 'recording-csrf', subject: 'owner' }),
+    );
+    await act(async () => button(m.library_occurrence_read_current()).click());
+    expect(journalWrites).toHaveLength(1);
+    expect(journalSection().textContent).toContain(m.library_journal_retry_identity());
+    await act(async () => button(m.library_rich_entry_retry()).click());
+    expect(journalWrites).toHaveLength(2);
+    expect(journalWrites[1]).toEqual(captured);
+    expect(journalSection().textContent).toContain(m.library_journal_saved());
+    // A definitive stale refusal retains selected fields until an explicit read and re-review.
+    refuse = true;
+    await setField(m.library_occurrence_start_date(), '2025');
+    await act(async () => button(m.library_journal_review()).click());
+    await act(async () => button(m.library_occurrence_save()).click());
+    expect(journalSection().textContent).toContain(m.library_journal_draft_retained());
+    expect(field(m.library_occurrence_start_date()).value).toBe('2025');
+    journal = { ...journal, revision: 2, reflection: 'Changed elsewhere' };
+    await act(async () => button(m.library_occurrence_read_current()).click());
+    await act(async () => button(m.library_occurrence_review_latest()).click());
+    refuse = false;
+    await act(async () => button(m.library_journal_review()).click());
+    await act(async () => button(m.library_occurrence_save()).click());
+    expect(journalWrites[3]?.body).toEqual({ revision: 2, startDate: { year: 2025 } });
+    expect(journalWrites[3]?.key).not.toBe(journalWrites[2]?.key);
   } finally {
     await act(async () => root.unmount());
     queries.clear();

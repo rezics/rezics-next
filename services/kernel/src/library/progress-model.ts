@@ -1,5 +1,4 @@
 import type { LibraryCountForms } from '@rezics/definitions';
-import type { LibraryProgressUnitDescriptor } from './profile.ts';
 import type { ProgressMode, ProgressState, ProgressUnit } from './progress.ts';
 
 export type { ProgressIntent, ProgressMode, ProgressState, ProgressUnit } from './progress.ts';
@@ -33,30 +32,17 @@ export type ProgressSession = Omit<ProgressSessionRow, 'route' | 'mode' | 'unit'
   measures?: ProgressScalarMeasure[];
 };
 
-/** A private, session-addressed journal. Its revision is independent of progress state and measures. */
-export type ProgressSessionJournalDate = Readonly<{ year: number; month?: number; day?: number }>;
-export type ProgressSessionJournalAssessment = Readonly<{ meaningRevision: 1; units: number | null }>;
-export type ProgressSessionJournal = Readonly<{
-  sessionId: string;
-  revision: number;
-  startDate: ProgressSessionJournalDate | null;
-  finishDate: ProgressSessionJournalDate | null;
-  reflection: string | null;
-  assessment: ProgressSessionJournalAssessment;
-}>;
-export type ProgressSessionJournalPatch = Readonly<{
-  revision: number;
-  startDate?: ProgressSessionJournalDate | null;
-  finishDate?: ProgressSessionJournalDate | null;
-  reflection?: string | null;
-  assessment?: Readonly<{ units: number }> | null;
-}>;
-/** Receipt-safe result of a journal edit; private field values are read on the session route. */
-export type ProgressSessionJournalWrite = Readonly<{ sessionId: string; revision: number; changed: boolean }>;
-
-/** A scalar value keeps its exact profile unit, total and nullable amount. */
-export type ProgressScalarMeasure = { unit: ProgressUnit; total: string | null; amount: string | null };
-export type ProgressMeasureDraft = { unit: ProgressUnit; total: string | null };
+export type {
+  ProgressSessionJournalDate,
+  ProgressSessionJournalAssessment,
+  ProgressSessionJournal,
+  ProgressSessionJournalPatch,
+  ProgressSessionJournalWrite,
+  ProgressScalarMeasure,
+  ProgressMeasureDraft,
+  ProgressInputRules,
+} from '@rezics/progress';
+import type { ProgressScalarMeasure, ProgressInputRules } from '@rezics/progress';
 export type ProgressMeasurePresentation = { unit: ProgressUnit; presentation: ProgressPresentation };
 
 export type ProgressSessionDraft = {
@@ -120,14 +106,6 @@ export type ProgressChangePage = {
 
 export const MAX_PROGRESS_PAGE_SIZE = 100;
 export const MAX_PROGRESS_UNIT_IDS = 100;
-
-/** Current descriptor hints for the existing native decimal/total validators; never permission. */
-export type ProgressInputRules = Readonly<{
-  min?: LibraryProgressUnitDescriptor['minimum'];
-  max?: LibraryProgressUnitDescriptor['maximum'];
-  step: string;
-  total: NonNullable<LibraryProgressUnitDescriptor['totalPolicy']>;
-}>;
 
 /** Opt-in owner detail only. No source identity or private accepting pin enters this DTO. */
 export type ProgressPresentation = Readonly<{

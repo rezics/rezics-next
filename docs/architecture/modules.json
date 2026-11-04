@@ -164,6 +164,11 @@
         "**/fixtures/**",
         "**/stories/**"
       ]
+    },
+    {
+      "path": "packages/progress/src",
+      "extensions": [".ts"],
+      "exclude": ["**/*.test.*"]
     }
   ],
   "modules": [
@@ -273,7 +278,8 @@
         "kernel-platform",
         "kernel-rating",
         "kernel-search",
-        "kernel-semantic"
+        "kernel-semantic",
+        "progress"
       ],
       "capabilities": ["library"],
       "postgresPaths": ["services/kernel/src/library/**"]
@@ -457,7 +463,8 @@
         "web-content",
         "web-performance",
         "web-search",
-        "web-semantic"
+        "web-semantic",
+        "progress"
       ],
       "capabilities": ["library-pages"]
     },
@@ -772,6 +779,15 @@
       "publicEntries": ["@rezics/client"],
       "allowedDependencies": ["auth-contract", "composition", "definitions", "document", "filter"],
       "capabilities": ["typed-client"]
+    },
+    {
+      "id": "progress",
+      "kind": "core",
+      "owner": "commerce",
+      "paths": ["packages/progress/src/**"],
+      "publicEntries": ["@rezics/progress"],
+      "allowedDependencies": [],
+      "capabilities": ["progress-rules"]
     }
   ]
 }

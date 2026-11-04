@@ -1,6 +1,24 @@
+import {
+  buildJournalDraftPatch,
+  emptyJournalDraft,
+  journalDraftText,
+  reviewJournalDraft,
+  formatJournalDate,
+  formatJournalAssessment,
+  parseJournalDateText,
+  MAX_JOURNAL_REFLECTION_CHARACTERS,
+  MAX_JOURNAL_REFLECTION_BYTES,
+  type JournalDraft,
+  type JournalField,
+  type JournalFieldDraft,
+  type ProgressSessionJournalPatch,
+} from '@rezics/progress';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useId, type FormEvent, type ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../../kernel/exposure';
 import { useSession } from '../../session/query';
@@ -15,8 +33,6 @@ import {
 
 import { historyReturn } from './address';
 
-type DateShape = { year: number; month?: number; day?: number };
-type JournalDraft = { startDate: string; finishDate: string; reflection: string; assessment: string };
 type JournalBody = JournalPatch;
 type JournalCommand = {
   sessionId: string;
@@ -34,75 +50,46 @@ type LifecycleCommand = {
   revision: number;
 };
 
-function dateText(value: DateShape | null): string {
-  if (!value) return '';
-  const year = String(value.year).padStart(4, '0');
-  if (value.month === undefined) return year;
-  const month = String(value.month).padStart(2, '0');
-  return value.day === undefined ? year + '-' + month : year + '-' + month + '-' + String(value.day).padStart(2, '0');
-}
-
-function parseDate(value: string): DateShape | null | 'invalid' {
-  if (value === '') return null;
-  const match = /^([0-9]{4})(?:-([0-9]{2})(?:-([0-9]{2}))?)?$/.exec(value);
-  if (!match) return 'invalid';
-  const year = Number(match[1]);
-  const month = match[2] === undefined ? undefined : Number(match[2]);
-  const day = match[3] === undefined ? undefined : Number(match[3]);
-  if (year < 1 || (month !== undefined && (month < 1 || month > 12))) return 'invalid';
-  if (day !== undefined) {
-    if (month === undefined) return 'invalid';
-    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    const days = month === 2 ? (leap ? 29 : 28) : [4, 6, 9, 11].includes(month) ? 30 : 31;
-    if (day < 1 || day > days) return 'invalid';
-  }
-  return {
-    year,
-    ...(month === undefined ? {} : { month }),
-    ...(day === undefined ? {} : { day }),
-  };
-}
-
 type PrivateJournal = Extract<JournalReadResult, { kind: 'ready' }>['journal'];
-
-function journalDraft(journal: PrivateJournal): JournalDraft {
-  return {
-    startDate: dateText(journal.startDate),
-    finishDate: dateText(journal.finishDate),
-    reflection: journal.reflection ?? '',
-    assessment: journal.assessment.units === null ? '' : String(journal.assessment.units / 2),
-  };
+type JournalCustody = { command?: JournalCommand; flight?: object };
+// Only the existing progress-reader lifetime can retain a dispatched command through a read replacement.
+// This map contains no journal read, reflected draft or independent request identity.
+const journalCommands = new WeakMap<object, JournalCustody>();
+function journalCustody(lifetime: object | undefined): JournalCustody {
+  if (!lifetime) return {};
+  let retained = journalCommands.get(lifetime);
+  if (!retained) journalCommands.set(lifetime, (retained = {}));
+  return retained;
 }
 
-function changedJournalBody(revision: number, current: JournalDraft, draft: JournalDraft): JournalBody | null {
-  const body: JournalBody = { revision };
-  let changed = false;
-  if (current.startDate !== draft.startDate) {
-    const date = parseDate(draft.startDate);
-    if (date === 'invalid') return null;
-    body.startDate = date;
-    changed = true;
+function draftFromPatch(patch: ProgressSessionJournalPatch): JournalDraft {
+  const draft = { ...emptyJournalDraft() };
+  for (const field of ['startDate', 'finishDate', 'reflection', 'assessment'] as const) {
+    if (!Object.hasOwn(patch, field)) continue;
+    const value = patch[field];
+    draft[field] =
+      value === null
+        ? { kind: 'clear' }
+        : {
+            kind: 'set',
+            text:
+              field === 'startDate' || field === 'finishDate'
+                ? formatJournalDate(patch[field] ?? null)
+                : field === 'reflection'
+                  ? (patch.reflection ?? '')
+                  : formatJournalAssessment(patch.assessment!.units),
+          };
   }
-  if (current.finishDate !== draft.finishDate) {
-    const date = parseDate(draft.finishDate);
-    if (date === 'invalid') return null;
-    body.finishDate = date;
-    changed = true;
-  }
-  if (current.reflection !== draft.reflection) {
-    body.reflection = draft.reflection === '' ? null : draft.reflection;
-    changed = true;
-  }
-  if (current.assessment !== draft.assessment) {
-    if (!validAssessment(draft.assessment)) return null;
-    body.assessment = draft.assessment === '' ? null : { units: Number(draft.assessment) * 2 };
-    changed = true;
-  }
-  return changed ? body : null;
+  return draft;
 }
 
-function validAssessment(value: string) {
-  return value === '' || /^(?:[0-9](?:\.5|\.0)?|10(?:\.0)?)$/.test(value);
+function freezeJournalCommand(command: JournalCommand): JournalCommand {
+  const parsed = buildJournalDraftPatch(command.body.revision, draftFromPatch(command.body));
+  if (!parsed.ok) throw new Error('Invalid journal draft');
+  const body = structuredClone(parsed.patch);
+  for (const field of ['startDate', 'finishDate', 'assessment'] as const)
+    if (body[field] && typeof body[field] === 'object') Object.freeze(body[field]);
+  return Object.freeze({ ...command, body: Object.freeze(body) });
 }
 
 function currentJournal(
@@ -120,7 +107,11 @@ function currentJournal(
 }
 
 /** Replacement of an owner, credential, source or return visit cannot inherit private commands. */
-export function PrivateOccurrenceControls(props: { session: ProgressSessionView; isCurrent: () => boolean }) {
+export function PrivateOccurrenceControls(props: {
+  session: ProgressSessionView;
+  isCurrent: () => boolean;
+  lifetime?: object | undefined;
+}) {
   const owner = useSession();
   const location = useLocation();
   const read = useOperation('progress_session.read');
@@ -142,7 +133,15 @@ export function PrivateOccurrenceControls(props: { session: ProgressSessionView;
   );
 }
 
-function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionView; isCurrent: () => boolean }) {
+function OccurrenceControls({
+  session,
+  isCurrent,
+  lifetime,
+}: {
+  session: ProgressSessionView;
+  isCurrent: () => boolean;
+  lifetime?: object | undefined;
+}) {
   const router = useRouter();
   const location = useLocation();
   const returnSearch = historyReturn(location.search.history);
@@ -154,6 +153,7 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
     };
   }, []);
   const flight = useRef(false);
+  const [custody] = useState(() => journalCustody(lifetime));
   const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
   const readAllowed = useOperation('progress_session.read');
@@ -194,16 +194,33 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
     acceptedJournal.csrfToken === csrfToken
       ? acceptedJournal.journal
       : currentJournal(query.data, session.id, currentViewer, csrfToken);
-  const [draft, setDraft] = useState<Partial<JournalDraft> | null>(null);
-  const working: JournalDraft = {
-    ...(journal ? journalDraft(journal) : { startDate: '', finishDate: '', reflection: '', assessment: '' }),
-    ...draft,
-  };
-  const body = journal ? changedJournalBody(journal.revision, journalDraft(journal), working) : null;
-  const [journalCommand, setJournalCommand] = useState<JournalCommand | null>(null);
+  const retainedCommand = custody.command;
+  const retained =
+    retainedCommand &&
+    retainedCommand.sessionId === session.id &&
+    retainedCommand.viewer === currentViewer &&
+    retainedCommand.csrfToken === csrfToken
+      ? retainedCommand
+      : null;
+  const [draft, setDraft] = useState<JournalDraft>(() =>
+    retained ? draftFromPatch(retained.body) : emptyJournalDraft(),
+  );
+  const [review, setReview] = useState<JournalCommand | null>(retained);
+  const working = journal
+    ? {
+        startDate: journalDraftText(journal, draft, 'startDate'),
+        finishDate: journalDraftText(journal, draft, 'finishDate'),
+        reflection: journalDraftText(journal, draft, 'reflection'),
+        assessment: journalDraftText(journal, draft, 'assessment'),
+      }
+    : { startDate: '', finishDate: '', reflection: '', assessment: '' };
+  const parsedDraft = buildJournalDraftPatch(journal?.revision ?? 0, draft);
+  const body = parsedDraft.ok && parsedDraft.changedFields.length ? parsedDraft.patch : null;
+  const [journalCommand, setJournalCommand] = useState<JournalCommand | null>(retained);
   const [journalNotice, setJournalNotice] = useState<
-    'conflict' | 'uncertain' | 'acknowledged' | 'missing' | 'retired' | null
-  >(null);
+    'conflict' | 'uncertain' | 'acknowledged' | 'missing' | 'retired' | 'saved' | 'invalid' | null
+  >(retained ? 'uncertain' : null);
+  const [refusedField, setRefusedField] = useState<string | null>(null);
   const [conflictRevision, setConflictRevision] = useState<number | null>(null);
   const [reviewedRevision, setReviewedRevision] = useState<number | null>(null);
   const [lifecycleCommand, setLifecycleCommand] = useState<LifecycleCommand | null>(null);
@@ -226,8 +243,10 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
       generation: authority.current.generation + 1,
     };
   useEffect(() => {
-    setJournalCommand(null);
-    setJournalNotice(null);
+    // Admission replacement can retire rendering, but cannot settle a dispatched command.
+    setReview(custody.command ?? null);
+    setJournalCommand(custody.command ?? null);
+    setJournalNotice(custody.command ? 'uncertain' : null);
     setConflictRevision(null);
     setReviewedRevision(null);
     setLifecycleCommand(null);
@@ -279,13 +298,18 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
   }, [leaveRetiredDetail, query.data?.kind]);
 
   async function sendJournal(command: JournalCommand) {
-    if (!currentRef.current.journalUpdateAllowed || !stillCurrent(command) || flight.current) return;
+    if (!currentRef.current.journalUpdateAllowed || !stillCurrent(command) || flight.current || custody.flight) return;
+    if (custody.command && custody.command !== command) return;
+    custody.command ??= command;
+    const attempt = {};
+    custody.flight = attempt;
     flight.current = true;
     const generation = authority.current.generation;
     setBusy(true);
     setJournalCommand(command);
     setJournalNotice(null);
     const result = await correctOccurrenceJournal({ data: command }).catch(() => ({ kind: 'uncertain' as const }));
+    if (custody.flight === attempt) delete custody.flight;
     flight.current = false;
     if (!stillCurrent(command)) return;
     setBusy(false);
@@ -302,19 +326,23 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
         csrfToken: command.csrfToken,
         journal: result.journal,
       });
-      setDraft(null);
+      delete custody.command;
+      setDraft(emptyJournalDraft());
+      setReview(null);
+      setJournalNotice('saved');
       setJournalCommand(null);
       setConflictRevision(null);
       setReviewedRevision(null);
       return;
     }
     if (result.kind === 'conflict') {
+      delete custody.command;
+      setReview(null);
       setAcceptedJournal(null);
       setJournalCommand(null);
       setConflictRevision(command.body.revision);
       setReviewedRevision(null);
       setJournalNotice('conflict');
-      void query.refetch();
       return;
     }
     if (result.kind === 'uncertain' || result.kind === 'acknowledged') {
@@ -322,7 +350,14 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
       setJournalNotice(result.kind);
       return;
     }
+    delete custody.command;
     setJournalCommand(null);
+    setReview(null);
+    if (result.kind === 'invalid') {
+      setRefusedField(result.field);
+      setJournalNotice('invalid');
+      return;
+    }
     setJournalNotice(result.kind);
     if (result.kind === 'missing' || result.kind === 'retired') {
       leaveRetiredDetail();
@@ -343,14 +378,16 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
     )
       return;
     if (conflictRevision !== null && reviewedRevision !== journal.revision) return;
-    const command: JournalCommand = {
+    const command = freezeJournalCommand({
       sessionId: session.id,
       viewer: currentViewer,
       csrfToken,
       key: crypto.randomUUID(),
       body: { ...body, revision: conflictRevision === null ? journal.revision : reviewedRevision! },
-    };
-    void sendJournal(command);
+    });
+    setReview(command);
+    setJournalNotice(null);
+    setRefusedField(null);
   }
 
   async function submitLifecycle(command: LifecycleCommand) {
@@ -414,6 +451,7 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
       terminal ||
       busy ||
       journalCommand !== null ||
+      review !== null ||
       lifecycleConflictRevision !== null
     )
       return;
@@ -471,102 +509,57 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
       ) : null}
 
       {journal ? (
-        <form className="space-y-4" onSubmit={submitJournal}>
-          <p id="library-occurrence-date-help" className="text-sm text-muted-foreground">
-            {m.library_occurrence_date_help()}
-          </p>
+        <form className="space-y-4" onSubmit={submitJournal} noValidate>
+          <p className="text-sm text-muted-foreground">{m.library_occurrence_date_help()}</p>
+          <p className="text-sm text-muted-foreground">{m.library_journal_selection_help()}</p>
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">{m.library_occurrence_start_date()}</span>
-              <input
-                className="min-h-11 w-full rounded-md border bg-background px-3"
-                inputMode="numeric"
-                aria-describedby="library-occurrence-date-help"
-                value={working.startDate}
-                disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-                onChange={(event) => setDraft({ ...draft, startDate: event.currentTarget.value })}
+            {(['startDate', 'finishDate', 'assessment', 'reflection'] as const).map((field) => (
+              <JournalFieldEditor
+                key={field}
+                field={field}
+                selection={draft[field]}
+                value={working[field]}
+                disabled={!journalUpdateAllowed || journalCommand !== null || busy || review !== null}
+                invalid={!parsedDraft.ok && parsedDraft.field === field}
+                refused={refusedField === field}
+                onChange={(selection) => {
+                  if (!enabled || !isCurrent() || !journalUpdateAllowed || custody.command || custody.flight || review)
+                    return;
+                  setDraft((current) => ({ ...current, [field]: selection }));
+                  setJournalNotice(null);
+                  setRefusedField(null);
+                }}
               />
-              <button
-                type="button"
-                className="mt-2 min-h-11 rounded-md border px-3"
-                disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-                onClick={() => setDraft({ ...draft, startDate: '' })}
-              >
-                {m.library_occurrence_clear_date()}
-              </button>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">{m.library_occurrence_finish_date()}</span>
-              <input
-                className="min-h-11 w-full rounded-md border bg-background px-3"
-                inputMode="numeric"
-                aria-describedby="library-occurrence-date-help"
-                value={working.finishDate}
-                disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-                onChange={(event) => setDraft({ ...draft, finishDate: event.currentTarget.value })}
-              />
-              <button
-                type="button"
-                className="mt-2 min-h-11 rounded-md border px-3"
-                disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-                onClick={() => setDraft({ ...draft, finishDate: '' })}
-              >
-                {m.library_occurrence_clear_date()}
-              </button>
-            </label>
+            ))}
           </div>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">{m.library_occurrence_assessment()}</span>
-            <p id="library-occurrence-assessment-help" className="text-sm text-muted-foreground">
-              {m.library_occurrence_assessment_help()}
-            </p>
-            <input
-              type="number"
-              min="0"
-              max="10"
-              step="0.5"
-              className="min-h-11 w-full rounded-md border bg-background px-3"
-              aria-describedby="library-occurrence-assessment-help"
-              value={working.assessment}
-              disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-              onChange={(event) => setDraft({ ...draft, assessment: event.currentTarget.value })}
-            />
-            <button
-              type="button"
-              className="mt-2 min-h-11 rounded-md border px-3"
-              disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-              onClick={() => setDraft({ ...draft, assessment: '' })}
-            >
-              {m.library_occurrence_clear_assessment()}
-            </button>
-          </label>
-          {!validAssessment(working.assessment) ? <p role="alert">{m.library_occurrence_assessment_help()}</p> : null}
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">{m.library_occurrence_reflection()}</span>
-            <textarea
-              className="min-h-28 w-full rounded-md border bg-background p-3"
-              value={working.reflection}
-              disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-              onChange={(event) => setDraft({ ...draft, reflection: event.currentTarget.value })}
-            />
-            <button
-              type="button"
-              className="mt-2 min-h-11 rounded-md border px-3"
-              disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-              onClick={() => setDraft({ ...draft, reflection: '' })}
-            >
-              {m.library_occurrence_clear_reflection()}
-            </button>
-          </label>
-          {body === null &&
-          ((working.startDate !== dateText(journal.startDate) && parseDate(working.startDate) === 'invalid') ||
-            (working.finishDate !== dateText(journal.finishDate) && parseDate(working.finishDate) === 'invalid')) ? (
-            <p role="alert">{m.library_occurrence_date_invalid()}</p>
+          {journalNotice === 'invalid' ? (
+            <p role="alert">{m.library_journal_native_refusal({ field: journalFieldLabel(refusedField) })}</p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            <button
+          {review ? (
+            <JournalDraftReview journal={journal} draft={draftFromPatch(review.body)} revision={review.body.revision}>
+              <Button
+                type="button"
+                disabled={busy || !journalUpdateAllowed || !!custody.flight}
+                onClick={() => void sendJournal(review)}
+              >
+                {journalCommand ? m.library_rich_entry_retry() : m.library_occurrence_save()}
+              </Button>
+              {!journalCommand ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    if (isCurrent() && !custody.command) setReview(null);
+                  }}
+                >
+                  {m.library_journal_correct_draft()}
+                </Button>
+              ) : null}
+            </JournalDraftReview>
+          ) : (
+            <Button
               type="submit"
-              className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
               disabled={
                 !journalUpdateAllowed ||
                 busy ||
@@ -575,102 +568,93 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
                 (conflictRevision !== null && reviewedRevision !== journal.revision)
               }
             >
-              {m.library_occurrence_save()}
-            </button>
-            {journalCommand ? (
-              <>
-                <button
-                  type="button"
-                  className="min-h-11 rounded-md border px-3"
-                  disabled={busy || query.isFetching}
-                  onClick={() => void query.refetch()}
-                >
-                  {m.library_occurrence_read_current()}
-                </button>
-                <button
-                  type="button"
-                  className="min-h-11 rounded-md border px-3"
-                  disabled={busy || !journalUpdateAllowed}
-                  onClick={() => void sendJournal(journalCommand)}
-                >
-                  {m.library_rich_entry_retry()}
-                </button>
-              </>
-            ) : null}
-          </div>
-          {journalCommand && query.data?.kind === 'ready' ? (
-            <p role="status">
-              {m.library_occurrence_observed({
-                revision: query.data.journal.revision,
-                assessment:
-                  query.data.journal.assessment.units === null ? '—' : String(query.data.journal.assessment.units / 2),
-              })}
-            </p>
+              {m.library_journal_review()}
+            </Button>
+          )}
+          {journalCommand ? (
+            <div className="space-y-2">
+              <p role="status">
+                {journalNotice === 'acknowledged'
+                  ? m.library_occurrence_acknowledged()
+                  : m.library_occurrence_uncertain()}
+              </p>
+              <p className="text-sm text-muted-foreground">{m.library_journal_retry_identity()}</p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || query.isFetching}
+                onClick={() => {
+                  if (isCurrent()) void query.refetch();
+                }}
+              >
+                {m.library_occurrence_read_current()}
+              </Button>
+              {query.data?.kind === 'ready' ? (
+                <p role="status">
+                  {m.library_occurrence_observed({
+                    revision: query.data.journal.revision,
+                    assessment:
+                      query.data.journal.assessment.units === null
+                        ? '—'
+                        : formatJournalAssessment(query.data.journal.assessment.units),
+                  })}
+                </p>
+              ) : null}
+            </div>
           ) : null}
-          {journalNotice === 'uncertain' || journalNotice === 'acknowledged' ? (
-            <p role="status">
-              {journalNotice === 'acknowledged'
-                ? m.library_occurrence_acknowledged()
-                : m.library_occurrence_uncertain()}
-            </p>
-          ) : null}
+          {journalNotice === 'saved' ? <p role="status">{m.library_journal_saved()}</p> : null}
           {journalNotice === 'conflict' ? (
-            <div className="rounded-md border p-3">
-              <p>{m.library_occurrence_conflict()}</p>
+            <div className="space-y-3 rounded-md border p-3">
+              <p role="alert">{m.library_occurrence_conflict()}</p>
+              <p>{m.library_journal_draft_retained()}</p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={query.isFetching || busy}
+                onClick={() => {
+                  if (isCurrent()) void query.refetch();
+                }}
+              >
+                {m.library_occurrence_read_current()}
+              </Button>
               {journal.revision !== conflictRevision ? (
-                <button
-                  type="button"
-                  className="mt-2 min-h-11 rounded-md border px-3"
-                  onClick={() => {
-                    setReviewedRevision(journal.revision);
-                    setConflictRevision(journal.revision);
-                    setJournalNotice(null);
-                  }}
-                >
-                  {m.library_occurrence_review_latest()}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="mt-2 min-h-11 rounded-md border px-3"
-                  onClick={() => void query.refetch()}
-                >
-                  {m.library_selection_retry()}
-                </button>
-              )}
+                <>
+                  <JournalDraftReview journal={journal} draft={draft} revision={journal.revision} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (!isCurrent() || custody.command || custody.flight) return;
+                      setReviewedRevision(journal.revision);
+                      setJournalNotice(null);
+                      setReview(null);
+                    }}
+                  >
+                    {m.library_occurrence_review_latest()}
+                  </Button>
+                </>
+              ) : null}
             </div>
           ) : null}
           {lifecycleConflictRevision !== null ? (
-            <div
-              role="group"
-              aria-label={m.library_occurrence_conflict()}
-              className="flex flex-wrap items-center gap-2"
-            >
+            <div role="group" aria-label={m.library_occurrence_conflict()} className="space-y-2">
               <p>{m.library_occurrence_conflict()}</p>
-              {session.revision !== lifecycleConflictRevision ? (
-                <button
-                  type="button"
-                  className="min-h-11 rounded-md border px-3"
-                  onClick={() => {
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (!isCurrent()) return;
+                  if (session.revision !== lifecycleConflictRevision) {
                     setLifecycleConflictRevision(null);
                     setLifecycleNotice(null);
-                  }}
-                >
-                  {m.library_occurrence_review_latest()}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="min-h-11 rounded-md border px-3"
-                  onClick={() => void router.invalidate()}
-                >
-                  {m.library_selection_retry()}
-                </button>
-              )}
+                  } else void router.invalidate();
+                }}
+              >
+                {session.revision !== lifecycleConflictRevision
+                  ? m.library_occurrence_review_latest()
+                  : m.library_occurrence_read_current()}
+              </Button>
             </div>
-          ) : null}
-          {journalNotice === 'missing' || journalNotice === 'retired' ? (
-            <p role="status">{m.library_occurrence_retired()}</p>
           ) : null}
         </form>
       ) : null}
@@ -682,7 +666,7 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
               <button
                 type="button"
                 className="min-h-11 rounded-md border px-3"
-                disabled={lifecycleConflictRevision !== null || busy || journalCommand !== null}
+                disabled={lifecycleConflictRevision !== null || busy || journalCommand !== null || review !== null}
                 onClick={() => chooseLifecycle('reopen')}
               >
                 {m.library_occurrence_reopen()}
@@ -692,7 +676,7 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
               <button
                 type="button"
                 className="min-h-11 rounded-md border px-3"
-                disabled={lifecycleConflictRevision !== null || busy || journalCommand !== null}
+                disabled={lifecycleConflictRevision !== null || busy || journalCommand !== null || review !== null}
                 onClick={() => chooseLifecycle('retire')}
               >
                 {m.library_occurrence_retire()}
@@ -743,6 +727,187 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
           ) : null}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function journalFieldLabel(field: string | null): string {
+  if (field === 'startDate') return m.library_occurrence_start_date();
+  if (field === 'finishDate') return m.library_occurrence_finish_date();
+  if (field === 'reflection') return m.library_occurrence_reflection();
+  if (field === 'assessment') return m.library_occurrence_assessment();
+  return m.library_occurrence_heading();
+}
+
+function journalSelectionLabel(selection: JournalFieldDraft): string {
+  if (selection.kind === 'untouched') return m.library_journal_untouched();
+  if (selection.kind === 'clear') return m.library_journal_clear_selected();
+  return m.library_journal_value_selected();
+}
+
+/** Selection status stays next to the control, including when Clear and an empty text look alike. */
+function JournalFieldEditor({
+  field,
+  selection,
+  value,
+  disabled,
+  invalid,
+  refused,
+  onChange,
+}: {
+  field: JournalField;
+  selection: JournalFieldDraft;
+  value: string;
+  disabled: boolean;
+  invalid: boolean;
+  refused: boolean;
+  onChange: (selection: JournalFieldDraft) => void;
+}) {
+  const id = useId();
+  const error = `${id}-error`;
+  const help = `${id}-help`;
+  const status = `${id}-selection`;
+  const date = field === 'startDate' || field === 'finishDate';
+  const description =
+    field === 'reflection'
+      ? m.library_journal_reflection_limit({
+          characters: MAX_JOURNAL_REFLECTION_CHARACTERS,
+          bytes: MAX_JOURNAL_REFLECTION_BYTES,
+        })
+      : field === 'assessment'
+        ? m.library_occurrence_assessment_help()
+        : m.library_occurrence_date_help();
+  const characters = field === 'reflection' ? Array.from(value).length : 0;
+  const bytes = field === 'reflection' ? new TextEncoder().encode(value).byteLength : 0;
+  const clearLabel = date
+    ? m.library_occurrence_clear_date()
+    : field === 'reflection'
+      ? m.library_occurrence_clear_reflection()
+      : m.library_occurrence_clear_assessment();
+  return (
+    <div className={field === 'reflection' ? 'space-y-2 md:col-span-2' : 'space-y-2'}>
+      <label htmlFor={id} className="block text-sm font-medium">
+        {journalFieldLabel(field)}
+      </label>
+      <p id={help} className="text-sm text-muted-foreground">
+        {description}
+      </p>
+      {field === 'reflection' ? (
+        <Textarea
+          id={id}
+          value={value}
+          disabled={disabled}
+          className="min-h-28"
+          aria-invalid={invalid || refused}
+          aria-describedby={`${help} ${status}${invalid || refused ? ` ${error}` : ''}`}
+          onChange={(event) => onChange({ kind: 'set', text: event.currentTarget.value })}
+        />
+      ) : (
+        <Input
+          id={id}
+          value={value}
+          disabled={disabled}
+          inputMode={date ? 'text' : 'decimal'}
+          aria-invalid={invalid || refused}
+          aria-describedby={`${help} ${status}${invalid || refused ? ` ${error}` : ''}`}
+          onChange={(event) => onChange({ kind: 'set', text: event.currentTarget.value })}
+        />
+      )}
+      <p id={status} className="text-sm font-medium" data-journal-selection={selection.kind}>
+        {journalSelectionLabel(selection)}
+      </p>
+      {field === 'reflection' ? (
+        <p className="text-sm text-muted-foreground">{m.library_journal_reflection_count({ characters, bytes })}</p>
+      ) : selection.kind === 'set' && date && parseJournalDateText(value) !== null ? (
+        <p className="text-sm text-muted-foreground">
+          {value.length === 4
+            ? m.library_journal_precision_year()
+            : value.length === 7
+              ? m.library_journal_precision_month()
+              : m.library_journal_precision_day()}
+        </p>
+      ) : null}
+      {invalid || refused ? (
+        <p id={error} role="alert" className="text-sm text-destructive">
+          {refused
+            ? m.library_journal_native_refusal({ field: journalFieldLabel(field) })
+            : date
+              ? m.library_occurrence_date_invalid()
+              : field === 'assessment'
+                ? m.library_occurrence_assessment_help()
+                : m.library_journal_reflection_limit({
+                    characters: MAX_JOURNAL_REFLECTION_CHARACTERS,
+                    bytes: MAX_JOURNAL_REFLECTION_BYTES,
+                  })}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled || selection.kind === 'clear'}
+          onClick={() => onChange({ kind: 'clear' })}
+        >
+          {clearLabel}
+        </Button>
+        {selection.kind !== 'untouched' ? (
+          <Button type="button" variant="ghost" disabled={disabled} onClick={() => onChange({ kind: 'untouched' })}>
+            {m.library_journal_preserve_field()}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function JournalValue({ value }: { value: string | null }) {
+  if (value === null) return <span className="text-muted-foreground">{m.library_journal_no_value()}</span>;
+  if (value === '') return <span className="text-muted-foreground">{m.library_journal_empty_text()}</span>;
+  return <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</span>;
+}
+
+/** Review shows every preserved field as well as the deliberately addressed changes. */
+function JournalDraftReview({
+  journal,
+  draft,
+  revision,
+  children,
+}: {
+  journal: PrivateJournal;
+  draft: JournalDraft;
+  revision: number;
+  children?: ReactNode;
+}) {
+  return (
+    <section className="space-y-4 rounded-lg border p-4" aria-label={m.library_journal_review()}>
+      <h3 className="font-semibold">{m.library_journal_review()}</h3>
+      <p className="text-sm text-muted-foreground">{m.library_journal_review_basis({ revision })}</p>
+      <p className="text-sm text-muted-foreground">{m.library_occurrence_private_help()}</p>
+      <dl className="space-y-4">
+        {reviewJournalDraft(journal, draft).map((field) => (
+          <div key={field.field} className="space-y-2 border-b pb-3 last:border-0">
+            <dt className="font-medium">{journalFieldLabel(field.field)}</dt>
+            <dd className="space-y-2">
+              <p className="text-sm font-medium">{journalSelectionLabel(draft[field.field])}</p>
+              {field.kind !== 'untouched' ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm text-muted-foreground">{m.library_journal_current_value()}</p>
+                    <JournalValue value={field.before} />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm text-muted-foreground">{m.library_journal_after_save()}</p>
+                    <JournalValue value={field.after} />
+                  </div>
+                </div>
+              ) : (
+                <JournalValue value={field.before} />
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {children ? <div className="flex flex-wrap gap-2">{children}</div> : null}
     </section>
   );
 }
