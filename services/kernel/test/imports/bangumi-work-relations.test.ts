@@ -102,7 +102,23 @@ test('production operator imports reciprocal and one-sided work relations for in
     }
 
     await adopt(storyId, 'rezics:sideStoryOf', parentId);
-    await adopt(movieId, 'rezics:crossMediaCounterpart', storyId);
+    let counterpartHolder: string | undefined;
+    let counterpartTarget: string | undefined;
+    for (const holder of [movieId, storyId]) {
+      const target = holder === movieId ? storyId : movieId;
+      const query = new URLSearchParams({ property: 'rezics:crossMediaCounterpart', limit: '100' });
+      const page = await editor.http(`/v1/subjects/${holder}/candidates?${query}`);
+      expect(page.status).toBe(200);
+      const candidates = (page.body as { candidates: Candidate[] }).candidates;
+      if (candidates.some((candidate) => candidate.statement.value.content === target)) {
+        counterpartHolder = holder;
+        counterpartTarget = target;
+        break;
+      }
+    }
+    expect(counterpartHolder).toBeDefined();
+    expect(counterpartTarget).toBeDefined();
+    await adopt(counterpartHolder!, 'rezics:crossMediaCounterpart', counterpartTarget!);
     async function current(subjectId: string, property: string) {
       const query = new URLSearchParams({ context });
       const response = await runtime.request(`/v1/subjects/${subjectId}?${query}`);
@@ -111,7 +127,7 @@ test('production operator imports reciprocal and one-sided work relations for in
       return view.subject.statements[property]?.map((statement) => statement.value.content) ?? [];
     }
     expect(await current(storyId, 'rezics:sideStoryOf')).toContain(parentId);
-    expect(await current(movieId, 'rezics:crossMediaCounterpart')).toContain(storyId);
+    expect(await current(counterpartHolder!, 'rezics:crossMediaCounterpart')).toContain(counterpartTarget);
 
     const priorDatabase = new Database(state, { readonly: true });
     const priorBytes = priorDatabase

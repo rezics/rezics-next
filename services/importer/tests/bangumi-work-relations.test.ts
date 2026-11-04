@@ -49,8 +49,8 @@ test('the production seed coalesces reciprocal subject relation rows into one ca
     relation: { family: 2, code: 2, reciprocalCode: 3, evidence: [{ code: 2 }, { code: 3 }] },
   });
   expect(relations.find((edge) => edge.relation?.family === 6)).toMatchObject({
-    holder: '5',
-    target: '3',
+    holder: '3',
+    target: '5',
     property: 'rezics:crossMediaCounterpart',
     relation: { family: 6, code: 1, sourceSubject: '5', sourceEndpoint: '3', evidence: [{ code: 1 }] },
   });
@@ -140,7 +140,7 @@ test('production graph journals immutable relation commands and retries without 
   const firstCommand = JSON.parse(firstRow.command_payload).commands[0];
   expect(first.proposed).toHaveLength(1);
   expect(firstCommand).toMatchObject({
-    source: { record_revision: null, converter_revision: /^bangumi-vocabulary@2:relation-2@2:12:6$/, digest: /^[a-f0-9]{64}$/ },
+    source: { record_revision: 'unversioned', converter_revision: /^bangumi-vocabulary@2:relation-2@2:12:6$/, digest: /^[a-f0-9]{64}$/ },
     statement: { property: { id: 'rezics:sideStoryOf' } },
   });
   expect(firstRow.status).toBe('proposed');

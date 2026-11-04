@@ -146,7 +146,15 @@ export class CrossMediaGraph {
     const gaps: GraphMappingGap[] = [];
     let unchanged = 0;
     const mark = this.database.prepare(`UPDATE cross_media_graph SET status=?, command_key=? WHERE edge_key=?`);
-    const commands: { draft: GraphEdgeDraft; command: BatchCommand; subject: string; target: string; bytes: string }[] = [];
+    const commands: {
+      draft: GraphEdgeDraft;
+      command: BatchCommand;
+      subject: string;
+      target: string;
+      sourceHolder: string;
+      sourceTarget: string;
+      bytes: string;
+    }[] = [];
     for (const draft of drafts) {
       const holder = input.claim({ source: draft.alias, external_id: draft.holder });
       const target =
@@ -181,38 +189,51 @@ export class CrossMediaGraph {
           continue;
         }
         const rowDigest = sourceDigest(draft.relation.evidence);
-        const mapped = mapBangumiVocabulary({
-          metadata: {
-            provider: 'bangumi',
-            sourceAlias: draft.alias,
-            externalId: draft.holder,
-            recordRevision: null,
-            digest: rowDigest,
-            converterRevision: `${bangumiVocabularyRevision}:relation-${draft.relation.family}@2:${draft.relation.code}:${draft.relation.reciprocalCode ?? 'one-sided'}`,
-            recordUrl: `https://bgm.tv/subject/${draft.relation.sourceSubject}`,
-            license: 'CC-BY-SA-3.0',
-            attribution: 'Bangumi contributors',
-          },
-          bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
-          rows: [
-            {
-              kind: 'relation',
-              path: draft.relation.path,
-              origin: {
-                externalId: draft.holder,
-                revision: null,
-                digest: rowDigest,
-                url: `https://bgm.tv/subject/${draft.relation.sourceSubject}`,
-              },
-              subject: { id: sourceClaim.subject, type: sourceType, releaseDigest: bundledDigest },
-              endpoint: { id: endpointClaim.subject, type: endpointType, releaseDigest: bundledDigest },
-              endpointCode: draft.relation.sourceEndpoint,
-              family: draft.relation.family,
-              code: draft.relation.code,
-              ...(draft.relation.reciprocalCode === undefined ? {} : { reciprocalCode: draft.relation.reciprocalCode }),
+        const mapRelation = (ownerExternalId: string) =>
+          mapBangumiVocabulary({
+            metadata: {
+              provider: 'bangumi',
+              sourceAlias: draft.alias,
+              externalId: ownerExternalId,
+              recordRevision: null,
+              digest: rowDigest,
+              converterRevision: `${bangumiVocabularyRevision}:relation-${draft.relation!.family}@2:${draft.relation!.code}:${draft.relation!.reciprocalCode ?? 'one-sided'}`,
+              recordUrl: `https://bgm.tv/subject/${draft.relation!.sourceSubject}`,
+              license: 'CC-BY-SA-3.0',
+              attribution: 'Bangumi contributors',
             },
-          ],
-        });
+            bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+            rows: [
+              {
+                kind: 'relation',
+                path: draft.relation!.path,
+                origin: {
+                  externalId: ownerExternalId,
+                  revision: null,
+                  digest: rowDigest,
+                  url: `https://bgm.tv/subject/${draft.relation!.sourceSubject}`,
+                },
+                subject: { id: sourceClaim.subject, type: sourceType, releaseDigest: bundledDigest },
+                endpoint: { id: endpointClaim.subject, type: endpointType, releaseDigest: bundledDigest },
+                endpointCode: draft.relation!.sourceEndpoint,
+                family: draft.relation!.family,
+                code: draft.relation!.code,
+                ...(draft.relation!.reciprocalCode === undefined ? {} : { reciprocalCode: draft.relation!.reciprocalCode }),
+              },
+            ],
+          });
+        let mapped = mapRelation(draft.holder);
+        const firstProposal = mapped.proposals[0];
+        if (firstProposal?.op === 'propose') {
+          const ownerExternalId =
+            firstProposal.subject === sourceClaim.subject
+              ? draft.relation.sourceSubject
+              : firstProposal.subject === endpointClaim.subject
+                ? draft.relation.sourceEndpoint
+                : undefined;
+          if (ownerExternalId === undefined) throw new TypeError('Cross-media relation mapper returned an unbound holder');
+          if (firstProposal.source.external_id !== ownerExternalId) mapped = mapRelation(ownerExternalId);
+        }
         for (const gap of mapped.gaps)
           gaps.push({
             ...gap,
@@ -226,8 +247,15 @@ export class CrossMediaGraph {
         }
         const command = mapped.proposals[0]!;
         if (command.op !== 'propose') throw new TypeError('Bangumi relation mapper returned a non-proposal command');
-        if (command.subject !== holder.subject || command.source.external_id !== draft.holder)
+        const sourceIsHolder = command.source.external_id === draft.relation.sourceSubject;
+        const sourceIsEndpoint = command.source.external_id === draft.relation.sourceEndpoint;
+        const actualHolder = sourceIsHolder ? sourceClaim : sourceIsEndpoint ? endpointClaim : null;
+        const actualTarget = sourceIsHolder ? endpointClaim : sourceIsEndpoint ? sourceClaim : null;
+        if (actualHolder?.state !== 'bound' || actualTarget?.state !== 'bound' || command.subject !== actualHolder.subject)
           throw new TypeError('Cross-media relation mapper did not preserve the canonical holder binding');
+        const value = command.statement.value;
+        if (value.type !== 'value' || value.content !== actualTarget.subject)
+          throw new TypeError('Cross-media relation mapper did not preserve the canonical endpoint binding');
         if (checkBatchWrite({ commands: [command] }, bundledRelease).length)
           throw new TypeError('Cross-media relation proposal failed portable validation');
         const retained = this.database
@@ -238,7 +266,15 @@ export class CrossMediaGraph {
             return this.retainCommand(graphEdgeKey(draft), exact);
           })
           .immediate();
-        commands.push({ draft, command: JSON.parse(retained.bytes).commands[0] as BatchCommand, subject: holder.subject, target: target.subject, bytes: retained.bytes });
+        commands.push({
+          draft,
+          command: JSON.parse(retained.bytes).commands[0] as BatchCommand,
+          subject: actualHolder.subject,
+          target: actualTarget.subject,
+          sourceHolder: command.source.external_id,
+          sourceTarget: sourceIsHolder ? draft.relation.sourceEndpoint : draft.relation.sourceSubject,
+          bytes: retained.bytes,
+        });
         continue;
       }
       const qualifiers = (draft.qualifiers ?? []).map((qualifier) => {
@@ -267,7 +303,15 @@ export class CrossMediaGraph {
         statement,
       };
       const retained = this.retainCommand(graphEdgeKey(draft), command);
-      commands.push({ draft, command: JSON.parse(retained.bytes).commands[0] as BatchCommand, subject: holder.subject, target: target.subject, bytes: retained.bytes });
+      commands.push({
+        draft,
+        command: JSON.parse(retained.bytes).commands[0] as BatchCommand,
+        subject: holder.subject,
+        target: target.subject,
+        sourceHolder: draft.holder,
+        sourceTarget: draft.target,
+        bytes: retained.bytes,
+      });
     }
     for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
       const page = commands.slice(offset, offset + BATCH_LIMIT);
@@ -307,8 +351,8 @@ export class CrossMediaGraph {
           .immediate();
         proposed.push({
           key: graphEdgeKey(entry.draft),
-          holder: entry.draft.holder,
-          target: entry.draft.target,
+          holder: entry.sourceHolder,
+          target: entry.sourceTarget,
           property: entry.draft.property,
           subject: entry.subject,
         });
