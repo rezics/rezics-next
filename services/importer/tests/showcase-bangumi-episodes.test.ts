@@ -53,8 +53,25 @@ function tables(): CrossMediaTables {
       if (provider === 'bangumi' && table === 'subject') {
         yield { id: 81, type: 2, name: 'STEINS;GATE' };
         yield { id: 99, type: 2, name: 'Unrelated title' };
+        yield { id: 82, type: 2, name: 'CLANNAD' };
+        yield { id: 83, type: 2, name: 'Fate/stay night' };
       }
       if (provider === 'bangumi' && table === 'episode') yield* episodes;
+      if (provider === 'vndb' && table === 'vn_titles') {
+        yield { id: 'v81', lang: 'ja', title: 'STEINS;GATE', official: 't' };
+        yield { id: 'v82', lang: 'ja', title: 'CLANNAD', official: 't' };
+        yield { id: 'v83', lang: 'ja', title: 'Fate/stay night', official: 't' };
+      }
+      if (provider === 'vndb' && table === 'vn') {
+        yield { id: 'v81', olang: 'ja', alias: null };
+        yield { id: 'v82', olang: 'ja', alias: null };
+        yield { id: 'v83', olang: 'ja', alias: null };
+      }
+      if (provider === 'vndb' && table === 'entry_meta') {
+        yield { id: 'v81', revision: '1', lastmod: '2026-11-01' };
+        yield { id: 'v82', revision: '1', lastmod: '2026-11-01' };
+        yield { id: 'v83', revision: '1', lastmod: '2026-11-01' };
+      }
     },
   };
 }
