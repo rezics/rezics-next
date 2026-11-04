@@ -1,6 +1,7 @@
 import { createKernelClient, type KernelClient, type SubjectRead } from '@rezics/client';
 import { candidateContext } from '../../../subject/candidates';
 import recordedRelease from '../../../kernel/recorded/definitions-release.json';
+import type { GuideRelease } from '../definition-guide';
 import { readMusicRelease, type MusicReleaseAddress } from './model';
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
@@ -23,7 +24,15 @@ export type MusicReleaseExample =
 
 /** Explicit example vocabulary, separate from producer publication and generated declarations. */
 export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', locale = 'en') {
-  const release = { ...structuredClone(recordedRelease.release), digest: recordedRelease.digest };
+  const release: GuideRelease = { ...structuredClone(recordedRelease.release), digest: recordedRelease.digest };
+  const summary = (id: string, type: string, label: string) => ({
+    id,
+    type,
+    label: { value: label, language: 'en' },
+    types: [type],
+    creativeWork: true,
+    cover: null,
+  });
   const statement = (n: number, property: string, value: Statement['value']): Statement => ({
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
     property: {
@@ -72,20 +81,20 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
     account: null,
     summary: null,
     related: {
-      '00000000-0000-4000-8000-00000000b306': { type: 'skos:Concept', labels: { en: 'CD' } },
-      '00000000-0000-4000-8000-00000000b309': { type: 'skos:Concept', labels: { en: 'lead vocals' } },
-      [albumId]: { type: 'schema:MusicAlbum', labels: { en: 'Harbour sessions' } },
-      '00000000-0000-4000-8000-00000000b305': { type: 'schema:Place', labels: { en: 'Japan' } },
+      '00000000-0000-4000-8000-00000000b306': summary('00000000-0000-4000-8000-00000000b306', 'skos:Concept', 'CD'),
+      '00000000-0000-4000-8000-00000000b309': summary(
+        '00000000-0000-4000-8000-00000000b309',
+        'skos:Concept',
+        'lead vocals',
+      ),
+      [albumId]: summary(albumId, 'schema:MusicAlbum', 'Harbour sessions'),
+      '00000000-0000-4000-8000-00000000b305': summary(
+        '00000000-0000-4000-8000-00000000b305',
+        'schema:Place',
+        'Japan',
+      ),
     },
   };
-  const summary = (id: string, type: string, label: string) => ({
-    id,
-    type,
-    label: { value: label, language: 'en' },
-    types: [type],
-    creativeWork: true,
-    cover: null,
-  });
   const assertion = (n: number, property: string, target: string, position: string): Statement => ({
     ...statement(n, property, { type: 'value', content: target }),
     qualifiers: [

@@ -79,6 +79,7 @@ function correctionAdvice(source: object | string, contextId: string): NativeOpe
 
 /** Observe existing viewer/disclosure caches; a retired source never revives after an away/back transition. */
 export function MusicReleaseReader(props: Props) {
+  const { initial, ...windowProps } = props;
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const focused = useRef<EventTarget | null>(null);
@@ -114,9 +115,9 @@ export function MusicReleaseReader(props: Props) {
       {reading.available ? (
         <MusicReleaseWindow
           key={reading.key}
-          {...props}
+          {...windowProps}
           startingAddress={route.address}
-          initial={route.address.expectedRevision === undefined ? props.initial : undefined}
+          {...(route.address.expectedRevision === undefined && initial !== undefined ? { initial } : {})}
           returnFocus={route.focus}
           correction={correctionAdvice(props.source, props.context)}
           current={reading.isCurrent}
@@ -358,9 +359,9 @@ export function MusicReleaseWindow({
                 currentReturn && disclosed
                   ? { ...currentReturn, focus: { holder: row.holder, statementId: row.statementId } }
                   : currentReturn;
-              const linkTo = (href: string, props: LinkProps) => (
+              const linkTo = (props: LinkProps) => (
                 <a
-                  href={rowReturn ? musicReleaseLinkHref(href, rowReturn) : href}
+                  href={rowReturn ? musicReleaseLinkHref(props.href, rowReturn) : props.href}
                   lang={props.lang}
                   className={props.className ?? `${linkClass} ${linkColor}`}
                   target="_blank"
@@ -481,7 +482,7 @@ export function MusicReleaseWindow({
                               </div>
                               <div>
                                 <dt>{m.work_parts_relation({}, o)}</dt>
-                                <dd>{valueLabel(page.stream.property)}</dd>
+                                <dd>{valueLabel(page.stream?.property ?? '')}</dd>
                               </div>
                             </dl>
                           </details>
