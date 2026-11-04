@@ -1,19 +1,25 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { PROFILE_FORMAT, type PresentationProfile } from '@rezics/composition';
-import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { RELEASE_LIMITS, validateRelease } from '@rezics/definitions';
 import { fromPlainText } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { derivedId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { itemFacts } from '../../src/semantic/item.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import {
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
-import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -140,8 +146,55 @@ afterAll(async () => {
   if (db) await db.close();
 });
 
+const unrelatedNamespace = '00000000-0000-4000-8000-00000000c100';
+function unrelated(): Population {
+  return {
+    name: 'cited-quotation-unrelated',
+    hotPartition: 4094,
+    hotShare: 1,
+    rows: ({ ordinal, route }) => {
+      const id = derivedId(unrelatedNamespace, `cited-quotation-unrelated:${ordinal}`, route);
+      const tx = randomUUID();
+      const facts = itemFacts(id, { labels: { en: `Unrelated ${ordinal}` } });
+      return {
+        'semantic.subject': [
+          {
+            route,
+            subject_id: id,
+            type: 'schema:Book',
+            recorded_transaction_id: tx,
+            visibility: 'visible',
+            security_revision: 0,
+            current_facts: facts.length,
+            current_release: bundledDigest,
+            projection_pending: false,
+          },
+        ],
+        'semantic.revision': [
+          {
+            route,
+            subject_id: id,
+            revision: 1,
+            kind: 'create',
+            release: bundledDigest,
+            recorded_transaction_id: tx,
+          },
+        ],
+        'semantic.fact': facts.map((fact) => ({
+          ...fact,
+          route,
+          subject_id: id,
+          recorded_transaction_id: tx,
+          release: null,
+          relation: false,
+        })),
+      };
+    },
+  };
+}
+
 test('fixed quotation page work stays bounded as unrelated facts grow', async () => {
-  const population = unrelatedSemanticPopulation('cited-quotation-unrelated', 4094).population;
+  const population = unrelated();
   const report = await checkGrowth(db, {
     name: 'cited quotation page',
     scales,
@@ -149,7 +202,7 @@ test('fixed quotation page work stays bounded as unrelated facts grow', async ()
     repetitions: 3,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (database, scale, previous) => {
-      await seedSemanticPopulation(database, population, { from: previous, to: scale });
+      await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
     },
     operation: async () => {
       const response = await app.handle(
