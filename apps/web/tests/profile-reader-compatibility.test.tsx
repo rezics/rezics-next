@@ -2,7 +2,6 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, createElement, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
-import { createMediaReservationIntent } from '../src/threads/upload';
 import type { ProfileReadResult, ProfileSaveResult, ProfileValues } from '../src/settings/profile-data';
 import type { ProfileAttempt, ProfileEditor } from '../src/settings/profile-write';
 
@@ -68,7 +67,7 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/settings/actions', () => ({ readProfile: readProfileBoundary, saveProfile: saveProfileBoundary }));
 mock.module('../src/threads/upload', () => ({
-  createMediaReservationIntent,
+  createMediaReservationIntent: () => undefined,
   UploadRefusal: MockUploadRefusal,
   uploadAvatar: uploadAvatarBoundary,
   resumeReplyImageUpload: uploadAvatarBoundary,
