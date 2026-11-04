@@ -225,7 +225,7 @@ test('derived current-head bounds hold as unrelated Subjects and obsolete histor
   const expected = [
     { property: 'schema:inLanguage', value: 'ja', facet: { kind: 'code' } },
     { property: 'schema:inLanguage', value: 'en', facet: { kind: 'code' } },
-  ];
+  ] as const;
   let responseBytes = 0;
   const expectWindow = (value: Awaited<ReturnType<typeof source.read>>) => {
     expect(value.subjects.map(({ id, statements }) => ({ id, statements }))).toEqual([
