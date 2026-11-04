@@ -1,0 +1,100 @@
+import { m } from '../../paraglide/messages.js';
+
+export type PermissionPresentation = {
+  label: string;
+  effect: string;
+  identifier: string;
+};
+
+type Copy = () => string;
+
+const actionCopy: Record<string, Copy> = {
+  'collection:read': m.access_permission_read,
+  'space:read': m.access_permission_read,
+  'realm:read': m.access_permission_read,
+  'collection:update': m.access_permission_edit,
+  'space:manage': m.access_permission_manage,
+  'realm:manage': m.access_permission_manage,
+  'collection:delete': m.access_permission_delete,
+  'realm:ban': m.access_permission_ban,
+  'realm:publish': m.access_permission_publish,
+  'board:create': m.access_permission_boards,
+  'access:grant': m.access_permission_access,
+  'moderation:takedown': m.access_permission_moderate,
+  'realm:join': m.access_permission_join,
+  'realm:participate': m.access_permission_participate,
+  'context:accept': m.access_permission_context_accept,
+  'context:adopt': m.access_permission_context_adopt,
+  'post:revise': m.access_permission_post_revise,
+  'post:erase': m.access_permission_post_erase,
+  'edition:sell': m.access_permission_edition_sell,
+  'edition:unpublish': m.access_permission_edition_unpublish,
+  'media:create': m.access_permission_media_create,
+  'media:read': m.access_permission_media_read,
+  'media:read_reservation': m.access_permission_media_read_reservation,
+  'media:complete': m.access_permission_media_complete,
+  'media:erase': m.access_permission_media_erase,
+  'media:import_from_url': m.access_permission_media_import,
+  'statement:delete': m.access_permission_delete,
+  'statement:restore': m.access_permission_restore,
+  'classification_ballot:set': m.access_permission_ballot_set,
+  'classification_ballot:read_own': m.access_permission_ballot_read,
+  'thread:create': m.access_permission_thread_create,
+  'thread:read': m.access_permission_read,
+  'post:create': m.access_permission_post_create,
+  'post:read': m.access_permission_read,
+  'report:create': m.access_permission_report_create,
+  'reaction:set': m.access_permission_reaction_set,
+  'edition:read': m.access_permission_read,
+  'context:delete': m.access_permission_delete,
+  'context:restore': m.access_permission_restore,
+  'zone:read': m.access_permission_read,
+  'zone:configure': m.access_permission_manage,
+  'zone:publish': m.access_permission_publish,
+  'zone:delete': m.access_permission_delete,
+  'zone:restore': m.access_permission_restore,
+};
+
+const roleCopy: Record<string, Copy> = {
+  'community.realm.owner': m.access_role_owner,
+  'community.realm.standing': m.access_role_standing,
+  'community.realm.member': m.access_role_member,
+  'community.realm.moderator': m.access_role_moderator,
+  'community.space.owner': m.access_role_owner,
+  'community.space.standing': m.access_role_standing,
+  'content.board.owner': m.access_role_owner,
+  'content.board.standing': m.access_role_standing,
+  'content.thread.owner': m.access_role_owner,
+  'content.thread.standing': m.access_role_standing,
+  'content.post.owner': m.access_role_owner,
+  'content.post.standing': m.access_role_standing,
+  'content.edition.owner': m.access_role_owner,
+  'content.authored_field.owner': m.access_role_owner,
+  'content.media.owner': m.access_role_owner,
+  'commerce.offer.owner': m.access_role_owner,
+  'commerce.offer.standing': m.access_role_standing,
+  'commerce.payout.owner': m.access_role_owner,
+  'semantic.context.owner': m.access_role_owner,
+  'semantic.context.moderator': m.access_role_moderator,
+  'semantic.revision.author': m.access_role_revision_author,
+  'semantic.subject.classification_ballot_standing': m.access_role_ballot_standing,
+  'library.collection.owner': m.access_role_owner,
+  'semantic.zone.owner': m.access_role_owner,
+  'platform.governance': m.access_role_governance,
+};
+
+export function permissionPresentation(identifier: string): PermissionPresentation {
+  const label = actionCopy[identifier]?.();
+  return {
+    label: label ?? m.access_permission_unknown(),
+    effect: label ? m.access_permission_effect({ permission: label }) : m.access_permission_unknown_effect(),
+    identifier,
+  };
+}
+
+export function rolePresentation(identifier: string): { label: string; identifier: string } {
+  return {
+    label: roleCopy[identifier]?.() ?? m.access_role_installed(),
+    identifier,
+  };
+}

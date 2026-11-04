@@ -13,7 +13,7 @@ import {
 } from '../../../accounts/resource-access/data';
 import { m } from '../../../paraglide/messages.js';
 import { getLocale } from '../../../paraglide/runtime.js';
-import { snapshot } from './fixtures';
+import { permissionSnapshot, snapshot } from './fixtures';
 
 function Example({
   status = 'ready',
@@ -30,13 +30,14 @@ function Example({
     | 'deleted-unknown'
     | 'organization'
     | 'delegated'
+    | 'permission-review'
     | 'long'
     | 'generic'
     | 'reload'
     | 'retired';
 }) {
   const [setup] = useState(() => {
-    let page = structuredClone(snapshot);
+    let page = structuredClone(scenario === 'permission-review' ? permissionSnapshot : snapshot);
     // Illustrative supplied summaries; no directory or per-row identity requests.
     if (scenario === 'delegated') page.authority.principalId = '0192f3a0-6c1e-7b2a-a001-000200000099';
     if (scenario === 'generic') page.resource.type = 'illustrative.unrecognized_resource_type_' + 'exact_'.repeat(20);
@@ -186,13 +187,38 @@ export const CurrentAccess: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.access_grant_actions() }));
     await userEvent.click(await screen.findByText(m.access_edit_grant(), { selector: '[role="menuitem"], button' }));
     await userEvent.selectOptions(canvas.getByLabelText(m.access_action()), 'collection:update');
-    await userEvent.click(canvas.getByRole('button', { name: m.access_save() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_confirm() }));
     await expect(canvas.getByRole('status')).toHaveTextContent(m.access_saved());
     await userEvent.click(canvas.getByRole('button', { name: m.access_add_grant() }));
     await userEvent.selectOptions(canvas.getByLabelText(m.access_recipient()), 'active_accounts');
-    await userEvent.click(canvas.getByRole('button', { name: m.access_save() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_confirm() }));
     await expect(canvas.getByRole('status')).toHaveTextContent(m.access_saved());
     await expect(canvas.getByText(m.access_active_accounts())).toBeVisible();
+  },
+};
+export const PermissionSelectionReview: Story = {
+  args: { scenario: 'permission-review' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.access_add_grant() }));
+    await userEvent.selectOptions(canvas.getByLabelText(m.access_recipient()), 'active_accounts');
+    await userEvent.selectOptions(canvas.getByLabelText(m.access_grant_kind()), 'direct');
+    const permission = canvas.getByLabelText(m.access_action());
+    const filter = canvas.getByLabelText(m.access_search_permissions());
+    await userEvent.selectOptions(permission, 'context:accept');
+    await userEvent.type(filter, 'adopt');
+    await expect(permission).toHaveValue('context:accept');
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
+    await expect(canvas.getByText(m.access_permission_context_accept())).toBeVisible();
+    await expect(canvas.getByText('context:accept')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_edit() }));
+    await userEvent.selectOptions(permission, 'context:adopt');
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
+    await expect(canvas.getByText(m.access_permission_context_adopt())).toBeVisible();
+    await expect(canvas.getByText('context:adopt')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_confirm() }));
   },
 };
 export const LostResponse: Story = {
@@ -215,7 +241,8 @@ export const Refused: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.access_add_grant() }));
     await userEvent.selectOptions(canvas.getByLabelText(m.access_recipient()), 'active_accounts');
-    await userEvent.click(canvas.getByRole('button', { name: m.access_save() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_title() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.access_review_confirm() }));
     await expect(canvas.getByRole('status')).toHaveTextContent(m.access_refused());
     await expect(canvas.getByText('Aki')).toBeVisible();
   },
