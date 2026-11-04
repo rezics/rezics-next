@@ -1,4 +1,15 @@
-import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
+import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
+import { browserObservation } from '../../../session/observation';
 import { m } from '../../../paraglide/messages.js';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import type { PersonStatement } from '../person-reader/model';
@@ -14,6 +25,7 @@ type Facts = {
   projection: FactProjection | undefined;
   expanded: string | undefined;
   inspecting: boolean;
+  inspectable: boolean;
   expand: (field: string | undefined) => void;
   inspect: (visit: Visit) => void;
   stale: ReadonlySet<string>;
@@ -22,17 +34,23 @@ const Context = createContext<Facts | null>(null);
 const unavailable: ValueRead = { kind: 'unavailable' };
 export const useFactVisit = () => useContext(Context);
 
-/** One local visit and one explanation; no per-row readers, caches or browser listeners. */
-export function PeopleFacts({
-  reading,
-  fields,
-  children,
-}: {
-  reading: ProfileReading;
-  fields: readonly string[];
-  children: ReactNode;
-}) {
-  const source = useMemo(() => ({}), [reading.public, reading.release, reading.documents]);
+type FactsProps = { reading: ProfileReading; fields: readonly string[]; children: ReactNode };
+
+/** One local visit and one explanation; no per-row readers or candidate caches. */
+export function PeopleFacts(props: FactsProps) {
+  const client = useContext(QueryClientContext);
+  return client ? <ObservedFacts {...props} client={client} /> : <FactsReading {...props} inspectable={false} />;
+}
+
+/** Establish the existing shared browser observation before explicit inspection, without a request. */
+function ObservedFacts({ client, ...props }: FactsProps & { client: QueryClient }) {
+  const observation = browserObservation(client);
+  const snapshot = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
+  return <FactsReading {...props} inspectable={snapshot.state === 'signed-in' || snapshot.state === 'signed-out'} />;
+}
+
+function FactsReading({ reading, fields, children, inspectable }: FactsProps & { inspectable: boolean }) {
+  const source = useMemo(() => ({}), [reading.public, reading.release, reading.documents, reading.reader]);
   const lifetime = useSubjectCommunityReading({
     source,
     reader: null,
@@ -50,6 +68,7 @@ export function PeopleFacts({
       fields={fields}
       current={lifetime.isCurrent}
       available={lifetime.available}
+      inspectable={inspectable}
     >
       {children}
     </FactVisit>
@@ -62,12 +81,14 @@ function FactVisit({
   children,
   current,
   available,
+  inspectable,
 }: {
   reading: ProfileReading;
   fields: readonly string[];
   children: ReactNode;
   current: () => boolean;
   available: boolean;
+  inspectable: boolean;
 }) {
   const ids = JSON.stringify(fields);
   const projection = useMemo(
@@ -103,6 +124,7 @@ function FactVisit({
         projection: available ? projection : undefined,
         expanded,
         inspecting: !!visit,
+        inspectable,
         expand(field) {
           if (current()) {
             expand(field);
@@ -110,7 +132,7 @@ function FactVisit({
           }
         },
         inspect(next) {
-          if (current() && projection && !stale.has(next.statement.id)) {
+          if (current() && inspectable && projection && !stale.has(next.statement.id)) {
             setChanged(false);
             setVisit(next);
           }
@@ -186,7 +208,8 @@ export function FactInspectionEntry({ statement, reading }: { statement: PersonS
             event.ctrlKey ||
             event.altKey ||
             event.shiftKey ||
-            !visit?.projection
+            !visit?.projection ||
+            !visit.inspectable
           )
             return;
           event.preventDefault();

@@ -143,6 +143,7 @@ export function PeopleFactField({
               <button
                 type="button"
                 className={factControl}
+                disabled={visit?.inspecting}
                 onClick={() => {
                   reset();
                   setOffset(0);
@@ -156,6 +157,7 @@ export function PeopleFactField({
             <button
               type="button"
               className={factControl}
+              disabled={visit?.inspecting}
               onClick={() => {
                 reset();
                 setOffset(0);
