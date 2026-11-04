@@ -70,6 +70,7 @@ test('a type command keeps its payload and key through unknown readback; clean s
   expect(draft.snapshot()).toBe(retained);
   removeReading();
   removeShelf();
+  draft.editTypeLayout(book, undefined);
   draft.editTypeLayout(movie, 'list');
   await draft.retry();
   expect(draft.snapshot().phase).toBe('uncertain'); // Stale readback is never a confirmed save.
