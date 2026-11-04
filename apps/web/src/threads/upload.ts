@@ -305,8 +305,12 @@ async function readReservation(id: string, signal: AbortSignal): Promise<Reserve
   return media;
 }
 
-async function poll(id: string, signal: AbortSignal, initial?: ReservedMedia): Promise<ReservedMedia> {
-  const started = Date.now();
+async function poll(
+  id: string,
+  signal: AbortSignal,
+  initial?: ReservedMedia,
+  started = Date.now(),
+): Promise<ReservedMedia> {
   let delay = initialDelay;
   for (let read = 0; read < maxReads; read += 1) {
     throwIfAborted(signal);
@@ -326,9 +330,10 @@ async function readUploadedImage(
   file: File,
   signal: AbortSignal,
   initial?: ReservedMedia,
+  started?: number,
 ): Promise<UploadedImage> {
   try {
-    const settled = await poll(mediaId, signal, initial);
+    const settled = await poll(mediaId, signal, initial, started);
     if (settled.state !== 'available') throw new UploadRefusal('rejected');
     const size = await naturalSize(file, signal);
     return { src: mediaId, width: size.width, height: size.height };
@@ -397,6 +402,7 @@ export function uploadReplyImage(
 
 /** Resume only missing bytes on the original reservation, then observe its native processing state. */
 export async function resumeReplyImageUpload(mediaId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
+  const started = Date.now();
   try {
     throwIfAborted(signal);
     if (!isPostImageType(file.type)) throw new UploadRefusal('type');
@@ -407,7 +413,7 @@ export async function resumeReplyImageUpload(mediaId: string, file: File, signal
     if (current.mediaType !== file.type || current.byteCount !== file.size) throw new UploadRefusal('unavailable');
     if (current.state === 'rejected') throw new UploadRefusal('rejected');
     if (current.state === 'reserved') await putBytes(current, file, signal);
-    return await readUploadedImage(mediaId, file, signal, current);
+    return await readUploadedImage(mediaId, file, signal, current, started);
   } catch (error) {
     throwIfAborted(signal);
     if (isAbort(error)) throw error;

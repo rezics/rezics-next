@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 const session = await import('../src/session/query');
 const { resumeReplyImageUpload, uploadReplyImage, uploadAvatar, UploadRefusal } = await import('../src/threads/upload');
 const { ReplyImageUploadRecovery } = await import('../src/threads/media-upload-recovery');
