@@ -274,7 +274,16 @@ function nativePageRoute<App>(
         security: draftPreview ? [{ bearerAuth: [] }] : [{ bearerAuth: [] }, {}],
       },
     },
-    async ({ body: envelope, request: callerRequest, authorize, admission, job, actor: caller, session: requestSession, set }) => {
+    async ({
+      body: envelope,
+      request: callerRequest,
+      authorize,
+      admission,
+      job,
+      actor: caller,
+      session: requestSession,
+      set,
+    }) => {
       set.headers['cache-control'] = 'private, no-store';
       // Preview authorization belongs to the caller; execution belongs to an anonymous reader.
       // No caller credentials, session token or prepared capability reaches a native source.
@@ -299,10 +308,12 @@ function nativePageRoute<App>(
           captured = profileSnapshot(profile);
         } catch (error) {
           if (!(error instanceof ProfileInputError)) throw error;
-          reject(error.violations.map(({ pointer, code }) => ({
-            pointer: `/profile${pointer}`,
-            code: code === 'limit' ? 'out_of_range' : 'invalid_format',
-          })));
+          reject(
+            error.violations.map(({ pointer, code }) => ({
+              pointer: `/profile${pointer}`,
+              code: code === 'limit' ? 'out_of_range' : 'invalid_format',
+            })),
+          );
         }
       }
 
@@ -341,17 +352,24 @@ function nativePageRoute<App>(
         // Validity does not confer authority. Both the curator and public reader must be admitted.
         for (const reader of [caller, actor]) {
           const readCheck = await accessCheck(pageAccess, reader, 'presentation:read', readResource, {
-            pool, deadline: job.deadline,
+            pool,
+            deadline: job.deadline,
           });
           if (!(await withConnection(pool, (client) => readCheck(client)))) throw new ProblemError('forbidden');
         }
         const release = await activeRelease(pool);
         const violations = validateProfileFilters(
-          platformRegistry, captured, release?.release ?? { types: {}, properties: {} },
+          platformRegistry,
+          captured,
+          release?.release ?? { types: {}, properties: {} },
         );
-        if (violations.length) reject(violations.map(({ pointer, code }) => ({
-          pointer: `/profile${pointer}`, code: code === 'limit' ? 'out_of_range' : 'unsupported',
-        })));
+        if (violations.length)
+          reject(
+            violations.map(({ pointer, code }) => ({
+              pointer: `/profile${pointer}`,
+              code: code === 'limit' ? 'out_of_range' : 'unsupported',
+            })),
+          );
         if ('route' in target && !captured.routes.some((entry) => entry.route === target.route))
           reject([{ pointer: '/target/route', code: 'unsupported' }]);
         return { digest: profileDigest(captured), profile: captured };
@@ -602,10 +620,7 @@ function nativePageRoute<App>(
 }
 
 /** Two transports select a profile; both use the same native target resolver, planner and executor. */
-export function pageRoutes<App>(
-  app: App,
-  dependencies: Parameters<typeof nativePageRoute>[1],
-) {
+export function pageRoutes<App>(app: App, dependencies: Parameters<typeof nativePageRoute>[1]) {
   return nativePageRoute(nativePageRoute(app, dependencies, false), dependencies, true);
 }
 
