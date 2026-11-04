@@ -153,6 +153,13 @@ test('uncertain removal needs current advice and both captured retry deadlines b
   const cursors: (string | null)[] = [];
   const nextCursor = 'sealed/+cursor==';
   let current: WatchRead = page([readable, inaccessible], nextCursor);
+  const revised = (revision: number, remove: 'available' | 'denied' = 'available') =>
+    managed({
+      ...readable,
+      revision,
+      command: { ...readable.command, expectedRevision: revision },
+      remove,
+    });
   const { client, controller } = setup({
     read: async ({ cursor }) => {
       cursors.push(cursor);
@@ -171,18 +178,13 @@ test('uncertain removal needs current advice and both captured retry deadlines b
     await controller.stop(readable.subscriptionId);
     const original = controller.snapshot().command;
     expect(original?.credential).toBe(identity.csrfToken);
+    expect(controller.snapshot()).toMatchObject({ write: 'uncertain', writeRetryAt: startedAt + 5000 });
     expect(controller.needsDecision()).toBe(true);
-    expect(controller.snapshot().writeRetryAt).toBe(startedAt + 5000);
     expect(controller.canRetryOriginal()).toBe(false);
 
     current = { kind: 'denied', problem: { status: 410, code: 'closed', retryAfter: '2' } };
     await controller.refresh();
-    expect(controller.snapshot()).toMatchObject({
-      read: 'denied',
-      command: original,
-      readRetryAt: startedAt + 2000,
-      writeRetryAt: startedAt + 5000,
-    });
+    expect(controller.snapshot()).toMatchObject({ read: 'denied', command: original, readRetryAt: startedAt + 2000 });
     expect(controller.canRetryOriginal()).toBe(false);
     await controller.refresh();
     await controller.retryOriginal();
@@ -190,32 +192,21 @@ test('uncertain removal needs current advice and both captured retry deadlines b
     expect(commands).toHaveLength(1);
 
     now += 2000;
-    const denied = managed({
-      ...readable,
-      revision: readable.revision + 1,
-      command: { ...readable.command, expectedRevision: readable.revision + 1 },
-      remove: 'denied',
-    });
     current = {
       kind: 'page',
-      page: { viewer, actions: { remove: 'denied' }, watches: [denied], next: nextCursor },
+      page: { viewer, actions: { remove: 'denied' }, watches: [revised(4, 'denied')], next: nextCursor },
     };
     await controller.refresh();
     expect(controller.snapshot().command).toBe(original);
     expect(controller.canRetryOriginal()).toBe(false);
 
-    const revised = managed({
-      ...readable,
-      revision: readable.revision + 2,
-      command: { ...readable.command, expectedRevision: readable.revision + 2 },
-    });
-    current = page([revised], nextCursor);
+    current = page([revised(5)], nextCursor);
     await controller.refresh();
-    expect(controller.snapshot().command).toBe(original);
+    expect(controller.snapshot()).toMatchObject({ command: original, actions: { remove: 'available' }, writeRetryAt: startedAt + 5000 });
     expect(controller.canRetryOriginal()).toBe(false);
     current = page([]);
     await controller.next();
-    expect(controller.snapshot()).toMatchObject({ command: original, rows: [], writeRetryAt: startedAt + 5000 });
+    expect(controller.snapshot()).toMatchObject({ command: original, rows: [] });
     expect(controller.canRetryOriginal()).toBe(false);
 
     now += 3000;
