@@ -13,8 +13,8 @@ const {
   observeContributionActionsSession,
   sameContributionActionsEpisode,
   ContributionActionsPageScope,
-  type ContributionActionsEpisode,
 } = await import('../src/accounts/public-profile/contribution-actions/host');
+type ContributionActionsEpisode = import('../src/accounts/public-profile/contribution-actions/host').ContributionActionsEpisode;
 const { sessionQuery } = await import('../src/session/query');
 const { unavailableAuthorContributionActionsWire } = await import(
   '../src/accounts/public-profile/contribution-actions/receiver'
