@@ -232,15 +232,7 @@ export function ProfileReaderGroups({
   );
 }
 
-function EditionList({
-  editions,
-  locale,
-  link: Link,
-}: {
-  editions: AlbumEditionRead;
-  locale: string;
-  link: PageLink;
-}) {
+function EditionList({ editions, locale }: { editions: AlbumEditionRead; locale: string }) {
   const o = options(locale);
   return (
     <section data-slot="music-album-editions" className="min-w-0 space-y-3">
@@ -259,14 +251,14 @@ function EditionList({
             const label = row.summary?.label?.value ?? row.label ?? row.subject;
             return (
               <li key={`${row.subject}:${row.statement}`}>
-                <Link
+                <a
                   href={subjectHref({ id: row.subject, label }, locale).href}
                   className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center [overflow-wrap:anywhere]`}
                   target="_blank"
                   rel="noopener"
                 >
                   {label}
-                </Link>
+                </a>
               </li>
             );
           })}
@@ -337,7 +329,7 @@ export function MusicAlbumReader({
         />
       ) : null}
       {visit.state === 'ready' || visit.state === 'empty' ? (
-        <EditionList editions={visit.editions} locale={locale} link={link} />
+        <EditionList editions={visit.editions} locale={locale} />
       ) : null}
       <ProfileBoundNotes bounds={visit.bounds} locale={locale} />
       <ProfileSourceList sources={visit.sources} locale={locale} />

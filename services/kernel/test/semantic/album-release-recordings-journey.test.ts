@@ -37,6 +37,9 @@ function subject(response: HttpResponse): Subject {
 function facts(value: Subject, property: string) {
   return value.statements[property] ?? [];
 }
+type Proposed = Omit<StatementInput, 'value'> & {
+  value: StatementInput['value'] | { type: 'somevalue' } | { type: 'novalue' };
+};
 function problem(response: HttpResponse, status: number, code: string) {
   ok(response, status);
   expect(response.body.code).toBe(code);
@@ -47,7 +50,7 @@ const snak = (property: string, content: StatementInput['value']['content']) => 
 });
 const date = (time: string, precision: 9 | 10 | 11) => ({ time, precision, calendarmodel: GREGORIAN });
 
-async function adopted(holder: CreatedSubject, input: StatementInput, key?: string) {
+async function adopted(holder: CreatedSubject, input: Proposed, key?: string) {
   if (!key) {
     const receipt = await fixture.adopt(holder, input);
     expect(receipt.release).toBe(bundledDigest);
@@ -191,8 +194,12 @@ test('a reader follows an album through two released editions and ordered record
   expect(facts(subject(await fixture.read(copy)), 'schema:releaseOf')).toEqual([]);
   expect(facts(subject(await fixture.read(cd)), 'schema:releaseOf')[0]?.value.content).toBe(album.id);
   expect(facts(subject(await fixture.read(cd)), 'schema:datePublished')[0]?.rezics.release).toBe(bundledDigest);
-  expect(facts(subject(await fixture.read(tba)), 'schema:datePublished')[0]?.value.type).toBe('somevalue');
-  expect(facts(subject(await fixture.read(none)), 'schema:datePublished')[0]?.value.type).toBe('novalue');
+  expect(facts(subject(await fixture.read(tba)), 'schema:datePublished')[0]?.value as unknown).toEqual({
+    type: 'somevalue',
+  });
+  expect(facts(subject(await fixture.read(none)), 'schema:datePublished')[0]?.value as unknown).toEqual({
+    type: 'novalue',
+  });
   expect(facts(subject(await fixture.read(vinyl)), 'schema:datePublished')[0]?.value.content).toMatchObject({ precision: 9 });
   expect(facts(subject(await fixture.read(album)), 'schema:datePublished')).toEqual([]);
 
@@ -222,7 +229,9 @@ test('a reader follows an album through two released editions and ordered record
   const page = ok(await fixture.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: cd.id } }));
   expect(page.subject).toBe(cd.id);
   expect(page.viewer).toEqual({ type: 'schema:MusicRelease', id: cd.id });
-  expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(page.actions?.status);
+  expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(
+    (page as { actions?: { status?: string } }).actions?.status,
+  );
   expect(Object.keys(page.reads as object).length).toBeLessThanOrEqual(16);
   const editorPage = ok(await fixture.request('editor', 'POST', '/v1/pages:read', { target: { subject: cd.id } }));
   expect(editorPage.viewer).toEqual(page.viewer);
