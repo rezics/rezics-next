@@ -37,7 +37,12 @@ test('Kernel command phases pair without a duration assertion', async () => {
   const file = join(temporaryDirectory(), 'command-phases.tsv');
   let clock = 1_000_000_000n;
   const env = { REZICS_CHECK_PHASES: file };
-  await withCommandPhase('compiler', () => 0, env, () => (clock += 1n));
+  await withCommandPhase(
+    'compiler',
+    () => 0,
+    env,
+    () => (clock += 1n),
+  );
   const lines = readFileSync(file, 'utf8').trim().split('\n');
   expect(lines).toHaveLength(2);
   expect(lines[0]).toMatch(/^compiler\tstart\t\d+$/);
@@ -74,9 +79,7 @@ test('the one-run compiler database stays in the run slice on a labelled volume'
     const args = throwawayDatabaseRunArgs(4242);
     expect(args).toContain('--cgroup-parent=rezics-check-fixture.slice');
     expect(args).toContain('--mount');
-    expect(args).toContain(
-      'type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=4242',
-    );
+    expect(args).toContain('type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=4242');
     expect(args).not.toContain('--tmpfs');
     expect(args).not.toContain('--rm');
   } finally {

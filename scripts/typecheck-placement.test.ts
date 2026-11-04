@@ -707,7 +707,7 @@ assert.equal(starts.length, 2);
 for (const args of starts) {
   assert.equal(args.includes('--mount'), true);
   assert.equal(
-    args.includes(`type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=${process.pid}`),
+    args.includes('type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=' + process.pid),
     true,
   );
   assert.equal(args.includes('--tmpfs'), false);

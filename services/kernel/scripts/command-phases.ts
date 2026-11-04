@@ -2,13 +2,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 /** Command phases owned by Kernel. Slot wait and rsync stay on the transport receipt. */
-export const KERNEL_COMMAND_PHASES = [
-  'database-image',
-  'migrations',
-  'sql-schema',
-  'compiler',
-  'cleanup',
-] as const;
+export const KERNEL_COMMAND_PHASES = ['database-image', 'migrations', 'sql-schema', 'compiler', 'cleanup'] as const;
 
 export type KernelCommandPhase = (typeof KERNEL_COMMAND_PHASES)[number];
 
@@ -151,8 +145,7 @@ export function formatCommandObservation(label: string, observation: CommandObse
   ];
   if (observation.memory?.anon !== undefined) parts.push(`anon=${observation.memory.anon}`);
   if (observation.memory?.file !== undefined) parts.push(`file=${observation.memory.file}`);
-  if (observation.memory?.inactive_file !== undefined)
-    parts.push(`inactive_file=${observation.memory.inactive_file}`);
+  if (observation.memory?.inactive_file !== undefined) parts.push(`inactive_file=${observation.memory.inactive_file}`);
   if (observation.io?.someAvg10 !== undefined) parts.push(`io.some.avg10=${observation.io.someAvg10}`);
   if (observation.io?.fullAvg10 !== undefined) parts.push(`io.full.avg10=${observation.io.fullAvg10}`);
   return `${parts.join(' ')}\n`;
