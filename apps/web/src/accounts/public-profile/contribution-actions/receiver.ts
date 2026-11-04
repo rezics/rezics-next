@@ -170,14 +170,20 @@ export class ContributionActionsReceiver<T> {
     return flight;
   };
 
-  retire = () => {
+  retire = () => this.finishRetirement(true);
+
+  /** Replace a visit during render without notifying the previous external-store subscriber. */
+  retireSilently = () => this.finishRetirement(false);
+
+  private finishRetirement(notify: boolean) {
     if (this.retired) return;
     this.retired = true;
     ++this.generation;
     this.abort?.abort();
     this.abort = undefined;
     this.flight = undefined;
-    this.publish({ state: 'retired' });
+    if (notify) this.publish({ state: 'retired' });
+    else this.current = { state: 'retired' };
     this.listeners.clear();
-  };
+  }
 }

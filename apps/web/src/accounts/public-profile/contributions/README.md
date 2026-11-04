@@ -45,6 +45,13 @@ installs the native method and DTO; the initial receiver retains only an immutab
 `contribution-actions/receiver.ts` validates the anonymous page's actual `actionSelection`, caps its cohort at twenty,
 retains the original author/view/cursor/proof, and coalesces refreshes. Failure keeps that exact input for retry.
 Retirement aborts the read, clears retained private state and guards late completion. It does not normalize missing
-own slots or acknowledge writes. This is the reader foundation; the page/row lifetime host, closed response adapter,
-native command owners and accessible action presentation remain to be connected. No production method or installed
-declaration head has been established, and this foundation does not add private fields to anonymous documents.
+own slots or acknowledge writes. The page host now supplies only the anonymous source's actual selection and retires
+on page, read, record, publication, credential, locale, QueryClient and navigation replacement. It never derives
+native references from rendered rows. When the source selection or installed method is absent, the host stays
+unavailable and exposes no inferred controls.
+
+At declaration head `25f7c27445d37078c22b4066a7fe9f64396b53c4`, installed `@rezics/client` resolves to
+`packages/client` version `0.1.0`; `src/kernel/zones/http.d.ts` has no `author_contributions.actions` declaration.
+The production wire remains unavailable until the complete-input publisher supplies that public method and DTO.
+The closed response adapter, existing native command-owner connections and accessible action presentation remain
+for the continuation. This reader does not add private fields to anonymous documents.
