@@ -63,10 +63,13 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/authored')({
     property: typeof input.property === 'string' && input.property.length <= 256 ? input.property : undefined,
     via: subjectVisitReturn(input.via, getLocale()),
   }),
-  loader: ({ params, location, search }) =>
+  loader: ({ params, location }) =>
     canonicalAuthored({
       data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
-    }).then((result) => ({ ...result, via: search.via })),
+    }).then((result) => ({
+      ...result,
+      via: subjectVisitReturn(new URLSearchParams(location.searchStr).get('via'), getLocale()),
+    })),
   head: () => ({ meta: [{ title: m.authored_title() }, { name: 'robots', content: 'noindex' }] }),
   component: candidateSession(AuthoredRoute),
 });
