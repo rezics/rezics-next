@@ -5,7 +5,7 @@ import { parseListPresentation } from '@rezics/ui/cover';
 import { CollectionMemberDetails } from '../src/library/collection-member-row';
 import { collectionMemberRatio, type CollectionListPresentations } from '../src/library/collection-presentation';
 import { subjectOf, type CollectionMember } from '../src/library/reads';
-import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, locales, overwriteGetLocale } from '../src/paraglide/runtime.js';
 import recording from '../src/kernel/recorded/library-collection-members.json';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 import subjectRecording from '../src/kernel/recorded/subject.json';
@@ -25,11 +25,11 @@ const renderDetails = (member: Pick<CollectionMember, 'subject' | 'facts'>, list
   renderToStaticMarkup(createElement(CollectionMemberDetails, { member, listPresentations }));
 
 test('Book and Film facts use released order, localized supplied labels and existing number/unit formatting', () => {
-  const previous = getLocale();
+  const previous = getLocale;
   const labels = Object.fromEntries(locales.map((locale) => [locale, `Supplied credit (${locale})`]));
   try {
     for (const locale of locales) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       for (const [type, credit, amount, unit] of [
         ['schema:Book', 'schema:author', 123456, 'words'],
         ['schema:Movie', 'schema:director', 95.5, 'min'],
@@ -56,14 +56,14 @@ test('Book and Film facts use released order, localized supplied labels and exis
       }
     }
   } finally {
-    setLocale(previous, { reload: false });
+    overwriteGetLocale(previous);
   }
 });
 
 test('absent, complete-empty, withheld and explicitly cleared facts stay absent without title heuristics', () => {
   for (const facts of [undefined, {}, { 'schema:author': [], 'schema:datePublished': [] }]) {
     const html = renderDetails({ subject: book.subject, ...(facts === undefined ? {} : { facts }) });
-    expect(html).not.toContain('member-list-row-facts');
+    expect(html).toContain(`data-context-state="${facts === undefined ? 'unknown' : 'empty'}"`);
     expect(html).not.toContain('1943');
   }
   const supplied: Pick<CollectionMember, 'subject' | 'facts'> = {
@@ -85,7 +85,9 @@ test('absent, complete-empty, withheld and explicitly cleared facts stay absent 
       'schema:wordCount': [{ kind: 'quantity', amount: Infinity, unit: 'words' }],
     },
   });
-  expect(invalid).not.toContain('member-list-row-facts');
+  expect(invalid).toContain('data-context-state="unavailable"');
+  expect(invalid).not.toContain('NaN');
+  expect(invalid).not.toContain('Infinity');
 });
 
 test('Collection geometry follows actual Type hints while owner/dominant Collection kind leaves member facts intact', () => {
