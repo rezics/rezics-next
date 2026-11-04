@@ -266,7 +266,10 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     expect(new Set(genres.map(content))).toEqual(new Set([conceptIds.g311, conceptIds.g44]));
     const hasMetric = (command: Extract<BatchCommand, { op: 'propose' }>) =>
       command.statement.qualifiers?.some(
-        (term) => term.property.id === 'rezics:sourceTagWeightMetric' && term.value.content === vndbTagsRatingMetric,
+        (term) =>
+          term.property.id === 'rezics:sourceTagWeightMetric' &&
+          term.value.type === 'value' &&
+          term.value.content === vndbTagsRatingMetric,
       );
     const weights = genres.filter(hasMetric);
     const associations = genres.filter((command) => !hasMetric(command));
@@ -294,7 +297,16 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       property: { id: 'rezics:sourceTagWeightMetric' },
       value: { type: 'value', content: vndbTagsRatingMetric },
     });
-    expect(weight.statement.references?.[1]?.parts[0]?.value.content).toBe(vndbTagsRatingDocumentation);
+    expect(
+      weight.statement.references?.some((reference) =>
+        reference.parts.some(
+          (part) =>
+            part.property.id === 'schema:url' &&
+            part.value.type === 'value' &&
+            part.value.content === vndbTagsRatingDocumentation,
+        ),
+      ),
+    ).toBe(true);
     expect(referenceValue(weight, 'rezics:sourceSnapshot')).toBe(
       `unversioned:sha256:${createHash('sha256').update(kanaResponse(1.25, 1)).digest('hex')}`,
     );
