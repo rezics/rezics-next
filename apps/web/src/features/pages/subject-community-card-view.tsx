@@ -1,6 +1,10 @@
 import { m } from '../../paraglide/messages.js';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
-import { threadActivity } from '../../threads/activity';
+import {
+  conversationActivity,
+  formatConversationReplyCount,
+  threadActivity,
+} from '../../threads/activity';
 import { fullDateTime, timeText } from '../../threads/byline';
 import { NativeDocumentImage } from '../../threads/document-media';
 import type { CommunityCard, CommunityNativeCard } from './subject-community-card';
@@ -43,11 +47,13 @@ export function CommunityNativePresentation({
   summary,
   locale,
   now,
+  retryHref,
 }: {
   card: CommunityNativeCard;
   summary: string;
   locale: string;
   now: string;
+  retryHref?: string;
 }) {
   const options = { locale: locale as never };
   const content = card.presentation ? (
@@ -62,7 +68,7 @@ export function CommunityNativePresentation({
       ))}
     </div>
   ) : null;
-  const activity = card.comments;
+  const activity = conversationActivity(card.comments ?? undefined);
   return (
     <div className="min-w-0 space-y-2 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11 [&_a]:min-w-11">
       {card.presentation?.spoiler ? (
@@ -72,15 +78,19 @@ export function CommunityNativePresentation({
       ) : (
         content
       )}
-      {activity ? (
+      {activity.state === 'current' ? (
         <p data-slot="community-activity" className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
-          <span>
-            {m.board_thread_replies(
-              {
-                count: `${new Intl.NumberFormat(locale).format(activity.count.value)}${activity.count.kind === 'lower-bound' ? '+' : ''}`,
-              },
-              options,
-            )}
+          <span
+            aria-label={
+              activity.count.kind === 'lower-bound'
+                ? m.board_thread_replies_lower_bound(
+                    { count: formatConversationReplyCount(activity.count, locale).replace(/\+$/, '') },
+                    options,
+                  )
+                : undefined
+            }
+          >
+            {m.board_thread_replies({ count: formatConversationReplyCount(activity.count, locale) }, options)}
           </span>
           {activity.lastActivityAt ? (
             <time dateTime={activity.lastActivityAt} title={fullDateTime(activity.lastActivityAt, locale)}>
@@ -88,7 +98,16 @@ export function CommunityNativePresentation({
             </time>
           ) : null}
         </p>
-      ) : null}
+      ) : (
+        <div data-slot="community-activity" role="status" className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+          <span>{m.board_thread_activity_unavailable({}, options)}</span>
+          {retryHref ? (
+            <a href={retryHref} className="text-primary underline underline-offset-4">
+              {m.subject_section_retry({}, options)}
+            </a>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

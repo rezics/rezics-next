@@ -610,6 +610,8 @@
   "board_start_thread": "Créer une discussion",
   "board_thread_last_activity": "Dernière activité {time}",
   "board_thread_replies": "Réponses : {count}",
+  "board_thread_replies_lower_bound": "Au moins {count} réponses",
+  "board_thread_activity_unavailable": "L’activité des réponses est indisponible.",
   "board_rank_refreshed": "Classement actualisé {time}",
   "board_threads_page_empty": "Aucune discussion visible sur cette page. Passez à la page suivante.",
   "board_threads_empty": "Il n’y a pas encore de discussion dans ce tableau.",

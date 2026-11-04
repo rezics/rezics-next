@@ -2,6 +2,8 @@ import { continueProgress } from '../../library/continue-source';
 import { progressView } from '../../library/progress-label';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
+import { fullDateTime } from '../../threads/byline';
+import { feedConversationActivity, formatConversationReplyCount } from '../../threads/activity';
 import { homeFeedDestination, homeFeedResume, homeFeedTitle } from '../pages/home-feed-destination';
 import type { FeedItem } from '../pages/home-feed-read';
 import type { FeedItemPresentation } from './feed-results';
@@ -26,6 +28,7 @@ export function homeFeedItemPresentation(
   const href = homeFeedDestination(item, locale);
   const resume = homeFeedResume(item, locale);
   const summary = item.summary;
+  const activity = item.key.owner === 'content' ? feedConversationActivity(summary) : null;
   const kind = feedCardKind(item);
   const parentContext = 'parentContext' in summary ? summary.parentContext : undefined;
   const parent = parentContext?.kind === 'reply' ? parentContext.parent : undefined;
@@ -47,7 +50,41 @@ export function homeFeedItemPresentation(
     className: '[overflow-wrap:anywhere] [&_[data-content-item-slot=title]]:break-words',
     visual: FeedCardVisual({ item, title, href, locale }),
     context: <FeedCardContext item={item} kind={kind} locale={locale} />,
-    metadata: <FeedCardAttribution item={item} kind={kind} locale={locale} />,
+    metadata: (
+      <>
+        <FeedCardAttribution item={item} kind={kind} locale={locale} />
+        {activity?.state === 'current' ? (
+          <p data-slot="conversation-activity" className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+            <span
+              aria-label={
+                activity.count.kind === 'lower-bound'
+                  ? m.board_thread_replies_lower_bound(
+                      { count: formatConversationReplyCount(activity.count, locale).replace(/\+$/, '') },
+                      options,
+                    )
+                  : undefined
+              }
+            >
+              {m.board_thread_replies({ count: formatConversationReplyCount(activity.count, locale) }, options)}
+            </span>
+            {activity.lastActivityAt ? (
+              <time dateTime={activity.lastActivityAt} title={fullDateTime(activity.lastActivityAt, locale)}>
+                {m.board_thread_last_activity({ time: fullDateTime(activity.lastActivityAt, locale) }, options)}
+              </time>
+            ) : null}
+          </p>
+        ) : activity?.state === 'withheld' ? (
+          <div data-slot="conversation-activity" role="status" className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+            <span>{m.board_thread_activity_unavailable({}, options)}</span>
+            {href ? (
+              <a href={href} className="text-primary underline underline-offset-4">
+                {m.subject_section_retry({}, options)}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+      </>
+    ),
     preview: (
       <>
         <FeedCardPreview item={item} />

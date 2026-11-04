@@ -1,6 +1,6 @@
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
-import { createConversationActivityBatch, type ConversationActivitySelection } from './conversation-activity.ts';
+import type { ConversationActivitySelection } from './conversation-activity.ts';
 import type { FeedAuthor } from './feed-contract.ts';
 import { prepareFeedContentContext } from './feed-context.ts';
 import type { AnchoredPosition, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
@@ -15,6 +15,7 @@ import {
 import { readSubjectThread } from './reads.ts';
 import type { ReactionCountFreshness, ThreadView } from './reads.ts';
 import type { SubjectThreadWithReactions } from './subject-threads-reactions.ts';
+import { staleSubjectThreadActivity, type SubjectThreadConversationActivity } from './subject-threads-conversation-activity.ts';
 
 export type SubjectThreadCardDependencies = ReadingPageDependencies & MediaDependencies;
 
@@ -167,7 +168,8 @@ function comments(
   postAvailability: SubjectThreadWithReactions['firstPost']['availability'],
 ): CardComments {
   if (selectedState === 'erased' || postAvailability !== 'available') return { state: 'withheld' };
-  if (!selection || selection.status !== 'current') return { state: 'unavailable' };
+  if (!selection) throw new ProblemError('dependency_unavailable');
+  if (selection.status !== 'current') return { state: 'withheld' };
   return {
     state: 'current',
     cohort: 'public',
@@ -247,10 +249,6 @@ function equalNativeThread(selected: SubjectThreadWithReactions, current: Thread
   return JSON.stringify(source) === JSON.stringify(current);
 }
 
-function staleActivity(selection: ConversationActivitySelection): boolean {
-  return selection.status === 'withheld' && selection.reason === 'stale';
-}
-
 /** Adds bounded card fields around Subject's selected native threads and retains every final source check. */
 export async function projectSubjectThreadCards(
   dependencies: SubjectThreadCardDependencies,
@@ -258,18 +256,19 @@ export async function projectSubjectThreadCards(
   placeId: string,
   selected: readonly SubjectThreadWithReactions[],
   context: ReadContext,
+  activitySnapshot: SubjectThreadConversationActivity,
   reactionsAsOf: SubjectThreadCardProjection['reactionsAsOf'],
+  finalDisclosure: () => Promise<void>,
 ): Promise<SubjectThreadCardProjection> {
   if (selected.length > 20) throw new RangeError('At most 20 Subject thread cards');
-  if (selected.length === 0) return { entries: [], anchors: [], reactionsAsOf: null };
+  if (selected.length === 0) {
+    await finalDisclosure();
+    return { entries: [], anchors: [], reactionsAsOf: null };
+  }
 
   const references = selected.map((thread) => cardReference(thread, subjectId));
   const cards = await createContentReadingCardBatch(dependencies, references, context.actor, context.deadline);
-  const activity = createConversationActivityBatch(dependencies.pool);
-  const initialActivity = await activity.select(
-    selected.map((thread) => thread.id),
-    context.deadline,
-  );
+  const initialActivity = activitySnapshot.selected;
   const content = await prepareFeedContentContext(dependencies, selected.map(contentReference), context, [], {
     observeThreads: (threadIds, current) =>
       Promise.all(
@@ -278,11 +277,8 @@ export async function projectSubjectThreadCards(
   });
 
   const cardResult = await cards.finish();
-  const finalActivity = await activity.confirm(initialActivity, context.deadline);
-  if (finalActivity.some(staleActivity)) throw new ProblemError('dependency_unavailable');
   const contentResult = await content.finish();
   const cardById = new Map(cardResult.selected.map((item) => [item.reference.id, item]));
-  const activityById = new Map(finalActivity.map((item) => [item.threadId, item]));
   const mediaPosts: SubjectThreadWithReactions['firstPost'][] = [];
   type FeedContextValue = NonNullable<ReturnType<typeof contentResult.contexts.get>>;
   const ready: {
@@ -308,6 +304,10 @@ export async function projectSubjectThreadCards(
   }
 
   const images = await readMedia(dependencies, context, mediaPosts);
+  await finalDisclosure();
+  const finalActivity = await activitySnapshot.confirm(context.deadline);
+  if (staleSubjectThreadActivity(finalActivity)) throw new ProblemError('dependency_unavailable');
+  const activityById = new Map(finalActivity.map((item) => [item.threadId, item]));
   const entries: SubjectThreadCardEntry[] = [];
   let hasCurrentReaction = false;
   for (const item of ready) {

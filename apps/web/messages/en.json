@@ -620,6 +620,8 @@
   "board_start_thread": "Start a new thread",
   "board_thread_last_activity": "Last activity {time}",
   "board_thread_replies": "Replies: {count}",
+  "board_thread_replies_lower_bound": "At least {count} replies",
+  "board_thread_activity_unavailable": "Reply activity is unavailable.",
   "board_rank_refreshed": "Ranking refreshed {time}",
   "board_threads_page_empty": "No visible discussions on this page. Continue to the next page.",
   "board_threads_empty": "There are no discussions in this board yet.",

@@ -610,6 +610,8 @@
   "board_start_thread": "새 스레드 시작",
   "board_thread_last_activity": "최근 활동 {time}",
   "board_thread_replies": "답글: {count}",
+  "board_thread_replies_lower_bound": "답글 {count}개 이상",
+  "board_thread_activity_unavailable": "답글 활동을 표시할 수 없습니다.",
   "board_rank_refreshed": "순위 갱신: {time}",
   "board_threads_page_empty": "이 페이지에 표시할 토론이 없습니다. 다음 페이지로 이동하세요.",
   "board_threads_empty": "이 게시판에는 아직 토론이 없습니다.",

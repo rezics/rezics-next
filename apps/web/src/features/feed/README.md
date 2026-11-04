@@ -74,6 +74,13 @@ and review ratings, stay absent until their bounded public owner summaries suppl
 reads, does not rank or apply public/private predicates, and omits missing descriptive fields. Following
 Collections and Content thread/post summaries keep their existing native identities and actions.
 
+Home discussion and review cards also consume the selected thread's `conversationActivity` summary. A current
+public cohort shows its admitted reply count and original last-contribution time; lower-bound counts retain a
+visible `+` and an accessible lower-bound label. Withheld activity shows no count or time and keeps retry on the
+exact conversation destination. The page adapter does not read replies or infer activity from loaded cards.
+Until the complete-input publisher emits the installed DTO, the Web activity parser accepts the native response as
+an unknown value and fails closed on missing or malformed fields.
+
 Decision: Home uses current native review target and question/vote revisions. Reply cards show only the exact
 immediate parent and its disclosed author, language and spoiler fields. Absent, withheld or unavailable context does
 not fall back to hidden bodies, citations or identities; spoiler reveal retires with page, target or account.

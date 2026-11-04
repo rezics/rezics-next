@@ -610,6 +610,8 @@
   "board_start_thread": "Neuen Thread starten",
   "board_thread_last_activity": "Letzte Aktivität {time}",
   "board_thread_replies": "Antworten: {count}",
+  "board_thread_replies_lower_bound": "Mindestens {count} Antworten",
+  "board_thread_activity_unavailable": "Antwortaktivität ist nicht verfügbar.",
   "board_rank_refreshed": "Rangfolge aktualisiert: {time}",
   "board_threads_page_empty": "Auf dieser Seite sind keine Diskussionen sichtbar. Weiter zur nächsten Seite.",
   "board_threads_empty": "In diesem Board gibt es noch keine Diskussionen.",

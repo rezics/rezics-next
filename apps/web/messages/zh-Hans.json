@@ -610,6 +610,8 @@
   "board_start_thread": "创建新讨论串",
   "board_thread_last_activity": "最近活动 {time}",
   "board_thread_replies": "回复：{count}",
+  "board_thread_replies_lower_bound": "至少 {count} 条回复",
+  "board_thread_activity_unavailable": "回复活动暂不可用。",
   "board_rank_refreshed": "排序更新于{time}",
   "board_threads_page_empty": "此页没有可见的讨论。请继续查看下一页。",
   "board_threads_empty": "此版面目前没有讨论串。",

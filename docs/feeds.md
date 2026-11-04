@@ -159,6 +159,21 @@ digest and part/count bindings. Total cursor size is capped at 32 KiB and expire
 Native discovery membership/freshness remains owned by its retained cursor. `asOf` is
 the private page boundary or anonymous discovery's native freshness timestamp.
 
+### Cost: Home and Subject conversation activity assembly
+
+- **Touches:** compose selected Home/Subject references, both activity snapshots, all page hydration and final
+  source/place/Realm/viewer disclosure. Charge existing native batch helpers, Semantic, Accounts, Access, media,
+  citation and reaction callees, every participating pool/control/runner phase, full-body reads and serialized bytes.
+- **Bound:** derive from selected T <= 20 native thread keys, represented homes H <= T, fixed page budgets and the
+  installed producer limits. Preserve physical-prefix bounds for initial/final observations. Include duplicate keys,
+  known-zero/lower-bound/withheld, sparse, guest/private, dependency-failure and exact retry branches. Output length
+  alone cannot bound authority/history work.
+- **Growth check:** independently grow unrelated threads/posts, selected removed/contribution history, account/
+  authority history and source repair backlog at 256/1024/4096 while T, H, page limits and admitted bytes stay fixed.
+  Measure the complete consumer operation, including strict indexed plans, actual examined rows/blocks, SQL/control
+  work, retained/materialized/serialized UTF-8 bytes and all owner phases. Keep producer repair measurements with
+  its original owner; this journey measures how page consumers call it.
+
 ## Activity, delivery and current authority
 
 The default Content registration adds committed thread/review/reply creation, Realm

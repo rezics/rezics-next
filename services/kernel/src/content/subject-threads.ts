@@ -18,6 +18,7 @@ import {
   type SubjectThreadCardEntry,
 } from './subject-threads-cards.ts';
 import type { ReactionCountFreshness } from './reads.ts';
+import { selectSubjectThreadConversationActivity } from './subject-threads-conversation-activity.ts';
 
 export type SubjectThreadKind = 'discussion' | 'review';
 export type SubjectThreadPageInput = {
@@ -190,18 +191,28 @@ export async function listSubjectThreads(
   }
 
   const hasMore = scanned < candidates.candidates.length || candidates.candidates.length === limit * SCAN_FACTOR;
+  const conversationActivity = await selectSubjectThreadConversationActivity(
+    dependencies.pool,
+    entries.map((entry) => entry.id),
+    context.deadline,
+  );
   const projected = await projectSubjectThreadReactions(dependencies, subjectId, input.place, entries, context);
+  let finalContext: SubjectThreadContext | undefined;
   const composed = await projectSubjectThreadCards(
     dependencies,
     subjectId,
     input.place,
     projected.entries,
     context,
+    conversationActivity,
     projected.reactionsAsOf,
+    async () => {
+      finalContext = await pageContext.finish();
+    },
   );
   anchors.push(...projected.anchors, ...composed.anchors);
   return {
-    context: await pageContext.finish(),
+    context: finalContext!,
     entries: composed.entries,
     reactionsAsOf: composed.reactionsAsOf,
     anchor: candidates.anchor,

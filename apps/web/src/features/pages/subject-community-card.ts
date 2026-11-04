@@ -94,19 +94,22 @@ const presentation = v.strictObject({
   spoiler: v.boolean(),
 });
 const author = v.object({ displayName: v.nullable(text), handle: v.nullable(text) });
-const comments = v.strictObject({
-  state: v.literal('current'),
-  cohort: v.literal('public'),
-  count: v.strictObject({
-    kind: v.picklist(['exact', 'lower-bound']),
-    value: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+const comments = v.variant('state', [
+  v.strictObject({
+    state: v.literal('current'),
+    cohort: v.literal('public'),
+    count: v.strictObject({
+      kind: v.picklist(['exact', 'lower-bound']),
+      value: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+    }),
+    lastActivityAt: v.nullable(date),
+    source: v.strictObject({
+      epoch: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
+      position: v.pipe(v.string(), v.maxLength(COMMUNITY_POSITION_LIMIT), v.regex(/^[0-9]+$/)),
+    }),
   }),
-  lastActivityAt: v.nullable(date),
-  source: v.strictObject({
-    epoch: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
-    position: v.pipe(v.string(), v.maxLength(COMMUNITY_POSITION_LIMIT), v.regex(/^[0-9]+$/)),
-  }),
-});
+  v.strictObject({ state: v.literal('withheld') }),
+]);
 
 /** A bounded display projection of Content's installed card, separate from historical provenance. */
 export type CommunityNativeCard = {
@@ -137,7 +140,12 @@ export function projectNativeCommunityCard(
     currentness.authors === 'current'
       ? v.safeParse(author, value.authors.thread.identity)
       : null;
-  const activity = currentness.comments === 'current' ? v.safeParse(comments, value.comments) : null;
+  const activity =
+    isRecord(value.comments) && value.comments.state === 'withheld'
+      ? v.safeParse(comments, value.comments)
+      : currentness.comments === 'current'
+        ? v.safeParse(comments, value.comments)
+        : null;
   const media: CommunityNativeCard['media'] = [];
   if (
     currentness.media === 'current' &&
