@@ -957,6 +957,35 @@ END $$;
 
 
 --
+-- Name: copy_condition_observation_valid(jsonb); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.copy_condition_observation_valid(value jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $_$
+  SELECT CASE
+    WHEN value IS NULL THEN true
+    WHEN jsonb_typeof(value) <> 'object' THEN false
+    ELSE value ?& ARRAY['value', 'pin', 'kindId']
+      AND value - ARRAY['value', 'pin', 'kindId'] = '{}'::jsonb
+      AND jsonb_typeof(value->'kindId') = 'string'
+      AND value->>'kindId' ~ '^[a-z][a-z0-9_.-]{0,63}$'
+      AND (
+        value->'value' = 'null'::jsonb
+        OR (
+          jsonb_typeof(value->'value') = 'string'
+          AND value->>'value' = ANY (ARRAY[
+            'unknown', 'mint', 'near_mint', 'very_good_plus',
+            'very_good', 'good', 'fair', 'poor'
+          ]::text[])
+        )
+      )
+      AND COALESCE(library.library_profile_pin_valid(value->'pin'), false)
+  END;
+$_$;
+
+
+--
 -- Name: erase_collection_structure_history_on_curator_change(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -1905,6 +1934,171 @@ BEGIN
       INSERT INTO library.reading_insights_year VALUES(r,a,y,d,d-subject_delta,group_delta*(k<>'')::integer);
     END IF;
   END IF;
+END $$;
+
+
+--
+-- Name: reading_insights_assessment_apply(integer, uuid, smallint, text, smallint, integer); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_assessment_apply(r integer, a uuid, m smallint, p text, u smallint, d integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE previous bigint; following bigint;
+BEGIN
+  INSERT INTO library.reading_insights_assessment_revision(route,account_id,meaning_revision)
+    VALUES(r,a,m) ON CONFLICT(route,account_id,meaning_revision) DO NOTHING;
+  UPDATE library.reading_insights_assessment_revision SET
+    absent=absent+CASE WHEN p='absent' THEN d ELSE 0 END,
+    explicit_null=explicit_null+CASE WHEN p='explicit_null' THEN d ELSE 0 END,
+    valued=valued+CASE WHEN p='value' THEN d ELSE 0 END,
+    historical_unknown=historical_unknown+CASE WHEN p='unknown' THEN d ELSE 0 END
+    WHERE route=r AND account_id=a AND meaning_revision=m;
+  IF p='value' THEN
+    SELECT occurrences INTO previous FROM library.reading_insights_assessment_value
+      WHERE route=r AND account_id=a AND meaning_revision=m AND units=u;
+    following := COALESCE(previous,0)+d;
+    IF following=0 THEN
+      DELETE FROM library.reading_insights_assessment_value
+        WHERE route=r AND account_id=a AND meaning_revision=m AND units=u;
+    ELSE
+      INSERT INTO library.reading_insights_assessment_value VALUES(r,a,m,u,following)
+        ON CONFLICT(route,account_id,meaning_revision,units)
+        DO UPDATE SET occurrences=EXCLUDED.occurrences;
+    END IF;
+  END IF;
+  DELETE FROM library.reading_insights_assessment_revision
+    WHERE route=r AND account_id=a AND meaning_revision=m
+      AND absent=0 AND explicit_null=0 AND valued=0 AND historical_unknown=0;
+END $$;
+
+
+--
+-- Name: reading_insights_assessment_mark(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_assessment_mark() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  NEW.reading_insights_assessment_initialized := true;
+  IF TG_OP='INSERT' AND NEW.journal_assessment_units IS NOT NULL
+     AND NEW.journal_assessment_presence='absent' THEN
+    NEW.journal_assessment_presence := 'value';
+  ELSIF TG_OP='UPDATE' AND NEW.journal_assessment_units IS DISTINCT FROM OLD.journal_assessment_units
+     AND NEW.journal_assessment_presence IS NOT DISTINCT FROM OLD.journal_assessment_presence THEN
+    NEW.journal_assessment_presence := CASE
+      WHEN NEW.journal_assessment_units IS NULL THEN 'explicit_null' ELSE 'value' END;
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: reading_insights_assessment_receive(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_assessment_receive() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE old_presence text; new_presence text; old_eligible boolean; new_eligible boolean;
+BEGIN
+  IF TG_OP='INSERT' THEN
+    INSERT INTO library.reading_insights_assessment_owner VALUES(NEW.route,NEW.account_id,0,gen_random_uuid())
+      ON CONFLICT(route,account_id) DO NOTHING;
+    PERFORM 1 FROM library.reading_insights_assessment_owner
+      WHERE route=NEW.route AND account_id=NEW.account_id FOR UPDATE;
+    new_presence := CASE
+      WHEN NEW.journal_assessment_presence IS NULL AND NEW.journal_assessment_units IS NOT NULL THEN 'value'
+      WHEN NEW.journal_assessment_presence IS NULL THEN 'unknown'
+      ELSE NEW.journal_assessment_presence END;
+    IF NEW.state<>'retired' THEN
+      PERFORM library.reading_insights_assessment_apply(
+        NEW.route,NEW.account_id,NEW.journal_assessment_meaning_revision,new_presence,
+        NEW.journal_assessment_units,1);
+    END IF;
+    UPDATE library.reading_insights_assessment_owner SET
+      initialized_sessions=initialized_sessions+1,revision=gen_random_uuid()
+      WHERE route=NEW.route AND account_id=NEW.account_id;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP='DELETE' THEN
+    IF OLD.reading_insights_assessment_initialized THEN
+      PERFORM 1 FROM library.reading_insights_assessment_owner
+        WHERE route=OLD.route AND account_id=OLD.account_id FOR UPDATE;
+      old_presence := CASE
+        WHEN OLD.journal_assessment_presence IS NULL AND OLD.journal_assessment_units IS NOT NULL THEN 'value'
+        WHEN OLD.journal_assessment_presence IS NULL THEN 'unknown'
+        ELSE OLD.journal_assessment_presence END;
+      IF OLD.state<>'retired' THEN
+        PERFORM library.reading_insights_assessment_apply(
+          OLD.route,OLD.account_id,OLD.journal_assessment_meaning_revision,old_presence,
+          OLD.journal_assessment_units,-1);
+      END IF;
+      UPDATE library.reading_insights_assessment_owner SET
+        initialized_sessions=initialized_sessions-1,revision=gen_random_uuid()
+        WHERE route=OLD.route AND account_id=OLD.account_id;
+      DELETE FROM library.reading_insights_assessment_owner
+        WHERE route=OLD.route AND account_id=OLD.account_id AND initialized_sessions=0;
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  old_eligible := OLD.state<>'retired';
+  new_eligible := NEW.state<>'retired';
+  old_presence := CASE
+    WHEN OLD.journal_assessment_presence IS NULL AND OLD.journal_assessment_units IS NOT NULL THEN 'value'
+    WHEN OLD.journal_assessment_presence IS NULL THEN 'unknown'
+    ELSE OLD.journal_assessment_presence END;
+  new_presence := CASE
+    WHEN NEW.journal_assessment_presence IS NULL AND NEW.journal_assessment_units IS NOT NULL THEN 'value'
+    WHEN NEW.journal_assessment_presence IS NULL THEN 'unknown'
+    ELSE NEW.journal_assessment_presence END;
+
+  IF OLD.reading_insights_assessment_initialized AND
+     (OLD.route,OLD.account_id,OLD.journal_assessment_meaning_revision,old_presence,
+       OLD.journal_assessment_units,old_eligible)
+     IS NOT DISTINCT FROM
+     (NEW.route,NEW.account_id,NEW.journal_assessment_meaning_revision,new_presence,
+       NEW.journal_assessment_units,new_eligible) THEN
+    RETURN NEW;
+  END IF;
+
+  INSERT INTO library.reading_insights_assessment_owner VALUES(NEW.route,NEW.account_id,0,gen_random_uuid())
+    ON CONFLICT(route,account_id) DO NOTHING;
+  PERFORM 1 FROM library.reading_insights_assessment_owner
+    WHERE route=NEW.route AND account_id=NEW.account_id FOR UPDATE;
+  IF OLD.reading_insights_assessment_initialized AND old_eligible THEN
+    PERFORM library.reading_insights_assessment_apply(
+      OLD.route,OLD.account_id,OLD.journal_assessment_meaning_revision,old_presence,
+      OLD.journal_assessment_units,-1);
+  END IF;
+  IF new_eligible THEN
+    PERFORM library.reading_insights_assessment_apply(
+      NEW.route,NEW.account_id,NEW.journal_assessment_meaning_revision,new_presence,
+      NEW.journal_assessment_units,1);
+  END IF;
+  UPDATE library.reading_insights_assessment_owner SET
+    initialized_sessions=initialized_sessions+(NOT OLD.reading_insights_assessment_initialized)::integer,
+    revision=gen_random_uuid()
+    WHERE route=NEW.route AND account_id=NEW.account_id;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: reading_insights_assessment_truncate(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_assessment_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  TRUNCATE library.reading_insights_assessment_owner,library.reading_insights_assessment_revision,
+    library.reading_insights_assessment_value;
+  RETURN NULL;
 END $$;
 
 
@@ -3628,19 +3822,37 @@ CREATE TABLE library.copy (
     partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
     kind_profile_pin jsonb,
     status_profile_pin jsonb,
+    media_condition jsonb,
+    packaging_condition jsonb,
     CONSTRAINT copy_check CHECK ((route = ((get_byte(uuid_send(copy_id), 10) * 256) + get_byte(uuid_send(copy_id), 11)))),
     CONSTRAINT copy_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT copy_kind_profile_pin_check CHECK (((kind_profile_pin IS NULL) OR library.library_profile_pin_valid(kind_profile_pin))),
     CONSTRAINT copy_library_profile_kind_check CHECK (((library_profile_pin IS NULL) OR ((kind IS NOT NULL) AND (char_length(kind) > 0)))),
     CONSTRAINT copy_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
     CONSTRAINT copy_location_check CHECK (((location IS NULL) OR (char_length(location) <= 200))),
+    CONSTRAINT copy_media_condition_check CHECK (library.copy_condition_observation_valid(media_condition)),
     CONSTRAINT copy_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
+    CONSTRAINT copy_packaging_condition_check CHECK (library.copy_condition_observation_valid(packaging_condition)),
     CONSTRAINT copy_retention_episode CHECK ((((deletion_id IS NULL) AND (deleted_at IS NULL) AND (restore_until IS NULL)) OR ((deletion_id IS NOT NULL) AND (deleted_at IS NOT NULL) AND (restore_until IS NOT NULL) AND (restore_until = (deleted_at + '720:00:00'::interval))))),
     CONSTRAINT copy_revision_check CHECK ((revision >= 1)),
     CONSTRAINT copy_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT copy_source_check CHECK (((source IS NULL) OR (char_length(source) <= 200))),
     CONSTRAINT copy_status_profile_pin_check CHECK (((status_profile_pin IS NULL) OR library.library_profile_pin_valid(status_profile_pin)))
 );
+
+
+--
+-- Name: COLUMN copy.media_condition; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.copy.media_condition IS 'Private physical media observation with its exact accepting profile pin; SQL NULL means not recorded.';
+
+
+--
+-- Name: COLUMN copy.packaging_condition; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.copy.packaging_condition IS 'Private physical packaging observation with its exact accepting profile pin; SQL NULL means not recorded.';
 
 
 --
@@ -5254,6 +5466,8 @@ CREATE TABLE library.progress_session (
     journal_assessment_units smallint,
     journal_assessment_meaning_revision smallint DEFAULT 1 NOT NULL,
     reading_insights_initialized boolean DEFAULT false NOT NULL,
+    journal_assessment_presence text DEFAULT 'absent'::text,
+    reading_insights_assessment_initialized boolean DEFAULT false CONSTRAINT progress_session_reading_insights_assessment_initializ_not_null NOT NULL,
     CONSTRAINT progress_session_additional_measures_check CHECK (
 CASE
     WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb)))
@@ -5348,6 +5562,67 @@ CREATE TABLE library.published_log (
     CONSTRAINT published_log_revision_check CHECK (((revision >= 1) AND (revision <= 2147483646))),
     CONSTRAINT published_log_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT published_log_session_state_check CHECK ((session_state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text])))
+);
+
+
+--
+-- Name: reading_insights_assessment_installation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_assessment_installation (
+    singleton boolean NOT NULL,
+    version integer NOT NULL,
+    CONSTRAINT reading_insights_assessment_installation_singleton_check CHECK (singleton),
+    CONSTRAINT reading_insights_assessment_installation_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: reading_insights_assessment_owner; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_assessment_owner (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    initialized_sessions bigint NOT NULL,
+    revision uuid NOT NULL,
+    CONSTRAINT reading_insights_assessment_owner_initialized_sessions_check CHECK ((initialized_sessions >= 0))
+);
+
+
+--
+-- Name: reading_insights_assessment_revision; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_assessment_revision (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    meaning_revision smallint NOT NULL,
+    absent bigint DEFAULT 0 NOT NULL,
+    explicit_null bigint DEFAULT 0 NOT NULL,
+    valued bigint DEFAULT 0 NOT NULL,
+    historical_unknown bigint DEFAULT 0 CONSTRAINT reading_insights_assessment_revisio_historical_unknown_not_null NOT NULL,
+    CONSTRAINT reading_insights_assessment_revision_absent_check CHECK ((absent >= 0)),
+    CONSTRAINT reading_insights_assessment_revision_explicit_null_check CHECK ((explicit_null >= 0)),
+    CONSTRAINT reading_insights_assessment_revision_historical_unknown_check CHECK ((historical_unknown >= 0)),
+    CONSTRAINT reading_insights_assessment_revision_meaning_revision_check CHECK (((meaning_revision >= 1) AND (meaning_revision <= 16))),
+    CONSTRAINT reading_insights_assessment_revision_valued_check CHECK ((valued >= 0))
+);
+
+
+--
+-- Name: reading_insights_assessment_value; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_assessment_value (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    meaning_revision smallint NOT NULL,
+    units smallint NOT NULL,
+    occurrences bigint NOT NULL,
+    CONSTRAINT reading_insights_assessment_value_meaning_revision_check CHECK (((meaning_revision >= 1) AND (meaning_revision <= 16))),
+    CONSTRAINT reading_insights_assessment_value_occurrences_check CHECK ((occurrences > 0)),
+    CONSTRAINT reading_insights_assessment_value_units_check CHECK (((units >= 0) AND (units <= 20)))
 );
 
 
@@ -7388,6 +7663,22 @@ ALTER TABLE library.progress_session
 
 
 --
+-- Name: progress_session progress_session_journal_assessment_presence_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.progress_session
+    ADD CONSTRAINT progress_session_journal_assessment_presence_check CHECK (((journal_assessment_presence IS NULL) OR (journal_assessment_presence = ANY (ARRAY['absent'::text, 'explicit_null'::text, 'value'::text, 'unknown'::text])))) NOT VALID;
+
+
+--
+-- Name: progress_session progress_session_journal_assessment_presence_units_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.progress_session
+    ADD CONSTRAINT progress_session_journal_assessment_presence_units_check CHECK (((journal_assessment_presence IS NULL) OR ((journal_assessment_presence = 'value'::text) AND (journal_assessment_units IS NOT NULL)) OR ((journal_assessment_presence = ANY (ARRAY['absent'::text, 'explicit_null'::text, 'unknown'::text])) AND (journal_assessment_units IS NULL)))) NOT VALID;
+
+
+--
 -- Name: progress_session progress_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -7417,6 +7708,38 @@ ALTER TABLE ONLY library.progress_unit
 
 ALTER TABLE ONLY library.published_log
     ADD CONSTRAINT published_log_pkey PRIMARY KEY (route, log_id);
+
+
+--
+-- Name: reading_insights_assessment_installation reading_insights_assessment_installation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_assessment_installation
+    ADD CONSTRAINT reading_insights_assessment_installation_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: reading_insights_assessment_owner reading_insights_assessment_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_assessment_owner
+    ADD CONSTRAINT reading_insights_assessment_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: reading_insights_assessment_revision reading_insights_assessment_revision_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_assessment_revision
+    ADD CONSTRAINT reading_insights_assessment_revision_pkey PRIMARY KEY (route, account_id, meaning_revision);
+
+
+--
+-- Name: reading_insights_assessment_value reading_insights_assessment_value_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_assessment_value
+    ADD CONSTRAINT reading_insights_assessment_value_pkey PRIMARY KEY (route, account_id, meaning_revision, units);
 
 
 --
@@ -10075,6 +10398,27 @@ CREATE TRIGGER published_log_fact_visibility AFTER UPDATE ON library.published_l
 
 
 --
+-- Name: progress_session reading_insights_assessment_mark; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reading_insights_assessment_mark BEFORE INSERT OR DELETE OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.reading_insights_assessment_mark();
+
+
+--
+-- Name: progress_session reading_insights_assessment_receive; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reading_insights_assessment_receive AFTER INSERT OR DELETE OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.reading_insights_assessment_receive();
+
+
+--
+-- Name: progress_session reading_insights_assessment_truncate; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reading_insights_assessment_truncate AFTER TRUNCATE ON library.progress_session FOR EACH STATEMENT EXECUTE FUNCTION library.reading_insights_assessment_truncate();
+
+
+--
 -- Name: progress_session reading_insights_progress_meaning_delete; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -10845,200 +11189,7 @@ ALTER TABLE ONLY library.vndb_label_adoption
 
 
 --
--- Reading-insights assessment receiver delta.
-ALTER TABLE library.progress_session
-    ADD COLUMN journal_assessment_presence text,
-    ADD COLUMN reading_insights_assessment_initialized boolean DEFAULT false NOT NULL;
-ALTER TABLE library.progress_session
-    ALTER COLUMN journal_assessment_presence SET DEFAULT 'absent'::text,
-    ADD CONSTRAINT progress_session_journal_assessment_presence_check CHECK (((journal_assessment_presence IS NULL) OR (journal_assessment_presence = ANY (ARRAY['absent'::text, 'explicit_null'::text, 'value'::text, 'unknown'::text])))),
-    ADD CONSTRAINT progress_session_journal_assessment_presence_units_check CHECK (((journal_assessment_presence IS NULL) OR ((journal_assessment_presence = 'value'::text) AND (journal_assessment_units IS NOT NULL)) OR ((journal_assessment_presence = ANY (ARRAY['absent'::text, 'explicit_null'::text, 'unknown'::text])) AND (journal_assessment_units IS NULL))));
-
-CREATE TABLE library.reading_insights_assessment_installation (
-    singleton boolean NOT NULL,
-    version integer NOT NULL,
-    CONSTRAINT reading_insights_assessment_installation_singleton_check CHECK (singleton),
-    CONSTRAINT reading_insights_assessment_installation_version_check CHECK ((version = 1))
-);
-CREATE TABLE library.reading_insights_assessment_owner (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    initialized_sessions bigint NOT NULL,
-    revision uuid NOT NULL,
-    CONSTRAINT reading_insights_assessment_owner_initialized_sessions_check CHECK ((initialized_sessions >= 0))
-);
-CREATE TABLE library.reading_insights_assessment_revision (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    meaning_revision smallint NOT NULL,
-    absent bigint DEFAULT 0 NOT NULL,
-    explicit_null bigint DEFAULT 0 NOT NULL,
-    valued bigint DEFAULT 0 NOT NULL,
-    historical_unknown bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT reading_insights_assessment_revision_check CHECK (((meaning_revision >= 1) AND (meaning_revision <= 16))),
-    CONSTRAINT reading_insights_assessment_revision_absent_check CHECK ((absent >= 0)),
-    CONSTRAINT reading_insights_assessment_revision_explicit_null_check CHECK ((explicit_null >= 0)),
-    CONSTRAINT reading_insights_assessment_revision_valued_check CHECK ((valued >= 0)),
-    CONSTRAINT reading_insights_assessment_revision_historical_unknown_check CHECK ((historical_unknown >= 0))
-);
-CREATE TABLE library.reading_insights_assessment_value (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    meaning_revision smallint NOT NULL,
-    units smallint NOT NULL,
-    occurrences bigint NOT NULL,
-    CONSTRAINT reading_insights_assessment_value_revision_check CHECK (((meaning_revision >= 1) AND (meaning_revision <= 16))),
-    CONSTRAINT reading_insights_assessment_value_units_check CHECK (((units >= 0) AND (units <= 20))),
-    CONSTRAINT reading_insights_assessment_value_occurrences_check CHECK ((occurrences > 0))
-);
-
-CREATE FUNCTION library.reading_insights_assessment_apply(r integer, a uuid, m smallint, p text, u smallint, d integer) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-DECLARE previous bigint; following bigint;
-BEGIN
-  INSERT INTO library.reading_insights_assessment_revision(route,account_id,meaning_revision)
-    VALUES(r,a,m) ON CONFLICT(route,account_id,meaning_revision) DO NOTHING;
-  UPDATE library.reading_insights_assessment_revision SET
-    absent=absent+CASE WHEN p='absent' THEN d ELSE 0 END,
-    explicit_null=explicit_null+CASE WHEN p='explicit_null' THEN d ELSE 0 END,
-    valued=valued+CASE WHEN p='value' THEN d ELSE 0 END,
-    historical_unknown=historical_unknown+CASE WHEN p='unknown' THEN d ELSE 0 END
-    WHERE route=r AND account_id=a AND meaning_revision=m;
-  IF p='value' THEN
-    SELECT occurrences INTO previous FROM library.reading_insights_assessment_value
-      WHERE route=r AND account_id=a AND meaning_revision=m AND units=u;
-    following := COALESCE(previous,0)+d;
-    IF following=0 THEN
-      DELETE FROM library.reading_insights_assessment_value
-        WHERE route=r AND account_id=a AND meaning_revision=m AND units=u;
-    ELSE
-      INSERT INTO library.reading_insights_assessment_value VALUES(r,a,m,u,following)
-        ON CONFLICT(route,account_id,meaning_revision,units)
-        DO UPDATE SET occurrences=EXCLUDED.occurrences;
-    END IF;
-  END IF;
-  DELETE FROM library.reading_insights_assessment_revision
-    WHERE route=r AND account_id=a AND meaning_revision=m
-      AND absent=0 AND explicit_null=0 AND valued=0 AND historical_unknown=0;
-END $$;
-
-CREATE FUNCTION library.reading_insights_assessment_mark() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
-  NEW.reading_insights_assessment_initialized := true;
-  IF TG_OP='INSERT' AND NEW.journal_assessment_units IS NOT NULL
-     AND NEW.journal_assessment_presence='absent' THEN
-    NEW.journal_assessment_presence := 'value';
-  ELSIF TG_OP='UPDATE' AND NEW.journal_assessment_units IS DISTINCT FROM OLD.journal_assessment_units
-     AND NEW.journal_assessment_presence IS NOT DISTINCT FROM OLD.journal_assessment_presence THEN
-    NEW.journal_assessment_presence := CASE
-      WHEN NEW.journal_assessment_units IS NULL THEN 'explicit_null' ELSE 'value' END;
-  END IF;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER reading_insights_assessment_mark BEFORE INSERT OR DELETE OR UPDATE ON library.progress_session
-    FOR EACH ROW EXECUTE FUNCTION library.reading_insights_assessment_mark();
-
-CREATE FUNCTION library.reading_insights_assessment_receive() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE old_presence text; new_presence text; old_eligible boolean; new_eligible boolean;
-BEGIN
-  IF TG_OP='INSERT' THEN
-    INSERT INTO library.reading_insights_assessment_owner VALUES(NEW.route,NEW.account_id,0,gen_random_uuid())
-      ON CONFLICT(route,account_id) DO NOTHING;
-    PERFORM 1 FROM library.reading_insights_assessment_owner
-      WHERE route=NEW.route AND account_id=NEW.account_id FOR UPDATE;
-    new_presence := CASE
-      WHEN NEW.journal_assessment_presence IS NULL AND NEW.journal_assessment_units IS NOT NULL THEN 'value'
-      WHEN NEW.journal_assessment_presence IS NULL THEN 'unknown'
-      ELSE NEW.journal_assessment_presence END;
-    IF NEW.state<>'retired' THEN
-      PERFORM library.reading_insights_assessment_apply(NEW.route,NEW.account_id,
-        NEW.journal_assessment_meaning_revision,new_presence,NEW.journal_assessment_units,1);
-    END IF;
-    UPDATE library.reading_insights_assessment_owner SET initialized_sessions=initialized_sessions+1,
-      revision=gen_random_uuid() WHERE route=NEW.route AND account_id=NEW.account_id;
-    RETURN NEW;
-  END IF;
-  IF TG_OP='DELETE' THEN
-    IF OLD.reading_insights_assessment_initialized THEN
-      PERFORM 1 FROM library.reading_insights_assessment_owner
-        WHERE route=OLD.route AND account_id=OLD.account_id FOR UPDATE;
-      old_presence := CASE
-        WHEN OLD.journal_assessment_presence IS NULL AND OLD.journal_assessment_units IS NOT NULL THEN 'value'
-        WHEN OLD.journal_assessment_presence IS NULL THEN 'unknown'
-        ELSE OLD.journal_assessment_presence END;
-      IF OLD.state<>'retired' THEN
-        PERFORM library.reading_insights_assessment_apply(OLD.route,OLD.account_id,
-          OLD.journal_assessment_meaning_revision,old_presence,OLD.journal_assessment_units,-1);
-      END IF;
-      UPDATE library.reading_insights_assessment_owner SET initialized_sessions=initialized_sessions-1,
-        revision=gen_random_uuid() WHERE route=OLD.route AND account_id=OLD.account_id;
-      DELETE FROM library.reading_insights_assessment_owner
-        WHERE route=OLD.route AND account_id=OLD.account_id AND initialized_sessions=0;
-    END IF;
-    RETURN OLD;
-  END IF;
-  old_eligible := OLD.state<>'retired';
-  new_eligible := NEW.state<>'retired';
-  old_presence := CASE
-    WHEN OLD.journal_assessment_presence IS NULL AND OLD.journal_assessment_units IS NOT NULL THEN 'value'
-    WHEN OLD.journal_assessment_presence IS NULL THEN 'unknown'
-    ELSE OLD.journal_assessment_presence END;
-  new_presence := CASE
-    WHEN NEW.journal_assessment_presence IS NULL AND NEW.journal_assessment_units IS NOT NULL THEN 'value'
-    WHEN NEW.journal_assessment_presence IS NULL THEN 'unknown'
-    ELSE NEW.journal_assessment_presence END;
-  IF OLD.reading_insights_assessment_initialized AND
-     (OLD.route,OLD.account_id,OLD.journal_assessment_meaning_revision,old_presence,
-       OLD.journal_assessment_units,old_eligible) IS NOT DISTINCT FROM
-     (NEW.route,NEW.account_id,NEW.journal_assessment_meaning_revision,new_presence,
-       NEW.journal_assessment_units,new_eligible) THEN RETURN NEW; END IF;
-  INSERT INTO library.reading_insights_assessment_owner VALUES(NEW.route,NEW.account_id,0,gen_random_uuid())
-    ON CONFLICT(route,account_id) DO NOTHING;
-  PERFORM 1 FROM library.reading_insights_assessment_owner
-    WHERE route=NEW.route AND account_id=NEW.account_id FOR UPDATE;
-  IF OLD.reading_insights_assessment_initialized AND old_eligible THEN
-    PERFORM library.reading_insights_assessment_apply(OLD.route,OLD.account_id,
-      OLD.journal_assessment_meaning_revision,old_presence,OLD.journal_assessment_units,-1);
-  END IF;
-  IF new_eligible THEN
-    PERFORM library.reading_insights_assessment_apply(NEW.route,NEW.account_id,
-      NEW.journal_assessment_meaning_revision,new_presence,NEW.journal_assessment_units,1);
-  END IF;
-  UPDATE library.reading_insights_assessment_owner SET
-    initialized_sessions=initialized_sessions+(NOT OLD.reading_insights_assessment_initialized)::integer,
-    revision=gen_random_uuid() WHERE route=NEW.route AND account_id=NEW.account_id;
-  RETURN NEW;
-END $$;
-CREATE TRIGGER reading_insights_assessment_receive AFTER INSERT OR DELETE OR UPDATE ON library.progress_session
-    FOR EACH ROW EXECUTE FUNCTION library.reading_insights_assessment_receive();
-
-CREATE FUNCTION library.reading_insights_assessment_truncate() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  TRUNCATE library.reading_insights_assessment_owner,library.reading_insights_assessment_revision,
-    library.reading_insights_assessment_value;
-  RETURN NULL;
-END $$;
-CREATE TRIGGER reading_insights_assessment_truncate AFTER TRUNCATE ON library.progress_session
-    FOR EACH STATEMENT EXECUTE FUNCTION library.reading_insights_assessment_truncate();
-INSERT INTO library.reading_insights_assessment_installation VALUES(true,1);
-
-ALTER TABLE ONLY library.reading_insights_assessment_installation
-    ADD CONSTRAINT reading_insights_assessment_installation_pkey PRIMARY KEY (singleton);
-ALTER TABLE ONLY library.reading_insights_assessment_owner
-    ADD CONSTRAINT reading_insights_assessment_owner_pkey PRIMARY KEY (route,account_id);
-ALTER TABLE ONLY library.reading_insights_assessment_revision
-    ADD CONSTRAINT reading_insights_assessment_revision_pkey PRIMARY KEY (route,account_id,meaning_revision);
-ALTER TABLE ONLY library.reading_insights_assessment_value
-    ADD CONSTRAINT reading_insights_assessment_value_pkey PRIMARY KEY (route,account_id,meaning_revision,units);
-
 -- PostgreSQL database dump complete
+--
 
 
