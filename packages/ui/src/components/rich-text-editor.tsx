@@ -978,7 +978,7 @@ export function RichTextEditor({
         <>
           {isCurrent() && upload && editor.schema.nodes.image && imagePosition !== null ? (
             <ImageInsert
-              key={visit}
+              key={`image-${visit}`}
               editor={editor}
               position={imagePosition}
               labels={resolvedLabels}
@@ -992,7 +992,7 @@ export function RichTextEditor({
           ) : null}
           {lookupMention && isCurrent() ? (
             <MentionMenu
-              key={visit}
+              key={`mention-${visit}`}
               editor={editor}
               source={lookupMention}
               handlers={mentionHandlers}

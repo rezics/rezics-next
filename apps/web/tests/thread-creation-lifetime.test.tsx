@@ -182,7 +182,7 @@ async function mountPage(initial: PageConfig) {
       await act(async () => {
         await new Promise((resolve) => window.setTimeout(resolve, 10));
       });
-    expect(ready()).toBe(true);
+    expect(ready(), host.textContent ?? '').toBe(true);
   };
   const editor = () => host.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"]');
   const title = () => host.querySelector<HTMLInputElement>('#thread-title');
@@ -253,8 +253,8 @@ async function mountPage(initial: PageConfig) {
     go,
     pauseRead: () => (routeRead = deferred<void>()),
     resolveWrite,
-    updateConfig,
-    poke,
+    updateConfig: (next: Parameters<typeof updateConfig>[0]) => updateConfig(next),
+    poke: () => act(async () => poke()),
     dispose,
   };
 }
