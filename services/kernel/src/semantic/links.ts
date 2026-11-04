@@ -1013,6 +1013,8 @@ export type SubjectLink = {
   property: string;
   statement: string;
   assertion?: Statement;
+  /** Exact current slot identity, without authority or a correction payload. */
+  creditSlot?: { property: string; target: string; key?: string };
   related?: Record<string, SubjectSummary>;
   type?: string;
   label?: string;
@@ -1294,10 +1296,21 @@ export async function listSubjectLinks(
         return summary ? [[id, summary]] : [];
       }),
     );
+    // Only an explicitly requested credit group expands unqualified assertions. Other groups stay compact.
+    const credit = options.property !== null && summaryRelease?.properties[link.property]?.relation?.group === 'credit';
+    const slotKey = credit ? summaryRelease?.properties[link.property]?.relation?.slotKey : undefined;
+    const rawKey = slotKey ? current.qualifiers.find((snak) => snak.property.id === slotKey) : undefined;
+    const key = slotKey ? assertion.qualifiers.find((snak) => snak.property.id === slotKey) : undefined;
+    // An omitted key may be concealed. Do not turn it into the unqualified slot.
+    const creditSlot = credit && (!rawKey || (key?.value.type === 'value' && typeof key.value.content === 'string'))
+      ? { property: link.property, target: options.subject,
+          ...(key?.value.type === 'value' && typeof key.value.content === 'string' ? { key: key.value.content } : {}) }
+      : undefined;
     return [
       {
         ...link,
-        ...(assertion.qualifiers.length ? { assertion, related } : {}),
+        ...(assertion.qualifiers.length || credit ? { assertion, related } : {}),
+        ...(creditSlot ? { creditSlot } : {}),
         ...(type ? { type } : {}),
         label: summary?.label?.value ?? '',
         summary,

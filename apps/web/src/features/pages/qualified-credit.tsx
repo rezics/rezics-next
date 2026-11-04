@@ -26,6 +26,7 @@ export function QualifiedCredit({
   qualified,
   value,
   openInNewTab = false,
+  inspection,
 }: {
   title: string;
   titleLang?: string | undefined;
@@ -35,6 +36,7 @@ export function QualifiedCredit({
   qualified: readonly QualifiedNote[];
   value: RowValue;
   openInNewTab?: boolean;
+  inspection?: ReactNode;
 }) {
   return (
     <div className="min-w-0 [&_h3_a]:inline-block [&_h3_a]:min-h-11 [&_h3_a]:max-w-full [&_h3_a]:min-w-11 [&_h3_a]:whitespace-pre-wrap">
@@ -95,6 +97,7 @@ export function QualifiedCredit({
                 })}
               </ul>
             )}
+            {inspection}
           </>
         }
       />
