@@ -243,7 +243,7 @@ export async function previewCollectionBulk(
         source_digest,receipt,created_transaction_id,state,chunk_index)
       SELECT $1,$2::uuid,(n-1),$3::uuid,(target->>'subjectId')::uuid,target->>'kind',
         (target->>'collectionId')::uuid,(target->>'memberId')::uuid,target,$5,
-        jsonb_build_object('partition',($8::jsonb->>((n-1)::integer))::integer,
+        jsonb_build_object('partition',($7::jsonb->>((n-1)::integer))::integer,
           'principalKind','account','principalId',($3::uuid)::text,
           'commandKind','library.collectionBulk.target','key',($2::uuid)::text||':'||(n-1)::text,
           'digest',encode(sha256(convert_to($5::text||':'||target::text,'UTF8')),'hex')),$6,'pending',(n-1)/100
@@ -255,7 +255,6 @@ export async function previewCollectionBulk(
         JSON.stringify(targets),
         sourceDigest,
         input.transactionId,
-        partitionOf(input.route),
         JSON.stringify(receiptPartitions),
       ],
     );

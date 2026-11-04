@@ -156,6 +156,8 @@ test('filtered preview exhausts native Members pages before status confirmation'
   for (let n = 0; n < 101; n++)
     await collections.addMember(owner.actor, source.id, { subjectId, note: `occurrence-${n}` }, key());
 
+  expect((await f.send(owner.bearer, 'GET', `/v1/collections/${source.id}`)).status).toBe(200);
+  expect((await f.send(owner.bearer, 'GET', `/v1/collections/${source.id}/members`)).status).toBe(200);
   const response = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
     action: 'set_status',
     state: 'completed',
