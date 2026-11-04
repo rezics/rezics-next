@@ -4,7 +4,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
 mock.module('../src/kernel/query', () => ({ personalRead: { enabled: true } }));
-mock.module('../src/session/query', () => ({ useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }) }));
+mock.module('../src/session/query', () => ({
+  sessionQuery: { queryKey: ['session'] },
+  exposureQuery: { queryKey: ['exposure'] },
+  useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }),
+}));
 mock.module('../src/settings/actions', () => ({
   readOwnedCollection: async () => ({
     id: 'collection-1',

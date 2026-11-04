@@ -208,7 +208,7 @@ function CollectionRowView({
             }
             onChange={(event) => {
               if (pager?.snapshot().restarting) return;
-              const value = current.allowedVisibilityActions.find((option) => option === event.target.value);
+              const value = options.find((option) => option === event.target.value);
               if (value) void editor.edit(value);
             }}
           >

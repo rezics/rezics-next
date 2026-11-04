@@ -111,7 +111,12 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   async edit(desired: CollectionVisibility) {
     if (!this.live() || !this.canWrite()) return;
     const current = this.state.current;
-    if (!current || current.revision === null || !current.allowedVisibilityActions.includes(desired)) return;
+    if (
+      !current ||
+      current.revision === null ||
+      (desired !== current.visibility && !current.allowedVisibilityActions.includes(desired))
+    )
+      return;
     if (this.state.readRefusal) return;
     this.edits++;
     this.update({ desired });
