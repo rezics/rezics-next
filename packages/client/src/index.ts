@@ -10,6 +10,18 @@ import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
+export {
+  decodePreferenceAdvice,
+  decodePreferencePage,
+  decodePreferenceValues,
+  PREFERENCE_READING_DEFAULTS,
+  type PreferenceActionAdvice,
+  type PreferencePageAdvice,
+  type PreferencePageValues,
+  type PreferenceReadingPage,
+  type PreferenceSpoilerLevel,
+  type PreferenceSuitability,
+} from './preference-page.ts';
 export type {
   PersonalEntry,
   PersonalEntryAnnotationWrite,

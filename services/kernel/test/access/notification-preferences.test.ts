@@ -2,7 +2,7 @@ import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { clientDeclarations, committedDeclarations } from '../../scripts/client.ts';
 import { notificationAllowed } from '../../src/access/index.ts';
-import { createPreferenceCommands, projectPreferencePage } from '../../src/access/preferences.ts';
+import { createPreferenceCommands, withReadingPreferencePage } from '../../src/access/preferences.ts';
 import {
   DEFAULT_NOTIFICATIONS,
   NOTIFICATION_KINDS,
@@ -12,6 +12,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
@@ -26,6 +27,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(30),
     tokens: fixture.referenceKeys,
+    receiptKeys: testReceiptKeys(),
     access: () => fixture.access,
     writeRate: createWriteRateLimiter({ secret: 'notifications-write-rate-secret-32bytes' }),
   });
@@ -120,14 +122,15 @@ test('a mandatory or unknown kind in a patch is refused with 400 and changes not
     expect((await call(person, { expectedVersion: 0, notifications, suitability: 'show' })).status).toBe(400);
     expect((await stored(person.accountId)).rows).toHaveLength(0);
   }
-  expect((await call(person)).value).toEqual({
-    spoilerLevel: 0,
-    suitability: 'blur',
-    shelf: {},
-    notifications: DEFAULT_NOTIFICATIONS,
-    version: 0,
-    page: projectPreferencePage({ notifications: DEFAULT_NOTIFICATIONS, version: 0 }),
-  });
+  expect((await call(person)).value).toEqual(
+    withReadingPreferencePage({
+      spoilerLevel: 0,
+      suitability: 'blur',
+      shelf: {},
+      notifications: DEFAULT_NOTIFICATIONS,
+      version: 0,
+    }),
+  );
   await call(person, { expectedVersion: 0, notifications: allOff });
   const before = (await stored(person.accountId)).rows;
   expect(
