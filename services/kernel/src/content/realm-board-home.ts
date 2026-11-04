@@ -7,9 +7,13 @@ import { selectRealmBoardPage, type ContentBoardDependencies } from './boards.ts
 import { observeBoardRecords } from './reads.ts';
 import type { BoardRecord, ReadContext } from './model.ts';
 import { BoardRecordSchema } from './schemas.ts';
+import { observeRealmCommunity, RealmCommunityRecentSchema, type RealmCommunityRecent } from './realm-community.ts';
 
 export const REALM_HOME_BOARD_LIMIT = 20;
-export type RealmHomeBoardPage = Readonly<{ items: readonly BoardRecord[]; next: string | null }>;
+export type RealmHomeBoardPage = Readonly<{
+  items: readonly (BoardRecord & { recent: RealmCommunityRecent | { state: 'unavailable' } })[];
+  next: string | null;
+}>;
 export type RealmHomeBoardObservation = Readonly<{
   page: RealmHomeBoardPage;
   current: () => Promise<boolean>;
@@ -21,7 +25,10 @@ export const RealmHomeBoardQuerySchema = t.Object(
 );
 export const RealmHomeBoardPageSchema = t.Object(
   {
-    items: t.Array(BoardRecordSchema, { maxItems: REALM_HOME_BOARD_LIMIT }),
+    items: t.Array(t.Object({
+      ...BoardRecordSchema.properties,
+      recent: t.Union([RealmCommunityRecentSchema, t.Object({ state: t.Literal('unavailable') }, closed)]),
+    }, closed), { maxItems: REALM_HOME_BOARD_LIMIT }),
     next: t.Union([t.String(), t.Null()]),
   },
   closed,
@@ -42,12 +49,18 @@ export function createRealmHomeBoardObservationReader(deps: ContentBoardDependen
     const observation = await observeBoardRecords(deps, selected.ids, context);
     if (observation.records.some(({ anchor }) => anchor.epoch !== selected.anchor.epoch))
       throw new AccessUnavailableError('contention');
+    const admitted = observation.records.flatMap(({ value }) => value?.realmId === realmId ? [value] : []);
+    const community = await observeRealmCommunity(deps, admitted, context);
     return {
       page: {
-        items: observation.records.flatMap(({ value }) => (value?.realmId === realmId ? [value] : [])),
+        items: admitted.map((board) => ({
+          ...board,
+          recent: community.recent.get(board.id) ?? { state: 'unavailable' as const },
+        })),
         next: selected.next,
       },
       async current() {
+        if (!(await community.current())) return false;
         if (!(await observation.current())) return false;
         const partition = await withConnection(deps.pool, (connection) =>
           readPartition(deadlineClient(connection, context.deadline), selected.anchor.partition.partitionNo),

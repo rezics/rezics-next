@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { fromPlainText } from '@rezics/document';
 import type { Account, CommunityDriver, Fixture } from '../../../../specs/community-driver.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { REALM_OWNER_ROLE } from '../../src/access/realm-ownership.ts';
@@ -9,6 +10,8 @@ import boardWindow from '../../src/content/board-realm-page.sql';
 import summaries from '../../src/semantic/summaries-read.sql';
 import memberCount from '../../src/community/member-count-read.sql';
 import { routeOf } from '../../src/route/route.ts';
+import { partitionOf } from '../../src/route/route.ts';
+import { repairConversationActivityPage } from '../../src/content/conversation-activity.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
 import { closeCommunityDrivers, communityFixtureRuntime, createCommunityDriver } from './community-driver.ts';
 
@@ -107,6 +110,75 @@ async function subject(type: string, label: string, statements?: unknown) {
     )
   ).subject.id;
 }
+
+async function communityBoard() {
+  const target = await realm();
+  const schemeId = await subject('skos:ConceptScheme', 'Recent discussions');
+  await command(`/v1/realms/${target.realmId}/boardScheme`, { schemeId }, 'PUT', target.headRevisionId);
+  const conceptId = await subject('skos:Concept', 'Discussion', {
+    'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
+  });
+  const { board } = await command<{ board: { id: string } }>(`/v1/realms/${target.realmId}/boards`, {
+    conceptId, title: 'Selected Board', visibility: 'published',
+  });
+  const thread = async (title: string) => (await command<{ thread: { id: string; firstPost: { id: string } } }>(
+    '/v1/threads', { boardId: board.id, title, body: fromPlainText(title), licence: 'MIT', visibility: 'published', subjectIds: [] },
+  )).thread;
+  return { target, board, thread };
+}
+
+test('mounted community keeps a three-thread native prefix, exact destinations, and producer replies distinct from empty', async () => {
+  const { target, board, thread } = await communityBoard();
+  expect((await home(target.realmId)).boards.items[0]!.recent).toEqual({ state: 'current', threads: [], complete: true });
+  const created = [];
+  for (let index = 0; index < 4; index++) created.push(await thread(`Recent discussion ${index}`));
+  const latest = created.at(-1)!;
+  await command(`/v1/threads/${latest.id}/posts`, {
+    body: fromPlainText('One admitted reply'), licence: 'MIT', visibility: 'published', subjectIds: [],
+  });
+  await driver.settle();
+  const partition = partitionOf(routeOf(latest.id)!);
+  for (let page = 0; page < 10; page++) {
+    const repaired = await repairConversationActivityPage(runtime.system.database.pool, partition, Date.now() + 30_000);
+    if (repaired.done) break;
+  }
+  const result = await home(target.realmId);
+  const selected = result.boards.items[0]!;
+  expect(selected.id).toBe(board.id);
+  if (selected.recent.state !== 'current') throw new Error('Recent discussions were unavailable');
+  expect(selected.recent.complete).toBe(false);
+  expect(selected.recent.threads.map((item) => item.thread.id)).toEqual(created.slice(1).reverse().map((item) => item.id));
+  expect(selected.recent.threads[0]).toMatchObject({
+    thread: { title: 'Recent discussion 3', firstPost: { availability: 'available' } },
+    target: { kind: 'thread', id: latest.id, boardId: board.id },
+    comments: { state: 'current', cohort: 'public', count: { kind: 'exact', value: 1 } },
+  });
+  expect(selected.recent.threads.every((item) => !('actions' in item))).toBe(true);
+});
+
+test('community retains original thread sources across foreign hydration and retries after a changed opening', async () => {
+  const { target, thread } = await communityBoard();
+  const created = await thread('Original opening');
+  await driver.settle();
+  const observer = observeSql(runtime.system.database.pool);
+  const barrier = observer.hold({ statement: summaries.sql }, 'after');
+  const pending = read(`/v1/realms/${target.realmId}/home`);
+  try {
+    await barrier.entered;
+    await command(`/v1/posts/${created.firstPost.id}/revisions`, {
+      body: fromPlainText('Changed opening'), licence: 'MIT', subjectIds: [],
+    });
+    barrier.release();
+    const stale = await pending;
+    expect(stale.status).toBe(503);
+    expect(await stale.text()).not.toContain('Original opening');
+  } finally {
+    barrier.release();
+    await pending;
+    await observer.close();
+  }
+  expect((await home(target.realmId)).boards.items[0]!.recent.state).toBe('current');
+});
 
 test('mounted empty home keeps carrier, identity, optional states, and anonymous sign-in distinct', async () => {
   const target = await realm();

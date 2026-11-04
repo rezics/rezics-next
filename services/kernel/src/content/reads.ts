@@ -1178,11 +1178,17 @@ export async function discloseBoardPageThreads(
         createdAt: thread.created_at.toISOString(),
         firstPost: item,
       });
+      contentSourceWitnesses.set(output.get(id)!, fingerprint({ thread, posts: [post], revision })!);
     }
     return { items: output, parentAllowed: true };
   });
   for (const [id, thread] of result.value.items) {
-    if (thread) result.value.items.set(id, await readableCitation(dependencies, context, thread));
+    if (thread) {
+      const current = await readableCitation(dependencies, context, thread);
+      const witness = contentSourceWitness(thread);
+      if (witness) contentSourceWitnesses.set(current, witness);
+      result.value.items.set(id, current);
+    }
   }
   const items = threadIds.map((id) => {
     const partition = result.anchors.get(partitionOf(route(id)))!;
