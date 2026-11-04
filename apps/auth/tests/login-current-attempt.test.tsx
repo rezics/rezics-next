@@ -59,7 +59,15 @@ async function open(path = '/login') {
   const router = createRouter({ history, routeTree: parent.addChildren([route, stepUp, away]) });
   const requests: ReturnType<typeof Promise.withResolvers<Response>>[] = [];
   const ceremonies: ReturnType<typeof Promise.withResolvers<PasskeySignInResult>>[] = [];
-  globalThis.fetch = (() => {
+  globalThis.fetch = ((path) => {
+    if (path === '/signin/page')
+      return Promise.resolve(
+        Response.json({
+          methods: { password: true, passkey: true },
+          viewer: { kind: 'signed-out' },
+          continuation: { href: '/security', requires_sign_in: false },
+        }),
+      );
     const call = Promise.withResolvers<Response>();
     requests.push(call);
     return call.promise;

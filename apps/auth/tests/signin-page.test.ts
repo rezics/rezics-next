@@ -65,3 +65,22 @@ test('failed reads stay unavailable and a replaced page drops its late account a
     request.mockRestore();
   }
 });
+
+test('account choice retires old reads and dispatched work excludes review without an extra request', async () => {
+  const response = Promise.withResolvers<Response>();
+  const request = spyOn(globalThis, 'fetch').mockReturnValue(response.promise);
+  try {
+    const owner = new LoginAttempt();
+    const oldRead = loadSignInPageForJourney('?scope=&scope=a%20b&state=%2f', origin, owner);
+    expect(owner.choose()).toBe(true);
+    const dispatched = owner.begin('password')!;
+    expect(owner.choose()).toBe(false);
+    expect(await loadSignInPageForJourney('', origin, owner)).toBeNull();
+    response.resolve(Response.json(payload('old')));
+    expect(await oldRead).toBeNull();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(dispatched.finish()).toBe(true);
+  } finally {
+    request.mockRestore();
+  }
+});

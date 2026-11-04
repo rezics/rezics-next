@@ -29,7 +29,18 @@ import { ErrorAlert } from '../alert';
 import { selectManagementOperationStepUp } from '../management-operation-step-up';
 import { confirmStepUp, confirmStepUpWithPasskey } from '../step-up';
 import { LoginAttempt, useLoginJourney } from '../login-attempt';
-import { canContinueAsCurrentAccount, loadSignInPageForJourney, type SignInPageResult } from '../signin-page';
+import { loadSignInPageForJourney } from '../signin-page';
+import {
+  initialLoginChoice,
+  loginCanContinue,
+  loginReview,
+  loginShowsCredentials,
+  observedLoginChoice,
+  type LoginAccountChoice,
+} from '../login-account-choice';
+import { LoginAccountChoiceView } from '../login-account-choice-view';
+import { selectAccountOperationStepUp } from '../account-operation-step-up';
+import { selectOrganizationDeleteStepUp } from '../organization-delete-step-up';
 
 const emailId = 'login-email';
 const emailErrorId = 'login-email-error';
@@ -135,9 +146,9 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
   const unfinished = useRef(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [page, setPage] = useState<SignInPageResult | { kind: 'loading' }>({ kind: 'loading' });
+  const [choice, setChoiceState] = useState<LoginAccountChoice>(initialLoginChoice);
+  const currentChoice = useRef(choice);
   const [pageRetry, setPageRetry] = useState(0);
-  const [switching, setSwitching] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -148,7 +159,33 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
   const [passkeyPending, setPasskeyPending] = useState(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
+  const focusCredentials = useRef(false);
+  const stepUp =
+    selectManagementOperationStepUp(query).kind !== 'ordinary' ||
+    selectAccountOperationStepUp(query).kind !== 'ordinary' ||
+    selectOrganizationDeleteStepUp(query).kind !== 'ordinary';
+  const pageData = choice.kind === 'ready' ? choice.page : null;
+  const showCredentials = loginShowsCredentials(choice) || (choice.kind === 'ready' && stepUp);
   unfinished.current = !released.current && Boolean(email.trim() || password || pending);
+
+  function setChoice(next: LoginAccountChoice) {
+    currentChoice.current = next;
+    setChoiceState(next);
+  }
+
+  function clearFeedback() {
+    setMessage('');
+    setEmailError('');
+    setPasswordError('');
+  }
+
+  function uncertain() {
+    setChoice({ kind: 'uncertain', review: { ...loginReview(currentChoice.current), uncertain: true } });
+    setPassword('');
+    setPending(false);
+    setPasskeyPending(false);
+    clearFeedback();
+  }
 
   function leave() {
     released.current = true;
@@ -158,6 +195,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     setPassword('');
     setPending(false);
     setPasskeyPending(false);
+    setChoice(initialLoginChoice());
   }
 
   function complete(target: string) {
@@ -186,12 +224,19 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     else if (message) alert.current?.focus();
   }, [emailError, passwordError, message]);
 
+  useLayoutEffect(() => {
+    if (focusCredentials.current) {
+      focusCredentials.current = false;
+      emailInput.current?.focus();
+    }
+  }, [choice]);
+
   useEffect(() => {
     const controller = new AbortController();
+    const review = loginReview(currentChoice.current);
     void loadSignInPageForJourney(query, window.location.origin, attempt, controller.signal).then((result) => {
       if (!result) return;
-      setPage(result);
-      if (result.kind === 'ready' && result.page.viewer.kind === 'signed-in') setEmail(result.page.viewer.email ?? '');
+      setChoice(observedLoginChoice(result, review, pageRetry > 0));
     });
     return () => {
       controller.abort();
@@ -199,7 +244,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
   }, [attempt, pageRetry, query]);
 
   useLayoutEffect(() => {
-    if (page.kind !== 'ready') return;
+    if (choice.kind !== 'ready') return;
     try {
       if (window.sessionStorage.getItem(RECOVERY_COMPLETE_NOTICE_KEY) === '1') {
         window.sessionStorage.removeItem(RECOVERY_COMPLETE_NOTICE_KEY);
@@ -208,7 +253,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     } catch {
       // The notice is optional when browser storage is unavailable.
     }
-  }, [page.kind]);
+  }, [choice.kind]);
 
   useEffect(() => {
     let active = true;
@@ -228,17 +273,29 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
   // The browser offers passkeys in the email field once its autocomplete token is on the page.
   useEffect(() => {
     if (
-      page.kind !== 'ready' ||
-      !page.page.methods.passkey ||
-      (page.page.viewer.kind === 'signed-in' && !switching && canContinueAsCurrentAccount(page.page)) ||
+      !showCredentials ||
+      choice.kind !== 'ready' ||
+      choice.uncertain ||
+      choice.observation !== 'initial' ||
+      !choice.page.methods.passkey ||
       passkeySupport !== 'autofill' ||
-      selectManagementOperationStepUp(query).kind !== 'ordinary'
+      stepUp
     )
       return;
     startAutofill();
-  }, [attempt, page, passkeySupport, query, switching]);
+  }, [attempt, choice, passkeySupport, query, showCredentials, stepUp]);
 
   function startAutofill() {
+    const selected = currentChoice.current;
+    if (
+      selected.kind !== 'ready' ||
+      selected.uncertain ||
+      selected.observation !== 'initial' ||
+      !loginShowsCredentials(selected) ||
+      !selected.page.methods.passkey ||
+      stepUp
+    )
+      return;
     const completion = attempt.begin('autofill');
     if (!completion) return;
     void signInWithPasskey({ autofill: true, isCurrent: completion.isCurrent }).then((result) => {
@@ -247,12 +304,32 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
   }
 
   function switchAccount() {
-    setSwitching(true);
+    if (currentChoice.current !== choice || choice.kind !== 'ready' || !attempt.choose()) return;
+    focusCredentials.current = true;
+    setChoice({ ...choice, mode: 'credentials' });
     setEmail('');
     setPassword('');
-    setMessage('');
-    setEmailError('');
-    setPasswordError('');
+    clearFeedback();
+  }
+
+  function reviewSession() {
+    if (currentChoice.current !== choice || choice.kind === 'loading' || !attempt.choose()) return;
+    setChoice({ kind: 'loading', review: loginReview(choice) });
+    setEmail('');
+    setPassword('');
+    clearFeedback();
+    setPageRetry((value) => value + 1);
+  }
+
+  function continueCurrentAccount() {
+    if (currentChoice.current !== choice || !loginCanContinue(choice) || stepUp || choice.kind !== 'ready') return;
+    if (!attempt.begin('continue')) return;
+    complete(choice.page.continuation.href);
+  }
+
+  function credentialChoice() {
+    const selected = currentChoice.current;
+    return selected.kind === 'ready' && (loginShowsCredentials(selected) || stepUp) ? selected : null;
   }
 
   function finishPasskey(result: PasskeySignInResult) {
@@ -263,19 +340,25 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     setPending(false);
     setPasskeyPending(false);
     if (result.reason === 'cancelled') return;
+    if (result.reason === 'unavailable') {
+      uncertain();
+      return;
+    }
     setMessage(passkeySignInFailure(result));
   }
 
   async function submitPasskey() {
-    if (page.kind !== 'ready' || !page.page.methods.passkey || passkeySupport === 'none') return;
+    const selected = credentialChoice();
+    if (!selected || !selected.page.methods.passkey || !['prompt', 'autofill'].includes(passkeySupport)) return;
     const completion = attempt.begin('passkey');
     if (!completion) return;
+    setChoice({ ...selected, mode: 'credentials' });
     setPending(true);
     setPasskeyPending(true);
     setMessage('');
     setEmailError('');
     setPasswordError('');
-    if (selectManagementOperationStepUp(query).kind !== 'ordinary') {
+    if (stepUp) {
       const outcome = await confirmStepUpWithPasskey(query, window.location.origin, completion.isCurrent);
       if (!completion.finish()) return;
       if (outcome.ok) {
@@ -284,6 +367,10 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
       }
       setPending(false);
       setPasskeyPending(false);
+      if (outcome.message === m.auth_failure_unavailable()) {
+        uncertain();
+        return;
+      }
       setMessage(outcome.message ?? '');
       return;
     }
@@ -296,8 +383,8 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (page.kind !== 'ready' || !page.page.methods.password) return;
-    if (pending && !passkeyPending) return;
+    const selected = credentialChoice();
+    if (!selected || !selected.page.methods.password) return;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
     const invalidPassword = !password;
     setEmailError(invalidEmail ? (email.trim() ? m.auth_form_email_invalid() : m.auth_form_required()) : '');
@@ -309,12 +396,13 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     }
     const completion = attempt.begin('password');
     if (!completion) return;
+    setChoice({ ...selected, mode: 'credentials' });
     setPending(true);
     setPasskeyPending(false);
     setMessage('');
     setEmailError('');
     setPasswordError('');
-    if (selectManagementOperationStepUp(query).kind !== 'ordinary') {
+    if (stepUp) {
       const outcome = await confirmStepUp(email, password, query, window.location.origin, completion.isCurrent);
       if (!completion.finish()) return;
       setPassword('');
@@ -323,6 +411,10 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
         return;
       }
       setPending(false);
+      if (outcome.message === m.auth_failure_unavailable()) {
+        uncertain();
+        return;
+      }
       setMessage(outcome.message ?? '');
       return;
     }
@@ -334,6 +426,10 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
       return;
     }
     setPending(false);
+    if (result.reason === 'unavailable') {
+      uncertain();
+      return;
+    }
     setMessage(
       result.reason === 'credentials'
         ? failureMessage(401, 'authentication_denied', null)
@@ -343,51 +439,23 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     );
   }
 
-  const pageData = page.kind === 'ready' ? page.page : null;
-  const currentViewer = pageData?.viewer.kind === 'signed-in' ? pageData.viewer : null;
-  const canContinue = pageData ? canContinueAsCurrentAccount(pageData) : false;
-  const showCredentials = !!pageData && (!currentViewer || switching || pageData.continuation.requires_sign_in);
-
   return (
     <AuthPage heading={m.auth_login_heading()}>
       <LoginDeparture unfinished={unfinished} leave={leave} focus={() => emailInput.current?.focus()} />
-      {page.kind === 'loading' ? <p role="status">{m.auth_inventory_loading()}</p> : null}
-      {page.kind === 'unavailable' ? (
-        <div className="auth-login-form">
-          <ErrorAlert>{m.auth_login_page_unavailable()}</ErrorAlert>
-          <Button
-            type="button"
-            onClick={() => {
-              setPage({ kind: 'loading' });
-              setPageRetry((value) => value + 1);
-            }}
-          >
-            {m.auth_login_page_retry()}
-          </Button>
-        </div>
-      ) : null}
-      {currentViewer ? (
-        <section className="auth-login-form" aria-label={m.auth_login_heading()}>
-          <p role="status">
-            {m.auth_login_current_account({ account: currentViewer.email ?? m.auth_security_rezics_account() })}
-          </p>
-          {canContinue ? (
-            <Button type="button" onClick={() => complete(pageData!.continuation.href)}>
-              {m.auth_login_continue()}
-            </Button>
-          ) : null}
-          {!switching ? (
-            <Button type="button" variant="outline" onClick={switchAccount}>
-              {m.auth_login_switch_account()}
-            </Button>
-          ) : null}
-        </section>
-      ) : null}
+      <LoginAccountChoiceView
+        choice={choice}
+        pending={pending}
+        passkeyPending={passkeyPending}
+        allowContinue={!stepUp}
+        onContinue={continueCurrentAccount}
+        onSwitch={switchAccount}
+        onReview={reviewSession}
+      />
       {pageData && !pageData.methods.passkey ? <p role="status">{m.auth_login_passkey_method_unavailable()}</p> : null}
       {pageData && pageData.methods.passkey && passkeySupport === 'none' ? (
         <p role="status">{m.auth_login_passkey_browser_unsupported()}</p>
       ) : null}
-      {showCredentials ? (
+      {showCredentials && pageData ? (
         <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
           <Field data-invalid={Boolean(emailError)}>
             <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>

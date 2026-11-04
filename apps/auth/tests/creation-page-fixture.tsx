@@ -61,6 +61,14 @@ export function creationFixture() {
 export async function open(page: ReactNode, sessionBody: object) {
   const calls: { path: string; body: any; resolve: (response: Response) => void }[] = [];
   globalThis.fetch = ((path, init) => {
+    if (path === '/signin/page')
+      return Promise.resolve(
+        Response.json({
+          methods: { password: true, passkey: true },
+          viewer: { kind: 'signed-out' },
+          continuation: { href: '/security', requires_sign_in: false },
+        }),
+      );
     if (path === '/recovery/page')
       return Promise.resolve(
         Response.json(

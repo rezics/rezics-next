@@ -38,8 +38,22 @@ provisional client id (`login`) and scope (`[]`). It uses the shared `src/api.ts
 failures become an unavailable result. Browser-unsupported passkeys, a missing native passkey method and an actual
 native credential refusal have separate localized messages.
 
-Decision: label a verified current-session continuation with that account's own email as private display context; never
-derive the viewer from the address entered into the sign-in form.
+Decision: during an explicit sign-in, disable account switching and session review; switching before dispatch retires
+conditional mediation and the old Continue control synchronously. Native email is display context, never credential input.
+
+The current account, credential entry for another account, pending authentication, unavailable advice and reviewed session
+are distinct mounted choices. Continue belongs to that choice, not merely the last loaded page. Password can still replace
+a passkey ceremony. Same-turn events share LoginAttempt's exclusion before React renders. A dispatched request cannot be
+cancelled at the server by changing browser presentation. Account-operation returns use the existing step-up selectors and
+confirmation helpers; a page review cannot complete or replay them.
+
+When authentication has no confirmed response, the page removes the old account label and offers Review current session.
+This makes exactly one bounded `POST /signin/page` read with the original query. It does not resend authentication. The
+review explains a changed account, signed-out state or unavailable observation before another explicit choice. Even a
+matching account is not evidence that the uncertain request succeeded. The person may deliberately continue a supported
+current-session return or choose credentials again; neither step claims the uncertain request failed or was cancelled.
+Review clears credentials, invalidates conditional mediation and never automatically starts another ceremony. No private
+choice or credential data survives pagehide; BFCache restoration starts with one fresh native observation.
 
 After successful sign-in, the browser navigates to `/authorize` with the received query, preserving repeated and empty
 parameters and removing every `sig`, `exp`, `prompt` and `return_to`. It keeps `max_age`. Without a remaining query it
@@ -57,8 +71,8 @@ with `{}` for discoverable-credential options, prompts, and sends `{ response, c
 conditional mediation, the email field carries `autocomplete="username webauthn"` and the same ceremony runs in the
 background so the browser can offer passkeys in autofill. Both start from one set of options, which the page shares for
 four minutes, so a sign-in is two Auth calls however it starts. A dismissed prompt (`NotAllowedError`) or a ceremony
-replaced by a newer one is silent; any other failure shows the shared destructive alert, with a passkey-specific
-message for a refused passkey. Without WebAuthn the page shows no passkey control and the email field keeps
+replaced by a newer one is silent. A definitive refusal shows a passkey-specific alert; an unconfirmed outcome offers
+current-session review. Without WebAuthn the page shows no passkey control and the email field keeps
 `autocomplete="username"`.
 
 Password, explicit passkey and autofill completions belong only to the current login journey. Changing the
@@ -72,7 +86,7 @@ The submit button stays enabled until a request is pending. Submission validates
 invalid field with a linked error, and focuses the first invalid field. The password uses the shared in-field show and
 hide control. A refusal keeps the email, clears the password and focuses a destructive alert with an icon and title:
 401 reports incorrect email or password without identifying an account, 429 includes valid `Retry-After` seconds,
-and other responses or network failures report an unavailable Auth service.
+and an unconfirmed response enters current-session review without a resend or a success claim.
 
 ## Recovery
 
@@ -499,7 +513,8 @@ Production does not set AUTH_ORIGIN.
 
 The static page frames make zero K, D, R and A calls. Development forwarding makes one Auth request per forwarded
 request, streams both bodies, and buffers nothing. Both costs are constant per request.
-The sign-in page makes one Auth `POST /signin/page` read on entry and one more only when Retry is selected. A password
+The sign-in page makes one Auth `POST /signin/page` read on entry or BFCache restoration, and one per explicit
+Retry or Review current session. Switching alone adds no page read. Review never chains reads or retries authentication. A password
 sign-in adds one `POST /signin` and one navigation on success. A passkey sign-in remains two Auth requests and one
 navigation on success. The page read adds no kernel calls and carries no preparation token into submission.
 Recovery makes no kernel reads and adds one Auth request per submit.

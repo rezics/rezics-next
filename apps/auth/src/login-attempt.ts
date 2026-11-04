@@ -2,13 +2,21 @@ import { useRouter } from '@tanstack/react-router';
 import { WebAuthnAbortService } from '@simplewebauthn/browser';
 import { useLayoutEffect, useRef, useState } from 'react';
 
-type Method = 'password' | 'passkey' | 'autofill';
+type Method = 'password' | 'passkey' | 'autofill' | 'continue';
 
 // Browser ownership only: retiring a request cannot undo a server sign-in.
 export class LoginAttempt {
   private active = true;
   private current: { method: Method } | null = null;
   private pageGeneration = 0;
+
+  // Choice changes and reads may replace conditional mediation, never a dispatched explicit operation.
+  choose() {
+    if (!this.active || (this.current && this.current.method !== 'autofill')) return false;
+    this.cancel();
+    this.pageGeneration += 1;
+    return true;
+  }
 
   begin(method: Method) {
     if (!this.active) return null;
@@ -31,7 +39,7 @@ export class LoginAttempt {
   }
 
   beginPageRead() {
-    if (!this.active) return null;
+    if (!this.choose()) return null;
     const generation = ++this.pageGeneration;
     let finished = false;
     const isCurrent = () => this.active && !finished && this.pageGeneration === generation;
@@ -52,7 +60,8 @@ export class LoginAttempt {
   private cancel() {
     const previous = this.current;
     this.current = null;
-    if (previous && previous.method !== 'password') WebAuthnAbortService.cancelCeremony();
+    if (previous && (previous.method === 'passkey' || previous.method === 'autofill'))
+      WebAuthnAbortService.cancelCeremony();
   }
 
   retire() {
@@ -65,11 +74,7 @@ export class LoginAttempt {
 export function useLoginJourney() {
   const { history } = useRouter();
   const sequence = useRef(0);
-  const [journey, setJourney] = useState<{ key: number; query: string; attempt: LoginAttempt } | null>(() => ({
-    key: 0,
-    query: history.location.search,
-    attempt: new LoginAttempt(),
-  }));
+  const [journey, setJourney] = useState<{ key: number; query: string; attempt: LoginAttempt } | null>(null);
   useLayoutEffect(() => {
     let current: LoginAttempt | null = null;
     const replace = () => {
