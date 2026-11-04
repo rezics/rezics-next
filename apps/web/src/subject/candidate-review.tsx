@@ -423,7 +423,9 @@ function CandidateReviewLive({
                 : m.candidate_confirm_replace({}, options)}
       </p>
       {confirmation === 'adopt' && !isContextReview && (
-        <p className="text-sm">{m.candidate_confirm_head({ head: current.page?.adoption?.head?.toString() ?? '—' }, options)}</p>
+        <p className="text-sm">
+          {m.candidate_confirm_head({ head: current?.page?.adoption?.head?.toString() ?? '—' }, options)}
+        </p>
       )}
       {isContextReview && confirmation === 'adopt' && (
         <p>
