@@ -157,14 +157,18 @@ async function setup() {
   );
 }
 
-async function assemble() {
+export async function assemble(options?: {
+  env: Record<string, string>;
+  authDatabaseUrl: string;
+  keys: DevelopmentKeys;
+}) {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
   await import('reylo/register');
   const [
     auth,
     { createKernel },
     { actionCatalogue },
-    { createAccess },
+    { createAccess, accessActionCatalogue },
     { createNativeAccountBindings },
     { readConfig },
     { createAccountManagementReadAccess },
@@ -177,19 +181,19 @@ async function assemble() {
     import('../../kernel/src/server.ts'),
     import('../../kernel/src/access/management-source.ts'),
   ]);
-  const env = await kernelEnvironment();
+  const env = options?.env ?? (await kernelEnvironment());
   const config = readConfig(env);
   localDatabase(config.databaseUrl);
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
-  const database = new Pool({ connectionString: await authDatabaseUrl() });
-  const keys = await developmentKeys();
+  const database = new Pool({ connectionString: options?.authDatabaseUrl ?? (await authDatabaseUrl()) });
+  const keys = options?.keys ?? (await developmentKeys());
   const kernel = createKernel({
     pool: kernelPool,
     tokens: config.tokens,
     routeKey: config.routeKey,
     ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
   });
-  const actions = actionCatalogue(kernel);
+  const actions = accessActionCatalogue(actionCatalogue(kernel));
   let service: import('../src/index.ts').AuthService;
   const access = createAccess({
     actions,
