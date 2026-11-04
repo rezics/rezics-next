@@ -12,6 +12,7 @@ import { bangumiEditionFactsWithheldOnWork, parseBangumiBookInfobox } from './ba
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { bangumiDiagnosticLimit, extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
 import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
+import { bangumiGameEnvironment } from './bangumi-game-environment.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -29,7 +30,7 @@ export const converter_revision = 'bangumi@10';
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Thirteen projected top-level fields; at most nine commands, one cover intent,
+// Thirteen projected top-level fields; at most 51 commands, one cover intent,
 // and one citation envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
@@ -347,6 +348,14 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
   }
   const playerCount = bangumiGamePlayerCount(record);
+  let environment;
+  try {
+    environment = bangumiGameEnvironment(record, context);
+  } catch (error) {
+    if (error instanceof TypeError && error.message === 'invalid_reference_context')
+      invalid('', 'invalid_reference_context');
+    throw error;
+  }
   const proposals: BatchCommand[] = [];
   const propose = (
     statement: BatchStatement,
@@ -394,6 +403,35 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         ? { ...fact(item.property, item.content), qualifiers: [item.qualifier] }
         : fact(item.property, item.content);
       proposals.push(propose(statement, 'facts', item.field));
+    }
+    for (const item of environment.facts) {
+      let cited = recordUrl;
+      try {
+        const parsed = new URL(recordUrl);
+        parsed.hash = item.citationPath;
+        cited = parsed.href;
+      } catch {
+        cited = recordUrl;
+      }
+      proposals.push(
+        propose(
+          {
+            property: { id: item.property },
+            value: { type: 'value', content: item.content },
+            ...(item.qualifiers
+              ? {
+                  qualifiers: item.qualifiers.map((qualifier) => ({
+                    property: { id: qualifier.property },
+                    value: { type: 'value' as const, content: qualifier.content },
+                  })),
+                }
+              : {}),
+            references: references([cited]),
+          },
+          'facts',
+          item.field,
+        ),
+      );
     }
     if (document) {
       proposals.push({
@@ -456,10 +494,14 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         ...retainedFieldDiagnostics(
           record,
           extractedFields.diagnostics,
-          television.handledInfobox || playerCount.handledInfobox || bookTitleProfile,
+          television.handledInfobox ||
+            playerCount.handledInfobox ||
+            environment.handledInfobox ||
+            bookTitleProfile,
         ),
         ...television.diagnostics,
         ...playerCount.diagnostics,
+        ...environment.diagnostics,
       ]),
     ],
     coverAssets,
