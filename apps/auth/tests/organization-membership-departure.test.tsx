@@ -300,7 +300,10 @@ test('native acknowledgement survives failed observation and restoration; histor
   globalThis.fetch = (async (input, init) => {
     const path = String(input);
     if (path.endsWith('/execute')) executed = true;
-    else if (executed && path.endsWith('/member')) return Response.json({}, { status: 503 });
+    else if (executed && path.endsWith('/member')) {
+      executed = false;
+      return Response.json({}, { status: 503 });
+    }
     return normal(input, init);
   }) as typeof fetch;
   await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());

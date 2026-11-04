@@ -591,7 +591,9 @@ Stay preserves a current review; Leave discards an unsent review and retains a d
 
 One ordinary entry, restored ordinary page or explicit refresh uses at most three native requests: route session,
 page preparation session and one bounded page (up to 20 holders). An unresolved restored document reads only the
-route session until explicit review. One explicit recovery review still uses at most four native requests: session,
+route session until explicit review. A mounted known acknowledgement adds at most one selected-member read to
+ordinary refresh (four calls total), retaining the original submitted marker until its existing observed-close rule
+allows clearing it. One explicit recovery review still uses at most four native requests: session,
 page preparation session, bounded page and selected membership. Selection adds one selected-member point read.
 A fresh submit uses session, selected-member preparation, approval and execute (four), then selected readback and
 page preparation/session plus page (three); exact retry uses session, selected-member preparation and execute
