@@ -247,11 +247,11 @@ old identity, preview, image and destination. Reader/session/source retirement s
 - Search's current Review summary supplies author name/handle, excerpt and optional reviewed Subject. It supplies no
   avatar or rating; Home does not infer either fact or fetch the Subject separately.
 
-Decision: Home keeps an unavailable, visit-local Entry/score seam until Commerce and rating owners provide a bounded currentness projection; the existing work destination remains available.
+Decision: Home keeps an unavailable native personal-actions seam until Content publishes the admitted page and generated transport; its local receiver joins original occurrence keys and Subjects, displays facts without granting actions, and removes arbitrary control callbacks.
 
-- Commerce's `withLibraryViewerFacts` in `services/kernel/src/library/personal-routes.ts` attaches bounded facts only to Library entries and Collection members. The Home route has no admitted page-level Entry projection, and `loadSubjectLibrarySlot` reads one Subject at a time; do not mount it per Home card. Commerce should supply a distinct-work batch projection with explicit present/absent/unavailable outcomes, currentness, and its existing command controls.
-- The Web seam accepts at most 100 distinct identities per page and three pages per visit. It keeps the projection out of the public Home query cache, retires it when reader, credential epoch, feed source, observation, locale, or route scope changes, and leaves unmatched identities unavailable. Missing rows and stale/failed reads are never treated as absence.
-- Rating controls remain owned by the rating/currentness owner. `docs/library-and-collections.md` defines the standard own-counted-vote facts and `docs/library-personal-score-order.md` records that Content's owner-wide identity fence is still required. A review citation is public evidence about its cited vote and is never admitted as this reader's score. The row slot accepts only the reader's own current score control supplied with its work identity.
+The [Home work Library receiver](home-work-library/README.md) defines the single-page boundary, exact association,
+reader retirement and remaining native composition and command integration. Do not mount per-card Subject reads.
+
 - Home receives public Collection, Review and Space cards through the generated Feed response. Collection summaries
   currently supply title/description only; Space summaries require current title/address and may supply Realm carrier
   text. Native eligibility still depends on Search's Review coverage and Community's complete Space/Realm tuple.

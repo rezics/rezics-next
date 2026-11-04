@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HomeWorkLibraryAction, HomeWorkLibraryProvider } from '../features/feed/home-work-library/view';
 import type { HomeWorkLibraryProjection, HomeWorkLibraryScope } from '../features/feed/home-work-library/contract';
-import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 
 const scope: HomeWorkLibraryScope = {
@@ -19,36 +18,34 @@ function preparedProjection(locale: string): HomeWorkLibraryProjection {
     state: 'ready' as const,
     rows: [
       {
+        rowKey: 'occurrence-1',
         subjectId: '00000000-0000-7000-8000-000000000101',
         entry: {
           state: 'present' as const,
           value: { subjectId: '00000000-0000-7000-8000-000000000101', state: 'reading', revision: 1 },
         },
         score: { state: 'present' as const, value: { reader: scope.reader, kind: 'ready' as const, units: 16 } },
-        entryControl: () => (
-          <span className="text-sm">
-            {m.library_entry_state_label({ title: 'Prepared work', state: m.library_other() })}
-          </span>
-        ),
-        scoreControl: () => <span className="text-sm">8 / 10</span>,
+        actions: { state: 'current' as const, allowed: [] },
       },
       {
+        rowKey: 'occurrence-2',
         subjectId: '00000000-0000-7000-8000-000000000102',
         entry: { state: 'absent' as const },
         score: { state: 'absent' as const },
-        entryControl: () => <span className="text-sm">{m.library_empty_title()}</span>,
-        scoreControl: () => <span className="text-sm">{m.subject_rating_control_unrated()}</span>,
+        actions: { state: 'current' as const, allowed: [] },
       },
       {
+        rowKey: 'occurrence-3',
         subjectId: '00000000-0000-7000-8000-000000000103',
         entry: { state: 'unavailable' as const },
         score: { state: 'unavailable' as const },
+        actions: { state: 'unavailable' as const },
       },
     ],
   };
   return {
     scope: visitScope,
-    pages: [ready],
+    page: ready,
     lease: { subscribe: () => () => {}, snapshot: () => 0, isCurrent: () => true },
   };
 }
@@ -66,11 +63,13 @@ function PreparedHomeWorkLibrary() {
         <section aria-label="Repeated reference to a saved work" className="space-y-2 rounded-lg border p-4">
           <h2 className="font-semibold">Prepared work — repeated reference</h2>
           <HomeWorkLibraryAction
+            rowKey="occurrence-1"
             subjectId="00000000-0000-7000-8000-000000000101"
             href={`/${locale}/subjects/00000000-0000-7000-8000-000000000101/Prepared?slot=collections`}
             locale={locale}
           />
           <HomeWorkLibraryAction
+            rowKey="occurrence-1"
             subjectId="00000000-0000-7000-8000-000000000101"
             href={`/${locale}/subjects/00000000-0000-7000-8000-000000000101/Prepared?slot=collections`}
             locale={locale}
@@ -79,6 +78,7 @@ function PreparedHomeWorkLibrary() {
         <section aria-label="Work with no Library entry" className="space-y-2 rounded-lg border p-4">
           <h2 className="font-semibold">Prepared work — no Entry</h2>
           <HomeWorkLibraryAction
+            rowKey="occurrence-2"
             subjectId="00000000-0000-7000-8000-000000000102"
             href={`/${locale}/subjects/00000000-0000-7000-8000-000000000102/Prepared?slot=collections`}
             locale={locale}
@@ -87,6 +87,7 @@ function PreparedHomeWorkLibrary() {
         <section aria-label="Work with unavailable private state" className="space-y-2 rounded-lg border p-4">
           <h2 className="font-semibold">Prepared work — private state unavailable</h2>
           <HomeWorkLibraryAction
+            rowKey="occurrence-3"
             subjectId="00000000-0000-7000-8000-000000000103"
             href={`/${locale}/subjects/00000000-0000-7000-8000-000000000103/Prepared?slot=collections`}
             locale={locale}

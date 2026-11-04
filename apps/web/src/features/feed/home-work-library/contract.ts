@@ -1,11 +1,9 @@
-import type { ReactNode } from 'react';
 import type { FeedItem } from '../../pages/home-feed-read';
 import type { SubjectOwnRating } from '../../pages/subject-ratings';
 import type { SubjectSlotEntry } from '../../../library/subject-slot';
 
-/** Commerce's admitted facts page supports 100 rows; Home admits at most two continuations. */
+/** The native composition owns one page, bounded before any Subject deduplication. */
 export const HOME_WORK_LIBRARY_PAGE_SIZE = 100;
-export const HOME_WORK_LIBRARY_PAGE_LIMIT = 3;
 
 export type HomeWorkLibraryScope = Readonly<{
   reader: string;
@@ -22,11 +20,13 @@ export type HomeWorkLibraryFact<T> =
   | Readonly<{ state: 'unavailable' }>;
 
 export type HomeWorkLibraryRow = Readonly<{
+  rowKey: string;
   subjectId: string;
   entry: HomeWorkLibraryFact<SubjectSlotEntry>;
   score: HomeWorkLibraryFact<SubjectOwnRating>;
-  entryControl?: (fact: Exclude<HomeWorkLibraryFact<SubjectSlotEntry>, { state: 'unavailable' }>) => ReactNode;
-  scoreControl?: (fact: Exclude<HomeWorkLibraryFact<SubjectOwnRating>, { state: 'unavailable' }>) => ReactNode;
+  actions:
+    | Readonly<{ state: 'current'; allowed: readonly Readonly<{ action: string; operations: readonly string[] }>[] }>
+    | Readonly<{ state: 'unavailable' }>;
 }>;
 
 export type HomeWorkLibraryPage = Readonly<{
@@ -40,49 +40,26 @@ export type HomeWorkLibraryLease = Readonly<{
   isCurrent(): boolean;
 }>;
 
-/** This visit-local projection is deliberately separate from the anonymous Home query cache. */
+/** Local presentation seam, not a native DTO. It stays unavailable until Content's generated page is installed. */
 export type HomeWorkLibraryProjection = Readonly<{
   scope: HomeWorkLibraryScope;
-  pages: readonly HomeWorkLibraryPage[];
+  page: HomeWorkLibraryPage;
   lease: HomeWorkLibraryLease;
 }>;
-
-export type HomeWorkLibraryPlan = Readonly<{
-  pages: readonly (readonly string[])[];
-  hasMore: boolean;
-}>;
-
-export function planHomeWorkLibraryPages(identities: Iterable<string>): HomeWorkLibraryPlan {
-  const limit = HOME_WORK_LIBRARY_PAGE_SIZE * HOME_WORK_LIBRARY_PAGE_LIMIT;
-  const unique = new Set<string>();
-  const kept: string[] = [];
-  let hasMore = false;
-  for (const identity of identities) {
-    if (!validIdentity(identity) || unique.has(identity)) continue;
-    if (unique.size === limit) {
-      hasMore = true;
-      continue;
-    }
-    unique.add(identity);
-    kept.push(identity);
-  }
-  const pages: string[][] = [];
-  for (let offset = 0; offset < kept.length; offset += HOME_WORK_LIBRARY_PAGE_SIZE)
-    pages.push(kept.slice(offset, offset + HOME_WORK_LIBRARY_PAGE_SIZE));
-  return { pages, hasMore };
-}
 
 /** Missing rows stay unavailable. This helper never treats an omitted ID as an absent Entry or score. */
 export function homeWorkLibraryRow(
   projection: HomeWorkLibraryProjection | undefined,
+  rowKey: string | undefined,
   subjectId: string,
 ): HomeWorkLibraryRow | undefined {
-  if (!projection || !isValidProjection(projection)) return;
-  for (const page of projection.pages) {
-    if (page.state !== 'ready') continue;
-    const row = page.rows.find((candidate) => candidate.subjectId === subjectId);
-    if (row) return row;
-  }
+  if (!projection || !rowKey || !projection.lease.isCurrent() || !isValidProjection(projection)) return;
+  const page = projection.page;
+  if (page.state !== 'ready') return;
+  const matches = page.rows.filter((candidate) => candidate.rowKey === rowKey);
+  if (matches.length !== 1) return;
+  const row = matches[0]!;
+  return row.subjectId === subjectId && validRow(projection, row) ? row : undefined;
 }
 
 export function sameHomeWorkLibraryScope(left: HomeWorkLibraryScope, right: HomeWorkLibraryScope): boolean {
@@ -103,63 +80,65 @@ export function sameHomeWorkLibraryScope(left: HomeWorkLibraryScope, right: Home
 }
 
 export type HomeWorkLibraryAcknowledgement = Readonly<{
+  scope: HomeWorkLibraryScope;
   state: 'acknowledged' | 'unknown' | 'rejected';
   commandId: string;
+  rowKey: string;
   subjectId: string;
   entry?: HomeWorkLibraryFact<SubjectSlotEntry>;
   score?: HomeWorkLibraryFact<SubjectOwnRating>;
 }>;
 
-/** Only an acknowledged owner receipt changes shared rows; unknown commands retain their original identity. */
+/** Only an acknowledged command from a still-admitted occurrence reconciles shared personal facts. */
 export function reconcileHomeWorkLibraryAcknowledgement(
   projection: HomeWorkLibraryProjection,
   acknowledgement: HomeWorkLibraryAcknowledgement,
 ): HomeWorkLibraryProjection {
   if (
     acknowledgement.state !== 'acknowledged' ||
+    !sameHomeWorkLibraryScope(projection.scope, acknowledgement.scope) ||
     !acknowledgement.commandId ||
     !validIdentity(acknowledgement.subjectId) ||
-    !projection.lease.isCurrent() ||
+    !homeWorkLibraryRow(projection, acknowledgement.rowKey, acknowledgement.subjectId) ||
     (!acknowledgement.entry && !acknowledgement.score)
   )
     return projection;
+  const origin = homeWorkLibraryRow(projection, acknowledgement.rowKey, acknowledgement.subjectId)!;
+  if (
+    !validRow(projection, {
+      ...origin,
+      ...(acknowledgement.entry ? { entry: acknowledgement.entry } : {}),
+      ...(acknowledgement.score ? { score: acknowledgement.score } : {}),
+    })
+  )
+    return projection;
   let changed = false;
-  const pages = projection.pages.map((page) => {
-    if (page.state !== 'ready') return page;
-    let pageChanged = false;
-    const rows = page.rows.map((row) => {
-      if (row.subjectId !== acknowledgement.subjectId) return row;
-      changed = pageChanged = true;
-      return {
-        ...row,
-        ...(acknowledgement.entry ? { entry: acknowledgement.entry } : {}),
-        ...(acknowledgement.score ? { score: acknowledgement.score } : {}),
-      };
-    });
-    return pageChanged ? { ...page, rows } : page;
+  const rows = projection.page.rows.map((row) => {
+    if (row.subjectId !== acknowledgement.subjectId || !validRow(projection, row)) return row;
+    changed = true;
+    return {
+      ...row,
+      ...(acknowledgement.entry ? { entry: acknowledgement.entry } : {}),
+      ...(acknowledgement.score ? { score: acknowledgement.score } : {}),
+    };
   });
-  const reconciled = changed ? { ...projection, pages } : projection;
+  const reconciled = changed ? { ...projection, page: { ...projection.page, rows } } : projection;
   return isValidProjection(reconciled) ? reconciled : projection;
 }
 
 export function isValidProjection(projection: HomeWorkLibraryProjection): boolean {
-  if (projection.pages.length > HOME_WORK_LIBRARY_PAGE_LIMIT) return false;
-  const seen = new Set<string>();
-  for (const page of projection.pages) {
-    if (page.state === 'unavailable' && page.rows.length > 0) return false;
-    if (page.rows.length > HOME_WORK_LIBRARY_PAGE_SIZE) return false;
-    for (const row of page.rows) {
-      if (!validIdentity(row.subjectId) || seen.has(row.subjectId)) return false;
-      if (row.entry.state === 'present' && row.entry.value.subjectId !== row.subjectId) return false;
-      if (
-        row.score.state === 'present' &&
-        (row.score.value.kind !== 'ready' || row.score.value.reader !== projection.scope.reader)
-      )
-        return false;
-      seen.add(row.subjectId);
-    }
-  }
-  return true;
+  const page = projection.page;
+  return page.rows.length <= HOME_WORK_LIBRARY_PAGE_SIZE && (page.state === 'ready' || page.rows.length === 0);
+}
+
+function validRow(projection: HomeWorkLibraryProjection, row: HomeWorkLibraryRow): boolean {
+  return (
+    row.rowKey.length > 0 &&
+    validIdentity(row.subjectId) &&
+    (row.entry.state !== 'present' || row.entry.value.subjectId === row.subjectId) &&
+    (row.score.state !== 'present' ||
+      (row.score.value.kind === 'ready' && row.score.value.reader === projection.scope.reader))
+  );
 }
 
 /** Exact identity only: a cited review target, reply, Collection, or other subject is not promoted to a Work. */
