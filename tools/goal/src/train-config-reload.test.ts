@@ -7,7 +7,7 @@ import { integrationHarness } from './test-support.ts';
 
 const setPrelandingTypecheck = (file: string, enabled: boolean) => {
   const settings = JSON.parse(readFileSync(file, 'utf8'));
-  settings.integration = { ...settings.integration, devPrelandingTypecheck: enabled };
+  settings.integration = { ...settings.integration, batchSize: 1, devPrelandingTypecheck: enabled };
   writeFileSync(file, JSON.stringify(settings));
 };
 
