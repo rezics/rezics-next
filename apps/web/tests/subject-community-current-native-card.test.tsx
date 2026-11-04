@@ -233,8 +233,6 @@ test('installed native cards render through the generated reader and original ac
       button.textContent?.includes(m.subject_spoiler_show()),
     )!;
     await act(async () => reveal.click());
-    expect(host.querySelector('img')?.getAttribute('alt')).toBe('Original document image');
-    expect(host.querySelector('[lang="fr"] [data-content-item-slot="preview"]')).not.toBeNull();
     const watch = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === m.thread_watch_watch());
     expect(watch).toBeDefined();
     await act(async () => watch!.click());
@@ -258,6 +256,8 @@ test('installed native cards render through the generated reader and original ac
     expect(stop).toBeDefined();
     await act(async () => stop!.click());
     expect(host.textContent).toContain(m.thread_watch_confirm_stopped());
+    expect(host.querySelector('img')?.getAttribute('alt')).toBe('Original document image');
+    expect(host.querySelector('[lang="fr"] [data-content-item-slot="preview"]')).not.toBeNull();
     expect(actionCalls).toBe(2);
     expect(requests).toHaveLength(2);
     (host.querySelector('h3 a') as HTMLElement).focus();
