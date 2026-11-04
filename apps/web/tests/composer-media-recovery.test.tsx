@@ -1,7 +1,7 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, useState } from 'react';
 import * as start from '../.storybook/react-start';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -65,11 +65,13 @@ async function mountComposer() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'writer', csrfToken: 'original-csrf' });
   const submitted: unknown[] = [];
-  const route = createRootRoute({
-    component: () => (
+  let rebind!: (binding: { initialKey: string; boardId: string }) => void;
+  function Compose() {
+    const [binding, setBinding] = useState({ initialKey: 'draft-key', boardId: 'board' });
+    rebind = setBinding;
+    return (
       <PostComposer
-        initialKey="draft-key"
-        boardId="board"
+        {...binding}
         localDraft={false}
         onSubmit={async (command) => {
           submitted.push(command);
@@ -77,8 +79,9 @@ async function mountComposer() {
         }}
         onSuccess={() => {}}
       />
-    ),
-  });
+    );
+  }
+  const route = createRootRoute({ component: Compose });
   const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/compose'] }) });
   const host = window.document.createElement('div');
   window.document.body.append(host);
@@ -124,6 +127,7 @@ async function mountComposer() {
     editor,
     attach,
     submitted,
+    rebind: (binding: Parameters<typeof rebind>[0]) => act(async () => rebind(binding)),
     async dispose() {
       await act(async () => root.unmount());
       client.clear();
@@ -244,12 +248,7 @@ test('mounted attachment rows explain actual stages and recover only the selecte
     await page.settle(() => reservations === 4);
     await page.click(page.m.editor_dismiss_upload(), row('Removed description'));
     const beforeLate = calls.length;
-    await act(async () =>
-      removed.resolve(
-        Response.json({ media: { id: 'image-4', state: 'reserved', mediaType: 'image/png', byteCount: 3 } }),
-      ),
-    );
-    expect(calls).toHaveLength(beforeLate);
+
     expect(page.editor().textContent).toContain('Keep my writing.');
     expect(page.host.querySelectorAll('[role="img"][aria-label="First description"]')).toHaveLength(1);
     await page.settle(() => !page.button(page.m.thread_write_send()).disabled);
@@ -258,8 +257,62 @@ test('mounted attachment rows explain actual stages and recover only the selecte
     expect(JSON.stringify(page.submitted)).toContain('First description');
     expect(JSON.stringify(page.submitted)).toContain('Second description');
     expect(JSON.stringify(page.submitted)).not.toContain('Removed description');
+    await act(async () =>
+      removed.resolve(
+        Response.json({ media: { id: 'image-4', state: 'reserved', mediaType: 'image/png', byteCount: 3 } }),
+      ),
+    );
+    expect(calls).toHaveLength(beforeLate);
   } finally {
     transport.mockRestore();
     await page.dispose();
+  }
+});
+
+test('board and command-key replacements retire old attachment callbacks while the freshly admitted composer works', async () => {
+  for (const change of ['board', 'key'] as const) {
+    const page = await mountComposer();
+    const late = deferred<Response>();
+    let posts = 0;
+    let puts = 0;
+    const media = (state: string) =>
+      Response.json({
+        media: { id: 'current-image', containerId: 'current-container', state, mediaType: 'image/png', byteCount: 3 },
+      });
+    const transport = spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      if (init?.method === 'POST') {
+        posts++;
+        return posts === 1 ? late.promise : media('reserved');
+      }
+      if (init?.method === 'PUT') {
+        puts++;
+        return new Response(null, { status: 204 });
+      }
+      return media('available');
+    });
+    try {
+      await page.attach('Old occurrence');
+      await page.settle(() => posts === 1);
+      const oldRemove = page.button(page.m.editor_dismiss_upload());
+      await page.rebind({
+        initialKey: change === 'key' ? 'new-key' : 'draft-key',
+        boardId: change === 'board' ? 'new-board' : 'board',
+      });
+      await page.settle(() => !!page.editor());
+      await act(async () => {
+        oldRemove.click();
+        late.resolve(media('reserved'));
+        await Promise.resolve();
+      });
+      expect(puts).toBe(0);
+      expect(page.host.querySelector('[role="img"]')).toBeNull();
+      await page.attach('New occurrence');
+      await page.settle(() => page.host.querySelector('[role="img"][aria-label="New occurrence"]') !== null);
+      expect(posts).toBe(2);
+      expect(puts).toBe(1);
+    } finally {
+      transport.mockRestore();
+      await page.dispose();
+    }
   }
 });

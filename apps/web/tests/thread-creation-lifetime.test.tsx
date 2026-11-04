@@ -764,11 +764,8 @@ test('retired page attachments ignore late reservation stages after departure an
       });
       expect(puts).toBe(0);
       expect(page.host.querySelector('[role="img"]')).toBeNull();
-      if (reason === 'departure') await page.go(`/boards/${id(101)}/new`);
-      else {
-        await act(async () => page.updateConfig((current) => ({ ...current, visible: false })));
-        await act(async () => page.updateConfig((current) => ({ ...current, visible: true })));
-      }
+      if (reason !== 'departure') await page.go(`/boards/${id(101)}`);
+      await page.go(`/boards/${id(101)}/new`);
       await page.settle(() => !!page.editor());
       await attach();
       await page.settle(() => page.host.querySelector('[role="img"]') !== null);
