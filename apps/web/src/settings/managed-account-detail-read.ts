@@ -345,7 +345,9 @@ export class ManagedAccountReader {
       members:
         !section || section === 'members' || detail.members.state === 'denied'
           ? { page: detail.members, cursor: section === 'members' ? cursor : undefined, pending: false }
-          : { ...this.state.members, pending: restricted ? false : this.state.members.pending },
+          : restricted
+            ? { ...this.state.members, pending: false }
+            : this.state.members,
       responsibilities:
         !section || section === 'responsibilities' || detail.responsibilities === null
           ? {
@@ -353,7 +355,9 @@ export class ManagedAccountReader {
               cursor: section === 'responsibilities' ? cursor : undefined,
               pending: false,
             }
-          : { ...this.state.responsibilities, pending: restricted ? false : this.state.responsibilities.pending },
+          : restricted
+            ? { ...this.state.responsibilities, pending: false }
+            : this.state.responsibilities,
     });
   }
 }
