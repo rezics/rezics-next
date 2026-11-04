@@ -23,7 +23,8 @@ export const RealmHomeBoardQuerySchema = t.Object(
   { cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })) },
   closed,
 );
-export const RealmHomeBoardPageSchema = t.Object(
+export const RealmHomeBoardPageSchema = t.Unsafe<RealmHomeBoardPage>(
+  t.Object(
   {
     items: t.Array(
       t.Object(
@@ -38,6 +39,7 @@ export const RealmHomeBoardPageSchema = t.Object(
     next: t.Union([t.String(), t.Null()]),
   },
   closed,
+  ),
 );
 
 /** The ordinary raw board window and exact-key native disclosure, without a
