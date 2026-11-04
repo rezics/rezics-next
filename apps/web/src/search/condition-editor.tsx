@@ -154,10 +154,6 @@ export function ConditionEditor({
   const { store, value: reader } = useWorkspaceAdmission(PRESET_OPERATIONS);
   const address = useReaderAddress(null, undefined, locale);
   const readerKey = JSON.stringify([reader.subject, reader.viewer, reader.observation?.id]);
-  const presetCurrent = () => {
-    const now = store.read();
-    return address.isCurrent() && readerKey === JSON.stringify([now.subject, now.viewer, now.observation?.id]);
-  };
   const root = useRef<HTMLDivElement>(null);
   const serial = useRef(0);
   const nextKey = () => ++serial.current;
@@ -231,6 +227,16 @@ export function ConditionEditor({
     [metadata, locale],
   );
   const presetOwner = useMemo(() => ({}), [presets, focusOwner, session.lifetime]);
+  const currentPresetOwner = useRef(presetOwner);
+  currentPresetOwner.current = presetOwner;
+  const presetCurrent = () => {
+    const now = store.read();
+    // Public address observation and the supplied locale own this editor. Ambient message locale may differ.
+    return (
+      currentPresetOwner.current === presetOwner &&
+      readerKey === JSON.stringify([now.subject, now.viewer, now.observation?.id])
+    );
+  };
   const getSavedFilterEdit = (path: ConditionTreePath, id: string, mode: SavedFilterEditMode) => {
     if (!value || !admitsCondition || !presetCurrent()) return undefined;
     return editSavedFilterTree(value, path, id, mode, admitsCondition);
