@@ -321,8 +321,8 @@ test('a missing assertion is unavailable and a missing summary remains withheld,
   try {
     const fixture = gameExample();
     const row = fixture.first.links[0]!;
-    row.summary = null;
-    row.assertion = null;
+    delete row.summary;
+    delete row.assertion;
     await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport: fixture.read });
     expect(mounted.host.querySelector('[data-date-kind="partial"]')?.textContent).toContain('+2024-05');
     expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();

@@ -1,5 +1,4 @@
 import { useId, useLayoutEffect, useRef } from 'react';
-import type { ComponentProps, ReactNode } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../../paraglide/messages.js';
 import type { GameReaderReady } from '../model';
@@ -27,7 +26,7 @@ export function EditionInspection({
   page: GameReaderReady;
   locale: string;
   current: () => boolean;
-  link: (props: ComponentProps<'a'>) => ReactNode;
+  link: typeof import('../../../pages/shared').PlainLink;
   close: () => void;
 }) {
   const id = useId();
