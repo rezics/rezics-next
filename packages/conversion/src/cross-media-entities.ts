@@ -1185,15 +1185,13 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     if (nameInput.status === 'admitted') nameFacts.push({ language: 'und', text: nameInput.text });
     else if (nameInput.status === 'invalid') diagnostics.push({ pointer: '/name', code: 'invalid_source_name' });
     if (chineseInput.status === 'admitted') nameFacts.push({ language: 'zh', text: chineseInput.text });
-    else if (chineseInput.status === 'invalid')
-      diagnostics.push({ pointer: '/name_cn', code: 'invalid_source_name' });
+    else if (chineseInput.status === 'invalid') diagnostics.push({ pointer: '/name_cn', code: 'invalid_source_name' });
     nameFacts.push(...infoboxNames.names);
     diagnostics.push(...infoboxNames.diagnostics);
 
     for (const nameFact of nameFacts) {
       if (labels[nameFact.language] === undefined) labels[nameFact.language] = nameFact.text;
-      else if (labels[nameFact.language] !== nameFact.text)
-        (aliases[nameFact.language] ??= []).push(nameFact.text);
+      else if (labels[nameFact.language] !== nameFact.text) (aliases[nameFact.language] ??= []).push(nameFact.text);
     }
     for (const alias of alternateNames) {
       if (labels[alias.language] === alias.text) continue;

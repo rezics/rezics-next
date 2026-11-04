@@ -281,7 +281,9 @@ export function parseBangumiCharacterInfoboxNames(value: unknown): BangumiCharac
   };
 }
 
-export function bangumiCharacterNameScalar(value: unknown):
+export function bangumiCharacterNameScalar(
+  value: unknown,
+):
   | { status: 'absent' }
   | { status: 'invalid'; kind: string; bytes?: number; sha256?: string }
   | { status: 'admitted'; text: string } {

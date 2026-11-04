@@ -35,9 +35,7 @@ function convert(aliases = sourceAliases, bound = true) {
 
 function facts(output: ReturnType<typeof convert>, property: string) {
   return output.proposals.flatMap((command) =>
-    command.op === 'propose' &&
-    command.statement.property.id === property &&
-    command.statement.value.type === 'value'
+    command.op === 'propose' && command.statement.property.id === property && command.statement.value.type === 'value'
       ? [{ value: command.statement.value.content, source: command.source }]
       : [],
   );

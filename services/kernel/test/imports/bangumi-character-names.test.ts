@@ -44,7 +44,9 @@ function tables(aliases = sourceAliases): CrossMediaTables {
         name_cn: null,
         type: null,
         summary: 'A source summary.',
-        infobox: ['{{Infobox Crt', '|简体中文名= 牧濑红莉栖', '|别名={', ...aliases, '}', '|性别= 女', '}}'].join('\r\n'),
+        infobox: ['{{Infobox Crt', '|简体中文名= 牧濑红莉栖', '|别名={', ...aliases, '}', '|性别= 女', '}}'].join(
+          '\r\n',
+        ),
       },
     ],
     person: [{ id: 25284, name: 'Miyano Mamoru', name_cn: '宮野真守', type: 1 }],
@@ -196,9 +198,11 @@ test('default selected Bangumi character names publish, retain adoption, and ref
         limit: '100',
       })}`,
     );
-    const candidate = (alternateListing.body as {
-      candidates: { id: string; head: number; retracted: number | null }[];
-    }).candidates.find((item) => item.id === independent);
+    const candidate = (
+      alternateListing.body as {
+        candidates: { id: string; head: number; retracted: number | null }[];
+      }
+    ).candidates.find((item) => item.id === independent);
     expect(candidate).toBeTruthy();
     const accepted = await editor.http(`/v1/subjects/${characterId}/candidates/${independent}:accept`, {
       context: globalContext,
