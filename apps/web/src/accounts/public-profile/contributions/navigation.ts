@@ -6,6 +6,23 @@ function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function point(value: unknown): ReturnPoint | undefined {
+  if (
+    !record(value) ||
+    typeof value.address !== 'string' ||
+    typeof value.item !== 'string' ||
+    typeof value.destination !== 'string'
+  )
+    return;
+  return { address: value.address, item: value.item, destination: value.destination };
+}
+
+function currentPoint(host: Window): ReturnPoint | undefined {
+  const state: unknown = host.history.state;
+  const saved = record(state) ? point(state[returnKey]) : undefined;
+  return saved?.address === host.location.href ? saved : undefined;
+}
+
 /** Remember focus on this history entry, retaining the native view and opaque query bytes. */
 export function rememberContribution(item: string, destination: string, host: Window = window): void {
   const state: unknown = host.history.state;
@@ -20,15 +37,51 @@ export function rememberContribution(item: string, destination: string, host: Wi
 
 /** Focus only the returning entry's exact surviving link; never scan or reload another page. */
 export function restoreContribution(root: HTMLElement, item: string, host: Window = window): void {
-  const state: unknown = host.history.state;
-  const point = record(state) && record(state[returnKey]) ? state[returnKey] : null;
-  if (!point || point.address !== host.location.href || point.item !== item || typeof point.destination !== 'string')
-    return;
+  const saved = currentPoint(host);
+  if (!saved || saved.item !== item) return;
   const link = [...root.querySelectorAll<HTMLAnchorElement>('a[href]')].find(
-    (candidate) => candidate.getAttribute('href') === point.destination,
+    (candidate) => candidate.getAttribute('href') === saved.destination,
   );
   if (!link) return;
   // A newer deliberate focus choice wins over a delayed page mount.
   if (host.document.activeElement !== host.document.body && !root.contains(host.document.activeElement)) return;
   link.focus({ preventScroll: true });
+}
+
+/** Focus a visible recovery notice if this history entry's exact destination no longer survives. */
+export function restoreContributionRecovery(notice: HTMLElement, host: Window = window): void {
+  const saved = currentPoint(host);
+  const region = notice.closest<HTMLElement>('section[data-slot^="account-"]');
+  if (!saved || !region) {
+    notice.hidden = true;
+    return;
+  }
+  const contributions = [...region.querySelectorAll<HTMLElement>('[data-profile-contribution-id]')].filter(
+    (candidate) => candidate.dataset.profileContributionId === saved.item,
+  );
+  let originalRow: HTMLLIElement | null = null;
+  let exactDestination: HTMLAnchorElement | undefined;
+  for (const candidate of contributions) {
+    const itemRow = candidate.closest('li');
+    if (!itemRow) continue;
+    originalRow ??= itemRow;
+    exactDestination = [...itemRow.querySelectorAll<HTMLAnchorElement>('a[href]')].find(
+      (link) => link.getAttribute('href') === saved.destination,
+    );
+    if (exactDestination) {
+      originalRow = itemRow;
+      break;
+    }
+  }
+  if (exactDestination) {
+    notice.hidden = true;
+    const active = host.document.activeElement;
+    if (active === host.document.body || active === notice || (originalRow && originalRow.contains(active)))
+      exactDestination.focus({ preventScroll: true });
+    return;
+  }
+  notice.hidden = false;
+  const active = host.document.activeElement;
+  if (active === host.document.body || active === notice || (originalRow && originalRow.contains(active)))
+    notice.focus({ preventScroll: true });
 }

@@ -7,6 +7,9 @@ refuse these views. The receiver caps Content windows at twenty rows and never t
 Decision: reuse the anonymous page and public profile identity; absent native card context stays unavailable,
 without point reads or inferred viewer actions, and return focus belongs to the exact existing history entry.
 
+Decision: when the original contribution or its exact destination no longer survives on return, show and focus a
+recovery notice in that public contribution region while preserving the current account page and cursor.
+
 `ContributionRow` uses the shared ContentItem family, bounded public attribution, historical review details,
 immediate-parent presentation and document spoiler renderer. Review citations describe publication history, not
 the author's current rating. Native thread/post IDs and exact revision IDs select destinations independently of

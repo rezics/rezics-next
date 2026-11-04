@@ -22,6 +22,8 @@ type ContributionActionsEpisode =
 const { sessionQuery } = await import('../src/session/query');
 const { unavailableAuthorContributionActionsWire } =
   await import('../src/accounts/public-profile/contribution-actions/receiver');
+const { rememberContribution, restoreContributionRecovery } =
+  await import('../src/accounts/public-profile/contributions/navigation');
 
 const id = '00000000-0000-4000-8000-000000000001';
 
@@ -151,7 +153,7 @@ test('mounted host shares reader retirement and reacquires only the current orig
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://site.test/en/accounts/author/posts?cursor=original%2B%2F%3D' });
+  const window = new Window({ url: 'https://site.test/en/accounts/author/posts?cursor=original%2B%2F%3D#reply' });
   const originals = new Map<string, PropertyDescriptor | undefined>();
   for (const [key, value] of Object.entries({
     window,
@@ -231,6 +233,28 @@ test('mounted host shares reader retirement and reacquires only the current orig
     return latest!;
   };
   try {
+    const region = document.createElement('section');
+    region.dataset.slot = 'account-posts';
+    const recovery = document.createElement('p');
+    recovery.hidden = true;
+    recovery.tabIndex = -1;
+    region.append(recovery);
+    document.body.append(region);
+    rememberContribution('removed-row', '/en/threads/original?post=original', window);
+    restoreContributionRecovery(recovery, window);
+    expect(recovery.hidden).toBe(false);
+    expect(document.activeElement).toBe(recovery);
+    const survivingRow = document.createElement('li');
+    const contribution = document.createElement('div');
+    contribution.dataset.profileContributionId = 'removed-row';
+    const destination = document.createElement('a');
+    destination.setAttribute('href', '/en/threads/original?post=original');
+    survivingRow.append(contribution, destination);
+    region.append(survivingRow);
+    restoreContributionRecovery(recovery, window);
+    expect(recovery.hidden).toBe(true);
+    expect(document.activeElement).toBe(destination);
+    region.remove();
     await router.load();
     await flush(() =>
       root.render(
@@ -241,7 +265,7 @@ test('mounted host shares reader retirement and reacquires only the current orig
     );
     expect(flights).toHaveLength(0);
     expect(node.querySelector('a[href*="sign-in"]')?.getAttribute('href')).toContain(
-      'return_to=%2Fen%2Faccounts%2Fauthor%2Fposts%3Fcursor%3Doriginal%252B%252F%253D',
+      'return_to=%2Fen%2Faccounts%2Fauthor%2Fposts%3Fcursor%3Doriginal%252B%252F%253D%23reply',
     );
     await flush(() => client.setQueryData(sessionQuery.queryKey, session));
     expect(flights).toHaveLength(1);

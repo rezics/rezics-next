@@ -8602,6 +8602,7 @@
   "profile_contribution_actions_sign_in": "登录以查看贡献内容当前可用的操作",
   "profile_contribution_actions_preparing": "正在检查贡献内容当前可用的操作…",
   "profile_contribution_actions_unavailable": "私人操作暂不可用。你仍可打开各条贡献内容。",
+  "profile_contribution_return_recovered": "原始贡献或目的地已不在此页面。请从当前的贡献继续浏览。",
   "profile_contribution_actions_retired": "这些操作已失效。请返回当前页面重新检查。",
   "library_collection_metadata_history": "历史",
   "library_collection_metadata_history_description": "查看此集合的标题、描述、可见性和展示方式的变更记录。",

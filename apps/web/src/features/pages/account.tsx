@@ -14,7 +14,7 @@ import { browserObservation } from '../../session/observation';
 import { useSession } from '../../session/query';
 import { Failed, Preview, sectionClass, useOverview, viewHref, type OverviewValue } from './overview';
 import { isRecord, linkClass, linkColor, webUrl } from './shared';
-import { ContributionRow } from '../../accounts/public-profile/contributions/row';
+import { ContributionReturnRecovery, ContributionRow } from '../../accounts/public-profile/contributions/row';
 import {
   ContributionActionsHost,
   contributionPublicationSource,
@@ -339,6 +339,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
           <h2 id={`${id}-title`} className="sr-only">
             {title}
           </h2>
+          {actionView ? <ContributionReturnRecovery rows={items} locale={value.locale} /> : null}
           <Empty className="border p-6">
             <EmptyHeader>
               <EmptyTitle className="sr-only">{title}</EmptyTitle>
@@ -352,6 +353,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
         <h2 id={`${id}-title`} className="sr-only">
           {title}
         </h2>
+        {actionView ? <ContributionReturnRecovery rows={items} locale={value.locale} /> : null}
         {actionList}
         {next && (spec.kind !== 'accountCollections' || collectionPagesAdmitted) && (
           <a
