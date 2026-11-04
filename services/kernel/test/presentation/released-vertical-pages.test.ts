@@ -242,8 +242,10 @@ for (const [vertical, types] of Object.entries(launch)) {
           expect(publicPage(editor)).toEqual(publicPage(anonymous));
           expect(anonymous.viewer).toEqual({ type, id });
           expect(editor.viewer).toEqual({ type, id });
-          expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(anonymous.actions?.status);
-          expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(editor.actions?.status);
+          const anonymousStatus = (anonymous as { actions?: { status: string } }).actions?.status ?? 'missing';
+          const editorStatus = (editor as { actions?: { status: string } }).actions?.status ?? 'missing';
+          expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(anonymousStatus);
+          expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(editorStatus);
         }
         const missing = await driver.request('anonymous', 'POST', '/v1/pages:read', {
           target: { subject: id, view: 'collections' },
