@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { issuerSecurityRequest } from './security-inventory';
-import { readTurnstileConfig } from './turnstile';
+import { readTurnstileConfig } from './turnstile.ts';
 
 export type RegistrationPageRequirements = {
   handle: { minLength: number; maxLength: number };
