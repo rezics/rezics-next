@@ -16,7 +16,11 @@ function title(
 }
 
 function record(titles: Record<string, unknown>[], extra: Record<string, unknown> = {}) {
-  return { external_id: 'r1', record_revision: null, record: { id: 'r1', ...extra, releases_titles: titles } };
+  return {
+    external_id: 'r1',
+    record_revision: null,
+    record: { id: 'r1', minage: 0, ...extra, releases_titles: titles },
+  };
 }
 
 function expectInvalid(input: ReturnType<typeof record>, pointer: string) {
@@ -105,6 +109,19 @@ test('nullable and unadmitted latin keep the primary title', () => {
   ).toEqual([]);
 });
 
+test('a release language with a null title retains source absence without inventing a name', () => {
+  const input = record([{ id: 'r1', lang: 'en', mtl: false, title: null, latin: null }, title('ja', 'Known title')]);
+  const bootstrap = convertCrossMediaEntity(input);
+  expect(bootstrap.normalizedRecord).toMatchObject({
+    releases_titles: expect.arrayContaining([{ id: 'r1', lang: 'en', mtl: false, title: null, latin: null }]),
+  });
+  if (bootstrap.proposals[0]?.op !== 'create') throw new Error('Expected bootstrap');
+  expect(bootstrap.proposals[0].subject.labels).toEqual({ ja: 'Known title' });
+  expect(names(convertCrossMediaEntity(input, { subjectId }), 'schema:name')).toEqual([
+    { language: 'ja', text: 'Known title' },
+  ]);
+});
+
 test('invalid language, malformed rows and bound edges stay at addressable paths', () => {
   const skipped = convertCrossMediaEntity(record([title('!!!!', 'Bad'), title('en', 'Harbor')]));
   expect(skipped.diagnostics).toEqual([{ pointer: '/releases_titles/0/lang', code: 'unadmitted_language' }]);
@@ -118,5 +135,5 @@ test('invalid language, malformed rows and bound edges stay at addressable paths
   );
   expectInvalid(record([{ id: 'r1', lang: 'en', mtl: 'yes', title: 'Harbor', latin: null }]), '/releases_titles/0/mtl');
   expectInvalid(record([title('en', '')]), '/releases_titles/0/title');
-  expect(vndbReleaseNameLimits.maxCommands).toBe(163);
+  expect(vndbReleaseNameLimits.maxCommands).toBe(164);
 });

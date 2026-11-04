@@ -906,7 +906,7 @@ function projectReleaseTitles(
     id: string;
     lang: string;
     mtl: boolean;
-    title: string;
+    title: string | null;
     latin: string | null;
   }[];
   names: { language: string; text: string }[];
@@ -925,7 +925,7 @@ function projectReleaseTitles(
     id: string;
     lang: string;
     mtl: boolean;
-    title: string;
+    title: string | null;
     latin: string | null;
   }[] = [];
   const diagnostics: ConversionDiagnostic[] = [];
@@ -942,7 +942,8 @@ function projectReleaseTitles(
     const rawLanguage = own(row, 'lang', `${pointer}/lang`);
     if (typeof rawLanguage !== 'string') return fail(`${pointer}/lang`);
     const lang = canonicalLanguageTag(rawLanguage);
-    const title = releaseTitleText(own(row, 'title', `${pointer}/title`), `${pointer}/title`);
+    const rawTitle = own(row, 'title', `${pointer}/title`);
+    const title = rawTitle === null ? null : releaseTitleText(rawTitle, `${pointer}/title`);
     const mtl = copyFlag(own(row, 'mtl', `${pointer}/mtl`), `${pointer}/mtl`);
     const latin = own(row, 'latin', `${pointer}/latin`);
     const association = JSON.stringify([lang ?? rawLanguage, title, latin]);
@@ -972,7 +973,7 @@ function projectReleaseTitles(
       diagnostics.push({ pointer: `${pointer}/lang`, code: 'unadmitted_language' });
       continue;
     }
-    names.push({ language: lang, text: title });
+    if (title !== null) names.push({ language: lang, text: title });
     if (romanizedText) {
       const romanized = latinLanguageTag(lang);
       if (romanized === null) diagnostics.push({ pointer: `${pointer}/latin`, code: 'unadmitted_latin_language' });
@@ -1001,7 +1002,7 @@ function projectReleaseTitles(
   titles.sort(
     (a, b) =>
       compareText(a.lang, b.lang) ||
-      compareText(a.title, b.title) ||
+      compareText(a.title ?? '', b.title ?? '') ||
       compareText(a.latin ?? '', b.latin ?? '') ||
       Number(a.mtl) - Number(b.mtl),
   );
