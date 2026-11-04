@@ -455,6 +455,10 @@ pending command. Navigation and supported unload warn even for an unresolved sav
 focus do not count as edits. Reload preserves that baseline and draft, and uncertain retries retain their exact
 sender, credential, request and key. Confirmed saves and authority retirement clear navigation protection.
 
+Decision: the rule editor's primary submit is the explicit “Save and view results” choice. After native confirmation it
+returns to that saved identity's first results page and reads the admitted current rule; the separate results link is
+the explicit leave-without-save choice and retains only its validated supported context.
+
 <a id="selected-whole-query-publication-contract-native-bodies-pending"></a>
 
 ### Selected whole-query publication runtime
