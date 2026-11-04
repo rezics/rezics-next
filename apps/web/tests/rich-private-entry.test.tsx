@@ -141,7 +141,7 @@ test('rendered review preserves operands and focus, retries original uncertainty
       writes.push({ command, reply });
       return reply.promise;
     },
-    privacy: async () => ({ kind: 'uncertain' }),
+    sourceCorrection: async () => ({ kind: 'uncertain' }),
   };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const host = window.document.createElement('div');

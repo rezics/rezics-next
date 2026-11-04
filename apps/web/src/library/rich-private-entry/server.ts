@@ -2,6 +2,7 @@ import type {
   PersonalEntry,
   PersonalEntryAnnotationWrite,
   PersonalEntryFieldChange,
+  PersonalEntryGuard,
   PersonalEntryPrivacyValue,
   PersonalEntrySourceAdmission,
   PersonalEntrySourceCorrection,
@@ -104,8 +105,13 @@ function privacyValue(value: unknown): PersonalEntryPrivacyValue | null {
   )
     return { status: 'known', meaning: value.meaning };
   if (value.status === 'unknown') {
-    if ('sourceValue' in value && typeof value.sourceValue === 'string' && value.sourceValue.length <= 192)
-      return { status: 'unknown', sourceValue: value.sourceValue };
+    if ('sourceValue' in value)
+      return typeof value.sourceValue === 'string' &&
+        value.sourceValue.length > 0 &&
+        new TextEncoder().encode(value.sourceValue).byteLength <= 192 &&
+        !/[\u0000-\u001f\u007f]/.test(value.sourceValue)
+        ? { status: 'unknown', sourceValue: value.sourceValue }
+        : null;
     return { status: 'unknown' };
   }
   return null;
@@ -117,8 +123,13 @@ function timestampValue(value: unknown): PersonalEntryTimestampInput | null {
   if (value.status === 'known' && 'value' in value && typeof value.value === 'string' && value.value.length <= 64)
     return { status: 'known', value: value.value };
   if (value.status === 'unknown') {
-    if ('sourceValue' in value && typeof value.sourceValue === 'string' && value.sourceValue.length <= 64)
-      return { status: 'unknown', sourceValue: value.sourceValue };
+    if ('sourceValue' in value)
+      return typeof value.sourceValue === 'string' &&
+        value.sourceValue.length > 0 &&
+        new TextEncoder().encode(value.sourceValue).byteLength <= 64 &&
+        !/[\u0000-\u001f\u007f]/.test(value.sourceValue)
+        ? { status: 'unknown', sourceValue: value.sourceValue }
+        : null;
     return { status: 'unknown' };
   }
   return null;
@@ -135,8 +146,30 @@ function privacyChange(value: unknown): PersonalEntryFieldChange<PersonalEntryPr
   return null;
 }
 
+function timestampChange(value: unknown): PersonalEntryFieldChange<PersonalEntryTimestampInput> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('op' in value)) return null;
+  if (value.op === 'clear') return { op: 'clear' };
+  if (value.op === 'unchanged') return { op: 'unchanged' };
+  if (value.op === 'set' && 'value' in value) {
+    const parsed = timestampValue(value.value);
+    return parsed ? { op: 'set', value: parsed } : null;
+  }
+  return null;
+}
+
 function annotationKey(value: unknown) {
   return typeof value === 'string' && keyPattern.test(value);
+}
+
+function sourceEntryGuard(value: unknown): Pick<PersonalEntryGuard, 'incarnationId' | 'currentRevision'> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const guard = value as Record<string, unknown>;
+  return typeof guard.incarnationId === 'string' &&
+    keyPattern.test(guard.incarnationId) &&
+    Number.isSafeInteger(guard.currentRevision) &&
+    (guard.currentRevision as number) >= 1
+    ? { incarnationId: guard.incarnationId, currentRevision: guard.currentRevision as number }
+    : null;
 }
 
 function expectedSession(value: Record<string, unknown>, identity: SessionIdentity) {
@@ -269,47 +302,67 @@ export const admitPrivateSourceForSubject = createServerFn({ method: 'POST' })
     }
   });
 
-export type SourcePrivacyCommandResult =
+export type SourceCorrectionCommandResult =
   | { kind: 'saved'; entry: PersonalEntry; observation: import('@rezics/client').PersonalEntryObservation }
   | Exclude<SourceCorrectionResult, { kind: 'saved' }>
-  | { kind: 'signed-out' };
+  | { kind: 'signed-out' | 'unavailable' };
 
-export const savePrivateSourcePrivacy = createServerFn({ method: 'POST' })
+export const savePrivateSourceCorrection = createServerFn({ method: 'POST' })
   .validator((value: unknown) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid source correction');
     const item = value as Record<string, unknown>;
     const id = subjectId(item.subjectId);
-    const privacy = privacyChange(item.privacy);
+    const input = item.body;
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid source correction');
+    const bodyInput = input as Record<string, unknown>;
+    const privacy = privacyChange(bodyInput.privacy);
+    const sourceCreated = timestampChange(bodyInput.sourceCreated);
+    const sourceUpdated = timestampChange(bodyInput.sourceUpdated);
     const provider =
-      typeof item.provider === 'string' && item.provider.length >= 1 && item.provider.length <= 64
-        ? item.provider
+      typeof bodyInput.provider === 'string' && bodyInput.provider.length >= 1 && bodyInput.provider.length <= 64
+        ? bodyInput.provider
         : null;
     const recordId =
-      typeof item.recordId === 'string' && item.recordId.length >= 1 && item.recordId.length <= 192
-        ? item.recordId
+      typeof bodyInput.recordId === 'string' && bodyInput.recordId.length >= 1 && bodyInput.recordId.length <= 192
+        ? bodyInput.recordId
         : null;
     const key = typeof item.key === 'string' && annotationKey(item.key) ? item.key : null;
     const viewer = typeof item.viewer === 'string' ? item.viewer : null;
     const csrfToken = typeof item.csrfToken === 'string' ? item.csrfToken : null;
+    const credential =
+      typeof item.credential === 'string' && /^[A-Za-z0-9_-]{1,6400}$/.test(item.credential) ? item.credential : null;
+    const originLifetime =
+      typeof item.originLifetime === 'string' && item.originLifetime.length >= 1 && item.originLifetime.length <= 192
+        ? item.originLifetime
+        : null;
+    const entryGuard = sourceEntryGuard(item.entryGuard);
     if (
       !id ||
       !privacy ||
+      !sourceCreated ||
+      !sourceUpdated ||
       !provider ||
       !recordId ||
-      !Number.isSafeInteger(item.revision) ||
+      !Number.isSafeInteger(bodyInput.revision) ||
+      (bodyInput.revision as number) < 1 ||
+      bodyInput.confirmReviewed !== true ||
       !key ||
       !viewer ||
-      !csrfToken
+      !csrfToken ||
+      !credential ||
+      !originLifetime ||
+      !entryGuard ||
+      (privacy.op === 'unchanged' && sourceCreated.op === 'unchanged' && sourceUpdated.op === 'unchanged')
     )
       throw new Error('Invalid source correction');
     const body: PersonalEntrySourceCorrection = {
       provider,
       recordId,
-      revision: item.revision as number,
+      revision: bodyInput.revision as number,
       confirmReviewed: true,
       privacy,
-      sourceCreated: { op: 'unchanged' },
-      sourceUpdated: { op: 'unchanged' },
+      sourceCreated,
+      sourceUpdated,
     };
     return {
       subjectId: id,
@@ -317,21 +370,34 @@ export const savePrivateSourcePrivacy = createServerFn({ method: 'POST' })
       key,
       viewer,
       csrfToken,
+      credential,
+      originLifetime,
+      entryGuard,
     };
   })
-  .handler(async ({ data }): Promise<SourcePrivacyCommandResult> => {
+  .handler(async ({ data }): Promise<SourceCorrectionCommandResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const identity = await currentIdentity();
-    if (!identity || !expectedSession(data, identity)) return { kind: 'signed-out' };
+    const session = await readSubjectSlotSession(getRequest(), env as Partial<SessionEnv>);
+    if (session.state === 'unavailable') return { kind: 'unavailable' };
+    if (session.state !== 'signed-in' || !session.csrfToken) return { kind: 'signed-out' };
+    const identity = { viewer: session.subject, csrfToken: session.csrfToken, authorization: session.authorization };
+    if (!expectedSession(data, identity)) return { kind: 'signed-out' };
+    const authorization = await originalAnnotationCredential(
+      getRequest(),
+      env as Partial<SessionEnv>,
+      identity,
+      data,
+    );
+    if (!authorization) return { kind: 'retired' };
     try {
       const result = await correctPrivateSourceObservation(kernelClient(), {
         subjectId: data.subjectId,
         body: data.body,
         key: data.key,
-        authorization: identity.authorization,
+        authorization,
       });
       if (result.kind !== 'saved') return result;
-      const refreshed = await readPrivateEntry(kernelClient(), data.subjectId, identity.authorization);
+      const refreshed = await readPrivateEntry(kernelClient(), data.subjectId, authorization);
       return refreshed.kind === 'ready' &&
         refreshed.entry.sourceObservations.some(
           (observation) =>

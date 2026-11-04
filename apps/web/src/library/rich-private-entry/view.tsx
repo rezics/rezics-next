@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../../kernel/exposure';
 import type { useSession } from '../../session/query';
@@ -7,17 +7,18 @@ import { PRIVATE_NOTE_BYTES, annotationWrite, draftOf, type AnnotationDraft } fr
 import {
   readPrivateEntryForSubject,
   savePrivateAnnotations,
-  savePrivateSourcePrivacy,
+  savePrivateSourceCorrection,
   type PrivateEntryCommandResult,
   type PrivateEntryReadResult,
-  type SourcePrivacyCommandResult,
+  type SourceCorrectionCommandResult,
 } from './server';
 import type {
   PersonalEntry,
   PersonalEntryGuard,
   PersonalEntryObservation,
-  PersonalEntryPrivacyValue,
+  PersonalEntrySourceCorrection,
 } from '@rezics/client';
+import { SourceCorrectionEditor, type SourceCorrectionNotice } from './source-correction-editor';
 
 type ReaderSession = ReturnType<typeof useSession>;
 
@@ -30,15 +31,15 @@ type AnnotationCommand = {
   body: NonNullable<ReturnType<typeof annotationWrite>>;
 };
 
-type PrivacyCommand = {
+type SourceCorrectionCommand = {
   subjectId: string;
   viewer: string;
   csrfToken: string;
+  credential: string;
   key: string;
-  provider: string;
-  recordId: string;
-  revision: number;
-  privacy: { op: 'clear' | 'unchanged' } | { op: 'set'; value: PersonalEntryPrivacyValue };
+  originLifetime: string;
+  entryGuard: Pick<PersonalEntryGuard, 'incarnationId' | 'currentRevision'>;
+  body: PersonalEntrySourceCorrection;
 };
 
 function privacyText(value: PersonalEntryObservation['privacy']) {
@@ -60,8 +61,24 @@ function timestampText(value: PersonalEntryObservation['sourceCreated']) {
       : m.library_rich_source_unknown();
   return m.library_rich_source_timestamp({
     value: value.value,
-    precision: value.precision,
-    zone: value.zone,
+    precision:
+      value.precision === 'year'
+        ? m.library_rich_entry_precision_year()
+        : value.precision === 'month'
+          ? m.library_rich_entry_precision_month()
+          : value.precision === 'day'
+            ? m.library_rich_entry_precision_day()
+            : value.precision === 'minute'
+              ? m.library_rich_entry_precision_minute()
+              : value.precision === 'second'
+                ? m.library_rich_entry_precision_second()
+                : m.library_rich_entry_precision_fraction(),
+    zone:
+      value.zone === 'utc'
+        ? m.library_rich_entry_zone_utc()
+        : value.zone === 'offset'
+          ? m.library_rich_entry_zone_offset()
+          : m.library_rich_entry_zone_unknown(),
   });
 }
 
@@ -75,12 +92,12 @@ function validDraft(draft: AnnotationDraft) {
 type PrivateEntryTransport = {
   read: (input: { data: { subjectId: string } }) => Promise<PrivateEntryReadResult>;
   annotations: (input: { data: AnnotationCommand }) => Promise<PrivateEntryCommandResult>;
-  privacy: (input: { data: PrivacyCommand }) => Promise<SourcePrivacyCommandResult>;
+  sourceCorrection: (input: { data: SourceCorrectionCommand }) => Promise<SourceCorrectionCommandResult>;
 };
 const nativeTransport: PrivateEntryTransport = {
   read: readPrivateEntryForSubject,
   annotations: savePrivateAnnotations,
-  privacy: savePrivateSourcePrivacy,
+  sourceCorrection: savePrivateSourceCorrection,
 };
 type Review = { entry: PersonalEntry; guard: PersonalEntryGuard };
 const reviewVersion = (entry: PersonalEntry, guard: PersonalEntryGuard | null) =>
@@ -100,7 +117,14 @@ export function RichPrivateEntry(props: PrivateEntryProps) {
   const receiver = useMemo(() => crypto.randomUUID(), [client]);
   return (
     <PrivateEntryReview
-      key={JSON.stringify([props.subject.id, props.session.subject, props.origin.lifetime, props.returnTo])}
+      key={JSON.stringify([
+        props.subject.id,
+        props.session.state,
+        props.session.state === 'signed-in' ? props.session.subject : null,
+        props.session.state === 'signed-in' ? props.session.csrfToken : null,
+        props.origin.lifetime,
+        props.returnTo,
+      ])}
       {...props}
     />
   );
@@ -124,8 +148,8 @@ function PrivateEntryReview({
   const mounted = useRef(true);
   const retired = useRef(false);
   const generation = useRef(0);
-  const current = useRef({ origin, enabled });
-  current.current = { origin, enabled };
+  const current = useRef({ origin, enabled, subjectId: subject.id, viewer, entryGuard });
+  current.current = { origin, enabled, subjectId: subject.id, viewer, entryGuard };
   const currentResult = () =>
     mounted.current && !retired.current && current.current.enabled && current.current.origin.isCurrent();
   const queryKey = useMemo(
@@ -162,12 +186,22 @@ function PrivateEntryReview({
   const [conflictRefreshed, setConflictRefreshed] = useState(false);
   const annotationBusy = useRef(false);
   const [sourceEditor, setSourceEditor] = useState<string | null>(null);
-  const [sourceChoice, setSourceChoice] = useState('keep');
-  const [sourceReviewed, setSourceReviewed] = useState(false);
-  const [sourceCommand, setSourceCommand] = useState<PrivacyCommand | null>(null);
-  const [sourceNotice, setSourceNotice] = useState<'conflict' | 'uncertain' | 'denied' | 'missing' | null>(null);
+  const [sourceBaseObservation, setSourceBaseObservation] = useState<PersonalEntryObservation | null>(null);
+  const [sourceCommand, setSourceCommand] = useState<SourceCorrectionCommand | null>(null);
+  const [sourceNotice, setSourceNotice] = useState<SourceCorrectionNotice | null>(null);
+  const [sourceSavedBody, setSourceSavedBody] = useState<PersonalEntrySourceCorrection | null>(null);
+  const [sourceSavedObservation, setSourceSavedObservation] = useState<PersonalEntryObservation | null>(null);
   const [sourceConflictRevision, setSourceConflictRevision] = useState<number | null>(null);
   const [privateAuthorityRetired, setPrivateAuthorityRetired] = useState(false);
+  const [retirementKind, setRetirementKind] = useState<'account' | 'entry' | 'exposure' | null>(null);
+  const sourceBusy = useRef(false);
+  const sourceOpener = useRef<HTMLButtonElement | null>(null);
+  const sourceOwnerKey = JSON.stringify([
+    subject.id,
+    viewer,
+    origin.lifetime,
+    entryGuard,
+  ]);
   useEffect(() => {
     mounted.current = true;
     const stop = queryClient.getQueryCache().subscribe((event) => {
@@ -183,6 +217,98 @@ function PrivateEntryReview({
       stop();
     };
   }, [queryClient, queryKey]);
+
+  const lastSourceOwner = useRef(sourceOwnerKey);
+  useEffect(() => {
+    if (lastSourceOwner.current === sourceOwnerKey) return;
+    lastSourceOwner.current = sourceOwnerKey;
+    sourceBusy.current = false;
+    setSourceEditor(null);
+    setSourceBaseObservation(null);
+    setSourceCommand(null);
+    setSourceNotice(null);
+    setSourceSavedBody(null);
+    setSourceSavedObservation(null);
+    setSourceConflictRevision(null);
+    setPrivateAuthorityRetired(true);
+    setRetirementKind('entry');
+    void query.refetch().then((fresh) => {
+      const latest = current.current;
+      if (
+        latest.origin.isCurrent() &&
+        JSON.stringify([latest.subjectId, latest.viewer, latest.origin.lifetime, latest.entryGuard]) === sourceOwnerKey &&
+        !fresh.isError &&
+        fresh.data?.kind === 'ready'
+      ) {
+        setPrivateAuthorityRetired(false);
+        setRetirementKind(null);
+      }
+    });
+  }, [sourceOwnerKey]);
+
+  const lastReadExposure = useRef(enabled);
+  useEffect(() => {
+    if (lastReadExposure.current === enabled) return;
+    lastReadExposure.current = enabled;
+    generation.current++;
+    sourceBusy.current = false;
+    setSourceEditor(null);
+    setSourceBaseObservation(null);
+    setSourceCommand(null);
+    setSourceNotice(null);
+    setSourceSavedBody(null);
+    setSourceSavedObservation(null);
+    setSourceConflictRevision(null);
+    setDraft(null);
+    setReview(null);
+    setAnnotationCommand(null);
+    setAnnotationNotice(null);
+    setRetirementKind(enabled ? null : 'exposure');
+    setPrivateAuthorityRetired(!enabled);
+    if (!enabled) {
+      retired.current = true;
+      queryClient.removeQueries({ queryKey });
+    } else {
+      retired.current = false;
+      void queryClient.invalidateQueries({ queryKey });
+    }
+  }, [enabled, queryClient, queryKey]);
+
+  const lastWriteExposure = useRef(writeAllowed);
+  const sourceOwnerChanged = lastSourceOwner.current !== sourceOwnerKey;
+  const readExposureChanged = lastReadExposure.current !== enabled;
+  const writeExposureChanged = lastWriteExposure.current !== writeAllowed;
+  useEffect(() => {
+    if (lastWriteExposure.current === writeAllowed) return;
+    lastWriteExposure.current = writeAllowed;
+    generation.current++;
+    sourceBusy.current = false;
+    setSourceEditor(null);
+    setSourceBaseObservation(null);
+    setSourceCommand(null);
+    setSourceNotice(null);
+    setSourceSavedBody(null);
+    setSourceSavedObservation(null);
+    setSourceConflictRevision(null);
+    setDraft(null);
+    setReview(null);
+    setAnnotationCommand(null);
+    setAnnotationNotice(null);
+    setPrivateAuthorityRetired(true);
+    setRetirementKind('exposure');
+    if (!enabled) {
+      retired.current = true;
+      queryClient.removeQueries({ queryKey });
+      return;
+    }
+    retired.current = false;
+    void query.refetch().then((fresh) => {
+      if (currentResult() && !fresh.isError && fresh.data?.kind === 'ready') {
+        setPrivateAuthorityRetired(false);
+        setRetirementKind(null);
+      }
+    });
+  }, [writeAllowed]);
 
   const workingDraft = draft ?? (entry ? draftOf(entry) : { note: '', priority: '' });
   const write = entry ? annotationWrite(review?.entry ?? entry, workingDraft, review?.guard ?? entryGuard) : null;
@@ -203,6 +329,7 @@ function PrivateEntryReview({
       !currentResult() ||
       !writeAllowed ||
       sourceCommand ||
+      sourceBusy.current ||
       annotationCommand ||
       annotationBusy.current ||
       !entry ||
@@ -220,7 +347,7 @@ function PrivateEntryReview({
   }
 
   async function sendAnnotation(command: AnnotationCommand) {
-    if (!currentResult() || !writeAllowed || annotationBusy.current) return;
+    if (!currentResult() || !writeAllowed || sourceBusy.current || sourceCommand || annotationBusy.current) return;
     const episode = generation.current;
     annotationBusy.current = true;
     setAnnotationCommand(command);
@@ -263,6 +390,7 @@ function PrivateEntryReview({
     if (outcome.kind === 'retired' || outcome.kind === 'signed-out') {
       retired.current = true;
       setPrivateAuthorityRetired(true);
+      setRetirementKind(outcome.kind === 'retired' ? 'entry' : 'account');
       queryClient.removeQueries({ queryKey });
       setDraft(null);
       setSourceEditor(null);
@@ -280,6 +408,8 @@ function PrivateEntryReview({
       !validDraft(workingDraft) ||
       !writeAllowed ||
       annotationCommand ||
+      sourceCommand ||
+      sourceBusy.current ||
       annotationBusy.current ||
       conflictWaiting ||
       result?.kind !== 'ready'
@@ -307,34 +437,91 @@ function PrivateEntryReview({
     setConflictRefreshed(false);
   }
 
-  function openSource(observation: PersonalEntryObservation) {
+  function openSource(observation: PersonalEntryObservation, event: MouseEvent<HTMLButtonElement>) {
+    if (!currentResult() || !writeAllowed || sourceCommand || annotationCommand || annotationBusy.current) return;
+    sourceOpener.current = event.currentTarget;
     setSourceEditor(observation.provider + '\u0000' + observation.recordId);
-    setSourceChoice('keep');
-    setSourceReviewed(false);
+    setSourceBaseObservation(observation);
     setSourceCommand(null);
     setSourceNotice(null);
+    setSourceSavedBody(null);
+    setSourceSavedObservation(null);
     setSourceConflictRevision(null);
   }
 
-  async function sendSource(command: PrivacyCommand) {
-    if (!currentResult() || !writeAllowed) return;
+  function sourceCommandIsCurrent(command: SourceCorrectionCommand) {
+    const latest = current.current;
+    return (
+      currentResult() &&
+      command.subjectId === latest.subjectId &&
+      command.viewer === latest.viewer &&
+      command.originLifetime === latest.origin.lifetime &&
+      latest.entryGuard !== null &&
+      JSON.stringify(command.entryGuard) ===
+        JSON.stringify({
+          incarnationId: latest.entryGuard.incarnationId,
+          currentRevision: latest.entryGuard.currentRevision,
+        })
+    );
+  }
+
+  function clearSourceFlow() {
+    sourceBusy.current = false;
+    setSourceEditor(null);
+    setSourceBaseObservation(null);
+    setSourceCommand(null);
     setSourceNotice(null);
-    const outcome: SourcePrivacyCommandResult = await transport.privacy({ data: command });
-    if (!currentResult()) return;
+    setSourceSavedBody(null);
+    setSourceSavedObservation(null);
+    setSourceConflictRevision(null);
+  }
+
+  async function sendSource(command: SourceCorrectionCommand) {
+    if (
+      !sourceCommandIsCurrent(command) ||
+      !writeAllowed ||
+      annotationCommand ||
+      annotationBusy.current ||
+      sourceBusy.current
+    )
+      return;
+    const episode = generation.current;
+    sourceBusy.current = true;
+    setSourceCommand(command);
+    setSourceNotice(null);
+    let outcome: SourceCorrectionCommandResult;
+    try {
+      outcome = await transport.sourceCorrection({
+        data: {
+          subjectId: command.subjectId,
+          viewer: command.viewer,
+          csrfToken: command.csrfToken,
+          credential: command.credential,
+          key: command.key,
+          originLifetime: command.originLifetime,
+          entryGuard: command.entryGuard,
+          body: command.body,
+        },
+      });
+    } catch {
+      outcome = { kind: 'uncertain' };
+    } finally {
+      sourceBusy.current = false;
+    }
+    if (!sourceCommandIsCurrent(command) || episode !== generation.current) return;
     if (outcome.kind === 'saved') {
       acceptEntry(outcome.entry);
       setSourceCommand(null);
-      setSourceEditor(null);
-      setSourceReviewed(false);
-      setSourceNotice(null);
+      setSourceNotice('saved');
+      setSourceSavedBody(command.body);
+      setSourceSavedObservation(outcome.observation);
       setSourceConflictRevision(null);
       return;
     }
     if (outcome.kind === 'conflict') {
       setSourceCommand(null);
       setSourceNotice('conflict');
-      setSourceConflictRevision(command.revision);
-      setSourceReviewed(false);
+      setSourceConflictRevision(command.body.revision);
       void query.refetch();
       return;
     }
@@ -344,50 +531,94 @@ function PrivateEntryReview({
       return;
     }
     setSourceCommand(null);
-    if (outcome.kind === 'retired') {
+    if (outcome.kind === 'retired' || outcome.kind === 'signed-out') {
+      retired.current = true;
+      setRetirementKind(outcome.kind === 'retired' ? 'entry' : 'account');
       setPrivateAuthorityRetired(true);
       queryClient.removeQueries({ queryKey });
       setDraft(null);
-      setSourceEditor(null);
+      setReview(null);
+      clearSourceFlow();
+      return;
+    }
+    if (outcome.kind === 'unavailable') {
+      setSourceNotice('unavailable');
       return;
     }
     setSourceNotice(outcome.kind === 'denied' ? 'denied' : outcome.kind === 'missing' ? 'missing' : null);
   }
 
-  function submitSource(event: FormEvent, observation: PersonalEntryObservation) {
-    event.preventDefault();
-    if (!viewer || !csrfToken || !sourceReviewed || !writeAllowed || sourceCommand || sourceChoice === 'keep') return;
-    const privacy =
-      sourceChoice === 'cleared'
-        ? { op: 'clear' as const }
-        : sourceChoice === 'private'
-          ? { op: 'set' as const, value: { status: 'known' as const, meaning: 'private' as const } }
-          : sourceChoice === 'visible'
-            ? { op: 'set' as const, value: { status: 'known' as const, meaning: 'source_visible' as const } }
-            : sourceChoice === 'absent'
-              ? { op: 'set' as const, value: { status: 'absent' as const } }
-              : { op: 'set' as const, value: { status: 'unknown' as const } };
-    const command: PrivacyCommand = {
+  function submitSource(body: PersonalEntrySourceCorrection) {
+    if (
+      !currentResult() ||
+      !viewer ||
+      !csrfToken ||
+      result?.kind !== 'ready' ||
+      !entryGuard ||
+      !sourceBaseObservation ||
+      !writeAllowed ||
+      sourceCommand ||
+      sourceBusy.current ||
+      annotationCommand ||
+      annotationBusy.current ||
+      body.provider !== sourceBaseObservation.provider ||
+      body.recordId !== sourceBaseObservation.recordId ||
+      body.revision !== sourceBaseObservation.revision
+    )
+      return;
+    const command: SourceCorrectionCommand = Object.freeze({
       subjectId: subject.id,
-      viewer,
-      csrfToken,
+      viewer: result.viewer,
+      csrfToken: result.csrfToken,
+      credential: result.credential,
       key: crypto.randomUUID(),
-      provider: observation.provider,
-      recordId: observation.recordId,
-      revision: observation.revision,
-      privacy,
-    };
+      originLifetime: origin.lifetime,
+      entryGuard: Object.freeze({
+        incarnationId: entryGuard.incarnationId,
+        currentRevision: entryGuard.currentRevision,
+      }),
+      body,
+    });
     void sendSource(command);
+  }
+
+  function reviewLatestSource() {
+    if (!currentResult() || !entry || !sourceBaseObservation || !sourceEditor) return;
+    const [provider, recordId] = sourceEditor.split('\u0000');
+    const latest = entry.sourceObservations.find((item) => item.provider === provider && item.recordId === recordId);
+    if (!latest) return;
+    setSourceBaseObservation(latest);
+    setSourceNotice(null);
+    setSourceSavedBody(null);
+    setSourceSavedObservation(null);
+    setSourceConflictRevision(null);
+  }
+
+  function closeSource() {
+    if (!currentResult()) return;
+    clearSourceFlow();
+    sourceOpener.current?.focus();
   }
 
   const displayedSource = entry?.sourceObservations.find(
     (observation) => sourceEditor === observation.provider + '\u0000' + observation.recordId,
   );
 
-  if (privateAuthorityRetired) {
+  if (privateAuthorityRetired || sourceOwnerChanged || readExposureChanged || writeExposureChanged) {
     return (
       <p role="status" className="mt-4 text-sm text-muted-foreground">
-        {m.library_rich_entry_signed_out()}
+        {retirementKind === 'entry' || sourceOwnerChanged
+          ? m.library_rich_entry_source_retired()
+          : retirementKind === 'exposure' || readExposureChanged || writeExposureChanged
+            ? m.library_rich_entry_source_unavailable()
+            : m.library_rich_entry_signed_out()}
+      </p>
+    );
+  }
+  if (!origin.isCurrent()) {
+    return (
+      <p role="status" className="mt-4 text-sm text-muted-foreground">
+        {m.library_rich_entry_source_retired()}
       </p>
     );
   }
@@ -583,6 +814,7 @@ function PrivateEntryReview({
         <div>
           <h3 className="font-semibold">{m.library_rich_entry_sources()}</h3>
           <p className="text-sm text-muted-foreground">{m.library_rich_entry_sources_help()}</p>
+          <p className="text-sm text-muted-foreground">{m.library_rich_entry_timestamp_is_source_evidence()}</p>
         </div>
         {entry.sourceObservations.length === 0 ? (
           <p>{m.library_rich_entry_no_sources()}</p>
@@ -622,107 +854,61 @@ function PrivateEntryReview({
                     type="button"
                     className="mt-3 min-h-11 rounded-md border px-3"
                     disabled={!writeAllowed || annotationCommand !== null || sourceCommand !== null}
-                    onClick={() => openSource(observation)}
+                    onClick={(event) => openSource(observation, event)}
                   >
-                    {m.library_rich_entry_edit_privacy()}
+                    {m.library_rich_entry_edit_source_facts()}
                   </button>
-                  {open ? (
-                    <form
-                      className="mt-3 space-y-3 border-t pt-3"
-                      onSubmit={(event) => submitSource(event, observation)}
-                    >
-                      <label className="block">
-                        <span className="mb-1 block text-sm font-medium">{m.library_rich_entry_privacy()}</span>
-                        <select
-                          className="min-h-11 w-full rounded-md border bg-background px-3"
-                          value={sourceChoice}
-                          disabled={sourceCommand !== null}
-                          onChange={(event) => {
-                            setSourceChoice(event.currentTarget.value);
-                            setSourceReviewed(false);
-                          }}
-                        >
-                          <option value="keep">{m.library_rich_entry_keep_privacy()}</option>
-                          <option value="private">{m.library_rich_source_private()}</option>
-                          <option value="visible">{m.library_rich_source_visible()}</option>
-                          <option value="unknown">{m.library_rich_source_unknown()}</option>
-                          <option value="absent">{m.library_rich_source_not_supplied()}</option>
-                          <option value="cleared">{m.library_rich_source_cleared()}</option>
-                        </select>
-                      </label>
-                      <label className="flex min-h-11 items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={sourceReviewed}
-                          onChange={(event) => setSourceReviewed(event.currentTarget.checked)}
-                        />
-                        <span>{m.library_rich_entry_confirm_source()}</span>
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="submit"
-                          className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
-                          disabled={
-                            !sourceReviewed || !writeAllowed || sourceCommand !== null || sourceChoice === 'keep'
-                          }
-                        >
-                          {m.library_rich_entry_save_privacy()}
-                        </button>
-                        <button
-                          type="button"
-                          className="min-h-11 rounded-md border px-3"
-                          onClick={() => setSourceEditor(null)}
-                        >
-                          {m.library_rich_entry_cancel()}
-                        </button>
-                        {sourceCommand ? (
-                          <button
-                            type="button"
-                            className="min-h-11 rounded-md border px-3"
-                            onClick={() => void sendSource(sourceCommand)}
-                          >
-                            {m.library_rich_entry_retry()}
-                          </button>
-                        ) : null}
-                      </div>
-                      {sourceNotice === 'uncertain' ? <p role="status">{m.library_rich_entry_uncertain()}</p> : null}
-                      {sourceNotice === 'denied' ? <p role="status">{m.library_rich_entry_denied()}</p> : null}
-                      {sourceNotice === 'missing' ? <p role="status">{m.library_rich_entry_missing()}</p> : null}
-                      {sourceNotice === 'conflict' ? (
-                        <div className="space-y-2" role="status">
-                          <p>{m.library_rich_entry_source_conflict()}</p>
-                          {query.isFetching ? (
-                            <p>{m.library_rich_entry_refreshing()}</p>
-                          ) : displayedSource && displayedSource.revision !== sourceConflictRevision ? (
-                            <button
-                              type="button"
-                              className="min-h-11 rounded-md border px-3"
-                              onClick={() => {
-                                setSourceConflictRevision(null);
-                                setSourceNotice(null);
-                                setSourceReviewed(false);
-                              }}
-                            >
-                              {m.library_rich_entry_review_latest()}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="min-h-11 rounded-md border px-3"
-                              onClick={() => void query.refetch()}
-                            >
-                              {m.library_selection_retry()}
-                            </button>
-                          )}
-                        </div>
-                      ) : null}
-                    </form>
+                  {open && sourceBaseObservation ? (
+                    <SourceCorrectionEditor
+                      key={`${subject.id}:${viewer}:${origin.lifetime}:${observation.provider}:${observation.recordId}`}
+                      baseline={sourceBaseObservation}
+                      current={displayedSource}
+                      notice={sourceNotice}
+                      conflictRevision={sourceConflictRevision}
+                      pending={sourceCommand !== null}
+                      savedBody={sourceSavedBody}
+                      savedObservation={sourceSavedObservation}
+                      disabled={!writeAllowed || annotationCommand !== null || annotationBusy.current}
+                      onSubmit={submitSource}
+                      onRetry={() => sourceCommand && void sendSource(sourceCommand)}
+                      onRefresh={() => void query.refetch()}
+                      onReviewLatest={reviewLatestSource}
+                      onCancel={closeSource}
+                      onEdit={() => {
+                        setSourceNotice(null);
+                        setSourceSavedBody(null);
+                        setSourceSavedObservation(null);
+                      }}
+                    />
                   ) : null}
                 </li>
               );
             })}
           </ul>
         )}
+        {sourceEditor && sourceBaseObservation && !displayedSource ? (
+          <SourceCorrectionEditor
+            key={`${subject.id}:${viewer}:${origin.lifetime}:${sourceBaseObservation.provider}:${sourceBaseObservation.recordId}`}
+            baseline={sourceBaseObservation}
+            current={null}
+            notice={sourceNotice}
+            conflictRevision={sourceConflictRevision}
+            pending={sourceCommand !== null}
+            savedBody={sourceSavedBody}
+            savedObservation={sourceSavedObservation}
+            disabled={!writeAllowed || annotationCommand !== null || annotationBusy.current}
+            onSubmit={submitSource}
+            onRetry={() => sourceCommand && void sendSource(sourceCommand)}
+            onRefresh={() => void query.refetch()}
+            onReviewLatest={reviewLatestSource}
+            onCancel={closeSource}
+            onEdit={() => {
+              setSourceNotice(null);
+              setSourceSavedBody(null);
+              setSourceSavedObservation(null);
+            }}
+          />
+        ) : null}
       </div>
 
       <div className="border-t pt-4">

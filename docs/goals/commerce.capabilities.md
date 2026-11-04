@@ -1434,3 +1434,7 @@ Driver contract: [specs/viewer-actions-driver.ts](../../specs/viewer-actions-dri
 - `answers keep request order and are sorted and unique within a resource`
 - `two personas never see each other's answers`
 - `statements and rows stay constant as unrelated grants resources and history grow`
+
+## private-entry-source-correction
+
+Source correction starts each field at Preserve; setting or clearing a field requires an explicit per-field choice and review of the complete before/after set.
