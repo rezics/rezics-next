@@ -46,13 +46,21 @@ export function ProfileFeedback({
   showReaderReload?: boolean;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
-  const waiting = usePreferenceRetry(state.failure);
+  const commandWaiting = usePreferenceRetry(undefined, state.commandRetryAt);
+  const readWaiting = usePreferenceRetry(undefined, state.readRetryAt);
   const canRead = readable ?? writable;
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const denied = state.readAuthority === 'denied';
   const unavailable = state.readStatus === 'failed' || state.phase === 'unavailable' || denied;
   const failed = ['uncertain', 'refused', 'review'].includes(state.phase) && state.scope === scope;
   const uncertainScope = state.attempt?.scope ?? state.scope;
+  const commandWaitLabel = state.attempt
+    ? uncertainScope === 'views'
+      ? m.settings_public_activity_retry()
+      : m.settings_profile_retry_save()
+    : state.scope === 'views'
+      ? m.settings_profile_save_activity()
+      : m.settings_profile_save();
   const uncertain =
     uncertainScope === 'views' ? m.settings_public_activity_unknown() : m.settings_profile_save_unknown();
   return (
@@ -65,6 +73,16 @@ export function ProfileFeedback({
         </p>
       ) : null}
       {state.phase === 'saved' && state.scope === scope ? <p role="status">{m.settings_saved()}</p> : null}
+      {commandWaiting ? (
+        <p role="status">
+          {commandWaitLabel}: {m.settings_retry_wait()}
+        </p>
+      ) : null}
+      {readWaiting ? (
+        <p role="status">
+          {m.settings_profile_reload_current()}: {m.settings_retry_wait()}
+        </p>
+      ) : null}
       {unavailable || failed ? (
         <Alert
           variant="destructive"
@@ -94,14 +112,13 @@ export function ProfileFeedback({
                     : m.settings_profile_review_needed()}
             </p>
             {state.attempt && (unavailable || state.failure) ? <p>{uncertain}</p> : null}
-            {waiting ? <p>{m.settings_retry_wait()}</p> : null}
             <div className="flex flex-wrap gap-2">
               {state.attempt ? (
                 <Button
                   type="button"
                   variant="outline"
                   className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                  disabled={!writable || busy || waiting}
+                  disabled={!writable || busy || commandWaiting}
                   onClick={() => void editor.retry()}
                 >
                   {uncertainScope === 'views' ? m.settings_public_activity_retry() : m.settings_profile_retry_save()}
@@ -111,7 +128,7 @@ export function ProfileFeedback({
                 type="button"
                 variant="outline"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                disabled={!canRead || busy || (writable && waiting)}
+                disabled={!canRead || busy || readWaiting}
                 onClick={() => void editor.reload()}
               >
                 {m.settings_profile_reload_current()}
@@ -136,7 +153,7 @@ export function ProfileFeedback({
           type="button"
           variant="outline"
           className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-          disabled={busy}
+          disabled={busy || readWaiting}
           onClick={() => void editor.reload()}
         >
           {m.settings_profile_reload_current()}
@@ -179,7 +196,8 @@ export function ProfileCard({
   avatarResume?: AvatarResume;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
-  const waiting = usePreferenceRetry(state.failure);
+  const commandWaiting = usePreferenceRetry(undefined, state.commandRetryAt);
+  const readWaiting = usePreferenceRetry(undefined, state.readRetryAt);
   const canRead = readable ?? writable;
   const profile = canRead && state.readAuthority === 'allowed' ? state.draft : null;
   const ids = useId();
@@ -387,7 +405,7 @@ export function ProfileCard({
               <Button
                 type="submit"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                disabled={closed || busy || uploading || !!state.attempt || !changed}
+                disabled={closed || busy || uploading || !!state.attempt || commandWaiting || !changed}
               >
                 {state.phase === 'saving' && state.scope === 'profile'
                   ? m.settings_saving()
@@ -397,7 +415,7 @@ export function ProfileCard({
                 type="button"
                 variant="outline"
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                disabled={!canRead || busy || (writable && waiting)}
+                disabled={!canRead || busy || readWaiting}
                 onClick={() => void editor.reload()}
               >
                 {m.settings_profile_reload_current()}

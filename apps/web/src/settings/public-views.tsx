@@ -25,7 +25,7 @@ export function PublicViewsCard({
   readable?: boolean;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
-  const waiting = usePreferenceRetry(state.failure);
+  const commandWaiting = usePreferenceRetry(undefined, state.commandRetryAt);
   const canRead = readable ?? writable;
   const profile = canRead && state.readAuthority === 'allowed' ? state.draft : null;
   const ids = useId();
@@ -100,7 +100,7 @@ export function PublicViewsCard({
                 type="button"
                 variant="outline"
                 className="mt-2 h-auto min-h-11 w-full max-w-sm justify-start whitespace-normal break-words py-2 text-left"
-                disabled={closed || !!state.attempt || waiting}
+                disabled={closed || !!state.attempt || commandWaiting}
                 onClick={() => void editor.submit('views')}
               >
                 {m.settings_profile_save_activity()}
