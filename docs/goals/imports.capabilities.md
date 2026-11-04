@@ -770,7 +770,7 @@ not additional check requests.
   same-title extras stay excluded; ISBN does not invent an edition; missing
   volumes and missing author-role bindings stay gaps. Refresh keeps the same
   book, volume and person identities. Decision: type 1 Book/BookSeries dispatch
-  uses the current `bangumi@11` converter, preserving Book names, TVAnime
+  uses the current `bangumi@12` converter, preserving Book names, TVAnime
   original-run, Game player-count and work evidence while adding TVAnime official
   websites. Decision: selected Book Girl
   records join the common showcase manifest; book review gaps stay in the seed
@@ -1311,7 +1311,7 @@ explicit `0` is a stated zero.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-The original-run mapping was introduced in `bangumi@8`; current `bangumi@11`
+The original-run mapping was introduced in `bangumi@8`; current `bangumi@12`
 continues to convert pinned TVAnime `放送开始`, `播放结束` and `话数` through
 ordinary Bangumi registration and selected-family rows, preserving the
 `bangumi@9` player-count mapping and earlier name extraction. Native read is on
@@ -1339,7 +1339,7 @@ the whole occurrence.
 Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
 unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
 
-The player-count mapping was introduced in `bangumi@9`; current `bangumi@11`
+The player-count mapping was introduced in `bangumi@9`; current `bangumi@12`
 continues to convert pinned Game `游玩人数` through ordinary Bangumi
 registration and selected-family rows, preserving the `bangumi@8` original-run
 mapping. Native read is on the acknowledged VideoGame.
@@ -1428,9 +1428,9 @@ The local task reuses Accounts' development persona and private seed wiring, the
 
 Decision: accept one literal HTTP(S) `官方网站` value per field occurrence. Exact URL duplicates coalesce; distinct addresses remain separate candidates under the single-valued released property. Do not normalize hosts or split lists.
 
-The ordinary converter advances from the integrated `bangumi@10` work-evidence
-mapping to `bangumi@11`, preserving current TVAnime names, original-run facts,
-Game player-count and work-evidence mappings.
+The ordinary converter advances from the integrated `bangumi@11` Game-name
+mapping to `bangumi@12`, preserving current TVAnime and Book names, original-run
+facts, Game player-count and work-evidence mappings.
 Ordinary registration and selected-family seeding share the bounded profile
 extractor. Only the exact type-2 `{{Infobox animanga/TVAnime` profile is
 eligible. Each supported URL becomes a cited `schema:url` proposal whose
@@ -1486,8 +1486,8 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
 
 Decision: see [Bangumi TVAnime work evidence](../../packages/conversion/README.md#bangumi-tv-anime-work-evidence).
 
-Ordinary conversion uses `bangumi@11`. The selected-family Bangumi caller uses
-`cross-media-entities@11+bangumi@11` so source refresh replays the new mapping
+Ordinary conversion uses `bangumi@12`. The selected-family Bangumi caller uses
+`cross-media-entities@11+bangumi@12` so source refresh replays the new mapping
 under an honest revision without revising the VNDB adapter. Only the exact
 TVAnime `链接` and `Copyright` fields are admitted. Descriptive destinations
 retain their URL spelling and cite the Bangumi subject record; copyright
@@ -1572,7 +1572,7 @@ The selected default Bangumi seed already elects character IDs through the selec
 ## Bangumi Game subject names
 
 Decision: scalar Game `中文名` supplies `zh`; scalar or single-level bullet `别名` stays `und`.
-Ordinary conversion uses `bangumi@11`; selected-family registration uses `cross-media-entities@11+bangumi@11`.
+Ordinary conversion uses `bangumi@12`; selected-family registration uses `cross-media-entities@11+bangumi@12`.
 
 The pinned `{{Infobox Game` grammar is distinct from TVAnime. Type 4 remains
 `schema:VideoGame`; admitted values become cited `schema:name` or

@@ -2252,7 +2252,7 @@ volume 26) from the pinned dump relation check, walks only 1002/1003 novel
 members, and delivers authors through the existing creator-credit helper.
 Steins;Gate remains the required VN/anime showcase; this book family is a
 separate actual source family. Decision: type 1 Book/BookSeries dispatch uses
-the current `bangumi@11` converter, preserving Book names, TVAnime original-run
+the current `bangumi@12` converter, preserving Book names, TVAnime original-run
 and Game player-count while adding TVAnime work evidence. Decision: one Bangumi subject stays one
 identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
 selected Book Girl records join the common showcase manifest; book review
@@ -2284,11 +2284,11 @@ for these source Concepts.
 
 ### Bangumi TVAnime bounded profile conversion
 
-Current `bangumi@11` retains the exact-template TVAnime names, original-run and
+Current `bangumi@12` retains the exact-template TVAnime names, original-run and
 work-evidence projections while adding the official website mapping. Ordinary
 registration and selected-family rows share the bounded pure conversion; the
 selected-family registration uses
-`cross-media-entities@11+bangumi@11`. Existing source metadata admission,
+`cross-media-entities@11+bangumi@12`. Existing source metadata admission,
 citations, journal, independent review/adoption, current-read flow and exact
 Bangumi alias/key remain in use. No additional publisher or identity lookup is
 involved. A source without a provider revision remains `unversioned`; semantic
@@ -2309,7 +2309,7 @@ digests still include the bounded infobox projection.
 ### Bangumi television original run
 
 Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@11`,
+`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@12`,
 retaining the original-run mapping alongside newer TVAnime evidence. Selected-family seed uses that same converter; this
 journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
 schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
@@ -2329,9 +2329,9 @@ date is not completion or access authority.
 ### Bangumi Game player count
 
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
-`游玩人数` on type 4 through current `bangumi@11`, retaining original-run and
+`游玩人数` on type 4 through current `bangumi@12`, retaining original-run and
 work-evidence mappings. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@11+bangumi@11` registration; this journey adds no
+existing combined `cross-media-entities@11+bangumi@12` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
@@ -2551,8 +2551,8 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 
 ### Bangumi TVAnime official websites
 
-The official-website projection runs through ordinary `bangumi@11` and the
-selected-family `cross-media-entities@11+bangumi@11` registration. It recognizes
+The official-website projection runs through ordinary `bangumi@12` and the
+selected-family `cross-media-entities@11+bangumi@12` registration. It recognizes
 only a literal `官方网站` value from the exact pinned type-2 TVAnime template.
 The URL fact is distinct from its `schema:url` reference to the exact Bangumi
 subject record. Source spelling, path, query and fragment are preserved. A
@@ -2616,7 +2616,7 @@ aliases use `und`. A malformed field is withheld as a whole while independent
 source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@11+bangumi@11` registration, record bindings,
+uses its existing `cross-media-entities@11+bangumi@12` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh
@@ -2639,14 +2639,14 @@ Decision: trim only horizontal template/list-boundary whitespace; `链接` remai
 
 Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` are admitted. Descriptive destinations preserve their source spelling and cite the Bangumi subject record; notices remain verbatim `schema:copyrightNotice` values and grant no licence or media permission. Malformed neighbors are bounded, source-free omissions; summary and cover rights remain separate.
 
-- Touches: ordinary `bangumi@11` and selected-family `cross-media-entities@11+bangumi@11` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
+- Touches: ordinary `bangumi@12` and selected-family `cross-media-entities@11+bangumi@12` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
 - Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
 - Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.
 
 ### Bangumi Game-template subject names
 
 Ordinary Bangumi registration and selected-family Game records use the exact
-`{{Infobox Game` grammar through the current `bangumi@11` converter. Type 4
+`{{Infobox Game` grammar through the current `bangumi@12` converter. Type 4
 remains `schema:VideoGame`; scalar `中文名` supplies `zh`, and scalar or
 single-level bullet `别名` stays `und`. Top-level labels keep their existing
 meaning. Unsupported field occurrences are withheld atomically while separate

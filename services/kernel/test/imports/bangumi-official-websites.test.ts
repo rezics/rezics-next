@@ -58,7 +58,7 @@ test('ordinary Bangumi imports review and adopt an exact TVAnime website on its 
       source: 'bangumi',
       external_id: externalId,
       record_revision: 'unversioned',
-      converter_revision: 'bangumi@11',
+      converter_revision: 'bangumi@12',
     });
     expect(selected.statement.references).toEqual([
       { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: sourceUrl } }] },

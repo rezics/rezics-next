@@ -975,7 +975,10 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 
 ## Bangumi TVAnime subject profiles
 
-Current `bangumi@11` shares one bounded infobox scan for the exact pinned
+Decision: `bangumi@12` adds official websites to the integrated `bangumi@11`
+Game-name mapping; the combined registration keeps `cross-media-entities@11`.
+
+Current `bangumi@12` shares one bounded infobox scan for the exact pinned
 `{{Infobox animanga/TVAnime` template on selected type-2 `schema:TVSeries`
 records. It preserves the existing cited name, original-run and work-evidence
 mappings while adding the explicit `官方网站` URL fact. The top-level `name` and
@@ -1073,15 +1076,15 @@ identity; the connected native acceptance is
 
 ## Bangumi book grain
 
-The current `bangumi@11` converter dispatches type 1 Book versus BookSeries from
+The current `bangumi@12` converter dispatches type 1 Book versus BookSeries from
 the source series flag, novel platform and wiki template. Comic/manga stays
 generic Book so a novel family is never filled with manga. Type 1 cites a
 parseable `date` as `schema:datePublished` on Book or BookSeries. ISBN,
 publisher and pages stay off the work as withheld edition assertions; volume
 counts stay counts.
-Decision: type 1 Book/BookSeries dispatch remains in `bangumi@11`, preserving
+Decision: type 1 Book/BookSeries dispatch remains in `bangumi@12`, preserving
 TVAnime names, Book-template names, original-run, Game player-count and work
-evidence and Game names while the same honest revision adds official websites. One Bangumi subject stays one
+evidence and Game names while the new revision adds official websites. One Bangumi subject stays one
 identity; ISBN does not create a `bf:Instance`.
 
 ## Bangumi TVAnime work evidence
@@ -1091,7 +1094,7 @@ Decision: plain TVAnime `链接` values become cited `wdt:P973` facts;
 only horizontal template/list boundary whitespace.
 
 `bangumi@10` introduced the exact pinned TVAnime `链接` and `Copyright`
-mapping, retained by current `bangumi@11`. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
+mapping, retained by current `bangumi@12`. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
 source spelling and URL bytes are kept, and the URL is never a source citation
 or identity claim. A plain notice becomes `schema:copyrightNotice` with its
 source text preserved. Both facts cite only the exact Bangumi subject record.
@@ -1106,8 +1109,8 @@ diagnostics. The exact selected TVSeries schema bounds both URLs and notices to
 descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
-- Touches: ordinary `bangumi@11` and selected-family
-  `cross-media-entities@11+bangumi@11` publication for one TVAnime source record,
+- Touches: ordinary `bangumi@12` and selected-family
+  `cross-media-entities@11+bangumi@12` publication for one TVAnime source record,
   its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights

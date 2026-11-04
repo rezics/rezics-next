@@ -26,13 +26,13 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@11';
+export const converter_revision = 'bangumi@12';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Thirteen projected top-level fields; at most 95 commands, one cover intent,
-// and one citation envelope per statement with at most two URL parts.
+// Thirteen projected top-level fields; at most 95 commands, 24 distinct Game
+// names, one cover intent, and one citation envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
   id: number;
