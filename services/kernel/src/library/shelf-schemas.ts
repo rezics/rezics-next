@@ -59,6 +59,7 @@ export const shelfEntrySchema = embedded(
       updatedAt: text,
       lastActivityAt: text,
       finishedAt: nullable,
+      titleCoverage: t.Optional(t.Union([t.Literal('labelled'), t.Literal('missing')])),
       personalScore: t.Optional(t.Union([t.Integer({ minimum: 0, maximum: 4096 }), t.Null()])),
       priority: t.Optional(t.Union([t.Integer({ minimum: 1, maximum: 100 }), t.Null()])),
       activeProgressSession: t.Union([shelfSessionSchema, t.Null()]),
@@ -104,3 +105,5 @@ export const shelfScorePreparationSchema = t.Object(
   },
   closed,
 );
+
+export const shelfTitlePreparationSchema = shelfScorePreparationSchema;

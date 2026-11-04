@@ -251,6 +251,7 @@ export function SortControls({
           <option value="lastActivity">{m.library_sort_activity()}</option>
           <option value="createdAt">{m.library_sort_created()}</option>
           <option value="finishedAt">{m.library_sort_finished()}</option>
+          <option value="title">{m.library_column_title()}</option>
           <option value="personalScore" disabled>
             {m.library_score_order()}
           </option>
@@ -270,8 +271,8 @@ export function SortControls({
           }}
           className="min-h-11 max-w-full rounded-md border bg-background p-2"
         >
-          <option value="desc">{scoreOrder ? m.library_score_highest() : m.library_sort_newest()}</option>
-          <option value="asc">{scoreOrder ? m.library_score_lowest() : m.library_sort_oldest()}</option>
+          <option value="desc">{scoreOrder ? m.library_score_highest() : selection.orderBy === 'title' ? 'Z–A' : m.library_sort_newest()}</option>
+          <option value="asc">{scoreOrder ? m.library_score_lowest() : selection.orderBy === 'title' ? 'A–Z' : m.library_sort_oldest()}</option>
         </select>
       </label>
       <Button type="submit" variant="outline" className="min-h-11">

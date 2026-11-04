@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { ShelfTitleSource } from './shelf-title-source.ts';
 import type { PersonalScoreCurrentness } from '../rating/personal-score.ts';
 import { createShelfTypeKeys as nativeShelfTypeKeys, type ShelfTypeKeysOptions } from './shelf-type-keys.ts';
 import { createShelfCounters as nativeShelfCounters } from './shelf-counters.ts';
@@ -42,7 +43,7 @@ export function isLegacyEntryState(value: string): value is LegacyEntryState {
 export function isShelfEntryState(value: string): boolean {
   return /^[a-z][a-z0-9_.-]{0,63}$(?![\s\S])/.test(value);
 }
-export const SHELF_ORDERS = ['lastActivity', 'finishedAt', 'createdAt', 'personalScore', 'priority'] as const;
+export const SHELF_ORDERS = ['lastActivity', 'finishedAt', 'createdAt', 'personalScore', 'priority', 'title'] as const;
 export const SHELF_DIRECTIONS = ['desc', 'asc'] as const;
 export type ShelfOrder = (typeof SHELF_ORDERS)[number];
 export type ShelfDirection = (typeof SHELF_DIRECTIONS)[number];
@@ -67,6 +68,8 @@ export type ShelfQuery = {
   direction: ShelfDirection;
   limit: number;
   cursor?: string;
+  /** Internal native binding, resolved only after currentness admission. */
+  titleGeneration?: string;
 };
 
 /**
@@ -93,6 +96,8 @@ export type ShelfEntry = {
   activeProgressSession: ShelfSession | null;
   /** Native standard-question units; present only for personalScore order. */
   personalScore?: number | null;
+  /** Explicit missing-label coverage; present only in native title order. */
+  titleCoverage?: 'labelled' | 'missing';
   /** Owner-local annotation rank; present only for priority order. Null is explicitly unranked. */
   priority?: number | null;
 };
@@ -252,9 +257,9 @@ export function createShelfTypeKeys(options?: ShelfTypeKeysOptions): ShelfTypeKe
 // --- Reader ---------------------------------------------------------------------------------------------------
 
 /** One bounded statement set: at most `limit + 1` entry rows and one active-session probe per returned entry. */
-export type ShelfRows = { entries: ShelfEntry[]; more: boolean };
+export type ShelfRows = { entries: ShelfEntry[]; more: boolean; after?: ShelfSeek };
 /** Date adapters return candidates before the independent active-session enrichment. */
-export type ShelfDateRows = { entries: Omit<ShelfEntry, 'activeProgressSession'>[]; more: boolean };
+export type ShelfDateRows = { entries: Omit<ShelfEntry, 'activeProgressSession'>[]; more: boolean; after?: ShelfSeek };
 export interface ShelfDateReader {
   page(
     client: Client,
@@ -322,6 +327,7 @@ export type ShelfReads = {
 
 export type ShelfReadDependencies = {
   scoreCurrentness?: PersonalScoreCurrentness;
+  titleSource?: ShelfTitleSource;
   pool: Pool;
   access: Access;
   tokens: KeyRing;

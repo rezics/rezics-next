@@ -624,7 +624,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
     <ShelfTable
       rows={tableRows}
       columns={columns}
-      {...(controls.sort && controls.sort.orderBy !== 'personalScore'
+      {...(controls.sort && controls.sort.orderBy !== 'personalScore' && controls.sort.orderBy !== 'title'
         ? {
             sort: {
               field:

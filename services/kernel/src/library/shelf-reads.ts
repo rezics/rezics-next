@@ -31,6 +31,8 @@ import {
   type ShelfSeek,
 } from './shelf-contract.ts';
 import { shelfScoreBinding, validShelfScoreKey } from './shelf-score.ts';
+import { shelfTitleBinding, validShelfTitleSeek } from './shelf-title-reader.ts';
+import { currentShelfTitleBasis, titleLanguages } from './shelf-title-source.ts';
 import { validShelfPriorityKey } from './entry-priority-page.ts';
 import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 
@@ -246,8 +248,8 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
 
   return {
     async listShelf(actor, raw) {
-      owner(actor, true);
-      const value = input(raw, ['state', 'type', 'orderBy', 'direction', 'limit', 'cursor']);
+      const account = owner(actor, true);
+      const value = input(raw, ['state', 'type', 'orderBy', 'direction', 'limit', 'cursor', 'languages']);
       if (
         !SHELF_ORDERS.includes(value.orderBy as ShelfOrder) ||
         (value.direction !== undefined && !SHELF_DIRECTIONS.includes(value.direction as 'asc' | 'desc')) ||
@@ -258,7 +260,15 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         throw new ProblemError('forbidden');
       const selected = page(value);
       const type = publicType(value.type);
-      return snapshot(actor, true, async (client, route, accountId, epoch, generation) => {
+      let languages: string[] = [];
+      try { languages = titleLanguages(value.languages ?? []); }
+      catch { throw new ProblemError('invalid_argument'); }
+      const titleOwner = { route: routeOf(account.accountId)!, accountId: account.accountId };
+      // Authorize natively, release that snapshot, then acquire complete foreign observations.
+      if (value.orderBy === 'title') await snapshot(actor, true, async () => null);
+      const titleBasis = value.orderBy === 'title'
+        ? await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account) : null;
+      const pageResult = await snapshot(actor, true, async (client, route, accountId, epoch, generation) => {
         const typeId = await resolve(client, route, accountId, type);
         const query = normalizeShelfQuery({
           ...selected,
@@ -272,7 +282,12 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
           query.orderBy === 'personalScore'
             ? await shelfScoreBinding(client, route, accountId, deps.scoreCurrentness)
             : null;
-        const binding = { ...base, query: { ...base.query, ...generation, ...score?.binding } };
+        const title = query.orderBy === 'title'
+          ? await shelfTitleBinding(client, route, accountId, languages, titleBasis!) : null;
+        if (title) query.titleGeneration = title.titleGeneration;
+        const binding = { ...base, query: { ...base.query, ...generation, ...score?.binding, ...title,
+          ...(title ? { accountLifetime: account.authnEpoch } : {}),
+        } };
         const keys = await decode(binding, selected.cursor, epoch);
         let after: ShelfSeek | null = null;
         if (keys !== null) {
@@ -281,7 +296,9 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
             typeof keys[0] !== 'string' ||
             typeof keys[1] !== 'string' ||
             routeOf(keys[1]) === null ||
-            !(query.orderBy === 'personalScore'
+            !(query.orderBy === 'title'
+              ? validShelfTitleSeek(keys[0])
+              : query.orderBy === 'personalScore'
               ? validShelfScoreKey(keys[0])
               : query.orderBy === 'priority'
                 ? validShelfPriorityKey(keys[0])
@@ -292,7 +309,11 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
         }
         const result = await deps.pageReader.page(client, route, accountId, query, after);
         const last = result.entries.at(-1);
-        const key =
+        if (query.orderBy === 'title' && last &&
+          (!result.after || !validShelfTitleSeek(result.after.key) ||
+            result.entries.some((entry) => entry.titleCoverage === undefined)))
+          throw new ShelfReadUnavailableError('native title page coverage and seek');
+        const key = query.orderBy === 'title' ? result.after?.key : (
           last &&
           (query.orderBy === 'personalScore'
             ? last.personalScore === null
@@ -306,7 +327,7 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
                 ? last.lastActivityAt
                 : query.orderBy === 'createdAt'
                   ? last.createdAt
-                  : (last.finishedAt ?? ''));
+                  : (last.finishedAt ?? '')));
         return {
           entries: result.entries,
           ...(score ? { scoreQuestion: score.question } : {}),
@@ -316,6 +337,9 @@ export function createShelfReads(deps: ShelfReadDependencies): ShelfReads {
               : null,
         };
       });
+      if (titleBasis !== null && titleBasis !== await currentShelfTitleBasis(deps.titleSource, titleOwner, languages, account))
+        throw new ShelfReadUnavailableError('unchanged current title/disclosure basis');
+      return pageResult;
     },
     async summary(actor, raw) {
       owner(actor, false);
