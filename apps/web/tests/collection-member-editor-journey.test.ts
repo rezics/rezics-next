@@ -175,8 +175,8 @@ test('Curator can add and edit Collection members without an always-open form wa
           build.onResolve({ filter: /^@tanstack\/react-start(?:\/server)?$|^cloudflare:workers$/ }, () => ({
             path: boundary,
           }));
-          build.onResolve({ filter: /^react\/jsx-(?:dev-)?runtime$/ }, () => ({
-            path: Bun.resolveSync('react/jsx-dev-runtime', app),
+          build.onResolve({ filter: /^react\/jsx-(?:dev-)?runtime$/ }, ({ path }) => ({
+            path: Bun.resolveSync(path, app),
           }));
         },
       },
