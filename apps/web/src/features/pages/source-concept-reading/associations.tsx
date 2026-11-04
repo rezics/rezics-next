@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
@@ -247,4 +247,39 @@ export function ConceptAliases({
       ))}
     </ul>
   );
+}
+
+/** Scheme selectors also contain native association targets; each required reveal precedes their mounting. */
+export function ConceptWorksDisclosure({
+  read,
+  reader,
+  locale,
+  children,
+}: {
+  read: Extract<ConceptRead, { ok: true }>;
+  reader: Reader;
+  locale: string;
+  children: (read: Extract<ConceptRead, { ok: true }>) => ReactNode;
+}) {
+  const o = { locale: locale as never };
+  const presentation = useMemo(
+    () => ({
+      ...read,
+      schemes: read.schemes.map((scheme) => ({
+        ...scheme,
+        label: scheme.label || m.concept_explore_scheme_withheld({}, o),
+      })),
+    }),
+    [read, locale],
+  );
+  let works = children(presentation);
+  for (const statement of [...(read.public.subject.statements[conceptRequested.inScheme] ?? [])].reverse()) {
+    if (spoilerLevel(statement) <= reader.spoilerLevel) continue;
+    works = (
+      <SpoilerGate key={statement.id} label={m.subject_spoiler_show({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
+        {works}
+      </SpoilerGate>
+    );
+  }
+  return works;
 }
