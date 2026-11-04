@@ -10,8 +10,8 @@ import { readCandidateDisclosure } from '../semantic/disclosure.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { MAX_DOCUMENT_BYTES } from './document.ts';
 import { tupleRoute } from './imported-contract.ts';
-import { readImportedField, type ImportedFieldView } from './imported-fields.ts';
-import { readAuthoredField, type AuthoredFieldView } from './authored-fields.ts';
+import { readImportedField, readImportedFieldBounded, type ImportedFieldView } from './imported-fields.ts';
+import { readAuthoredField, readAuthoredFieldBounded, type AuthoredFieldView } from './authored-fields.ts';
 import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { readFences } from './source-fences.ts';
 
@@ -138,15 +138,29 @@ export async function readDocument(
   dependencies: DocumentReadDependencies,
   id: string,
   context: ReadContext,
+  maxSourceBytes?: number,
 ): Promise<{ document: DocumentView; anchors: readonly AnchoredPosition[] } | null> {
   const route = routeOf(id);
-  if (route === null || !Number.isFinite(context.deadline) || Date.now() >= context.deadline) return null;
+  if (
+    route === null ||
+    !Number.isFinite(context.deadline) ||
+    Date.now() >= context.deadline ||
+    (maxSourceBytes !== undefined &&
+      (!Number.isSafeInteger(maxSourceBytes) || maxSourceBytes < 1 || maxSourceBytes > MAX_DOCUMENT_BYTES))
+  )
+    return null;
   const atHome = <T>(home: number, work: (client: AccessClient) => Promise<T>) =>
     snapshot(dependencies, home, context, work);
   const readReference = async (client: AccessClient): Promise<DocumentReference | null> => {
-    const imported = await readImportedField(client, route, id);
+    const imported =
+      maxSourceBytes === undefined
+        ? await readImportedField(client, route, id)
+        : await readImportedFieldBounded(client, route, id, maxSourceBytes);
     if (imported) return { origin: 'import', row: imported };
-    const authored = await readAuthoredField(client, route, id);
+    const authored =
+      maxSourceBytes === undefined
+        ? await readAuthoredField(client, route, id)
+        : await readAuthoredFieldBounded(client, route, id, maxSourceBytes);
     return authored ? { origin: 'account', row: authored } : null;
   };
   try {

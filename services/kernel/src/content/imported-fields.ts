@@ -13,6 +13,7 @@ import {
 } from './imported-contract.ts';
 import append from './append-imported-field.sql';
 import read from './read-imported-field.sql';
+import readBounded from './read-imported-field-bounded.sql';
 
 export type ImportedFieldResult = Readonly<{ id: string; digest: string }>;
 export type ImportedFieldView = ImportedFieldResult &
@@ -25,6 +26,8 @@ export type ImportedFieldView = ImportedFieldResult &
     language: string;
     availability: 'available' | 'erased';
     body: Buffer | null;
+    /** True only for bounded reads whose bytes were withheld before returning to the caller. */
+    bodyTooLarge?: boolean;
   }>;
 
 export type StoredImportedField = ImportedFieldView;
@@ -175,6 +178,33 @@ export async function readImportedField(
     candidate: row.candidate,
     revision: row.revision,
     body: row.body === null ? null : Buffer.from(row.body),
+    availability: row.availability as ImportedFieldView['availability'],
+    source: row.source as ImportedSource,
+    rights: row.rights as Rights,
+    language: row.language,
+  };
+}
+
+/** Exact Content-owner read that withholds an oversized body in SQL before it reaches the application. */
+export async function readImportedFieldBounded(
+  client: Pick<PoolClient, 'query'>,
+  route: number,
+  id: string,
+  maximumBytes: number,
+): Promise<ImportedFieldView | null> {
+  if (routeOf(id) !== route) throw new RangeError('Imported document ID must carry the supplied route');
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1) throw new RangeError('Invalid document byte limit');
+  const rows = await readBounded.run(client, { route, id, maximum_bytes: maximumBytes });
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    digest: row.digest,
+    subject: row.subject,
+    candidate: row.candidate,
+    revision: row.revision,
+    body: row.body === null ? null : Buffer.from(row.body),
+    bodyTooLarge: row.bodyTooLarge,
     availability: row.availability as ImportedFieldView['availability'],
     source: row.source as ImportedSource,
     rights: row.rights as Rights,
