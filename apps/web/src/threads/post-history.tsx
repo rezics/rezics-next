@@ -274,7 +274,8 @@ function HistoryDisclosure({
   async function load(cursor?: string, keyboardElement?: HTMLButtonElement) {
     const pendingReturn = returnAttempt.current;
     const returning =
-      pendingReturn?.target.historyCursor === cursor &&
+      pendingReturn !== undefined &&
+      pendingReturn.target.historyCursor === cursor &&
       historyReturnTargetCurrent(
         pendingReturn.target,
         postId,
