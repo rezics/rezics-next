@@ -81,8 +81,10 @@ test('the production Auth host and Access binding separate source and destinatio
     sourceOperationKey: key(),
   };
   const counts = async () =>
-    (await pool.query(`SELECT (SELECT count(*) FROM access.workflow_approval)::text approvals,
-      (SELECT count(*) FROM core.receipt)::text receipts`)).rows;
+    (
+      await pool.query(`SELECT (SELECT count(*) FROM access.workflow_approval)::text approvals,
+      (SELECT count(*) FROM core.receipt)::text receipts`)
+    ).rows;
   const unchanged = await counts();
 
   const sourcePage = await post(path, { kind: 'source', subjectAccountId: subject.accountId }, sourceCookie);
@@ -93,7 +95,10 @@ test('the production Auth host and Access binding separate source and destinatio
   });
 
   // The destination cannot use the old source-private read, but its own target admission is independent.
-  expect((await post('/account-management/operators/relation', { subjectAccountId: subject.accountId }, destinationCookie)).status).toBe(403);
+  expect(
+    (await post('/account-management/operators/relation', { subjectAccountId: subject.accountId }, destinationCookie))
+      .status,
+  ).toBe(403);
   const destinationPage = await post(path, { kind: 'destination', request }, destinationCookie);
   expect(await destinationPage.json()).toEqual({
     viewer: { kind: 'ready' },
@@ -136,9 +141,10 @@ test('the native page rereads source and actor observations after preparation an
     const evidence = await original(...args);
     if (!changed) {
       changed = true;
-      await pool.query('UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch+1 WHERE route=$1 AND account_id=$2', [
-        routeOf(destination.accountId), destination.accountId,
-      ]);
+      await pool.query(
+        'UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch+1 WHERE route=$1 AND account_id=$2',
+        [routeOf(destination.accountId), destination.accountId],
+      );
     }
     return evidence;
   };
@@ -147,9 +153,10 @@ test('the native page rereads source and actor observations after preparation an
     expect(await response.json()).toMatchObject({ viewer: { kind: 'ready' }, review: { kind: 'changed' } });
   } finally {
     access.prepare = original;
-    await pool.query('UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch-1 WHERE route=$1 AND account_id=$2', [
-      routeOf(destination.accountId), destination.accountId,
-    ]);
+    await pool.query(
+      'UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch-1 WHERE route=$1 AND account_id=$2',
+      [routeOf(destination.accountId), destination.accountId],
+    );
   }
 
   const originalReservation = before.previous.reservationId;
@@ -159,7 +166,9 @@ test('the native page rereads source and actor observations after preparation an
     if (!changedRelation) {
       changedRelation = true;
       await pool.query('UPDATE access.account SET operator_reservation_id=$3 WHERE route=$1 AND account_id=$2', [
-        routeOf(subject.accountId), subject.accountId, randomUUID(),
+        routeOf(subject.accountId),
+        subject.accountId,
+        randomUUID(),
       ]);
     }
     return evidence;
@@ -170,7 +179,9 @@ test('the native page rereads source and actor observations after preparation an
   } finally {
     access.prepare = original;
     await pool.query('UPDATE access.account SET operator_reservation_id=$3 WHERE route=$1 AND account_id=$2', [
-      routeOf(subject.accountId), subject.accountId, originalReservation,
+      routeOf(subject.accountId),
+      subject.accountId,
+      originalReservation,
     ]);
   }
 

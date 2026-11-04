@@ -179,7 +179,17 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     invalidContinuation,
     needsProof,
   });
-  state.current = { session, result, attempt, subject, destination, requestText, acceptance, invalidContinuation, needsProof };
+  state.current = {
+    session,
+    result,
+    attempt,
+    subject,
+    destination,
+    requestText,
+    acceptance,
+    invalidContinuation,
+    needsProof,
+  };
   const protectedWork = () => {
     const value = state.current;
     return (
@@ -322,6 +332,12 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       offerReadRetry(() => loadPageSession());
       return { kind: 'failure', reason: 'unavailable' };
     }
+    const saved = restoreTransferAttempt();
+    if (saved === 'invalid' || (saved && (value.kind !== 'ready' || saved.accountId !== value.accountId))) {
+      setInvalidContinuation(true);
+      setResult({ kind: 'failure', reason: 'account-changed' });
+      return { kind: 'failure', reason: 'account-changed' };
+    }
     const readiness = await readOperatorTransferPage(
       { kind: 'readiness' },
       value.kind === 'ready' ? value.accountId : undefined,
@@ -342,11 +358,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       setInvalidContinuation(true);
       return { kind: 'failure', reason: 'denied' };
     }
-    const saved = restoreTransferAttempt();
-    if (saved === 'invalid' || (saved && (value.kind !== 'ready' || saved.accountId !== value.accountId))) {
-      setInvalidContinuation(true);
-      setResult({ kind: 'failure', reason: 'account-changed' });
-    } else if (saved) {
+    if (saved) {
       liveAttempt.current = saved;
       setAttempt(saved);
       setAcceptance(saved.acceptance ?? '');
@@ -362,8 +374,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         if (advice) {
           showFailure(advice);
           if (advice.reason === 'unavailable') offerReadRetry(() => retryAttemptRead(saved));
-        }
-        else setNativeAdvice(saved.side);
+        } else setNativeAdvice(saved.side);
       }
       if (saved.phase === 'accepted') setResult({ kind: 'accepted', reference: saved.reference! });
     }
@@ -511,7 +522,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       needsProof ||
       invalidContinuation ||
       (attempt.phase === 'approve' && nativeAdvice !== attempt.side)
-    ) return;
+    )
+      return;
     const started = view.current;
     void perform(async () => {
       const value = { ...attempt, ...(attempt.side === 'source' ? { acceptance } : {}) };
@@ -673,8 +685,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         {!session ? <p role="status">{m.auth_inventory_loading()}</p> : null}
         {session?.kind === 'signed-out' ? (
           <p role="status">
-            {m.auth_transfer_signed_out()}{' '}
-            <a href="/login">{m.auth_security_sign_in()}</a>
+            {m.auth_transfer_signed_out()} <a href="/login">{m.auth_security_sign_in()}</a>
           </p>
         ) : null}
         {session?.kind === 'failure' ? <ErrorAlert>{m.auth_transfer_unavailable()}</ErrorAlert> : null}
@@ -889,11 +900,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
               </Field>
             </details>
             {attempt.phase === 'approve' && nativeAdvice !== attempt.side ? (
-              <Button
-                variant="outline"
-                disabled={locked || Boolean(attempt.reference)}
-                onClick={reviewAttempt}
-              >
+              <Button variant="outline" disabled={locked || Boolean(attempt.reference)} onClick={reviewAttempt}>
                 {attempt.side === 'source' ? m.auth_transfer_review_same_person() : m.auth_transfer_native_review()}
               </Button>
             ) : null}
@@ -955,8 +962,12 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
                       type="checkbox"
                       checked={confirmed}
                       onChange={(event) => setConfirmed(event.target.checked)}
-                      disabled={pending || needsProof || invalidContinuation ||
-                        (attempt.phase === 'approve' && nativeAdvice !== attempt.side)}
+                      disabled={
+                        pending ||
+                        needsProof ||
+                        invalidContinuation ||
+                        (attempt.phase === 'approve' && nativeAdvice !== attempt.side)
+                      }
                       required
                     />
                     {attempt.side === 'source'

@@ -128,7 +128,10 @@ async function mount(initial: AccountSessionResult | undefined = session, attemp
     await act(async () => root.unmount());
     host.remove();
   };
-  await act(async () => root.render(<OperatorTransferPage initial={initial} />));
+  await act(async () => {
+    root.render(<OperatorTransferPage initial={initial} />);
+    for (let turn = 0; turn < 12; turn++) await Promise.resolve();
+  });
   return host;
 }
 function guide(host: HTMLElement) {
@@ -404,7 +407,11 @@ test('source readback keeps current identity and the responsibility limit visibl
           kind: 'source',
           action: 'allowed',
           relation: {
-            previous: { ...source.request.previous, operatorAccountId: source.request.operatorAccountId, reservationId: 'new-reservation' },
+            previous: {
+              ...source.request.previous,
+              operatorAccountId: source.request.operatorAccountId,
+              reservationId: 'new-reservation',
+            },
             expectedVersion: '13',
           },
         },
@@ -550,7 +557,11 @@ test('relation read retry preserves uncertain execution and never resubmits it',
         ? new Response(null, { status: 503 })
         : Response.json({
             viewer: { kind: 'ready' },
-            review: { kind: 'source', relation: { previous: source.request.previous, expectedVersion: '12' }, action: 'allowed' },
+            review: {
+              kind: 'source',
+              relation: { previous: source.request.previous, expectedVersion: '12' },
+              action: 'allowed',
+            },
           });
     throw new Error(`Unexpected write: ${input}`);
   }) as typeof fetch;

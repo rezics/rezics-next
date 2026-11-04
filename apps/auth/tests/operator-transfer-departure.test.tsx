@@ -51,7 +51,7 @@ async function setup(saved?: TransferAttempt) {
   );
   const page = await open(view(), session);
   const queuedFetch = globalThis.fetch;
-  await flush();
+  await flush(() => {});
   await flush(() => page.calls[0]!.resolve(Response.json(session)));
   await flush(() =>
     page.calls[1]!.resolve(Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } })),
@@ -63,7 +63,11 @@ async function setup(saved?: TransferAttempt) {
         saved.side === 'source'
           ? Response.json({
               viewer: { kind: 'ready' },
-              review: { kind: 'source', relation: { previous: saved.request.previous, expectedVersion: saved.request.expectedVersion }, action: 'allowed' },
+              review: {
+                kind: 'source',
+                relation: { previous: saved.request.previous, expectedVersion: saved.request.expectedVersion },
+                action: 'allowed',
+              },
             })
           : Response.json({
               viewer: { kind: 'ready' },
@@ -185,7 +189,11 @@ for (const stage of ['relation', 'approval'])
         page.calls[0]!.resolve(
           Response.json({
             viewer: { kind: 'ready' },
-            review: { kind: 'source', relation: { previous: source.request.previous, expectedVersion: '12' }, action: 'allowed' },
+            review: {
+              kind: 'source',
+              relation: { previous: source.request.previous, expectedVersion: '12' },
+              action: 'allowed',
+            },
           }),
         ),
       );
@@ -197,16 +205,18 @@ for (const stage of ['relation', 'approval'])
     await page.choose('Leave');
     await page.render(page.view());
     await flush(() =>
-      page.calls
-        .at(-1)!
-        .resolve(
-          stage === 'approval'
-            ? approval()
-            : Response.json({
-                viewer: { kind: 'ready' },
-                review: { kind: 'source', relation: { previous: source.request.previous, expectedVersion: '12' }, action: 'allowed' },
-              }),
-        ),
+      page.calls.at(-1)!.resolve(
+        stage === 'approval'
+          ? approval()
+          : Response.json({
+              viewer: { kind: 'ready' },
+              review: {
+                kind: 'source',
+                relation: { previous: source.request.previous, expectedVersion: '12' },
+                action: 'allowed',
+              },
+            }),
+      ),
     );
     expect(restoreTransferAttempt()).toEqual(original);
     expect(page.calls).toHaveLength(stage === 'approval' ? 2 : 1);

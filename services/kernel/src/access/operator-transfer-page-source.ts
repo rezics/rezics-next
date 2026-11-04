@@ -1,6 +1,11 @@
 import { managementOperationProfile } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
-import { authoritativeTimeValue, mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  releaseOperationalTime,
+  type AuthoritativeTime,
+} from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type AccountActor, type Actor } from '../request/access.ts';
@@ -10,7 +15,11 @@ import { deadlineClient, within } from './authenticate.ts';
 import assignmentRead from './delegation-read.sql';
 import { deriveAccess } from './derived-access.ts';
 import { accessClock } from './access-clock.ts';
-import { ManagementSourceRefusedError, readOperatorTransferState, type OperatorTransferState } from './management-source.ts';
+import {
+  ManagementSourceRefusedError,
+  readOperatorTransferState,
+  type OperatorTransferState,
+} from './management-source.ts';
 import { managedAuthWorkflowDescriptor } from './workflow-approvals.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
@@ -38,12 +47,16 @@ export interface OperatorTransferPageAccess {
 
 type Dependencies = { pool: Pool; access: Access };
 class EntryUnavailable extends Error {}
-const active = (account: Account | null): account is Account => !!account && account.state === 'active' && !account.fenced;
+const active = (account: Account | null): account is Account =>
+  !!account && account.state === 'active' && !account.fenced;
 const asHuman = (account: Account | null): account is Account =>
   active(account) && account.kind === 'actor' && account.operatorAccountId === null;
 const destinationOperator = (account: Account | null): account is Account =>
-  active(account) && account.operatorAccountId === null && (account.kind === 'actor' || account.kind === 'organization');
-const stable = (value: unknown) => JSON.stringify(value, (_, item) => (typeof item === 'bigint' ? item.toString() : item));
+  active(account) &&
+  account.operatorAccountId === null &&
+  (account.kind === 'actor' || account.kind === 'organization');
+const stable = (value: unknown) =>
+  JSON.stringify(value, (_, item) => (typeof item === 'bigint' ? item.toString() : item));
 
 function validHandoff(value: OperatorTransferHandoff): boolean {
   const id = (candidate: unknown) => typeof candidate === 'string' && routeOf(candidate) !== null;
@@ -116,7 +129,7 @@ async function destinationAdvice(
     );
 
   const observe = async (client: AccessClient) => {
-    const homes = new Map<number, readonly [number, string]>();
+    const homes = new Map<number, readonly [string, number]>();
     async function home(route: number) {
       const partition = partitionOf(route);
       if (homes.has(partition)) return;
@@ -135,7 +148,8 @@ async function destinationAdvice(
       const reference = /^urn:rezics:request:([^:]+):([^:]+)$/.exec(actor.requestedBy);
       const principalRoute = reference ? routeOf(reference[1]!) : null;
       const requestRoute = reference ? routeOf(reference[2]!) : null;
-      if (!reference || principalRoute === null || requestRoute === null) return { admitted: false, homes, identity: '' };
+      if (!reference || principalRoute === null || requestRoute === null)
+        return { admitted: false, homes, identity: '' };
       await home(principalRoute);
       principal = await readAccount(client, principalRoute, reference[1]!);
       assignment = await assignmentRead.run(client, {
@@ -152,12 +166,17 @@ async function destinationAdvice(
       actor.authnEpoch >= 1 &&
       BigInt(actor.authnEpoch) >= caller.minimumAuthnEpoch;
     const principalAllowed =
-      actor.requestedBy === null ||
-      (asHuman(principal) && assignment !== null && assignment !== undefined);
+      actor.requestedBy === null || (asHuman(principal) && assignment !== null && assignment !== undefined);
     const identity = stable({
       caller: caller && [caller.kind, caller.state, caller.fenced, caller.operatorAccountId, caller.minimumAuthnEpoch],
       target: target && [target.accountId, target.kind, target.state, target.fenced, target.operatorAccountId],
-      principal: principal && [principal.kind, principal.state, principal.fenced, principal.operatorAccountId, principal.minimumAuthnEpoch],
+      principal: principal && [
+        principal.kind,
+        principal.state,
+        principal.fenced,
+        principal.operatorAccountId,
+        principal.minimumAuthnEpoch,
+      ],
       assignment,
       callerAllowed,
       principalAllowed,
@@ -215,7 +234,12 @@ export async function readOperatorTransferPage(
     if (Object.keys(input).sort().join(',') !== 'kind,subjectAccountId' || routeOf(input.subjectAccountId) === null)
       return { kind: 'refused' };
     try {
-      const relation = await readOperatorTransferState(deps, actor, { subjectAccountId: input.subjectAccountId }, { deadline });
+      const relation = await readOperatorTransferState(
+        deps,
+        actor,
+        { subjectAccountId: input.subjectAccountId },
+        { deadline },
+      );
       return relation ? { kind: 'source', relation, action: 'allowed' } : { kind: 'missing' };
     } catch (error) {
       if (error instanceof ManagementSourceRefusedError)
@@ -223,7 +247,8 @@ export async function readOperatorTransferPage(
       return { kind: 'unavailable' };
     }
   }
-  if (Object.keys(input).sort().join(',') !== 'kind,request' || !validHandoff(input.request)) return { kind: 'refused' };
+  if (Object.keys(input).sort().join(',') !== 'kind,request' || !validHandoff(input.request))
+    return { kind: 'refused' };
   return destinationAdvice(deps, actor, input.request.operatorAccountId, deadline);
 }
 
