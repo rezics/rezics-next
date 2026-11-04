@@ -55,7 +55,11 @@ beforeAll(async () => {
   };
   await bootstrapProfile(db.pool, profile);
   digest = profileDigest(profile);
-  kernel = createKernel({ pool: db.pool, routeKey: new Uint8Array(32).fill(61), tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(62)]]) } });
+  kernel = createKernel({
+    pool: db.pool,
+    routeKey: new Uint8Array(32).fill(61),
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(62)]]) },
+  });
   const created = await createSubject(db.pool, {
     actor,
     target: { route, id: newId(route) },

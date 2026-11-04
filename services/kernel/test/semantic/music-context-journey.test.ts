@@ -20,14 +20,17 @@ const cited = (property: string, content: unknown, qualifiers: Record<string, un
   value: { type: 'value' as const, content },
   rank: 'normal' as const,
   qualifiers,
-  references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/src' } }] }],
+  references: [
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/src' } }] },
+  ],
 });
 
 function closedRelease(): Release {
   const release = structuredClone(bundledRelease);
   const instrument = release.types['wd:Q34379'];
   for (const id of MUSIC_TYPES) delete release.types[id];
-  for (const term of ['schema:location', 'schema:containedInPlace', 'wdt:P1303'] as const) delete release.properties[term];
+  for (const term of ['schema:location', 'schema:containedInPlace', 'wdt:P1303'] as const)
+    delete release.properties[term];
   if (instrument) release.types['schema:MusicInstrument'] = { ...instrument, iri: 'http://schema.org/MusicInstrument' };
   release.catalogue = { ...release.catalogue, version: '1.0.1-music-context-closed' };
   return release;
@@ -127,9 +130,13 @@ test('a reader follows a sourced music event through native review and a bounded
     expect(facts.statements['schema:location'][0].value.content).toBe(venue.id);
     expect(facts.statements['schema:startDate'][0].value.content.precision).toBe(10);
     expect(facts.statements['wdt:P1303'][0].qualifiers[0].value.content).toBe('piano');
-    expect(facts.statements['schema:location'][0].references[0].parts[0].value.content).toBe('https://example.test/src');
+    expect(facts.statements['schema:location'][0].references[0].parts[0].value.content).toBe(
+      'https://example.test/src',
+    );
     for (const related of [venue, area, piano]) {
-      const relatedPage = await driver.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: related.id } });
+      const relatedPage = await driver.request('anonymous', 'POST', '/v1/pages:read', {
+        target: { subject: related.id },
+      });
       expect(relatedPage.status, JSON.stringify(relatedPage.body)).toBe(200);
       expect(relatedPage.body.subject).toBe(related.id);
       expect(pageSubject(relatedPage.body, related.id)?.type).toBe(related.type);
@@ -155,7 +162,9 @@ test('a reader follows a sourced music event through native review and a bounded
     const editorActions = await actions('editor', event.id, event.type);
     const readerActions = await actions('anonymous', event.id, event.type);
     const suspendedActions = await actions('suspended', event.id, event.type);
-    expect(editorActions.map((entry) => entry.action)).toEqual(expect.arrayContaining(['statement:propose', 'subject:read']));
+    expect(editorActions.map((entry) => entry.action)).toEqual(
+      expect.arrayContaining(['statement:propose', 'subject:read']),
+    );
     expect(readerActions.map((entry) => entry.action)).toContain('subject:read');
     expect(readerActions.map((entry) => entry.action)).not.toContain('statement:propose');
     expect(suspendedActions.map((entry) => entry.action)).not.toContain('statement:propose');
