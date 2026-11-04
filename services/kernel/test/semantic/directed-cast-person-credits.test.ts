@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
-import { startRelays } from '../../src/events/relays.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -16,7 +16,6 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
-const relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 50 });
 const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000001' };
 const actions = ['subject:create', 'subject:read', 'statement:propose'];
 const realAccess = await createRealAccess(admin, accounts, actions);
@@ -31,7 +30,6 @@ const kernel = createKernel({
 });
 
 afterAll(async () => {
-  await relays.stop();
   await pool.end();
   await admin.end();
 });
@@ -69,6 +67,7 @@ async function create(type: string, label: string, statements?: Record<string, u
     ...(statements ? { statements } : {}),
   });
   expect(result.response.status, JSON.stringify(result.body)).toBe(201);
+  expect((await linkProjection(pool).run(partitionOf(routeOf(result.body.subject.id)!))).status).not.toBe('busy');
   return result.body.subject as { id: string; statements: Record<string, any[]> };
 }
 
@@ -87,7 +86,7 @@ test('released inverse descriptors keep the original cast property and pin quali
   });
   expect(directions.resolve('wd:Q95074', 'wdt:P453', 'inverse')).toMatchObject({
     state: 'unsupported',
-    reason: 'missing-inverse',
+    reason: 'ambiguous-inverse',
   });
   expect(
     createReleasedRelationDirectionResolver(bundledRelease, 'sha256:stale').resolve(

@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { CreditInspection } from '../features/catalogue/credit-inspection/view';
 import { creditAssertion, type CreditVisit } from '../features/catalogue/credit-inspection/model';
-import { relationFixture, relationActor, relationProperty, relationRole } from '../kernel/fake/catalogue-relations';
+import { relationFixture, relationActor, relationProperty } from '../kernel/fake/catalogue-relations';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { ConnectedStory } from './connected-story';
@@ -21,10 +21,16 @@ function Inspection({ denied = false, plain = false }: { denied?: boolean; plain
       type: 'value',
       content: 'A very long original credited name with several professional and performance names',
     };
-    fixture.original.qualifiers.push({
-      property: { id: 'wdt:P3831', data_type: 'wikibase-item' },
-      value: { type: 'value', content: relationRole },
-    });
+    for (const [id, label] of [
+      ['00000000-0000-8000-8000-000000000301', 'Narration'],
+      ['00000000-0000-8000-8000-000000000302', 'Additional voices'],
+    ] as const) {
+      fixture.publicRead.related[id] = { labels: { en: label }, type: 'skos:Concept' };
+      fixture.original.qualifiers.push({
+        property: { id: 'wdt:P3831', data_type: 'wikibase-item' },
+        value: { type: 'value', content: id },
+      });
+    }
     fixture.candidate.statement = structuredClone(fixture.original);
     if (denied) fixture.setActions([]);
     return fixture;

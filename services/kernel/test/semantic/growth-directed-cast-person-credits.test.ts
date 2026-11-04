@@ -85,26 +85,43 @@ test('one inverse cast window stays fixed across unrelated catalogue growth and 
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
     grow: async (_, scale, previous) => {
+      const identities = new Map<number, { id: string; transaction: string }>();
+      const population = {
+        name: 'unrelated-people-works-and-obsolete-cast-edges',
+        hotPartition: UNRELATED_PARTITION,
+        hotShare: 1,
+      };
+      // Insert parent rows first: seed batches may split an ordinal between tables.
       await seed(
         { pool: db.pool, admin: db.admin },
         {
-          name: 'unrelated-people-works-and-obsolete-cast-edges',
-          hotPartition: UNRELATED_PARTITION,
-          hotShare: 1,
+          ...population,
           rows({ route, ordinal }) {
-            const id = newId(route);
-            const transaction = randomUUID();
+            const identity = { id: newId(route), transaction: randomUUID() };
+            identities.set(ordinal, identity);
             return {
               'semantic.subject': [
                 {
                   route,
-                  subject_id: id,
+                  subject_id: identity.id,
                   type: ordinal % 2 === 0 ? 'schema:Person' : 'schema:Movie',
-                  recorded_transaction_id: transaction,
+                  recorded_transaction_id: identity.transaction,
                   current_facts: 1,
                   current_release: bundledDigest,
                 },
               ],
+            };
+          },
+        },
+        { from: previous + 1, to: scale },
+      );
+      await seed(
+        { pool: db.pool, admin: db.admin },
+        {
+          ...population,
+          rows({ route, ordinal }) {
+            const { id, transaction } = identities.get(ordinal)!;
+            return {
               'semantic.revision': [
                 {
                   route,
