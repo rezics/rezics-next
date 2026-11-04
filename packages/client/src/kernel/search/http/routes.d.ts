@@ -5,6 +5,17 @@ import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
 import { type KernelClock } from '../../clock.ts';
 export type SearchService = ReturnType<typeof createSearchService>;
+export type EmptyRecoveryAction =
+    | { kind: "edit-query" }
+    | { kind: "remove-type" }
+    | { kind: "remove-kind"; value: string }
+    | { kind: "remove-facet"; property: string; value: string }
+    | { kind: "remove-range"; property: string };
+export type EmptyRecovery = {
+    status: "ready" | "preparing" | "unavailable";
+    alternatives: { query: string; label: string }[];
+    actions: EmptyRecoveryAction[];
+};
 export declare const FactSchema: import("typebox").TUnion<[import("typebox").TObject<{
     kind: import("typebox").TLiteral<"item">;
     id: import("typebox").TString;
@@ -184,6 +195,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         descriptions?: boolean;
                         languages?: string[];
                         properties?: string[];
+                        emptyRecoveryActions?: EmptyRecoveryAction[];
                     };
                     params: {};
                     query: unknown;
@@ -379,6 +391,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             };
                             next: string | null;
                             as_of: string;
+                            emptyRecovery?: EmptyRecovery;
                         } | {
                             subjects: {
                                 id: string;
@@ -519,6 +532,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             };
                             next: string | null;
                             as_of: string;
+                            emptyRecovery?: EmptyRecovery;
                         } | import("../query-share.ts").QueryShare;
                         400: Response | {
                             type: unknown;

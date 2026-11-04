@@ -131,7 +131,7 @@ function SearchResults({
       deps={deps}
       locale={locale}
       searchHref={searchHref}
-      key={searchSessionLifetime(locale, deps, reader ?? undefined)}
+      key={searchSessionLifetime(locale, { ...deps, cursor: undefined }, reader ?? undefined)}
       {...(searchRequiresCurrentReader(deps) && reader ? { reader } : {})}
       session={reader}
     />

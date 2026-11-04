@@ -17,6 +17,7 @@ export type SearchWireResponse = {
 };
 export type SearchRecoveryState =
   | { status: 'ready' }
+  | { status: 'sparse' | 'exhausted'; asOf?: string }
   | {
       status:
         | 'loading'
@@ -85,10 +86,18 @@ export async function readSearchOutcome(
       return { recovery: searchRecoveryFromResponse(response, Date.now(), request.cursor) };
     if (request.representation === 'discovery-v1') {
       const page = parseDiscoveryPage(response.data);
+      if (page && request.cursor && page.hits.length === 0 && page.next === null)
+        return { recovery: { status: 'exhausted', asOf: page.as_of } };
+      if (page && page.hits.length === 0 && page.next !== null)
+        return { recovery: { status: 'sparse', asOf: page.as_of } };
       if (page && usefulPage(page.hits.length, page.next, request.cursor))
         return { recovery: { status: 'ready' }, discovery: { status: 'ready', page } };
     } else {
       const result = parseLegacySearchPage(response.data);
+      if (result && request.cursor && result.subjects.length === 0 && result.next === null)
+        return { recovery: { status: 'exhausted', asOf: result.as_of } };
+      if (result && result.subjects.length === 0 && result.next !== null)
+        return { recovery: { status: 'sparse', asOf: result.as_of } };
       if (result && usefulPage(result.subjects.length, result.next, request.cursor))
         return { recovery: { status: 'ready' }, result };
     }
@@ -147,7 +156,7 @@ export function searchPageForRecovery(data: SearchPageData, recovery = data.reco
   return {
     ...retained,
     recovery,
-    ...(recovery.problem ? { problem: recovery.problem } : {}),
+    ...('problem' in recovery && recovery.problem ? { problem: recovery.problem } : {}),
     hitTypes: {},
     typeChoices: [],
     groups: [],
