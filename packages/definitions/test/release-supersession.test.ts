@@ -58,7 +58,7 @@ test('VNDB source row keeps id as the superseding release and maps rid to the ex
     mapping: 'rezics:releaseSupersedes',
   });
   expect(inventory.table_types['rezics:releaseSupersedes']!.meaning).toContain('current release id supersedes');
-  expect(inventory.table_types['wdt:P155']!.meaning).toContain('not replacement');
+  expect(inventory.table_types['wdt:P155']!.meaning).toContain('does not mean replacement');
 });
 
 test('the released release descriptor stays within limits through ten and one hundred manifest expansions', async () => {
