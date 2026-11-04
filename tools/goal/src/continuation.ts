@@ -4,7 +4,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AttemptRef } from './contracts.ts';
 import {
@@ -295,7 +295,7 @@ export function continuesItself(task: Pick<Task, 'brief'> & Partial<Pick<Task, '
 export function completeContinuation(
   markdown: string,
   task: Pick<Task, 'brief' | 'id'>,
-  ownership: RiskOwnership,
+  ownership: RiskOwnership | undefined,
   policy: ControlPolicy['brief'] = defaultPolicy.brief,
 ): string {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
@@ -328,7 +328,7 @@ export function completeContinuation(
   if (Array.isArray(front.after) && !front.after.includes(task.id)) front.after = [...front.after, task.id];
   const areas = list(front.riskAreas, []);
   const paths = front.paths;
-  if (Array.isArray(areas) && Array.isArray(paths) && paths.every((path) => typeof path === 'string'))
+  if (ownership && Array.isArray(areas) && Array.isArray(paths) && paths.every((path) => typeof path === 'string'))
     for (const [area, patterns] of Object.entries(ownership.areas))
       if (
         !areas.includes(area) &&
@@ -336,6 +336,14 @@ export function completeContinuation(
       )
         areas.push(area);
   front.riskAreas = areas;
+  if (front.acceptance && typeof front.acceptance === 'object' && !Array.isArray(front.acceptance)) {
+    const acceptance = { ...(front.acceptance as Record<string, unknown>) };
+    if (Object.hasOwn(acceptance, 'placement') && !Object.hasOwn(acceptance, 'command')) {
+      delete acceptance.placement;
+      if (Object.keys(acceptance).length) front.acceptance = acceptance;
+      else delete front.acceptance;
+    }
+  }
   if (JSON.stringify(front) === JSON.stringify(raw)) return markdown;
   const newline = match[0].includes('\r\n') ? '\r\n' : '\n';
   const yaml = Bun.YAML.stringify(front, null, 2).trimEnd().replaceAll('\n', newline);
@@ -367,13 +375,46 @@ function invalidReason(
   }
 }
 
+function preserveFailedContinuation(
+  source: string,
+  target: string,
+  task: Task,
+  ref: AttemptRef,
+  name: string,
+  reason: string,
+): string {
+  const failedDirectory = join(target, 'failed');
+  mkdirSync(failedDirectory, { recursive: true });
+  const candidates = continuationBacklogNames(task.id, ref.attempt, name);
+  let destination: string;
+  for (let variant = 0; ; variant++) {
+    const candidate =
+      variant < candidates.length
+        ? join(failedDirectory, candidates[variant]!)
+        : join(failedDirectory, `${candidates.at(-1)!.slice(0, -3)}-${variant}.md`);
+    if (existsSync(candidate) || existsSync(`${candidate}.reason`)) continue;
+    destination = candidate;
+    break;
+  }
+  const reasonPath = `${destination}.reason`;
+  writeFileSync(reasonPath, `${reason}\n`, { flag: 'wx' });
+  try {
+    renameSync(source, destination);
+  } catch (error) {
+    rmSync(reasonPath, { force: true });
+    throw error;
+  }
+  return destination;
+}
+
 /**
  * Move the continuation briefs an attempt left under `.temp/continuation/` into its Goal's backlog, where they are
  * dispatched like any other brief. A brief must parse with the ordinary brief parser and keep the task's goal and
- * manager; other untracked files are removed and their reasons recorded on the attempt. Tracked sources remain
- * untouched, including inherited briefs belonging to other outcomes. A backlog name that already holds the
- * same brief is left untouched. A different brief is published under the next stable distinct name. The source is
- * removed only after that publication, so an interrupted harvest neither drops nor overwrites a wanted continuation.
+ * manager. Rejected regular Markdown is moved to the Goal's failed directory with a reason and a manager notice;
+ * other untracked files are removed. Tracked sources remain untouched, including inherited briefs belonging to
+ * other outcomes. A backlog name that already holds the same brief is left untouched. A different brief is published
+ * under the next stable distinct name. The source is removed only after that publication, so an interrupted harvest
+ * neither drops nor overwrites a wanted continuation.
  */
 export function harvestContinuations(
   store: WorkerStore,
@@ -425,11 +466,25 @@ export function harvestContinuations(
     for (const name of names) {
       if (trackedNames.has(name)) continue;
       const path = join(source, name);
-      const drop = (reason: string) => {
-        rmSync(path, { recursive: true, force: true });
+      const drop = (reason: string, keepMarkdown = false) => {
+        const failedPath = keepMarkdown ? preserveFailedContinuation(path, target, task, ref, name, reason) : undefined;
+        if (!keepMarkdown) rmSync(path, { recursive: true, force: true });
         result.dropped.push({ file: name, reason });
         store.event(ref, 'continuation-dropped', { file: name, reason });
-        console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} dropped: ${reason}`);
+        if (failedPath) {
+          const summary = `Continuation ${name} kept at failed/${basename(failedPath)}: ${reason}`
+            .replace(/\s+/g, ' ')
+            .slice(0, 600);
+          new SqliteManagerInbox(store.db, settings.stateDirectory).deliver({
+            managerId: task.brief.manager,
+            goalId: task.brief.goal,
+            kind: 'instruction',
+            summary,
+          });
+          console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} kept at ${failedPath}: ${reason}`);
+        } else {
+          console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} dropped: ${reason}`);
+        }
       };
       const stat = lstatSync(path, { throwIfNoEntry: false });
       if (!stat) continue;
@@ -439,18 +494,18 @@ export function harvestContinuations(
       }
       // Creation time, rather than mtime, prevents a touched inherited file being attributed to this attempt.
       if (!Number.isFinite(startedAt) || stat.birthtimeMs < startedAt) {
-        drop('file was not created during this attempt');
+        drop('file was not created during this attempt', true);
         continue;
       }
       if (queuedBy !== undefined) {
-        drop(`attempt ${queuedBy} of this task already queued its continuation`);
+        drop(`attempt ${queuedBy} of this task already queued its continuation`, true);
         continue;
       }
       const written = readFileSync(path, 'utf8');
-      const markdown = ownership ? completeContinuation(written, task, ownership, settings.policy?.brief) : written;
+      const markdown = completeContinuation(written, task, ownership, settings.policy?.brief);
       const reason = invalidReason(markdown, task, settings, known);
       if (reason) {
-        drop(reason);
+        drop(reason, true);
         continue;
       }
       const basenames = continuationBacklogNames(task.id, ref.attempt, name);

@@ -1556,8 +1556,11 @@ already holding the same brief is left in place. A different brief is published 
 source is removed only then; when every distinct name is occupied the source stays and a `continuation-retained` event
 is recorded. A brief moves only when it parses with the ordinary
 brief parser, keeps the task's goal and manager, is itself product work on dev and names only known dependencies;
-anything else is removed and its reason recorded in a `continuation-dropped` event. Workers in a shared module workspace
-list the remainder in their summary instead.
+regular Markdown that cannot be admitted moves to `<state>/backlog/<goal>/failed/` under a task/attempt-prefixed name,
+with a `.reason` file and a manager `instruction` naming the continuation and reason; other entries are removed. The
+attempt still records `continuation-dropped`. Decision: keep rejected Markdown in the Goal's `failed/` directory, and
+remove `acceptance.placement` when `acceptance.command` is absent so validation remains worker-owned. Workers in a
+shared module workspace list the remainder in their summary instead.
 
 Set `policy.backlog.continuationReview` to a per-Goal boolean map, for example
 `{ "search": true, "web": false }`. A Goal in review mode keeps continuations in `proposed/` and records

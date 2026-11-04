@@ -8,6 +8,7 @@ import { WorkerJob } from './job.ts';
 import { readRiskOwnership } from './briefs.ts';
 import { harness, markdown } from './test-support.ts';
 import { git } from './merge.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 
 test("a gate failure's automatic retry survives the process that recorded it exiting before it ran", async () => {
   const h = harness();
@@ -148,6 +149,47 @@ test("a retried attempt's continuation is dropped once an earlier attempt queued
     ]);
     expect(readdirSync(source)).toEqual([]);
     expect(readdirSync(join(h.settings.stateDirectory, 'backlog', 'fixture'))).toHaveLength(1);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an invalid Markdown continuation is kept with its reason and reported to its manager', () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, 'invalid.md'), markdown.replace('goal: fixture', 'goal: web'));
+    const failure = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt }).dropped[0]!;
+    const failed = join(h.settings.stateDirectory, 'backlog', 'fixture', 'failed');
+    const saved = join(failed, readdirSync(failed).find((name) => name.endsWith('.md'))!);
+    const reason = readFileSync(`${saved}.reason`, 'utf8');
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.stateDirectory);
+    const notice = inbox.pending(task.brief.manager).map(({ event }) => JSON.stringify(event) ?? '').join('\n');
+    expect(readFileSync(saved, 'utf8')).toContain('goal: web');
+    expect(reason).toContain(failure.reason);
+    expect(notice).toContain('instruction');
+    expect(notice).toContain('invalid.md');
+    expect(notice).toContain(failure.reason);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('acceptance placement without a command is removed and the continuation is admitted', () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    const placement = markdown.replace('paths: [result.txt]', 'paths: [result.txt]\nacceptance:\n  placement: default');
+    writeFileSync(join(source, 'placement-only.md'), placement);
+    const result = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt });
+    expect(result.queued).toHaveLength(1);
+    expect(readFileSync(result.queued[0]!, 'utf8')).not.toContain('placement:');
   } finally {
     h.dispose();
   }
