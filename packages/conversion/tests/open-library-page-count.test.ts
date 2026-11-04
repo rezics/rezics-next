@@ -30,7 +30,10 @@ test('observed edition pages are a released cited unit quantity and change sourc
   expect(proposal.statement.value.content).toEqual({ amount: '+96', unit: '1' });
   expect(proposal.statement.references[0]?.parts).toEqual(
     expect.arrayContaining([
-      { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://openlibrary.org/books/OL7353617M.json' } },
+      {
+        property: { id: 'schema:url' },
+        value: { type: 'value', content: 'https://openlibrary.org/books/OL7353617M.json' },
+      },
       { property: { id: 'wdt:P648' }, value: { type: 'value', content: 'OL7353617M' } },
       { property: { id: 'schema:version' }, value: { type: 'value', content: '28' } },
       {
@@ -50,7 +53,9 @@ test('observed edition pages are a released cited unit quantity and change sourc
   expect(convert({ ...edition, number_of_pages: Number.MAX_SAFE_INTEGER }).normalizedRecord.number_of_pages).toBe(
     Number.MAX_SAFE_INTEGER,
   );
-  const maxPageProposal = pageCountProposal(convert({ ...edition, number_of_pages: Number.MAX_SAFE_INTEGER }).proposals);
+  const maxPageProposal = pageCountProposal(
+    convert({ ...edition, number_of_pages: Number.MAX_SAFE_INTEGER }).proposals,
+  );
   expect(maxPageProposal).toBeDefined();
   if (!maxPageProposal || maxPageProposal.statement.value.type !== 'value')
     throw new Error('Missing maximum safe page-count proposal');
@@ -64,9 +69,11 @@ test('observed edition pages are a released cited unit quantity and change sourc
   );
   expect(workResult.sourceMetadata.subjectType).toBe('schema:Book');
   expect(workResult.normalizedRecord).not.toHaveProperty('number_of_pages');
-  expect(workResult.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:numberOfPages')).toBe(
-    false,
-  );
+  expect(
+    workResult.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:numberOfPages',
+    ),
+  ).toBe(false);
 });
 
 test('missing and malformed page counts stay unknown without dropping independent edition facts', () => {
@@ -74,12 +81,16 @@ test('missing and malformed page counts stay unknown without dropping independen
   delete (missing as { number_of_pages?: number }).number_of_pages;
   const absent = convert(missing);
   expect(absent.diagnostics).toContainEqual({ pointer: '/number_of_pages', code: 'missing_number_of_pages' });
-  expect(absent.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:numberOfPages')).toBe(
-    false,
-  );
-  expect(absent.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:wordCount')).toBe(
-    false,
-  );
+  expect(
+    absent.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:numberOfPages',
+    ),
+  ).toBe(false);
+  expect(
+    absent.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:wordCount',
+    ),
+  ).toBe(false);
   expect(absent.proposals.some((command) => command.op === 'retract')).toBe(false);
 
   for (const value of [null, '96', '96p.', 96.5, Number.MAX_SAFE_INTEGER + 1, 0, -1, {}]) {
@@ -87,15 +98,19 @@ test('missing and malformed page counts stay unknown without dropping independen
     expect(result.outcome).toBe('converted');
     expect(result.diagnostics).toContainEqual({ pointer: '/number_of_pages', code: 'invalid_number_of_pages' });
     expect(result.normalizedRecord).not.toHaveProperty('number_of_pages');
-    expect(result.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:isbn')).toBe(
-      true,
-    );
-    expect(result.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:inLanguage')).toBe(
-      true,
-    );
+    expect(
+      result.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:isbn'),
+    ).toBe(true);
+    expect(
+      result.proposals.some(
+        (command) => command.op === 'propose' && command.statement.property.id === 'schema:inLanguage',
+      ),
+    ).toBe(true);
     expect(result.proposals.some((command) => command.op === 'retract')).toBe(false);
-    expect(result.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:wordCount')).toBe(
-      false,
-    );
+    expect(
+      result.proposals.some(
+        (command) => command.op === 'propose' && command.statement.property.id === 'schema:wordCount',
+      ),
+    ).toBe(false);
   }
 });

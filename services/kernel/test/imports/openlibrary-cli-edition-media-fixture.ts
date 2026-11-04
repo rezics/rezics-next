@@ -28,7 +28,15 @@ import pageFenceSource from '../../../../specs/fixtures/imports/open-library/edi
 import pageWorkSource from '../../../../specs/fixtures/imports/open-library/work-number-of-pages.json';
 
 type Candidate = { id: string; statement: Statement; revision: number; retracted: number | null };
-type Exchange = { source: string; method: string; path: string; key: string | null; bytes: string; status: number; body: string };
+type Exchange = {
+  source: string;
+  method: string;
+  path: string;
+  key: string | null;
+  bytes: string;
+  status: number;
+  body: string;
+};
 type Journal = { key: string; bytes: string; acknowledgement: string | null };
 type OpenLibraryRow = {
   type: { key: string };
@@ -424,7 +432,10 @@ export async function runOpenLibraryEditionMediaJourney() {
     });
     expect(pageCount96!.statement.references[0]?.parts).toEqual(
       expect.arrayContaining([
-        { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://openlibrary.org/books/OL7353617M.json' } },
+        {
+          property: { id: 'schema:url' },
+          value: { type: 'value', content: 'https://openlibrary.org/books/OL7353617M.json' },
+        },
         { property: { id: 'wdt:P648' }, value: { type: 'value', content: 'OL7353617M' } },
         { property: { id: 'schema:version' }, value: { type: 'value', content: '28' } },
       ]),
@@ -498,7 +509,8 @@ export async function runOpenLibraryEditionMediaJourney() {
     expect(pageCountCommand(replayedExchange!, '+104')).toEqual(committedLostCommand);
     expect(claim(own, pageEdition.key)).toBe(pageEditionId);
     const pageProposal104BeforeFence = await pageProposal(own, pageEdition.key, '+104');
-    const pageCountAfterProposal = (await subject(pageEditionId)).statements['schema:numberOfPages']?.[0]?.value.content;
+    const pageCountAfterProposal = (await subject(pageEditionId)).statements['schema:numberOfPages']?.[0]?.value
+      .content;
     expect(pageCountAfterProposal).toEqual({
       amount: '+96',
       unit: '1',
@@ -508,7 +520,8 @@ export async function runOpenLibraryEditionMediaJourney() {
     );
     expect(pageCount104).toBeDefined();
     await select(pageEditionId, 'schema:numberOfPages', [pageCount104!]);
-    const pageCountAfterRefreshSelection = (await subject(pageEditionId)).statements['schema:numberOfPages']?.[0]?.value.content;
+    const pageCountAfterRefreshSelection = (await subject(pageEditionId)).statements['schema:numberOfPages']?.[0]?.value
+      .content;
     expect(pageCountAfterRefreshSelection).toEqual({
       amount: '+104',
       unit: '1',
@@ -527,7 +540,8 @@ export async function runOpenLibraryEditionMediaJourney() {
       (candidate) => pageAmount(candidate) === '+120',
     );
     expect(factsFenceRejected120).toBe(true);
-    const pageCountAfterFactsFence = (await subject(pageEditionId)).statements['schema:numberOfPages']?.[0]?.value.content;
+    const pageCountAfterFactsFence = (await subject(pageEditionId)).statements['schema:numberOfPages']?.[0]?.value
+      .content;
     expect(pageCountAfterFactsFence).toEqual({
       amount: '+104',
       unit: '1',
