@@ -206,6 +206,8 @@ test('header suggestions retire at locale, scope and loader owner transitions', 
   const transition = async (update: Partial<Props>) => {
     props = { ...props, ...update, boundary: props.boundary + 1 };
     await app.render(props);
+    if (app.host.querySelector('[data-header-search]')?.getAttribute('data-expanded') !== 'true')
+      await act(async () => app.open());
     expect(app.visits).toEqual([]);
     expect(app.options()).toHaveLength(0);
     expect(app.input().value).toBe(draft);
