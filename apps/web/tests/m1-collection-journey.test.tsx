@@ -13,6 +13,36 @@ import { m } from '../src/paraglide/messages.js';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: `https://site.test/en/collections/${card.id}` });
+window.document.head.innerHTML = `<link rel="canonical" href="https://site.test/en/collections/${card.id}">`;
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  location: window.location,
+  HTMLElement: window.HTMLElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  HTMLInputElement: window.HTMLInputElement,
+  HTMLTextAreaElement: window.HTMLTextAreaElement,
+  HTMLSelectElement: window.HTMLSelectElement,
+  FormData: window.FormData,
+  Element: window.Element,
+  Node: window.Node,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { readPublicCollectionPage } = await import('../src/library/public-collection-discovery/read');
 const { PublicCollectionDiscoveryPage } = await import('../src/library/public-collection-discovery/page');
 const { CollectionPage, CollectionReadMembers } = await import('../src/library/collection-page');
@@ -127,36 +157,6 @@ test('native public discovery leads to ordered/mixed and grid reading, with exac
 });
 
 test('current native actions govern create/add/reorder; review precedes sending and only acknowledgement refreshes rows', async () => {
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
-  const window = new Window({ url: `https://site.test/en/collections/${card.id}` });
-  window.document.head.innerHTML = `<link rel="canonical" href="https://site.test/en/collections/${card.id}">`;
-  const globals = {
-    window,
-    document: window.document,
-    navigator: window.navigator,
-    location: window.location,
-    HTMLElement: window.HTMLElement,
-    HTMLButtonElement: window.HTMLButtonElement,
-    HTMLInputElement: window.HTMLInputElement,
-    HTMLTextAreaElement: window.HTMLTextAreaElement,
-    HTMLSelectElement: window.HTMLSelectElement,
-    FormData: window.FormData,
-    Element: window.Element,
-    Node: window.Node,
-    Document: window.Document,
-    DocumentFragment: window.DocumentFragment,
-    MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver,
-    getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-    IS_REACT_ACT_ENVIRONMENT: true,
-  };
-  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider, useQuery } = await import('@tanstack/react-query');
   const { createRouter, createRootRoute, createMemoryHistory, RouterContextProvider } =
@@ -209,7 +209,9 @@ test('current native actions govern create/add/reorder; review precedes sending 
     act(async () => {
       element.focus();
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(element, value);
-      element.dispatchEvent(new window.Event('input', { bubbles: true }) as unknown as Event);
+      element.dispatchEvent(
+        new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }) as unknown as Event,
+      );
     });
   const page: EditableCollectionPage = {
     id: card.id,
@@ -313,6 +315,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 400));
     });
+    expect(search).toHaveBeenCalledTimes(1);
     await click(
       [...document.querySelectorAll('[role=option]')].find((node) => node.textContent?.includes('Disclosed work')),
     );
@@ -384,11 +387,13 @@ test('current native actions govern create/add/reorder; review precedes sending 
     await act(async () => root.unmount());
     stop();
     client.clear();
-    await window.happyDOM.close();
-    for (const [key, descriptor] of previous) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
   }
 });
-afterAll(() => mock.restore());
+afterAll(async () => {
+  mock.restore();
+  await window.happyDOM.close();
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
