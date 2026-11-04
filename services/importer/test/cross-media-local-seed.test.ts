@@ -74,8 +74,9 @@ test('development seed fetches the shared cache once and passes the local person
         };
       },
       seedCatalogue: async () => ({ subjects: {}, facts: [] }),
-      runSeed: async (argv) => {
+      runSeed: async (argv, seedOptions) => {
         args.push(...argv);
+        passedOptions = seedOptions;
       },
     });
     const option = (name: string) => args[args.indexOf(name) + 1];
