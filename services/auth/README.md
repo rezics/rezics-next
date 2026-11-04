@@ -1046,7 +1046,26 @@ native Access authentication; account equality and the exact management rename p
 The response allowlist is `{ profile: { id, kind: 'actor', handle: string | null } }`, including handleless accounts.
 The route requires same-issuer Origin, JSON, no query or bearer header and a current native human cookie session;
 it revalidates that same proof after the source read. Every response is `private, no-store`. Missing bindings, failed
-authority or malformed reads disclose no profile and remain recoverable unavailable in the page.
+authority or malformed reads disclose no profile. The route remains the exact private profile port; its client, scope,
+authentication method, account equality and native `account:update` formula are unchanged.
+
+`POST /account-management/rename-page` accepts only `{}` and is the Auth rename page's bounded projection. A signed-in
+human without the exact rename management profile receives only `management-auth-required` and the fixed rename
+management-operation continuation; no profile or acting identity is included. This is the page's reversible
+disclosure choice: show the account and handle only after the native profile read is admitted. The default host binds
+`trustedAccess.readRenameAccountPage` from Kernel's native account bindings. After exact-profile admission it composes
+the same private profile read with the existing native `readManagedAuthActions` observation. Only the matching
+`auth.account.rename` entry permits the form to appear; an empty ready observation is `refused`, while an action-source
+dependency failure is `unavailable` and cannot enable the form. A profile denial, changed proof/floor or malformed
+source response discloses no handle, identity or denial reason. An action-source failure after a successful profile
+read may retain that already admitted account and handle alongside an unavailable readiness state.
+
+Both routes require same-issuer Origin, JSON, no query or bearer header and a current native human cookie session;
+the page route revalidates the same proof, floor and consent after native I/O. Every response is `private, no-store`.
+The page read is a finite sum: one existing exact profile read, one full-key current-account seek and the existing
+bounded self action observation (one rename candidate, before/final native snapshots and one installed Access
+formula). The Auth transport closes at most eight source action entries and returns at most the exact rename entry.
+It adds no inventory, handle-availability lookup, approval, command or permission rule.
 Decision: profile review accepts a current, possibly stale rename-profile session; approval retains fresh authentication.
 
 `apps/auth/src/management-operations.ts` exports the closed `ManagementOperation`,

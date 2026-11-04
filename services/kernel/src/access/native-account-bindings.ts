@@ -1,6 +1,10 @@
 import { createOrganizationDeletionAccess, type OrganizationDeletionAccess } from './organization-deletion-source.ts';
 import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
-import { createAccountProfileAccess, type AccountProfileAccess } from './account-profile-source.ts';
+import {
+  createAccountProfileAccess,
+  type AccountProfileAccess,
+  type RenameAccountPageAccess,
+} from './account-profile-source.ts';
 import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
 import { createManagementMembershipAccess, type ManagementMembershipAccess } from './management-membership-source.ts';
 import { createAuthHistoryProofBindings } from './shared-history-auth.ts';
@@ -259,6 +263,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     ManagementMembershipAccess &
     AutomatedOperatorAccess &
     AccountProfileAccess &
+    RenameAccountPageAccess &
     OrganizationDeletionAccess = {
     ...createAccountProfileAccess({
       pool,
