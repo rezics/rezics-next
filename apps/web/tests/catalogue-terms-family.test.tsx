@@ -608,6 +608,8 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       return <p>Destination</p>;
     }
     const routeRoot = createRootRoute({ component: Outlet });
+    const history = createMemoryHistory({ initialEntries: ['/inbox'] });
+    history.push('/terms');
     const router = createRouter({
       routeTree: routeRoot.addChildren([
         createRoute({ getParentRoute: () => routeRoot, path: '/terms', component: TermsRoute }),
@@ -620,7 +622,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
           remountDeps: ({ search }) => search,
         }),
       ]),
-      history: createMemoryHistory({ initialEntries: ['/inbox'] }),
+      history,
     });
     await router.load();
     client.clear();
@@ -631,7 +633,6 @@ test('independent Terms forms retain stable associations, multilingual drafts an
         </QueryClientProvider>,
       ),
     );
-    await act(async () => router.history.push('/terms'));
     await settle(() => !!host.querySelector('form'));
     const page = () => host.querySelector<HTMLElement>('article')!;
     const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
