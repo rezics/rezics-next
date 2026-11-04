@@ -15,8 +15,15 @@ import type { ImportLibraryPage } from '../src/library/showcase-import-return/re
 import { setLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('../src/session/request', () => ({
+  prepareSession: async () => false,
+  sessionSubject: (request: Request) => request.headers.get('x-reader') ?? undefined,
+  requestCsrfToken: (request: Request) => request.headers.get('x-csrf-token'),
+  viewerCredential: (request: Request) => request.headers.get('authorization'),
+}));
 const { VndbReviewPage } = await import('../src/library/personal-list-import/review');
 const { VndbUploadForm } = await import('../src/library/personal-list-import/upload');
+const { loadImportLibrary } = await import('../src/library/showcase-import-return/read');
 
 const uploadId = '00000000-0000-4000-8000-000000000001';
 const targetId = '00000000-0000-4000-8000-000000000002';
@@ -275,13 +282,26 @@ test('XML → exact target/state review → explicit selected apply → a separa
   expect(results).toContain('data-vndb-result="unavailable"');
   expect(results).toContain(reviewId);
   expect(results).toContain(scoreReviewId);
-  const fresh = await client.libraryEntries.get({
-    query: { view: 'FULL', limit: 8, orderBy: 'lastActivity', direction: 'desc' },
+  const request = new Request('https://example.invalid/library/import-return', {
+    headers: { authorization: 'Bearer current-reader', 'x-reader': 'reader-1', 'x-csrf-token': 'csrf-1' },
   });
-  const pageRequest = requests.find((row) => row.path.endsWith('/libraryEntries'))!;
+  const fresh = await loadImportLibrary(client, request, {}, {
+    expectedReader: 'reader-1',
+    expectedCredential: 'csrf-1',
+  });
+  expect(fresh.state).toBe('current');
+  if (fresh.state !== 'current') throw new Error('Admitted Library read should be current');
+  const denied = await loadImportLibrary(client, request, {}, {
+    expectedReader: 'another-reader',
+    expectedCredential: 'csrf-1',
+  });
+  expect(denied).toEqual({ state: 'denied' });
+  const libraryRequests = requests.filter((row) => row.path.endsWith('/libraryEntries'));
+  expect(libraryRequests).toHaveLength(1);
+  const pageRequest = libraryRequests[0]!;
   expect(new URL(pageRequest.url).searchParams.get('limit')).toBe('8');
   const html = await render(
-    <ImportLibraryView result={{ state: 'current', page: fresh.data! }} busy={false} onRead={nothing} />,
+    <ImportLibraryView result={fresh} busy={false} onRead={nothing} />,
   );
   expect(html).toContain('現在のライブラリの題名');
   expect(html).toContain('/library');
