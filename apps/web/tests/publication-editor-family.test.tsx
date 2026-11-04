@@ -654,7 +654,9 @@ test('independent publication creation, local corrections, immutable recovery an
       ],
     };
     collision.transport = { ...collision.transport, load: async () => suppliedCollision, submit: async () => errors };
-    await mount(collision, tracked());
+    const other = tracked();
+    other.transport = { ...other.transport, load: async () => suppliedCollision };
+    await mount(collision, other);
     await ready();
     await add('schema:isbn');
     await replace(input(m.correction_value()), '978-0-140-44430-8');
