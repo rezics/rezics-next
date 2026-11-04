@@ -741,7 +741,7 @@
       "additionalProperties": false,
       "properties": {
         "type": {
-          "enum": ["string", "object"]
+          "enum": ["string", "object", "integer"]
         },
         "pattern": {
           "type": "string"
@@ -753,6 +753,12 @@
         "maxLength": {
           "type": "integer",
           "minimum": 0
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
         },
         "required": {
           "type": "array",
