@@ -38,6 +38,7 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   };
   const createKey = entryKey();
   const created = await native.send('owner', 'POST', '/v1/copy-loans', input, createKey);
+  if (created.status !== 201) throw new Error(`Loan create returned ${created.status}: ${await created.text()}`);
   expect(created.status).toBe(201);
   const original = await created.json();
   expect(original).toMatchObject({
