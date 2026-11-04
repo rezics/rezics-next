@@ -1275,7 +1275,7 @@ explicit `0` is a stated zero.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-`bangumi@8` converts pinned TVAnime `放送开始`, `播放结束` and `话数` through
+`bangumi@9` converts pinned TVAnime `放送开始`, `播放结束` and `话数` through
 the ordinary Bangumi registration used by JSON-lines dumps and the selected
 family, preserving `bangumi@7` name extraction. Native read is on the
 acknowledged TVSeries. Weekday schedule text, custom infobox keys, OVA/Movie
@@ -1386,6 +1386,36 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   and common-publication scenario is
   `services/kernel/test/imports/bangumi-character-names.test.ts`; broader native
   acceptance remains controller-owned.
+## Bangumi Book-template subject names
+
+Title extraction requires the selected `schema:Book` profile and the exact
+pinned `{{Infobox animanga/Book` header; separately inventoried
+`Novel`, `Manga`, `PhotoBook` and `BookSeries` templates stay excluded.
+
+Ordinary Bangumi conversion and the existing selected-family registration use
+the same pure Book title extraction. The exact scalar `中文名` becomes a `zh`
+`schema:name`; a scalar or flat-list `别名` becomes additional `schema:name`
+facts in `und`, as the reviewed Book mapping requires. It does not use
+TVAnime's `schema:alternateName` mapping or assign a preferred label. Mixed or
+nested fields are withheld atomically with bounded omissions. Top-level source
+names and independently supported fields remain available.
+
+The selected-family caller keeps its existing source alias, immutable record
+key, source revision marker, digest, acknowledged UUID, current facts fence and
+finite showcase manifest/journal. Ordinary import only proposes. Explicit
+showcase review accepts and adopts current exact candidates separately, and
+public reading remains bound to that same `schema:Book` UUID.
+
+- Touches: one selected source record, at most 24 distinct name values and 16
+  shared omission diagnostics; every candidate retains its Bangumi record
+  citation and field-specific command identity.
+- Bound: 65,536 projection bytes and infobox characters, 64 visited fields, and
+  existing source journal and batch limits; no catalogue scan or new publisher.
+- Growth check: `services/importer/tests/bangumi-book-names.test.ts` covers
+  ordinary/default conversion, atomic omission, same-title source identity and
+  same-UUID correction. `services/kernel/test/imports/bangumi-book-names.test.ts`
+  covers explicit review/adoption, public reading and fenced refresh; execution
+  remains controller-owned.
 
 ## Default Bangumi anime Episodes
 
