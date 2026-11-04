@@ -260,7 +260,7 @@
   "auth_security_passkey_registration_reviewed": "Die aktuellen Passkeys werden unten angezeigt. Die vorherige Registrierung ist weiterhin unbestätigt. Prüfe die Liste, bevor du fortfährst.",
   "auth_security_passkey_registration_unknown": "Die Antwort auf die Registrierung ging verloren oder konnte nicht bestätigt werden. Dein Passkey ist möglicherweise bereits eingerichtet. Prüfe die aktuellen Passkeys, bevor du fortfährst.",
   "auth_security_passkey_remove": "Entfernen",
-  "auth_security_passkey_remove_confirmation": "Diesen Passkey entfernen? Du kannst dich dann nicht mehr damit anmelden.",
+  "auth_security_passkey_remove_confirmation": "Diesen Passkey entfernen? Sie können sich damit nicht mehr anmelden. Alle Sitzungen werden abgemeldet.",
   "auth_security_passkey_remove_failed": "Der Passkey konnte nicht entfernt werden. Bitte versuche es später erneut.",
   "auth_security_passkey_remove_named": "Passkey {name} entfernen",
   "auth_security_passkey_removed": "Passkey entfernt.",

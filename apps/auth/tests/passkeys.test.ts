@@ -501,10 +501,10 @@ test(
       expect(await rows.count()).toBe(2);
       expect(await rows.nth(1).innerText()).toContain('Phone');
       expect(await section.getByLabel('Passkey name (optional)').inputValue()).toBe('');
-      // Registration is two Auth calls, and the new row comes from the 201 body, not a second list.
+      // Registration uses its existing commands, then refreshes the native page and target advice.
       expect(authCalls('/passkeys/register/options')).toHaveLength(1);
       expect(authCalls('/passkeys/register')).toHaveLength(1);
-      expect(authCalls('/security-page')).toHaveLength(1);
+      expect(authCalls('/security-page')).toHaveLength(2);
       expect(authCalls('/passkeys')).toHaveLength(0);
 
       // Left unnamed, the passkey is named for the browser and system. An authenticator that already holds a listed
@@ -657,7 +657,7 @@ test(
 );
 
 test(
-  'a browser without WebAuthn shows no passkey controls',
+  'a browser without WebAuthn keeps Security inventory while hiding creation and sign-in ceremonies',
   async () => {
     reset({ passkeys: [] });
     for (const path of ['/login', '/step-up', '/security']) {
@@ -665,10 +665,10 @@ test(
       const { page } = await open(path, { webauthn: false });
       try {
         expect(await page.evaluate(() => 'PublicKeyCredential' in window)).toBe(false);
-        if (path === '/security') await page.getByRole('region', { name: 'Password', exact: true }).waitFor();
+        if (path === '/security') await page.getByRole('heading', { name: 'Passkeys', exact: true }).waitFor();
         expect(await page.getByRole('button', { name: /passkey/i }).count(), path).toBe(0);
-        expect(await page.getByRole('heading', { name: /passkeys/i }).count(), path).toBe(0);
-        expect(await page.getByText(/passkey/i).count(), path).toBe(0);
+        expect(await page.getByRole('heading', { name: /passkeys/i }).count(), path).toBe(path === '/security' ? 1 : 0);
+        if (path !== '/security') expect(await page.getByText(/passkey/i).count(), path).toBe(0);
         if (path !== '/security') {
           expect(await page.locator('input[type=email]').getAttribute('autocomplete')).toBe('username');
           // The password form is the whole page.

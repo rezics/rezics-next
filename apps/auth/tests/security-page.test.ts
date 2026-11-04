@@ -81,6 +81,8 @@ test('a selected session reconciles native advice and old targets retire on refr
   const oldButton = view.host.querySelectorAll<HTMLButtonElement>('li button')[2]!;
   await flush(() => oldButton.click());
   expect(actions).toEqual(['other']);
+  await flush(() => oldButton.click());
+  expect(actions).toEqual(['other']);
   expect(view.host.textContent).toContain(m.auth_security_target_absent());
   expect(view.host.querySelector('[aria-labelledby="security-sessions-heading"]')!.querySelectorAll('li')).toHaveLength(
     1,

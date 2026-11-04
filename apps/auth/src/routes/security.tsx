@@ -145,6 +145,8 @@ function SecurityPageView({
   const activeAccount = useRef('');
   const authorityGeneration = useRef(0);
   const renderGeneration = authorityGeneration.current;
+  const adviceGeneration = useRef(0);
+  const renderAdviceGeneration = adviceGeneration.current;
   const lifetime = useRef(new AbortController());
   const retryLoad = useRef<(() => void) | null>(null);
   const recoveryStatus = useRef<HTMLDivElement>(null);
@@ -292,6 +294,7 @@ function SecurityPageView({
   function clearPrivateData(state: Exclude<LoadState, 'ready'>, notice = '') {
     if (departure) departure.current.protected = false;
     authorityGeneration.current++;
+    adviceGeneration.current++;
     lifetime.current.abort();
     lifetime.current = new AbortController();
     activeAccount.current = '';
@@ -332,6 +335,7 @@ function SecurityPageView({
   async function recoverTarget() {
     const held = activeOperation.current;
     if (held?.kind !== 'recovery' || held.reading) return;
+    adviceGeneration.current++;
     updateOperation({ ...held, reading: true });
     const { target } = held;
     const generation = authorityGeneration.current;
@@ -396,7 +400,7 @@ function SecurityPageView({
   }
 
   async function runAction(target: SecurityTarget, current = false, retry = false) {
-    if (renderGeneration !== authorityGeneration.current) return;
+    if (renderGeneration !== authorityGeneration.current || renderAdviceGeneration !== adviceGeneration.current) return;
     const held = activeOperation.current;
     const retryAllowed =
       retry &&
@@ -450,6 +454,7 @@ function SecurityPageView({
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (renderGeneration !== authorityGeneration.current || renderAdviceGeneration !== adviceGeneration.current) return;
     if (activeOperation.current || !activeAccount.current) return;
     const passwordLength = Array.from(password).length;
     if (passwordLength < 8 || passwordLength > 128) {
@@ -481,6 +486,7 @@ function SecurityPageView({
 
   async function submitPasskey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (renderGeneration !== authorityGeneration.current || renderAdviceGeneration !== adviceGeneration.current) return;
     if (
       activeOperation.current ||
       !activeAccount.current ||
@@ -520,6 +526,7 @@ function SecurityPageView({
   }
 
   async function refreshRegistrationInventory(owner: string, generation: number) {
+    adviceGeneration.current++;
     updateOperation({ kind: 'passkey-add' });
     setSessions((current) => current.map((row) => ({ ...row, revoke: 'unavailable' as const })));
     const result = await (securitySource?.load ?? loadSecurity)(passkeysSupported()).catch((): SecurityLoadResult => ({
@@ -799,7 +806,7 @@ function SecurityPageView({
                                     )}
                                   </ItemDescription>
                                 </ItemContent>
-                                <ItemActions>
+                                <ItemActions className="max-w-full flex-col items-start">
                                   <Button
                                     type="button"
                                     variant="outline"
