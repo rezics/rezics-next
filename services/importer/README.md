@@ -2188,21 +2188,22 @@ released qualifier, so the journey keeps one bounded weight gap. Parent
 `tags_parents` edges stay review gaps until Semantic admits `skos:broader`
 for these source Concepts.
 
-### Bangumi TVAnime subject names
+### Bangumi TVAnime name facts
 
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
-Both use one pure TVAnime name extractor and the existing journal, source
-metadata admission, citations, candidate acceptance and adoption flow. No
-additional seed publisher or identity lookup is involved. The importer keeps the
-exact Bangumi subject alias and key, unversioned record state where no provider
-revision exists, the normalized digest and the acknowledged native UUID.
+The shared bounded TVAnime profile projection consumes only `中文名` and `别名`
+from the exact pinned template. It emits cited `schema:name` and
+`schema:alternateName` proposals after the source subject identity is bound.
+The ordinary converter is now `bangumi@9`; selected-family registration retains
+its combined `cross-media-entities@9` revision. Top-level bootstrap labels keep
+their existing meanings, and source aliases never supply native identity.
+The existing journal, metadata admission, candidate review and adoption flow
+continues to govern the proposals. Exact source aliases, record keys, normalized
+digest and acknowledged native UUID remain stable across refresh.
 
 - Touches: one selected source record, at most 24 name statements and 16 bounded
   omission diagnostics; each name carries its exact Bangumi subject citation.
-- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
-  and the current source journal and batch limits; raw source values never enter
+- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences
+  and current source journal and batch limits; raw source values never enter
   diagnostics.
 - Growth check: `services/importer/tests/bangumi-subject-names.test.ts` covers
   selected-family JSONL planning, stable identity, unchanged and changed input,
