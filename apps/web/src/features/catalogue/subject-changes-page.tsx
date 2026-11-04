@@ -7,7 +7,7 @@ import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
 import { viewTabLabels } from '../pages/route-support';
 import { languageName } from '../../subject/language';
 import { candidateContext } from '../../subject/candidates';
-import type { CurrentCandidateAddress } from './subject-changes-navigation';
+import type { CurrentCandidateAddress, CurrentCorrectionAddress } from './subject-changes-navigation';
 import {
   appendChangePage,
   firstChangePage,
@@ -23,6 +23,7 @@ import {
   type ChangesFailure,
   type ChangesState,
   type ChangesTransport,
+  type CurrentOperationsRead,
 } from './subject-changes';
 
 type FocusResult =
@@ -43,6 +44,7 @@ type Props = {
   onRetry?: (event: ChangeAction) => void;
   onDetailRetry?: (event: ChangeAction) => void;
   onReviewCandidate?: (address: CurrentCandidateAddress, href: string, revision: number) => boolean;
+  onCorrectCurrent?: (address: CurrentCorrectionAddress, href: string, revision: number) => boolean;
   returnUnavailable?: boolean;
   historyTruncated?: boolean;
   onStartOver?: () => void;
@@ -64,6 +66,8 @@ function Failure({ failure, locale }: { failure: ChangesFailure; locale: string 
             ? m.changes_invalid({}, o)
             : failure.kind === 'conflict'
               ? m.changes_conflict({}, o)
+              : failure.kind === 'preparing'
+                ? m.changes_preparing({}, o)
               : m.changes_unavailable({}, o)}
     </p>
   );
@@ -128,18 +132,95 @@ function CurrentReviewLink({
   );
 }
 
+function currentCorrectionHref(pageHref: string | undefined, address: CurrentCorrectionAddress) {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (
+    !pageHref?.startsWith('/') ||
+    pageHref.startsWith('//') ||
+    pageHref.includes('\\') ||
+    !uuid.test(address.subject)
+  )
+    return undefined;
+  const base = pageHref.replace(/\/$/, '');
+  if (address.kind === 'terms') return `${base}/terms?returnTo=changes`;
+  if (address.kind === 'subject') return `${base}/edit?returnTo=changes`;
+  if (!address.property || address.property.length > 256 || address.context !== candidateContext) return undefined;
+  return `${base}/edit?${new URLSearchParams({ property: address.property, returnTo: 'changes' }).toString()}`;
+}
+
+function correctionAddress(detail: ChangeDetail): CurrentCorrectionAddress | undefined {
+  if (detail.summary.kind === 'terms') return { kind: 'terms', subject: detail.id };
+  if (detail.summary.kind === 'limited') return { kind: 'subject', subject: detail.id };
+  if (
+    'property' in detail.summary &&
+    'context' in detail.summary &&
+    detail.summary.context === candidateContext &&
+    detail.summary.property
+  )
+    return {
+      kind: 'property',
+      subject: detail.id,
+      property: detail.summary.property,
+      context: detail.summary.context,
+    };
+  return undefined;
+}
+
+function CurrentCorrectionAction({
+  detail,
+  revision,
+  locale,
+  pageHref,
+  currentOperations,
+  onCorrectCurrent,
+}: {
+  detail: ChangeDetail;
+  revision: number;
+  locale: string;
+  pageHref?: string | undefined;
+  currentOperations?: CurrentOperationsRead | undefined;
+  onCorrectCurrent?: Props['onCorrectCurrent'];
+}) {
+  const o = { locale: locale as never };
+  if (!currentOperations || currentOperations.state === 'unavailable')
+    return <p role="status">{m.changes_correction_unavailable({}, o)}</p>;
+  if (currentOperations.state === 'preparing')
+    return <p role="status">{m.changes_correction_preparing({}, o)}</p>;
+  const address = correctionAddress(detail);
+  const operation = address?.kind === 'terms' ? 'subject.terms' : address ? 'subject.propose' : undefined;
+  if (operation && !currentOperations.operations.includes(operation))
+    return <p role="status">{m.changes_correction_denied({}, o)}</p>;
+  const href = address && operation ? currentCorrectionHref(pageHref, address) : undefined;
+  if (!href || !onCorrectCurrent) return <p role="status">{m.changes_correction_unavailable({}, o)}</p>;
+  return (
+    <Link
+      className={`${actionClassName} inline-flex items-center text-primary underline-offset-4 hover:underline`}
+      to={href as never}
+      onClick={(event) => {
+        if (!onCorrectCurrent(address, `${pageHref!.replace(/\/$/, '')}/changes`, revision)) event.preventDefault();
+      }}
+    >
+      {address.kind === 'terms' ? m.changes_correct_terms({}, o) : m.changes_correct_current({}, o)}
+    </Link>
+  );
+}
+
 export function ChangeExplanation({
   detail,
   revision,
   locale,
   pageHref,
   onReviewCandidate,
+  currentOperations,
+  onCorrectCurrent,
 }: {
   detail: ChangeDetail;
   revision: number;
   locale: string;
   pageHref?: string | undefined;
   onReviewCandidate?: Props['onReviewCandidate'];
+  currentOperations?: CurrentOperationsRead | undefined;
+  onCorrectCurrent?: Props['onCorrectCurrent'];
 }) {
   const o = { locale: locale as never };
   const summary = detail.summary;
@@ -271,6 +352,16 @@ export function ChangeExplanation({
           <p className="text-sm text-muted-foreground">{m.changes_review_notice({}, o)}</p>
         </section>
       )}
+      <section className="space-y-2" aria-label={m.changes_correct_current({}, o)}>
+        <CurrentCorrectionAction
+          detail={detail}
+          revision={revision}
+          locale={locale}
+          pageHref={pageHref}
+          currentOperations={currentOperations}
+          onCorrectCurrent={onCorrectCurrent}
+        />
+      </section>
     </div>
   );
 }
@@ -285,6 +376,7 @@ export function SubjectChangesPage({
   onRetry,
   onDetailRetry,
   onReviewCandidate,
+  onCorrectCurrent,
   returnUnavailable,
   historyTruncated,
   onStartOver,
@@ -446,6 +538,8 @@ export function SubjectChangesPage({
                     locale={locale}
                     pageHref={page?.href}
                     onReviewCandidate={onReviewCandidate}
+                    currentOperations={state.currentOperations ?? state.detail?.currentOperations}
+                    onCorrectCurrent={onCorrectCurrent}
                   />
                 )}
               </ContentItemFrame>
@@ -645,28 +739,28 @@ function SubjectChangesReader({
     if (!operation) return;
     const history = visit.history;
     let found = false;
-    let chainNext: string | null | undefined;
+    let cursor: string | undefined;
     try {
       if (!visit.lease.current() || visit.subject !== visit.id || visit.revision < 1)
         throw new Error('Expired history visit');
+      historyRef.current = firstChangePage();
+      revisionAddresses.current.clear();
       for (let index = 0; index < history.addresses.length; index++) {
-        const cursor = history.addresses[index];
-        if (index > 0 && cursor !== chainNext) throw new Error('Expired history continuation');
+        if (index > 0 && cursor === undefined) throw new Error('History frontier ended');
         dispatch({ type: 'list-start', more: index > 0 });
         const result = await currentTransport.current.list(cursor, session.current);
         if (!operation.current() || !visit.lease.current()) return;
-        if (result.kind !== 'ready') throw new Error('History page unavailable');
+        if (result.kind !== 'ready' || result.page.id !== visit.subject) throw new Error('History page unavailable');
         session.current = result.session ?? session.current;
-        chainNext = result.page.next;
+        if (index > 0) historyRef.current = appendChangePage(historyRef.current, cursor!);
+        setHistoryTruncated(historyRef.current.truncated || history.truncated);
         for (const row of result.page.revisions) {
           revisionAddresses.current.set(row.revision, cursor);
           if (row.revision === visit.revision) found = true;
         }
         dispatch({ type: 'list', result, more: index > 0 });
-        if (index + 1 < history.addresses.length && result.page.next !== history.addresses[index + 1])
-          throw new Error('History continuation changed');
+        cursor = result.page.next ?? undefined;
       }
-      setHistoryTruncated(history.truncated);
       setReturnUnavailable(!found);
       dispatch({ type: 'detail-start', revision: visit.revision });
       if (found) {
@@ -722,6 +816,30 @@ function SubjectChangesReader({
       lease,
     });
   }
+  function correctCurrent(address: CurrentCorrectionAddress, href: string, revision: number) {
+    const page = latest.current.page;
+    if (
+      !lease ||
+      !lease.current() ||
+      !active() ||
+      !page ||
+      latest.current.selected !== revision ||
+      !revisionAddresses.current.has(revision)
+    )
+      return false;
+    const cursor = revisionAddresses.current.get(revision);
+    if (!historyRef.current.addresses.includes(cursor)) return false;
+    return saveSubjectChangesReturn({
+      id: page.id,
+      subject: page.id,
+      href,
+      locale,
+      history: { addresses: [...historyRef.current.addresses], truncated: historyRef.current.truncated },
+      revision,
+      address,
+      lease,
+    });
+  }
   return (
     <SubjectChangesPage
       rootRef={focusRoot}
@@ -732,6 +850,7 @@ function SubjectChangesReader({
       returnUnavailable={returnUnavailable}
       onStartOver={startOver}
       {...(lease ? { onReviewCandidate: reviewCandidate } : {})}
+      {...(lease ? { onCorrectCurrent: correctCurrent } : {})}
       {...(currentHref ? { currentHref } : {})}
       onMore={(event) => {
         const cursor = state.page?.next;

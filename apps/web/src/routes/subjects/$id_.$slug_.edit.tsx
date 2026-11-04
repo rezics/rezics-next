@@ -4,7 +4,7 @@ import { candidateSession, useCandidateWork } from '../../subject/candidate-life
 import { readSubjectCandidates, confirmSubjectCandidate } from '../../features/pages/curate-actions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useSyncExternalStore } from 'react';
-import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
+import { createFileRoute, Link, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { StatementEditor, EditorFailure } from '../../features/catalogue/statement-editor-view';
@@ -26,7 +26,10 @@ import { readSubjectContext, confirmSubjectContext } from '../../features/catalo
 import { candidateContext } from '../../subject/candidates';
 import { providerQueueReturnForReview } from '../../features/import-review/provider-queue';
 import { providerSessionSource } from '../../features/import-review/provider-visit';
-import { subjectChangesReturnForReview } from '../../features/catalogue/subject-changes-navigation';
+import {
+  subjectChangesReturnForCorrection,
+  subjectChangesReturnForReview,
+} from '../../features/catalogue/subject-changes-navigation';
 import { captureCandidateSession } from '../../subject/candidate-lifetime';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -134,8 +137,36 @@ function CorrectionRoute() {
           candidateLease.reader,
         )
       : undefined;
-  const returnHref = providerReturn ? '/imports/review' : changesReturn?.href;
-  const returnUnavailable = (returnTo === 'queue' && !providerReturn) || (returnTo === 'changes' && !changesReturn);
+  const correctionReturn =
+    returnTo === 'changes' && candidateLease
+      ? subjectChangesReturnForCorrection(
+          property
+            ? { kind: 'property', subject: id, property, context: candidateContext }
+            : { kind: 'subject', subject: id },
+          candidateLease.reader,
+        )
+      : undefined;
+  const returnHref = providerReturn ? '/imports/review' : (changesReturn?.href ?? correctionReturn?.href);
+  const returnUnavailable =
+    (returnTo === 'queue' && !providerReturn) ||
+    (returnTo === 'changes' && !changesReturn && !correctionReturn);
+  const correctionReturnLink =
+    returnTo === 'changes' && !reviewProperty ? (
+      returnHref ? (
+        <p className="px-6 pt-4">
+          <Link
+            className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            to={returnHref as never}
+          >
+            {m.changes_return_to_changes()}
+          </Link>
+        </p>
+      ) : (
+        <p role="status" className="px-6 pt-4">
+          {m.changes_return_unavailable()}
+        </p>
+      )
+    ) : null;
   const read = async () => {
     const result = await readCorrection({
       data: editorRequest({ id, property, statement }, editorWork),
@@ -182,29 +213,31 @@ function CorrectionRoute() {
     );
   if (!property)
     return (
-      <SubjectFacts
-        key={`${id}:${locale}`}
-        initial={query.data}
-        locale={locale}
-        transport={{
-          read,
-          propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-        }}
-        initialReview={
-          reviewProperty && candidate && context
-            ? {
-                property: reviewProperty,
-                candidate,
-                context,
-                ...(returnHref ? { returnHref } : {}),
-                ...(returnHref
-                  ? { returnLabel: returnTo === 'queue' ? m.prq_return_to_queue() : m.changes_return_to_changes() }
-                  : {}),
-                ...(returnTo ? { returnUnavailable } : {}),
-              }
-            : undefined
-        }
-        review={(_property, initialSession, reviewContext) => {
+      <>
+        {correctionReturnLink}
+        <SubjectFacts
+          key={`${id}:${locale}`}
+          initial={query.data}
+          locale={locale}
+          transport={{
+            read,
+            propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          }}
+          initialReview={
+            reviewProperty && candidate && context
+              ? {
+                  property: reviewProperty,
+                  candidate,
+                  context,
+                  ...(returnHref ? { returnHref } : {}),
+                  ...(returnHref
+                    ? { returnLabel: returnTo === 'queue' ? m.prq_return_to_queue() : m.changes_return_to_changes() }
+                    : {}),
+                  ...(returnTo ? { returnUnavailable } : {}),
+                }
+              : undefined
+          }
+          review={(_property, initialSession, reviewContext) => {
           const exactContext = reviewContext ?? candidateContext;
           return {
             read: async (field, cursor, session = initialSession, work) => {
@@ -240,23 +273,26 @@ function CorrectionRoute() {
               return result;
             },
           };
-        }}
-      />
+          }}
+        />
+      </>
     );
   return (
-    <StatementEditor
-      key={`${id}:${property}:${statement}:${locale}`}
-      initial={query.data}
-      locale={locale}
-      transport={{
-        read,
-        propose: (data) => submitCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-      }}
-      lifecycle={{
-        change: (data) => changeOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-        read: (data) => rereadOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-      }}
-      onLifecycleClear={async () => {
+    <>
+      {correctionReturnLink}
+      <StatementEditor
+        key={`${id}:${property}:${statement}:${locale}`}
+        initial={query.data}
+        locale={locale}
+        transport={{
+          read,
+          propose: (data) => submitCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        }}
+        lifecycle={{
+          change: (data) => changeOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          read: (data) => rereadOwnContribution({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        }}
+        onLifecycleClear={async () => {
         if (!editorWork.live()) return;
         // Cancel in-flight reads before dropping cached subject/candidate payloads.
         await queryClient.cancelQueries({ predicate: (query) => query.queryKey.includes(id) });
@@ -268,8 +304,8 @@ function CorrectionRoute() {
         queryClient.removeQueries({
           predicate: (query) => query.queryKey.includes(id) && query.queryKey[0] !== 'statement-editor',
         });
-      }}
-      review={(initialSession) => {
+        }}
+        review={(initialSession) => {
         return {
           read: async (field, cursor, session = initialSession, work) => {
             if (!work?.live()) return { ok: false, reason: 'denied' };
@@ -285,7 +321,8 @@ function CorrectionRoute() {
             return result;
           },
         };
-      }}
-    />
+        }}
+      />
+    </>
   );
 }

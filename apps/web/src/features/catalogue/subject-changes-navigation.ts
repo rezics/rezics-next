@@ -28,6 +28,11 @@ export function validChangePageHistory(value: unknown): value is ChangePageHisto
 }
 
 export type CurrentCandidateAddress = { subject: string; property: string; candidate: string; context: string };
+export type CurrentCorrectionAddress =
+  | { kind: 'subject'; subject: string }
+  | { kind: 'terms'; subject: string }
+  | { kind: 'property'; subject: string; property: string; context: string };
+type SubjectChangesAddress = CurrentCandidateAddress | CurrentCorrectionAddress;
 export type SubjectChangesReturn = {
   id: string;
   subject: string;
@@ -35,7 +40,7 @@ export type SubjectChangesReturn = {
   locale: string;
   history: ChangePageHistory;
   revision: number;
-  address: CurrentCandidateAddress;
+  address: SubjectChangesAddress;
   lease: CandidateSessionLease;
 };
 type StoredReturn = SubjectChangesReturn & { key: string; stop: () => void };
@@ -56,6 +61,17 @@ function validAddress(address: CurrentCandidateAddress) {
     !!address.property &&
     address.property.length <= 256
   );
+}
+function validReturnAddress(address: SubjectChangesAddress) {
+  if ('kind' in address) {
+    if (!uuid.test(address.subject)) return false;
+    return (
+      address.kind === 'subject' ||
+      address.kind === 'terms' ||
+      (!!address.property && address.property.length <= 256 && uuid.test(address.context))
+    );
+  }
+  return validAddress(address);
 }
 function safeSubjectReturnHref(href: string, subject: string, locale: string) {
   if (
@@ -96,7 +112,7 @@ export function saveSubjectChangesReturn(
     !Number.isSafeInteger(visit.revision) ||
     visit.revision < 1 ||
     !validChangePageHistory(visit.history) ||
-    !validAddress(visit.address) ||
+    !validReturnAddress(visit.address) ||
     visit.address.subject !== visit.subject
   )
     return false;
@@ -117,6 +133,7 @@ export function subjectChangesReturnForReview(
     return undefined;
   }
   return validAddress(address) &&
+    !('kind' in stored.address) &&
     stored.lease.reader === reader &&
     stored.subject === address.subject &&
     stored.address.subject === address.subject &&
@@ -125,6 +142,23 @@ export function subjectChangesReturnForReview(
     stored.address.context === address.context
     ? stored
     : undefined;
+}
+export function subjectChangesReturnForCorrection(
+  address: CurrentCorrectionAddress,
+  reader: string,
+): SubjectChangesReturn | undefined {
+  if (!stored) return undefined;
+  if (!stored.lease.current() || stored.lease.reader !== reader) {
+    clear(stored.key);
+    return undefined;
+  }
+  if (!validReturnAddress(address) || !('kind' in stored.address) || stored.lease.reader !== reader) return undefined;
+  const saved = stored.address;
+  if (saved.kind !== address.kind || saved.subject !== address.subject) return undefined;
+  if (saved.kind === 'property' && address.kind === 'property') {
+    return saved.property === address.property && saved.context === address.context ? stored : undefined;
+  }
+  return saved.kind === address.kind ? stored : undefined;
 }
 export function takeSubjectChangesReturn(subject: string, reader: string): SubjectChangesReturn | undefined {
   if (!stored) return undefined;

@@ -28,9 +28,12 @@ export function catalogueChangesFixture(
   const { id, read } = catalogueSourcesFixture();
   let outcome = scenario;
   let subjectStatus = 200;
+  let actionOutcome: 'available' | 'component-unavailable' | 'unavailable' | 'preparing' = 'available';
+  let actionOperations = ['subject.propose', 'subject.terms'];
   const calls: {
     path: string;
     cursor: string | null;
+    includeViewerActions: boolean;
     authorization: string | null;
     session: string | null;
     cache: RequestCache;
@@ -43,6 +46,7 @@ export function catalogueChangesFixture(
       calls.push({
         path: url.pathname,
         cursor: url.searchParams.get('cursor'),
+        includeViewerActions: url.searchParams.get('includeViewerActions') === 'true',
         authorization: request.headers.get('authorization'),
         session: request.headers.get('rezics-session-token'),
         cache: request.cache,
@@ -53,8 +57,21 @@ export function catalogueChangesFixture(
           status,
           headers: { 'content-type': 'application/json', 'rezics-session-token': 'changes-session' },
         });
-      if (url.pathname === `/v1/subjects/${id}`)
-        return json(subjectStatus === 200 ? read : { code: 'not_found' }, subjectStatus);
+      if (url.pathname === `/v1/subjects/${id}`) {
+        if (subjectStatus !== 200) return json({ code: 'not_found' }, subjectStatus);
+        if (url.searchParams.get('includeViewerActions') !== 'true') return json(read);
+        if (actionOutcome === 'preparing') return json({ code: 'semantic_not_ready' }, 503);
+        if (actionOutcome === 'unavailable') return json({ code: 'overloaded' }, 503);
+        if (actionOutcome === 'component-unavailable')
+          return json({ ...read, viewerActions: { state: 'unavailable' } });
+        return json({
+          ...read,
+          viewerActions: {
+            state: 'available',
+            actions: [{ action: 'statement:propose', operations: actionOperations }],
+          },
+        });
+      }
       const detailPath = `/v1/subjects/${id}/revisions/`;
       if (url.pathname.startsWith(detailPath))
         return nativeDetail?.(Number(url.pathname.slice(detailPath.length))) ?? json({ code: 'overloaded' }, 503);
@@ -114,6 +131,12 @@ export function catalogueChangesFixture(
     },
     conceal: () => {
       subjectStatus = 404;
+    },
+    setActionOutcome: (value: 'available' | 'component-unavailable' | 'unavailable' | 'preparing') => {
+      actionOutcome = value;
+    },
+    setActionOperations: (operations: string[]) => {
+      actionOperations = operations;
     },
   };
 }

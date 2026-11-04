@@ -72,7 +72,7 @@ export const readSubjectRevisionDetail: RevisionDetailPort = async (client, inpu
         },
         fetch: { cache: 'no-store', redirect: 'manual' },
       });
-    if (response.status !== 200) return changesFailure(response.status);
+    if (response.status !== 200) return changesFailure(response.status, response.error?.value);
     const parsed = v.safeParse(detailSchema, response.data);
     if (!parsed.success) return { kind: 'unavailable' };
     const { subject, revision, change } = parsed.output;

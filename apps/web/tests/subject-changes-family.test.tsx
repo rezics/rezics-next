@@ -219,7 +219,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     expect(revisions(a).querySelector('h2')?.textContent).toBe(m.changes_revisions());
     expect(explanation(a).textContent).toContain(m.changes_choose());
     expect(calls).toEqual([{ operation: 'list', operand: undefined, session: undefined }]);
-    expect(first.calls).toHaveLength(2);
+    expect(first.calls).toHaveLength(3);
     for (const page of [a, b]) authoredControls(page);
     const currentHref = a.querySelector<HTMLAnchorElement>('nav a')!.getAttribute('href');
     const selectFive = m.changes_revision({ revision: '5' });
@@ -258,7 +258,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     });
     expect(
       first.calls
-        .filter((call) => call.path === `/v1/subjects/${first.id}`)
+        .filter((call) => call.path === `/v1/subjects/${first.id}` && !call.includeViewerActions)
         .every((call) => call.authorization === null),
     ).toBe(true);
     expect(a.querySelector('nav a')?.getAttribute('href')).toBe(currentHref);
@@ -340,7 +340,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     await showReaders();
     expect(calls).toHaveLength(beforeRefresh);
     expect(a.getAttribute('aria-busy')).toBe('true');
-    observed = { ...observed, csrfToken: 'replacement-csrf' };
+    observed = { ...observed, subject: second.id, csrfToken: 'replacement-csrf' };
     await showReaders();
     await until(() => !!histories()[0]?.querySelector('ol button'));
     expect(calls.at(-1)).toEqual({ operation: 'list', operand: undefined, session: undefined });
@@ -379,8 +379,18 @@ test('the complete Subject history family keeps independent headings, bounded su
       changesLastCursor,
       null,
     ]);
-    expect(first.calls).toHaveLength(12);
-    expect(second.calls).toHaveLength(4);
+    const firstActionReads = first.calls.filter((call) => call.includeViewerActions);
+    const firstCurrentReads = first.calls.filter(
+      (call) => call.path === `/v1/subjects/${first.id}` && !call.includeViewerActions,
+    );
+    expect(firstActionReads).toHaveLength(firstCurrentReads.length);
+    expect(first.calls.filter((call) => !call.includeViewerActions)).toHaveLength(12);
+    const secondActionReads = second.calls.filter((call) => call.includeViewerActions);
+    const secondCurrentReads = second.calls.filter(
+      (call) => call.path === `/v1/subjects/${second.id}` && !call.includeViewerActions,
+    );
+    expect(secondActionReads).toHaveLength(secondCurrentReads.length);
+    expect(second.calls.filter((call) => !call.includeViewerActions)).toHaveLength(4);
 
     // Empty final batches retain the accumulated list and allow a subsequent explanation.
     const initial = await second.transport.list();
