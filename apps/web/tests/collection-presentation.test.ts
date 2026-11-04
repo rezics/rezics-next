@@ -6,6 +6,7 @@ import { CollectionMemberDetails } from '../src/library/collection-member-row';
 import {
   collectionMemberRatio,
   collectionPageAddress,
+  readCollectionTypeOptions,
   type CollectionListPresentations,
 } from '../src/library/collection-presentation';
 import { collectionFilterAddress } from '../src/library/collection-filter-params';
