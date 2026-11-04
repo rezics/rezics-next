@@ -287,7 +287,6 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={realms.state === 'loading'}
                     onClick={() => void readRealms(realms.next!)}
                   >
                     {m.realms_more()}
