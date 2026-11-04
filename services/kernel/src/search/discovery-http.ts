@@ -191,13 +191,14 @@ const viewerFactsUnavailable = t.Object(
   },
   closed,
 );
+const currentViewerFactsSchema = viewerFactsResponseSchema.anyOf[0];
 const searchViewerFacts = t.Object(
   {
-    ...viewerFactsResponseSchema.properties,
+    ...currentViewerFactsSchema.properties,
     rows: t.Array(
       t.Object(
         {
-          ...viewerFactsResponseSchema.properties.rows.items.properties,
+          ...currentViewerFactsSchema.properties.rows.items.properties,
           resolvedSubjectId: t.Optional(t.String({ format: 'uuid' })),
         },
         closed,
