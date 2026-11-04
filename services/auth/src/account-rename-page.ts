@@ -151,11 +151,21 @@ export function accountRenamePageTransport(
               continuation: { kind: 'management-operation-step-up', operation: 'rename' },
             };
           if (!access) return { state: 'unavailable' };
-          const page = closePage(
-            await access.readRenameAccountPage({ human, accountId: human.account_id, deadline }),
-            human.account_id,
-            human,
-          );
+          let page: RenamePageBody;
+          try {
+            page = closePage(
+              await access.readRenameAccountPage({ human, accountId: human.account_id, deadline }),
+              human.account_id,
+              human,
+            );
+          } catch (error) {
+            // A native 401 means the admitted proof no longer meets Access's
+            // account, currentness or authentication floor. It is a refusal,
+            // while Auth proof failures outside this seam remain signed-out.
+            const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
+            if (status === 401 || status === 403 || status === 409) return { state: 'refused' };
+            throw error;
+          }
           // Revalidate the same session, floor, client and consent after native I/O.
           await service.internal.accessTokenForProof(human);
           if (Date.now() >= deadline) return { state: 'unavailable' };
