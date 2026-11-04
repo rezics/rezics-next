@@ -20,7 +20,8 @@ and authenticates its own session under Accounts' contract.
 Catalogue's candidate boundary keys visits by address and reader observation. Editor holders retain private drafts
 under their existing current-reading adapter, while transports and callbacks belong only to the admitted reading.
 History's operation episodes retain native intent during healthy credential rotation; dispatch versions retire
-callbacks immediately. Refusal, account replacement and replaced response identity keep their stronger retirement
+callbacks immediately. Private read keys include dispatch and observation identity, so a retained draft never
+reuses its prior private reading after session replacement. Refusal, account replacement and replaced response identity keep their stronger retirement
 rules. Ratings owns its operation/context descriptor and original vote-pair identity; its currently required
 personal_library exposure policy is explicit and does not imply Library membership or resource action grants.
 

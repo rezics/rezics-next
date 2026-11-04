@@ -74,6 +74,8 @@ export function useReaderCurrentOrigin(
     };
   }
   const boundary = ref.current;
+  const seedObservation = useRef<typeof scoped.observation>(undefined);
+  if (hydrated && scoped.observation && !seedObservation.current) seedObservation.current = scoped.observation;
   useLayoutEffect(() => {
     // Mounting never reactivates a render-retired boundary.
     if (boundary.active) boundary.mounted = true;
@@ -101,6 +103,12 @@ export function useReaderCurrentOrigin(
       now.allowed[index] === true
     );
   }
+  const command = (index: number) => operationLease(
+    readLease(subject ?? '', boundary.lease, () => current(index)),
+    operations[index]!,
+    () => store.allowed(operations[index]!),
+    () => client.getQueryData(sessionQuery.queryKey)?.csrfToken ?? null,
+  );
   return {
     client,
     session,
@@ -110,18 +118,15 @@ export function useReaderCurrentOrigin(
     authoritative: !!suppliedClient,
     allowed: !suppliedClient && previewAllowed ? previewAllowed : snapshot.allowed,
     retained: !suppliedClient && previewAllowed ? previewAllowed : hydrated ? scoped.granted : snapshot.allowed,
-    seed: boundary.seed && snapshot.episodes.every((value) => value === 0),
+    seed: boundary.seed && snapshot.episodes.every((value) => value === 0) &&
+      (!hydrated || seedObservation.current === scoped.observation),
+    readKey: (index: number) => JSON.stringify([boundary.id, scoped.observation?.id, snapshot.dispatch[index]]),
     lifetime: (index: number) => JSON.stringify([boundary.id, snapshot.episodes[index]]),
     epoch: (index: number) => snapshot.dispatch[index],
     current,
     readLease: (index: number) => readLease(subject ?? '', boundary.lease, () => current(index)),
-    operationLease: (index: number) => operationLease(
-      readLease(subject ?? '', boundary.lease, () => current(index)),
-      operations[index]!,
-      () => store.allowed(operations[index]!),
-      () => client.getQueryData(sessionQuery.queryKey)?.csrfToken ?? null,
-    ),
-    credential: (index: number) => (current(index) ? client.getQueryData(sessionQuery.queryKey)?.csrfToken : null),
+    operationLease: command,
+    credential: (index: number) => command(index).credential(),
   };
 }
 
