@@ -6,7 +6,9 @@ import { subjectHref } from '../../subject/subject-href';
 
 /** Shared native list facts; the shelf never requests Subject details or reads votes. */
 export type ShelfFacts = NonNullable<CollectionMember['facts']>;
+export type ShelfEntryIdentity = { subjectId: string; revision: number; incarnationId?: string | null };
 export type ShelfContextSource = {
+  entryIdentity?: ShelfEntryIdentity | null;
   subjectId: string;
   revision: number;
   incarnationId?: string | null;
@@ -29,6 +31,9 @@ function identity(entry: ShelfContextSource): string {
     entry.incarnationId ?? null,
     entry.id ?? null,
     entry.labelId ?? null,
+    entry.entryIdentity?.subjectId ?? null,
+    entry.entryIdentity?.revision ?? null,
+    entry.entryIdentity?.incarnationId ?? null,
   ]);
 }
 

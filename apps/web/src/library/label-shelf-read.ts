@@ -12,9 +12,15 @@ import { requestLocale } from '../kernel/client';
 import { libraryStateLabel } from './profiles';
 import { m } from '../paraglide/messages.js';
 
-import { prepareShelfWorkContext, suppliedShelfFacts, type ShelfWorkContext } from './shelf-work-context/context';
+import {
+  prepareShelfWorkContext,
+  suppliedShelfFacts,
+  type ShelfWorkContext,
+  type ShelfEntryIdentity,
+} from './shelf-work-context/context';
 
 export type LabelShelfEntry = {
+  entryIdentity?: ShelfEntryIdentity | null;
   workContext?: ShelfWorkContext | null;
   id: string;
   labelId: string;
@@ -157,6 +163,13 @@ async function readLabelShelfPage(
               ? m.library_other()
               : undefined;
         const progress = entry?.activeProgressSession;
+        const entryIdentity = entry
+          ? {
+              subjectId: entry.subjectId,
+              revision: entry.revision,
+              incarnationId: entry.incarnationId,
+            }
+          : null;
         return {
           id: row.id,
           removeKey: crypto.randomUUID(),
@@ -164,7 +177,12 @@ async function readLabelShelfPage(
           subjectId: row.subjectId,
           revision: row.revision,
           subject,
-          workContext: prepareShelfWorkContext({ ...row, subject, facts: suppliedShelfFacts(row) }, release, locale),
+          entryIdentity,
+          workContext: prepareShelfWorkContext(
+            { ...row, subject, entryIdentity, facts: suppliedShelfFacts(row) },
+            release,
+            locale,
+          ),
           ...(state ? { state } : {}),
           ...(stateLabel ? { stateLabel } : {}),
           ...(progress ? { activeProgressSession: progress } : {}),

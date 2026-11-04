@@ -64,8 +64,16 @@ test('missing, withheld, stale or replaced contexts have no link; released bound
     },
   };
   expect(prepareShelfWorkContext(many, contextExampleRelease, 'en')?.facts).toHaveLength(3);
-  const assignment = { ...entry, id: shelfExampleId(800), labelId: shelfExampleId(801) };
+  const assignment = {
+    ...entry,
+    id: shelfExampleId(800),
+    labelId: shelfExampleId(801),
+    entryIdentity: { subjectId: entry.subjectId, revision: entry.revision, incarnationId: entry.incarnationId ?? null },
+  };
   const bound = { ...assignment, workContext: prepareShelfWorkContext(assignment, contextExampleRelease, 'en') };
+  expect(
+    currentShelfWorkContext({ ...bound, entryIdentity: { ...assignment.entryIdentity, revision: 8 } }, 'en'),
+  ).toBeNull();
   expect(currentShelfWorkContext({ ...bound, id: shelfExampleId(802) }, 'en')).toBeNull();
   expect(currentShelfWorkContext({ ...bound, labelId: shelfExampleId(803) }, 'en')).toBeNull();
 });
