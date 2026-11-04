@@ -5,7 +5,7 @@ import type { PersonStatement } from '../person-reader/model';
 import type { ProfileReading } from '../person-reader/reader';
 import { ValueExplanationSession } from '../value-explanation-session';
 import type { ValueRead } from '../value-explanation';
-import { admitFacts, factAddress, factFieldAnchor, type FactProjection } from './model';
+import { admitFacts, factAddress, factFieldAnchor, sameFactReading, type FactProjection } from './model';
 
 export const factControl =
   'inline-flex min-h-11 min-w-11 max-w-full items-center px-1 py-2 underline whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -13,6 +13,7 @@ type Visit = { statement: PersonStatement; source: HTMLAnchorElement; field: str
 type Facts = {
   projection: FactProjection | undefined;
   expanded: string | undefined;
+  inspecting: boolean;
   expand: (field: string | undefined) => void;
   inspect: (visit: Visit) => void;
   stale: ReadonlySet<string>;
@@ -101,6 +102,7 @@ function FactVisit({
       value={{
         projection: available ? projection : undefined,
         expanded,
+        inspecting: !!visit,
         expand(field) {
           if (current()) {
             expand(field);
@@ -144,7 +146,7 @@ function FactVisit({
             link={reading.link}
             onRead={(result) => {
               if (!current() || activeVisit.current !== visit) return;
-              if (result.kind === 'ready' && !result.page.statement)
+              if (result.kind === 'ready' && !sameFactReading(reading, visit.statement, result.page))
                 setStale((old) => new Set([...old, visit.statement.id]));
             }}
           />
