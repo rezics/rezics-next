@@ -9,7 +9,7 @@ export function YearlyGoalPage({
   year,
   sessionState,
 }: {
-  year?: number;
+  year?: number | undefined;
   sessionState: 'signed-in' | 'signed-out' | 'unknown' | 'unavailable';
 }) {
   const locale = getLocale();
