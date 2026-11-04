@@ -8,7 +8,8 @@ import type { KernelClock } from '../clock.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
+import { IDEMPOTENCY_HEADER } from '../http/headers.ts';
+import { idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import { languageRanges } from '../semantic/language.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -901,7 +902,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           closed,
         ),
         response: { 200: strict(structureHistoryPageSchema), ...failures },
-        detail: detail('collection.structure_history.list', 'collection:update'),
+        detail: detail('collection.structure_history_list', 'collection:update'),
         transform: ({ set }) => {
           set.headers['cache-control'] = 'private, no-store';
         },
@@ -920,7 +921,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           closed,
         ),
         response: { 200: strict(structureHistoryComparisonSchema), ...failures },
-        detail: detail('collection.structure_history.compare', 'collection:update'),
+        detail: detail('collection.structure_history_compare', 'collection:update'),
         transform: ({ set }) => {
           set.headers['cache-control'] = 'private, no-store';
         },

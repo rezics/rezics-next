@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { trustedAccessPorts } from '../../../auth/test/support/trusted-access.ts';
 import { withThrowawayDatabase } from '../../scripts/derived.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 
 setDefaultTimeout(600_000);
@@ -90,15 +91,49 @@ async function startKernelWorker(databaseUrl: string) {
   await worker.stop();
 }
 
+const OPERATION_ID = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
+
+/** Same parallel graph as `bun services/auth/scripts/dev-stack.ts persona` (`task dev:persona` / `task seed:dev`). */
+async function startPersonaSeed(databaseUrl: string) {
+  const [, { createKernel }] = await Promise.all([
+    import('../../../auth/src/index.ts'),
+    import('../../src/http/kernel.ts'),
+    import('../../src/http/request.ts'),
+    import('../../src/access/index.ts'),
+    import('../../src/access/native-account-bindings.ts'),
+    import('../../src/server.ts'),
+    import('../../src/access/management-source.ts'),
+  ]);
+  const pool = new Pool({ connectionString: databaseUrl });
+  try {
+    const kernel = createKernel({
+      pool,
+      routeKey: randomBytes(32),
+      receiptKeys: testReceiptKeys(),
+    });
+    let history = 0;
+    for (const route of kernel.routes) {
+      const detail = route.hooks?.detail as Record<string, unknown> | undefined;
+      if (!detail || detail.hide === true) continue;
+      expect(detail.operationId).toMatch(OPERATION_ID);
+      if (String(route.path).includes('/structure-history')) history += 1;
+    }
+    expect(history).toBe(2);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function boot(env: NodeJS.ProcessEnv) {
   const databaseUrl = env.DATABASE_URL!;
   // DBOS is process-global; production runs these entries in separate processes.
+  await startPersonaSeed(databaseUrl);
   await startKernelApi(databaseUrl);
   await startAuthHost(databaseUrl);
   await startKernelWorker(databaseUrl);
 }
 
-test('the Kernel API, worker and native Auth host entries start against a throwaway database', async () => {
+test('Kernel API, worker, native Auth host and persona/seed entries start against a throwaway database', async () => {
   if (process.env.DATABASE_URL) await boot(process.env);
   else await withThrowawayDatabase(boot);
 });

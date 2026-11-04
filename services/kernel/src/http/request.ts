@@ -6,9 +6,7 @@ import { ANONYMOUS_PRINCIPAL_ID, normalizeCommandKey, type CommandPrincipal } fr
 import type { ActionCatalogue, Actor } from '../request/access.ts';
 import { anchorRoute, derivedId } from '../route/route.ts';
 import { kernelWriteRateFor } from './write-rate-routes.ts';
-
-export const SESSION_HEADER = 'rezics-session-token';
-export const IDEMPOTENCY_HEADER = 'idempotency-key';
+export { SESSION_HEADER, IDEMPOTENCY_HEADER } from './headers.ts';
 
 export function idempotencyKeyOf(header: string | null | undefined, principal?: CommandPrincipal): string {
   if (typeof header !== 'string')
