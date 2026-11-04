@@ -91,7 +91,7 @@ async function discover(input: DiscoveryInput): Promise<readonly ExposureOperati
     await within(input.deadline, () =>
       withConnection(input.pool, async (client) => {
         const bounded = deadlineClient(client, input.deadline);
-        for (const row of await openGroups.run(bounded, { groups: catalogue.groups, at: instant })) {
+        for (const row of await openGroups.run(bounded, { groups: [...catalogue.groups], at: instant })) {
           if (typeof row.group !== 'string') throw new Error('Open group read failed');
           open.add(row.group);
         }
