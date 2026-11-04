@@ -19,6 +19,7 @@ import {
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 
+const origin = 'https://kernel.import.test';
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const gameId = 990301;
 const gameExternalId = String(gameId);
@@ -77,7 +78,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
     expect(grant.status).toBe(201);
 
     const publicClient = createPublicBulkClient({
-      origin: runtime.origin,
+      origin,
       fetch: Object.assign(
         async (input: Parameters<typeof fetch>[0]) => {
           const url = new URL(String(input));
@@ -93,7 +94,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
         plan,
         state,
         captureShowcaseCommands(runtime.importTransport, journal),
-        { origin: runtime.origin },
+        { origin },
         { providers: ['bangumi'] },
       );
       return { plan, result };
@@ -126,7 +127,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
       context: globalContext,
       limit: 100,
     });
-    const websiteCandidate = websitePage.candidates.find(
+    const websiteCandidate = websitePage.candidates.filter((candidate) => 'statement' in candidate).find(
       (candidate) =>
         candidate.source?.external_id === gameExternalId &&
         candidate.statement.property.id === 'schema:url' &&
@@ -143,7 +144,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
       context: globalContext,
       limit: 100,
     });
-    expect(malformedPage.candidates.some((candidate) => candidate.source?.external_id === gameExternalId)).toBe(false);
+    expect(malformedPage.candidates.some((candidate) => 'source' in candidate && candidate.source?.external_id === gameExternalId)).toBe(false);
 
     await publish(first);
     expect(publicValues(await publicClient.readSubject(subjectId), 'schema:url')).toContain(website);
@@ -159,7 +160,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
       context: globalContext,
       limit: 100,
     });
-    const descriptiveCandidate = descriptivePage.candidates.find(
+    const descriptiveCandidate = descriptivePage.candidates.filter((candidate) => 'statement' in candidate).find(
       (candidate) =>
         candidate.source?.external_id === gameExternalId &&
         candidate.statement.property.id === 'wdt:P973' &&
@@ -184,9 +185,13 @@ test('selected Bangumi Game destinations survive independent review, correction 
       context: globalContext,
       limit: 100,
     });
-    expect(websiteAdoption.adoption?.selection?.length).toBeGreaterThan(0);
-    expect(descriptiveAdoption.adoption?.selection?.map((item) => item.candidate)).toContain(descriptiveCandidate?.id);
+    expect(websiteAdoption.adoption?.mode).toBe('replace');
+    expect(websiteAdoption.adoption?.head).toBeGreaterThan(0);
+    expect(descriptiveAdoption.adoption?.mode).toBe('replace');
+    expect(descriptiveAdoption.adoption?.head).toBeGreaterThan(0);
     const publicGame = await publicClient.readSubject(subjectId);
+    expect((publicGame.subject as { type: string }).type).toBe('schema:VideoGame');
+    expect(publicValues(publicGame, 'schema:name')).toContainEqual({ language: 'und', text: 'CLANNAD' });
     expect(publicValues(publicGame, 'schema:url')).toContain(website);
     expect(publicValues(publicGame, 'wdt:P973')).toContain(descriptive);
   } finally {
