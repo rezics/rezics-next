@@ -1043,8 +1043,8 @@ Decision: the client facade accepts a per-request Authorization header on the ap
 
 The call is `KernelClient['moderation-decisions']({ id }).get({ headers: { authorization } })`;
 the source response, generated OpenAPI and installed declarations contain the retained top-level decision,
-`viewer` and `targetContext`. The generated delivery commit is `3c8649474435786d59176800053cc3888458a8fb`.
-Web can adopt these installed fields. Narrow on
+`viewer` and `targetContext`. The installed generated delivery commit is `3c8649474435786d59176800053cc3888458a8fb`.
+A fresh full-tree generated delivery is still required before consumer freshness is verified. Narrow on
 `targetContext.state` before accessing navigation, and on `viewer.appeal.state` before presenting an appeal action.
 The existing `.$appeal.post({ statement }, { headers: { authorization, 'idempotency-key': key } })` command is
 unchanged. Keep the private-reader lifetime, departure and uncertain-submission engines in Web. A board response
