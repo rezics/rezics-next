@@ -2494,7 +2494,7 @@ No Search registration, index, Home engine or hydration authorization is impleme
   even without an indexable witness. Decision: full pages continue after the last examined key; short pages end,
   allowing one final empty page at an exact multiple. Rebuilding starts again at null using current native truth.
 - Available items are `status:'indexable'` plus `value:{kind:'collection',key,revision,title,description,
-presentationKind,coverMediaId,membershipKind,output}`. Curated output is null. Saved dynamic output is only
+  presentationKind,coverMediaId,membershipKind,output}`. Curated output is null. Saved dynamic output is only
   `{route,collectionId,generation}`, verified by the installed `collection-source-output-head.sql` Publication
   witness, its Core commit and current source fence. No rule, personal population, private totals or members cross.
 - Hidden/deleted/absent keys return `status:'withdrawn'` with the key alone. Public dynamic rows without a current
