@@ -2030,6 +2030,17 @@ identity and incoming parent meaning, duplicate-target assertion identity, whole
 states, exact return and caller/Context A/B/A retirement. Source review, authored consumer tests and fixtures are
 separate evidence classes; actual seeded mounted evidence and native producer growth are not claimed here.
 
+The private Character Relationships editor keeps its visit in the source history entry. Its navigation state is capped
+at 327,680 UTF-8 bytes and contains at most eight opaque cursors (8,192 UTF-16 units each), the current stream/work
+keys and an exact disclosed holder/statement focus; it carries no page, source, release, session or reveal payload.
+Eight worst-case four-byte cursors account for 262,144 bytes; the cap also covers the duplicated origin address and
+fixed keys. A target click adds no read. Returning performs one fresh current-page adapter read, and More, Previous,
+Retry or restart each perform one read through the private reader. The selected window requests at most 20 rows;
+holder descriptors are deduplicated and read four at a time, related summaries admit at most 256 distinct IDs, and
+each statement is bounded to one main Snak, 16 qualifiers and 16 references of up to 16 parts (273 Snaks). Only the
+current response remains mounted; retained prior-page payload bytes are zero. Missing row or work identity is
+announced and offers a fresh read of the current stream.
+
 A `via` return address admits only a same-locale canonical Subject or Realm path, with at most one Realm operand.
 No nested return chain, credential, draft or private row travels with it. A bounded Connections fragment may carry the selected native cursor and comparison locator described above. A link from a qualified note has
 the same return behavior as its main work/person link. Returning re-resolves the destination under current authority

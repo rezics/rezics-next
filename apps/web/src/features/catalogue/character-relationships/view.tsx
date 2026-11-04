@@ -2,6 +2,7 @@ import { catalogueEditor, useEditorLifetime } from '../editor-lifetime';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from '@tanstack/react-router';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { pickText } from '@rezics/composition';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
@@ -17,7 +18,13 @@ import {
   characterRelationshipsSummaryClass,
 } from '../../pages/character-relationships';
 import { associationCorrection } from './correction';
-import { associationReadingKey } from './navigation';
+import {
+  advanceCharacterRelationshipsCursor,
+  associationReadingKey,
+  createCharacterRelationshipsVisit,
+  type CharacterRelationshipsOrigin,
+  type CharacterRelationshipsVisit,
+} from './navigation';
 import {
   isCurrentCharacterRelationshipsRead,
   type CharacterAssociationRow,
@@ -56,6 +63,9 @@ function CharacterRelationshipsLive({
   work,
   stream: initialStream,
   cursor: initialCursor,
+  origin,
+  visit,
+  saveVisit,
   signedIn = true,
 }: {
   id: string;
@@ -66,6 +76,9 @@ function CharacterRelationshipsLive({
   work?: string | undefined;
   stream?: string | undefined;
   cursor?: string | undefined;
+  origin?: CharacterRelationshipsOrigin | undefined;
+  visit?: CharacterRelationshipsVisit | undefined;
+  saveVisit?: (visit: CharacterRelationshipsVisit) => void;
   signedIn?: boolean;
 }) {
   const streamId = useId();
@@ -85,24 +98,54 @@ function CharacterRelationshipsLive({
   const [failure, setFailure] = useState<Extract<CharacterRelationshipsRead, { ok: false }>>();
   const [busy, setBusy] = useState(false);
   const [drafts, setDrafts] = useState<OpenDraft[]>([]);
-  const [selectedWork, setSelectedWork] = useState(work);
+  const [selectedWork, setSelectedWork] = useState(visit ? (visit.work ?? undefined) : work);
+  const [returnChanged, setReturnChanged] = useState(false);
   const nextDraftInstance = useRef(0);
   const focusAfterOpen = useRef<OpeningFocus | undefined>(undefined);
   useLayoutEffect(() => () => focusAfterOpen.current?.cancel(), []);
   const focusAfterClose = useRef<HTMLElement | undefined>(undefined);
   const readFocus = useConsentFocus();
+  const router = useRouter({ warn: false });
   const readSequence = useRef(0);
   const sliceStatus = useRef<HTMLParagraphElement>(null);
   const readFailure = useRef<HTMLParagraphElement>(null);
   const running = useRef(false);
   const session = useRef<string | undefined>(undefined);
-  const cursor = useRef<string | undefined>(initialCursor);
+  const cursorAddresses = useRef<(string | null)[]>(visit ? [...visit.cursors] : [initialCursor ?? null]);
+  const cursorIndex = useRef(visit?.index ?? 0);
+  const cursor = useRef<string | undefined>(cursorAddresses.current[cursorIndex.current] ?? undefined);
+  const pageRoot = useRef<HTMLElement>(null);
+  const focusAttempted = useRef(false);
   useLayoutEffect(() => {
     const target = focusAfterClose.current;
     if (!target) return;
     focusAfterClose.current = undefined;
     if (target.isConnected) target.focus();
   }, [drafts]);
+  useLayoutEffect(() => {
+    if (!visit || focusAttempted.current || !query.isSuccess || query.isFetching || !query.data?.ok) return;
+    focusAttempted.current = true;
+    const workMissing = !!visit.work && !query.data.rows.some((row) => row.holder === visit.work);
+    const focus = visit?.focus;
+    if (!focus) {
+      if (workMissing) setReturnChanged(true);
+      return;
+    }
+    const rowIndex = query.data.rows.findIndex(
+      (row) => row.holder === focus.holder && row.statementId === focus.statement,
+    );
+    if (rowIndex < 0) {
+      setReturnChanged(true);
+      return;
+    }
+    if (workMissing) setReturnChanged(true);
+    const row = pageRoot.current?.querySelector<HTMLElement>(`[data-relationship-row="${rowIndex}"]`);
+    if (
+      row?.isConnected &&
+      (document.activeElement === document.body || document.activeElement === document.documentElement)
+    )
+      row.focus();
+  }, [query.data, query.isFetching, query.isSuccess, visit]);
   const read = page ?? (query.data?.ok ? query.data : undefined);
   const error = failure ?? (!page && query.data && !query.data.ok ? query.data : undefined);
   const concealed = !!error || (!page && query.isError);
@@ -124,17 +167,41 @@ function CharacterRelationshipsLive({
     if (!selectedWork || !read) return;
     if (read.rows.some((row) => row.holder === selectedWork)) return;
     setSelectedWork(undefined);
-    setDrafts([]);
   }, [read, selectedWork]);
-  async function load(key = stream?.key, next?: string, event?: MouseEvent<HTMLButtonElement>) {
+  type ReadAction = 'next' | 'previous' | 'restart' | 'stream' | 'retry';
+  function rememberVisit(
+    key: string | undefined,
+    workValue: string | undefined,
+    focus?: { holder: string; statement: string },
+  ) {
+    const visitOrigin = origin ?? {
+      id,
+      locale,
+      ...(query.data?.ok ? { context: query.data.public.subject.context } : {}),
+    };
+    const address = createCharacterRelationshipsVisit(visitOrigin, {
+      stream: key,
+      work: workValue,
+      cursors: cursorAddresses.current,
+      index: cursorIndex.current,
+      ...(focus ? { focus } : {}),
+    });
+    if (address) saveVisit?.(address);
+  }
+  async function load(
+    key = stream?.key,
+    next?: string,
+    event?: MouseEvent<HTMLButtonElement>,
+    action: ReadAction = 'retry',
+  ) {
     if (!slice.active()) return;
     readFocus.cancel();
     if (running.current) return;
+    if (action !== 'retry') setReturnChanged(false);
     if (key !== stream?.key || next !== cursor.current) {
       slice.retire();
       sliceRevision.current++;
-      setDrafts([]);
-      setSelectedWork(undefined);
+      if (key !== stream?.key) setSelectedWork(undefined);
     }
     const sequence = ++readSequence.current;
     const revision = sliceRevision.current;
@@ -165,18 +232,30 @@ function CharacterRelationshipsLive({
       if (!value.ok) {
         outcome = 'failure';
         setFailure(value);
-        setDrafts([]);
         return;
       }
       setPage(value);
       session.current = value.session ?? session.current;
       cursor.current = next;
       setFailure(undefined);
+      if (action === 'stream' || action === 'restart') {
+        cursorAddresses.current = [null];
+        cursorIndex.current = 0;
+      } else if (action === 'previous') {
+        cursorIndex.current = Math.max(0, cursorIndex.current - 1);
+      } else if (action === 'next' && next) {
+        const advanced = advanceCharacterRelationshipsCursor(cursorAddresses.current, cursorIndex.current, next);
+        cursorAddresses.current = advanced.cursors;
+        cursorIndex.current = advanced.index;
+      }
+      const workValue =
+        key !== stream?.key || !value.rows.some((row) => row.holder === selectedWork) ? undefined : selectedWork;
+      if (workValue !== selectedWork) setSelectedWork(workValue);
+      rememberVisit(key, workValue);
     } catch {
       if (!lifetime.active()) return;
       outcome = 'failure';
       setFailure({ ok: false, reason: 'unavailable' });
-      setDrafts([]);
     } finally {
       if (!lifetime.active()) return;
       complete = true;
@@ -238,8 +317,24 @@ function CharacterRelationshipsLive({
   }
   function selectWork(next: string | undefined) {
     if (!slice.active()) return;
-    if (next !== selectedWork) setDrafts([]);
     setSelectedWork(next);
+  }
+  function visitTarget(row: CharacterAssociationRow, event: MouseEvent<HTMLAnchorElement>) {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      !slice.active()
+    )
+      return;
+    rememberVisit(stream?.key, selectedWork, { holder: row.holder, statement: row.statementId });
+    if (router) {
+      event.preventDefault();
+      const target = new URL(event.currentTarget.href);
+      void router.navigate({ to: `${target.pathname}${target.search}${target.hash}` as never });
+    }
   }
   const failed =
     error?.reason === 'denied'
@@ -256,6 +351,7 @@ function CharacterRelationshipsLive({
   });
   return (
     <article
+      ref={pageRoot}
       className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
       aria-busy={busy || query.isPending}
     >
@@ -278,11 +374,18 @@ function CharacterRelationshipsLive({
               selectedWork={selectedWork}
               busy={busy}
               sliceStatus={sliceStatus}
-              onSelectStream={(key) => void load(key)}
+              onSelectStream={(key) => void load(key, undefined, undefined, 'stream')}
               onSelectWork={selectWork}
               {...(signedIn && currentRead ? { onCorrect: open } : {})}
-              onMore={(event) => void load(stream?.key, read.next ?? undefined, event)}
-              onRestart={(event) => void load(stream?.key, undefined, event)}
+              onTargetVisit={visitTarget}
+              canPrevious={cursorIndex.current > 0}
+              returnChanged={returnChanged}
+              onPrevious={(event) => {
+                const previous = cursorAddresses.current[cursorIndex.current - 1];
+                if (cursorIndex.current > 0) void load(stream?.key, previous ?? undefined, event, 'previous');
+              }}
+              onMore={(event) => void load(stream?.key, read.next ?? undefined, event, 'next')}
+              onRestart={(event) => void load(stream?.key, undefined, event, 'restart')}
             />
             <p>
               <a
@@ -340,7 +443,7 @@ function CharacterRelationshipsLive({
           className={characterRelationshipsActionClass}
           variant="outline"
           disabled={busy}
-          onClick={(event) => void load(stream?.key, cursor.current, event)}
+          onClick={(event) => void load(stream?.key, cursor.current, event, 'retry')}
         >
           {m.candidate_reload({}, o)}
         </Button>

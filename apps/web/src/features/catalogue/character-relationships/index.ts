@@ -23,7 +23,20 @@ export {
   type UnavailableConfiguration,
 } from './reading';
 export { associationCorrection, associationSlot, appearanceFactsStayOnSlot, voiceStaysIndependent } from './correction';
-export { characterRelationshipsHref, parseCharacterRelationshipsAddress, associationReadingKey } from './navigation';
+export {
+  characterRelationshipsHref,
+  parseCharacterRelationshipsAddress,
+  characterRelationshipsVisit,
+  createCharacterRelationshipsVisit,
+  advanceCharacterRelationshipsCursor,
+  CHARACTER_RELATIONSHIPS_CURSOR_LIMIT,
+  associationReadingKey,
+} from './navigation';
+export type {
+  CharacterRelationshipsOrigin,
+  CharacterRelationshipsFocus,
+  CharacterRelationshipsVisit,
+} from './navigation';
 export { CharacterRelationshipsView, type CharacterRelationshipsTransport } from './view';
 export { CharacterRelationshipsSession } from './session';
 export { CharacterRelationshipsEntry } from './entry';
