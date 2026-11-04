@@ -1288,8 +1288,7 @@ export class WorkerJob implements GateOutcomeSink {
             managerId: notice.managerId,
             taskId: predecessor.id,
             kind: 'instruction',
-            summary:
-              `Predecessor ${predecessor.id} ended ${notice.state} without landing; held task ${notice.taskId} no longer waits for it.`,
+            summary: `Predecessor ${predecessor.id} ended ${notice.state} without landing; held task ${notice.taskId} no longer waits for it.`,
           },
           (event) => this.inbox.deliver(event),
         );

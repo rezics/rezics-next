@@ -58,7 +58,12 @@ for (const terminal of ['stopped', 'cancelled'] as const) {
       await new WorkerJob(h.tasks, { enqueue() {} }, inbox).recoverOrphans();
 
       expect(h.store.task(held.id).state).not.toBe('held');
-      expect(inbox.read(held.brief.manager).map((entry) => entry.event.summary).join('\n')).toContain(predecessor.id);
+      expect(
+        inbox
+          .read(held.brief.manager)
+          .map((entry) => entry.event.summary)
+          .join('\n'),
+      ).toContain(predecessor.id);
     } finally {
       await h.disposeAsync();
     }
