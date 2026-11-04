@@ -414,15 +414,22 @@ test('A new dev head whose Kernel entry throws on import gets a boot finding wit
       tasks.push({
         id: 'boot-repair',
         state: 'ready',
-        brief: { urgent: true, markdown: `Boot-smoke repair for \`${repair.test}\``, goal: 'kernel', manager: 'kernel-manager' },
+        brief: {
+          urgent: true,
+          markdown: `Boot-smoke repair for \`${repair.test}\``,
+          goal: 'kernel',
+          manager: 'kernel-manager',
+        },
       } as Task);
   };
   await verifyDev({ ...ctx, runGate: run, dispatchRepair });
   expect(order[0]).toBe('boot');
   expect(order).toContain('queued');
-  expect(ctx.store.devVerifierFindings().some((finding) => finding.status === 'new' && finding.reason.includes('Boot smoke'))).toBe(
-    true,
-  );
+  expect(
+    ctx.store
+      .devVerifierFindings()
+      .some((finding) => finding.status === 'new' && finding.reason.includes('Boot smoke')),
+  ).toBe(true);
   expect(repairs).toHaveLength(1);
   expect(repairs[0]).toMatchObject({ test: KERNEL_BOOT, commit: breaking });
   expect(repairs[0]!.existingTaskId).toBeUndefined();
