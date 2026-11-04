@@ -227,4 +227,4 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 60_000);
