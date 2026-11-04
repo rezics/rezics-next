@@ -1538,6 +1538,7 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.accept_candidate',
+          'x-authority-resource-types': ['semantic.context'],
           'x-exposure': 'public',
           'x-action': 'context:accept',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
@@ -1614,6 +1615,7 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.reject_candidate',
+          'x-authority-resource-types': ['semantic.context'],
           'x-exposure': 'public',
           'x-action': 'context:accept',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
@@ -1915,6 +1917,7 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.adopt',
+          'x-authority-resource-types': ['semantic.context'],
           'x-exposure': 'public',
           'x-action': 'context:adopt',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
