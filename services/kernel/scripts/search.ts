@@ -143,7 +143,8 @@ async function up(): Promise<void> {
   await waitForSearch(url, container);
   const envFile = resolve(directory, '.env');
   const existingEnv = (await Bun.file(envFile).exists()) ? await Bun.file(envFile).text() : '';
-  await Bun.write(envFile, developmentEnv(existingEnv, url));
+  const generated = developmentEnv(existingEnv, url);
+  if (generated !== existingEnv) await Bun.write(envFile, generated);
 }
 
 async function rebuild(): Promise<void> {

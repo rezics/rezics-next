@@ -1,6 +1,6 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
 import { randomBytes, randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
@@ -67,7 +67,15 @@ export function publicKey(key: JWK): JWK {
   const { d: _private, key_ops: _operations, ...publicPart } = key;
   return publicPart;
 }
-async function privateFile(path: string, value: string) {
+export async function privateFile(path: string, value: string) {
+  try {
+    if ((await readFile(path, 'utf8')) === value) {
+      if (((await stat(path)).mode & 0o777) !== 0o600) await chmod(path, 0o600);
+      return;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
   await writeFile(path, value, { mode: 0o600 });
   await chmod(path, 0o600);
 }
