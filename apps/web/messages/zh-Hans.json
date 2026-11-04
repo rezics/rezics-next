@@ -2475,6 +2475,7 @@
   "settings_profile_checking": "正在检查当前个人资料… 不会发送任何更改。",
   "settings_profile_confirming": "已收到保存响应，正在检查当前个人资料…",
   "settings_profile_read_failed": "无法检查当前个人资料。显示的值可能已过时。草稿已保留，请重新加载后再检查。",
+  "settings_profile_acknowledged_stale": "原个人资料保存已确认。当前个人资料尚未确认；请重新加载后再保存其他更改。",
   "settings_profile_read_closed": "目前无法加载当前个人资料。此页面上的修改会保留。请稍后重新加载，以确认个人资料的最新状态。",
   "settings_profile_save_error_title": "个人资料保存需要处理",
   "settings_profile_save_closed": "目前无法编辑个人资料。草稿会保留。再次保存前，请重新加载当前个人资料。",

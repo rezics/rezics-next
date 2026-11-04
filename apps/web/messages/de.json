@@ -2475,6 +2475,7 @@
   "settings_profile_checking": "Das aktuelle Profil wird geprüft… Es werden keine Änderungen gesendet.",
   "settings_profile_confirming": "Die Antwort auf das Speichern ist eingegangen. Das aktuelle Profil wird geprüft…",
   "settings_profile_read_failed": "Das aktuelle Profil konnte nicht geprüft werden. Angezeigte Werte können veraltet sein. Dein Entwurf bleibt erhalten. Lade das Profil erneut, um es zu prüfen.",
+  "settings_profile_acknowledged_stale": "Dein ursprüngliches Profil wurde als gespeichert bestätigt. Das aktuelle Profil ist noch nicht bestätigt; lade es neu, bevor du weitere Änderungen speicherst.",
   "settings_profile_read_closed": "Das aktuelle Profil kann derzeit nicht geladen werden. Deine Änderungen auf dieser Seite bleiben erhalten. Lade das Profil erneut, sobald es verfügbar ist.",
   "settings_profile_save_error_title": "Das Speichern des Profils erfordert Aufmerksamkeit",
   "settings_profile_save_closed": "Profiländerungen sind derzeit nicht möglich. Dein Entwurf bleibt erhalten. Lade zuerst das aktuelle Profil neu, bevor du wieder speicherst.",

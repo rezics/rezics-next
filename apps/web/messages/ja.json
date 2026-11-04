@@ -2475,6 +2475,7 @@
   "settings_profile_checking": "現在のプロフィールを確認しています… 変更は送信していません。",
   "settings_profile_confirming": "保存への応答を受信しました。現在のプロフィールを確認しています…",
   "settings_profile_read_failed": "現在のプロフィールを確認できませんでした。表示中の値は古い可能性があります。下書きは保持されています。再読み込みして確認してください。",
+  "settings_profile_acknowledged_stale": "元のプロフィール保存は確認されました。現在のプロフィールはまだ確認できていません。続けて保存する前に再読み込みしてください。",
   "settings_profile_read_closed": "現在のプロフィールを読み込めません。ページ上の変更はそのまま保持されます。後で再読み込みして現在の状態を確認してください。",
   "settings_profile_save_error_title": "プロフィールの保存内容を確認してください",
   "settings_profile_save_closed": "現在、プロフィールを編集できません。下書きは保持されています。再度保存する前に、現在のプロフィールを再読み込みしてください。",

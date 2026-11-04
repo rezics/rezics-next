@@ -2536,6 +2536,7 @@
   "settings_profile_checking": "Checking the current profile… No changes are being sent.",
   "settings_profile_confirming": "Save response received. Checking the current profile…",
   "settings_profile_read_failed": "Could not check the current profile. Displayed values may be out of date. Your draft is kept; reload to check again.",
+  "settings_profile_acknowledged_stale": "Your original profile save was acknowledged. The current profile has not been confirmed; reload it before saving further changes.",
   "settings_profile_read_closed": "The current profile can't be loaded right now. Any edits on this page are still here. Reload later to check the current profile.",
   "settings_profile_save_error_title": "Profile save needs attention",
   "settings_profile_save_closed": "Profile edits aren't available right now. Your draft is still here. Reload the current profile before trying to save again.",

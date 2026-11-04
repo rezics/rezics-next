@@ -2475,6 +2475,7 @@
   "settings_profile_checking": "Comprobando el perfil actual… No se envía ningún cambio.",
   "settings_profile_confirming": "Se ha recibido la respuesta al guardado. Comprobando el perfil actual…",
   "settings_profile_read_failed": "No se ha podido comprobar el perfil actual. Los valores mostrados pueden estar desactualizados. Tu borrador se conserva; vuelve a cargar el perfil para comprobarlo.",
+  "settings_profile_acknowledged_stale": "Se confirmó el guardado original del perfil. El perfil actual aún no se ha confirmado; vuelve a cargarlo antes de guardar más cambios.",
   "settings_profile_read_closed": "Ahora no se puede cargar el perfil actual. Los cambios hechos en esta página se conservan. Vuelve a cargar el perfil más tarde para comprobar su estado actual.",
   "settings_profile_save_error_title": "El guardado del perfil requiere atención",
   "settings_profile_save_closed": "Ahora no se puede editar el perfil. El borrador se conserva. Vuelve a cargar el perfil actual antes de intentar guardarlo de nuevo.",

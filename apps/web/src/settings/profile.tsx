@@ -111,9 +111,13 @@ export function ProfileFeedback({
                     ? uncertain
                     : m.settings_profile_review_needed()}
             </p>
-            {state.attempt && (unavailable || state.failure) ? <p>{uncertain}</p> : null}
+            {state.acknowledged ? (
+              <p>{m.settings_profile_acknowledged_stale()}</p>
+            ) : state.attempt && (unavailable || state.failure) ? (
+              <p>{uncertain}</p>
+            ) : null}
             <div className="flex flex-wrap gap-2">
-              {state.attempt ? (
+              {state.attempt && !state.acknowledged ? (
                 <Button
                   type="button"
                   variant="outline"
