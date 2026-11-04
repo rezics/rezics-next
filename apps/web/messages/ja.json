@@ -1,4 +1,5 @@
 {
+  "credit_refresh_window": "このクレジット一覧を更新",
   "credit_inspect": "クレジットを確認",
   "credit_original": "この作品の元の記述です。公開されたリンク先は別のタブで開き、このクレジット一覧を保持します。",
   "credit_inverse": "方向：作品がこの人物をクレジットしています。",

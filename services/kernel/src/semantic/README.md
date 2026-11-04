@@ -2312,3 +2312,12 @@ Explicit inverse credit groups retain the original disclosed assertion even when
 `creditSlot` supplies current slot identity only; it grants no operation and carries no draft. A concealed slot-key
 qualifier never becomes an unqualified correction slot. Other unqualified inverse groups remain compact. The same
 batched current-statement and summary reads supply this projection; it adds no row hydration or history scan.
+
+The response bound follows the existing native 100-row link cap and statement admission: one main Snak, at most
+16 qualifiers and 16 references with 16 parts each, hence 273 Snaks per row. Let A be the maximum UTF-8 JSON
+size of an admitted Snak under its released value schema and native input budget, S the existing disclosed-summary
+bound, and F the fixed assertion/reference/slot framing. The credit payload is bounded by
+`100 × (273A + 257S + F)`: each row has one holder summary and related entries drawn from the existing 256-ID
+summary budget. This is a response ceiling, not another truncation rule. Explicit inspection adds one keyed revision
+read with its existing finite change/reference budgets; correction adds one existing exact-holder/Context authority
+projection with at most three Subjects. Neither operation grows with obsolete history or unrelated Subjects.

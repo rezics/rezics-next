@@ -11,7 +11,7 @@ import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { RelationEditor } from '../relation-editor';
 import type { DetailRead } from '../subject-changes';
 import { ChangeExplanation } from '../subject-changes-page';
-import { creditCorrection, creditRelated, type CreditAssertion, type CreditCorrection, type CreditVisit } from './model';
+import { creditCorrection, creditRelated, creditWindowHref, type CreditAssertion, type CreditCorrection, type CreditVisit } from './model';
 
 /** Independent destinations keep the bounded original credit window mounted in its original tab. */
 function DisclosedTarget({ children, ...props }: LinkProps) {
@@ -110,7 +110,7 @@ export function CreditInspection({ credit, visit, title, propertyLabel, locale, 
           <h3 className="font-medium">{m.credit_revision({}, o)}</h3>
           <p>{m.credit_identity({ statement: statement.id, revision: statement.rezics.revision, release: statement.rezics.release }, o)}</p>
           <p className="text-muted-foreground">{m.credit_metadata_meaning({}, o)}</p>
-          <Button variant="outline" disabled={readingMetadata} onClick={() => void inspectRevision()}>
+          <Button variant="outline" disabled={readingMetadata || editing} onClick={() => void inspectRevision()}>
             {readingMetadata ? m.candidate_loading({}, o) : failedDetail ? m.credit_retry_revision({}, o) : m.credit_read_revision({}, o)}
           </Button>
           {failedDetail && <p role="status">{m.credit_revision_unavailable({}, o)}</p>}
@@ -125,7 +125,9 @@ export function CreditInspection({ credit, visit, title, propertyLabel, locale, 
               !signedIn ? m.relation_sign_in({}, o) : correction?.state === 'denied' ? m.credit_correction_denied({}, o) :
               correction?.state === 'stale' ? m.credit_correction_stale({}, o) :
               correction?.state === 'ready' ? m.credit_proposal_meaning({}, o) : m.credit_correction_unavailable({}, o)}</p>
-            {correction?.state === 'ready' && <Button onClick={() => { if (current()) setEditing(true); }}>{m.credit_correct({}, o)}</Button>}
+            {correction?.state === 'ready' && <Button disabled={readingMetadata} onClick={() => { if (current()) setEditing(true); }}>{m.credit_correct({}, o)}</Button>}
+            {correction?.state === 'stale' && <a className="underline" href={creditWindowHref(visit, locale)}
+              target="_blank" rel="noopener noreferrer">{m.credit_refresh_window({}, o)}</a>}
             {correction?.state === 'unavailable' && <Button variant="outline" onClick={() => { if (current()) setAttempt((value) => value + 1); }}>{m.credit_retry_correction({}, o)}</Button>}
           </>}
         </section>

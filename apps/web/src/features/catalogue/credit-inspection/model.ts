@@ -4,6 +4,7 @@ import type { SubjectSummary } from '../../../media/summary';
 import type { OverviewValue, Section } from '../../pages/overview';
 import { isRecord, type Snak, type Stmt } from '../../pages/shared';
 import { candidateContext } from '../../../subject/candidates';
+import { subjectViewHref } from '../../../subject/subject-href';
 import { relationDraft, relationSlotMatches, validRelationSlot, type RelationRead, type RelationSlot } from '../../../subject/relation-candidates';
 
 export type CreditAssertion = {
@@ -33,6 +34,14 @@ export function creditVisit(value: OverviewValue, node: string, section: Section
   return { person: value.subject, node, stream: section.read, context: value.context?.id ?? candidateContext,
     reader: value.cacheReader ?? null, release: admission.release,
     propertyLabel: (property && value.relations[property]?.forwardLabel) || property || '', realm: value.realm };
+}
+
+/** Refresh only the native original window, never an arbitrary return address or a replacement candidate. */
+export function creditWindowHref(visit: CreditVisit, locale: string): string {
+  const cursor = visit.stream.kind === 'links' ? visit.stream.cursor : undefined;
+  const query = new URLSearchParams({ node: visit.node, ...(cursor ? { cursor } : {}),
+    ...(visit.realm ? { realm: visit.realm } : {}) });
+  return `${subjectViewHref({ id: visit.person, label: '' }, locale, 'works')}?${query}`;
 }
 
 function snak(value: unknown): value is Snak & Record<string, unknown> {
