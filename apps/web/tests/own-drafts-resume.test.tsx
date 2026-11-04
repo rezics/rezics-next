@@ -234,13 +234,12 @@ test('browser writing stays separate until the person names it as the editor sou
         },
       },
     });
-    const expectedThreadHref = localizeHref(
-      threadHref({ id: entry.threadId, title: entry.title }),
-      { locale },
-    );
+    const expectedThreadHref = localizeHref(threadHref({ id: entry.threadId, title: entry.title }), { locale });
     const expectedBoardHref = localizeHref(`/boards/${encodeURIComponent(entry.board.id)}`, { locale });
     const inventoryLinks = [...fixture.host.querySelectorAll('a')];
-    expect(inventoryLinks.find((link) => link.textContent === entry.title)?.getAttribute('href')).toBe(expectedThreadHref);
+    expect(inventoryLinks.find((link) => link.textContent === entry.title)?.getAttribute('href')).toBe(
+      expectedThreadHref,
+    );
     expect(inventoryLinks.find((link) => link.textContent === entry.board.title)?.getAttribute('href')).toBe(
       expectedBoardHref,
     );
