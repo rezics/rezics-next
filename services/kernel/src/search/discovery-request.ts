@@ -98,6 +98,7 @@ export function admitDiscoveryRequest(
         parseDiscoveryFilter(request.filter),
         release,
         new Set(discoveryKindDirectory(registry).map((entry) => entry.kind)),
+        { inverse: true },
       );
   } catch (error) {
     if (error instanceof TextSyntaxError) unsupported('/text');

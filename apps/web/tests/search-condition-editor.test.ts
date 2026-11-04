@@ -5,7 +5,9 @@ import { createKernelClient } from '@rezics/client';
 import { type FilterDocument } from '@rezics/filter';
 import * as v from 'valibot';
 import recording from '../src/kernel/recorded/definitions-release.json';
+import { m } from '../src/paraglide/messages.js';
 import { ConditionEditor } from '../src/search/condition-editor';
+import { changeConditionDirection } from '../src/search/condition-direction';
 import {
   CONDITION_POINTER,
   conditionAdmission,
@@ -14,6 +16,7 @@ import {
   conditionSearchState,
   type ConditionMetadata,
 } from '../src/search/condition-editor-model';
+import { changeStatementProperty, resolveConditionPropertyChange } from '../src/search/condition-property-edit';
 import { discoverySearchHref, searchFormFields, searchLoaderDeps, searchParams } from '../src/search/search-params';
 import { discoveryRequest, readSearchPage } from '../src/search/search-request';
 import { readDiscovery } from '../src/search/discovery';
@@ -45,16 +48,19 @@ function render(
   value: FilterDocument | undefined,
   issues: { pointer: string; code: string }[] = [],
   definitions: ConditionMetadata | undefined = metadata,
+  locale = 'en',
+  values: Record<string, { value: string; labels: Record<string, string> }[]> = {},
 ) {
   return renderToStaticMarkup(
     createElement(ConditionEditor, {
       value,
       metadata: definitions,
       onChange() {},
-      locale: 'en',
+      locale,
       languages: ['ja'],
       onLanguages() {},
       issues,
+      values,
     }),
   );
 }
@@ -173,6 +179,103 @@ test('same-statement qualifiers and released datatype/unit values survive editin
     'unsupported',
   );
   expect(html).not.toMatch(/owner\.presence|account selector|Save filter/);
+});
+
+test('released inverse relations round-trip through editing and the URL with their labelled operand and qualifier', () => {
+  const relation = Object.entries(metadata.properties).find(
+    ([, definition]) =>
+      definition.datatype === 'wikibase-item' &&
+      definition.relation &&
+      definition.qualifiers?.some((property) => metadata.properties[property]?.datatype === 'wikibase-item'),
+  );
+  expect(relation).toBeDefined();
+  const [property, definition] = relation!;
+  const qualifierProperty = definition.qualifiers!.find(
+    (candidate) => metadata.properties[candidate]?.datatype === 'wikibase-item',
+  )!;
+  const operand = '018f0000-0000-7000-8000-00a000000020';
+  const qualifierValue = '018f0000-0000-7000-8000-00a000000021';
+  const inverse = {
+    statement: {
+      property,
+      inverse: true,
+      in: [operand],
+      qualifiers: [{ property: qualifierProperty, in: [qualifierValue] }],
+    },
+  } satisfies FilterDocument;
+  const operandLabels = { en: 'Selected work', ja: '選択した作品', 'zh-Hant': '選取的作品' };
+  const values = {
+    [property]: [{ value: operand, labels: operandLabels }],
+    [qualifierProperty]: [{ value: qualifierValue, labels: { en: 'Writer', ja: '担当者', 'zh-Hant': '角色' } }],
+  };
+
+  expect(conditionAdmission(metadata)(inverse, state)).toEqual([]);
+  const propertyChange = changeStatementProperty(inverse, 'schema:inLanguage', metadata.properties);
+  expect(propertyChange.requiresConfirmation).toBe(true);
+  expect(resolveConditionPropertyChange(propertyChange, false)).toEqual(inverse);
+  expect(resolveConditionPropertyChange(propertyChange, true)).toMatchObject({
+    statement: { property: 'schema:inLanguage', inverse: true },
+  });
+  const direct = changeConditionDirection(inverse, 'direct');
+  expect(direct).toEqual({ statement: { property, in: [operand], qualifiers: inverse.statement.qualifiers } });
+  expect(changeConditionDirection(direct, 'inverse')).toEqual(inverse);
+
+  const edited = conditionSearchState(state, inverse);
+  expect(edited.cursor).toBeUndefined();
+  const url = new URL(discoverySearchHref('ja', edited), 'https://example.test').searchParams;
+  const restored = searchLoaderDeps({
+    ...Object.fromEntries(url),
+    kinds: url.getAll('kinds'),
+    'f.schema:inLanguage': url.getAll('f.schema:inLanguage'),
+  });
+  expect(restored.condition).toEqual(inverse);
+  expect(discoveryRequest(restored, ['ja']).filter?.and[0]).toEqual(inverse);
+
+  for (const locale of ['ja', 'zh-Hant'] as const) {
+    const propertyLabel = metadata.properties[property]?.labels?.[locale] ?? property;
+    const html = render(inverse, [], metadata, locale, values);
+    expect(html).toContain(`data-condition-field-pointer="${CONDITION_POINTER}/statement/inverse"`);
+    expect(html).toContain(operandLabels[locale]);
+    expect(html).toContain(
+      m.condition_relation_inverse({ property: propertyLabel, values: operandLabels[locale] }, { locale }),
+    );
+  }
+});
+
+test('an unsupported inverse stays visible and correctable, clears old pagination, and never broadens a refused request', async () => {
+  const unsupportedMetadata: ConditionMetadata = {
+    types: { 'ex:Thing': { labels: { en: 'Thing' }, bases: [], facets: ['ex:label'] } },
+    properties: {
+      'ex:label': { labels: { en: 'Label' }, datatype: 'string', value: { pattern: '^[a-z]+$' } },
+    },
+  };
+  const unsupported: FilterDocument = {
+    statement: { property: 'ex:label', inverse: true, in: ['label'] },
+  };
+  const issues = conditionAdmission(unsupportedMetadata)(unsupported, state);
+  expect(issues).toEqual([
+    { pointer: `${CONDITION_POINTER}/statement/inverse`, code: 'unsupported' },
+  ]);
+  const html = render(unsupported, issues, unsupportedMetadata);
+  expect(html).toContain('Relation direction');
+  expect(html).toContain(`data-condition-field-pointer="${CONDITION_POINTER}/statement/inverse"`);
+  expect(html).toContain('aria-invalid="true"');
+
+  const edited = conditionSearchState(state, unsupported);
+  expect(edited.condition).toEqual(unsupported);
+  expect(edited.cursor).toBeUndefined();
+  const request = discoveryRequest(edited, ['en']);
+  expect(request.filter?.and[0]).toEqual(unsupported);
+  const calls: unknown[] = [];
+  const refused = await readDiscovery(request, async (body) => {
+    calls.push(body);
+    return {
+      status: 422,
+      error: { value: { code: 'unsupported_query', errors: [{ pointer: issues[0]!.pointer, code: 'unsupported' }] } },
+    };
+  });
+  expect(refused.discovery.status).toBe('unsupported');
+  expect(calls).toEqual([request]);
 });
 
 test('shared admission enforces all grammar ceilings, byte bounds and invalid ranges while unfinished controls retain their input', () => {

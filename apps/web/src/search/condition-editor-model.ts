@@ -80,8 +80,11 @@ function constructionIssues(
   options?: ConditionConstructionOptions,
 ): ConditionIssue[] {
   const construction = createFilterConstruction(metadata);
+  const admissionOptions = { ...options, inverse: true as const };
   if (!options?.requestResources)
-    return construction.validateFilter({ and: [condition] }, options).map(({ pointer, code }) => ({ pointer, code }));
+    return construction
+      .validateFilter({ and: [condition] }, admissionOptions)
+      .map(({ pointer, code }) => ({ pointer, code }));
 
   const shadow = requestResourceAdmissionShadow(condition);
   const issues = [...shadow.issues];
@@ -89,7 +92,7 @@ function constructionIssues(
 
   // Resource leaves are request-only, including when a released saved filter is expanded beside them.
   for (const saved of shadow.saved) {
-    const errors = construction.validateFilter({ and: [{ saved: saved.id }] });
+    const errors = construction.validateFilter({ and: [{ saved: saved.id }] }, { inverse: true });
     for (const error of errors) {
       const prefix = '/and/0';
       const suffix = error.pointer.startsWith(prefix) ? error.pointer.slice(prefix.length) : '';
@@ -98,7 +101,7 @@ function constructionIssues(
   }
 
   // The owner leaf is a private structural stand-in for each request resource, never authored request syntax.
-  const errors = construction.validateFilter({ and: [shadow.condition] }, { owner: true });
+  const errors = construction.validateFilter({ and: [shadow.condition] }, { ...admissionOptions, owner: true });
   issues.push(...errors.map(({ pointer, code }) => ({ pointer, code })));
   return issues.filter(
     (entry, index, all) =>
@@ -116,7 +119,7 @@ export function conditionAdmission(metadata: ConditionMetadata) {
   return (condition: FilterDocument | undefined, state: SearchLoaderDeps): ConditionIssue[] => {
     if (condition) {
       // The request has the same outer AND even when this is its only condition.
-      const errors = constructionIssues(metadata, condition, { requestResources: true });
+      const errors = constructionIssues(metadata, condition, { requestResources: true, inverse: true });
       if (errors.length) return errors.map(({ pointer, code }) => ({ pointer: `/filter${pointer}`, code }));
     }
     try {

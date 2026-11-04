@@ -648,11 +648,13 @@ export function createSearchService({
           if (containsUnsupportedDiscoveryLeaf(filter)) unsupported('/filter');
           admitted = admitDiscoveryFilter(parseDiscoveryFilter(filter), active, new Set(), {
             owner: true,
+            ...(inverse ? { inverse: true as const } : {}),
             ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
           });
         } else {
           admitted = admitFilter(filter as FilterDocument, active, {
-            ...(containsOwnerPredicate(filter) ? { owner: true as const } : inverse ? { inverse: true as const } : {}),
+            ...(containsOwnerPredicate(filter) ? { owner: true as const } : {}),
+            ...(inverse ? { inverse: true as const } : {}),
             ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
           });
         }
@@ -1718,7 +1720,7 @@ export function createSearchService({
           if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
           // The native facet population is pinned to schema:Thing by its registered provider meaning.
           const predicate = normalized.filter ?? { type: { in: ['schema:Thing'] } };
-          const admitted = await admitQuery(normalized.text, predicate, current);
+          const admitted = await admitQuery(normalized.text, predicate, current, false, undefined, true);
           if (!admitted) throw indexNotReady();
           const catalogue = catalogueFilter(admitted);
 
@@ -1777,7 +1779,7 @@ export function createSearchService({
       const current = await release();
       if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       validateFacetCursorRelease(positions, current);
-      const admitted = await admitQuery(text, filter, current);
+      const admitted = await admitQuery(text, filter, current, false, undefined, true);
       const catalogue = admitted === undefined ? undefined : catalogueFilter(admitted);
       admitFacets(facets, catalogue, current);
       // The native factory must resolve the actual registered catalogue/meaning/identity context.

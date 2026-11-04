@@ -78,7 +78,10 @@ export function compileRefinement(
   for (const [property, range] of Object.entries(conditions.ranges ?? {}))
     clauses.push({ statement: { property, range } });
   if (!clauses.length) return;
-  return admitFilter(clauses.length === 1 ? clauses[0]! : { and: clauses }, release, { saved: false });
+  return admitFilter(clauses.length === 1 ? clauses[0]! : { and: clauses }, release, {
+    saved: false,
+    inverse: true,
+  });
 }
 
 /** Opaque cursors never survive a predicate edit; the untouched condition tree does. */
