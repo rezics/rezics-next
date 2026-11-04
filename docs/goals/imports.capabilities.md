@@ -1142,6 +1142,32 @@ and Organization, refresh by digest, and respect the summary fence` in
 journey is authored, but its native execution is deferred to integration; no
 native pass is claimed.
 
+## Bangumi television original run and episode count
+
+Decision: original-run start is infobox `放送开始`. Type-2 top-level `date`
+stays unmapped. If both parse and the top-level date asserts a finer or
+different component than the infobox, withhold `datePublished` rather than
+emit two scalars or pad the infobox date. An end that cannot overlap the
+start withholds both run dates. Template `*` is an unknown episode total;
+explicit `0` is a stated zero.
+
+`bangumi@6` converts pinned TVAnime `放送开始`, `播放结束` and `话数` through
+the ordinary Bangumi registration used by JSON-lines dumps and the selected
+family. Native read is on the acknowledged TVSeries. Weekday schedule text,
+custom infobox keys, OVA/Movie templates and episode-row counts stay outside
+this mapping.
+
+The authored focused scenarios are:
+
+- `operator imports TVAnime original-run fields, keeps unknown totals and schedule text as omissions, and refreshes without changing work identity` in the importer workspace.
+- `imported TVAnime original run and episode count are independently adopted, current, cited, fenced and idempotent after reopen` in the Kernel workspace. Native execution is deferred to the controller after integration.
+
+```sh
+bun run --cwd services/kernel check test/imports/bangumi-television-run.test.ts
+```
+
+This delivery does not claim that native command passed.
+
 ## VNDB character names and qualified aliases
 
 Decision: language-less aliases use `und`; explicit Romanized cells use the

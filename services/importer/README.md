@@ -781,7 +781,7 @@ uses five metadata-only native envelopes and the ordinary account-key CLI: an ex
 subject, then live action, then returns as a revised Book under the same native key. Complete membership
 stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
 receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
-`bangumi@5` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
+`bangumi@6` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
 five-record launch checks. Its earlier ignored-type native child is superseded by typed 3/6 conversion.
 [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
 log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
@@ -1422,6 +1422,22 @@ bindings or native published state. Authoritative lifecycle work and its
 bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
+
+### Import authored Bangumi television original-run and episode count
+
+- Touches: one admitted type-2 TVAnime infobox on the ordinary Bangumi JSON-lines
+  registration, the shared `bangumi@6` converter, and ordinary public
+  batch/fence/candidate paths on that TVSeries. Selected-family seed reuses the
+  same registration; this adds no publisher.
+- Bound: at most 64 infobox keys and three run facts inside the existing 64 KiB
+  projection, nine-command and journal budgets. Unknown `*`, weekday schedule
+  text and custom keys withhold only those fields. No extra reads, episode-row
+  counts or broadcaster resolution.
+- Growth check: the focused importer case checks exact start/end/count
+  proposals, month precision, unknown totals, schedule/custom diagnostics,
+  converter-revision refresh and changed totals with stable work identity. The
+  focused kernel case checks public acceptance/adoption, citation, facts fencing
+  and idempotent reopen. No PostgreSQL growth series is added.
 
 ### Bangumi creator and voice credits
 
@@ -2177,3 +2193,12 @@ Organization, refresh by digest, and respect the summary fence` in
 `services/kernel/test/imports/bangumi-people-biography.test.ts`. The native
 scenario uses the current released definitions and Auth/Access/public API;
 execution remains controller-owned and is not recorded as a local pass.
+
+### Bangumi television original run
+
+Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
+`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@6`. Selected-family
+seed uses that same converter; this journey adds no publisher. Native read is
+the acknowledged TVSeries. Weekday schedule text, custom keys and OVA/Movie
+templates remain diagnostics. An end date is not completion or access
+authority.
