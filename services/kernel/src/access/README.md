@@ -2853,6 +2853,15 @@ role name, owner equality, profile `account.update` viewer action or cached obse
 Transfer reads reuse the original source slot interpretation and never check an unrelated operated target as its
 authority anchor. Destination admission and acceptance remain separate.
 
+`operator-transfer-page-source.ts` owns one bounded review per selected side. Source review delegates to the
+existing current-relation reader, whose two snapshots cover the subject and current operator, slot/version,
+human floor and assignment; its released action preparation is followed by the reader's current tuple and action
+check. Destination review validates the closed handoff, then reads only the acting human, proposed destination,
+their home/lifecycle state and, when delegated, one principal and assignment in a repeatable-read snapshot. It
+releases that connection before one action preparation and final action check, then repeats the same bounded
+observations and compares actor, destination and homes before disclosing advice. Both sides authenticate one native
+token and perform no list, unrelated relation lookup, command lock, receipt lookup or write.
+
 This metadata observes workflow ENTRY only. It conveys no approval, result, pending workflow, private body, reference,
 key, credential or URL, and does not assert that an Auth route is deployed. Consumers independently require the
 explicit deployed Auth path. Auth retains exact-profile consent, fresh same-human step-up, second submission and
