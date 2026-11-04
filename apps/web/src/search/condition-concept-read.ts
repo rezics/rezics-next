@@ -10,7 +10,10 @@ const SCHEME = 'skos:ConceptScheme';
 const IN_SCHEME = 'skos:inScheme';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function statusForFailure(status: number, code: unknown): ConditionConceptReference['status'] {
+function statusForFailure(
+  status: number,
+  code: unknown,
+): Exclude<ConditionConceptReference['status'], 'ready'> {
   if (status === 202 || code === 'index_not_ready') return 'preparing';
   if (status === 409 || code === 'search_restart_required') return 'restart';
   if (status === 403 || code === 'platform_closed' || code === 'forbidden') return 'refused';
@@ -56,7 +59,7 @@ export async function readConditionConcept(
     const [{ kernelClient }, release] = await Promise.all([import('../kernel/client.ts'), readRelease()]);
     if (request.signal.aborted) return unavailable;
     if (!release.digest || release.digest !== digest) return { status: 'restart', id };
-    const locale = new URL(request.url).searchParams.get('locale') ?? requestLocale(request);
+    const locale = new URL(request.url).searchParams.get('locale') ?? requestLocale(request) ?? 'en';
     const client = kernelClient(locale);
     const credential = viewerCredential(request);
     const result = await client.subjects({ id }).get({

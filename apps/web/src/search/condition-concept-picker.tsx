@@ -19,7 +19,7 @@ import {
 type ConceptFilterDocument = { statement: Extract<FilterStatement, { in: readonly string[] }> };
 
 type Props = {
-  value: ConceptFilterDocument;
+  value: FilterDocument;
   lookup: ConditionConceptLookup;
   locale: string;
   disabled: boolean;
@@ -36,6 +36,25 @@ function referenceMessage(reference: ConditionConceptReference | undefined, opti
 }
 
 export function ConditionConceptPicker({ value, lookup, locale, disabled, onChange }: Props) {
+  if (!('statement' in value) || !('in' in value.statement)) return null;
+  return (
+    <ConceptPicker
+      value={{ statement: value.statement }}
+      lookup={lookup}
+      locale={locale}
+      disabled={disabled}
+      onChange={onChange}
+    />
+  );
+}
+
+function ConceptPicker({
+  value,
+  lookup,
+  locale,
+  disabled,
+  onChange,
+}: Omit<Props, 'value'> & { value: ConceptFilterDocument }) {
   const statement = value.statement;
   const existingId = statement.concept ? statement.in[0] : undefined;
   const options = useMemo(

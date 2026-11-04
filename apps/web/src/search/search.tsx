@@ -74,12 +74,12 @@ import { sessionCsrfToken } from '../session/query';
 import type { RealmDiscoveryState } from '../community/realm-discovery';
 import {
   conditionAdmission,
-  conditionConceptSuggestionFilter,
   conditionMetadata,
   conditionSearchState,
   type ConditionMetadata,
   type SearchProblem,
 } from './condition-editor-model';
+import { conditionConceptSuggestionFilter } from './condition-concept-model';
 import { createFilterDraft, resetFilterDraft } from './filter-draft-reset';
 import { useFilterSurfaceFocus } from './filter-surface-focus';
 type SearchResult = LegacySearchPage;
