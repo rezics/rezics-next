@@ -539,7 +539,7 @@
       "kind": "UI/transport library",
       "owner": "commerce",
       "paths": ["apps/web/src/checkout/**"],
-      "publicEntries": [],
+      "publicEntries": ["apps/web/src/checkout/reader-origin.ts"],
       "allowedDependencies": ["client", "ui", "web-app", "web-content", "web-search"],
       "capabilities": ["checkout-pages"]
     },
