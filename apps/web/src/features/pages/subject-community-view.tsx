@@ -306,10 +306,7 @@ export function SubjectCommunityRegion({
                     data-content-item-slot="actions"
                     className="flex flex-wrap gap-x-4 gap-y-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a]:px-2 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
                   >
-                    <a
-                      className={actionClass}
-                      href={communityBoardHref(locale, thread.boardId, returnTo)}
-                    >
+                    <a className={actionClass} href={communityBoardHref(locale, thread.boardId, returnTo)}>
                       {m.subject_community_board({}, options)}
                     </a>
                   </ListRowControl>

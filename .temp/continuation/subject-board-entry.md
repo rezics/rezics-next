@@ -1,42 +1,36 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "apps/web/src/features/pages/subject-community*.ts",
-    "apps/web/src/features/pages/subject-community*.tsx",
-    "apps/web/src/features/pages/subject-community-entry/**",
-    "apps/web/src/features/pages/overview.tsx",
-    "apps/web/src/features/pages/subject-visit-navigation.ts",
-    "apps/web/tests/subject-community*.test.*",
-    "apps/web/src/stories/subject-community*.tsx",
-    "apps/web/messages/*.json",
-    "apps/web/src/routes/boards/$id.tsx",
-    "apps/web/src/routes/boards/$id_.new.tsx",
-    "apps/web/src/threads/board-community-actions.tsx",
-    "apps/web/src/threads/thread-creation-lifetime.ts"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "waiting": [],
-  "after": [],
-  "estimate": {
-    "lines": 2200,
-    "files": 16
-  },
-  "criticalPath": false,
-  "acceptance": {
-    "tests": [
-      "Subject community exact selected Board entry/creation states for work, character and person: not_selected, concealed, unavailable, current denied, sign-in and allowed; no inferred Board.",
-      "Mounted entry/return journey retains original Subject/place, cursor/context/source/Realm revision, duplicate occurrences and current regional return through Board/composer/sign-in; existing Subject community baseline remains."
-    ]
-  }
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'apps/web/src/features/pages/subject-community*.ts',
+      'apps/web/src/features/pages/subject-community*.tsx',
+      'apps/web/src/features/pages/subject-community-entry/**',
+      'apps/web/src/features/pages/overview.tsx',
+      'apps/web/src/features/pages/subject-visit-navigation.ts',
+      'apps/web/tests/subject-community*.test.*',
+      'apps/web/src/stories/subject-community*.tsx',
+      'apps/web/messages/*.json',
+      'apps/web/src/routes/boards/$id.tsx',
+      'apps/web/src/routes/boards/$id_.new.tsx',
+      'apps/web/src/threads/board-community-actions.tsx',
+      'apps/web/src/threads/thread-creation-lifetime.ts',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'waiting': [],
+  'after': [],
+  'estimate': { 'lines': 2200, 'files': 16 },
+  'criticalPath': false,
+  'acceptance':
+    {
+      'tests':
+        [
+          'Subject community exact selected Board entry/creation states for work, character and person: not_selected, concealed, unavailable, current denied, sign-in and allowed; no inferred Board.',
+          'Mounted entry/return journey retains original Subject/place, cursor/context/source/Realm revision, duplicate occurrences and current regional return through Board/composer/sign-in; existing Subject community baseline remains.',
+        ],
+    },
 }
 ---
 

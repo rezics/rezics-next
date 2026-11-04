@@ -21,9 +21,11 @@ import {
   type BoardPageLoadResult,
 } from '../../threads/board-page-caller';
 
-export function boardSearch(
-  search: Record<string, unknown>,
-): { cursor?: string; sort?: 'hot' | 'new'; returnTo?: string } {
+export function boardSearch(search: Record<string, unknown>): {
+  cursor?: string;
+  sort?: 'hot' | 'new';
+  returnTo?: string;
+} {
   const cursor = v.parse(v.fallback(v.optional(v.string()), undefined), search.cursor);
   const sort = boardSortFromSearch(v.parse(v.fallback(v.optional(v.string()), undefined), search.sort));
   const returnTo = subjectCommunityVisitReturn(search.returnTo, getLocale());

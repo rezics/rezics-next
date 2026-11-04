@@ -28,7 +28,11 @@ export function threadCreationPreset(
       ? search.subjectTitle
       : undefined;
   const returnTo = subjectCommunityVisitReturn(search.returnTo, locale);
-  return { ...(subject ? { subject } : {}), ...(subjectTitle ? { subjectTitle } : {}), ...(returnTo ? { returnTo } : {}) };
+  return {
+    ...(subject ? { subject } : {}),
+    ...(subjectTitle ? { subjectTitle } : {}),
+    ...(returnTo ? { returnTo } : {}),
+  };
 }
 
 /** Include the preset intent while leaving unrelated queries and anchors alone. */
