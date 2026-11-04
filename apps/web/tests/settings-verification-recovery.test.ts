@@ -229,15 +229,16 @@ test('empty and failed reads never settle an unknown original command, and retir
   let reads = 0;
   let finish!: (value: VerificationSnapshot) => void;
   const sent: unknown[] = [];
+  const denied: VerificationSnapshot = { ...empty, viewerActions: [] };
   const controller = new VerificationRecovery('alice', {
     read: async () => {
       reads++;
       if (reads === 2) throw new Error('Read connection lost');
-      if (reads === 4)
+      if (reads === 5)
         return new Promise<VerificationSnapshot>((resolve) => {
           finish = resolve;
         });
-      return empty;
+      return reads === 3 ? denied : empty;
     },
     request: async (_, input) => {
       sent.push(input);
@@ -248,15 +249,49 @@ test('empty and failed reads never settle an unknown original command, and retir
   await controller.reload();
   await controller.submit({ subject: 'subject-1', statement: 'Original statement', links: [] });
   const original = controller.snapshot().attempt;
+  const originalInput = original!.input;
+  const originalEvidence = JSON.stringify(originalInput);
+  const capturedRetry = () => controller.retry();
   expect(controller.snapshot().readStatus).toBe('idle');
   await controller.reload();
   expect(controller.snapshot()).toMatchObject({ readStatus: 'error', phase: 'uncertain', current: null });
   expect(controller.snapshot().attempt).toBe(original);
   await controller.reload();
-  expect(controller.snapshot()).toMatchObject({ readStatus: 'success', phase: 'uncertain', current: empty });
+  expect(controller.snapshot()).toMatchObject({ readStatus: 'success', phase: 'uncertain', current: denied });
   expect(controller.snapshot().attempt).toBe(original);
   await controller.retry();
-  expect(sent).toEqual([original!.input, original!.input]);
+  await capturedRetry();
+  expect(sent).toEqual([originalInput]);
+  expect(original!.input).toBe(originalInput);
+  expect(JSON.stringify(original!.input)).toBe(originalEvidence);
+  const html = renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(VerificationCard, {
+        controller,
+        csrfToken: 'current-csrf',
+        initialDraft: {
+          selected: { id: 'later-subject', title: 'Later subject', type: 'agent' },
+          statement: 'Later draft',
+          links: [{ label: 'Later link', url: 'https://example.test/later' }],
+        },
+      }),
+    ),
+  );
+  expect(html).toContain('Original statement');
+  expect(html).toContain('Later draft');
+  expect(html).toMatch(
+    new RegExp(`<button[^>]*disabled=""[^>]*>${m.settings_verification_retry_original()}</button>`),
+  );
+  expect(html).toMatch(
+    new RegExp(`<button(?![^>]*disabled)[^>]*>${m.settings_verification_read_current()}</button>`),
+  );
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ readStatus: 'success', phase: 'uncertain', current: empty });
+  expect(controller.snapshot().attempt).toBe(original);
+  await capturedRetry();
+  expect(sent).toEqual([originalInput, originalInput]);
   expect(sent[1]).toBe(sent[0]);
   const late = controller.reload();
   const retired = controller.snapshot();
@@ -265,7 +300,7 @@ test('empty and failed reads never settle an unknown original command, and retir
   await late;
   await controller.reload();
   expect(controller.snapshot()).toBe(retired);
-  expect(reads).toBe(4);
+  expect(reads).toBe(5);
 });
 
 test('read-only Verification recovery cannot mint request or withdrawal attempts', async () => {

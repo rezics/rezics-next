@@ -28,8 +28,9 @@ export type VerificationRecoveryState = {
   phase: 'loading' | 'idle' | 'sending' | 'reading' | 'uncertain' | 'refused' | 'review' | 'unavailable';
   readStatus: 'idle' | 'reading' | 'success' | 'error';
   failure?: VerificationFailure | undefined;
-  /** Captured once per failure, shared by the IO guards and the controls' passive timer. */
-  retryAt: number;
+  /** Captured once per response and scoped to the operation that received it. */
+  readRetryAt: number;
+  commandRetryAt: number;
 };
 export type VerificationRecoveryIO = {
   read: (accountId: string, signal?: AbortSignal) => Promise<VerificationSnapshot>;
@@ -75,6 +76,16 @@ export function canWithdrawVerification(current: VerificationSnapshot | null): b
   return admitsVerificationOperation(current, WITHDRAW_OPERATION);
 }
 
+/** Original recovery requires the matching current native operation; receipts wait for status readback. */
+export function canRetryVerification(
+  attempt: VerificationAttempt | null,
+  current: VerificationSnapshot | null,
+): boolean {
+  if (!attempt || attempt.receipt) return false;
+  if (attempt.kind === 'request') return canRequestVerification(current);
+  return current?.verificationRequest?.id === attempt.requestId && canWithdrawVerification(current);
+}
+
 /** Bind withdrawal confirmation to this observation; a newer request, state, or advice is a different command. */
 export function verificationWithdrawalObservation(current: VerificationSnapshot | null): string | null {
   const request = current?.verificationRequest;
@@ -100,7 +111,8 @@ export class VerificationRecovery {
     attempt: null,
     phase: 'loading',
     readStatus: 'idle',
-    retryAt: 0,
+    readRetryAt: 0,
+    commandRetryAt: 0,
   };
   private listeners = new Set<() => void>();
   private epoch = 0;
@@ -144,8 +156,11 @@ export class VerificationRecovery {
   private busy() {
     return this.state.phase === 'sending' || this.state.phase === 'reading';
   }
-  private waiting() {
-    return this.state.retryAt > Date.now();
+  private readWaiting() {
+    return this.state.readRetryAt > Date.now();
+  }
+  private commandWaiting() {
+    return this.state.commandRetryAt > Date.now();
   }
   private older(request: AgentVerificationRequest) {
     if (!this.latest) return false;
@@ -162,6 +177,7 @@ export class VerificationRecovery {
       !this.isCurrent() ||
       !this.canWrite() ||
       this.busy() ||
+      this.commandWaiting() ||
       this.state.attempt ||
       !canRequestVerification(this.state.current)
     )
@@ -181,8 +197,10 @@ export class VerificationRecovery {
       !this.isCurrent() ||
       !this.canWrite() ||
       this.busy() ||
+      this.commandWaiting() ||
       this.state.attempt ||
-      !canWithdrawVerification(this.state.current)
+      !canWithdrawVerification(this.state.current) ||
+      !this.state.current?.verificationRequest
     )
       return;
     this.update({
@@ -196,15 +214,32 @@ export class VerificationRecovery {
     await this.send(false);
   }
   async retry() {
-    if (!this.active || !this.isCurrent() || !this.canWrite() || !this.state.attempt || this.busy() || this.waiting())
+    const attempt = this.state.attempt;
+    if (
+      !this.active ||
+      !this.isCurrent() ||
+      !this.canWrite() ||
+      !attempt ||
+      this.busy() ||
+      this.commandWaiting() ||
+      !canRetryVerification(attempt, this.state.current)
+    )
       return;
     await this.send(true);
   }
   private async send(recovering: boolean) {
     const attempt = this.state.attempt;
-    if (!attempt || !this.active || !this.isCurrent() || !this.canWrite()) return;
+    if (
+      !attempt ||
+      !this.active ||
+      !this.isCurrent() ||
+      !this.canWrite() ||
+      this.commandWaiting() ||
+      (recovering && !canRetryVerification(attempt, this.state.current))
+    )
+      return;
     const epoch = this.epoch;
-    this.update({ phase: 'sending', readStatus: 'idle', current: null, failure: undefined, retryAt: 0 });
+    this.update({ phase: 'sending', readStatus: 'idle', current: null, failure: undefined });
     let result: VerificationCommandResult;
     try {
       result = await withVerificationDeadline(
@@ -230,7 +265,7 @@ export class VerificationRecovery {
         phase: uncertain ? 'uncertain' : 'refused',
         attempt: uncertain ? attempt : null,
         failure,
-        retryAt: preferenceRetryDeadline(failure.retryAfter),
+        commandRetryAt: preferenceRetryDeadline(failure.retryAfter),
       });
       return;
     }
@@ -260,12 +295,16 @@ export class VerificationRecovery {
     );
   }
   async reload() {
-    if (!this.active || !this.isCurrent() || this.busy() || this.waiting()) return;
+    if (!this.active || !this.isCurrent() || this.busy() || this.readWaiting()) return;
     await this.readCurrent(this.epoch);
   }
   private async readCurrent(epoch: number) {
     if (!this.live(epoch)) return;
-    this.update({ phase: 'reading', readStatus: 'reading', current: null, failure: undefined, retryAt: 0 });
+    if (this.readWaiting()) {
+      if (this.state.attempt?.receipt) this.update({ phase: 'uncertain', readStatus: 'idle' });
+      return;
+    }
+    this.update({ phase: 'reading', readStatus: 'reading', current: null, failure: undefined, readRetryAt: 0 });
     let current: VerificationSnapshot;
     try {
       current = await withVerificationDeadline((signal) => this.io.read(this.accountId, signal), this.lifetime.signal);
@@ -288,7 +327,7 @@ export class VerificationRecovery {
           phase: this.state.attempt ? 'uncertain' : 'unavailable',
           readStatus: 'error',
           failure,
-          retryAt: preferenceRetryDeadline(failure?.retryAfter),
+          readRetryAt: preferenceRetryDeadline(failure?.retryAfter),
         });
       return;
     }
@@ -308,6 +347,8 @@ export class VerificationRecovery {
       readStatus: 'success',
       attempt: resolved ? null : attempt,
       phase: attempt ? (resolved ? 'review' : 'uncertain') : 'idle',
+      failure: undefined,
+      readRetryAt: 0,
     });
   }
 }

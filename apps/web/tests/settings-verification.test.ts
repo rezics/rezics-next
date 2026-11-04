@@ -428,6 +428,7 @@ test('An uncertain verification request or withdrawal retries the exact original
   const { client, calls } = fakeClient([
     { status: 200, data: statusOf(null) },
     { status: 200, data: statusOf(pending) },
+    { status: 200, data: statusOf(null) },
     { status: 201, data: { verificationRequest: pending } },
     { status: 200, data: statusOf(approving) },
   ]);
@@ -469,6 +470,10 @@ test('An uncertain verification request or withdrawal retries the exact original
   expect(controller.snapshot().phase).toBe('uncertain');
   expect(sent).toHaveLength(1);
   await controller.retry();
+  expect(sent).toHaveLength(1);
+  await controller.reload();
+  expect(controller.snapshot().attempt).toBe(original);
+  await controller.retry();
   expect(sent).toHaveLength(2);
   expect(sent[1]).toBe(sent[0]);
   expect(sent[1]).toEqual({ ...input, idempotencyKey: expect.any(String) });
@@ -478,7 +483,7 @@ test('An uncertain verification request or withdrawal retries the exact original
   expect(draft).toMatchObject({ subject: 'later-subject', statement: 'Later unsent statement' });
   expect(draft.links).toHaveLength(5);
   expect(draft.links[0]!.url).toBe('https://example.test/later');
-  expect(calls.map((call) => call.operation)).toEqual(['read', 'read', 'request', 'read']);
+  expect(calls.map((call) => call.operation)).toEqual(['read', 'read', 'read', 'request', 'read']);
 });
 
 test('uncertain withdrawal keeps confirmation, original key and native failures until an identified withdrawn read', async () => {
@@ -486,8 +491,9 @@ test('uncertain withdrawal keeps confirmation, original key and native failures 
   const withdrawn = { ...pending, state: 'withdrawn' as const };
   const { client, calls } = fakeClient([
     { status: 200, data: statusOf(pending) },
-    { status: 200, data: statusOf(null) },
+    { status: 200, data: statusOf(pending) },
     { status: 409, error: { value: { detail: 'The verification request is no longer pending' } } },
+    { status: 200, data: statusOf(pending) },
     { status: 200, data: statusOf(withdrawn) },
     { status: 200, data: statusOf(null) },
     { status: 200, data: statusOf(withdrawn) },
@@ -514,7 +520,7 @@ test('uncertain withdrawal keeps confirmation, original key and native failures 
   await controller.withdraw(true);
   await controller.reload();
   expect(controller.snapshot().phase).toBe('uncertain');
-  expect(controller.snapshot().current?.verificationRequest).toBeNull();
+  expect(controller.snapshot().current?.verificationRequest).toEqual(pending);
   expect(controller.snapshot().attempt?.requestId).toBe('request-1');
   await controller.submit(input);
   await controller.retry();
@@ -523,6 +529,7 @@ test('uncertain withdrawal keeps confirmation, original key and native failures 
     message: 'The verification request is no longer pending',
   });
   expect(controller.snapshot().attempt).not.toBeNull();
+  await controller.reload();
   await controller.retry();
   // Even an ok command response cannot turn an absent current read into a withdrawal success.
   expect(controller.snapshot().phase).toBe('uncertain');
@@ -533,7 +540,15 @@ test('uncertain withdrawal keeps confirmation, original key and native failures 
   await controller.reload();
   expect(controller.snapshot().attempt).toBeNull();
   expect(controller.snapshot().current?.verificationRequest?.state).toBe('withdrawn');
-  expect(calls.map((call) => call.operation)).toEqual(['read', 'read', 'withdraw', 'withdraw', 'read', 'read']);
+  expect(calls.map((call) => call.operation)).toEqual([
+    'read',
+    'read',
+    'withdraw',
+    'read',
+    'withdraw',
+    'read',
+    'read',
+  ]);
 });
 
 test('verification reads reject missing data and other accounts, and late commands cannot cross viewers', async () => {
@@ -657,11 +672,13 @@ test('Keep native verification recovery delays actionable without weakening nati
   try {
     const { client, calls } = nativeVerificationClient([
       Response.json(statusOf(null)),
+      Response.json(statusOf(null)),
       Response.json(
         { detail: 'Wait before replaying', code: 'rate_limited', request_id: 'refusal-id' },
         { status: 429, headers: { 'Retry-After': '2' } },
       ),
-      Response.json(statusOf(request)),
+      Response.json(statusOf(null)),
+      Response.json(statusOf(null)),
       Response.json({ verificationRequest: request }, { status: 201 }),
       Response.json(statusOf({ ...request, state: 'approving' })),
     ]);
@@ -690,10 +707,12 @@ test('Keep native verification recovery delays actionable without weakening nati
     await controller.submit(draft);
     const original = controller.snapshot().attempt;
     expect(controller.snapshot().failure).toBeUndefined();
-    expect(controller.snapshot().retryAt).toBe(0);
+    expect(controller.snapshot().commandRetryAt).toBe(0);
+    expect(controller.snapshot().readRetryAt).toBe(0);
     draft.subject = 'later-subject';
     draft.statement = 'Later draft';
     draft.links[0]!.url = 'https://example.test/later';
+    await controller.reload();
     await controller.retry();
     expect(controller.snapshot()).toMatchObject({
       phase: 'uncertain',
@@ -705,23 +724,26 @@ test('Keep native verification recovery delays actionable without weakening nati
         requestId: 'refusal-id',
         retryAfter: '2',
       },
-      retryAt: now + 2000,
+      commandRetryAt: now + 2000,
     });
     expect(controller.snapshot().failure).not.toHaveProperty('retryable');
     expect(controller.snapshot().attempt).toBe(original);
-    const deadline = controller.snapshot().retryAt;
+    const deadline = controller.snapshot().commandRetryAt;
     now = deadline - 1;
     await controller.retry();
     await controller.reload();
     await controller.submit(draft);
     await controller.withdraw(true);
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(4);
+    expect(controller.snapshot().commandRetryAt).toBe(deadline);
+    expect(controller.snapshot().readRetryAt).toBe(0);
     now = deadline;
-    expect(calls).toHaveLength(2); // Expiry itself never dispatches IO.
+    expect(calls).toHaveLength(4); // Expiry itself never dispatches IO.
     await controller.reload();
     expect(controller.snapshot().attempt).toBe(original);
     expect(controller.snapshot().attempt?.receipt).toBeNull();
     expect(controller.snapshot().phase).toBe('uncertain');
+    expect(controller.snapshot().commandRetryAt).toBe(deadline);
     await controller.retry();
     expect(sent).toHaveLength(3);
     expect(sent.every((value) => value === original?.input)).toBe(true);
@@ -732,9 +754,9 @@ test('Keep native verification recovery delays actionable without weakening nati
     expect(controller.snapshot().current?.verificationRequest?.state).toBe('approving');
     expect(draft).toMatchObject({ subject: 'later-subject', statement: 'Later draft' });
     expect(draft.links[0]!.url).toBe('https://example.test/later');
-    expect(calls.map((call) => call.method)).toEqual(['GET', 'POST', 'GET', 'POST', 'GET']);
-    expect(calls[1]!.headers.get('idempotency-key')).toBe(calls[3]!.headers.get('idempotency-key'));
-    expect(await calls[3]!.json()).toEqual({ subject: input.subject, statement: input.statement, links: input.links });
+    expect(calls.map((call) => call.method)).toEqual(['GET', 'GET', 'POST', 'GET', 'GET', 'POST', 'GET']);
+    expect(calls[2]!.headers.get('idempotency-key')).toBe(calls[5]!.headers.get('idempotency-key'));
+    expect(await calls[5]!.json()).toEqual({ subject: input.subject, statement: input.statement, links: input.links });
   } finally {
     clock.mockRestore();
   }
@@ -747,6 +769,7 @@ test('a failed final native status read retains the withdrawal receipt and exact
     const retryAfter = new Date(now + 3000).toUTCString();
     const withdrawn = { ...request, state: 'withdrawn' };
     const { client, calls } = nativeVerificationClient([
+      Response.json(statusOf(request)),
       Response.json(statusOf(request)),
       Response.json({ verificationRequest: withdrawn }),
       Response.json(
@@ -782,6 +805,7 @@ test('a failed final native status read retains the withdrawal receipt and exact
     await controller.reload();
     await controller.withdraw(true);
     const original = controller.snapshot().attempt;
+    await controller.reload();
     await controller.retry();
     const receipted = controller.snapshot().attempt;
     expect(receipted?.input).toBe(original?.input);
@@ -792,16 +816,16 @@ test('a failed final native status read retains the withdrawal receipt and exact
       phase: 'uncertain',
       current: null,
       failure: { status: 503, code: 'overloaded', retryable: true, requestId: 'read-id', retryAfter },
-      retryAt: now + 3000,
+      readRetryAt: now + 3000,
     });
-    const deadline = controller.snapshot().retryAt;
+    const deadline = controller.snapshot().readRetryAt;
     now = deadline - 1;
     await controller.reload();
     await controller.retry();
     expect(controller.snapshot().attempt).toBe(receipted);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
     now = deadline;
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
     pauseRead = true;
     const reading = controller.reload();
     expect(controller.snapshot().phase).toBe('reading');
@@ -809,13 +833,13 @@ test('a failed final native status read retains the withdrawal receipt and exact
     await controller.retry();
     expect(sent).toHaveLength(2);
     expect(sent[1]).toBe(sent[0]);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
     finishRead();
     await reading;
     expect(controller.snapshot().attempt).toBeNull();
     expect(controller.snapshot().current?.verificationRequest?.state).toBe('withdrawn');
     expect(controller.snapshot().phase).toBe('review');
-    expect(calls.map((call) => call.method)).toEqual(['GET', 'POST', 'GET', 'GET']);
+    expect(calls.map((call) => call.method)).toEqual(['GET', 'GET', 'POST', 'GET', 'GET']);
   } finally {
     clock.mockRestore();
   }
@@ -848,10 +872,10 @@ test('ordinary read Errors and invalid native retry timing never invent a delay 
     },
   });
   await controller.reload();
-  expect(controller.snapshot()).toMatchObject({ phase: 'unavailable', current: null, retryAt: 0 });
+  expect(controller.snapshot()).toMatchObject({ phase: 'unavailable', current: null, readRetryAt: 0 });
   expect(controller.snapshot().failure).toBeUndefined();
   await controller.reload();
-  expect(controller.snapshot()).toMatchObject({ phase: 'unavailable', current: null, retryAt: 0 });
+  expect(controller.snapshot()).toMatchObject({ phase: 'unavailable', current: null, readRetryAt: 0 });
   expect(controller.snapshot().failure).toEqual({
     status: 403,
     message: 'Read denied',
@@ -867,7 +891,7 @@ test('ordinary read Errors and invalid native retry timing never invent a delay 
   expect(controller.snapshot().phase).toBe('idle');
   await controller.reload();
   expect(controller.snapshot().failure).toEqual({ status: 403, message: 'rezics-platform-closed' });
-  expect(controller.snapshot().retryAt).toBe(0);
+  expect(controller.snapshot().readRetryAt).toBe(0);
   expect(calls).toHaveLength(2);
 });
 

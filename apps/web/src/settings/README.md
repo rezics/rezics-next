@@ -14,6 +14,8 @@ Subject lookup carries a private success/failure envelope with a safe localized 
 
 **Decision:** Private verification status uses owner verification authority for request and withdraw advice; a missing authority handle returns the latest request with empty viewerActions and never treats that read as no request.
 
+**Decision:** A transient failed status read neither grants nor proves denial of native admission; original-command retry stays unavailable until a fresh readable snapshot supplies that exact operation.
+
 **Decision:** Subject search maps native 403 `platform_closed` to closed, other native 4xx responses to refused, and malformed, deadline, transport or server failures to unavailable; valid Retry-After gates only a deliberate retry.
 
 ## Profile avatar
