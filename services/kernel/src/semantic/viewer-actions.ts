@@ -179,8 +179,14 @@ export async function readSubjectCorrectionActions(input: {
     [
       'semantic.context',
       mounted.map(
-        ({ action, operationId, exposure, fixedResourceId }) =>
-          ({ action, operationId, exposure, fixedResourceId, authority: 'resource' }) satisfies ViewerActionBinding,
+        ({ action, operationId, exposure }) =>
+          ({
+            action,
+            operationId,
+            exposure,
+            authority: 'resource',
+            fixedResourceId: GLOBAL_CONTEXT,
+          }) satisfies ViewerActionBinding,
       ),
     ],
   ]);
