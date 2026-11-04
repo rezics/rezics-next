@@ -4,11 +4,17 @@ import { sameSubjectOffer } from './model';
 
 type Operand = { offer: SubjectOffer; trigger: HTMLButtonElement };
 type Mode = { kind: 'inspect'; operand: Operand } | { kind: 'compare'; trigger: HTMLButtonElement } | null;
-type Scope = { page: SubjectOffersPage; version: number; locale: string; address: string };
+type Scope = { page: SubjectOffersPage; version: number; locale: string; address: string; origin: object | undefined };
 type Selection = { scope: Scope; operands: readonly Operand[]; mode: Mode };
 
 function sameScope(a: Scope, b: Scope) {
-  return a.page === b.page && a.version === b.version && a.locale === b.locale && a.address === b.address;
+  return (
+    a.page === b.page &&
+    a.version === b.version &&
+    a.locale === b.locale &&
+    a.address === b.address &&
+    a.origin === b.origin
+  );
 }
 
 /** Only this mounted received page owns these two operands. There is no persistence or command port. */
@@ -17,16 +23,18 @@ export function useSubjectOfferReading({
   version,
   locale,
   current: admitted,
+  origin,
 }: {
   page: SubjectOffersPage;
   version: number;
   locale: string;
   current?: (() => boolean) | undefined;
+  origin?: object | undefined;
 }) {
   const id = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const address = typeof window === 'undefined' ? '' : window.location.href;
-  const scope = { page, version, locale, address };
+  const scope = { page, version, locale, address, origin };
   const [selection, setSelection] = useState<Selection>(() => ({ scope, operands: [], mode: null }));
   const live = useRef({ scope, admitted, visible: true, selection });
   let selected = selection;
