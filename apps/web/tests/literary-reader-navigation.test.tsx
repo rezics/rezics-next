@@ -71,27 +71,43 @@ test('aliased native reads keep a continuation attached only to its supplied nod
       { type: 'SubjectList', props: { id: 'members-alias', title: 'Other members', property: 'wdt:P179', limit: 12, paged: true } },
     ],
   };
+  const shared = planReads(platformRegistry, document, {
+    subject: literaryIds.series,
+    account: null,
+  });
+  const sharedKey = shared.nodes['members-primary']!;
+  expect(shared.nodes['members-alias']).toBe(sharedKey);
+  const body = {
+    links: [{ subject: literaryIds.member, target: literaryIds.member }],
+    relations: [{ subject: literaryIds.member, target: literaryIds.member }],
+    next: 'next-native-cursor',
+    freshness: { caught_up: true },
+  };
+  const uncontinued = profileRelationWindows({
+    subject: literaryIds.series,
+    document,
+    reads: { [sharedKey]: { status: 200, body } },
+  }, { includeAliases: true });
+  expect(uncontinued.map(({ node }) => node)).toEqual(['members-primary', 'members-alias']);
+  expect(uncontinued.map(({ rows }) => rows)).toEqual([body.links, body.links]);
+
   const continuation = { node: 'members-primary', cursor: 'primary-only-cursor' };
-  const plan = planReads(platformRegistry, document, {
+  const continued = planReads(platformRegistry, document, {
     subject: literaryIds.series,
     account: null,
     continuation,
   });
-  const key = plan.nodes['members-primary']!;
-  expect(plan.nodes['members-alias']).toBe(key);
-  const planned = plan.reads[key]!;
-  const body = {
-    [planned.kind === 'links' ? 'links' : 'relations']: [{ subject: literaryIds.member, target: literaryIds.member }],
-    next: 'next-native-cursor',
-    freshness: { caught_up: true },
-  };
-  const windows = profileRelationWindows({
+  const primaryKey = continued.nodes['members-primary']!;
+  const aliasKey = continued.nodes['members-alias']!;
+  expect(aliasKey).not.toBe(primaryKey);
+  const cursorOwned = profileRelationWindows({
     subject: literaryIds.series,
     continuation,
     document,
-    reads: { [key]: { status: 200, body } },
+    reads: { [primaryKey]: { status: 200, body } },
   }, { includeAliases: true });
-  expect(windows.map(({ node }) => node)).toEqual(['members-primary', 'members-alias']);
-  expect(windows[0]).toMatchObject({ node: 'members-primary', status: 200, next: 'next-native-cursor' });
-  expect(windows[1]).toMatchObject({ node: 'members-alias', status: 409, rows: [], valid: false });
+  expect(cursorOwned.map(({ node }) => node)).toEqual(['members-primary', 'members-alias']);
+  expect(cursorOwned[0]).toMatchObject({ node: 'members-primary', status: 200, next: 'next-native-cursor' });
+  expect(cursorOwned[1]).toMatchObject({ node: 'members-alias', rows: [], valid: false });
+  expect(cursorOwned[1]!.status).toBeUndefined();
 });

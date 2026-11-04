@@ -198,6 +198,31 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     expect(returned.searchParams.get('streamDirection')).toBe('inverse');
     expect(returned.searchParams.get('cursor')).toBe('current-member-cursor');
 
+    input = { ...input, source: {}, windows: [{ ...membersSecond, status: 503 }] };
+    await render();
+    const failed = host.querySelector<HTMLElement>('[data-slot="literary-window"][data-node="members-second"]')!;
+    expect(failed.dataset.direction).toBe('inverse');
+    expect(failed.querySelector('[data-state="unavailable"]')).not.toBeNull();
+    const failedAddresses = [...failed.querySelectorAll<HTMLAnchorElement>('a')].map((link) => new URL(link.href));
+    expect(
+      failedAddresses.some(
+        (url) =>
+          url.searchParams.get('node') === 'members-second' &&
+          url.searchParams.get('streamProperty') === 'wdt:P179' &&
+          url.searchParams.get('streamDirection') === 'inverse' &&
+          url.searchParams.get('cursor') === 'current-member-cursor',
+      ),
+    ).toBe(true);
+    expect(
+      failedAddresses.some(
+        (url) =>
+          url.searchParams.get('node') === 'members-second' &&
+          url.searchParams.get('streamProperty') === 'wdt:P179' &&
+          url.searchParams.get('streamDirection') === 'inverse' &&
+          !url.searchParams.has('cursor'),
+      ),
+    ).toBe(true);
+
     host.querySelector<HTMLAnchorElement>('[data-stream-node="members-second"] > a')!.focus();
     input = { ...input, source: {}, windows: [membersFirst, editionInverse] };
     await render();
