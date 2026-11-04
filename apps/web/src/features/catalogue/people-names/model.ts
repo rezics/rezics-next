@@ -14,15 +14,18 @@ export function peopleNames(subject: Subject, locale: string): PeopleNames {
   try {
     // Reject malformed containers before the producer iterates aliases. No language interpretation here.
     if (
-      !subject.labels || !subject.aliases ||
-      Array.isArray(subject.labels) || Array.isArray(subject.aliases) ||
-      typeof subject.labels !== 'object' || typeof subject.aliases !== 'object' ||
+      !subject.labels ||
+      !subject.aliases ||
+      Array.isArray(subject.labels) ||
+      Array.isArray(subject.aliases) ||
+      typeof subject.labels !== 'object' ||
+      typeof subject.aliases !== 'object' ||
       !Object.values(subject.aliases).every(Array.isArray)
-    ) return { state: 'malformed' };
+    )
+      return { state: 'malformed' };
     // Person/Character display selection has no work original-title/original-language metadata.
     const names = workNames({ ...subject, statements: {} }, locale);
-    if (names.state === 'unavailable')
-      return { state: names.bytes > WORK_NAMES_BYTES ? 'oversized' : 'malformed' };
+    if (names.state === 'unavailable') return { state: names.bytes > WORK_NAMES_BYTES ? 'oversized' : 'malformed' };
     return { state: 'ready', bytes: names.bytes, groups: names.groups, selected: names.selected };
   } catch {
     return { state: 'malformed' };
@@ -45,5 +48,7 @@ export function peopleNamesAdvice(authority: TermsPageAuthority): NamesAdvice {
   if (authority.viewer !== 'signed-in' || authority.actions.state !== 'ready') return 'unavailable';
   return authority.actions.actions.some(
     (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.terms'),
-  ) ? 'allowed' : 'denied';
+  )
+    ? 'allowed'
+    : 'denied';
 }
