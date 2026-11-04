@@ -12,6 +12,7 @@ or episodes from a current Type or a profile ID. Pins exceeding 1,024 encoded by
 Decision: Capture current-progress meaning only from the accepting pinned descriptor at native session creation; older
 rows without a captured descriptor remain unavailable, and labels or current profiles never supply historical meaning.
 Decision: Assessment coverage includes retained non-retired sessions, including active sessions; retirement removes a session from the panel and restoration receives it again. Keep exact values and half-point frequencies within each meaning revision, report historical null presence as unknown, and never average incompatible revisions.
+Decision: Insights returns diary navigation as the existing `library_diary.list` operation and its query values; Diary retains ownership of the destination and allocation.
 
 ## Mounted panel contract
 
