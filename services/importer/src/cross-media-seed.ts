@@ -1506,7 +1506,7 @@ export async function seedCrossMedia(
     path,
     ...(destination ? { destination } : {}),
     ...(vocabularyAdmission ? { vocabularyAdmission } : {}),
-    ...(extras?.recordConcurrency === undefined ? {} : { recordConcurrency: extras.recordConcurrency }),
+    ...(vndbCredits ? { recordConcurrency: 1 } : extras?.recordConcurrency === undefined ? {} : { recordConcurrency: extras.recordConcurrency }),
     ...(extras?.mediaDeadlineMs === undefined ? {} : { mediaDeadlineMs: extras.mediaDeadlineMs }),
     transport: {
       batchWrite: (request) => port.batch(request),
@@ -1550,7 +1550,7 @@ export async function seedCrossMedia(
         }
       }
       const run = await importer.runRecords(registration, records());
-      ensure(run.status === 'committed', `Cross-media ${provider} import failed: ${run.status} (${run.diagnostic})`);
+      ensure(run.status === 'committed', `Cross-media ${provider} import failed: ${run.status}`);
       runs[provider] = run;
     }
     const hasBangumiInput = plan.records.bangumi.length > 0 || plan.entities.bangumi.length > 0;
