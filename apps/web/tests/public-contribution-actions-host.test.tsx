@@ -844,6 +844,7 @@ test('PostActions retains the original report body, sender, key and credential f
       other!.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+    expect(other!.getAttribute('aria-checked')).toBe('true');
     const details = document.querySelector<HTMLTextAreaElement>('textarea');
     expect(details).toBeDefined();
     await act(async () => {
@@ -854,6 +855,7 @@ test('PostActions retains the original report body, sender, key and credential f
       details!.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+    expect(details!.value).toBe('the original report body');
     await clickButton(node, 'Verify test challenge');
     const submit = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
       (candidate) => candidate.textContent?.trim() === m.report_submit(),
