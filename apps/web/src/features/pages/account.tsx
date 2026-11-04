@@ -314,7 +314,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
     actionProfile &&
     actionPage?.view === actionView &&
     actionPage.page.account?.id === actionProfile.id &&
-    value.account.id === actionProfile.id ? (
+    value.account?.id === actionProfile.id ? (
       <ContributionActionsHost
         accountId={actionProfile.id}
         view={actionView}

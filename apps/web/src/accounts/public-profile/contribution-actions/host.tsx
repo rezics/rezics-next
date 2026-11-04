@@ -54,7 +54,11 @@ export function observeContributionActionsSession(client: QueryClient): SessionO
     subscribe(notify) {
       return client.getQueryCache().subscribe((event) => {
         const query = 'query' in event ? event.query : undefined;
-        if (!query || query.queryKey.length !== key.length || query.queryKey.some((part, index) => part !== key[index]))
+        if (
+          !query ||
+          query.queryKey.length !== key.length ||
+          query.queryKey.some((part: unknown, index: number) => part !== key[index])
+        )
           return;
         const replaced =
           event.type === 'added' ||
@@ -180,7 +184,7 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
 }
 
 export type ContributionActionsHostValue = {
-  input?: ContributionActionsInput;
+  input: ContributionActionsInput | undefined;
   state: ContributionActionsState<unknown>;
   isCurrent: () => boolean;
   retry: () => Promise<void>;
