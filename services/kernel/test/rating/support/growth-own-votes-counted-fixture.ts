@@ -12,6 +12,7 @@ import {
   stepIdentityEpochBootstrap,
 } from '../../../src/semantic/identity-epoch-bootstrap.ts';
 import * as commandTiming from '../../../src/command/timing.ts';
+import { CommandUnavailableError } from '../../../src/command/command.ts';
 import { withReadTransaction } from '../../../src/semantic/read.ts';
 import { createSubject } from '../../../src/semantic/subject.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
@@ -52,18 +53,24 @@ function bytes(value: unknown): number {
 
 export async function createCountedGrowthFixture() {
   const db = await openGrowthDatabase();
+  db.pool.options.max = 1;
   try {
     configureTestReceiptKeys(db.pool);
     // Drive the existing native bootstrap before creating the fixed inputs; never fixture-write readiness.
-    for (let batch = 0; batch < 100 && (await readIdentityEpochCutover(db.pool)).state !== 'ready'; batch++)
-      await runIdentityEpochBootstrapBatch(db.pool);
+    for (let batch = 0; batch < 4096 && (await readIdentityEpochCutover(db.pool)).state !== 'ready'; batch++) {
+      try {
+        await runIdentityEpochBootstrapBatch(db.pool);
+      } catch (error) {
+        // The native scheduler's single-attempt commands retain progress and retry contention.
+        if (!(error instanceof CommandUnavailableError) || error.reason !== 'contention') throw error;
+      }
+    }
     expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'ready' });
     for (const home of [partitionOf(0x6a20), partitionOf(0x6a30)]) {
       await stepIdentityEpochBootstrap(db.pool, home);
       const epoch = await withReadTransaction(db.pool, (client) => identityEpochStore.readEpoch(client, home));
       expect(epoch.state, epoch.state === 'unavailable' ? epoch.reason : epoch.state).toBe('published');
     }
-    db.pool.options.max = 1;
     await bootstrapRelease(db.pool, bundledRelease);
     const scopes = ['subject:create', 'subject:read', 'definitions:read', 'rating:vote'];
     const accountId = newId(0x23a1);
