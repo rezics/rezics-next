@@ -100,20 +100,24 @@ response coverage is in `apps/web/tests/progress-address.test.tsx` and
 `apps/web/tests/progress-index-current-origin.test.tsx`. Rendered page states are in
 `apps/web/src/stories/library-progress-discovery.stories.tsx`.
 
-`bun run --cwd services/kernel derived schema` passed and derived the installed schema from the migration. The Kernel
-typecheck command, `bun run --cwd services/kernel typecheck`, completed with repository errors outside the discovery
-sources; the first is the missing Content-owned client publication at
-`../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.` The final typecheck reported no diagnostics in the discovery route, store, SQL, presentation, or erasure changes.
+On the current retry, `bun run --cwd services/kernel typecheck` failed with repository-wide Kernel errors, beginning
+with the missing Content-owned generated export:
+`../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.` The discovery Kernel route, store, SQL, presentation, and erasure changes had no Kernel diagnostics.
 
-`bun run --cwd apps/web typecheck` failed while loading Kernel source without its SQL content mapper. Its discovery-specific
-error is `../../services/kernel/src/library/progress-discovery-presentation.ts(10,26): error TS2307: Cannot find module './progress-discovery-releases.sql' or its corresponding type declarations.` This does not validate generated client consumption; that publication remains with Content.
+`bun run --cwd apps/web typecheck` reported 3,748 errors while compiling the shared Web and Kernel source graph. It also
+cannot resolve the discovery SQL mapper when Web compiles Kernel source directly:
+`../../services/kernel/src/library/progress-discovery-presentation.ts(10,26): error TS2307: Cannot find module './progress-discovery-releases.sql' or its corresponding type declarations.` The installed client publication is still Content-owned and unavailable to Web.
 
-The focused Kernel command `bun run --cwd services/kernel check test/library/progress-http.test.ts` was attempted four
-times. Each attempt stopped during shared remote preparation before the test process started: failures reported
-`stalledPhase: "native-cache-lock"`, `stalledPhase: "source-artifact-publication"`, and `phase: "run-lifetime"` twice
-after approximately 50 seconds. The Web command
+The focused Kernel command `bun run --cwd services/kernel check test/library/progress-http.test.ts` stopped during
+shared remote preparation before tests started:
+`remote-check: infrastructure failure: remote run timed out {"command": "bun [2 arguments]", "elapsedMs": 49275, "host": "c", "limitMs": 49071, "phase": "run-lifetime"}`.
+
+The Web focused command
 `bun apps/web/scripts/focused.ts --private-network -- bun test tests/progress-address.test.tsx tests/progress-index-current-origin.test.tsx`
-was attempted four times and exited before spawning tests with `Web check custody: private descriptor must be outside candidate source` each time. These focused results are unavailable, not passes.
+ran 11 tests: 5 passed and 6 failed in the existing current-origin action cases; all four address cases and the new
+stale-predicate case passed. This is not a passing focused suite. The callback harness now dispatches mounted form and
+input events, so those existing cases exercise the rendered page rather than private React props.
 
-Frozen broader acceptance, independent 64/512/4096 growth, full Kernel checks, and browser review remain
-controller-owned.
+Frozen broader acceptance, independent 64/512/4096 growth and inclusive cost derivation, generated client consumption,
+full Kernel checks, and seeded browser review remain deferred. The typed client integration and bounded scale cases are
+tracked in `.temp/continuation/progress-discovery-client.md`.
