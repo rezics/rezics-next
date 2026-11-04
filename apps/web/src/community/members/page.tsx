@@ -8,7 +8,9 @@ import { boundedRealmMemberPage, type MemberIdentity, type RealmMembersSource } 
 import { MemberAddition } from './addition';
 import { SelectedRealmMemberContext } from './selected-account';
 import { RealmBansPanel } from '../realm-bans-panel';
-import { addSelectedRealmMember } from './commands';
+
+const addWithAccountsWorkflow: NonNullable<RealmMembersSource['addMember']> = async (intent) =>
+  (await import('./commands')).addSelectedRealmMember(intent);
 
 export type MembersCaller = {
   current: () => boolean;
@@ -29,7 +31,7 @@ function Identity({ identity }: { identity: MemberIdentity }) {
   );
 }
 
-/** Supplied sources are composition fixtures until the native producer is published. */
+/** Renders one producer-backed page and one explicit selected observation at a time. */
 export function RealmMembersPage({
   realmId,
   source = boundedRealmMemberPage,
@@ -216,7 +218,7 @@ export function RealmMembersPage({
                   current.membershipInterval === selection.address.membershipInterval
                 );
               }}
-              addMember={source.addMember ?? addSelectedRealmMember}
+              addMember={source.addMember ?? addWithAccountsWorkflow}
               refreshSelected={visit.refreshSelected}
             />
           ) : null}

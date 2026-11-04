@@ -268,15 +268,14 @@ test('selected episode changes retire stale inspection while explicit add readba
     },
   });
 
-  let pageReads = 0;
+  let selectedReads = 0;
   const readback = new RealmMembersVisit('realm', {
     pageBound: 20,
-    readPage: async () => {
-      pageReads++;
-      return { kind: 'ready', page: page([]) };
+    readPage: async () => ({ kind: 'ready', page: page([]) }),
+    readSelected: async () => {
+      selectedReads++;
+      return selectedReads === 1 ? selected('none', 'absence-episode') : selected('current', 'new-member-episode');
     },
-    readSelected: async () =>
-      pageReads === 1 ? selected('none', 'absence-episode') : selected('current', 'new-member-episode'),
   });
   const stopReadback = readback.connect();
   await settle();
@@ -288,7 +287,7 @@ test('selected episode changes retire stale inspection while explicit add readba
     membershipInterval: 'new-member-episode',
     membershipEpisode: 'new-member-episode',
   });
-  expect(pageReads).toBe(1);
+  expect(selectedReads).toBe(2);
   stopReadback();
 
   let attempts = 0;
