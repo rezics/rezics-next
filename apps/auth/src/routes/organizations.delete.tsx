@@ -215,7 +215,10 @@ export function OrganizationDeleteContent({
     const saved = continuation.kind === 'pending' ? continuation.value : null;
     const selected = organizationId ?? saved?.organizationId;
     selectedId.current = selected;
-    const uncertain = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
+    const hint = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
+    // A record stored under a different target is conservative, never a replacement operation.
+    const uncertain =
+      hint.kind === 'pending' && hint.value.organizationId !== selected ? { kind: 'invalid' as const } : hint;
     attempt.current = selected
       ? organizationDeletionAttempt(
           uncertain.kind === 'pending' ? uncertain.value : { organizationId: selected },
@@ -326,6 +329,7 @@ export function OrganizationDeleteContent({
     // Unknown work is never replaced by a new authentication continuation.
     if (readOrganizationDeleteUnknown(selected).kind !== 'absent') {
       setConfirmation('');
+      if (attempt.current) attempt.current.unresolved = true;
       setOutcome('unknown');
       return;
     }
@@ -408,7 +412,8 @@ export function OrganizationDeleteContent({
         // follows while the original command identity remains stored.
         clearReviewContinuation(current);
         const retained = readOrganizationDeleteUnknown(target.organizationId);
-        if (retained.kind === 'pending') attempt.current = organizationDeletionAttempt(retained.value, true);
+        if (retained.kind === 'pending' && retained.value.organizationId === target.organizationId)
+          attempt.current = organizationDeletionAttempt(retained.value, true);
         else if (attempt.current) attempt.current.unresolved = true;
         setOutcome('unknown');
         setMessage('');

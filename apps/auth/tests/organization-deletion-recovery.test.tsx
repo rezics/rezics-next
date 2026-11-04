@@ -94,10 +94,15 @@ test('single readback survives storage loss; late advice cannot affect replaceme
   expect(page.calls).toHaveLength(2);
 });
 
-for (const malformed of [false, true])
-  test(`restored ${malformed ? 'malformed' : 'exact'} hint stays conservative through page retirement and account replacement`, async () => {
-    if (malformed)
+for (const restored of ['exact', 'malformed', 'wrong-target'] as const)
+  test(`restored ${restored} hint stays conservative through page retirement and account replacement`, async () => {
+    if (restored === 'malformed')
       window.sessionStorage.setItem(`rezics.organization-delete.step-up.unknown.${first}`, '{"oldLabel":"secret"}');
+    else if (restored === 'wrong-target')
+      window.sessionStorage.setItem(
+        `rezics.organization-delete.step-up.unknown.${first}`,
+        JSON.stringify({ ...hint, organizationId: second }),
+      );
     else storeOrganizationDeleteUnknown(hint);
     const saved = readOrganizationDeleteUnknown(first);
     let result = ready(first);
