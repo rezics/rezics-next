@@ -43,9 +43,9 @@ test('a maintenance subprocess that blocks its event loop is killed at its deadl
   const dir = temporaryDirectory();
   try {
     const start = performance.now();
-    await expect(maintenanceCommand(
-      [process.execPath, '-e', 'while (true) {}'], dir.path, AbortSignal.timeout(50),
-    )).rejects.toThrow();
+    await expect(
+      maintenanceCommand([process.execPath, '-e', 'while (true) {}'], dir.path, AbortSignal.timeout(50)),
+    ).rejects.toThrow();
     expect(performance.now() - start).toBeLessThan(1000);
   } finally {
     dir.close();
@@ -62,16 +62,26 @@ test('derived worktree cleanup removes generator leftovers and preserves a gener
     git(dir.path, 'add', '.');
     git(dir.path, 'commit', '-qm', 'Initial');
     const settings = {
-      mainCheckout: dir.path, integrationBranch: 'dev', stateDirectory: join(dir.path, '.temp'),
+      mainCheckout: dir.path,
+      integrationBranch: 'dev',
+      stateDirectory: join(dir.path, '.temp'),
       worktreeRoot: join(dir.path, '.temp/worktrees'),
     } as Settings;
     mkdirSync(settings.stateDirectory);
-    const derivedFiles = [{
-      path: 'generated.txt', stage: 'promotion' as const,
-      command: [process.execPath, '-e', "const fs = require('node:fs'); fs.mkdirSync('leftovers/nested/.git', {recursive:true}); fs.writeFileSync('leftovers/nested/.git/HEAD', 'fixture'); throw new Error('generator failed');"],
-    }];
-    await expect(regenerateDerivedHead({ settings, derivedFiles }, git(dir.path, 'rev-parse', 'HEAD')))
-      .rejects.toThrow('generator failed');
+    const derivedFiles = [
+      {
+        path: 'generated.txt',
+        stage: 'promotion' as const,
+        command: [
+          process.execPath,
+          '-e',
+          "const fs = require('node:fs'); fs.mkdirSync('leftovers/nested/.git', {recursive:true}); fs.writeFileSync('leftovers/nested/.git/HEAD', 'fixture'); throw new Error('generator failed');",
+        ],
+      },
+    ];
+    await expect(regenerateDerivedHead({ settings, derivedFiles }, git(dir.path, 'rev-parse', 'HEAD'))).rejects.toThrow(
+      'generator failed',
+    );
     expect(git(dir.path, 'worktree', 'list', '--porcelain').match(/^worktree /gm)).toHaveLength(1);
     expect(readdirSync(settings.worktreeRoot)).toEqual([]);
   } finally {

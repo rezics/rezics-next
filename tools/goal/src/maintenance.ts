@@ -82,8 +82,7 @@ export async function runMaintenance(job: MaintenanceJob | 'all', runtime: Runti
               signal.throwIfAborted();
               if (existsSync(task.worktree)) continue;
               for (const attempt of runtime.store.attempts(task.id))
-                if (attempt.process)
-                  await step(`reap ${task.id}`, () => terminateProcessGroup(attempt.process, 1000));
+                if (attempt.process) await step(`reap ${task.id}`, () => terminateProcessGroup(attempt.process, 1000));
             }
             break;
           case 'detect':

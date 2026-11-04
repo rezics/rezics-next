@@ -534,7 +534,9 @@ test('resident regressions roll back the published tree and restart the restored
 test('a failed rollback restores published code and a matching host after legacy shutdown', async () => {
   for (const migrationFails of [true, false]) {
     const f = fixture();
-    let restarts = 0, observations = 0, runningHead = '';
+    let restarts = 0,
+      observations = 0,
+      runningHead = '';
     const result = await sync({
       ...f.options,
       resident: {
@@ -778,7 +780,9 @@ else if (args.includes('show')) console.log('LoadState=loaded\\nActiveState=acti
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
   }
-  expect(readFileSync(calls, 'utf8')).not.toMatch(/"(?:start|restart)","rezics-goal-(?:maintenance|regenerate)\.service"/);
+  expect(readFileSync(calls, 'utf8')).not.toMatch(
+    /"(?:start|restart)","rezics-goal-(?:maintenance|regenerate)\.service"/,
+  );
   expect(installs).toHaveLength(1);
   expect(installs[0]!.code).toBe(0);
   expect(installs[0]!.output).not.toContain('usage: goal <');

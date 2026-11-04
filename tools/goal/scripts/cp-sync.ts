@@ -1446,7 +1446,9 @@ export async function rollback(options: Options = {}): Promise<number> {
           return 1;
         }
         const restored = commitTree(
-          checkout, replacePaths(checkout, failed, current, paths), [failed],
+          checkout,
+          replacePaths(checkout, failed, current, paths),
+          [failed],
           `control-plane: restore running host code ${short(current)}`,
         );
         publish(checkout, 'rollback', failed, restored, paths, undefined, print);
@@ -1459,8 +1461,11 @@ export async function rollback(options: Options = {}): Promise<number> {
           await resident.restart(checkout, { install: true });
         }
         appendHistory(historyFile, {
-          time: now.toISOString(), action: 'sync', paths,
-          main: { previous: failed, current: restored }, source: current,
+          time: now.toISOString(),
+          action: 'sync',
+          paths,
+          main: { previous: failed, current: restored },
+          source: current,
         });
         print('cp-sync: retained the published code with a running host; rollback failed.');
         return 1;

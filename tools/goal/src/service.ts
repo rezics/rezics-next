@@ -118,7 +118,10 @@ export async function installService(options: ServiceInstall, run = serviceComma
   await checked(['loginctl', 'enable-linger', user], run);
   // Reject a broken unit before the legacy supervisor stops, so a bad install never leaves no host at all.
   await checked(['systemd-analyze', '--user', 'verify', ...SERVICE_UNITS.map((unit) => join(directory, unit))], run);
-  await checked(['systemctl', '--user', 'enable', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3], SERVICE_UNITS[5]], run);
+  await checked(
+    ['systemctl', '--user', 'enable', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3], SERVICE_UNITS[5]],
+    run,
+  );
   await stopLegacySupervisor(join(main, '.temp/goal'), run);
   // Wait for the notify host only after the old supervisor and host have relinquished the socket.
   await checked(['systemctl', '--user', 'start', HOST_UNIT, SERVICE_UNITS[1]], run);
