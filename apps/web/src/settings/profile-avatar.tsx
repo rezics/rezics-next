@@ -17,22 +17,12 @@ import {
   avatarMedia,
   ProfileAvatarUpload,
   type AvatarAdviceRead,
+  type AvatarAdviceState,
   type AvatarResume,
   type AvatarUpload,
 } from './profile-avatar-upload';
 import { ProfileAvatarCrop } from './profile-avatar-crop.tsx';
 import { usePreferenceRetry } from './preference-failure-retry';
-
-const admittedAdvice = (accountId: string) => ({
-  viewerState: 'signed_in' as const,
-  viewer: { accountId },
-  target: { containerId: accountId, purpose: 'avatar' as const },
-  constraints: {
-    mediaTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const,
-    maxByteCount: 20_971_520 as const,
-  },
-  allowedActions: ['upload'] as const,
-});
 
 export function useProfileAvatarUpload(
   editor: ProfileEditor,
@@ -45,14 +35,7 @@ export function useProfileAvatarUpload(
       upload(accountId, file, signal, intent, onStage);
     const guardedResume: AvatarResume | undefined =
       resume && ((mediaId, file, signal) => resume(mediaId, file, signal));
-    const readAdvice: AvatarAdviceRead =
-      upload === uploadAvatar
-        ? readSiteAvatarUploadAdvice
-        : async () => {
-            const accountId = editor.snapshot().draft?.accountId;
-            if (!accountId) throw new Error('unavailable');
-            return admittedAdvice(accountId);
-          };
+    const readAdvice: AvatarAdviceRead = readSiteAvatarUploadAdvice;
     return new ProfileAvatarUpload(editor, guardedUpload, URL, guardedResume, readAdvice);
   }, [editor, upload, resume]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
@@ -106,9 +89,20 @@ function avatarStatus(
   if (state.phase === 'ready') return m.settings_profile_avatar_ready();
   if (state.phase === 'error') return avatarFailure(state.failure?.reason);
   if (changed) return avatar ? m.settings_profile_avatar_draft() : m.settings_profile_avatar_removal();
-  if ((state.advice === 'unavailable' || state.advice === 'denied') && !avatar)
-    return m.settings_profile_avatar_unavailable();
   return avatar ? m.settings_profile_avatar_saved() : m.settings_profile_avatar_empty();
+}
+
+function adviceStatus(advice: AvatarAdviceState | undefined) {
+  switch (advice) {
+    case 'allowed':
+      return m.settings_profile_avatar_advice_allowed();
+    case 'denied':
+      return m.settings_profile_avatar_advice_denied();
+    case 'unavailable':
+      return m.settings_profile_avatar_advice_unavailable();
+    default:
+      return m.settings_profile_avatar_advice_loading();
+  }
 }
 
 /** Product controls compose shadcn primitives with native summaries and a separately owned local preview. */
@@ -132,6 +126,7 @@ export function ProfileAvatar({
   const choose = useRef<HTMLButtonElement>(null);
   const { state, controller } = upload;
   const waiting = usePreferenceRetry(undefined, state.retryAt ?? 0);
+  const adviceWaiting = usePreferenceRetry(undefined, state.adviceRetryAt ?? 0);
   const local = !!state.url;
   const selected = local || state.phase === 'preparing' || state.phase === 'original-only';
   const localPreview = local && state.phase !== 'preparing' && state.phase !== 'original-only';
@@ -178,8 +173,18 @@ export function ProfileAvatar({
           >
             {status}
           </p>
+          <p role="status" aria-live="polite" aria-atomic="true">
+            {adviceStatus(state.advice)}
+          </p>
           {waiting && state.failure?.retryAfter !== undefined ? (
             <p role="status">{m.settings_profile_avatar_retry_after({ seconds: state.failure.retryAfter })}</p>
+          ) : null}
+          {adviceWaiting && state.adviceRetryAt ? (
+            <p role="status">
+              {m.settings_profile_avatar_retry_after({
+                seconds: Math.max(1, Math.ceil((state.adviceRetryAt - Date.now()) / 1000)),
+              })}
+            </p>
           ) : null}
         </div>
       </div>
@@ -249,6 +254,20 @@ export function ProfileAvatar({
             }}
           >
             {m.settings_profile_avatar_retry()}
+          </Button>
+        ) : null}
+        {controller.canOfferAdviceRetry() ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
+            disabled={disabled || adviceWaiting}
+            onClick={() => {
+              if (disabled || adviceWaiting) return;
+              controller.retryAdvice();
+            }}
+          >
+            {m.settings_profile_avatar_advice_retry()}
           </Button>
         ) : null}
         {avatar || selected ? (

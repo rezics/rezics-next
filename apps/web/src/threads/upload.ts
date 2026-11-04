@@ -25,6 +25,8 @@ export type UploadRefusalReason = 'closed' | 'type' | 'too-large' | 'rejected' |
 export class UploadRefusal extends Error {
   readonly reason: UploadRefusalReason;
   readonly retryAfter?: number;
+  retryAfterHeader?: string;
+  responseTime?: number;
   /** Retain a known reservation when completion or processing has an uncertain outcome. */
   mediaId?: string;
   constructor(reason: UploadRefusalReason, retryAfter?: number) {
@@ -446,10 +448,29 @@ export function uploadAvatar(
   return uploadImage({ containerId: accountId }, file, signal, 'avatar', intent, onStage);
 }
 
-export async function readSiteAvatarUploadAdvice(signal: AbortSignal): Promise<unknown> {
+export async function readSiteAvatarUploadAdvice(signal: AbortSignal): Promise<{
+  ok: true;
+  body: unknown;
+  retryAfter?: string;
+  responseTime: number;
+}> {
   const response = await siteFetch('/media/avatar-upload-advice', { method: 'GET', signal });
-  if (!response.ok) throw await refusalFrom(response);
-  return response.json();
+  const responseTime = Date.now();
+  const retryAfter = response.headers.get('retry-after') ?? undefined;
+  if (!response.ok) {
+    const refusal = await refusalFrom(response);
+    refusal.retryAfterHeader = retryAfter;
+    refusal.responseTime = responseTime;
+    throw refusal;
+  }
+  try {
+    return { ok: true, body: await response.json(), retryAfter, responseTime };
+  } catch {
+    const refusal = new UploadRefusal('unavailable');
+    refusal.retryAfterHeader = retryAfter;
+    refusal.responseTime = responseTime;
+    throw refusal;
+  }
 }
 
 /** Realm uploads reuse the uploader-bound byte/digest/completion pipeline; previews need a native derivative summary. */

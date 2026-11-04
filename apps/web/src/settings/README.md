@@ -18,6 +18,8 @@ Settings Profile reads Content `GET /v1/media/avatar-upload-advice` for current 
 
 **Decision:** Web advice decoding binds the current viewer, self target and native constraints without a second UUID grammar; Content schemas remain the identifier authority.
 
+**Decision:** During an unresolved avatar upload, a separate availability check may reread current `media:create` advice without changing the retained file, reservation identity or upload retry deadline; only the existing upload retry resumes it.
+
 ## Notifications
 
 The signed-in Settings notifications section reads the Access preference `page`: current optional kinds, compulsory

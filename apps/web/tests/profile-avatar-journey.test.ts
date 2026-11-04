@@ -7,7 +7,7 @@ import {
   type MediaReservationIntent,
   type UploadRefusalReason,
 } from '../src/threads/upload';
-import type { AvatarAdviceRead, AvatarResume } from '../src/settings/profile-avatar-upload';
+import type { AvatarAdviceRead, AvatarAdviceReadResult, AvatarResume } from '../src/settings/profile-avatar-upload';
 import { ProfileAvatarUpload, type AvatarUpload } from '../src/settings/profile-avatar-upload';
 import type { ProfileValues } from '../src/settings/profile-data';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
@@ -58,6 +58,9 @@ function advice(accountId: string, actions: ['upload'] | [] = ['upload']) {
     allowedActions: actions,
   };
 }
+function adviceResult(body: unknown, result: Partial<AvatarAdviceReadResult> = {}): AvatarAdviceReadResult {
+  return { ok: true, body, responseTime: Date.now(), ...result };
+}
 async function submit(controller: ProfileAvatarUpload, selected = file()) {
   controller.choose(selected);
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -98,7 +101,7 @@ function uploads(editor: ProfileEditor, readAdvice?: AvatarAdviceRead) {
       },
     },
     undefined,
-    readAdvice ?? (async () => advice(editor.snapshot().draft?.accountId ?? '')),
+    readAdvice ?? (async () => adviceResult(advice(editor.snapshot().draft?.accountId ?? ''))),
   );
   return { controller, requests, created, revoked, disconnect: controller.connect() };
 }
@@ -287,7 +290,7 @@ test('an uncertain profile save retains its immutable retry and local draft unti
   boundary.disconnect();
 });
 
-function recovery(editor: ProfileEditor, resumeAvailable = true) {
+function recovery(editor: ProfileEditor, resumeAvailable = true, readAdvice?: AvatarAdviceRead) {
   const calls: {
     operation: 'upload' | 'resume';
     target: string;
@@ -328,12 +331,12 @@ function recovery(editor: ProfileEditor, resumeAvailable = true) {
       },
     },
     resumeAvailable ? resume : undefined,
-    async () => advice(editor.snapshot().draft?.accountId ?? ''),
+    readAdvice ?? (async () => adviceResult(advice(editor.snapshot().draft?.accountId ?? ''))),
   );
   return { controller, calls, created, revoked, disconnect: controller.connect() };
 }
-async function mountedRecovery(editor: ProfileEditor, resumeAvailable = true) {
-  const boundary = recovery(editor, resumeAvailable);
+async function mountedRecovery(editor: ProfileEditor, resumeAvailable = true, readAdvice?: AvatarAdviceRead) {
+  const boundary = recovery(editor, resumeAvailable, readAdvice);
   await settle();
   await settle();
   return boundary;
@@ -533,7 +536,7 @@ test('upload admission follows current advice independently of profile-reference
     { read: async () => initial, save: async (attempt) => ({ ok: true, profile: attempt.after }) },
     initial,
   );
-  const denied = await mounted(writable, async () => advice(initial.accountId, []));
+  const denied = await mounted(writable, async () => adviceResult(advice(initial.accountId, [])));
   expect(denied.controller.canUpload()).toBe(false);
   await submit(denied.controller);
   expect(denied.requests).toHaveLength(0);
@@ -541,7 +544,7 @@ test('upload admission follows current advice independently of profile-reference
   expect(writable.snapshot().draft?.avatar).toBeNull();
   denied.disconnect();
 
-  const malformed = await mounted(writable, async () => ({ viewerState: 'signed_in' }));
+  const malformed = await mounted(writable, async () => adviceResult({ viewerState: 'signed_in' }));
   expect(malformed.controller.snapshot().advice).toBe('unavailable');
   await submit(malformed.controller);
   expect(malformed.requests).toHaveLength(0);
@@ -561,6 +564,123 @@ test('upload admission follows current advice independently of profile-reference
   await submit(admitted.controller);
   expect(admitted.requests).toHaveLength(1);
   admitted.disconnect();
+});
+
+test('unavailable upload advice can be deliberately retried without selecting or uploading a file', async () => {
+  const editor = recoveryEditor();
+  const fresh = deferred<AvatarAdviceReadResult>();
+  let reads = 0;
+  const boundary = uploads(editor, async () => {
+    reads++;
+    if (reads === 1) throw new Error('advice unavailable');
+    return fresh.promise;
+  });
+  await settle();
+  expect(boundary.controller.snapshot().advice).toBe('unavailable');
+  expect(boundary.controller.canOfferAdviceRetry()).toBe(true);
+  boundary.controller.retryAdvice();
+  expect(reads).toBe(2);
+  fresh.resolve(adviceResult(advice(profile().accountId)));
+  await settle();
+  expect(boundary.controller.snapshot().advice).toBe('allowed');
+  expect(boundary.controller.canUpload()).toBe(true);
+  expect(boundary.requests).toHaveLength(0);
+  boundary.disconnect();
+});
+
+test('retiring a target without a selection fences its late advice response', async () => {
+  const editor = recoveryEditor();
+  const late = deferred<AvatarAdviceReadResult>();
+  let signal: AbortSignal | undefined;
+  const boundary = uploads(editor, async (requestSignal) => {
+    signal = requestSignal;
+    return late.promise;
+  });
+  expect(boundary.controller.snapshot()).toMatchObject({ phase: 'idle', url: null, advice: 'loading' });
+  editor.retire();
+  expect(signal?.aborted).toBe(true);
+  expect(boundary.controller.snapshot()).toMatchObject({ phase: 'idle', url: null, advice: 'unavailable' });
+  late.resolve(adviceResult(advice(profile().accountId)));
+  await settle();
+  expect(boundary.controller.snapshot().advice).toBe('unavailable');
+  expect(boundary.controller.canUpload()).toBe(false);
+  expect(boundary.requests).toHaveLength(0);
+  boundary.disconnect();
+});
+
+test('advice recovery preserves an uncertain reservation and its original upload deadline', async () => {
+  let now = 1_000;
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
+  const editor = recoveryEditor();
+  let reads = 0;
+  const readAdvice: AvatarAdviceRead = async () => {
+    reads++;
+    if (reads === 1) return adviceResult(advice(profile().accountId));
+    if (reads === 2) return adviceResult(undefined, { ok: false, retryAfter: '3', responseTime: 2_000 });
+    return adviceResult(advice(profile().accountId), { retryAfter: '1', responseTime: 5_000 });
+  };
+  const boundary = await mountedRecovery(editor, true, readAdvice);
+  try {
+    const selected = file();
+    await submit(boundary.controller, selected);
+    const original = boundary.calls[0]!;
+    original.result.reject(refusal('rate-limited', 'original-reservation', 7));
+    await settle();
+    const originalUrl = boundary.controller.snapshot().url;
+    expect(boundary.controller.snapshot()).toMatchObject({
+      phase: 'error',
+      url: originalUrl,
+      stage: 'reservation',
+      failure: { reason: 'rate-limited', retryAfter: 7 },
+      retryAt: 8_000,
+      advice: 'allowed',
+    });
+
+    now = 2_000;
+    boundary.controller.retryAdvice();
+    await settle();
+    expect(boundary.controller.snapshot()).toMatchObject({
+      phase: 'error',
+      url: originalUrl,
+      stage: 'reservation',
+      retryAt: 8_000,
+      advice: 'unavailable',
+      adviceRetryAt: 5_000,
+    });
+    expect(boundary.calls).toHaveLength(1);
+    expect(boundary.controller.canRetry()).toBe(false);
+
+    now = 4_999;
+    boundary.controller.retryAdvice();
+    expect(reads).toBe(2);
+    now = 5_000;
+    boundary.controller.retryAdvice();
+    await settle();
+    expect(boundary.controller.snapshot()).toMatchObject({
+      phase: 'error',
+      url: originalUrl,
+      retryAt: 8_000,
+      advice: 'allowed',
+      adviceRetryAt: 6_000,
+    });
+    expect(boundary.calls).toHaveLength(1);
+
+    now = 7_999;
+    boundary.controller.retry();
+    expect(boundary.calls).toHaveLength(1);
+    now = 8_000;
+    boundary.controller.retry();
+    expect(boundary.calls[1]).toMatchObject({
+      operation: 'resume',
+      target: 'original-reservation',
+      file: selected,
+    });
+    expect(boundary.calls[0]!.intent?.file).toBe(selected);
+  } finally {
+    boundary.disconnect();
+    clock.mockRestore();
+  }
+  expect(boundary.revoked).toEqual(boundary.created);
 });
 
 test('an unknown reservation acknowledgement retries the original intent; a new file starts another', async () => {
