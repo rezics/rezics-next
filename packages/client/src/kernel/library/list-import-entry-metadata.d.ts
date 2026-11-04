@@ -2,6 +2,7 @@ import type { PersonalEntryFieldChange, PersonalEntry, PersonalEntryPrivacyValue
 import type { Actor } from '../request/access.ts';
 import type { CommandOutcome } from '../command/command.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 export declare const ENTRY_IMPORT_METADATA_LIMITS: {
     readonly fields: 5;
     readonly reviewsPerRow: 2;
@@ -41,6 +42,7 @@ export type EntryImportMetadataOutcome = Readonly<{
     fields: readonly EntryImportMetadataFieldOutcome[];
 }>;
 export type EntryImportMetadataConfirmation = {
+    nativeAdmission?: 'vndb-source-v1';
     fields: EntryImportMetadataSelection[];
     selectionDigest: string;
     annotationKey: string;
@@ -123,6 +125,7 @@ export declare function applyEntryImportMetadataCommands(input: {
     record?: (outcome: CommandOutcome<unknown>) => void;
     isCancelled: () => Promise<boolean>;
     isCurrent?: () => Promise<boolean>;
+    admission?: LabelCommandAdmission;
     signal?: AbortSignal;
 }): Promise<{
     outcome: EntryImportMetadataOutcome;

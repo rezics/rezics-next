@@ -13,7 +13,7 @@ declare function schemaFor(codes: readonly ProblemCode[], status: number): impor
     detail?: import("typebox").TOptional<import("typebox").TString>;
     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
         pointer: import("typebox").TString;
-        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+        code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
     }>>>;
 }>;
 declare function extendedSchema<Extensions extends Record<string, TSchema>>(codes: readonly ProblemCode[], status: number, extensions: Extensions): import("typebox").TObject<{
@@ -27,7 +27,7 @@ declare function extendedSchema<Extensions extends Record<string, TSchema>>(code
     detail?: import("typebox").TOptional<import("typebox").TString>;
     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
         pointer: import("typebox").TString;
-        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+        code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
     }>>>;
 } & Omit<Extensions, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
 declare function erasedResultSchema(): import("typebox").TObject<{
@@ -40,7 +40,7 @@ declare function erasedResultSchema(): import("typebox").TObject<{
     detail?: import("typebox").TOptional<import("typebox").TString>;
     errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
         pointer: import("typebox").TString;
-        code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+        code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
     }>>>;
     effect_status: import("typebox").TLiteral<"applied">;
 }>;

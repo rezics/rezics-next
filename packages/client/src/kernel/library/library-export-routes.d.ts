@@ -5209,6 +5209,20 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                         fullExport: false;
                         state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
                         first: string | null;
+                    } | {
+                        format: "https://rezics.com/formats/library-export";
+                        version: 4;
+                        coverage: "private-library-owner-facts-v4";
+                        exportId: string;
+                        capturedAt: string;
+                        expiresAt: string;
+                        privacy: "private";
+                        completeness: "supported-native-facts";
+                        sections: [];
+                        omissions: Record<string, string>;
+                        fullExport: false;
+                        state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+                        first: string | null;
                     };
                     400: Response | {
                         type: unknown;
@@ -5343,6 +5357,20 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                             format: "https://rezics.com/formats/library-export";
                             version: 3;
                             coverage: "private-library-owner-facts-v3";
+                            exportId: string;
+                            capturedAt: string;
+                            expiresAt: string;
+                            privacy: "private";
+                            completeness: "supported-native-facts";
+                            sections: [];
+                            omissions: Record<string, string>;
+                            fullExport: false;
+                            state: "cancelled" | "collecting" | "expired" | "limit" | "ready" | "stale";
+                            first: string | null;
+                        } | {
+                            format: "https://rezics.com/formats/library-export";
+                            version: 4;
+                            coverage: "private-library-owner-facts-v4";
                             exportId: string;
                             capturedAt: string;
                             expiresAt: string;
@@ -5665,6 +5693,30 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
                                             recordBytes: number;
                                         };
                                     };
+                                } | {
+                                    format: "https://rezics.com/formats/library-export";
+                                    version: 4;
+                                    coverage: "private-library-owner-facts-v4";
+                                    exportId: string;
+                                    capturedAt: string;
+                                    expiresAt: string;
+                                    privacy: "private";
+                                    completeness: "supported-native-facts";
+                                    sections: [];
+                                    omissions: Record<string, string>;
+                                    fullExport: false;
+                                    rows: number;
+                                    recordBytes: number;
+                                    sectionTotals: {
+                                        [x: string]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                        [x: number]: {
+                                            rows: number;
+                                            recordBytes: number;
+                                        };
+                                    };
                                 } | null;
                             };
                             400: Response | {
@@ -5796,7 +5848,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -5810,7 +5862,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -5824,7 +5876,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -5838,7 +5890,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -5852,7 +5904,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -5866,7 +5918,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -5880,7 +5932,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         200: import("typebox").TUnion<[import("typebox").TObject<{
@@ -5891,7 +5943,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
@@ -5905,7 +5957,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
@@ -5919,7 +5971,21 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<4>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v4">;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
@@ -5953,7 +6019,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -5967,7 +6033,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -5981,7 +6047,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -5995,7 +6061,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -6009,7 +6075,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -6023,7 +6089,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -6037,7 +6103,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         200: import("typebox").TUnion<[import("typebox").TObject<{
@@ -6048,7 +6114,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
@@ -6062,7 +6128,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
@@ -6076,7 +6142,21 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<4>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v4">;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
@@ -6127,7 +6207,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -6141,7 +6221,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -6155,7 +6235,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -6169,7 +6249,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -6183,7 +6263,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -6197,7 +6277,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -6211,7 +6291,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         200: import("typebox").TUnion<[import("typebox").TObject<{
@@ -6222,7 +6302,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
@@ -6236,7 +6316,7 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
@@ -6250,7 +6330,21 @@ export declare function libraryExportRoutes(app: ReturnType<typeof definitionRou
             expiresAt: import("typebox").TString;
             privacy: import("typebox").TLiteral<"private">;
             completeness: import("typebox").TLiteral<"supported-native-facts">;
-            sections: import("typebox").TTuple<import("typebox").TSchema[]>;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
+            omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
+            fullExport: import("typebox").TLiteral<false>;
+            state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;
+            first: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        }>, import("typebox").TObject<{
+            format: import("typebox").TLiteral<"https://rezics.com/formats/library-export">;
+            version: import("typebox").TLiteral<4>;
+            coverage: import("typebox").TLiteral<"private-library-owner-facts-v4">;
+            exportId: import("typebox").TString;
+            capturedAt: import("typebox").TString;
+            expiresAt: import("typebox").TString;
+            privacy: import("typebox").TLiteral<"private">;
+            completeness: import("typebox").TLiteral<"supported-native-facts">;
+            sections: import("typebox").TTuple<import("typebox").TLiteral<string>[]>;
             omissions: import("typebox").TRecord<"^.*$", import("typebox").TString>;
             fullExport: import("typebox").TLiteral<false>;
             state: import("typebox").TUnion<[import("typebox").TLiteral<"collecting">, import("typebox").TLiteral<"ready">, import("typebox").TLiteral<"stale">, import("typebox").TLiteral<"cancelled">, import("typebox").TLiteral<"expired">, import("typebox").TLiteral<"limit">]>;

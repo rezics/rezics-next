@@ -5237,6 +5237,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -5273,6 +5302,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     id: string;
                     title: string;
                     description: string | null;
+                    card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                 }>>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"collection">;
@@ -5302,7 +5332,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
-                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"thread">;
                     id: import("typebox").TString;
@@ -5379,6 +5409,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -5506,6 +5565,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -5588,7 +5676,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -5602,7 +5690,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -5616,7 +5704,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -5630,7 +5718,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -5644,7 +5732,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -5658,7 +5746,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -5672,7 +5760,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
     };
@@ -5742,6 +5830,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -5778,6 +5895,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     id: string;
                     title: string;
                     description: string | null;
+                    card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                 }>;
                 destination: {
                     kind: "collection";
@@ -5807,7 +5925,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
-                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
                 destination: {
                     kind: "thread";
                     id: string;
@@ -5884,6 +6002,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -6011,6 +6158,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -6207,6 +6383,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -6243,6 +6448,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     id: string;
                     title: string;
                     description: string | null;
+                    card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                 }>;
                 destination: {
                     kind: "collection";
@@ -6272,7 +6478,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
-                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
                 destination: {
                     kind: "thread";
                     id: string;
@@ -6349,6 +6555,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -6476,6 +6711,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: string[];
                         };
                     } | null;
+                    subjectReactions?: {
+                        target: {
+                            targetKind: "subject";
+                            targetId: string;
+                        };
+                        counts: {
+                            state: "available";
+                            values: {
+                                like?: number;
+                                love?: number;
+                                laugh?: number;
+                                insightful?: number;
+                                sad?: number;
+                            };
+                            asOf: Readonly<{
+                                epoch: number;
+                                position: string;
+                            }> | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        viewer?: {
+                            state: "available";
+                            kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                        } | {
+                            state: "unavailable";
+                        };
+                        action: "allowed" | "denied" | "sign_in" | "unavailable";
+                    };
                 };
                 destination: {
                     kind: "subject";
@@ -6682,6 +6946,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: import("typebox").TArray<import("typebox").TString>;
                             }>;
                         }>, import("typebox").TNull]>;
+                        subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                            target: import("typebox").TObject<{
+                                targetKind: import("typebox").TLiteral<"subject">;
+                                targetId: import("typebox").TString;
+                            }>;
+                            counts: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                values: import("typebox").TObject<{
+                                    like: import("typebox").TOptional<import("typebox").TInteger>;
+                                    love: import("typebox").TOptional<import("typebox").TInteger>;
+                                    laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                    insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                    sad: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>;
+                                asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }>>, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>;
+                            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>>;
+                            action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                        }>>;
                     }>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"subject">;
@@ -6718,6 +7011,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string;
                         description: string | null;
+                        card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                     }>>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"collection">;
@@ -6747,7 +7041,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             id: string;
                             title: string | null;
                         }> | null;
-                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"thread">;
                         id: import("typebox").TString;
@@ -6824,6 +7118,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: import("typebox").TArray<import("typebox").TString>;
                             }>;
                         }>, import("typebox").TNull]>;
+                        subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                            target: import("typebox").TObject<{
+                                targetKind: import("typebox").TLiteral<"subject">;
+                                targetId: import("typebox").TString;
+                            }>;
+                            counts: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                values: import("typebox").TObject<{
+                                    like: import("typebox").TOptional<import("typebox").TInteger>;
+                                    love: import("typebox").TOptional<import("typebox").TInteger>;
+                                    laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                    insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                    sad: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>;
+                                asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }>>, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>;
+                            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>>;
+                            action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                        }>>;
                     }>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"subject">;
@@ -6951,6 +7274,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: import("typebox").TArray<import("typebox").TString>;
                             }>;
                         }>, import("typebox").TNull]>;
+                        subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                            target: import("typebox").TObject<{
+                                targetKind: import("typebox").TLiteral<"subject">;
+                                targetId: import("typebox").TString;
+                            }>;
+                            counts: import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                values: import("typebox").TObject<{
+                                    like: import("typebox").TOptional<import("typebox").TInteger>;
+                                    love: import("typebox").TOptional<import("typebox").TInteger>;
+                                    laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                    insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                    sad: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>;
+                                asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }>>, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>;
+                            viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"available">;
+                                kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                            }>, import("typebox").TObject<{
+                                state: import("typebox").TLiteral<"unavailable">;
+                            }>]>>;
+                            action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                        }>>;
                     }>;
                     destination: import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"subject">;
@@ -7033,7 +7385,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -7047,7 +7399,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             403: import("typebox").TObject<{
@@ -7061,7 +7413,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             404: import("typebox").TObject<{
@@ -7075,7 +7427,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             409: import("typebox").TObject<{
@@ -7089,7 +7441,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             422: import("typebox").TObject<{
@@ -7103,7 +7455,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -7117,7 +7469,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
         };
@@ -7226,6 +7578,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     obligations: string[];
                 };
             } | null;
+            subjectReactions?: {
+                target: {
+                    targetKind: "subject";
+                    targetId: string;
+                };
+                counts: {
+                    state: "available";
+                    values: {
+                        like?: number;
+                        love?: number;
+                        laugh?: number;
+                        insightful?: number;
+                        sad?: number;
+                    };
+                    asOf: Readonly<{
+                        epoch: number;
+                        position: string;
+                    }> | null;
+                } | {
+                    state: "unavailable";
+                };
+                viewer?: {
+                    state: "available";
+                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                } | {
+                    state: "unavailable";
+                };
+                action: "allowed" | "denied" | "sign_in" | "unavailable";
+            };
         };
         destination: {
             kind: "subject";
@@ -7262,6 +7643,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             id: string;
             title: string;
             description: string | null;
+            card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
         }>;
         destination: {
             kind: "collection";
@@ -7291,7 +7673,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                 id: string;
                 title: string | null;
             }> | null;
-        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
         destination: {
             kind: "thread";
             id: string;
@@ -7368,6 +7750,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     obligations: string[];
                 };
             } | null;
+            subjectReactions?: {
+                target: {
+                    targetKind: "subject";
+                    targetId: string;
+                };
+                counts: {
+                    state: "available";
+                    values: {
+                        like?: number;
+                        love?: number;
+                        laugh?: number;
+                        insightful?: number;
+                        sad?: number;
+                    };
+                    asOf: Readonly<{
+                        epoch: number;
+                        position: string;
+                    }> | null;
+                } | {
+                    state: "unavailable";
+                };
+                viewer?: {
+                    state: "available";
+                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                } | {
+                    state: "unavailable";
+                };
+                action: "allowed" | "denied" | "sign_in" | "unavailable";
+            };
         };
         destination: {
             kind: "subject";
@@ -7495,6 +7906,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     obligations: string[];
                 };
             } | null;
+            subjectReactions?: {
+                target: {
+                    targetKind: "subject";
+                    targetId: string;
+                };
+                counts: {
+                    state: "available";
+                    values: {
+                        like?: number;
+                        love?: number;
+                        laugh?: number;
+                        insightful?: number;
+                        sad?: number;
+                    };
+                    asOf: Readonly<{
+                        epoch: number;
+                        position: string;
+                    }> | null;
+                } | {
+                    state: "unavailable";
+                };
+                viewer?: {
+                    state: "available";
+                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                } | {
+                    state: "unavailable";
+                };
+                action: "allowed" | "denied" | "sign_in" | "unavailable";
+            };
         };
         destination: {
             kind: "subject";
@@ -7630,6 +8070,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: string[];
                             };
                         } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
                     };
                     destination: {
                         kind: "subject";
@@ -7666,6 +8135,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string;
                         description: string | null;
+                        card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                     }>;
                     destination: {
                         kind: "collection";
@@ -7695,7 +8165,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             id: string;
                             title: string | null;
                         }> | null;
-                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
                     destination: {
                         kind: "thread";
                         id: string;
@@ -7772,6 +8242,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: string[];
                             };
                         } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
                     };
                     destination: {
                         kind: "subject";
@@ -7899,6 +8398,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: string[];
                             };
                         } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
                     };
                     destination: {
                         kind: "subject";
@@ -8095,6 +8623,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: string[];
                             };
                         } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
                     };
                     destination: {
                         kind: "subject";
@@ -8131,6 +8688,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string;
                         description: string | null;
+                        card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                     }>;
                     destination: {
                         kind: "collection";
@@ -8160,7 +8718,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             id: string;
                             title: string | null;
                         }> | null;
-                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                    }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
                     destination: {
                         kind: "thread";
                         id: string;
@@ -8237,6 +8795,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: string[];
                             };
                         } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
                     };
                     destination: {
                         kind: "subject";
@@ -8364,6 +8951,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 obligations: string[];
                             };
                         } | null;
+                        subjectReactions?: {
+                            target: {
+                                targetKind: "subject";
+                                targetId: string;
+                            };
+                            counts: {
+                                state: "available";
+                                values: {
+                                    like?: number;
+                                    love?: number;
+                                    laugh?: number;
+                                    insightful?: number;
+                                    sad?: number;
+                                };
+                                asOf: Readonly<{
+                                    epoch: number;
+                                    position: string;
+                                }> | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            viewer?: {
+                                state: "available";
+                                kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                            } | {
+                                state: "unavailable";
+                            };
+                            action: "allowed" | "denied" | "sign_in" | "unavailable";
+                        };
                     };
                     destination: {
                         kind: "subject";
@@ -8572,6 +9188,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     obligations: string[];
                                 };
                             } | null;
+                            subjectReactions?: {
+                                target: {
+                                    targetKind: "subject";
+                                    targetId: string;
+                                };
+                                counts: {
+                                    state: "available";
+                                    values: {
+                                        like?: number;
+                                        love?: number;
+                                        laugh?: number;
+                                        insightful?: number;
+                                        sad?: number;
+                                    };
+                                    asOf: Readonly<{
+                                        epoch: number;
+                                        position: string;
+                                    }> | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                viewer?: {
+                                    state: "available";
+                                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                action: "allowed" | "denied" | "sign_in" | "unavailable";
+                            };
                         };
                         destination: {
                             kind: "subject";
@@ -8608,6 +9253,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             id: string;
                             title: string;
                             description: string | null;
+                            card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                         }>;
                         destination: {
                             kind: "collection";
@@ -8637,7 +9283,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                 id: string;
                                 title: string | null;
                             }> | null;
-                        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
+                        }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">;
                         destination: {
                             kind: "thread";
                             id: string;
@@ -8714,6 +9360,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     obligations: string[];
                                 };
                             } | null;
+                            subjectReactions?: {
+                                target: {
+                                    targetKind: "subject";
+                                    targetId: string;
+                                };
+                                counts: {
+                                    state: "available";
+                                    values: {
+                                        like?: number;
+                                        love?: number;
+                                        laugh?: number;
+                                        insightful?: number;
+                                        sad?: number;
+                                    };
+                                    asOf: Readonly<{
+                                        epoch: number;
+                                        position: string;
+                                    }> | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                viewer?: {
+                                    state: "available";
+                                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                action: "allowed" | "denied" | "sign_in" | "unavailable";
+                            };
                         };
                         destination: {
                             kind: "subject";
@@ -8841,6 +9516,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                                     obligations: string[];
                                 };
                             } | null;
+                            subjectReactions?: {
+                                target: {
+                                    targetKind: "subject";
+                                    targetId: string;
+                                };
+                                counts: {
+                                    state: "available";
+                                    values: {
+                                        like?: number;
+                                        love?: number;
+                                        laugh?: number;
+                                        insightful?: number;
+                                        sad?: number;
+                                    };
+                                    asOf: Readonly<{
+                                        epoch: number;
+                                        position: string;
+                                    }> | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                viewer?: {
+                                    state: "available";
+                                    kind: "insightful" | "laugh" | "like" | "love" | "sad" | null;
+                                } | {
+                                    state: "unavailable";
+                                };
+                                action: "allowed" | "denied" | "sign_in" | "unavailable";
+                            };
                         };
                         destination: {
                             kind: "subject";
@@ -9063,6 +9767,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -9099,6 +9832,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                     id: string;
                     title: string;
                     description: string | null;
+                    card: import("../library/collection-discovery-summaries.ts").PublicCollectionDiscoverySummary;
                 }>>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"collection">;
@@ -9128,7 +9862,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                         id: string;
                         title: string | null;
                     }> | null;
-                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
+                }> & Pick<import("./feed-contract.ts").FeedContentSummary, "conversationActivity" | "reactionTarget" | "reactions" | "reviewContext" | "viewerReaction">>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"thread">;
                     id: import("typebox").TString;
@@ -9205,6 +9939,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -9332,6 +10095,35 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
                             obligations: import("typebox").TArray<import("typebox").TString>;
                         }>;
                     }>, import("typebox").TNull]>;
+                    subjectReactions: import("typebox").TOptional<import("typebox").TObject<{
+                        target: import("typebox").TObject<{
+                            targetKind: import("typebox").TLiteral<"subject">;
+                            targetId: import("typebox").TString;
+                        }>;
+                        counts: import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            values: import("typebox").TObject<{
+                                like: import("typebox").TOptional<import("typebox").TInteger>;
+                                love: import("typebox").TOptional<import("typebox").TInteger>;
+                                laugh: import("typebox").TOptional<import("typebox").TInteger>;
+                                insightful: import("typebox").TOptional<import("typebox").TInteger>;
+                                sad: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>;
+                            asOf: import("typebox").TUnion<[import("typebox").TUnsafe<Readonly<{
+                                epoch: number;
+                                position: string;
+                            }>>, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>;
+                        viewer: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"available">;
+                            kind: import("typebox").TUnion<[import("typebox").TUnsafe<"insightful" | "laugh" | "like" | "love" | "sad">, import("typebox").TNull]>;
+                        }>, import("typebox").TObject<{
+                            state: import("typebox").TLiteral<"unavailable">;
+                        }>]>>;
+                        action: import("typebox").TUnion<[import("typebox").TLiteral<"sign_in">, import("typebox").TLiteral<"allowed">, import("typebox").TLiteral<"denied">, import("typebox").TLiteral<"unavailable">]>;
+                    }>>;
                 }>;
                 destination: import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"subject">;
@@ -9414,7 +10206,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -9428,7 +10220,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -9442,7 +10234,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -9456,7 +10248,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -9470,7 +10262,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -9484,7 +10276,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -9498,7 +10290,7 @@ export declare function feedRoutes(app: ReturnType<typeof definitionRoutes>, dep
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
     };

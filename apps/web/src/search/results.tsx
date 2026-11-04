@@ -41,7 +41,7 @@ export type SubjectHit = {
   facts?: Record<string, Fact[]>;
   /** An optional presentation already resolved from the release read by the caller. */
   listPresentation?: ListPresentation;
-  matchEvidence?: MatchEvidence;
+  matchEvidence?: NativeHit['matchEvidence'];
 };
 export type ResultHit = SubjectHit & {
   descriptions?: Record<string, string>;
