@@ -7,6 +7,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 
 test('a type command keeps its payload and key through unknown readback; clean sibling changes survive recovery', async () => {
   const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const { SettingsNavigationDrafts } = await import('../src/settings/reading-navigation');
   const book = 'schema:Book',
     movie = 'schema:Movie';
   let version = 1;
@@ -44,9 +45,31 @@ test('a type command keeps its payload and key through unknown readback; clean s
       },
     },
   );
+  draft.edit({ layout: 'list' }, 'layout');
+  expect(draft.needsNavigationDecision()).toBe(false);
   draft.editTypeLayout(book, undefined);
   await draft.submit();
   expect(draft.snapshot().phase).toBe('uncertain');
+  draft.editTypeLayout(book, 'grid');
+  expect(draft.needsNavigationDecision()).toBe(true); // The exact original removal stays protected.
+  const navigation = new SettingsNavigationDrafts();
+  const removeShelf = navigation.register({ kind: 'shelf', needsDecision: draft.needsNavigationDecision });
+  expect([...navigation.kinds()]).toEqual(['shelf']);
+  const leaving = navigation.block('/settings', '/library');
+  expect(navigation.block('/settings', '/settings')).toBe(false); // Section hashes keep the retained panel mounted.
+  const removeReading = navigation.register({ kind: 'reading', needsDecision: () => true });
+  expect([...navigation.kinds()]).toEqual(['shelf', 'reading']);
+  expect(navigation.block('/settings', '/inbox')).toBe(true);
+  const retained = draft.snapshot();
+  navigation.stay();
+  expect(await leaving).toBe(true);
+  expect(draft.snapshot()).toBe(retained);
+  const abandoned = navigation.block('/settings', '/library');
+  navigation.leave();
+  expect(await abandoned).toBe(false);
+  expect(draft.snapshot()).toBe(retained);
+  removeReading();
+  removeShelf();
   draft.editTypeLayout(movie, 'list');
   await draft.retry();
   expect(draft.snapshot().phase).toBe('uncertain'); // Stale readback is never a confirmed save.
@@ -71,6 +94,37 @@ test('a type command keeps its payload and key through unknown readback; clean s
   current = false;
   await draft.submit();
   expect(commands).toHaveLength(4);
+});
+
+test('a pending reset is retained for navigation and a retired owner cannot accept its late completion', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const { SettingsNavigationDrafts } = await import('../src/settings/reading-navigation');
+  let current = true;
+  let finish = () => {};
+  const initial = withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 4, shelf: { gridSize: 'large' } });
+  const draft = new ShelfPreferenceDraftRecovery(
+    initial,
+    {
+      read: async () => ({ signedIn: false }),
+      save: async () => {
+        await new Promise<void>((resolve) => (finish = resolve));
+        return { ok: true as const, preferences: withShelfAdvice({ ...initial, version: 5, shelf: {} }) };
+      },
+    },
+    { canRead: () => current, canWrite: () => current, version: () => 4, onVersionChange() {} },
+  );
+  const navigation = new SettingsNavigationDrafts();
+  navigation.register({ kind: 'shelf', needsDecision: () => current && draft.needsNavigationDecision() });
+  const saving = draft.submit(true);
+  expect(draft.snapshot().pending?.input.shelf).toBeNull();
+  expect(navigation.needsDecision()).toBe(true);
+  const retained = draft.snapshot();
+  current = false;
+  navigation.refresh();
+  finish();
+  await saving;
+  expect(draft.snapshot()).toBe(retained);
+  expect(navigation.needsDecision()).toBe(false);
 });
 
 test('the native merged map bound includes preserved scopes, while removing one scope releases capacity', async () => {

@@ -71,6 +71,8 @@ The existing shelf editor adds exact type-URI layouts to its versioned dirty-fie
 
 **Decision:** Selecting a type is a view operation; a missing saved type offers removal, while setting a new override requires that type in the current admitted choices. Open Library links omit layout overrides to show the saved result. Shelf edit/reset use shared `allowedActions.update`; reset remains the existing null patch.
 
+**Decision:** Shelf-only departure names the retained Library view choices and recovery information; mixed drafts use the shared Settings warning. Leaving discards only local recovery, and an already-sent command may still finish.
+
 ## Account safety
 
 The Account card reads the current identity from the managed session and keeps rename advice in its separate native profile and viewer-actions read. Security, rename and deletion handoffs use only fixed Auth-owned paths from trusted issuer configuration; they do not grant a destructive command. An unavailable or denied read stays visible until deliberate reload, and native sign-out keeps ordinary POST/redirect behavior with explicit reload recovery and no automatic replay.
