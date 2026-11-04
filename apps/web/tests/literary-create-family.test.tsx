@@ -342,7 +342,7 @@ test('Literary native corrections name only current scalar and citation controls
 function queuedInput(input: HTMLInputElement) {
   const key = Object.keys(input).find((key) => key.startsWith('__reactProps$'))!;
   const change = Reflect.get(input, key).onChange;
-  return (value: string) => change({ target: { value } });
+  return (value: string) => change({ target: { value }, currentTarget: { value } });
 }
 
 test('mounted Literary creation keeps the complete initial bibliography family and native command journey', async () => {
@@ -369,6 +369,8 @@ test('mounted Literary creation keeps the complete initial bibliography family a
       await render(null);
       await render(h(LiteraryProfile, { ...props(fixture), session }));
       await until(() => !!type());
+      if (session === 'signed-in')
+        await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
     };
     const add = async (property: string, scope: HTMLElement = host) => {
       await change(propertyControl(panel(scope)), property);
@@ -945,7 +947,13 @@ test('Literary current refusal withdraws all old markup, fences pending work and
       return next;
     };
     await render(h(LiteraryProfile, props));
-    await until(() => !!host.querySelector('form'));
+    await until(() => {
+      const field = host.querySelector<HTMLElement>('section[aria-label="word count"]');
+      const edit = [...(field?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (candidate) => candidate.textContent?.trim() === m.facts_edit_field() && !candidate.disabled,
+      );
+      return !!edit;
+    });
     const field = host.querySelector<HTMLElement>('section[aria-label="word count"]')!;
     await click(m.facts_edit_field(), field);
     await input(labelledInput(field, m.correction_amount()), '+13000');
@@ -1046,8 +1054,11 @@ test('Literary creation uses current parent subject.create observation without i
       await input(host.querySelector<HTMLInputElement>('input[id="create-label-0"]')!, 'Eligible book');
       await change(propertyControl(initialPanel(host, m.literary_bibliography())), 'schema:wordCount');
       await click(m.correction_add(), initialPanel(host, m.literary_bibliography()));
-      await input(labelledInput(factRow()[0]!, m.correction_amount()), '+12000');
-      await change(factRow()[0]!.querySelector<HTMLSelectElement>(`select[aria-label="${m.correction_unit()}"]`)!, '1');
+      await input(labelledInput(factRow(host)[0]!, m.correction_amount()), '+12000');
+      await change(
+        factRow(host)[0]!.querySelector<HTMLSelectElement>(`select[aria-label="${m.correction_unit()}"]`)!,
+        '1',
+      );
     };
 
     const unavailable = literaryFixture();
@@ -1093,7 +1104,7 @@ test('Literary creation uses current parent subject.create observation without i
     await click(m.catalogue_create_submit());
     await until(() => host.textContent!.includes(m.identity_intake_authority_refused_permission()));
     expect(posts(revoked)).toHaveLength(0);
-    expect(labelledInput(factRow()[0]!, m.correction_amount()).value).toBe('+12000');
+    expect(labelledInput(factRow(host)[0]!, m.correction_amount()).value).toBe('+12000');
     current = allowedCreateAuthority;
     await click(m.identity_intake_authority_retry());
     await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
@@ -1111,7 +1122,7 @@ test('Literary creation uses current parent subject.create observation without i
     await click(m.catalogue_create_submit());
     await until(() => host.textContent!.includes(m.catalogue_create_denied()));
     expect(posts(denied)).toHaveLength(1);
-    expect(labelledInput(factRow()[0]!, m.correction_amount()).value).toBe('+12000');
+    expect(labelledInput(factRow(host)[0]!, m.correction_amount()).value).toBe('+12000');
 
     const late = literaryFixture();
     const pending: ((value: CreateAuthority) => void)[] = [];
