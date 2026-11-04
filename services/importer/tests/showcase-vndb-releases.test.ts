@@ -278,7 +278,7 @@ function port(
                 statements: { 'wdt:P3180': [{ value: { type: 'value', content: sourceId } }] },
               }
             : { id },
-        } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+        } as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
       }
       return row as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
