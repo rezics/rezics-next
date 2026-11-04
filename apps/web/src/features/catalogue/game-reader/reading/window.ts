@@ -39,7 +39,11 @@ export function useEditionWindow(input: {
     // Even a failed revisit removes the old edition destinations. Work evidence may remain
     // within this live admission, but is never presented as a successful new window.
     replaced();
-    setPage((previous) => (intent !== 'start' && previous ? { ...previous, editions: [], next: null } : undefined));
+    setPage((previous) =>
+      intent !== 'start' && previous
+        ? { ...previous, editions: [], workReleaseCards: { state: 'unavailable' }, next: null }
+        : undefined,
+    );
     setFailure(undefined);
     if (
       intent !== 'start' &&

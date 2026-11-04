@@ -375,7 +375,44 @@ export type UnreadNoticeSummary = NonNullable<UnreadNoticeRead['data']>;
 export type { InboxNoticeSelection } from './kernel/content/notice-inbox-selection.ts';
 export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
   ((...args: Parameters<SubjectsClient>) => ClassificationCompatibility<SubjectPath>);
-export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
+type MountedSubjectRead = SubjectRoutes[':id']['get']['response'][200];
+export type SubjectReadQuery = NonNullable<Parameters<SubjectPath['get']>[0]>['query'] & {
+  includeViewerActions?: boolean;
+};
+export type SubjectRead = MountedSubjectRead & {
+  viewerActions?:
+    | { state: 'unavailable' }
+    | { state: 'available'; actions: { action: string; operations: string[] }[] };
+};
+type MountedSubjectLinksResponse = NonNullable<Awaited<ReturnType<SubjectPath['links']['get']>>['data']>;
+type WorkReleaseStatement = NonNullable<MountedSubjectLinksResponse['links'][number]['assertion']>;
+type WorkReleaseSummary = MountedSubjectLinksResponse['links'][number]['summary'];
+export type WorkReleaseCardProperty =
+  | 'schema:gamePlatform'
+  | 'schema:inLanguage'
+  | 'schema:datePublished'
+  | 'schema:creativeWorkStatus'
+  | 'wdt:P5804'
+  | 'rezics:releaseStatus'
+  | 'schema:contentRating'
+  | 'schema:publisher'
+  | 'schema:producer'
+  | 'wdt:P178'
+  | 'wdt:P162'
+  | 'wdt:P2899';
+export type WorkReleaseCardField =
+  | { state: 'unsupported' | 'withheld' | 'missing' | 'unavailable' }
+  | { state: 'available'; statements: WorkReleaseStatement[]; related: Record<string, WorkReleaseSummary> };
+export type WorkReleaseCard = {
+  subject: string;
+  type: string;
+  summary: WorkReleaseSummary;
+  membership: WorkReleaseStatement;
+  related: Record<string, WorkReleaseSummary>;
+  fields: Record<WorkReleaseCardProperty, WorkReleaseCardField>;
+};
+export type WorkReleaseCards = { state: 'unavailable' } | { state: 'available'; cards: WorkReleaseCard[] };
+export type SubjectLinksResponse = MountedSubjectLinksResponse & { workReleaseCards?: WorkReleaseCards };
 
 type SubjectSourceStatisticsRoute = Routes['subjects'][':id']['source-statistics'];
 export type SourceStatisticListResponse = SubjectSourceStatisticsRoute['get']['response'][200];
