@@ -24,7 +24,16 @@ export function ownMediaQuery(
 ) {
   return queryOptions({
     ...personalRead,
-    queryKey: ['own-media-inventory', subject, OWN_MEDIA_OPERATION, 'personal_library', cursor, locale, OWN_MEDIA_SOURCE, originKey],
+    queryKey: [
+      'own-media-inventory',
+      subject,
+      OWN_MEDIA_OPERATION,
+      'personal_library',
+      cursor,
+      locale,
+      OWN_MEDIA_SOURCE,
+      originKey,
+    ],
     queryFn: async ({ signal }) => {
       assertHistoryCurrent(current, signal);
       try {

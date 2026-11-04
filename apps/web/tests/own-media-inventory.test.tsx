@@ -5,7 +5,9 @@ import { advisedMediaDestinations, eraseIntentFor, indexOwnMediaPage } from '../
 const id = '01a1a3b1-b7d4-7738-9f8b-2200fe3e8395';
 const viewer = '01a1a3b1-b7d4-7736-9cd2-2200583c3cf5';
 
-function entry(overrides: Partial<OwnMediaInventoryPage['entries'][number]> = {}): OwnMediaInventoryPage['entries'][number] {
+function entry(
+  overrides: Partial<OwnMediaInventoryPage['entries'][number]> = {},
+): OwnMediaInventoryPage['entries'][number] {
   return {
     id,
     purpose: 'post-image',

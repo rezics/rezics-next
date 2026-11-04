@@ -5,7 +5,13 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { executeOwnMediaErase, type OwnMediaEraseResult, type OwnMediaRead } from './actions';
 import { useOwnMediaCurrentOrigin } from './current-origin';
-import { eraseIntentFor, indexOwnMediaPage, OWN_MEDIA_SOURCE, advisedMediaDestinations, type OwnMediaEraseIntent } from './inventory';
+import {
+  eraseIntentFor,
+  indexOwnMediaPage,
+  OWN_MEDIA_SOURCE,
+  advisedMediaDestinations,
+  type OwnMediaEraseIntent,
+} from './inventory';
 import type { OwnMediaInventoryEntry, OwnMediaInventoryPage } from './wire';
 
 type EraseCall = (input: { data: OwnMediaEraseIntent }) => Promise<OwnMediaEraseResult>;
@@ -92,7 +98,9 @@ function stateText(state: OwnMediaInventoryEntry['state']): string {
 function dateText(value: string | null, locale: string): string | null {
   if (!value) return null;
   const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date) : null;
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+    : null;
 }
 
 function sizeText(value: number | null, locale: string): string | null {
@@ -186,14 +194,14 @@ export function OwnMediaInventoryWorkspace({
     }
   }
   const rows = indexed?.entries ?? emptyRows;
-  const selectedEntry = selection ? rows.get(selection.id) ?? null : null;
+  const selectedEntry = selection ? (rows.get(selection.id) ?? null) : null;
   const selectedCurrent = Boolean(
     selection &&
-      selectedEntry &&
-      selection.viewKey === viewKey &&
-      selection.identity === mediaIdentity(selectedEntry) &&
-      state === 'ready' &&
-      isCurrent(),
+    selectedEntry &&
+    selection.viewKey === viewKey &&
+    selection.identity === mediaIdentity(selectedEntry) &&
+    state === 'ready' &&
+    isCurrent(),
   );
   const activeEntry = selectedCurrent ? selectedEntry : null;
 
@@ -237,9 +245,7 @@ export function OwnMediaInventoryWorkspace({
     setConfirmingId(null);
     intentRef.current = null;
     setSelection((current) =>
-      current?.id === entry.id
-        ? null
-        : { id: entry.id, identity: mediaIdentity(entry), viewKey },
+      current?.id === entry.id ? null : { id: entry.id, identity: mediaIdentity(entry), viewKey },
     );
   };
 
@@ -304,7 +310,9 @@ export function OwnMediaInventoryWorkspace({
 
       {status !== 'ready' ? (
         <section className="grid gap-3 rounded-lg border p-4" aria-live="polite">
-          <h2 className="text-lg font-medium">{status === 'unavailable' ? m.own_media_unavailable_heading() : statusText(status)}</h2>
+          <h2 className="text-lg font-medium">
+            {status === 'unavailable' ? m.own_media_unavailable_heading() : statusText(status)}
+          </h2>
           <p className="max-w-3xl text-sm text-muted-foreground">{statusText(status)}</p>
           {status === 'unavailable' ? (
             <Button variant="outline" onClick={() => void onRefresh()} disabled={!isCurrent()}>
@@ -329,10 +337,14 @@ export function OwnMediaInventoryWorkspace({
             </div>
           ) : null}
           {feedback?.kind === 'acknowledged' ? (
-            <p role="status" className="rounded-lg border p-3 text-sm">{m.own_media_removed()}</p>
+            <p role="status" className="rounded-lg border p-3 text-sm">
+              {m.own_media_removed()}
+            </p>
           ) : null}
           {feedback && !['uncertain', 'acknowledged'].includes(feedback.kind) ? (
-            <p role="alert" className="rounded-lg border p-3 text-sm">{m.own_media_removal_refused()}</p>
+            <p role="alert" className="rounded-lg border p-3 text-sm">
+              {m.own_media_removal_refused()}
+            </p>
           ) : null}
 
           {page.entries.length === 0 ? (
@@ -377,7 +389,11 @@ export function OwnMediaInventoryWorkspace({
                           </button>
                         </h2>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                          {entry.declaredMediaType ? <span className="break-all">{m.own_media_file_kind({ kind: entry.declaredMediaType })}</span> : null}
+                          {entry.declaredMediaType ? (
+                            <span className="break-all">
+                              {m.own_media_file_kind({ kind: entry.declaredMediaType })}
+                            </span>
+                          ) : null}
                           {declaredSize ? <span>{m.own_media_declared_size({ size: declaredSize })}</span> : null}
                           {actualSize ? <span>{m.own_media_actual_size({ size: actualSize })}</span> : null}
                           {created ? <span>{m.own_media_created({ date: created })}</span> : null}
@@ -437,14 +453,30 @@ export function OwnMediaInventoryWorkspace({
 
                     {expanded ? (
                       <div className="mt-4 grid gap-3 border-t pt-4">
-                        {entry.state === 'reserved' ? <p className="text-sm text-muted-foreground">{m.own_media_reserved_note()}</p> : null}
-                        {entry.state === 'uploaded' ? <p className="text-sm text-muted-foreground">{m.own_media_processing_note()}</p> : null}
-                        {entry.state === 'available' ? <p className="text-sm text-muted-foreground">{m.own_media_available_note()}</p> : null}
-                        {entry.state === 'rejected' ? <p className="text-sm text-muted-foreground">{m.own_media_rejected_note()}</p> : null}
-                        {entry.state === 'erased' ? <p className="text-sm text-muted-foreground">{m.own_media_erased_note()}</p> : null}
-                        {entry.actions.resume ? <p className="text-sm text-muted-foreground">{m.own_media_resume_note()}</p> : null}
-                        {entry.actions.retry ? <p className="text-sm text-muted-foreground">{m.own_media_retry_note()}</p> : null}
-                        {entry.actions.read === null ? <p className="text-sm text-muted-foreground">{m.own_media_no_read()}</p> : null}
+                        {entry.state === 'reserved' ? (
+                          <p className="text-sm text-muted-foreground">{m.own_media_reserved_note()}</p>
+                        ) : null}
+                        {entry.state === 'uploaded' ? (
+                          <p className="text-sm text-muted-foreground">{m.own_media_processing_note()}</p>
+                        ) : null}
+                        {entry.state === 'available' ? (
+                          <p className="text-sm text-muted-foreground">{m.own_media_available_note()}</p>
+                        ) : null}
+                        {entry.state === 'rejected' ? (
+                          <p className="text-sm text-muted-foreground">{m.own_media_rejected_note()}</p>
+                        ) : null}
+                        {entry.state === 'erased' ? (
+                          <p className="text-sm text-muted-foreground">{m.own_media_erased_note()}</p>
+                        ) : null}
+                        {entry.actions.resume ? (
+                          <p className="text-sm text-muted-foreground">{m.own_media_resume_note()}</p>
+                        ) : null}
+                        {entry.actions.retry ? (
+                          <p className="text-sm text-muted-foreground">{m.own_media_retry_note()}</p>
+                        ) : null}
+                        {entry.actions.read === null ? (
+                          <p className="text-sm text-muted-foreground">{m.own_media_no_read()}</p>
+                        ) : null}
                         {entry.actions.remove?.operationId === 'media.erase' && entry.state !== 'erased' ? (
                           confirmingId === entry.id ? (
                             <div className="flex flex-wrap gap-2">
@@ -467,7 +499,9 @@ export function OwnMediaInventoryWorkspace({
                           )
                         ) : null}
                         {feedback?.id === entry.id && feedback.kind === 'concealed' ? (
-                          <p role="alert" className="text-sm">{m.own_media_removal_refused()}</p>
+                          <p role="alert" className="text-sm">
+                            {m.own_media_removal_refused()}
+                          </p>
                         ) : null}
                       </div>
                     ) : null}

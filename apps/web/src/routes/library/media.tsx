@@ -31,5 +31,7 @@ function OwnMediaRoute() {
   const search = Route.useSearch();
   const address = ownMediaCursor(search.cursor);
   const invalid = search.invalidCursor === true || !address.valid;
-  return <CurrentViewerOwnMediaPage initial={initial} cursor={invalid ? null : address.cursor} invalidAddress={invalid} />;
+  return (
+    <CurrentViewerOwnMediaPage initial={initial} cursor={invalid ? null : address.cursor} invalidAddress={invalid} />
+  );
 }

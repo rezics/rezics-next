@@ -1,4 +1,11 @@
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
@@ -50,7 +57,11 @@ function entry(
       remove: state === 'erased' ? null : { operationId: 'media.erase' },
       resume:
         state === 'reserved' || state === 'uploaded'
-          ? { operationId: 'media.read_reservation', mode: state === 'reserved' ? 'same-reservation' : 'processing', requiresOriginalFile: true }
+          ? {
+              operationId: 'media.read_reservation',
+              mode: state === 'reserved' ? 'same-reservation' : 'processing',
+              requiresOriginalFile: true,
+            }
           : null,
       retry: state === 'rejected' ? { operationId: 'media.create', guidance: 'choose-new-file' } : null,
     },
@@ -66,7 +77,9 @@ function StoryRouter({
   onErase = async () => 'uncertain',
 }: {
   inventory: OwnMediaRead;
-  onErase?: (input: { data: import('../media/own-inventory/inventory').OwnMediaEraseIntent }) => Promise<'acknowledged' | 'signed-out' | 'stale' | 'denied' | 'concealed' | 'uncertain'>;
+  onErase?: (input: {
+    data: import('../media/own-inventory/inventory').OwnMediaEraseIntent;
+  }) => Promise<'acknowledged' | 'signed-out' | 'stale' | 'denied' | 'concealed' | 'uncertain'>;
 }) {
   const router = useMemo(() => {
     const root = createRootRoute({ component: Outlet });

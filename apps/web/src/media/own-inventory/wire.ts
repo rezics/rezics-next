@@ -25,7 +25,10 @@ export function parseOwnMediaInventoryPage(value: unknown): OwnMediaInventoryPag
     page.availability !== 'available' ||
     !Array.isArray(page.entries) ||
     page.entries.length > 20 ||
-    !(page.nextCursor === null || (typeof page.nextCursor === 'string' && page.nextCursor.length > 0 && page.nextCursor.length <= 2048))
+    !(
+      page.nextCursor === null ||
+      (typeof page.nextCursor === 'string' && page.nextCursor.length > 0 && page.nextCursor.length <= 2048)
+    )
   )
     return null;
   const ids = new Set<string>();
@@ -125,10 +128,7 @@ function parseRead(
   return { operationId: 'media.authorize_download', variants: read.variants as string[], recheckAtUse: true };
 }
 
-function parseResume(
-  value: unknown,
-  state: unknown,
-): OwnMediaInventoryEntry['actions']['resume'] | undefined {
+function parseResume(value: unknown, state: unknown): OwnMediaInventoryEntry['actions']['resume'] | undefined {
   if (value === null) return null;
   if (!value || typeof value !== 'object') return undefined;
   const resume = value as Record<string, unknown>;
@@ -143,10 +143,7 @@ function parseResume(
   return { operationId: 'media.read_reservation', mode, requiresOriginalFile: true };
 }
 
-function parseRetry(
-  value: unknown,
-  state: unknown,
-): OwnMediaInventoryEntry['actions']['retry'] | undefined {
+function parseRetry(value: unknown, state: unknown): OwnMediaInventoryEntry['actions']['retry'] | undefined {
   if (value === null) return null;
   if (!value || typeof value !== 'object') return undefined;
   const retry = value as Record<string, unknown>;
