@@ -40,6 +40,9 @@ test('a kernel batch runs the policy boot check after typecheck on the combined 
       return { passed: true, output: '', timedOut: false };
     });
     expect(commands[0]?.some((part) => part.includes('scripts/typecheck.ts'))).toBe(true);
+    expect(commands[0]).toContain('TYPECHECK_LOCAL=1');
+    expect(commands[0]?.some((part) => /^TYPECHECK_DEV_COMMIT=[0-9a-f]{40}$/.test(part))).toBe(true);
+    expect(commands[0]?.some((part) => /^TYPECHECK_CANDIDATE_COMMIT=[0-9a-f]{40}$/.test(part))).toBe(true);
     expect(commands[1]).toEqual(['boot-fixture']);
     expect(commands).toHaveLength(2);
     expect(h.outcomes.map(({ passed }) => passed)).toEqual([true, true]);

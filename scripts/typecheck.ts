@@ -2,7 +2,8 @@
 // Typecheck every workspace from the repository root. One throwaway database receives the kernel and Auth
 // schemas, is shared, then removed.
 import { dirname, join, relative, resolve } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveBunCommand } from './gate.ts';
@@ -20,6 +21,89 @@ export type CompilerPlacementDependencies = {
 function unavailable(label: string, reason: string): number {
   console.error(`${label} unavailable: ${reason}`);
   return 75;
+}
+
+function infrastructure(label: string, reason: string): number {
+  console.error(`${label} infrastructure failure: ${reason}`);
+  return 75;
+}
+
+const FULL_COMMIT = /^[0-9a-f]{40}$/;
+
+/** The train opts in only with both immutable revisions bound to this local landing check. */
+export function isLocalTypecheckLanding(env: NodeJS.ProcessEnv): boolean {
+  return (
+    env.TYPECHECK_LOCAL === '1' &&
+    FULL_COMMIT.test(env.TYPECHECK_DEV_COMMIT ?? '') &&
+    FULL_COMMIT.test(env.TYPECHECK_CANDIDATE_COMMIT ?? '')
+  );
+}
+
+type CompilerState = {
+  file: string;
+  reused: boolean;
+  base: string;
+  candidate: string;
+  publish: () => void;
+  discard: () => void;
+};
+
+function compilerStateFingerprint(root: string): string {
+  const files = new Set([
+    'package.json',
+    'bun.lock',
+    'node_modules/typescript/package.json',
+    'services/kernel/package.json',
+    'services/kernel/tsconfig.json',
+    'services/kernel/scripts/typecheck.ts',
+    'services/auth/scripts/database.ts',
+  ]);
+  for (const glob of ['services/kernel/db/**/migrations/*.sql', 'services/auth/db/**/migrations/*.sql'])
+    for (const file of new Bun.Glob(glob).scanSync({ cwd: root })) files.add(file);
+
+  const hash = createHash('sha256').update(Bun.version).update('\0').update(Bun.revision);
+  for (const file of [...files].sort()) {
+    const path = join(root, file);
+    if (!existsSync(path)) continue;
+    hash.update(file).update('\0').update(readFileSync(path)).update('\0');
+  }
+  return hash.digest('hex').slice(0, 24);
+}
+
+function prepareCompilerState(root: string, workspaces: readonly Workspace[], env: NodeJS.ProcessEnv): CompilerState | undefined {
+  if (!isLocalTypecheckLanding(env) || !workspaces.some((workspace) => relative(root, workspace.directory) === 'services/kernel'))
+    return undefined;
+
+  const base = env.TYPECHECK_DEV_COMMIT!;
+  const candidate = env.TYPECHECK_CANDIDATE_COMMIT!;
+  const fingerprint = compilerStateFingerprint(root);
+  const stateRoot = join(root, '.temp/typecheck/compiler-state');
+  const source = join(stateRoot, base, fingerprint, 'kernel.tsbuildinfo');
+  const targetDirectory = join(stateRoot, candidate, fingerprint);
+  const target = join(targetDirectory, 'kernel.tsbuildinfo');
+  const runs = join(stateRoot, 'runs');
+  mkdirSync(runs, { recursive: true });
+  const runDirectory = mkdtempSync(join(runs, `${candidate}.`));
+  const file = join(runDirectory, 'kernel.tsbuildinfo');
+  const reused = existsSync(source);
+  if (reused) copyFileSync(source, file);
+
+  return {
+    file,
+    reused,
+    base,
+    candidate,
+    publish() {
+      if (!existsSync(file)) throw new Error('TypeScript did not write incremental compiler state');
+      mkdirSync(targetDirectory, { recursive: true });
+      const temporary = join(targetDirectory, `.kernel.${process.pid}.tmp`);
+      copyFileSync(file, temporary);
+      renameSync(temporary, target);
+    },
+    discard() {
+      rmSync(runDirectory, { recursive: true, force: true });
+    },
+  };
 }
 
 /** Null authorizes execution only in the physical directory of the entrypoint's own source. */
@@ -149,7 +233,8 @@ type Workspace = {
   /** Its typecheck runs external code that types `.sql` imports against the compiler database. */
   needsDatabase: boolean;
 };
-type WorkspaceResult = { block: string; code: number };
+type WorkspaceOutcome = 'passed' | 'type-errors' | 'infrastructure' | 'execution';
+type WorkspaceResult = { block: string; code: number; outcome: WorkspaceOutcome };
 
 /** Keep workspace package scripts on the repository-pinned Bun even when the caller came from PATH. */
 export function resolveTypecheckCommand(command: string[], root: string, executable = process.execPath): string[] {
@@ -253,26 +338,45 @@ function blockFor(
   stdout: string,
   stderr: string,
   durationMs: number,
+  forcedOutcome?: WorkspaceOutcome,
 ): WorkspaceResult {
   const output = code === 0 ? '' : [stdout.trimEnd(), stderr.trimEnd()].filter(Boolean).join('\n');
+  const hasDiagnostics = /(?:^|\n)[^\n]*\.(?:[cm]?[jt]sx?)(?:\(\d+,\d+\)|:\d+:\d+)\s*(?::|\s+-)?\s*error\b/m.test(output);
+  const outcome: WorkspaceOutcome =
+    forcedOutcome ??
+    (code === 0
+      ? 'passed'
+      : [75, 124, 130, 143].includes(code)
+        ? 'infrastructure'
+        : hasDiagnostics
+          ? 'type-errors'
+          : 'execution');
   const relativeDirectory = workspace.directory.startsWith(`${root}/`)
     ? workspace.directory.slice(root.length + 1)
     : relative(root, workspace.directory);
   const block = [
-    `Workspace ${workspace.name} finished in ${(durationMs / 1000).toFixed(2)}s`,
+    `Workspace ${workspace.name} ${outcome === 'passed' ? 'finished' : `${outcome} after`} ${(durationMs / 1000).toFixed(2)}s`,
     `$ ${workspace.command.join(' ')}  (${relativeDirectory})`,
     output,
   ]
     .filter(Boolean)
     .join('\n');
-  return { block: `${block}\n\n`, code };
+  return { block: `${block}\n\n`, code, outcome };
 }
 
 async function runWorkspace(root: string, workspace: Workspace, env: Record<string, string>): Promise<WorkspaceResult> {
   const startedAt = performance.now();
   // The root gate refuses a workspace without a check script, so promotion could not gate any commit that has one.
   if (!workspace.hasCheck)
-    return blockFor(root, workspace, 1, '', 'error: package.json has no check script, which the root gate requires', 0);
+    return blockFor(
+      root,
+      workspace,
+      1,
+      '',
+      'error: package.json has no check script, which the root gate requires',
+      0,
+      'execution',
+    );
   try {
     const child = Bun.spawn(resolveTypecheckCommand(workspace.command, root), {
       cwd: workspace.directory,
@@ -289,7 +393,7 @@ async function runWorkspace(root: string, workspace: Workspace, env: Record<stri
     return blockFor(root, workspace, code, stdout, stderr, performance.now() - startedAt);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return blockFor(root, workspace, 1, '', message, performance.now() - startedAt);
+    return blockFor(root, workspace, 75, '', message, performance.now() - startedAt, 'infrastructure');
   }
 }
 
@@ -298,6 +402,7 @@ async function runWorkspaces(
   workspaces: readonly Workspace[],
   env: NodeJS.ProcessEnv,
   write: (chunk: string) => void,
+  state?: CompilerState,
 ): Promise<number> {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl && workspaces.some((workspace) => workspace.needsDatabase))
@@ -305,23 +410,37 @@ async function runWorkspaces(
   const childEnv = environmentWith(env, databaseUrl ?? '');
   if (!databaseUrl) delete childEnv.DATABASE_URL;
   const failures: string[] = [];
+  const results: WorkspaceResult[] = [];
   await Promise.all(
     workspaces.map(async (workspace) => {
-      const result = await runWorkspace(root, workspace, childEnv);
+      const workspaceEnv =
+        state && relative(root, workspace.directory) === 'services/kernel'
+          ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
+          : childEnv;
+      const result = await runWorkspace(root, workspace, workspaceEnv);
       if (result.code === 0) write(result.block);
       else failures.push(result.block);
+      results.push(result);
     }),
   );
   for (const block of failures) write(block);
-  return failures.length === 0 ? 0 : 1;
+  if (failures.length === 0) return 0;
+  return results.some((result) => result.outcome === 'infrastructure') ? 75 : 1;
 }
 
 async function withStartedDatabase(
   startDatabase: () => Promise<StartedDatabase>,
   run: (env: NodeJS.ProcessEnv) => Promise<number>,
   env: NodeJS.ProcessEnv,
+  state?: CompilerState,
 ): Promise<number> {
-  const database = await startDatabase();
+  let database: StartedDatabase;
+  try {
+    database = await startDatabase();
+  } catch (error) {
+    state?.discard();
+    return infrastructure('root typecheck', `compiler database setup could not be proven: ${error instanceof Error ? error.message : String(error)}`);
+  }
   let removed = false;
   const remove = async (): Promise<void> => {
     if (removed) return;
@@ -329,24 +448,62 @@ async function withStartedDatabase(
     await database.remove();
   };
   const onSigint = (): void => {
-    void remove().finally(() => process.exit(130));
+    void remove().catch((error) => {
+      console.error(`root typecheck infrastructure failure: compiler database cleanup could not be proven: ${error instanceof Error ? error.message : String(error)}`);
+    }).finally(() => {
+      state?.discard();
+      process.exit(130);
+    });
   };
   const onSigterm = (): void => {
-    void remove().finally(() => process.exit(143));
+    void remove().catch((error) => {
+      console.error(`root typecheck infrastructure failure: compiler database cleanup could not be proven: ${error instanceof Error ? error.message : String(error)}`);
+    }).finally(() => {
+      state?.discard();
+      process.exit(143);
+    });
   };
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
+  let result = 75;
+  let failure: string | undefined;
+  let cleanupFailure: string | undefined;
   try {
-    return await run({ ...env, DATABASE_URL: database.url });
+    result = await run({ ...env, DATABASE_URL: database.url });
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
   } finally {
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
-    await remove();
+    try {
+      await remove();
+    } catch (error) {
+      cleanupFailure = error instanceof Error ? error.message : String(error);
+    }
   }
+  if (cleanupFailure) {
+    state?.discard();
+    return infrastructure('root typecheck', `compiler database cleanup could not be proven: ${cleanupFailure}`);
+  }
+  if (failure) {
+    state?.discard();
+    return infrastructure('root typecheck', `compiler run could not be completed: ${failure}`);
+  }
+  if (result === 0 && state) {
+    try {
+      state.publish();
+    } catch (error) {
+      state.discard();
+      return infrastructure('root typecheck', `incremental compiler state could not be committed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  state?.discard();
+  return result;
 }
 
 /** Run every workspace typecheck. Returns 1 when any workspace fails. */
 export async function typecheck(options: TypecheckOptions = {}): Promise<number> {
+  const startedAt = performance.now();
   const env = options.env ?? process.env;
   const root = resolve(options.root ?? env.TYPECHECK_ROOT ?? process.cwd());
   const write = (chunk: string): void => {
@@ -355,14 +512,61 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
   const changed =
     options.changedFiles ??
     (env.TYPECHECK_CHANGED === undefined ? undefined : env.TYPECHECK_CHANGED.split('\n').filter(Boolean));
-  const all = await loadWorkspaces(root);
+  let all: Workspace[];
+  try {
+    all = await loadWorkspaces(root);
+  } catch (error) {
+    return infrastructure('root typecheck', `workspace discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const workspaces = affectedWorkspaces(root, all, changed);
+  const localLanding = env.TYPECHECK_LOCAL === '1';
+  if (localLanding && !isLocalTypecheckLanding(env))
+    return infrastructure('root typecheck', 'local landing placement requires full dev and candidate commit bindings');
+  const finish = async (result: Promise<number>): Promise<number> => {
+    const code = await result;
+    const size = changed === undefined ? 'unscoped changes' : `${changed.length} changed paths`;
+    write(`Typecheck batch completed in ${((performance.now() - startedAt) / 1000).toFixed(2)}s (${size}; ${workspaces.length} workspaces).\n`);
+    return code;
+  };
   if (workspaces.length < all.length)
     write(`Checking ${workspaces.length} of ${all.length} workspaces the change can affect.\n`);
-  if (workspaces.length === 0) return 0;
-  const run = (env: NodeJS.ProcessEnv): Promise<number> => runWorkspaces(root, workspaces, env, write);
+  if (workspaces.length === 0) {
+    return finish(Promise.resolve(0));
+  }
+  let state: CompilerState | undefined;
+  try {
+    state = prepareCompilerState(root, workspaces, env);
+  } catch (error) {
+    return infrastructure('root typecheck', `incremental compiler state could not be prepared: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (state)
+    write(
+      `Kernel incremental state ${state.reused ? 'reused' : 'not found'} for dev ${state.base}; candidate ${state.candidate}.\n`,
+    );
+  const run = (env: NodeJS.ProcessEnv): Promise<number> => runWorkspaces(root, workspaces, env, write, state);
+  const completeWithoutDatabase = async (): Promise<number> => {
+    const result = await run(env);
+    if (result === 0 && state) {
+      try {
+        state.publish();
+      } catch (error) {
+        state.discard();
+        return infrastructure('root typecheck', `incremental compiler state could not be committed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    state?.discard();
+    return result;
+  };
+  const completeWithDatabase = async (): Promise<number> => {
+    if (root !== repository && !options.startDatabase)
+      return unavailable('root typecheck', 'database-backed checks require the source checkout root');
+    if (options.startDatabase) return withStartedDatabase(options.startDatabase, run, env, state);
+    const { prepareCompilerDatabase } = await import('./compiler-database.ts');
+    return withStartedDatabase(prepareCompilerDatabase, run, env, state);
+  };
   // The compiler database only serves workspaces that type .sql imports; starting it costs most of a minute.
-  if (!workspaces.some((workspace) => workspace.needsDatabase)) return run(env);
+  if (!workspaces.some((workspace) => workspace.needsDatabase)) return finish(completeWithoutDatabase());
+  if (localLanding) return finish(completeWithDatabase());
   if (root !== repository && !options.place && !options.recognize)
     return unavailable('root typecheck', 'database-backed checks require the source checkout root');
   const config = compilerConfigArgs(
@@ -370,23 +574,30 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
     root,
     workspaces.filter((w) => w.needsDatabase).map((w) => w.directory),
   );
-  const placed = await placeCompilerRun(
-    {
-      label: 'root typecheck',
-      root,
-      cwd: root,
-      command: ['bun', 'scripts/typecheck.ts', typecheckSelectionArgument(changed), ...config],
-      returns: [],
-    },
-    repository,
-    env,
-    options,
-  );
-  if (placed !== null) return placed;
-  if (env.DATABASE_URL) return run(env);
-  if (options.startDatabase) return withStartedDatabase(options.startDatabase, run, env);
-  const { prepareCompilerDatabase } = await import('./compiler-database.ts');
-  return withStartedDatabase(prepareCompilerDatabase, run, env);
+  let placed: number | null;
+  try {
+    placed = await placeCompilerRun(
+      {
+        label: 'root typecheck',
+        root,
+        cwd: root,
+        command: ['bun', 'scripts/typecheck.ts', typecheckSelectionArgument(changed), ...config],
+        returns: [],
+      },
+      repository,
+      env,
+      options,
+    );
+  } catch (error) {
+    return finish(Promise.resolve(infrastructure('root typecheck', `check-host execution could not be established: ${error instanceof Error ? error.message : String(error)}`)));
+  }
+  if (placed !== null) {
+    if ([75, 124, 130, 143].includes(placed))
+      return finish(Promise.resolve(infrastructure('root typecheck', `check-host execution ended with status ${placed}`)));
+    return finish(Promise.resolve(placed));
+  }
+  if (env.DATABASE_URL) return finish(run(env));
+  return finish(completeWithDatabase());
 }
 
 if (import.meta.main) {

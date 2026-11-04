@@ -1508,6 +1508,13 @@ export class MergeTrain {
     const policy = this.options.policy ?? defaultPolicy;
     const changed = changedFiles(tree, base, this.options.policy?.merge);
     const command = rootTypecheckCommand(changed);
+    command.splice(
+      1,
+      0,
+      'TYPECHECK_LOCAL=1',
+      `TYPECHECK_DEV_COMMIT=${base}`,
+      `TYPECHECK_CANDIDATE_COMMIT=${candidate}`,
+    );
     const passed = {
       command,
       result: { passed: true, output: '', timedOut: false } as GateResult,

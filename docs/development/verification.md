@@ -138,6 +138,17 @@ has at most 12 explicit test files; each file and its statically imported relati
 commands, full Kernel checks, browser work, database/container work and commands the classifier cannot prove local
 go to a performance-approved check host. Package-script, `--cwd` and ordinary `env` prefixes use the same classification.
 
+The dev train's serial prelanding root typecheck is a bounded placement exception: the train runs it on its local
+landing host, after selecting the changed workspace dependency closure. Kernel's incremental compiler state is copied
+from the base dev commit into a candidate-keyed entry, with the compiler, lockfile, project configuration and both
+Kernel/Auth migration sets in the compatibility key. A passing batch publishes that entry only after the throwaway
+database cleanup succeeds. The batch log reports elapsed seconds and selected workspace count. At three batch sizes,
+the landing acceptance records those durations; this worker did not run that deferred acceptance.
+
+Root typecheck outcomes distinguish compiler diagnostics from infrastructure. Database setup or cleanup failures,
+host loss, timeout and compiler startup without file/line diagnostics produce an infrastructure result; a type failure
+includes the compiler's complete file/line diagnostics.
+
 Kernel typecheck and kernel check command phases are `database-image`, `migrations`, `sql-schema`, `compiler` and
 `cleanup`, written to `REZICS_CHECK_PHASES`. Kernel typecheck nests `client-emit`, `tsc`, `construct` and `openapi`
 inside `compiler` so one receipt can split those commands. Slot wait and rsync remain transport-owned and must not be
