@@ -32,6 +32,8 @@ type Draft = {
 type Registry = {
   drafts: Map<string, { current: Draft }>;
   update(): void;
+  requestNavigation?: (href: string) => Promise<void>;
+  bypassNextNavigation?: boolean;
 };
 const Drafts = createContext<Registry | null>(null);
 const protectedDrafts = (registry: Registry) =>
@@ -65,6 +67,21 @@ export function CreatorOfferDraftNavigation({ children }: { children: ReactNode 
       setPrompt(true);
     });
   }, [registry]);
+  const requestNavigation = useCallback(
+    async (href: string) => {
+      if (await request()) return;
+      if (!router) return;
+      const bypass = protectedDrafts(registry).length > 0;
+      if (bypass) registry.bypassNextNavigation = true;
+      try {
+        await router.navigate({ href });
+      } finally {
+        if (bypass) registry.bypassNextNavigation = false;
+      }
+    },
+    [request, router],
+  );
+  registry.requestNavigation = requestNavigation;
   const drafts = protectedDrafts(registry);
   const mayCommit = drafts.some((draft) => draft.mayCommit);
   useEffect(() => {
@@ -141,7 +158,7 @@ export function CreatorOfferDraftNavigation({ children }: { children: ReactNode 
       >
         {children}
       </div>
-      {router && <RouterDraftNavigation request={request} />}
+      {router && <RouterDraftNavigation request={request} registry={registry} />}
       <AlertDialog
         open={prompt && drafts.length > 0}
         onOpenChange={(open) => {
@@ -172,12 +189,22 @@ export function CreatorOfferDraftNavigation({ children }: { children: ReactNode 
   );
 }
 
-function RouterDraftNavigation({ request }: { request(): boolean | Promise<boolean> }) {
+/** Origin controls use the mounted offer draft's same Stay/Discard decision. */
+export function useCreatorOfferDraftNavigation(): ((href: string) => Promise<void>) | null {
+  return useContext(Drafts)?.requestNavigation ?? null;
+}
+
+function RouterDraftNavigation({ request, registry }: { request(): boolean | Promise<boolean>; registry: Registry }) {
   useBlocker({
-    shouldBlockFn: ({ current, next }) =>
-      current.pathname === next.pathname && JSON.stringify(current.search) === JSON.stringify(next.search)
+    shouldBlockFn: ({ current, next }) => {
+      if (registry.bypassNextNavigation) {
+        registry.bypassNextNavigation = false;
+        return false;
+      }
+      return current.pathname === next.pathname && JSON.stringify(current.search) === JSON.stringify(next.search)
         ? false
-        : request(),
+        : request();
+    },
     withResolver: false,
     enableBeforeUnload: false,
   });

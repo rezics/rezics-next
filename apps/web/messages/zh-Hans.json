@@ -9373,5 +9373,16 @@
   "library_copy_editor_pending": "副本操作正在处理中。请保持编辑器打开，直到结果确认。",
   "library_copy_editor_uncertain": "操作结果尚未确认。重试会发送原始请求及原始内容，之后的编辑不会包含在此次重试中。",
   "library_copy_editor_retry_save": "重试原始保存",
-  "library_copy_editor_retry_delete": "重试原始删除"
+  "library_copy_editor_retry_delete": "重试原始删除",
+  "creator_edition_origin_heading": "创作者作品清单",
+  "creator_edition_origin_available": "你从创作者作品清单打开了此页。此标签页会保留原来的清单位置。",
+  "creator_edition_origin_checking": "正在重新检查原来的作品清单页面……",
+  "creator_edition_origin_present": "这个确切版本仍在重新准入的作品清单页面中。",
+  "creator_edition_origin_missing": "这个确切版本不在重新准入的作品清单页面中。它可能已更改或移动；请重新开始作品清单。",
+  "creator_edition_origin_lost": "此标签页已无法使用原来的清单返回信息。请重新开始作品清单并重新选择版本。",
+  "creator_edition_origin_return": "返回作品清单",
+  "creator_edition_origin_restart": "重新开始作品清单",
+  "creator_edition_origin_edition": "版本 ID",
+  "creator_edition_origin_source_revision": "来源修订版本"
+
 }

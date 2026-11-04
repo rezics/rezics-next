@@ -9376,5 +9376,16 @@
   "library_copy_editor_pending": "副本操作正在處理中。請保持編輯器開啟，直到結果確認。",
   "library_copy_editor_uncertain": "操作結果尚未確認。重試會傳送原始請求及原始內容，之後的編輯不會包含在此次重試中。",
   "library_copy_editor_retry_save": "重試原始儲存",
-  "library_copy_editor_retry_delete": "重試原始刪除"
+  "library_copy_editor_retry_delete": "重試原始刪除",
+  "creator_edition_origin_heading": "創作者作品清單",
+  "creator_edition_origin_available": "你從創作者作品清單開啟了此頁。本分頁會保留原本的清單位置。",
+  "creator_edition_origin_checking": "正在重新檢查原本的作品清單頁面……",
+  "creator_edition_origin_present": "這個確切版本仍在已重新載入的作品清單頁面中。",
+  "creator_edition_origin_missing": "這個確切版本不在已重新載入的作品清單頁面中。它可能已變更或移動；請重新開始作品清單。",
+  "creator_edition_origin_lost": "此分頁已無法使用原本的清單返回資訊。請重新開始作品清單並重新選擇版本。",
+  "creator_edition_origin_return": "返回作品清單",
+  "creator_edition_origin_restart": "重新開始作品清單",
+  "creator_edition_origin_edition": "版本 ID",
+  "creator_edition_origin_source_revision": "來源修訂版本"
+
 }

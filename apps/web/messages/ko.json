@@ -9373,5 +9373,16 @@
   "library_copy_editor_pending": "소장본 명령을 처리 중입니다. 결과가 확인될 때까지 편집기를 열어 두세요.",
   "library_copy_editor_uncertain": "결과가 확인되지 않았습니다. 재시도하면 원래 값을 포함한 원래 요청이 전송됩니다. 이후 수정한 내용은 재시도에 포함되지 않습니다.",
   "library_copy_editor_retry_save": "원래 저장 재시도",
-  "library_copy_editor_retry_delete": "원래 삭제 재시도"
+  "library_copy_editor_retry_delete": "원래 삭제 재시도",
+  "creator_edition_origin_heading": "창작자 인벤토리",
+  "creator_edition_origin_available": "창작자 인벤토리에서 이 페이지를 열었습니다. 이 탭은 원래 인벤토리 위치를 기억합니다.",
+  "creator_edition_origin_checking": "원래 인벤토리 페이지를 다시 확인하는 중…",
+  "creator_edition_origin_present": "이 Edition이 다시 승인된 인벤토리 페이지에 있습니다.",
+  "creator_edition_origin_missing": "이 Edition이 다시 승인된 인벤토리 페이지에 없습니다. 변경되었거나 이동되었을 수 있습니다. 인벤토리를 다시 시작하세요.",
+  "creator_edition_origin_lost": "이 탭에서는 원래 인벤토리로 돌아갈 수 없습니다. 인벤토리를 다시 시작하고 Edition을 선택하세요.",
+  "creator_edition_origin_return": "인벤토리로 돌아가기",
+  "creator_edition_origin_restart": "인벤토리 다시 시작",
+  "creator_edition_origin_edition": "Edition ID",
+  "creator_edition_origin_source_revision": "원본 리비전"
+
 }

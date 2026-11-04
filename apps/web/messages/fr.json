@@ -9373,5 +9373,16 @@
   "library_copy_editor_pending": "L’opération sur l’exemplaire est en cours. Gardez l’éditeur ouvert jusqu’à la confirmation du résultat.",
   "library_copy_editor_uncertain": "Le résultat n’est pas confirmé. Réessayer envoie la demande d’origine avec ses valeurs d’origine ; les modifications ultérieures ne sont pas incluses.",
   "library_copy_editor_retry_save": "Réessayer l’enregistrement d’origine",
-  "library_copy_editor_retry_delete": "Réessayer la suppression d’origine"
+  "library_copy_editor_retry_delete": "Réessayer la suppression d’origine",
+  "creator_edition_origin_heading": "Inventaire du créateur",
+  "creator_edition_origin_available": "Vous avez ouvert cette page depuis votre inventaire de créateur. Cet onglet conserve la position d’origine.",
+  "creator_edition_origin_checking": "Vérification de la page d’inventaire d’origine…",
+  "creator_edition_origin_present": "Cette édition exacte figure sur la page d’inventaire de nouveau admise.",
+  "creator_edition_origin_missing": "Cette édition exacte ne figure pas sur la page d’inventaire de nouveau admise. Elle a peut-être changé ou été déplacée ; relancez l’inventaire.",
+  "creator_edition_origin_lost": "Le retour à l’inventaire d’origine n’est pas disponible dans cet onglet. Relancez l’inventaire et choisissez une édition.",
+  "creator_edition_origin_return": "Retourner à l’inventaire",
+  "creator_edition_origin_restart": "Relancer l’inventaire",
+  "creator_edition_origin_edition": "ID de l’édition",
+  "creator_edition_origin_source_revision": "Révision source"
+
 }

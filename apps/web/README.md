@@ -3502,3 +3502,11 @@ they are response-double coverage, not a native execution claim. Native `tests/n
 requires a retained mounted stack and authentic selected full-graph seed via `REZICS_CROSS_MEDIA_VISIT`; it creates
 no replacement native stack and preserves the existing browser and native handles. Its final 56-image core set
 must cover 390/1440 light/dark after the native journey. Landing defers that acceptance and capture to integration.
+
+### Creator Edition inventory return context
+
+Same-tab inventory actions may add `editionOrigin`, an opaque receipt token, to the existing Edition create or creator offer address. The only supported origin fields are the current account subject, locale, opaque inventory cursor, and exact Edition ID when the action selected one. The receipt stays in volatile browser memory for that tab; it is not a source identity, Edition selector, authorization input, financial operand, or publish receipt.
+
+Return re-admits the saved native inventory cursor and focuses the exact Edition only when that ID appears on the admitted page. A missing or replaced occurrence requires an explicit inventory restart; the reader never scans other pages or matches by title. Refresh and retry preserve the same native address. Restart clears only the cursor. A full reload, new tab, account or locale change, replacement receipt, or changed authoring address can lose the return context; show the restart path and do not infer the former selection.
+
+Creator Edition return context uses one volatile same-browser receipt bound to locale, cursor, owner, and exact Edition ID; same-tab handoffs carry only its opaque token, native inventory re-admission focuses that exact ID when present, and lost or replaced occurrences require restart.

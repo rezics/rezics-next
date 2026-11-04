@@ -1,12 +1,23 @@
-import { useContext, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useRouter } from '@tanstack/react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
+import { localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
-import { CreatorOfferDraftNavigation, CreatorOfferDraftState } from './creator-offer-draft-navigation';
+import { useSession } from '../session/query';
+import { CreatorOfferDraftNavigation, CreatorOfferDraftState, useCreatorOfferDraftNavigation } from './creator-offer-draft-navigation';
+import {
+  creatorEditionOriginReturnHref,
+  readCreatorEditionOrigin,
+  restartCreatorEditionOrigin,
+  retireCreatorEditionOrigin,
+  type CreatorEditionOriginResolution,
+} from '../content-editions/creator-edition-origin';
+import { CreatorEditionOriginPanel } from '../content-editions/creator-edition-origin-panel';
 import { creatorPreviewGuard, useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { parseCreatorPrice } from './creator-price';
 import { formatMinorAmount } from './money';
@@ -45,6 +56,98 @@ export function parsedPrice(text: string, rule?: ConfiguredSaleCurrencyRule): nu
   } catch {
     return null;
   }
+}
+
+type CreatorOfferOriginContextValue = {
+  token: string;
+  resolution: CreatorEditionOriginResolution | null;
+};
+const CreatorOfferOriginContext = createContext<CreatorOfferOriginContextValue | null>(null);
+
+/** Return context is read only: the offer editor still loads and authorizes its Edition natively. */
+export function CreatorOfferOriginScope({
+  token,
+  editionId,
+  children,
+}: {
+  token?: string | undefined;
+  editionId?: string | undefined;
+  children: ReactNode;
+}) {
+  const session = useSession();
+  const [resolution, setResolution] = useState<CreatorEditionOriginResolution | null>(null);
+  const priorCredential = useRef<string | null>(null);
+  const sawCredential = useRef(false);
+  useEffect(() => {
+    if (!sawCredential.current) {
+      if (session.csrfToken) {
+        priorCredential.current = session.csrfToken;
+        sawCredential.current = true;
+      }
+      return;
+    }
+    if (priorCredential.current !== session.csrfToken) {
+      retireCreatorEditionOrigin(token);
+      priorCredential.current = session.csrfToken;
+      setResolution({ kind: 'lost', reason: 'account' });
+    }
+  }, [session.csrfToken, token]);
+  useEffect(() => {
+    if (!token) {
+      setResolution(null);
+      return;
+    }
+    if (session.state === 'unknown') return;
+    if (!editionId) {
+      retireCreatorEditionOrigin(token);
+      setResolution({ kind: 'lost', reason: 'edition' });
+      return;
+    }
+    setResolution(readCreatorEditionOrigin(token, session.subject, editionId));
+  }, [token, editionId, session.state, session.subject]);
+  return (
+    <CreatorOfferOriginContext.Provider value={token ? { token, resolution } : null}>
+      {children}
+    </CreatorOfferOriginContext.Provider>
+  );
+}
+
+function CreatorOfferOriginPanelSlot() {
+  const context = useContext(CreatorOfferOriginContext);
+  const router = useRouter({ warn: false });
+  const requestNavigation = useCreatorOfferDraftNavigation();
+  if (!context?.resolution) return null;
+
+  const navigate = (href: string) => {
+    if (requestNavigation) void requestNavigation(href);
+    else if (router) void router.navigate({ href });
+  };
+  const restart = () => {
+    if (context.resolution?.kind === 'current') {
+      const receipt = restartCreatorEditionOrigin(context.token);
+      if (receipt) {
+        navigate(creatorEditionOriginReturnHref(receipt));
+        return;
+      }
+    }
+    navigate(localizeHref('/editions'));
+  };
+  return (
+    <CreatorEditionOriginPanel
+      resolution={context.resolution}
+      onReturn={
+        context.resolution.kind === 'current'
+          ? () => navigate(creatorEditionOriginReturnHref(context.resolution.receipt))
+          : undefined
+      }
+      onRestart={restart}
+      editionId={context.resolution.kind === 'current' ? context.resolution.receipt.editionId : undefined}
+    />
+  );
+}
+
+export function CreatorOfferOriginAddressPanel() {
+  return <CreatorOfferOriginPanelSlot />;
 }
 
 /** Native text input keeps the adopted dot convention in every locale; only the preview is localized. */
@@ -167,6 +270,7 @@ export function CreatorOfferEditor({
 }) {
   return (
     <CreatorOfferDraftNavigation>
+      <CreatorOfferOriginPanelSlot />
       {guard ? (
         <CreatorOfferForm data={data} locale={locale} createKey={data.createKey} guard={guard} />
       ) : (

@@ -9373,5 +9373,16 @@
   "library_copy_editor_pending": "Der Befehl für das Exemplar wird verarbeitet. Lass den Editor geöffnet, bis das Ergebnis bestätigt ist.",
   "library_copy_editor_uncertain": "Das Ergebnis ist unbestätigt. Beim Wiederholen wird die ursprüngliche Anfrage mit den ursprünglichen Werten gesendet. Spätere Änderungen sind nicht enthalten.",
   "library_copy_editor_retry_save": "Ursprüngliches Speichern wiederholen",
-  "library_copy_editor_retry_delete": "Ursprüngliches Löschen wiederholen"
+  "library_copy_editor_retry_delete": "Ursprüngliches Löschen wiederholen",
+  "creator_edition_origin_heading": "Creator-Inventar",
+  "creator_edition_origin_available": "Du hast diese Seite aus deinem Creator-Inventar geöffnet. Diese Registerkarte merkt sich die ursprüngliche Position.",
+  "creator_edition_origin_checking": "Die ursprüngliche Inventarseite wird erneut geprüft …",
+  "creator_edition_origin_present": "Diese Edition befindet sich auf der erneut zugelassenen Inventarseite.",
+  "creator_edition_origin_missing": "Diese Edition befindet sich nicht auf der erneut zugelassenen Inventarseite. Sie wurde möglicherweise geändert oder verschoben. Starte das Inventar neu.",
+  "creator_edition_origin_lost": "Die Rückkehr zum ursprünglichen Inventar ist in dieser Registerkarte nicht verfügbar. Starte das Inventar neu und wähle eine Edition aus.",
+  "creator_edition_origin_return": "Zum Inventar zurückkehren",
+  "creator_edition_origin_restart": "Inventar neu starten",
+  "creator_edition_origin_edition": "Edition-ID",
+  "creator_edition_origin_source_revision": "Quellrevision"
+
 }

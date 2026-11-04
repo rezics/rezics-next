@@ -2,6 +2,7 @@ import { parseEditionMetadata, type EditionMetadata } from './edition-api';
 
 export const CREATOR_EDITIONS_PAGE_SIZE = 20;
 export type CreatorEditionsSearch = { cursor?: string };
+export type CreatorEditionsRouteSearch = CreatorEditionsSearch & { editionOrigin?: string };
 export type CreatorEditionsPage =
   | { kind: 'ready'; editions: EditionMetadata[]; next: string | null }
   | { kind: 'sign-in' | 'denied' | 'loading' | 'unavailable' | 'stale' };
@@ -26,6 +27,14 @@ export function creatorEditionsSearch(value: Record<string, unknown>): CreatorEd
   if (value.cursor === undefined || value.cursor === '') return {};
   if (typeof value.cursor !== 'string' || value.cursor.length > 4096) throw new Error('Invalid editions cursor');
   return { cursor: value.cursor };
+}
+
+/** The return token is route browsing context; the native inventory read receives only its cursor. */
+export function creatorEditionsRouteSearch(value: Record<string, unknown>): CreatorEditionsRouteSearch {
+  const search = creatorEditionsSearch(value);
+  const editionOrigin =
+    typeof value.editionOrigin === 'string' && value.editionOrigin.length <= 64 ? value.editionOrigin : undefined;
+  return { ...search, ...(editionOrigin ? { editionOrigin } : {}) };
 }
 
 /** Consumer-local binding to the declared producer route, without adding a producer module. */

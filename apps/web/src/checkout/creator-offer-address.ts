@@ -2,7 +2,11 @@ import { UUID } from './price';
 
 export type CreatorOfferAddressIssue = { requested: string };
 export type CreatorOffersSearch = { cursor?: string; addressIssue?: CreatorOfferAddressIssue };
-export type CreatorEditionSearch = { contentEditionId?: string; addressIssue?: CreatorOfferAddressIssue };
+export type CreatorEditionSearch = {
+  contentEditionId?: string;
+  editionOrigin?: string;
+  addressIssue?: CreatorOfferAddressIssue;
+};
 
 function issue(search: Record<string, unknown>, names: string[]): CreatorOfferAddressIssue {
   return {
@@ -30,5 +34,10 @@ export function creatorEditionSearch(search: Record<string, unknown>): CreatorEd
       return { addressIssue: issue(search, ['editionId', 'contentEditionId']) };
     selected = id;
   }
-  return selected === undefined ? {} : { contentEditionId: selected };
+  const editionOrigin =
+    typeof search.editionOrigin === 'string' && search.editionOrigin.length <= 64 ? search.editionOrigin : undefined;
+  return {
+    ...(selected === undefined ? {} : { contentEditionId: selected }),
+    ...(editionOrigin ? { editionOrigin } : {}),
+  };
 }

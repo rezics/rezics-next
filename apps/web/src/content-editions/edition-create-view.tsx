@@ -20,12 +20,23 @@ import {
   type ComponentType,
   type MouseEvent,
 } from 'react';
+import { useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { useSession } from '../session/query';
 import { exactRevisionHref } from '../threads/exact-revision-href';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
+import {
+  addCreatorEditionOriginToken,
+  bindCreatorEditionOriginEdition,
+  creatorEditionOriginReturnHref,
+  readCreatorEditionOrigin,
+  retireCreatorEditionOrigin,
+  restartCreatorEditionOrigin,
+  type CreatorEditionOriginResolution,
+} from './creator-edition-origin';
+import { CreatorEditionOriginPanel } from './creator-edition-origin-panel';
 import {
   commandEditionPublication,
   readEditionCreateSource,
@@ -75,18 +86,35 @@ export function EditionPublicationPanel({
   initialSource,
   initialEditionId,
   initialResume,
+  initialOriginToken,
   api: override,
   controller: suppliedController,
 }: {
   initialSource?: EditionSourceIdentity | undefined;
   initialEditionId?: string | undefined;
   initialResume?: EditionResumeRead | undefined;
+  initialOriginToken?: string | undefined;
   api?: EditionCreateApi | undefined;
   controller?: EditionPublicationController | undefined;
 }) {
   const session = useSession();
   const csrf = useRef(session.csrfToken);
+  const priorCredential = useRef<string | null>(null);
+  const sawCredential = useRef(false);
   csrf.current = session.csrfToken;
+  useEffect(() => {
+    if (!sawCredential.current) {
+      if (session.csrfToken) {
+        priorCredential.current = session.csrfToken;
+        sawCredential.current = true;
+      }
+      return;
+    }
+    if (priorCredential.current !== session.csrfToken) {
+      retireCreatorEditionOrigin(initialOriginToken);
+      priorCredential.current = session.csrfToken;
+    }
+  }, [initialOriginToken, session.csrfToken]);
   const api = useMemo<EditionCreateApi>(
     () =>
       override ?? {
@@ -127,6 +155,8 @@ export function EditionPublicationPanel({
       initialSource={initialSource}
       initialEditionId={initialEditionId}
       initialResume={controller === initialController.current ? initialResume : undefined}
+      originToken={initialOriginToken}
+      originAccountId={session.subject ?? undefined}
     />
   );
 }
@@ -137,12 +167,17 @@ export function EditionPublication({
   initialSource,
   initialEditionId,
   initialResume,
+  originToken,
+  originAccountId,
 }: {
   controller: EditionPublicationController;
   initialSource?: EditionSourceIdentity | undefined;
   initialEditionId?: string | undefined;
   initialResume?: EditionResumeRead | undefined;
+  originToken?: string | undefined;
+  originAccountId?: string | undefined;
 }) {
+  const router = useRouter({ warn: false });
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [sourceLink, setSourceLink] = useState('');
   const [invalidLink, setInvalidLink] = useState(false);
@@ -225,7 +260,7 @@ export function EditionPublication({
   const unresolvedCommand = !!state.intent && (state.busy || state.uncertain);
   const localSelection = state.resumeEditionId === null && !state.edition && (!!sourceLink.trim() || !!state.identity);
   const needsDeparture = localSelection || (confirmed && state.edition?.state === 'draft') || unresolvedCommand;
-  useAuthoringDeparture(
+  const departure = useAuthoringDeparture(
     needsDeparture,
     unresolvedCommand,
     JSON.stringify([
@@ -240,6 +275,95 @@ export function EditionPublication({
     undefined,
     controller.retire,
   );
+  const [origin, setOrigin] = useState<CreatorEditionOriginResolution | null>(null);
+  const originEditionId = state.edition?.editionId ?? initialEditionId ?? null;
+  const originSource = useRef<{ token: string; identity: string } | null>(null);
+  const sourceIdentity =
+    state.identity ? `${state.identity.postId}:${state.identity.revisionId}` : initialSource ? `${initialSource.postId}:${initialSource.revisionId}` : null;
+  useEffect(() => {
+    if (!originToken) {
+      originSource.current = null;
+      return;
+    }
+    if (!sourceIdentity) return;
+    if (!originSource.current || originSource.current.token !== originToken) {
+      originSource.current = { token: originToken, identity: sourceIdentity };
+      return;
+    }
+    if (originSource.current.identity !== sourceIdentity) {
+      retireCreatorEditionOrigin(originToken);
+      originSource.current = { token: originToken, identity: sourceIdentity };
+      setOrigin({ kind: 'lost', reason: 'replaced' });
+    }
+  }, [originToken, sourceIdentity]);
+  useEffect(() => {
+    if (!originToken) {
+      setOrigin(null);
+      return;
+    }
+    if (!originAccountId) return;
+    const resolution = readCreatorEditionOrigin(originToken, originAccountId, originEditionId);
+    if (
+      resolution.kind === 'current' &&
+      state.edition &&
+      !bindCreatorEditionOriginEdition(originToken, state.edition.editionId)
+    ) {
+      setOrigin({ kind: 'lost', reason: 'edition' });
+      return;
+    }
+    setOrigin(
+      resolution.kind === 'current' && state.edition
+        ? readCreatorEditionOrigin(originToken, originAccountId, state.edition.editionId)
+        : resolution,
+    );
+  }, [originToken, originAccountId, originEditionId, state.edition]);
+
+  function returnToInventory() {
+    if (origin?.kind !== 'current' || !router) return;
+    departure.requestNavigation(() => {
+      void router.navigate({ href: creatorEditionOriginReturnHref(origin.receipt) });
+    });
+  }
+
+  function restartInventory() {
+    if (!router) return;
+    if (origin?.kind === 'current' && originToken) {
+      const receipt = restartCreatorEditionOrigin(originToken);
+      if (receipt) {
+        departure.requestNavigation(() => {
+          void router.navigate({ href: creatorEditionOriginReturnHref(receipt) });
+        });
+        return;
+      }
+    }
+    departure.requestNavigation(() => {
+      void router.navigate({ href: localizeHref('/editions') });
+    });
+  }
+
+  function handoffToOffer(event: MouseEvent<HTMLAnchorElement>) {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      (event.currentTarget.target && event.currentTarget.target !== '_self') ||
+      !router
+    )
+      return;
+    const canonical = event.currentTarget.getAttribute('href');
+    if (!canonical) return;
+    event.preventDefault();
+    const destination =
+      origin?.kind === 'current' && originToken
+        ? addCreatorEditionOriginToken(canonical, originToken)
+        : canonical;
+    departure.requestNavigation(() => {
+      void router.navigate({ href: destination });
+    });
+  }
   useEffect(() => {
     if (initialEditionId !== undefined) {
       void controller.resume(initialEditionId, initialResume);
@@ -288,6 +412,19 @@ export function EditionPublication({
       className="mx-auto w-full max-w-3xl space-y-8 text-foreground [overflow-wrap:anywhere]"
       aria-busy={state.busy}
     >
+      {origin ? (
+        <CreatorEditionOriginPanel
+          resolution={origin}
+          onReturn={origin.kind === 'current' ? returnToInventory : undefined}
+          onRestart={restartInventory}
+          editionId={origin.kind === 'current' ? origin.receipt.editionId : undefined}
+          sourceRevisionId={
+            origin.kind === 'current'
+              ? state.identity?.revisionId ?? initialSource?.revisionId ?? null
+              : undefined
+          }
+        />
+      ) : null}
       <header className="space-y-3">
         <p className="text-sm font-medium text-muted-foreground">{m.edition_publication_eyebrow()}</p>
         <PageHeading>{m.edition_publication_heading()}</PageHeading>
@@ -576,6 +713,7 @@ export function EditionPublication({
             <a
               className={buttonVariants({ className: 'min-h-11' })}
               href={localizeHref(`/creator/offers/new?editionId=${encodeURIComponent(edition.editionId)}`)}
+              onClick={handoffToOffer}
             >
               {m.edition_publication_create_offer()}
             </a>

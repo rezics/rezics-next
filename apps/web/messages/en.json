@@ -9469,5 +9469,16 @@
   "library_copy_editor_pending": "The Copy command is pending. Keep this editor open until its result is confirmed.",
   "library_copy_editor_uncertain": "The result is unconfirmed. Retry sends the original request, including its original values; later edits are not part of that retry.",
   "library_copy_editor_retry_save": "Retry original save",
-  "library_copy_editor_retry_delete": "Retry original deletion"
+  "library_copy_editor_retry_delete": "Retry original deletion",
+  "creator_edition_origin_heading": "Creator inventory",
+  "creator_edition_origin_available": "You opened this page from your creator inventory. Your original inventory position is saved for this tab.",
+  "creator_edition_origin_checking": "Rechecking the original inventory page…",
+  "creator_edition_origin_present": "This exact Edition is on the admitted inventory page.",
+  "creator_edition_origin_missing": "This exact Edition is not on the admitted inventory page. It may have changed or moved; restart the inventory to continue.",
+  "creator_edition_origin_lost": "The original inventory return is unavailable in this tab. Restart the inventory to choose an Edition again.",
+  "creator_edition_origin_return": "Return to inventory",
+  "creator_edition_origin_restart": "Restart inventory",
+  "creator_edition_origin_edition": "Edition ID",
+  "creator_edition_origin_source_revision": "Source revision"
+
 }

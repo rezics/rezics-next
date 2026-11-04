@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useLocation, useRouter } from '@tanstack/react-router';
 import { EditionTechnicalDetails, editionSubjectName, editionRevisionDate } from './edition-identity';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -5,6 +7,17 @@ import { m } from '../paraglide/messages.js';
 import { localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorEditionsPage } from './creator-editions';
+import { useSession } from '../session/query';
+import {
+  addCreatorEditionOriginToken,
+  createCreatorEditionOrigin,
+  creatorEditionOriginTokenFromSearch,
+  readCreatorEditionOrigin,
+  restartCreatorEditionOrigin,
+  retireCreatorEditionOrigin,
+  type CreatorEditionOriginResolution,
+} from './creator-edition-origin';
+import { CreatorEditionOriginPanel } from './creator-edition-origin-panel';
 
 export function creatorEditionsHref(cursor?: string): string {
   return localizeHref(`/editions${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
@@ -15,6 +28,133 @@ const inventoryBoundaryId = 'creator-editions-inventory';
 /** Native document navigation hands focus to an admitted page, including without hydration. */
 export function creatorEditionsContinuationHref(cursor?: string): string {
   return `${creatorEditionsHref(cursor)}#${inventoryBoundaryId}`;
+}
+
+export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditionsPage; cursor?: string }) {
+  const router = useRouter();
+  const locationSearch = useLocation({ select: (location) => location.search });
+  const originToken = creatorEditionOriginTokenFromSearch(locationSearch);
+  const session = useSession();
+  const [origin, setOrigin] = useState<CreatorEditionOriginResolution | null>(null);
+  const [returnedEdition, setReturnedEdition] = useState<'checking' | 'present' | 'missing' | undefined>();
+  const preserveOriginOnLeave = useRef(false);
+  useEffect(
+    () => () => {
+      if (!preserveOriginOnLeave.current) retireCreatorEditionOrigin(originToken);
+    },
+    [originToken],
+  );
+  useEffect(() => {
+    if (!originToken) {
+      setOrigin(null);
+      setReturnedEdition(undefined);
+      return;
+    }
+    if (session.state === 'unknown') return;
+    const resolution = readCreatorEditionOrigin(originToken, session.subject);
+    if (resolution.kind === 'current' && resolution.receipt.cursor !== (cursor ?? null)) {
+      retireCreatorEditionOrigin(originToken);
+      setOrigin({ kind: 'lost', reason: 'replaced' });
+      setReturnedEdition(undefined);
+      return;
+    }
+    setOrigin(resolution);
+    setReturnedEdition(resolution.kind === 'current' && page.kind === 'loading' ? 'checking' : undefined);
+  }, [cursor, originToken, page.kind, session.state, session.subject]);
+
+  useEffect(() => {
+    if (origin?.kind !== 'current') {
+      setReturnedEdition(undefined);
+      return;
+    }
+    if (page.kind === 'loading') {
+      setReturnedEdition('checking');
+      return;
+    }
+    if (page.kind !== 'ready' || !origin.receipt.editionId) {
+      setReturnedEdition(undefined);
+      return;
+    }
+    const edition = page.editions.find((item) => item.editionId === origin.receipt.editionId);
+    if (!edition) {
+      setReturnedEdition('missing');
+      return;
+    }
+    setReturnedEdition('present');
+    const row = document.getElementById(`creator-edition-${origin.receipt.editionId}`);
+    row?.focus();
+  }, [origin, page]);
+
+  function navigateFromInventory(event: MouseEvent<HTMLElement>) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest('a');
+    if (!anchor || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (anchor.target && anchor.target !== '_self') return;
+    const destination = new URL(anchor.href, window.location.href);
+    if (destination.origin !== window.location.origin) return;
+    const path = destination.pathname;
+    const isAuthoring = path.endsWith('/editions/new') || path.endsWith('/creator/offers/new');
+    if (isAuthoring && session.subject && page.kind === 'ready') {
+      const editionId = destination.searchParams.get('editionId');
+      const token = createCreatorEditionOrigin({ accountId: session.subject, cursor: cursor ?? null, editionId });
+      if (!token) return;
+      preserveOriginOnLeave.current = true;
+      event.preventDefault();
+      const canonical = anchor.getAttribute('href') ?? destination.pathname + destination.search;
+      void router.navigate({ href: addCreatorEditionOriginToken(canonical, token) });
+      return;
+    }
+    if (originToken && origin?.kind === 'current') {
+      const sameAddress = path.endsWith('/editions') && destination.searchParams.get('cursor') === (cursor ?? null);
+      if (anchor.hasAttribute('data-creator-origin-restart')) {
+        const receipt = restartCreatorEditionOrigin(originToken);
+        if (receipt) {
+          preserveOriginOnLeave.current = true;
+          event.preventDefault();
+          void router.navigate({ href: addCreatorEditionOriginToken(anchor.getAttribute('href') ?? creatorEditionsHref(), originToken) });
+          return;
+        }
+      }
+      if (sameAddress) {
+        preserveOriginOnLeave.current = true;
+        event.preventDefault();
+        void router.navigate({ href: addCreatorEditionOriginToken(anchor.getAttribute('href') ?? href, originToken) });
+        return;
+      }
+      // A new page or a changed cursor is a new inventory occurrence. Do not carry
+      // the old focus target forward as if it had been admitted there.
+      retireCreatorEditionOrigin(originToken);
+    }
+  }
+
+  function restartInventory() {
+    if (!originToken || origin?.kind !== 'current') {
+      void router.navigate({ href: creatorEditionsContinuationHref() });
+      return;
+    }
+    const receipt = restartCreatorEditionOrigin(originToken);
+    if (!receipt) {
+      void router.navigate({ href: creatorEditionsContinuationHref() });
+      return;
+    }
+    preserveOriginOnLeave.current = true;
+    void router.navigate({ href: addCreatorEditionOriginToken(creatorEditionsContinuationHref(), originToken) });
+  }
+
+  return (
+    <div onClickCapture={navigateFromInventory}>
+      {origin ? (
+        <CreatorEditionOriginPanel
+          resolution={origin}
+          occurrence={returnedEdition}
+          onRestart={restartInventory}
+          editionId={origin.kind === 'current' ? origin.receipt.editionId : undefined}
+        />
+      ) : null}
+      <CreatorEditionsView page={page} cursor={cursor} />
+    </div>
+  );
 }
 
 export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPage; cursor?: string }) {
@@ -65,7 +205,12 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                   variant="outline"
                   className="min-h-11"
                   nativeButton={false}
-                  render={<a href={page.kind === 'stale' ? creatorEditionsContinuationHref() : href} />}
+                  render={
+                    <a
+                      href={page.kind === 'stale' ? creatorEditionsContinuationHref() : href}
+                      data-creator-origin-restart={page.kind === 'stale' ? '' : undefined}
+                    />
+                  }
                 >
                   {page.kind === 'stale' ? m.creator_editions_restart() : m.creator_editions_retry()}
                 </Button>
@@ -74,7 +219,7 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                     variant="ghost"
                     className="min-h-11"
                     nativeButton={false}
-                    render={<a href={creatorEditionsContinuationHref()} />}
+                    render={<a href={creatorEditionsContinuationHref()} data-creator-origin-restart="" />}
                   >
                     {m.creator_editions_restart()}
                   </Button>
@@ -102,6 +247,8 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
               {page.editions.map((edition) => (
                 <ContentItem
                   key={edition.editionId}
+                  id={`creator-edition-${edition.editionId}`}
+                  tabIndex={-1}
                   headingLevel={2}
                   title={editionSubjectName(edition.identity?.subject)}
                   {...(edition.identity?.subject.label ? { titleLang: edition.identity.subject.label.language } : {})}
@@ -189,12 +336,17 @@ export function CreatorEditionsView({ page, cursor }: { page: CreatorEditionsPag
                   variant="ghost"
                   className="min-h-11"
                   nativeButton={false}
-                  render={<a href={creatorEditionsContinuationHref()} />}
+                  render={<a href={creatorEditionsContinuationHref()} data-creator-origin-restart="" />}
                 >
                   {m.creator_editions_restart()}
                 </Button>
               )}
-              <Button variant="outline" className="min-h-11" nativeButton={false} render={<a href={href} />}>
+              <Button
+                variant="outline"
+                className="min-h-11"
+                nativeButton={false}
+                render={<a href={href} data-creator-origin-retry="" />}
+              >
                 {m.creator_editions_refresh()}
               </Button>
               {page.next && (
