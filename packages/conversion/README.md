@@ -396,9 +396,51 @@ unchanged dump bytes still refresh under this revision.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
+### VNDB character blood type and gender variants
+
+Decision: VNDB `chars.bloodt` imports only explicit `a`, `b`, `ab` and `o`
+values as source-specific Concepts on `wdt:P1853` at
+`https://rezics.com/schemes/vndb/character-blood-types/{code}`; no Wikidata
+equivalence is inferred, `unknown` and malformed values are omitted, and both
+gender variants stay withheld until the admitted native contract can represent them.
+
+The checked cache manifest identifies `vndb-db-2026-11-04.tar.zst`
+(`fadbe611c4d6475ef63a0c1861512bc9ff64d21c6c9804a988522c7c65f6fa85`). Its
+`schema_vndbid.sql` SHA-256 is
+`d608ec4022029bdb65a5c780bbf8ca46e3348f16eaa7b88290efde35e2dd4758`; that
+archive schema spells the fields `bloodt blood_type NOT NULL`, `gender
+char_gender` and `spoil_gender char_gender`. The same archive's `chars.header`
+confirms `bloodt` as the third column. Its README specifies PostgreSQL COPY
+text TSV escaping: `\N` is null after decoding; the explicit source enum code
+`unknown` remains a distinct literal. The official
+[VNDB API character contract](https://api.vndb.org/nyan) lists `a`, `b`, `ab`
+and `o`; the official
+[VNDB schema](https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=55866ce6cb150d2de85e5f204828eafae5e50bc5)
+defines `blood_type` as `unknown`, `a`, `b`, `ab` and `o`.
+
+`cross-media-entities@10` retains the classification input in the deterministic
+digest, preserves measurement cells when the character-name projection is
+present, and records actual versus spoiler gender as separate source variants.
+Only the four explicit blood types reach `vndb-vocabulary@3`; the bounded
+binding reader verifies the current `ConceptScheme` URI, each current Concept
+URI and its `skos:inScheme` association before proposing. The URI pattern is
+`https://rezics.com/schemes/vndb/character-blood-types/{code}` and does not
+assert Wikidata equivalence. The native gender qualifier gap stays explicit.
+
+- Touches: selected-family VNDB Character records, current blood-type scheme
+  and Concept reads, and ordinary `wdt:P1853` proposals with `/chars/bloodt`
+  citations.
+- Bound: at most 256 selected Characters, one scheme and four Concepts; no
+  catalogue scan or taxonomy creation. Unsupported values omit only this fact.
+- Growth check: importer `vndb-character-profile.test.ts` covers COPY decoding,
+  selection, identity/citation, unknown omission, gender withholding and
+  measurement retention. Kernel `imports/vndb-character-profile.test.ts`
+  authors current API acceptance/adoption and refresh/reopen; its execution is
+  deferred to integration.
+
 ### VNDB release titles
 
-`cross-media-entities@9` projects admitted `releases_titles` rows onto
+`cross-media-entities@10` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -420,7 +462,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@9` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@10` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -499,7 +541,7 @@ Decision: platform and medium projections advance the converter from `@6` to `@7
 
 ### VNDB character names and aliases
 
-`cross-media-entities@9` projects selected `chars_names` and `chars_alias`
+`cross-media-entities@10` projects selected `chars_names` and `chars_alias`
 rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
 `schema:name`; its explicit romanized `latin` cell becomes an unqualified
 `schema:alternateName` using the source language with a `Latn` script subtag.
@@ -520,7 +562,7 @@ rejected rather than truncated.
 
 ### Bangumi character names and aliases
 
-`cross-media-entities@9` reads only the selected character's `name`, `name_cn`
+`cross-media-entities@10` reads only the selected character's `name`, `name_cn`
 and the pinned `Crt` infobox fields `简体中文名` and labelled `别名` rows. Top-level
 `name` remains `und`, `name_cn` remains `zh`, and `简体中文名` is a `zh-Hans`
 preferred name. Every supported `别名` row is an alternate name; its exact label
@@ -549,7 +591,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@9` preserves the current Bangumi physical profile, VNDB character names and staff aliases, release titles, minimum age and GTIN while adding Bangumi character names.
+Combined revision decision: `cross-media-entities@10` preserves the current Bangumi physical profile, VNDB character names and staff aliases, release titles, minimum age and GTIN while adding Bangumi character names and verified VNDB blood types.
 
 ### VNDB native alternate-name contract
 
@@ -938,7 +980,7 @@ malformed or mixed occurrences contribute no names.
 
 ### Bangumi character physical profile
 
-`cross-media-entities@9` parses only `血型`, `身高` and `体重` from the
+`cross-media-entities@10` parses only `血型`, `身高` and `体重` from the
 [pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
 weights keep explicit kilograms/grams as released exact quantities. The
 original scalar and indexed field path enter normalized source evidence, so an

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { types as utilTypes } from 'node:util';
+import { isDeepStrictEqual, types as utilTypes } from 'node:util';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Release } from '@rezics/definitions';
 import {
@@ -36,7 +36,7 @@ import {
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
 
-export const converter_revision = 'cross-media-entities@9';
+export const converter_revision = 'cross-media-entities@10';
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +
@@ -101,6 +101,29 @@ export const vndbStaffNameLimits = Object.freeze({
 });
 const copySmallint = /^(?:0|[1-9][0-9]{0,4})$/u;
 const smallintMax = '32767';
+export const vndbCharacterBloodTypeCodes = ['a', 'b', 'ab', 'o'] as const;
+export type VndbCharacterBloodTypeCode = (typeof vndbCharacterBloodTypeCodes)[number];
+
+export type VndbCharacterBloodTypeProjection =
+  | { status: 'explicit'; code: VndbCharacterBloodTypeCode }
+  | { status: 'missing' | 'unknown' }
+  | { status: 'unsupported'; code: string }
+  | { status: 'malformed' };
+
+/** VNDB blood_type COPY cells are source enum codes; only explicit codes carry a fact. */
+export function projectVndbCharacterBloodType(
+  value: unknown,
+  present = value !== undefined,
+): VndbCharacterBloodTypeProjection {
+  if (!present) return { status: 'missing' };
+  if (value === null) return { status: 'unknown' };
+  if (typeof value !== 'string' || !value.isWellFormed() || Buffer.byteLength(value, 'utf8') > 64)
+    return { status: 'malformed' };
+  if (value === 'unknown') return { status: 'unknown' };
+  if ((vndbCharacterBloodTypeCodes as readonly string[]).includes(value))
+    return { status: 'explicit', code: value as VndbCharacterBloodTypeCode };
+  return { status: 'unsupported', code: value };
+}
 
 export type SourceMapping = {
   status: 'existing' | 'proposed' | 'omitted';
@@ -1054,6 +1077,176 @@ function projectReleaseAssociations(
     .map(([, association]) => association);
 }
 
+function profileSourceCell(raw: object, field: string): Record<string, unknown> {
+  if (!Object.hasOwn(raw, field)) return { status: 'missing' };
+  const value = Object.getOwnPropertyDescriptor(raw, field)?.value;
+  if (value === null) return { status: 'null' };
+  if (typeof value === 'string' && value.isWellFormed() && Buffer.byteLength(value, 'utf8') <= 64)
+    return { status: 'value', value };
+  let encoded: string;
+  try {
+    encoded = JSON.stringify(value) ?? typeof value;
+  } catch {
+    encoded = typeof value;
+  }
+  return {
+    status: 'malformed',
+    reason: typeof value === 'string' ? 'value_limit' : 'invalid_source_value',
+    digest: sourceDigest(encoded),
+  };
+}
+
+type ProfileSourceCell =
+  | { status: 'missing' | 'null' }
+  | { status: 'value'; value: string }
+  | { status: 'malformed'; reason: 'value_limit' | 'invalid_source_value'; digest: string };
+
+function exactKeys(value: object, keys: readonly string[], pointer: string): void {
+  const actual = Object.keys(value).sort(compareText);
+  const expected = [...keys].sort(compareText);
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) fail(pointer);
+}
+
+function projectedProfileSourceCell(value: unknown, pointer: string): ProfileSourceCell {
+  const cell = object(value, pointer);
+  const status = own(cell, 'status', `${pointer}/status`);
+  if (status === 'missing' || status === 'null') {
+    exactKeys(cell, ['status'], pointer);
+    return { status };
+  }
+  if (status === 'value') {
+    exactKeys(cell, ['status', 'value'], pointer);
+    return { status, value: text(own(cell, 'value', `${pointer}/value`), `${pointer}/value`, 64, true) };
+  }
+  if (status === 'malformed') {
+    exactKeys(cell, ['status', 'reason', 'digest'], pointer);
+    const reason = own(cell, 'reason', `${pointer}/reason`);
+    const digest = own(cell, 'digest', `${pointer}/digest`);
+    const validReason =
+      reason === 'value_limit' || reason === 'invalid_source_value' ? reason : fail(pointer);
+    const validDigest = typeof digest === 'string' && /^[0-9a-f]{64}$/u.test(digest) ? digest : fail(pointer);
+    return { status, reason: validReason, digest: validDigest };
+  }
+  return fail(pointer);
+}
+
+function bloodTypeFromProfileCell(cell: ProfileSourceCell): VndbCharacterBloodTypeProjection {
+  switch (cell.status) {
+    case 'missing':
+      return { status: 'missing' };
+    case 'null':
+      return projectVndbCharacterBloodType(null, true);
+    case 'value':
+      return projectVndbCharacterBloodType(cell.value, true);
+    case 'malformed':
+      return { status: 'malformed' };
+  }
+}
+
+function bloodTypeProfile(cell: ProfileSourceCell): Record<string, unknown> {
+  const bloodType = bloodTypeFromProfileCell(cell);
+  return {
+    sourceValue: cell,
+    classification: bloodType.status,
+    ...(bloodType.status === 'explicit' || bloodType.status === 'unsupported' ? { code: bloodType.code } : {}),
+    ...(bloodType.status === 'missing'
+      ? { omissionReason: 'missing_source_value' }
+      : bloodType.status === 'unknown'
+        ? { omissionReason: 'source_unknown' }
+        : bloodType.status === 'unsupported'
+          ? { omissionReason: 'unknown_source_code' }
+          : bloodType.status === 'malformed'
+            ? { omissionReason: 'invalid_source_value' }
+            : {}),
+  };
+}
+
+function retainedCharacterProfile(raw: object, diagnostics: ConversionDiagnostic[]): Record<string, unknown> | undefined {
+  const value = own(raw, 'characterProfile', '/characterProfile');
+  if (value === undefined) return;
+  const profile = object(value, '/characterProfile');
+  exactKeys(profile, ['revision', 'bloodt', 'gender', 'spoil_gender'], '/characterProfile');
+  if (own(profile, 'revision', '/characterProfile/revision') !== 'vndb-character-profile@1')
+    fail('/characterProfile/revision');
+  const blood = object(own(profile, 'bloodt', '/characterProfile/bloodt'), '/characterProfile/bloodt');
+  const bloodCell = projectedProfileSourceCell(
+    own(blood, 'sourceValue', '/characterProfile/bloodt/sourceValue'),
+    '/characterProfile/bloodt/sourceValue',
+  );
+  const bloodProjection = bloodTypeProfile(bloodCell);
+  exactKeys(blood, Object.keys(bloodProjection), '/characterProfile/bloodt');
+  if (Object.keys(bloodProjection).some((key) => !isDeepStrictEqual(own(blood, key, `/characterProfile/bloodt/${key}`), bloodProjection[key])))
+    fail('/characterProfile/bloodt');
+  const gender = (field: 'gender' | 'spoil_gender', variant: 'actual' | 'spoiler') => {
+    const pointer = `/characterProfile/${field}`;
+    const source = object(own(profile, field, pointer), pointer);
+    exactKeys(source, ['sourceVariant', 'sourceValue', 'omissionReason'], pointer);
+    if (
+      own(source, 'sourceVariant', `${pointer}/sourceVariant`) !== variant ||
+      own(source, 'omissionReason', `${pointer}/omissionReason`) !== 'native_gender_variant_not_admitted'
+    )
+      fail(pointer);
+    const sourceValue = projectedProfileSourceCell(own(source, 'sourceValue', `${pointer}/sourceValue`), `${pointer}/sourceValue`);
+    if (sourceValue.status !== 'missing' && sourceValue.status !== 'null' && !(sourceValue.status === 'value' && sourceValue.value === ''))
+      diagnostics.push({ pointer: `/${field}`, code: 'native_gender_variant_not_admitted' });
+    return { sourceVariant: variant, sourceValue, omissionReason: 'native_gender_variant_not_admitted' };
+  };
+  return {
+    revision: 'vndb-character-profile@1',
+    bloodt: bloodProjection,
+    gender: gender('gender', 'actual'),
+    spoil_gender: gender('spoil_gender', 'spoiler'),
+  };
+}
+
+function projectVndbCharacterProfile(
+  raw: object,
+  normalized: Normalized,
+  diagnostics: ConversionDiagnostic[],
+): void {
+  const retained = retainedCharacterProfile(raw, diagnostics);
+  if (retained) {
+    normalized.characterProfile = retained;
+    return;
+  }
+  const hasBloodType = Object.hasOwn(raw, 'bloodt');
+  const bloodValue = Object.getOwnPropertyDescriptor(raw, 'bloodt')?.value;
+  const bloodType = projectVndbCharacterBloodType(bloodValue, hasBloodType);
+  normalized.characterProfile = {
+    revision: 'vndb-character-profile@1',
+    bloodt: {
+      sourceValue: profileSourceCell(raw, 'bloodt'),
+      classification: bloodType.status,
+      ...(bloodType.status === 'explicit' || bloodType.status === 'unsupported' ? { code: bloodType.code } : {}),
+      ...(bloodType.status === 'missing'
+        ? { omissionReason: 'missing_source_value' }
+        : bloodType.status === 'unknown'
+          ? { omissionReason: 'source_unknown' }
+          : bloodType.status === 'unsupported'
+            ? { omissionReason: 'unknown_source_code' }
+            : bloodType.status === 'malformed'
+              ? { omissionReason: 'invalid_source_value' }
+              : {}),
+    },
+    gender: {
+      sourceVariant: 'actual',
+      sourceValue: profileSourceCell(raw, 'gender'),
+      omissionReason: 'native_gender_variant_not_admitted',
+    },
+    spoil_gender: {
+      sourceVariant: 'spoiler',
+      sourceValue: profileSourceCell(raw, 'spoil_gender'),
+      omissionReason: 'native_gender_variant_not_admitted',
+    },
+  };
+  for (const field of ['gender', 'spoil_gender'] as const) {
+    if (!Object.hasOwn(raw, field)) continue;
+    const value = Object.getOwnPropertyDescriptor(raw, field)?.value;
+    if (value === null || value === '') continue;
+    diagnostics.push({ pointer: `/${field}`, code: 'native_gender_variant_not_admitted' });
+  }
+}
+
 function project(kind: EntityKind, input: ConversionInput): Projected {
   const raw = object(input.record, '');
   const idField = kind.startsWith('vndb')
@@ -1157,6 +1350,12 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       chars_names: characterNames.names,
       chars_alias: characterNames.aliases,
     };
+    for (const field of ['height', 'weight'] as const) {
+      const value = own(raw, field, `/${field}`);
+      if (value !== undefined) normalized[field] = value;
+    }
+    const profileDiagnostics: ConversionDiagnostic[] = [];
+    projectVndbCharacterProfile(raw, normalized, profileDiagnostics);
     if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > vndbCharacterNameLimits.recordBytes)
       fail('', 'invalid_record_byte_limit');
     return {
@@ -1169,7 +1368,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       qualifiedAlternateNames: characterNames.qualifiedAlternateNameFacts,
       identifier: expected,
       maxCommands: vndbCharacterNameLimits.maxCommands,
-      diagnostics: characterNames.withheld,
+      diagnostics: [...characterNames.withheld, ...profileDiagnostics],
     };
   }
   if (kind === 'bangumi-character') {
@@ -1294,6 +1493,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       const value = own(raw, field, `/${field}`);
       if (value !== undefined) normalized[field] = value;
     }
+    projectVndbCharacterProfile(raw, normalized, diagnostics);
   }
   if (kind === 'bangumi-episode') {
     const sort = own(raw, 'sort', '/sort');

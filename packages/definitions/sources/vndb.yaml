@@ -1497,13 +1497,11 @@ tables:
             'https://www.wikidata.org/wiki/Property:P21',
           ]
       - name: spoil_gender
-        status: existing
-        term: rezics:spoilerLevel
-        'on': wd:Q95074
-        qualifies: schema:gender
-        mapping: wdt:P1552
-        meaning: Platform mechanism for disclosing the spoiler level of a gender value; no standard property represents this qualifier.
-        citations: *id015
+        status: omitted
+        reason: The source spoiler variant is a char_gender enum, not a numeric spoiler level. The admitted native contract cannot preserve this variant, so it is withheld without an unqualified gender fallback.
+        citations:
+          - https://api.vndb.org/nyan
+          - https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=55866ce6cb150d2de85e5f204828eafae5e50bc5
       - name: main
         status: existing
         term: rezics:relatedCharacterIdentity

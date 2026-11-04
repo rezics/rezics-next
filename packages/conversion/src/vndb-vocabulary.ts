@@ -17,7 +17,7 @@ import {
   vndbReleasePlatformTaxonomy,
 } from './support.ts';
 
-export const vndbVocabularyRevision = 'vndb-vocabulary@2';
+export const vndbVocabularyRevision = 'vndb-vocabulary@3';
 const calendarModel = 'http://www.wikidata.org/entity/Q1985727';
 const developmentStatus = new Map<number, string>([
   [0, 'Finished'],
@@ -40,6 +40,8 @@ const releaseTypes = new Set(['complete', 'partial', 'trial']);
 export const vndbAppearanceRoleCodes = Object.freeze(['main', 'primary', 'side', 'appears'] as const);
 const appearanceRoles = new Set<string>(vndbAppearanceRoleCodes);
 export const vndbAppearanceRoleSchemeUri = 'https://rezics.com/schemes/vndb/character-roles';
+export const vndbCharacterBloodTypeSchemeUri = 'https://rezics.com/schemes/vndb/character-blood-types';
+export const vndbCharacterBloodTypeTaxonomy = 'vndb.character-blood-type';
 
 function conceptIdentity(value: ResolvedConcept): NativeIdentity {
   return { id: value.id, type: value.type, releaseDigest: value.releaseDigest };
@@ -436,6 +438,42 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         });
       return;
     }
+    case 'character-blood-type': {
+      const code = environment.sourceCode(row.code);
+      if (row.omission === 'missing_source_value') {
+        rowGap(environment, row, 'unsupported_source_case', 'chars.bloodt', 'missing');
+        return;
+      }
+      if (row.omission === 'invalid_source_value' || code === null) {
+        rowGap(environment, row, 'invalid_source_value', 'chars.bloodt');
+        return;
+      }
+      if (code === 'unknown') {
+        rowGap(environment, row, 'unsupported_source_case', 'chars.bloodt', code);
+        return;
+      }
+      if (!['a', 'b', 'ab', 'o'].includes(code)) {
+        rowGap(environment, row, 'unknown_code', 'chars.bloodt', code);
+        return;
+      }
+      const resolved = exactConcept(
+        environment,
+        vndbCharacterBloodTypeTaxonomy,
+        code,
+        path,
+        vndbCharacterBloodTypeSchemeUri,
+      );
+      if (resolved)
+        environment.propose({
+          row,
+          subject: row.character,
+          property: 'wdt:P1853',
+          content: resolved.id,
+          target: conceptIdentity(resolved),
+          mappingRevision: `character-blood-type@1:${code}`,
+        });
+      return;
+    }
     case 'character-appearance': {
       const role = environment.sourceCode(row.roleCode);
       if (!role || !appearanceRoles.has(role)) {
@@ -545,6 +583,7 @@ export function mapVndbVocabulary(input: SourceVocabularyInput): SourceVocabular
     'voice-credit',
     'tag',
     'character-trait',
+    'character-blood-type',
     'character-appearance',
     'producer-parent',
   ];

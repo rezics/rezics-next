@@ -35,7 +35,7 @@ function content(command: Extract<BatchCommand, { op: 'propose' }>) {
 test('authored Bangumi person summaries preserve profile, document rights and refresh digest', () => {
   const person = convert(biography);
   const proposal = summary(person);
-  expect(converter_revision).toBe('cross-media-entities@9');
+  expect(converter_revision).toBe('cross-media-entities@10');
   expect(person.normalizedRecord.summary).toBe(biography);
   expect(person.normalizedRecord).not.toHaveProperty('description');
   expect(proposal?.op).toBe('propose');

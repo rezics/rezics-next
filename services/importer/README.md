@@ -1524,6 +1524,46 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Bound: at most two exact quantity facts per selected character inside the current command cap; unknown or invalid cells add at most one diagnostic each and never invent a native value.
 - Growth check: existing conversion/importer counted suites remain the measured evidence. The connected native file is registered and not executed in this attempt.
 
+### Import VNDB character blood types
+
+The selected-family `chars` rows pass through the existing cross-media
+coordinator and source registration. `vndb-character-profile@1` emits a
+`wdt:P1853` source-vocabulary row only for exact `bloodt` codes `a`, `b`, `ab`
+and `o`. Literal `unknown`, COPY null, missing, unsupported and malformed
+values produce bounded omissions; none resolves by label or nearby Concept.
+The classification input and its omission reason enter the deterministic
+projection under `cross-media-entities@10`, so a same-source refresh can offer
+new support without inventing an upstream revision. Character identity, names
+and height/weight survive this projection together.
+
+The source-specific scheme is
+`https://rezics.com/schemes/vndb/character-blood-types`; each Concept URI adds
+the exact source code. The default seed accepts `--vndb-character-profile-bindings
+<json>` or `.temp/cross-media-seed/vndb-character-profile-bindings.json` with
+`{ "schemeId": "…", "concepts": [{ "code": "a", "id": "…" }] }` and at
+most four code-to-ID rows. These IDs only select bounded current reads: the
+operator verifies the disclosed current scheme and each Concept's exact
+`schema:url` and `skos:inScheme` values before the source registration can
+propose. It never creates Concepts or adopts their candidates. Ordinary
+acceptance and adoption remain separate.
+
+`gender` and `spoil_gender` remain distinct actual and spoiler source variants
+in the digest. The source gender enums have no admitted native qualifier in
+this release, so both are withheld; the importer does not turn either into a
+numeric spoiler level or an unqualified fallback. The `sex` fields remain
+outside this mapping.
+
+- Touches: selected VNDB Character rows, one current source ConceptScheme,
+  at most four Concepts, ordinary `wdt:P1853` candidates and exact
+  `/chars/bloodt` citations.
+- Bound: at most 256 selected Characters and five public binding reads; no
+  catalogue scan, per-field permission query, or taxonomy publication.
+- Growth check: `tests/vndb-character-profile.test.ts` covers a COPY-shaped
+  family through the production coordinator. Kernel
+  `test/imports/vndb-character-profile.test.ts` authors independent
+  acceptance/adoption, a wrong-scheme binding and refresh/reopen; native
+  execution remains deferred to integration.
+
 ### Publish admitted VNDB public tag associations
 
 - Touches: extracted `tags` and `tags_vn` COPY rows for the selected works, one reviewed scheme/concept read per admitted binding, and the existing ordinary batch/candidate/current paths.
@@ -1653,7 +1693,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB character names and qualified aliases
 
 - Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
-- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@9` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@10` makes newly supported rows available on refresh even when source bytes are unchanged.
 - Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
@@ -2136,7 +2176,7 @@ revision bump.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
-selected release payload and convert them through `cross-media-entities@9`.
+selected release payload and convert them through `cross-media-entities@10`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
@@ -2210,6 +2250,7 @@ for these source Concepts.
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
 `cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
+`cross-media-entities@10` revision while the ordinary caller uses `bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2252,7 +2293,7 @@ date is not completion or access authority.
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
 `游玩人数` on type 4 through `bangumi@9`, advancing the `bangumi@8` TVAnime
 original-run mapping. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@8` registration; this journey adds no
+existing combined `cross-media-entities@10` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
@@ -2486,6 +2527,7 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
 `cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
+`cross-media-entities@10` revision while the ordinary caller uses `bangumi@6`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the

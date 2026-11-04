@@ -50,6 +50,13 @@ import {
   type VndbCreditVocabularyReferences,
   type VndbCreditVocabularyRequirement,
 } from './showcase-vndb-credits.ts';
+import {
+  parseVndbCharacterProfileReferences,
+  planVndbCharacterProfile,
+  readVndbCharacterProfileBindings,
+  vndbCharacterProfileAdmission,
+  type VndbCharacterProfileReferences,
+} from './vndb-character-profile.ts';
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
 import { createPublicBulkClient } from './public-bulk-client.ts';
 import {
@@ -265,6 +272,7 @@ export type CrossMediaPlan = {
   coverSources?: readonly BangumiCoverSource[];
 };
 const VNDB_EXPECTED_HEADERS: Readonly<Record<string, string>> = {
+  chars: 'id\timage\tbloodt\tcup_size\tsex\tspoil_sex\tgender\tspoil_gender\tmain\tmain_spoil\ts_bust\ts_waist\ts_hip\tbirthday\theight\tweight\tage\tdescription',
   producers_relations: 'id\tpid\trelation',
   releases_media: 'id\tmedium\tqty',
   releases_platforms: 'id\tplatform',
@@ -1784,6 +1792,8 @@ export type CrossMediaSeedResult = {
   vndbCreditVocabularyRequirements: VndbCreditVocabularyRequirement[];
   creditRoles?: readonly BangumiCreditRoleBinding[];
   creditVocabularyRequirements?: BangumiCreditVocabularyResolution['requirements'];
+  vndbCharacterProfileRequirements: ReturnType<typeof planVndbCharacterProfile>['requirements'];
+  vndbCharacterProfileOmissions: ReturnType<typeof planVndbCharacterProfile>['omissions'];
   characterDiagnostics: SourceVocabularyGap[];
   episodeDiagnostics: ShowcaseEpisodeDiagnostic[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
@@ -1817,6 +1827,7 @@ export type CrossMediaSeedExtras = {
   recordConcurrency?: ImporterOptions['recordConcurrency'];
   sourceVocabulary?: SourceVocabularyBindings;
   vndbCreditReferences?: VndbCreditVocabularyReferences;
+  vndbCharacterProfileBindings?: SourceVocabularyBindings;
   providers?: readonly Provider[];
   mediaDeadlineMs?: ImporterOptions['mediaDeadlineMs'];
   onConversionOutput?: ImporterOptions['onConversionOutput'];
@@ -1851,13 +1862,22 @@ export async function seedCrossMedia(
   const vndbCredits = providers.includes('vndb')
     ? await prepareShowcaseVndbCredits(plan, port, extras?.vndbCreditReferences)
     : undefined;
+  const characterProfile = providers.includes('vndb') ? planVndbCharacterProfile(plan) : undefined;
+  const characterProfileAdmission =
+    characterProfile === undefined
+      ? undefined
+      : vndbCharacterProfileAdmission(
+          characterProfile,
+          extras?.vndbCharacterProfileBindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+        );
   const existingAdmission =
-    extras?.vocabularyAdmission || vndbCredits
+    extras?.vocabularyAdmission || vndbCredits || characterProfileAdmission
       ? {
           request(context: Parameters<NonNullable<NonNullable<ImporterOptions['vocabularyAdmission']>['request']>>[0]) {
             return combineSourceVocabularyRequests([
               extras?.vocabularyAdmission?.request?.(context),
               vndbCredits?.vocabularyAdmission.request?.(context),
+              characterProfileAdmission?.request?.(context),
             ]);
           },
         }
@@ -2418,6 +2438,7 @@ export async function seedCrossMedia(
         credits.gaps.length ||
         credits.fenced.length ||
         (vndbCredits?.diagnostics.length ?? 0) ||
+        (characterProfile?.omissions.length ?? 0) ||
         (fidelity?.gaps.length ?? 0) ||
         episodeDiagnostics.length ||
         (bangumiGenrePublication?.diagnostics.length ?? 0) ||
@@ -2447,6 +2468,8 @@ export async function seedCrossMedia(
       vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
       vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
       ...(vocabulary ? { creditRoles: vocabulary.roles, creditVocabularyRequirements: vocabulary.requirements } : {}),
+      vndbCharacterProfileRequirements: characterProfile?.requirements ?? [],
+      vndbCharacterProfileOmissions: characterProfile?.omissions ?? [],
       characterDiagnostics: fidelity?.gaps ?? [],
       episodeDiagnostics,
       unresolved,
@@ -2509,6 +2532,7 @@ export async function runCrossMediaSeedCli(
     '--showcase-state',
     '--vndb-credit-bindings',
     '--vndb-character-vocabulary',
+    '--vndb-character-profile-bindings',
   ];
   const requiredFlags = [
     '--bangumi',
@@ -2526,7 +2550,7 @@ export async function runCrossMediaSeedCli(
     process.stdout.write(
       'Usage: bun scripts/datasets/cross-media-seed.ts ' +
         requiredFlags.map((flag) => flag + ' <value>').join(' ') +
-        ' [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>] [--vndb-character-vocabulary <json>]\n',
+        ' [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>] [--vndb-character-vocabulary <json>] [--vndb-character-profile-bindings <json>]\n',
     );
     return;
   }
@@ -2581,7 +2605,13 @@ export async function runCrossMediaSeedCli(
   const defaultCreditBindingsPath = resolve('.temp/cross-media-seed/vndb-credit-bindings.json');
   const creditBindingsPath =
     explicitCreditBindingsPath ?? (existsSync(defaultCreditBindingsPath) ? defaultCreditBindingsPath : undefined);
-  const seedFiles = [characterBindingsPath, tagBindingsPath, creditBindingsPath, vocabularyPath].filter(
+  const explicitProfileBindingsPath = values.has('--vndb-character-profile-bindings')
+    ? resolve(values.get('--vndb-character-profile-bindings')!)
+    : undefined;
+  const defaultProfileBindingsPath = resolve('.temp/cross-media-seed/vndb-character-profile-bindings.json');
+  const profileBindingsPath =
+    explicitProfileBindingsPath ?? (existsSync(defaultProfileBindingsPath) ? defaultProfileBindingsPath : undefined);
+  const seedFiles = [characterBindingsPath, tagBindingsPath, creditBindingsPath, vocabularyPath, profileBindingsPath].filter(
     (path): path is string => path !== undefined,
   );
   const showcaseConflictPaths = [statePath, resultPath, ...seedFiles].flatMap((path) => [
@@ -2613,6 +2643,12 @@ export async function runCrossMediaSeedCli(
     ensure(bytes.byteLength <= 256 * 1024, 'VNDB character vocabulary profile exceeds the configuration limit');
     vndbVocabularyProfile = parseVndbCharacterVocabularyProfile(JSON.parse(bytes.toString('utf8')) as unknown);
   }
+  let vndbCharacterProfileReferences: VndbCharacterProfileReferences | undefined;
+  if (profileBindingsPath) {
+    const bytes = await readFile(profileBindingsPath);
+    ensure(bytes.byteLength <= 256 * 1024, 'VNDB character profile bindings exceed the configuration limit');
+    vndbCharacterProfileReferences = parseVndbCharacterProfileReferences(JSON.parse(bytes.toString('utf8')));
+  }
   ensure(
     resultPath !== statePath && ![statePath + '-wal', statePath + '-shm'].includes(resultPath),
     'Result must not overwrite importer state',
@@ -2620,6 +2656,10 @@ export async function runCrossMediaSeedCli(
   ensure(!showcasePath || !showcaseConflictPaths.includes(showcasePath), 'Showcase state must not overlap seed files');
   await mkdir(dirname(statePath), { recursive: true });
   const importPort = createImportTransport({ origin: api, tokenProvider });
+  const characterProfileBindings = await readVndbCharacterProfileBindings(
+    importPort,
+    vndbCharacterProfileReferences,
+  );
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   const publicClient = showcasePath ? createPublicBulkClient({ origin: api }) : undefined;
@@ -2635,6 +2675,7 @@ export async function runCrossMediaSeedCli(
       destination: { origin: api },
       extras: {
         ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
+        vndbCharacterProfileBindings: characterProfileBindings,
         ...(options.episodeCatalogueSubjects ? { episodeCatalogueSubjects: options.episodeCatalogueSubjects } : {}),
         bangumiGenrePort: importPort,
         ...(journal && publicClient

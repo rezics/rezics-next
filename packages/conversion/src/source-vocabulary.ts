@@ -143,6 +143,12 @@ export type VndbVocabularyRow =
       lie?: boolean;
     })
   | (RowBase & {
+      kind: 'character-blood-type';
+      character: NativeIdentity;
+      code: string | null;
+      omission?: 'missing_source_value' | 'invalid_source_value';
+    })
+  | (RowBase & {
       kind: 'character-appearance';
       subject: NativeIdentity;
       character?: NativeIdentity;
