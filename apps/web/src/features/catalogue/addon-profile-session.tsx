@@ -7,7 +7,7 @@ import { csrfHeaders } from '../../threads/composer';
 import { AddonProfile } from './addon-profile-view';
 import { addonFacts, type AddonAddress } from './addon-profile';
 import { loadAddonProfile, createCatalogueAddon } from './addon-profile-actions';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import { relationTargetSearch } from './relation-editor-search';
 import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-actions';
@@ -34,6 +34,7 @@ function AddonProfileSessionLive({
         load: (data) => loadAddonProfile({ data }),
         create: (data) => createCatalogueAddon({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
+        eligibility: () => readCatalogueCreateEligibility(),
       }}
       facts={(id) => ({
         read: async () => {

@@ -89,6 +89,7 @@ export function AddonProfileCreate({
           return { ...result, reader: admit(result.id, result.reader) };
         },
         read: async (id) => admit(id, await transport.read(id)),
+        ...(transport.eligibility ? { eligibility: transport.eligibility } : {}),
       }}
       onNavigate={() => undefined}
       onCreated={(result) => onCreated({ ...result, reader: admit(result.id, result.reader) })}
