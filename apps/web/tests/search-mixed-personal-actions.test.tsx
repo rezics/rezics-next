@@ -52,6 +52,7 @@ function fixture(registry = createDiscoveryCommandRegistry()) {
       request: 'request',
       registry: 'registry',
       generation: 'generation',
+      admission: 'admission',
     },
     targets: [
       {

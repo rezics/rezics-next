@@ -9,6 +9,7 @@ export type DiscoveryPersonalScope = {
   request: string;
   registry: string;
   generation: string;
+  admission: string;
 };
 
 export type DiscoveryPersonalTarget = {
@@ -50,6 +51,7 @@ function scopeKey(scope: DiscoveryPersonalScope): string {
     scope.request,
     scope.registry,
     scope.generation,
+    scope.admission,
   ]);
 }
 
@@ -177,6 +179,7 @@ export function createDiscoveryPersonalPage(input: {
   }
 
   return {
+    locale: captured.scope.locale,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {

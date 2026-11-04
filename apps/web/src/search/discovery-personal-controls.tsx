@@ -43,8 +43,9 @@ export function DiscoveryPersonalControls({
   const [draft, setDraft] = useState(initial);
   const draftOwner = JSON.stringify([target.rowKey, target.subjectId, target.entry, locale, choices]);
   useEffect(() => setDraft(initial), [page, draftOwner, initial]);
-  const state = page.state(target.rowKey, 'entry');
-  const current = page.current() && page.accepts(target);
+  const accepts = locale === page.locale && page.accepts(target);
+  const state = accepts ? page.state(target.rowKey, 'entry') : 'retired';
+  const current = page.current() && accepts;
   const active = hydrated && current && state !== 'pending';
 
   const notice = (() => {
