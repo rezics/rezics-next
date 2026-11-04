@@ -6,12 +6,17 @@ import {
   type PresentationProfile,
   type View,
 } from '@rezics/composition';
-import type { CurationRead } from './curate-actions';
 import { profileTemplates, templateViewNames, viewOf, viewPointer, withView, type Template } from './curate';
 import { editorConfig, toComposition, type PageEditorData } from './editor-config';
 import type { PublicationConfirmation } from './curation-publish';
 
-export type CurationSnapshot = Extract<CurationRead, { ok: true }>;
+export type CurationSnapshot = {
+  ok: true;
+  reader: string;
+  digest: string;
+  head: number;
+  profile: PresentationProfile;
+};
 export type ViewSelection = { template: Template; view: View };
 export type CorrectionTarget = ViewSelection & {
   component: { id: string; type: string } | null;

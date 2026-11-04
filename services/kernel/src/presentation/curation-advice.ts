@@ -88,8 +88,11 @@ export async function readCurationOpening(input: {
   if (!profile) throw new Error('The active profile body is unavailable');
 
   let advice = unavailable();
+  let current: Active | null;
   try {
-    const latestAdvice = curationAdviceFromViewerActions(await input.readViewerActions());
+    const [latestActive, latestViewerActions] = await Promise.all([input.readActive(), input.readViewerActions()]);
+    current = latestActive;
+    const latestAdvice = curationAdviceFromViewerActions(latestViewerActions);
     if (initialAvailable) {
       advice = {
         publish: initialAdvice.publish === latestAdvice.publish ? latestAdvice.publish : 'unavailable',
@@ -98,9 +101,9 @@ export async function readCurationOpening(input: {
     }
   } catch {
     // Action advice is optional to reading the public composition.
+    current = await input.readActive();
   }
 
-  const current = await input.readActive();
   if (!current || current.digest !== active.digest || current.head !== active.head) return { state: 'stale' };
   return { state: 'active', viewer: input.viewer, ...active, profile, advice };
 }

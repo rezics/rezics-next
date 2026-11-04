@@ -104,7 +104,7 @@ const editorRecoveryClass =
 
 /** The existing whole-profile publication helper owns transport; no retry protocol lives in the editor. */
 export type CurationEditorTransport = PublicationTransport & {
-  readOpening: (expectedReader: string) => Promise<CurationRead>;
+  readOpening?: (expectedReader: string) => Promise<CurationRead>;
 };
 export type ObservedCurationSession = {
   state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
@@ -178,6 +178,14 @@ type CurationAdviceLease = {
   source: CurationEditorTransport;
   advice: CurationAdvice;
 };
+
+async function readCurationOpening(transport: CurationEditorTransport, reader: string): Promise<CurationRead> {
+  if (transport.readOpening) return transport.readOpening(reader);
+  const active = await transport.read(reader);
+  if (!active.ok) return active;
+  if (active.reader !== reader) return { ok: false, reason: 'forbidden', admissionChanged: true };
+  return { ...active, advice: unavailableCurationAdvice() };
+}
 
 function failureView(failure: CurationReadFailure, locale: string) {
   if (failure.reason === 'forbidden') return <ErrorPage />;
@@ -254,7 +262,7 @@ function ActualPresentationViewEditor({
       const promise = Promise.resolve().then(() => {
         if (!canDispatchCurationRead(waitRef.current, owner)) return;
         return admission.canRead(expectedReader, version)
-          ? invocationTransport.readOpening(expectedReader)
+          ? readCurationOpening(invocationTransport, expectedReader)
           : ({ ok: false, reason: 'unavailable' } as const);
       });
       request = { reader: expectedReader, version, promise };
@@ -454,8 +462,7 @@ function StandalonePresentationViewEditor({
     const owner = { reader: expectedReader, generation: epoch };
     if (!canDispatchCurationRead(waitRef.current, owner)) return 0;
     const serial = ++admissionRequest.current;
-    void invocationTransport
-      .readOpening(expectedReader)
+    void readCurationOpening(invocationTransport, expectedReader)
       .then((result) => {
         if (admissionRequest.current === serial) applyAdmission(epoch, expectedReader, result);
       })
@@ -543,7 +550,7 @@ function AdmittedPresentationViewEditor({
     digest: initial.digest,
     head: initial.head,
     source: transport,
-    advice: initial.advice,
+    advice: initial.advice ?? unavailableCurationAdvice(),
   }));
   const [adviceFailure, setAdviceFailure] = useState<CurationReadFailure | null>(null);
   const [adviceRefreshing, setAdviceRefreshing] = useState(false);
@@ -680,7 +687,7 @@ function AdmittedPresentationViewEditor({
       digest: initial.digest,
       head: initial.head,
       source: transport,
-      advice: initial.advice,
+      advice: initial.advice ?? unavailableCurationAdvice(),
     });
     setOwned(setAdviceFailure, null);
     setOwned(setFailure, null);
@@ -800,7 +807,7 @@ function AdmittedPresentationViewEditor({
     setOwned(setCorrection, null);
     setOwned(setMessage, '');
     try {
-      const next = await invocationTransport.readOpening(reader);
+      const next = await readCurationOpening(invocationTransport, reader);
       if (!isCurrent()) return;
       if (next.ok) {
         retireCurationReadWait(waitRef.current);
@@ -819,7 +826,7 @@ function AdmittedPresentationViewEditor({
           digest: next.digest,
           head: next.head,
           source: invocationTransport,
-          advice: next.advice,
+          advice: next.advice ?? unavailableCurationAdvice(),
         });
         setOwned(setAdviceFailure, null);
         setOwned(setGeneration, (value) => value + 1);
@@ -862,7 +869,7 @@ function AdmittedPresentationViewEditor({
     setOwned(setAdviceRefreshing, true);
     setOwned(setAdviceFailure, null);
     try {
-      const next = await invocationTransport.readOpening(reader);
+      const next = await readCurationOpening(invocationTransport, reader);
       if (
         !isCurrent() ||
         request !== adviceSequence.current ||
@@ -891,13 +898,13 @@ function AdmittedPresentationViewEditor({
       setOwned(setAdviceLease, {
         ...expected,
         source: invocationTransport,
-        advice: next.advice,
+        advice: next.advice ?? unavailableCurationAdvice(),
       });
     } catch {
       if (!isCurrent() || request !== adviceSequence.current) return;
       setOwned(setAdviceLease, null);
       setOwned(setAdviceFailure, { ok: false, reason: 'unavailable' });
-      replaceWait(waitAfterCurationRead(waitRef.current, waitOwner, { ok: false, reason: 'unavailable' }));
+      replaceWait(waitAfterCurationRead(waitRef.current, waitOwner, { reason: 'unavailable' }));
     } finally {
       if (
         isCurrent() &&
@@ -1006,7 +1013,7 @@ function AdmittedPresentationViewEditor({
 
   function published(confirmation: PublicationConfirmation) {
     if (!isCurrent() || confirmation.intent.reader !== reader) return;
-    const saved = { reader, profile: confirmation.intent.profile, ...confirmation.result };
+    const saved = { ok: true as const, reader, profile: confirmation.intent.profile, ...confirmation.result };
     setOwned(setCurrent, saved);
     setOwned(setDraft, (value) => value && confirmPresentationDraft(value, confirmation));
     setOwned(setCorrection, null);
@@ -1133,11 +1140,11 @@ function AdmittedPresentationViewEditor({
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 p-3">
             <dt>{m.curation_advice_publish_label({}, options)}</dt>
-            <dd className="font-medium">{adviceLabel(currentAdvice.publish, locale)}</dd>
+            <dd className="font-medium">{adviceLabel(currentAdvice.publish)}</dd>
           </div>
           <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 p-3">
             <dt>{m.curation_advice_activate_label({}, options)}</dt>
-            <dd className="font-medium">{adviceLabel(currentAdvice.activate, locale)}</dd>
+            <dd className="font-medium">{adviceLabel(currentAdvice.activate)}</dd>
           </div>
         </dl>
         <p className="text-sm text-muted-foreground">{m.curation_advice_help({}, options)}</p>
@@ -1187,8 +1194,9 @@ function AdmittedPresentationViewEditor({
             // reconcile('keep') returns the draft on the reviewed head. The dirty baseline is the actual read.
             const active = publicationState.active;
             if (!active) return;
-            setOwned(setCurrent, active);
-            setOwned(setDraft, (value) => value && reviewPresentationDraft(value, active, choice));
+            const reviewed = { ok: true as const, ...active };
+            setOwned(setCurrent, reviewed);
+            setOwned(setDraft, (value) => value && reviewPresentationDraft(value, reviewed, choice));
             if (choice === 'discard') setOwned(setGeneration, (value) => value + 1);
             setOwned(setFailure, null);
             setOwned(
