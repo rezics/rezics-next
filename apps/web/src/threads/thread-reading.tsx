@@ -408,7 +408,7 @@ export function ThreadReading({
                       personalReady={commandPersonalReady}
                       onChange={updatePost}
                       target={firstPost ? { kind: 'thread', id: thread.id } : { kind: 'post', id: post.id }}
-                      counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
+                      counts={firstPost ? (thread.reactions ?? {}) : 'reactions' in post ? (post.reactions ?? {}) : {}}
                       value={
                         reactionKinds.find(
                           (kind) => kind === currentPersonal?.reactions[firstPost ? thread.id : post.id],

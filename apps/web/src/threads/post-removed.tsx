@@ -65,18 +65,20 @@ export function RemovedPost({
     return (
       <li {...common}>
         <ContentItemFrame as="div" data-slot="content-item-frame" className="min-w-0 rounded-xl px-4 py-5 sm:px-6">
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <Byline
-              author={author}
-              createdAt={post.createdAt}
-              now={now}
-              showAuthor={authors !== null && authorId !== undefined}
-              className="min-h-8 flex-1"
-            />
-          </div>
+          {'createdAt' in post && typeof post.createdAt === 'string' ? (
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <Byline
+                author={author}
+                createdAt={post.createdAt}
+                now={now}
+                showAuthor={authors !== null && authorId !== undefined}
+                className="min-h-8 flex-1"
+              />
+            </div>
+          ) : null}
           {children}
           <Withheld shape="passage" labels={{ withheld: m.thread_post_withheld() }} />
-          {owner && 'decisionId' in post && post.decisionId ? (
+          {owner && 'decisionId' in post && typeof post.decisionId === 'string' && post.decisionId ? (
             <a
               className="mt-3 inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               href={`/moderation/decisions/${encodeURIComponent(post.decisionId)}`}
