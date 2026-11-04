@@ -2731,9 +2731,8 @@ export async function runCrossMediaSeedCli(
       .filter((member) => member.source === 'vndb' && member.kind === 'work')
       .map((member) => member.key);
     let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
-    let tagVocabularyRequirements: Awaited<
-      ReturnType<typeof prepareShowcaseVndbPublicTagVocabulary>
-    >['requirements'] = [];
+    let tagVocabularyRequirements: Awaited<ReturnType<typeof prepareShowcaseVndbPublicTagVocabulary>>['requirements'] =
+      [];
     if (tagBindingsPath) {
       const bytes = await readFile(tagBindingsPath);
       ensure(bytes.byteLength <= 256 * 1024, 'VNDB public tag bindings exceed the configuration limit');

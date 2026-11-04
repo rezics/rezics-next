@@ -420,9 +420,12 @@ test('default seed publishes dictionary without a UUID file, rereads, and withho
         ?.statement.qualifiers?.find((term) => term.property.id === 'rezics:spoilerLevel')?.value;
     expect(spoiler(g311)).toEqual({ type: 'value', content: { amount: '+0', unit: '1' } });
     expect(spoiler(g44)).toEqual({ type: 'value', content: { amount: '+2', unit: '1' } });
-    expect(imported.vocabulary.filter((item) => item.state === 'adopted').map((item) => item.key).sort()).toEqual(
-      ['cont', 'ero', 'g12', 'g311', 'g44', 'g88'].sort(),
-    );
+    expect(
+      imported.vocabulary
+        .filter((item) => item.state === 'adopted')
+        .map((item) => item.key)
+        .sort(),
+    ).toEqual(['cont', 'ero', 'g12', 'g311', 'g44', 'g88'].sort());
     expect(JSON.stringify({ commands, imported, prepared })).not.toContain('u9001');
     expect(JSON.stringify({ commands, imported, prepared })).not.toContain('private note');
     expect(JSON.stringify(genres)).not.toContain('vote');
