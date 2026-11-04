@@ -16,7 +16,7 @@ import {
   type PublishReceipt,
   type PublishResult,
 } from './curate';
-import { admitCurationReads } from './curation-read-response';
+import { admitCurationReads, type NativeReadResponse } from './curation-read-response';
 import { admitCurationOpening, type CurationAdvice } from './curation-advice';
 import { pickText } from '@rezics/composition';
 import { readRelease } from '../../subject/definitions';
@@ -150,7 +150,13 @@ export const readCuration = createServerFn({ method: 'POST', strict: false })
     if (!reader || (data?.expectedReader !== undefined && data.expectedReader !== reader))
       return { ok: false, reason: 'forbidden', admissionChanged: true };
     try {
-      const result = await kernelClient().presentation.curation.get({ headers: { authorization } });
+      // Keep the additive consumer shape local until the complete mounted client declarations can be emitted.
+      const client = kernelClient() as unknown as {
+        presentation: {
+          curation: { get(input: { headers: { authorization: string } }): Promise<NativeReadResponse> };
+        };
+      };
+      const result = await client.presentation.curation.get({ headers: { authorization } });
       return admitCurationOpening(reader, result);
     } catch {
       return { ok: false, reason: 'unavailable' };
