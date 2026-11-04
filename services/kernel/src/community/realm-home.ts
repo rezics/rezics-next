@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import type { KeyRing } from '../tokens/seal.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
@@ -218,7 +219,7 @@ export function createRealmHomeBoardReader(deps: RealmHomeDependencies) {
   };
 }
 
-export function realmHomeResponse(page: RealmHomePage) {
+export function realmHomeResponse(page: RealmHomePage): Static<typeof RealmHomePageSchema> {
   // Serialize through the same ordinary Realm/Space and native shelf models.
   // Join is deliberately absent from the presentation wire projection.
   const presentation = communityPresentationResponse({
