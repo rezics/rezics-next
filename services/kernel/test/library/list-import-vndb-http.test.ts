@@ -7,6 +7,8 @@ import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes
 import { parseVndb, VNDB_LIMITS } from '../../src/library/list-import-vndb-parser.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
 import { OWNED_PHASES } from '../../src/library/erasure-owned-graph.ts';
+import { createVndbImport, type VndbDateApplyInput } from '../../src/library/list-import-vndb.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 let f: NativeProfileFixture, matched: string;
 const vnId = `v${Date.now()}${Math.floor(Math.random() * 100000)}`;
 const base = '/v1/libraryImports/vndb';
@@ -373,8 +375,158 @@ test('VNDB typed dates select one repeat, preserve precision, and clear only wit
   });
   expect((await sessions.readSession(f.owner.actor, first.id)).revision).toBe(1);
   expect((await sessions.readSession(f.owner.actor, second.id)).revision).toBe(1);
+  const pending = await json('POST', `${base}/${uploadId}/dates/review`, {
+    ordinal: 0,
+    sourceReviewToken: providerReview.reviewId,
+    occurrenceId: first.id,
+    startAction: 'clear',
+  });
+  const service = createVndbImport({ pool: f.pool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() });
+  const selection: VndbDateApplyInput = {
+    confirm: true,
+    rows: [{ ordinal: 0, version: pending.version, fields: ['startDate'] }],
+  };
+  let acknowledgements = 0;
+  expect(
+    await service.applyConsumptionDates(f.owner.actor, uploadId, selection, () => {
+      if (++acknowledgements === 2) throw new Error('Lost journal acknowledgement');
+    }),
+  ).toMatchObject({ outcomes: [{ status: 'failed' }] });
+  const accepted = await sessions.readSessionJournal(f.owner.actor, first.id);
+  await f.pool.query(
+    "UPDATE library.vndb_import SET expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1 AND upload_id=$2",
+    [f.owner.actor.accountId, uploadId],
+  );
+  expect(await json('POST', `${base}/${uploadId}/dates/apply`, selection)).toMatchObject({
+    outcomes: [{ fields: [{ status: 'cleared' }] }],
+  });
+  expect(await sessions.readSessionJournal(f.owner.actor, first.id)).toEqual(accepted);
   await json('DELETE', `${base}/${uploadId}`);
 }, 120000);
+test('lost state acknowledgement reconciles the original receipt after expiry without source disclosure or a second effect', async () => {
+  const service = createVndbImport({ pool: f.pool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() });
+  const target = await f.createSubject('game'),
+    untouched = await f.createSubject('game');
+  const source = xml(
+    vn('v1234', '<vote> 07.3 </vote><notes>  exact\ntext  </notes><started> 2020-05-00 </started>') + vn('v1235'),
+  );
+  const { uploadId: id } = await upload(source);
+  const page = await json('GET', `${base}/${id}`);
+  expect(page.rows[0].fields).toMatchObject({
+    score: { raw: ' 07.3 ', value: 7.3 },
+    notes: { raw: '  exact\ntext  ', value: '  exact\ntext  ' },
+    started: { raw: ' 2020-05-00 ', value: '2020-05', precision: 'month' },
+  });
+  expect(await json('GET', `${base}/${id}/source`)).toEqual({ xml: source });
+  const first = await review(id, { ordinal: 0, action: 'state', targetId: target, state: 'planned' });
+  const second = await review(id, { ordinal: 1, action: 'state', targetId: untouched, state: 'playing' });
+  let acknowledgements = 0;
+  expect(
+    (
+      await service.apply(f.owner.actor, id, [{ ordinal: 0, reviewId: first.reviewId }], () => {
+        if (++acknowledgements === 2) throw new Error('Lost native acknowledgement');
+      })
+    ).outcomes[0]?.status,
+  ).toBe('failed');
+  const accepted = await f.commands.readEntry(f.owner.actor, target),
+    effects = await f.inspect();
+  await f.pool.query(
+    "UPDATE library.vndb_import SET expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1 AND upload_id=$2",
+    [f.owner.actor.accountId, id],
+  );
+  for (const suffix of ['', '/source'])
+    expect((await f.send('owner', 'GET', `${base}/${id}${suffix}`)).status).toBe(404);
+  expect(
+    await apply(id, [
+      { ordinal: 0, reviewId: first.reviewId },
+      { ordinal: 1, reviewId: second.reviewId },
+    ]),
+  ).toMatchObject({ outcomes: [{ ordinal: 0, status: 'applied' }], stopped: 'cancelled' });
+  expect(await f.commands.readEntry(f.owner.actor, target)).toEqual(accepted);
+  expect(await f.inspect()).toEqual(effects);
+  const stored = await f.pool.query(
+    "SELECT decisions->'0'->'receipt' AS receipt FROM library.vndb_import WHERE account_id=$1 AND upload_id=$2",
+    [f.owner.actor.accountId, id],
+  );
+  expect(stored.rows[0].receipt.transactionId).toBe(accepted.transactionId);
+  await json('DELETE', `${base}/${id}`);
+}, 120000);
+
+test('an interrupted state dispatch cannot create a fact after source cancellation', async () => {
+  const service = createVndbImport({ pool: f.pool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() });
+  const target = await f.createSubject('game'),
+    { uploadId: id } = await upload(xml(vn('v1236')));
+  const reviewed = await review(id, { ordinal: 0, action: 'state', targetId: target, state: 'planned' });
+  await expect(
+    service.apply(f.owner.actor, id, [{ ordinal: 0, reviewId: reviewed.reviewId }], () => {
+      throw new Error('Interrupted before dispatch');
+    }),
+  ).rejects.toThrow('Interrupted before dispatch');
+  const effects = await f.inspect();
+  await json('POST', `${base}/${id}:cancel`);
+  expect(await apply(id, [{ ordinal: 0, reviewId: reviewed.reviewId }])).toMatchObject({
+    outcomes: [{ status: 'stale' }],
+    stopped: 'cancelled',
+  });
+  expect(await f.inspect()).toEqual(effects);
+  await json('DELETE', `${base}/${id}`);
+}, 120000);
+
+test('correcting one match retires only that rows consent; metadata lost acknowledgement replays after expiry', async () => {
+  const service = createVndbImport({ pool: f.pool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() });
+  const first = await f.createSubject('game'),
+    second = await f.createSubject('game'),
+    corrected = await f.createSubject('game');
+  const { uploadId: id } = await upload(
+    xml(vn(vnId, '<notes>One</notes><label label="Custom"/>') + vn('v1238', '<notes>Two</notes>')),
+  );
+  const reviews = [];
+  for (const [ordinal, targetId] of [first, second].entries()) {
+    const decision = await review(id, { ordinal, action: 'retain', targetId });
+    reviews.push(await json('POST', `${base}/${id}:reviewMetadata`, { ordinal, sourceReviewToken: decision.reviewId }));
+  }
+  const correction = await review(id, { ordinal: 0, action: 'retain', targetId: corrected });
+  expect((await f.send('owner', 'GET', `${base}/${id}/metadata/0?reviewToken=${reviews[0].reviewToken}`)).status).toBe(
+    409,
+  );
+  expect(
+    await json('POST', `${base}/${id}:applyMetadata`, {
+      ordinal: 0,
+      reviewToken: reviews[0].reviewToken,
+      fields: [{ field: 'note', action: 'adopt' }],
+    }),
+  ).toMatchObject({ fields: [{ status: 'stale' }] });
+  const labels = await json('POST', `${base}/${id}/labels:review`, {
+    rows: [{ ordinal: 0, reviewId: correction.reviewId }],
+    mappings: [{ source: 'Custom', target: { name: entryKey() } }],
+  });
+  expect(await json('POST', `${base}/${id}/labels:apply`, { previewId: labels.previewId, items: [0] })).toMatchObject({
+    outcomes: [{ status: 'applied', subjectId: corrected }],
+  });
+  const selection = [{ field: 'note', action: 'adopt' }];
+  expect(
+    await service.applyMetadata(f.owner.actor, id, 1, reviews[1].reviewToken, selection, () => {
+      throw new Error('Lost annotation acknowledgement');
+    }),
+  ).toMatchObject({ fields: [{ status: 'failed' }] });
+  await f.pool.query(
+    "UPDATE library.vndb_import SET expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1 AND upload_id=$2",
+    [f.owner.actor.accountId, id],
+  );
+  const effects = await f.inspect();
+  expect(
+    await json('POST', `${base}/${id}:applyMetadata`, {
+      ordinal: 1,
+      reviewToken: reviews[1].reviewToken,
+      fields: selection,
+    }),
+  ).toMatchObject({ fields: [{ status: 'applied' }] });
+  expect(await f.inspect()).toEqual(effects);
+  expect((await json('GET', `/v1/libraryEntries/${corrected}/personal`)).personalEntry.note).toBeNull();
+  expect((await json('GET', `/v1/libraryEntries/${second}/personal`)).personalEntry.note).toBe('Two');
+  await json('DELETE', `${base}/${id}`);
+}, 120000);
+
 test('XML bounds, exact identifier kinds, missing/zero/invalid evidence and native terminal denial', async () => {
   const zero = parseVndb(xml(vn('v1', '<vote>0</vote><started>bad</started><finished>0000-00-00</finished>')))[0]!;
   for (const name of ['score', 'started']) expect(zero.fields[name]?.kind).toBe('invalid');

@@ -5,6 +5,7 @@ import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect, type AuthoritativeTime } from '../command/command.ts';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -647,7 +648,13 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     });
   }
 
-  async function saveAnnotations(actor: Actor, subjectId: string, input: unknown, requestKey: string) {
+  async function saveAnnotations(
+    actor: Actor,
+    subjectId: string,
+    input: unknown,
+    requestKey: string,
+    admission?: LabelCommandAdmission,
+  ) {
     const account = owner(actor, 'library_entry:update');
     requireRoute(subjectId);
     const parsed = parseAnnotationInput(input);
@@ -657,10 +664,17 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         action: 'library_entry:update',
         kind: 'library.entry.annotations.put',
         requestKey,
-        input: { subjectId, ...parsed },
+        input: {
+          subjectId,
+          ...parsed,
+          ...(admission?.input === undefined ? {} : { importAdmission: admission.input }),
+        },
         async prepare(attempt) {
           try {
-            return { subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time) };
+            return {
+              subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time),
+              admit: await admission?.prepare(attempt.time),
+            };
           } catch (error) {
             return { error };
           }
@@ -668,6 +682,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
       },
       async (tx, command, prepared) => {
         if ('error' in prepared) throw prepared.error;
+        await prepared.admit?.(tx);
         const route = requireRoute(account.accountId);
         const time = authoritativeTimeValue(command.time);
         if (parsed.entryGuard?.reviewGuard) {
@@ -845,6 +860,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     input: unknown,
     requestKey: string,
     internalGuard?: unknown,
+    admission?: LabelCommandAdmission,
   ) {
     const account = owner(actor, 'library_entry:update');
     requireRoute(subjectId);
@@ -858,6 +874,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
       subjectId,
       ...parsed,
       ...(archiveGuard ? { archiveReviewGuard: archiveGuard } : {}),
+      ...(admission?.input === undefined ? {} : { importAdmission: admission.input }),
     };
     return runner.ownAccountPrepared(
       actor,
@@ -868,7 +885,10 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         input: requestInput,
         async prepare(attempt) {
           try {
-            return { subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time) };
+            return {
+              subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time),
+              admit: await admission?.prepare(attempt.time),
+            };
           } catch (error) {
             return { error };
           }
@@ -876,6 +896,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
       },
       async (tx, command, prepared) => {
         if ('error' in prepared) throw prepared.error;
+        await prepared.admit?.(tx);
         const route = requireRoute(account.accountId);
         const time = authoritativeTimeValue(command.time);
         if (archiveGuard)
@@ -974,6 +995,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     input: unknown,
     requestKey: string,
     internalGuard?: unknown,
+    admission?: LabelCommandAdmission,
   ) {
     const account = owner(actor, 'library_entry:update');
     requireRoute(subjectId);
@@ -985,6 +1007,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
       subjectId,
       ...parsed,
       ...(archiveGuard ? { archiveReviewGuard: archiveGuard } : {}),
+      ...(admission?.input === undefined ? {} : { importAdmission: admission.input }),
     };
     return runner.ownAccountPrepared(
       actor,
@@ -995,7 +1018,10 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         input: requestInput,
         async prepare(attempt) {
           try {
-            return { subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time) };
+            return {
+              subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time),
+              admit: await admission?.prepare(attempt.time),
+            };
           } catch (error) {
             return { error };
           }
@@ -1003,6 +1029,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
       },
       async (tx, command, prepared) => {
         if ('error' in prepared) throw prepared.error;
+        await prepared.admit?.(tx);
         const route = requireRoute(account.accountId);
         if (archiveGuard)
           await verifyArchiveObservationGuard(

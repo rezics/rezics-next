@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { mintReadTime, type CommandOutcome } from '../command/command.ts';
+import { mintReadTime, type AuthoritativeTime, type CommandOutcome } from '../command/command.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -13,6 +13,7 @@ import { withReadTransaction } from '../semantic/read.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { createSessionCommands, ProgressConflictError, type ProgressSessionJournalAdmission } from './sessions.ts';
 import type { Entry } from './entry-model.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
@@ -112,6 +113,7 @@ type Decision = {
   replace: boolean;
   commandKey: string;
   guard: VndbEntryReview | null;
+  receipt?: { partition: number; epoch: number; position: string; transactionId: string };
   matchDigest?: string;
   metadata?: EntryImportMetadataReview[];
   score?: ScoreDecision;
@@ -304,6 +306,15 @@ type Upload = {
   decisions: Record<string, Decision>;
   xml: string;
 };
+// Once dispatch can have happened, only the original command may settle this review.
+const pendingState = (decision: Decision | undefined) =>
+  decision !== undefined && ['applying', 'failed'].includes(decision.status);
+const pendingAdoption = (decision: Decision | undefined) =>
+  !!(
+    decision?.metadata?.some((item) => item.confirmation && !item.confirmation.outcome) ||
+    (decision?.consumptionDateIntent?.patch &&
+      (!decision.consumptionDateIntent.outcome || decision.consumptionDateIntent.outcome.status === 'failed'))
+  );
 const updated = (accountId: string) => [
   { type: 'com.rezics.library.personal-import.changed.v1', subject: accountId, data: {} },
 ];
@@ -355,7 +366,7 @@ export function createVndbImport(config: Config) {
       deadline,
     );
   }
-  async function load(actor: Actor, id: string): Promise<Upload> {
+  async function load(actor: Actor, id: string, reconcile = false): Promise<Upload> {
     await authorized(actor);
     const account = owner(actor);
     const result = await withReadTransaction(pool, (client) =>
@@ -365,9 +376,24 @@ export function createVndbImport(config: Config) {
         id,
       ]),
     );
-    if (!result.rows[0]) throw new LibraryNotFoundError();
+    const upload = result.rows[0];
+    if (!upload || (!reconcile && upload.expires_at.getTime() <= Date.now())) throw new LibraryNotFoundError();
     await authorized(actor);
-    return result.rows[0];
+    if (!reconcile) await retainedSource(actor, id);
+    return upload;
+  }
+  // A receipt grants no authority to disclose a deleted or expired source. Recheck
+  // after asynchronous matching/serialization as well as before reading evidence.
+  async function retainedSource(actor: Actor, id: string) {
+    const account = owner(actor);
+    const result = await withReadTransaction(pool, (client) =>
+      client.query(
+        `SELECT upload_id FROM library.vndb_import
+         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND expires_at>clock_timestamp()`,
+        [requireRoute(account.accountId), account.accountId, id],
+      ),
+    );
+    if (!result.rows[0]) throw new LibraryNotFoundError();
   }
   function mutation<T>(
     actor: Actor,
@@ -383,10 +409,10 @@ export function createVndbImport(config: Config) {
       async (tx) => ({ value: await body(tx, account), events: updated(account.accountId) }),
     );
   }
-  async function current(actor: Actor, targetId: string) {
-    const at = await authorized(actor);
+  async function current(actor: Actor, targetId: string, at?: AuthoritativeTime) {
+    const observedAt = at ?? (await authorized(actor));
     const source = await readLibraryProfileSourceObservation(
-      { pool, access, actor, at, deadline: deadlineFor(5000) },
+      { pool, access, actor, at: observedAt, deadline: deadlineFor(5000) },
       targetId,
     );
     if (!source) return null;
@@ -517,6 +543,8 @@ export function createVndbImport(config: Config) {
     });
   }
   async function page(actor: Actor, id: string, offset: number) {
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > VNDB_LIMITS.rows)
+      throw new ProblemError('invalid_request');
     const upload = await load(actor, id);
     const pageRows = upload.rows.slice(offset, offset + VNDB_LIMITS.page);
     const question = pageRows.some((row) => row.kind === 'vn') ? await nativeQuestion(actor) : null;
@@ -555,6 +583,7 @@ export function createVndbImport(config: Config) {
       });
     }
     await authorized(actor);
+    await retainedSource(actor, id);
     return {
       uploadId: id,
       state: upload.state,
@@ -657,12 +686,17 @@ export function createVndbImport(config: Config) {
       );
       if (!stored.rows[0]) throw new ProblemError('conflict');
       const before = stored.rows[0].decisions[choice.ordinal];
-      if (before?.status === 'applying' || ['applying', 'applied', 'failed'].includes(before?.score?.status ?? ''))
+      if (
+        pendingState(before) ||
+        pendingAdoption(before) ||
+        ['applying', 'applied', 'failed'].includes(before?.score?.status ?? '')
+      )
         throw new ProblemError('conflict');
       const compatible =
         before?.targetId === target.targetId &&
         before.matchDigest === matchDigest &&
         before.guard?.source === target.source;
+      if (!compatible && before?.status === 'applied') throw new ProblemError('conflict');
       const parentReviewId = compatible && before ? before.reviewId : randomUUID();
       const plan: Decision =
         compatible && before
@@ -707,13 +741,7 @@ export function createVndbImport(config: Config) {
       if (!stored.rows[0]) throw new ProblemError('conflict');
       const before = stored.rows[0].decisions[choice.ordinal];
       if (before && ['applying', 'applied', 'failed'].includes(before.status)) throw new ProblemError('conflict');
-      if (
-        before?.consumptionDateIntent?.patch &&
-        (!before.consumptionDateIntent.outcome || before.consumptionDateIntent.outcome.status === 'failed')
-      )
-        throw new ProblemError('conflict');
-      if (before?.metadata?.some((item) => item.confirmation && !item.confirmation.outcome))
-        throw new ProblemError('conflict');
+      if (pendingAdoption(before)) throw new ProblemError('conflict');
       const reviewId = randomUUID();
       const decision: Decision = {
         reviewId,
@@ -726,7 +754,9 @@ export function createVndbImport(config: Config) {
         commandKey: `vndb:${id}:${reviewId}`,
         guard: target ? { uploadId: id, ordinal: choice.ordinal, reviewId, source: target.source } : null,
         matchDigest: entryImportMetadataDigest(matching),
-        metadata: before?.metadata ?? [],
+        // A refreshed source review has its own consent, even on the same target.
+        // Old metadata tokens must not be transplanted into a corrected match.
+        metadata: [],
       };
       await save(tx, account, id, choice.ordinal, decision);
       return publicDecision(decision);
@@ -951,7 +981,7 @@ export function createVndbImport(config: Config) {
         input.rows,
         signal,
         async (item) => {
-          const retained = await retainedRow(actor, id, item.ordinal),
+          const retained = await retainedRow(actor, id, item.ordinal, true),
             decision = retained.decision,
             reviewed = decision?.consumptionDateReview;
           if (
@@ -967,6 +997,13 @@ export function createVndbImport(config: Config) {
               receipt: null,
             };
           const previous = decision.consumptionDateIntent;
+          if ((retained.state !== 'active' || retained.expires_at.getTime() <= Date.now()) && !previous?.patch)
+            return {
+              version: item.version,
+              status: 'stale' as const,
+              fields: item.fields.map((field) => ({ field, status: 'stale' as const })),
+              receipt: null,
+            };
           if (previous && (previous.version !== item.version || previous.fields.join(',') !== item.fields.join(',')))
             throw new ProblemError('conflict');
           const account = owner(actor),
@@ -1011,22 +1048,33 @@ export function createVndbImport(config: Config) {
                       digest: entryImportMetadataDigest(next),
                     },
                     async (tx, account) => {
-                      const locked = await tx.query<{ row: VndbRow | null; decision: Decision | null }>(
-                        `SELECT rows->$4::integer AS row,decisions->$4::text AS decision FROM library.vndb_import
-                         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='active'
-                           AND expires_at>clock_timestamp() FOR UPDATE`,
+                      const locked = await tx.query<{
+                        row: VndbRow | null;
+                        decision: Decision | null;
+                        active: boolean;
+                      }>(
+                        `SELECT rows->$4::integer AS row,decisions->$4::text AS decision,
+                           state='active' AND expires_at>clock_timestamp() AS active
+                         FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
                         [requireRoute(account.accountId), account.accountId, id, item.ordinal],
                       );
                       const row = locked.rows[0]?.row,
-                        current = locked.rows[0]?.decision;
+                        current = locked.rows[0]?.decision,
+                        original = current?.consumptionDateIntent;
                       if (
                         !row ||
                         !current ||
                         current.reviewId !== reviewed.sourceReviewToken ||
                         current.consumptionDateReview?.version !== reviewed.version ||
                         entryImportMetadataDigest(row) !== reviewed.sourceFingerprint ||
-                        (current.consumptionDateIntent?.nativeRequestKey !== undefined &&
-                          current.consumptionDateIntent.nativeRequestKey !== next.nativeRequestKey)
+                        (!locked.rows[0]?.active && !original?.patch) ||
+                        (original !== undefined &&
+                          (original.nativeRequestKey !== next.nativeRequestKey ||
+                            original.version !== next.version ||
+                            original.fields.join(',') !== next.fields.join(',') ||
+                            entryImportMetadataDigest(original.patch) !== entryImportMetadataDigest(next.patch) ||
+                            entryImportMetadataDigest(original.admissionIdentity) !==
+                              entryImportMetadataDigest(next.admissionIdentity)))
                       )
                         throw new LibraryConflictError();
                       await save(tx, account, id, item.ordinal, { ...current, consumptionDateIntent: next });
@@ -1084,8 +1132,9 @@ export function createVndbImport(config: Config) {
     id: string,
     ordinal: number,
     token: string,
+    reconcile = false,
   ): Promise<EntryImportMetadataView> {
-    const upload = await load(actor, id),
+    const upload = await load(actor, id, reconcile),
       row = upload.rows[ordinal],
       decision = upload.decisions[ordinal];
     if (!row || !decision) throw new ProblemError('not_found');
@@ -1096,6 +1145,8 @@ export function createVndbImport(config: Config) {
     const profile = await metadataProfile(actor, decision),
       matching = await match(actor, row);
     const status =
+      upload.state === 'active' &&
+      upload.expires_at.getTime() > Date.now() &&
       decision.reviewId === record.sourceReviewToken &&
       account.clientId === record.clientId &&
       (account.requestedBy ?? null) === record.requestedBy &&
@@ -1118,7 +1169,84 @@ export function createVndbImport(config: Config) {
     };
     if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes)
       throw new ProblemError('invalid_request');
+    if (!reconcile) {
+      await authorized(actor);
+      await retainedSource(actor, id);
+    }
     return view;
+  }
+  // Reuse the installed native admission protocol. Business failures from source
+  // preparation are deferred by the command runner until after original receipt
+  // lookup; fresh effects then hold the parent lock against cancellation/deletion.
+  function metadataAdmission(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    reviewed: EntryImportMetadataReview,
+  ): LabelCommandAdmission {
+    const input = {
+      provider: 'vndb',
+      uploadId: id,
+      ordinal,
+      reviewToken: reviewed.token,
+      sourceReviewToken: reviewed.sourceReviewToken,
+      subjectId: reviewed.subjectId,
+      sourceDigest: reviewed.sourceDigest,
+      profileDigest: reviewed.profileDigest,
+      incarnationId: reviewed.incarnationId,
+      clientId: reviewed.clientId,
+      requestedBy: reviewed.requestedBy,
+      selectionDigest: reviewed.confirmation!.selectionDigest,
+    };
+    return {
+      // Existing in-flight confirmations keep the exact pre-admission native
+      // receipt digest. The fresh-effect fence still applies to those commands.
+      input: reviewed.confirmation?.nativeAdmission === 'vndb-source-v1' ? input : undefined,
+      async prepare(at) {
+        const retained = await retainedRow(actor, id, ordinal),
+          target = await current(actor, reviewed.subjectId, at),
+          decision = retained.decision;
+        if (
+          !decision ||
+          decision.reviewId !== reviewed.sourceReviewToken ||
+          decision.targetId !== reviewed.subjectId ||
+          !target ||
+          target.targetId !== reviewed.subjectId ||
+          target.source !== decision.guard?.source ||
+          dateProfileDigest(target) !== reviewed.profileDigest ||
+          entryImportMetadataDigest(retained.matching) !== decision.matchDigest
+        )
+          throw new LibraryConflictError();
+        return async (tx) => {
+          const account = owner(actor);
+          if (account.clientId !== reviewed.clientId || (account.requestedBy ?? null) !== reviewed.requestedBy)
+            throw new LibraryConflictError();
+          const locked = await tx.query<{ row: VndbRow; decision: Decision; active: boolean }>(
+            `SELECT rows->$4::integer AS row,decisions->$5::text AS decision,
+               state='active' AND expires_at>clock_timestamp() AS active
+             FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR SHARE`,
+            [requireRoute(account.accountId), account.accountId, id, ordinal, String(ordinal)],
+          );
+          const stored = locked.rows[0],
+            record = stored?.decision?.metadata?.find((item) => item.token === reviewed.token);
+          if (
+            !stored?.active ||
+            stored.decision.reviewId !== reviewed.sourceReviewToken ||
+            stored.decision.targetId !== reviewed.subjectId ||
+            stored.decision.guard?.source !== target.source ||
+            stored.decision.matchDigest !== decision.matchDigest ||
+            entryImportMetadataDigest(stored.row) !== reviewed.sourceDigest ||
+            !record?.confirmation ||
+            record.sourceReviewToken !== reviewed.sourceReviewToken ||
+            record.subjectId !== reviewed.subjectId ||
+            record.profileDigest !== reviewed.profileDigest ||
+            record.confirmation.selectionDigest !== input.selectionDigest ||
+            (!record.confirmation.annotationStarted && !record.confirmation.provenanceStarted)
+          )
+            throw new LibraryConflictError();
+        };
+      },
+    };
   }
   async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
     const upload = await load(actor, id),
@@ -1205,6 +1333,7 @@ export function createVndbImport(config: Config) {
         if (
           starting &&
           (found.state !== 'active' ||
+            found.expires_at.getTime() <= Date.now() ||
             decision?.reviewId !== record.sourceReviewToken ||
             entryImportMetadataDigest(found.rows[ordinal]) !== record.sourceDigest)
         )
@@ -1226,7 +1355,7 @@ export function createVndbImport(config: Config) {
   ) {
     const selections = parseEntryImportMetadataSelections(fields),
       selectionDigest = entryImportMetadataDigest(selections);
-    let upload = await load(actor, id),
+    let upload = await load(actor, id, true),
       decision = upload.decisions[ordinal],
       record = decision?.metadata?.find((item) => item.token === reviewToken);
     if (!record)
@@ -1235,7 +1364,8 @@ export function createVndbImport(config: Config) {
       throw new ProblemError('conflict');
     if (record.confirmation?.outcome) return record.confirmation.outcome;
     if (!record.confirmation) {
-      const confirmation = {
+      const confirmation: NonNullable<EntryImportMetadataReview['confirmation']> = {
+        nativeAdmission: 'vndb-source-v1',
         fields: selections,
         selectionDigest,
         annotationKey: `vndb:${id}:${ordinal}:${reviewToken}:annotations`,
@@ -1268,13 +1398,13 @@ export function createVndbImport(config: Config) {
           return { ordinal, reviewToken };
         },
       );
-      upload = await load(actor, id);
+      upload = await load(actor, id, true);
       decision = upload.decisions[ordinal];
       record = decision?.metadata?.find((item) => item.token === reviewToken);
     }
     if (!record?.confirmation || !decision) throw new ProblemError('conflict');
     if (record.confirmation.outcome) return record.confirmation.outcome;
-    const view = await metadataView(actor, id, ordinal, reviewToken);
+    const view = await metadataView(actor, id, ordinal, reviewToken, true);
     if (view.status !== 'current' && !record.confirmation.annotationStarted && !record.confirmation.provenanceStarted) {
       const outcome: EntryImportMetadataOutcome = {
         reviewToken,
@@ -1298,12 +1428,15 @@ export function createVndbImport(config: Config) {
       baselineAnnotationRevision: record.annotationRevision,
       confirmation: record.confirmation,
       native: personalEntries,
+      admission: metadataAdmission(actor, id, ordinal, record),
       persist: (confirmation) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, confirmation),
       isCurrent: async () => {
-        const latest = await load(actor, id),
+        const latest = await load(actor, id, true),
           currentDecision = latest.decisions[ordinal],
           currentRow = latest.rows[ordinal];
         if (
+          latest.state !== 'active' ||
+          latest.expires_at.getTime() <= Date.now() ||
           !currentDecision ||
           !currentRow ||
           currentDecision.reviewId !== record!.sourceReviewToken ||
@@ -1321,7 +1454,8 @@ export function createVndbImport(config: Config) {
       ...(recordCommand === undefined ? {} : { record: recordCommand }),
       isCancelled: async () => {
         try {
-          return (await load(actor, id)).state !== 'active';
+          const latest = await load(actor, id, true);
+          return latest.state !== 'active' || latest.expires_at.getTime() <= Date.now();
         } catch (error) {
           if (error instanceof LibraryNotFoundError) return true;
           throw error;
@@ -1368,28 +1502,33 @@ export function createVndbImport(config: Config) {
       return { ordinal: item.ordinal, reviewId: item.reviewId, status: decision.status };
     if (decision.baseline && !decision.replace)
       return { ordinal: item.ordinal, reviewId: item.reviewId, status: 'skipped' as const };
-    const started = await mutation(
-      actor,
-      'start',
-      `${decision.commandKey}:start`,
-      { id, item },
-      async (tx, account) => {
-        const locked = await tx.query<Upload>(
-          `SELECT * FROM library.vndb_import
+    if (!pendingState(decision)) {
+      const started = await mutation(
+        actor,
+        'start',
+        `${decision.commandKey}:start`,
+        { id, item },
+        async (tx, account) => {
+          const locked = await tx.query<Upload>(
+            `SELECT * FROM library.vndb_import
           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='active' AND expires_at>clock_timestamp() FOR UPDATE`,
-          [requireRoute(account.accountId), account.accountId, id],
-        );
-        const found = locked.rows[0]?.decisions[item.ordinal];
-        if (!found || found.reviewId !== item.reviewId) throw new ProblemError('conflict');
-        found.status = 'applying';
-        await save(tx, account, id, item.ordinal, found);
-        return { reviewId: found.reviewId };
-      },
-    );
-    record(started);
+            [requireRoute(account.accountId), account.accountId, id],
+          );
+          const found = locked.rows[0]?.decisions[item.ordinal];
+          if (!found || found.reviewId !== item.reviewId) throw new ProblemError('conflict');
+          found.status = 'applying';
+          await save(tx, account, id, item.ordinal, found);
+          return { reviewId: found.reviewId };
+        },
+      );
+      record(started);
+    }
     // Reload frozen operands even when the start command was replayed.
-    decision = (await load(actor, id)).decisions[item.ordinal]!;
+    decision = (await load(actor, id, true)).decisions[item.ordinal];
+    if (!decision || decision.reviewId !== item.reviewId || !pendingState(decision))
+      return { ordinal: item.ordinal, reviewId: item.reviewId, status: 'stale' as const };
     let status: Decision['status'] = 'failed';
+    let receipt: Decision['receipt'];
     try {
       const result = await entries.putEntry(
         actor,
@@ -1408,9 +1547,20 @@ export function createVndbImport(config: Config) {
       );
       record(result);
       status = 'applied';
+      receipt = {
+        partition: result.partition,
+        epoch: result.epoch,
+        position: String(result.position),
+        transactionId: result.transactionId,
+      };
     } catch (error) {
       if (error instanceof GrantDeniedError) throw error;
-      if (error instanceof LibraryConflictError || error instanceof LibraryNotFoundError) status = 'stale';
+      if (
+        error instanceof LibraryConflictError ||
+        error instanceof LibraryNotFoundError ||
+        (error instanceof ProblemError && error.code === 'conflict')
+      )
+        status = 'stale';
       else if (
         error instanceof LibraryEntryInvalidError ||
         (error instanceof ProblemError && error.code === 'unsupported_library_profile')
@@ -1422,7 +1572,7 @@ export function createVndbImport(config: Config) {
       actor,
       'finish',
       `${decision.commandKey}:finish:${status}`,
-      { id, item, status },
+      { id, item, status, ...(receipt ? { receipt } : {}) },
       async (tx, account) => {
         const locked = await tx.query<Upload>(
           'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
@@ -1431,6 +1581,7 @@ export function createVndbImport(config: Config) {
         const found = locked.rows[0]?.decisions[item.ordinal];
         if (found?.reviewId === item.reviewId && found.status !== 'applied') {
           found.status = status;
+          if (receipt) found.receipt = receipt;
           await save(tx, account, id, item.ordinal, found);
         }
         return { status: found?.status ?? status };
@@ -1506,16 +1657,23 @@ export function createVndbImport(config: Config) {
         stopped = signal?.aborted ? 'cancelled' : 'deadline';
         break;
       }
-      const upload = await load(actor, id);
-      if (upload.state !== 'active' || upload.expires_at.getTime() <= Date.now()) {
+      const upload = await load(actor, id, true);
+      const decision = upload.decisions[item.ordinal];
+      const inactive = upload.state !== 'active' || upload.expires_at.getTime() <= Date.now();
+      if (inactive && !(item.reviewId === decision?.reviewId && pendingState(decision))) {
         stopped = 'cancelled';
         break;
       }
-      const decision = upload.decisions[item.ordinal];
       if (item.reviewId)
         outcomes.push(
           await applyEntry(actor, id, { ordinal: item.ordinal, reviewId: item.reviewId }, decision, record),
         );
+      if (inactive) {
+        // Native receipt lookup can reconcile an earlier dispatch; its source fence
+        // still refuses every fresh effect. Never continue into another action.
+        stopped = 'cancelled';
+        break;
+      }
       if (!item.scoreReviewId) continue;
       if (signal?.aborted || Date.now() >= deadline) {
         stopped = signal?.aborted ? 'cancelled' : 'deadline';
@@ -1548,7 +1706,7 @@ export function createVndbImport(config: Config) {
   }
   /** Addressed retained evidence for the separate, explicitly consented label journey.
    * Keep matching and private read authority with this source owner. */
-  async function retainedRow(actor: Actor, id: string, ordinal: number) {
+  async function retainedRow(actor: Actor, id: string, ordinal: number, reconcile = false) {
     await authorized(actor);
     const account = owner(actor);
     const result = await withReadTransaction(pool, (client) =>
@@ -1559,10 +1717,11 @@ export function createVndbImport(config: Config) {
       ),
     );
     const retained = result.rows[0];
-    if (!retained?.row || retained.expires_at.getTime() <= Date.now()) throw new LibraryNotFoundError();
+    if (!retained?.row || (!reconcile && retained.expires_at.getTime() <= Date.now())) throw new LibraryNotFoundError();
     const matching = await match(actor, retained.row);
     const target = retained.decision?.targetId ? await current(actor, retained.decision.targetId) : null;
     await authorized(actor);
+    if (!reconcile) await retainedSource(actor, id);
     return { ...retained, matching, target };
   }
   return {
@@ -1572,11 +1731,11 @@ export function createVndbImport(config: Config) {
     reviewConsumptionDates,
     applyConsumptionDates,
     reviewMetadata,
-    metadata: metadataView,
+    metadata: (actor: Actor, id: string, ordinal: number, token: string) => metadataView(actor, id, ordinal, token),
     applyMetadata,
     apply,
     remove,
-    retainedRow,
+    retainedRow: (actor: Actor, id: string, ordinal: number) => retainedRow(actor, id, ordinal),
     authorized,
     source: async (actor: Actor, id: string) => ({ xml: (await load(actor, id)).xml }),
   };

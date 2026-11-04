@@ -49,6 +49,7 @@ export type VndbLabelOperand = {
   ordinal: number;
   reviewId: string;
   sourceDigest: string;
+  matchDigest?: string;
   subjectId: string | null;
   source: string | null;
   mapping: number;

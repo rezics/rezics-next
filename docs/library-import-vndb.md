@@ -29,12 +29,38 @@ Unmatched rows accept an explicit readable target obtained through ordinary cata
 | Notes, privacy, review, metadata, unknown XML            | Visible retained evidence with its reason; exact original XML is downloadable only by its owner. Notes are never public reviews.                                                                                                                                                                                                 |
 
 Missing, empty/unknown, invalid and valid values have distinct `kind` values with original `raw` text retained.
+Notes preserve significant whitespace when proposed for native adoption. Date parsing trims only its interpretation;
+the original spelling, including whitespace and unknown components, stays in `raw`. Progress and privacy tokens also
+retain their original spelling. Unsupported priority, timestamp and release vocabulary remains parsed evidence;
+no native priority or timestamp meaning is guessed.
 No absent value clears native facts. Existing entries are preserved by default; `replace:true` captures the current
 revision and incarnation for explicit review. Confirmation names that immutable `reviewId`. Apply rechecks current
 account authority, chosen identity, readability, release, cancellation and native admission. A changed basis returns
 `stale`; refresh review. Native commands freeze target, state, revision, incarnation, review guard and command key.
 An unknown failure retries that original command; it cannot be re-reviewed into different operands. Exact native
 receipt replay remains possible after an acknowledgement is lost. Applied rows are never applied again.
+
+Decision: a refreshed source review retires its metadata tokens rather than carrying them into a corrected match;
+an unresolved state, metadata or date dispatch must settle before review replacement.
+Corrected matches may explicitly adopt labels on the chosen readable target. New label operands bind both the
+source review and its observed match digest; a later match change invalidates that consent. Existing label operands
+retain their original native receipt input and conservative match check.
+
+State dispatches retain their original target, body, guard and key after an unknown acknowledgement. Reconciliation
+may dispatch that same command after cancellation or expiry: native receipt lookup returns an existing effect, while
+the original source fence refuses every fresh effect. No following row or score action starts on that source.
+An acknowledged state records the native transaction, partition, epoch and position. Metadata commands use the same
+installed native admission protocol as labels: preparation repeats target/profile and match observations, and fresh
+execution locks and checks the retained upload, row, target, source review, metadata token, selected fields, caller and
+lifetime after native receipt lookup. Confirmations already in flight retain their pre-admission native digest.
+Date retries likewise preserve the entire original patch, occurrence, admission identity and request key; only their
+acknowledgement may advance after cancellation or expiry. Neither path can renew source lifetime or replace operands.
+
+Private page, source and metadata reads require physically retained, unexpired evidence and recheck that condition
+after awaited work. Cancelled, unexpired evidence remains privately downloadable. Expired evidence cannot supply a
+new review, even if an old mutation receipt exists. Exact metadata/date acknowledgement reconciliation returns only
+the bounded native outcome; it does not restore private evidence access. Label orchestration still requires its live
+preview lifetime, so expired label acknowledgement reconciliation remains unavailable in this delivery.
 
 Decision: score review requires the owner to choose native units explicitly; native zero is a vote, clear is a
 separate explicit action, and source absence preserves the current vote.
@@ -166,3 +192,49 @@ Read references: `legacy-final:services/main/src/modules/library-import/formats/
 helpers and `csv.ts#sourceDate`; native entry/profile/identifier contracts; `.reference/INDEX.md` (no VNDB entry).
 The native HTTP scenarios live in `services/kernel/test/library/list-import-vndb-http.test.ts`; broader frozen
 acceptance remains an integration responsibility. No provider live-account or alternate-source support is claimed.
+
+## Inclusive retained-source caller derivation
+
+Let `B<=2 MiB` be original XML, `E<=16 MiB` retained parsed evidence, `D<=8 MiB` decisions, `N<=5000` rows,
+`U<=4` uploads, `P<=8` page rows, `A<=8` selected actions, `M<=8` label mappings and `I<=64` label items.
+These are fixed caller bounds, independent of unrelated account/catalogue/receipt population. Count actual invocations,
+including refusals, rolled-back attempts and lost-ack retries; successful creations are not the denominator.
+
+Each `load` selects and decodes the whole retained XML/evidence/decision document, costing `O(B+E+D)` bytes even
+when the subsequent operation refuses. It performs current authority checks before and after the read. Ordinary
+reads additionally seek the retained header after loading and after page/metadata work. Reconciliation still pays
+the whole load; it skips only the source-read admission that would prevent original receipt lookup. Each addressed
+`rows->ordinal`/`decisions->ordinal` projection can detoast/examine `E+D` on the server despite returning one row.
+Every repeated projection, source digest, matching digest and JSON serialization is charged independently. Hashing
+one row is bounded by that row's retained bytes; it is not priced as one constant operation.
+
+Matching performs one tuple-home partition observation and tuple seek returning at most two candidates. Each candidate
+repeats the full current Library profile/source observation and native Entry read. A selected target repeats those
+reads independently. Thus page composition reaches at most `3P` target observations, plus one question read and at
+most `P` current-own-vote reads. A metadata review/view reaches up to three target observations; each fresh metadata
+native dispatch prepares up to four more through its retained-row, match and target checks, in addition to the native
+personal command's canonical resolution. Both annotation and provenance dispatch pay that preparation independently.
+Date apply reaches up to three target observations to recover its retained intent, up to three more for fresh
+currentness, and up to three more at native admission; receipt replay skips the fresh admission body only. State
+retries repeat the native writer's source preparation and authority/receipt work under the unchanged operands.
+
+For each pool, sum actual SQL statements, returned/examined rows, loops, blocks, bound/result bytes and serialization
+over every reached attempt. Include account/Access/partition checks, reservations, owner/address locks, original receipt
+lookups, native type preparation, component/event/fence writes, and transaction retries. Library state start/finish,
+metadata confirmation/progress, date intent checkpoints and label creation/assignment acknowledgements each dispatch
+their own native command and repeat those costs. A lost acknowledgement adds another full dispatch; a refused or
+failed dispatch is never refunded. Current score application executes zero vote/aggregate commands but still pays
+the Library unavailable receipt and its authority work. Do not infer Content installation from a bounded result.
+
+Upload parses, hashes through the native command digest, serializes and indexes `B+E` before returning, including
+idempotent upload retries. Its row-index trigger inserts `N` evidence rows and advances the source fence for each.
+Pruning/DELETE/terminal cleanup includes up to `U` parent rows, `U*N` evidence children and `U*I` adoption items,
+their indexes/fences, retained receipt work and export cleanup/background participants. This fixed worst case must
+remain separate from growth in unrelated owners/history. The V4 exporter uses its existing indexed evidence pages;
+it does not reinterpret V1/V2/V3 or make V4 recoverable. Independent all-pool 64/512/4096 executed measurements,
+composed V4 fidelity/recovery refusal and terminal cases remain controller acceptance, not results of this derivation.
+
+The existing Web signatures remain unchanged. For example, retrying
+`apply(actor, uploadId, [{ordinal, reviewId}], record)` after a lost state acknowledgement may return
+`{uploadId,outcomes:[{ordinal,reviewId,status:'applied'}],stopped:'cancelled'}` after expiry. This acknowledges the
+original effect only; subsequent page/source reads return not found. This is a constructed shape, not acceptance evidence.

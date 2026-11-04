@@ -11,6 +11,7 @@ import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { normalizePersonalLabelName } from './label-store.ts';
 import { createVndbImport } from './list-import-vndb.ts';
+import { entryImportMetadataDigest } from './list-import-entry-metadata.ts';
 import {
   VNDB_LABEL_LIMITS as limits,
   VNDB_STATE_LABELS,
@@ -176,7 +177,7 @@ export function createVndbLabelAdoption(config: Config) {
         decision.targetId === subjectId &&
         decision.guard?.source === retained.target?.source &&
         !['ambiguous', 'unavailable', 'unsupported'].includes(retained.matching.status) &&
-        (retained.matching.status !== 'matched' || retained.matching.candidates[0] === subjectId);
+        decision.matchDigest === entryImportMetadataDigest(retained.matching);
       const slots = subjectId
         ? await pool.query<{ count: number }>(
             `SELECT count(*)::integer AS count FROM (
@@ -231,6 +232,7 @@ export function createVndbLabelAdoption(config: Config) {
             ordinal: selected.ordinal,
             reviewId: selected.reviewId,
             sourceDigest: digest(retained.row),
+            matchDigest: decision.matchDigest,
             subjectId,
             source: retained.target?.source ?? null,
             mapping: index,
@@ -317,7 +319,10 @@ export function createVndbLabelAdoption(config: Config) {
       current.target?.targetId !== operand.subjectId ||
       current.target.source !== operand.source ||
       ['ambiguous', 'unavailable', 'unsupported'].includes(current.matching.status) ||
-      (current.matching.status === 'matched' && current.matching.candidates[0] !== operand.subjectId)
+      (operand.matchDigest !== undefined
+        ? current.decision.matchDigest !== operand.matchDigest ||
+          entryImportMetadataDigest(current.matching) !== operand.matchDigest
+        : current.matching.status === 'matched' && current.matching.candidates[0] !== operand.subjectId)
     )
       throw stale();
   }
@@ -343,9 +348,16 @@ export function createVndbLabelAdoption(config: Config) {
           if (failure !== undefined) throw failure;
           const a = owner(actor);
           for (const operand of operands) {
-            const found = await tx.query<{ state: string; row: unknown; review_id: string; target_id: string }>(
+            const found = await tx.query<{
+              state: string;
+              row: unknown;
+              review_id: string;
+              target_id: string;
+              match_digest: string;
+            }>(
               `SELECT state,rows->$4::integer AS row,decisions->$5::text->>'reviewId' AS review_id,
-             decisions->$5::text->>'targetId' AS target_id FROM library.vndb_import
+             decisions->$5::text->>'targetId' AS target_id,
+             decisions->$5::text->>'matchDigest' AS match_digest FROM library.vndb_import
              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND expires_at>clock_timestamp() FOR SHARE`,
               [...tuple(a, id), operand.ordinal, String(operand.ordinal)],
             );
@@ -355,6 +367,7 @@ export function createVndbLabelAdoption(config: Config) {
               retained.state !== 'active' ||
               retained.review_id !== operand.reviewId ||
               retained.target_id !== operand.subjectId ||
+              (operand.matchDigest !== undefined && retained.match_digest !== operand.matchDigest) ||
               digest(retained.row) !== operand.sourceDigest
             )
               throw stale();

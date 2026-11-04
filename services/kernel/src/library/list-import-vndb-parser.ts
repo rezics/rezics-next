@@ -67,10 +67,12 @@ function value(raw: string | null): SourceValue {
   };
 }
 function date(raw: string | null): SourceValue {
-  const result = value(raw);
+  const lexeme = raw?.trim() ?? null;
+  const result = value(lexeme);
+  result.raw = raw;
   if (result.kind !== 'value') return result;
-  if (raw === '0000-00-00') return { kind: 'unknown', raw };
-  const normalized = raw!.replace(/-00(?:-00)?$/, '');
+  if (lexeme === '0000-00-00') return { kind: 'unknown', raw };
+  const normalized = lexeme!.replace(/-00(?:-00)?$/, '');
   const full =
     normalized.length === 4 ? `${normalized}-01-01` : normalized.length === 7 ? `${normalized}-01` : normalized;
   const parsed = new Date(`${full}T00:00:00Z`);
@@ -161,18 +163,18 @@ export function parseVndb(xml: string): VndbRow[] {
       fields: {
         status: value(labels.length ? labels.join(', ') : null),
         score: vote(rawField(nodes, 'vote')),
-        started: date(field(nodes, 'started')),
-        finished: date(field(nodes, 'finished')),
-        progress: value(field(nodes, 'progress')),
+        started: date(rawField(nodes, 'started')),
+        finished: date(rawField(nodes, 'finished')),
+        progress: value(rawField(nodes, 'progress')),
         progressMeasure: value(
-          (progress ? attr(progress, 'unit') : null) ?? attr(node, 'progress_unit') ?? field(nodes, 'progress-unit'),
+          (progress ? attr(progress, 'unit') : null) ?? attr(node, 'progress_unit') ?? rawField(nodes, 'progress-unit'),
         ),
-        notes: value(field(nodes, 'notes') ?? field(nodes, 'note')),
-        privacy: value(attr(node, 'private') ?? field(nodes, 'private')),
+        notes: value(rawField(nodes, 'notes') ?? rawField(nodes, 'note')),
+        privacy: value(attr(node, 'private') ?? rawField(nodes, 'private')),
       },
       retainedReason:
         kind === 'vn'
-          ? 'Only an explicitly selected released entry state can be applied; all other source fields remain private evidence.'
+          ? 'Native state, labels, metadata and occurrence dates each require explicit review and consent; unsupported fields remain private evidence.'
           : `${container}: no native Library admission; retained privately, never published.`,
       evidence: node,
     });

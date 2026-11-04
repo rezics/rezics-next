@@ -93,6 +93,13 @@ Personal VNDB XML upload now has mounted preview/page/source/review/apply/cancel
 and private loss retention. Exact source votes now have a separate native-question/units review, but score application
 is typed unavailable until Content supplies the writer's atomic reviewed-current admission guard. No native vote,
 aggregate, broader frozen acceptance or live provider-account support is claimed.
+Retained-source continuation preserves note/date/progress/privacy spelling, separates refreshed metadata consent,
+and binds corrected-match label adoption to its reviewed match digest. State, metadata and date lost acknowledgements
+can reconcile original native receipts after source expiry/cancellation while fresh effects and expired evidence reads
+are refused. The native personal command accepts the existing trusted admission protocol without changing other
+providers' request digests. Expired label-preview reconciliation remains unavailable. The source contract derives
+whole-document observations, repeated dispatches and cleanup costs; independent all-pool 64/512/4096, composed V4
+fidelity/recovery refusal and terminal acceptance remain unexecuted integration obligations.
 
 The Kernel wrappers import the original frozen specifications. These commands are the supported native entry
 points from the worktree root; they are listed as evidence entry points and were not executed here.

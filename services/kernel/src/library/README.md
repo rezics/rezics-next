@@ -3208,3 +3208,20 @@ redacted with `completed:null`; temporary Semantic failure remains `503 semantic
 response presents `state:"retired"` separately from original meaning and current `presentation.recording.state`,
 while retired Episode reads and fresh writes remain 404. No new client declaration, catalogue, or background worker
 is introduced.
+
+## VNDB retained-source admission and retry
+
+The [VNDB owner contract](../../../../docs/library-import-vndb.md) binds each explicit state, metadata, label and
+occurrence-date choice to its retained source review. Refreshed metadata tokens do not follow corrected matches;
+new label operands include the observed match digest. Notes and partial-date raw spelling survive native review.
+
+State, metadata and date reconciliation retries the original native operands and receipts after cancellation or
+expiry. The native source fence rejects fresh effects; private reads independently require retained, unexpired source.
+Personal annotation/observation commands reuse the trusted admission preparation/callback protocol after receipt
+lookup, preserving existing callers' digests. Original in-flight VNDB metadata digests remain unchanged.
+
+Expired label-preview reconciliation is still unavailable. V4 retains its private inert parsed evidence contract;
+native recovery consumers still refuse it. Focused HTTP cases cover actual lost native acknowledgements, expiry,
+interrupted dispatch, corrected target/independent consent and source spelling. The inclusive caller derivation counts
+whole retained-document decoding, each repeated source observation/dispatch, SQL work and cleanup. Frozen, independent
+all-pool 64/512/4096, V4 composition and terminal acceptance remain integration work.

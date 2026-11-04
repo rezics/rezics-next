@@ -20,6 +20,7 @@ import { LibraryNotFoundError } from './command-support.ts';
 import { LibraryConflictError } from './entry-errors.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import { ProblemError } from '../http/problem.ts';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 
 export const ENTRY_IMPORT_METADATA_LIMITS = {
   fields: 5,
@@ -58,6 +59,7 @@ export type EntryImportMetadataOutcome = Readonly<{
   fields: readonly EntryImportMetadataFieldOutcome[];
 }>;
 export type EntryImportMetadataConfirmation = {
+  nativeAdmission?: 'vndb-source-v1';
   fields: EntryImportMetadataSelection[];
   selectionDigest: string;
   annotationKey: string;
@@ -191,6 +193,7 @@ export async function applyEntryImportMetadataCommands(input: {
   record?: (outcome: CommandOutcome<unknown>) => void;
   isCancelled: () => Promise<boolean>;
   isCurrent?: () => Promise<boolean>;
+  admission?: LabelCommandAdmission;
   signal?: AbortSignal;
 }): Promise<{ outcome: EntryImportMetadataOutcome; complete: boolean }> {
   const { actor, subjectId, provider, recordId, reviewToken, personal, proposals, selections, native, persist } = input;
@@ -344,6 +347,7 @@ export async function applyEntryImportMetadataCommands(input: {
             subjectId,
             { revision: annotationInput.revision, note: annotationInput.note, priority: annotationInput.priority },
             confirmation.annotationKey,
+            input.admission,
           );
           input.record?.(command as CommandOutcome<unknown>);
           confirmation.annotationStatus = 'applied';
@@ -465,12 +469,16 @@ export async function applyEntryImportMetadataCommands(input: {
                     subjectId,
                     provenanceInput.value,
                     confirmation.provenanceKey,
+                    undefined,
+                    input.admission,
                   )
                 : await native.correctSourceObservation(
                     actor,
                     subjectId,
                     provenanceInput.value,
                     confirmation.provenanceKey,
+                    undefined,
+                    input.admission,
                   );
             input.record?.(command as CommandOutcome<unknown>);
             confirmation.provenanceStatus = 'applied';
