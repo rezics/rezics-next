@@ -142,7 +142,7 @@ export async function readRealmRulesAuthoringPage(
           threadId: item.threadId,
           boardId: item.boardId,
           boardTitle: item.boardTitle,
-          mediaIds: item.mediaIds,
+          mediaIds: [...item.mediaIds],
           body: item.rules.body,
           language: languageOf(item.rules.body),
           licence: item.rules.licence,
