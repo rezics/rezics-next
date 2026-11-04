@@ -8208,5 +8208,20 @@
   "discovery_collection_truncated": "A preview of this Collection. Open it for more.",
   "discovery_collection_empty": "This Collection is empty.",
   "discovery_collection_withheld": "No members can be shown.",
-  "discovery_collection_preview_unavailable": "Contents preview unavailable."
+  "discovery_collection_preview_unavailable": "Contents preview unavailable.",
+  "search_space_standalone": "Standalone Space",
+  "search_space_sign_in": "Sign in to follow",
+  "search_space_pending": "Saving follow…",
+  "search_space_follow_disabled": "Following is disabled for this reader.",
+  "search_space_follow_unavailable": "Your follow state is unavailable.",
+  "search_space_enter_realm": "Open Realm and entry rules",
+  "search_space_open": "Open Space",
+  "search_space_entry_unavailable": "Entry advice is unavailable.",
+  "search_space_rules": "Review the current rules and membership on the Realm page.",
+  "search_space_admission_disabled": "Membership changes are not offered to this reader.",
+  "search_space_admission_sign_in": "Sign in on the Realm page to review admission.",
+  "search_space_admission_unavailable": "Membership advice is unavailable.",
+  "search_space_failed": "The follow could not be changed. Your Search visit was kept.",
+  "search_space_image_unavailable": "Image unavailable",
+  "search_space_entry_disabled": "Entry is currently disabled."
 }

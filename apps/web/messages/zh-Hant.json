@@ -8116,5 +8116,20 @@
   "discovery_collection_truncated": "這是合集的一部分，開啟合集查看更多。",
   "discovery_collection_empty": "此合集為空。",
   "discovery_collection_withheld": "沒有可顯示的成員。",
-  "discovery_collection_preview_unavailable": "內容預覽無法使用。"
+  "discovery_collection_preview_unavailable": "內容預覽無法使用。",
+  "search_space_standalone": "獨立 Space",
+  "search_space_sign_in": "登入以追蹤",
+  "search_space_pending": "正在儲存追蹤…",
+  "search_space_follow_disabled": "目前讀者無法變更追蹤。",
+  "search_space_follow_unavailable": "無法取得你的追蹤狀態。",
+  "search_space_enter_realm": "開啟 Realm 和參與規則",
+  "search_space_open": "開啟 Space",
+  "search_space_entry_unavailable": "無法取得進入建議。",
+  "search_space_rules": "請在 Realm 頁面查看目前規則和成員狀態。",
+  "search_space_admission_disabled": "目前讀者無法變更成員狀態。",
+  "search_space_admission_sign_in": "請在 Realm 頁面登入以查看參與條件。",
+  "search_space_admission_unavailable": "無法取得成員建議。",
+  "search_space_failed": "無法變更追蹤，已保留搜尋狀態。",
+  "search_space_image_unavailable": "圖片無法使用",
+  "search_space_entry_disabled": "目前已停用進入。"
 }

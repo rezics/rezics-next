@@ -50,6 +50,7 @@ export function boundDiscoveryPrivateBytes(state: DiscoveryState, capabilities: 
     JSON.stringify({
       collectionFollows: state.status === 'ready' ? state.page.collectionFollows : null,
       viewerFacts: state.status === 'ready' ? state.page.viewerFacts : null,
+      spaceEntries: state.status === 'ready' ? state.page.spaceEntries : null,
       capabilities,
     }),
   ).byteLength;

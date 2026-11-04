@@ -8116,5 +8116,20 @@
   "discovery_collection_truncated": "Aperçu de cette collection. Ouvrez-la pour en voir plus.",
   "discovery_collection_empty": "Cette collection est vide.",
   "discovery_collection_withheld": "Aucun élément ne peut être affiché.",
-  "discovery_collection_preview_unavailable": "Aperçu indisponible."
+  "discovery_collection_preview_unavailable": "Aperçu indisponible.",
+  "search_space_standalone": "Space indépendant",
+  "search_space_sign_in": "Se connecter pour suivre",
+  "search_space_pending": "Enregistrement du suivi…",
+  "search_space_follow_disabled": "Le suivi est désactivé pour ce lecteur.",
+  "search_space_follow_unavailable": "Votre état de suivi est indisponible.",
+  "search_space_enter_realm": "Ouvrir le Realm et ses règles d’accès",
+  "search_space_open": "Ouvrir le Space",
+  "search_space_entry_unavailable": "Les informations d’accès sont indisponibles.",
+  "search_space_rules": "Consultez les règles et votre adhésion sur la page du Realm.",
+  "search_space_admission_disabled": "La modification de l’adhésion n’est pas proposée à ce lecteur.",
+  "search_space_admission_sign_in": "Connectez-vous sur la page du Realm pour consulter les conditions d’accès.",
+  "search_space_admission_unavailable": "Les informations d’adhésion sont indisponibles.",
+  "search_space_failed": "Le suivi n’a pas pu être modifié. Votre recherche est conservée.",
+  "search_space_image_unavailable": "Image indisponible",
+  "search_space_entry_disabled": "L’entrée est actuellement désactivée."
 }

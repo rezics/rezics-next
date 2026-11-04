@@ -1989,3 +1989,29 @@ future released identities are recognized by this reader, but no album is promot
 association is synthesized. Current Edition, VideoGameRelease and AnimeRelease producers supply real release
 identity today. The separate Web homonym journey must consume the generated field; its mounted receiving and
 navigation acceptance remains an integration check, not evidence supplied by source review or native tests.
+### Space entry composition and Cost
+
+The mixed aggregate includes current Community `presentation` on Space summaries and a private
+`spaceEntries` envelope bound to the actual reader (null for anonymous). Rows retain page order and
+exact Space identity, with a separate admitted destination, entry/admission advice and Space follow
+observation. Carried Realm identity is obtained only from Community's occupied-slot producer.
+Concealed/removed carriers, stale claims or changed final source bindings restart disclosure;
+optional action/media/follow failures retain explicit unavailable states where public identity is
+still admitted. No Global fallback, counts, private rules or membership census are returned.
+
+Decision: Space entry composes Library's published `readFollowDiscovery` adapter using exact native
+source hashes and rechecks its snapshot during final disclosure. It never substitutes Realm follows.
+Allowed/disabled advice comes from the current follow/unfollow operation; unavailable native reads
+remain explicitly unavailable. Anonymous readers receive sign-in advice. The Library writer and
+Realm membership/rules flows remain native.
+
+Incremental Cost is finite: S ≤ 100 Space hits, R ≤ S carried Realms, at most 2S native action resources
+in two batches per observation, R selected native avatars, and two complete observations around
+final disclosure. Community's documented full-key/LIMIT bounds apply; its transactions end before
+foreign preparation. Library adds two calls, each with two bounded account-home snapshots,
+for at most S full-key follow seeks per snapshot; Space source bindings are SHA-256 hashes. Presentation identity names are at most 1024 characters, addresses 256, and
+avatars expose a single admitted format/width (≤ 2560) rather than all media metadata. Serialized
+entry rows plus presentation are capped at 524288 UTF-8 bytes; the private envelope additionally
+fits the existing shared 65536-byte private-page allowance. Overflow cannot become a partial
+following census. Aggregate responses use `Cache-Control: private, no-store`. Existing source,
+credential, release, population and final-disclosure fences still apply after composition.

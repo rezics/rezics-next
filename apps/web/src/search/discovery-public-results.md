@@ -142,3 +142,21 @@ session/exposure/credential/request/locale/source lifetime guard rejects delayed
 The three personal Search files additionally include this envelope in the existing private byte allowance and suppress
 it when the private page lifetime is unavailable; public cards never receive viewer facts. Browser and native broader
 acceptance remains deferred to integration.
+Space rows consume current native presentation and reader-bound `spaceEntries` from the aggregate;
+they issue no detail requests. Native community identity, Space address/summary and carried-Realm
+context remain separate. Avatar absence, withheld media and unavailable/loading-failed media have
+explicit fallbacks. Standalone Spaces are named as standalone. A carried Realm always uses the
+admitted Realm destination, with current entry and rules/admission advice separate from following.
+No carrier is inferred from labels or an address, and no Global destination is substituted.
+
+Decision: Space following consumes Library’s shared native observation adapter, with exact source
+bindings and a final currentness check; unavailable observations retain explicit unavailable advice.
+Allowed commands call the existing Library Space-follow writer with a final
+expected-reader/credential fence. They never join a Realm. The mounted Search lifetime shares the
+existing no-queue command registry, announces pending/failure, and performs one aggregate refresh
+after settled successful or uncertain commands. Known rejection keeps the current row. Refresh
+failure keeps public presentation with private advice unavailable. Reader, credential, locale,
+request and exposure retirement discard delayed writes and out-of-order reads. Query, filters,
+scope, layout, continuation, focus and scroll remain in the Search visit; native entry/rules links
+use normal navigation so browser return restores the original URL. All advice is localized in the
+eight supported locales.

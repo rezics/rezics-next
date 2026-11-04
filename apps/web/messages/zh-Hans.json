@@ -8116,5 +8116,20 @@
   "discovery_collection_truncated": "这是合集的一部分，打开合集查看更多。",
   "discovery_collection_empty": "此合集为空。",
   "discovery_collection_withheld": "没有可显示的成员。",
-  "discovery_collection_preview_unavailable": "内容预览不可用。"
+  "discovery_collection_preview_unavailable": "内容预览不可用。",
+  "search_space_standalone": "独立 Space",
+  "search_space_sign_in": "登录以关注",
+  "search_space_pending": "正在保存关注…",
+  "search_space_follow_disabled": "当前读者无法更改关注。",
+  "search_space_follow_unavailable": "无法获取你的关注状态。",
+  "search_space_enter_realm": "打开 Realm 和参与规则",
+  "search_space_open": "打开 Space",
+  "search_space_entry_unavailable": "无法获取进入建议。",
+  "search_space_rules": "请在 Realm 页面查看当前规则和成员状态。",
+  "search_space_admission_disabled": "当前读者无法更改成员状态。",
+  "search_space_admission_sign_in": "请在 Realm 页面登录以查看参与条件。",
+  "search_space_admission_unavailable": "无法获取成员建议。",
+  "search_space_failed": "无法更改关注，已保留搜索状态。",
+  "search_space_image_unavailable": "图片不可用",
+  "search_space_entry_disabled": "目前已停用进入。"
 }

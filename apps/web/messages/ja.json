@@ -8116,5 +8116,20 @@
   "discovery_collection_truncated": "このコレクションの一部です。開くと続きを確認できます。",
   "discovery_collection_empty": "このコレクションは空です。",
   "discovery_collection_withheld": "表示できる項目はありません。",
-  "discovery_collection_preview_unavailable": "内容のプレビューは利用できません。"
+  "discovery_collection_preview_unavailable": "内容のプレビューは利用できません。",
+  "search_space_standalone": "独立したSpace",
+  "search_space_sign_in": "ログインしてフォロー",
+  "search_space_pending": "フォローを保存中…",
+  "search_space_follow_disabled": "この閲覧者はフォローを変更できません。",
+  "search_space_follow_unavailable": "フォロー状態を取得できません。",
+  "search_space_enter_realm": "Realmと参加ルールを開く",
+  "search_space_open": "Spaceを開く",
+  "search_space_entry_unavailable": "入場の案内を取得できません。",
+  "search_space_rules": "Realmのページで現在のルールと参加状況を確認してください。",
+  "search_space_admission_disabled": "この閲覧者には参加状況の変更が提供されていません。",
+  "search_space_admission_sign_in": "Realmのページでログインして参加条件を確認してください。",
+  "search_space_admission_unavailable": "参加の案内を取得できません。",
+  "search_space_failed": "フォローを変更できませんでした。検索の状態は保持されています。",
+  "search_space_image_unavailable": "画像を表示できません",
+  "search_space_entry_disabled": "現在、入場は無効になっています。"
 }
