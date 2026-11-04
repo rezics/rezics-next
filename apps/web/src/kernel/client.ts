@@ -33,6 +33,10 @@ export function hasKernelOrigin(): boolean {
   return Boolean(kernelOrigin());
 }
 
+export function configuredKernelOrigin(): string | undefined {
+  return kernelOrigin();
+}
+
 /** Carry the owner's restrictive cache policy through SSR, including nested server functions. */
 function pageFetch(fetcher: typeof fetch): typeof fetch {
   return (async (input, init) => {

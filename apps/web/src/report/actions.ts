@@ -3,7 +3,8 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
-import { submitReport, validateReport } from './submit.server';
+import { validateReport } from './draft';
+import { submitReport } from './submit.server';
 
 export const sendReport = createServerFn({ method: 'POST' })
   .validator(validateReport)
