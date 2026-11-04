@@ -264,9 +264,7 @@ test('the public batch returns visible identities in first-request order and hid
   expect(response.headers.get('cache-control')).toBe('no-cache');
   expect(response.headers.get('etag')).toMatch(/^"[A-Za-z0-9_-]+"$/);
   const observations = await readPublicIdentityObservations(pool, requested);
-  expect(observations.map(({ id }) => id)).toEqual(
-    requested.filter((id) => id !== identity.pending && id !== unknown),
-  );
+  expect(observations.map(({ id }) => id)).toEqual(requested.filter((id) => id !== identity.pending && id !== unknown));
   expect(observations.filter(({ state }) => state === 'deleted')).toEqual([
     { id: identity.deleted, kind: 'actor', state: 'deleted' },
     { id: identity.deletedOrganization, kind: 'organization', state: 'deleted' },
