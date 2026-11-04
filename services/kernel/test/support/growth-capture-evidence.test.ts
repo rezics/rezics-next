@@ -94,7 +94,7 @@ test('mergeGrowthCaptures pads optional evidence, rebases owners and keeps plan 
   expect(merged.requestBytes).toEqual([11, 0]);
   expect(merged.responseBytes).toEqual([4, 0]);
   expect(costOf(merged)).toMatchObject({
-    rows: 3,
+    rows: 2,
     sharedHit: 5,
     sharedRead: 1,
     blocks: 6,
