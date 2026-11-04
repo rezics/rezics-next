@@ -180,6 +180,7 @@ test('recorded native quotation page keeps exact text, work, speaker and denied 
     'en',
   );
   async function show(initial: typeof denied) {
+    clientQuery.clear();
     await act(async () =>
       root.render(
         h(
