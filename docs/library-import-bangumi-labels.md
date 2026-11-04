@@ -61,10 +61,11 @@ resolves an ID or name. Current native receipts, events, History and source fenc
 
 Request abort/deadline stops new items and returns exact completed outcomes and remaining indices. Source cancellation
 clears label review state and stops new effects; source deletion cascades the retained row. Both preserve accepted
-native labels and assignments. The existing terminal account graph's `bangumi_upload` phase removes the same rows
-in windows of at most 100 keys, including the new JSON state; labels remain with their native erasure phases.
-The base Bangumi engine has no expiry column or scheduled expiry owner. Scheduled expiry, terminal erasure execution
-and complete caller growth measurement remain continuation work, not evidence of completed acceptance.
+native labels and assignments. The scheduled seven-day source expiry and the terminal account graph's existing
+`bangumi_upload` phase remove the same rows in bounded windows; expiry removes at most 99 rows and one upload root,
+while terminal pages remove at most 100 keys. This clears label review, outcomes and temporary adoption state without
+deleting accepted native labels or assignments. Expiry is absolute during tag reads, review and fresh native admission.
+Full caller growth execution remains an integration responsibility.
 
 Comments, notes, source privacy, timestamps, progress counts, scores, state and unknown provider fields are excluded
 from label adoption. No Entry, Session, public Collection, review, follow or publication is created by tags. The state
@@ -80,11 +81,14 @@ No source evidence admission limit or command payer is enlarged.
 
 Review uses indexed owner/upload/row points, <=T addressed label or unique live-name probes and no History scan.
 Apply uses <=R*T decisions and <=M native creations, current Subject/profile preparation, original receipt reads,
-owner controls, upload locks, native History/events and source-fence work. Each assignment materializes <=32
+owner controls, upload locks, native History/events and source-fence work, including the locked absolute-expiry check.
+Each assignment materializes <=32
 reservations and <=33 sorted parent locks, returns effective duplicates before capacity refusal, and may reclaim
 one reservation only when the current parent is deleted; missing/deleted targets fail instead of allocating a slot.
 Native receipt replay and source serialization remain inside the same caller cost. Failed native preparation cannot
-be counted as a measurement. Expiry work must retain this source owner's lifetime and payer once supplied.
+be counted as a measurement. Expiry adds one due-index keyset lookup per upload, at most two current-owner-fenced
+cleanup commands for the 100-row maximum, and exact receipts for command restart. A terminal owner is drained by the
+existing graph phase under its tombstone fence.
 
 Focused native scenarios are `services/kernel/test/library/list-import-bangumi-labels.test.ts`; existing state scenarios
 are unchanged. Integration owns frozen acceptance, first/deep/final pages and native64/512/4096 whole-caller statements,

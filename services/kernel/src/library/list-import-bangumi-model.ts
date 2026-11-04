@@ -23,7 +23,13 @@ export type BangumiEvidence = {
   medium: string;
   stateRole: string | null;
 };
-export type BangumiGuard = { subjectId: string; releaseDigest: string; identityEpoch: string };
+export type BangumiGuard = {
+  subjectId: string;
+  releaseDigest: string;
+  identityEpoch: string;
+  claim: { route: number; externalId: string; subjectId: string | null } | null;
+  upload: { uploadId: string; ordinal: number; reviewToken: string };
+};
 export type BangumiScoreSource = {
   state: 'score' | 'unrated' | 'absent' | 'unsupported';
   value?: number | string | boolean | null;

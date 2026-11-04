@@ -20,6 +20,8 @@ export const libraryWorkModule: WorkModule = {
     const { registerLibraryMemberRetentionWork } = await import('./member-retention-work.ts');
     await registerLibraryMemberRetentionWork(context);
     await registerLabelRetention(context);
+    const { registerLibraryBangumiRetentionWork } = await import('./list-import-bangumi-retention.ts');
+    await registerLibraryBangumiRetentionWork(context);
     await registerLabelConsolidationRetention(context);
     await registerEntryAnnotationCorrectionRetention(context);
     const { registerLibraryPublishedLogRetentionWork } = await import('./published-log-retention.ts');

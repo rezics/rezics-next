@@ -157,11 +157,14 @@ const queries: Partial<Record<LibraryExportSectionV4, string>> = {
   collectionPins: `SELECT account_id::text AS key,collection_ids,revision::text FROM library.collection_pins
     WHERE route=$1 AND account_id=$2 AND account_id>$3::uuid ORDER BY account_id LIMIT 1`,
   bangumiUploads: `SELECT upload_id::text AS key,upload_id,cancelled FROM library.bangumi_upload
-    WHERE route=$1 AND account_id=$2 AND upload_id>$3::uuid ORDER BY upload_id LIMIT ${FETCH_ROWS}`,
+    WHERE route=$1 AND account_id=$2 AND expires_at>clock_timestamp() AND upload_id>$3::uuid
+    ORDER BY upload_id LIMIT ${FETCH_ROWS}`,
   bangumiEvidence: `SELECT upload_id::text||'/'||ordinal::text AS key,upload_id,ordinal,evidence
-    FROM library.bangumi_upload_row WHERE route=$1 AND account_id=$2
-      AND (upload_id,ordinal)>(split_part($3,'/',1)::uuid,split_part($3,'/',2)::integer)
-    ORDER BY upload_id,ordinal LIMIT ${FETCH_ROWS}`,
+    FROM library.bangumi_upload_row r WHERE r.route=$1 AND r.account_id=$2
+      AND EXISTS (SELECT 1 FROM library.bangumi_upload u WHERE u.route=r.route AND u.account_id=r.account_id
+        AND u.upload_id=r.upload_id AND u.expires_at>clock_timestamp())
+      AND (r.upload_id,r.ordinal)>(split_part($3,'/',1)::uuid,split_part($3,'/',2)::integer)
+    ORDER BY r.upload_id,r.ordinal LIMIT ${FETCH_ROWS}`,
   malImports: `SELECT id::text AS key,id AS upload_id,(document->>'canceled')::boolean AS cancelled,expires_at::text
     FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND expires_at>$4::timestamptz
       AND id>$3::uuid ORDER BY id LIMIT ${FETCH_ROWS}`,

@@ -159,6 +159,35 @@ test('default native worker removes private sessions/history, labels, archives, 
     rows: [{ row: 0, version: reviewKey, fields: ['tags'] }],
   });
   expect(adoption.outcomes[0].labels[0].status).toBe('accepted');
+  const bangumi = await f.json(as, 'POST', '/v1/libraryImports/bangumi:preview', 200, {
+    upload: JSON.stringify({
+      format: 'rezics.bangumi-collection.v1',
+      collections: [{ subject_id: 42, subject_type: 2, type: 1, tags: ['erase retained tag'], comment: 'private note' }],
+    }),
+  });
+  const bangumiReview = await f.json(as, 'POST', `/v1/libraryImports/bangumi/${bangumi.uploadId}:review`, 200, {
+    ordinal: 0,
+    target: subjectId,
+  });
+  const bangumiLabels = await f.json(
+    as,
+    'POST',
+    `/v1/libraryImports/bangumi/${bangumi.uploadId}:reviewLabels`,
+    200,
+    {
+      ordinal: 0,
+      rowRevision: bangumiReview.review.token,
+      mappings: [{ index: 0, target: { name: 'Erased Bangumi label' } }],
+    },
+  );
+  const bangumiAdoption = await f.json(
+    as,
+    'POST',
+    `/v1/libraryImports/bangumi/${bangumi.uploadId}:applyLabels`,
+    200,
+    { ordinal: 0, reviewToken: bangumiLabels.labels.review.token },
+  );
+  expect(bangumiAdoption.outcomes[0].status).toBe('assigned');
   const vndb = await f.json(as, 'POST', '/v1/libraryImports/vndb:preview', 200, {
     xml: '<vndb-export version="1.0"><vns><vn id="v9999999999999999"><label label="erase consent"/></vn></vns></vndb-export>',
   });
@@ -173,6 +202,8 @@ test('default native worker removes private sessions/history, labels, archives, 
   });
   for (const table of [
     'list_import_mal',
+    'bangumi_upload',
+    'bangumi_upload_row',
     'vndb_import',
     'vndb_label_adoption',
     'vndb_label_adoption_item',
@@ -209,6 +240,7 @@ test('default native worker removes private sessions/history, labels, archives, 
   expect((await f.request(as, 'POST', `/v1/progressSessions/${session.id}:reopen`, { revision: 3 })).status).toBe(401);
   expect((await f.request(as, 'GET', `/v1/progressSessions/${session.id}`)).status).toBe(401);
   expect((await f.request(as, 'GET', `/v1/libraryImports/vndb/${vndb.uploadId}/labels`)).status).toBe(401);
+  expect((await f.request(as, 'GET', `/v1/libraryImports/bangumi/${bangumi.uploadId}`)).status).toBe(401);
   await f.start();
   const results = await terminal(as.accountId);
   expect(results.reduce((sum, result) => sum + result.owned.removed, 0)).toBeGreaterThan(10);

@@ -702,9 +702,12 @@ and native64/512/4096 executed caller growth remain unmeasured and deferred.
 explicit target review, confirmed native state application, conflict preservation, original-command retries,
 bounded partial outcomes, cancellation and owner deletion. [Retained tag adoption](../library-import-bangumi-labels.md)
 adds separate owner review/confirmation and native private create/assign commands with original receipts, explicit
-unchanged/invalid/stale/capacity/partial outcomes and bounded same-row review cleanup. Other fields remain private
-loss-aware evidence. Scheduled source expiry, complete terminal erasure execution and native64/512/4096 whole-caller
-growth measurement remain continuation work. Score review now retains and displays Bangumi's source score and scale
+unchanged/invalid/stale/capacity/partial outcomes and bounded same-row review cleanup. A seven-day absolute deadline
+gates reads, reviews, fresh state/label admission and provider-evidence export; the scheduled expiry worker deletes at
+most 99 rows plus a root per current-owner-fenced command, and terminal erasure uses the existing appended
+`bangumi_upload` phase. Review command receipts keep only opaque tokens; acknowledged native facts survive expiry.
+Exported Bangumi evidence remains V4 export-only and V1/V2/V3 recovery inventories are unchanged. Native64/512/4096
+whole-caller growth and composed frozen acceptance remain deferred to integration. Score review now retains and displays Bangumi's source score and scale
 beside the selected Content question and owner-entered units; zero, absence, unsupported values and explicit clear
 remain distinct. Set/clear confirmation is separate, but score outcomes are typed unavailable until Content provides
 an atomic reviewed question/current-vote/counting-identity guard for `createVoteCommands.putVoteOutcome`; no native

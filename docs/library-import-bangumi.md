@@ -86,9 +86,13 @@ Credentials and malformed envelopes are rejected. Native request/command deadlin
 already admitted commands may finish. Cancel stops new row admission; acknowledged effects remain.
 Retries retain the original token, target, state, revision and native command key; failed rows retry that command,
 and a lost acknowledgment replays its receipt. A new review cannot replace a confirmed in-flight command.
-Evidence and review storage belong to Library's indexed account erasure graph, drained in 100-key pages;
-explicit upload deletion removes both without undoing native facts. Shared command-history erasure retains the
-existing Library pending-custody limitation; this source makes no complete erasure attestation.
+Evidence, reviews, row choices, outcomes and temporary label adoption expire seven days after upload. Expired uploads
+are unavailable to reads, review, application and provider-evidence export; a read never renews the deadline. The
+scheduled expiry owner seeks the due-time index and deletes at most 99 row keys plus one upload root per command.
+Retired accounts are left to Library's terminal owner graph, whose appended `bangumi_upload` phase also drains at most
+100 keys per page. Explicit deletion and either cleanup path preserve acknowledged native state and labels. Review
+command receipts retain only the opaque review token, not the private review response. Shared command-history erasure
+retains the existing Library pending-custody limitation; this source makes no complete erasure attestation.
 Examples above are constructed API guidance; focused native test execution is reported separately.
 
 ## Web journey
@@ -120,20 +124,34 @@ Decision: retained Bangumi evidence expires seven days after upload; reads, revi
   external claims, current released profile state roles, and the personal Library entry command. Web retains the
   current 10-row page plus N metadata rows; it does not scan other owners or fork the native engine.
 - Formula: one preview parses at most 256 KiB and writes one upload plus `N <= 100` evidence rows; `K` reads each
-  fetch at most 11 rows and return at most 10; `M <= N` reviews each address one row, its Bangumi claim, current
-  Account/Source/Subject/profile/Entry observations, and (with `rating:vote`) one Content question and one own-vote
-  read, then persist one bounded review and receipt/event. `P` selected rows are submitted in `Q` user-confirmed
-  batches, each `P_batch <= 5`; each row persists one bounded choice/outcome plus its receipt/event and any selected
-  existing state command. A confirmed score plan is bounded by the same `P`, with no refill or account-wide vote
-  scan. Score vote writes currently equal zero because guarded admission is unavailable. Once Content provides it,
-  each selected score command must include its repeated Account/scope, question, Subject/currentness and counting
-  identity guards, component/aggregate work, receipt and encoded permitted result; that nested native cost remains
-  unmeasured and cannot be claimed from this provider review. `R` retries address the same retained choice and
-  native key; cancellation, deletion and expiry use the existing bounded row cleanup.
+  fetch at most 11 rows and return at most 10, decoding no more than 10 complete retained JSON rows; `M <= N` reviews
+  each address one row, its Bangumi claim, current Account/Source/Subject/profile/Entry observations, and (with
+  `rating:vote`) one Content question and one own-vote read, then persist one bounded review and token-only
+  receipt/event. `P` selected rows are submitted in `Q` user-confirmed batches, each `P_batch <= 5`; each row persists
+  one bounded choice/outcome plus its receipt/event and any selected existing state command. The state command repeats
+  current Account/scope, profile release and identity epoch, current provider-claim binding and the locked
+  upload/review/choice/expiry fence; exact native receipt replay bypasses fresh admission. A confirmed score plan is
+  bounded by the same `P`, with no refill or account-wide vote scan. Score vote writes currently equal zero because
+  guarded admission is unavailable. Once Content provides it, each selected score command must include its repeated
+  Account/scope, question, Subject/currentness and counting identity guards, component/aggregate work, receipt and
+  encoded permitted result; that nested native cost remains unmeasured and cannot be claimed from this provider
+  review. `R` retries address the same retained choice and native key.
+- Expiry/background: one due-index keyset read selects one expired upload; each upload uses at most two account-fenced
+  command transactions because there are at most 100 row keys and each transaction deletes at most 99 rows plus its
+  root. Each transaction repeats the current-account fence, upload lock and exact expiry check, then writes one receipt
+  and, when it deletes keys, one bounded event. A worker segment handles at most 100 expired upload roots before a
+  durable continuation; population growth is separate from that fixed caller bound. Terminal erasure continues through
+  the existing append-only owner phase, selecting at most 100 row/root keys per command with the account tombstone
+  fence and replay receipt.
+- Export: each V4 evidence page fetches at most 17 ordered rows to return at most 16; each selected row reads and
+  serializes its full retained evidence JSON, capped at 32 KiB. Expired uploads are filtered at read time. This changes
+  no V1/V2/V3 inventory and does not enable V4 recovery.
 - Installed caps: `BANGUMI_LIMITS` in `services/kernel/src/library/list-import-bangumi-model.ts`.
 - Growth check: Web focused test `apps/web/tests/personal-bangumi-import.test.tsx` drives 10, 50 and 100 native-shaped
   rows through the same controller and asserts call counts, 10-row reads, 5-row writes and the retained-byte bound.
-  Native statement/index bounds stay with the Commerce engine; this journey introduces no new kernel query path.
+  The expiry worker adds one due-index lookup and at most two 100-key cleanup commands per expired upload; a fresh
+  state command adds one locked source-row check. Executed 64/512/4096 caller growth remains with integration. V1/V2/V3
+  recovery is unchanged and V4 provider evidence remains export-only.
 
 ## Selected retained tag adoption
 

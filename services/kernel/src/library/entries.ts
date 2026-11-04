@@ -553,6 +553,27 @@ export function createEntryCommands(config: Dependencies) {
             );
             if (!admitted.rows.length) throw new LibraryConflictError();
           }
+          if (reviewGuard?.upload) {
+            const source = reviewGuard.upload;
+            const admitted = await tx.query(
+              `SELECT u.upload_id FROM library.bangumi_upload u
+               JOIN library.bangumi_upload_row r USING(route,account_id,upload_id)
+               WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3 AND u.expires_at>clock_timestamp()
+                 AND NOT u.cancelled AND r.ordinal=$4 AND r.review->>'token'=$5
+                 AND r.choice->>'reviewToken'=$5 FOR SHARE OF u,r`,
+              [route, owner.accountId, source.uploadId, source.ordinal, source.reviewToken],
+            );
+            if (!admitted.rows.length) throw new LibraryConflictError();
+          }
+          if (reviewGuard?.claim) {
+            const claim = reviewGuard.claim;
+            const current = await tx.query<{ subject_id: string }>(
+              `SELECT subject_id::text FROM semantic.external_claim
+               WHERE route=$1 AND source='bangumi' AND external_id=$2 FOR KEY SHARE`,
+              [claim.route, claim.externalId],
+            );
+            if ((current.rows[0]?.subject_id ?? null) !== claim.subjectId) throw new LibraryConflictError();
+          }
           if ('error' in prepared) throw prepared.error;
           if (vndbReview) await admitVndbEntry(tx, owner.accountId, route, vndbReview);
           const source = prepared.source;

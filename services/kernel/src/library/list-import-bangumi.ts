@@ -307,7 +307,8 @@ export function createBangumiImport(deps: Dependencies) {
     if (routeOf(id) !== routeOf(a.accountId)) throw new LibraryNotFoundError();
     const h = (
       await tx.query<{ cancelled: boolean }>(
-        `SELECT cancelled FROM library.bangumi_upload WHERE route=$1 AND account_id=$2 AND upload_id=$3${lock ? ' FOR UPDATE' : ''}`,
+        `SELECT cancelled FROM library.bangumi_upload WHERE route=$1 AND account_id=$2 AND upload_id=$3
+          AND expires_at>clock_timestamp()${lock ? ' FOR UPDATE' : ''}`,
         args(a, id),
       )
     ).rows[0];
@@ -323,8 +324,10 @@ export function createBangumiImport(deps: Dependencies) {
   ): Promise<StoredRow> {
     const r = (
       await tx.query<StoredRow>(
-        `SELECT ordinal,evidence,review,choice,outcome,labels FROM library.bangumi_upload_row
-      WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4${lock ? ' FOR UPDATE' : ''}`,
+        `SELECT r.ordinal,r.evidence,r.review,r.choice,r.outcome,r.labels FROM library.bangumi_upload_row r
+      JOIN library.bangumi_upload u USING(route,account_id,upload_id)
+      WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.ordinal=$4
+        AND u.expires_at>clock_timestamp()${lock ? ' FOR UPDATE OF r' : ''}`,
         [...args(a, id), ordinal],
       )
     ).rows[0];
@@ -385,8 +388,10 @@ export function createBangumiImport(deps: Dependencies) {
       const h = await header(tx, a, id);
       const rows = (
         await tx.query<StoredRow>(
-          `SELECT ordinal,evidence,review,outcome FROM library.bangumi_upload_row
-        WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal>$4 ORDER BY ordinal LIMIT 11`,
+          `SELECT r.ordinal,r.evidence,r.review,r.outcome FROM library.bangumi_upload_row r
+        JOIN library.bangumi_upload u USING(route,account_id,upload_id)
+        WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.ordinal>$4
+          AND u.expires_at>clock_timestamp() ORDER BY r.ordinal LIMIT 11`,
           [...args(a, id), after],
         )
       ).rows;
@@ -515,17 +520,21 @@ export function createBangumiImport(deps: Dependencies) {
     const e = original.evidence;
     const candidates: string[] = [];
     let unavailable = false;
+    let claimGuard: BangumiGuard['claim'] = null;
     if (
       typeof e.source.subject_id === 'number' &&
       Number.isSafeInteger(e.source.subject_id) &&
       e.source.subject_id > 0
     ) {
       try {
+        const externalId = String(e.source.subject_id),
+          claimRoute = tupleRoute(deps.routeKey, 'bangumi', externalId);
         const claim = await readClaim.run(pool, {
-          route: tupleRoute(deps.routeKey, 'bangumi', String(e.source.subject_id)),
+          route: claimRoute,
           source: 'bangumi',
-          external_id: String(e.source.subject_id),
+          external_id: externalId,
         });
+        claimGuard = { route: claimRoute, externalId, subjectId: claim?.subject_id ?? null };
         if (claim) {
           const observed = await observation(actor, claim.subject_id);
           if (observed) candidates.push(observed.source.subjectId);
@@ -557,17 +566,20 @@ export function createBangumiImport(deps: Dependencies) {
         if (!(error instanceof LibraryNotFoundError)) throw error;
       }
     }
+    const reviewToken = randomUUID();
     const guard: BangumiReview['guard'] =
       source?.kind === 'supported'
         ? {
             subjectId: source.subjectId,
             releaseDigest: source.pin.releaseDigest,
             identityEpoch: String(observed!.anchor.identityEpoch),
+            claim: claimGuard,
+            upload: { uploadId: id, ordinal, reviewToken },
           }
         : null;
     const score = await scoreReview(actor, e, source?.subjectId ?? null, guard, selection);
     const review: StoredReview = {
-      token: randomUUID(),
+      token: reviewToken,
       candidates,
       target: source?.subjectId ?? null,
       match: target
@@ -603,10 +615,15 @@ export function createBangumiImport(deps: Dependencies) {
           `UPDATE library.bangumi_upload_row SET review=$5::jsonb,choice=NULL,outcome=NULL,labels=NULL WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
           [...args(a, id), ordinal, JSON.stringify(review)],
         );
-        return { ordinal, review };
+        return { ordinal, reviewToken: review.token };
       },
     );
-    return { ...saved.value, review: reviewView(saved.value.review) };
+    const stored = await read(actor, async (tx, a) => {
+      if ((await header(tx, a, id)).cancelled) throw new ProblemError('conflict');
+      return row(tx, a, id, ordinal);
+    });
+    if (!stored.review || stored.review.token !== saved.value.reviewToken) throw new ProblemError('conflict');
+    return { ordinal, review: reviewView(stored.review) };
   }
   async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
     const original = await read(actor, async (tx, a) => {

@@ -157,7 +157,7 @@ beforeAll(async () => {
     (${route},${collection},${sourceMemberIds[1]},${subjectIds[4]},'second occurrence','a0',now(),${owner})`;
   await sql`INSERT INTO library.entry(route,account_id,subject_id,state,library_profile_pin,revision,created_at,updated_at,transaction_id) VALUES(${route},${other},${subjectIds[0]},'secret-other-state',${legacyPin},1,now(),now(),${other})`;
   await sql`INSERT INTO library.bangumi_upload(route,account_id,upload_id) VALUES(${route},${owner},${copy}),(${route},${other},${copy})`;
-  await sql`INSERT INTO library.bangumi_upload_row(route,account_id,upload_id,ordinal,evidence,review) VALUES(${route},${owner},${copy},0,${parseBangumiUpload('{"format":"rezics.bangumi-collection.v1","collections":[{"subject_id":42,"notes":"source note","type":99}]}')[0]},'{"token":"never-export-review"}')`;
+  await sql`INSERT INTO library.bangumi_upload_row(route,account_id,upload_id,ordinal,evidence,review) VALUES(${route},${owner},${copy},0,${parseBangumiUpload('{"format":"rezics.bangumi-collection.v1","collections":[{"subject_id":42,"subject_type":2,"type":99,"rate":8,"ep_status":4,"tags":["private tag"],"comment":"source note","private":true,"custom_field":"future"}]}')[0]},'{"token":"never-export-review"}')`;
   await sql`INSERT INTO library.list_import_mal(route,account_id,id,document,expires_at) VALUES(${route},${owner},${copy},${{ rows: parseMal('<myanimelist><anime><series_animedb_id>17</series_animedb_id><series_title>Original title</series_title><my_start_date>2020-00-00</my_start_date><my_password>never-export-secret</my_password></anime></myanimelist>'), canceled: false, xml: 'never-export-raw-xml' }},now()+interval '1 day')`;
   const vndbRows = parseVndb(
     '<vndb-export version="1.0"><vns>' +
@@ -279,7 +279,21 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(sections.units?.map((r) => r.unit_id)).toEqual(['chapter-1', 'chapter-9']);
   expect(JSON.stringify(records)).not.toContain('secret-other-state');
   expect(JSON.stringify(records)).not.toMatch(/transaction_id|never-export-/);
-  expect(sections.bangumiEvidence?.[0]).toMatchObject({ evidence: { source: { subject_id: 42, type: 99 } } });
+  expect(sections.bangumiEvidence?.[0]).toMatchObject({
+    evidence: {
+      source: {
+        subject_id: 42,
+        subject_type: 2,
+        type: 99,
+        rate: 8,
+        ep_status: 4,
+        tags: ['private tag'],
+        comment: 'source note',
+        private: true,
+        custom_field: 'future',
+      },
+    },
+  });
   expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { identifier: { value: '17' } } });
   expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { dates: { started: { precision: 'year' } } } });
   expect(() => decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })))).toThrow();

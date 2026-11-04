@@ -237,7 +237,8 @@ export function createBangumiLabelReview(
           }>(
             `SELECT u.cancelled,r.review,r.labels FROM library.bangumi_upload u
              JOIN library.bangumi_upload_row r USING(route,account_id,upload_id)
-             WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3 AND r.ordinal=$4 FOR UPDATE OF u`,
+             WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3 AND u.expires_at>clock_timestamp()
+               AND r.ordinal=$4 FOR UPDATE OF u`,
             args(actor, id, ordinal),
           );
           const r = current.rows[0];
