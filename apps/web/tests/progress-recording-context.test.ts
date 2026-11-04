@@ -203,6 +203,13 @@ test('Record and correct exact progress and a selected-field journal with retain
     changeOccurrenceLifecycle: async () => ({ kind: 'uncertain' }),
   }));
   const { createElement: h, act } = await import('react');
+  const settle = async (action: () => unknown) => {
+    await act(async () => {
+      await action();
+      // Query observers deliver batched notifications on the next scheduler turn.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  };
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
@@ -244,7 +251,7 @@ test('Record and correct exact progress and a selected-field journal with retain
   window.document.body.append(host);
   const root = createRoot(host);
   try {
-    await act(async () => root.render(h(QueryClientProvider, { client: queries }, h(RouterProvider, { router }))));
+    await settle(async () => root.render(h(QueryClientProvider, { client: queries }, h(RouterProvider, { router }))));
     const button = (text: string) => {
       const match = [...window.document.querySelectorAll('button')].find(
         (element: HTMLButtonElement) => element.textContent === text,
@@ -253,14 +260,14 @@ test('Record and correct exact progress and a selected-field journal with retain
       return match!;
     };
     const open = async () => {
-      await act(async () => button(m.library_progress_update()).click());
+      await settle(async () => button(m.library_progress_update()).click());
       const dialog = window.document.querySelector('[role="dialog"]');
       expect(dialog).not.toBeNull();
       return dialog!;
     };
     const enter = async (dialog: HTMLElement, value: string) => {
       const input = dialog.querySelector('input[inputmode="decimal"]')!;
-      await act(async () => {
+      await settle(async () => {
         input.focus();
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
         input.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
@@ -283,10 +290,10 @@ test('Record and correct exact progress and a selected-field journal with retain
     await enter(dialog, '3.75');
     expect(dialog.textContent).toContain('Recorded total after saving: 3.75 segments');
     expect(dialog.textContent).not.toContain('6.25');
-    await act(async () =>
+    await settle(async () =>
       dialog.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
     );
-    await act(async () => button(m.library_progress_confirm_correction()).click());
+    await settle(async () => button(m.library_progress_confirm_correction()).click());
     expect(writes).toEqual([
       {
         body: { revision: 1, amount: '3.75' },
@@ -303,10 +310,10 @@ test('Record and correct exact progress and a selected-field journal with retain
     expect(again.textContent).toContain('Current recorded total: 3.75 segments');
     await enter(again, '0');
     expect(again.textContent).toContain('Recorded total after saving: 0 segments');
-    await act(async () =>
+    await settle(async () =>
       again.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })),
     );
-    await act(async () => button(m.library_progress_confirm_correction()).click());
+    await settle(async () => button(m.library_progress_confirm_correction()).click());
     expect(writes[1]?.body).toEqual({ revision: 2, amount: '0' });
     expect(writes[1]?.key).not.toBe(JSON.stringify(page.idempotencyKey));
     expect(session.amount).toBe('0');
@@ -322,7 +329,7 @@ test('Record and correct exact progress and a selected-field journal with retain
     };
     const setField = async (label: string, value: string) => {
       const input = field(label);
-      await act(async () => {
+      await settle(async () => {
         input.focus();
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
         input.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
@@ -333,10 +340,10 @@ test('Record and correct exact progress and a selected-field journal with retain
     expect(journalSection().textContent).toContain(m.library_occurrence_date_invalid());
     expect(button(m.library_journal_review()).disabled).toBe(true);
     await setField(m.library_occurrence_finish_date(), '2024-02');
-    await act(async () => button(m.library_journal_review()).click());
+    await settle(async () => button(m.library_journal_review()).click());
     expect(journalSection().textContent).toContain(m.library_journal_precision_month());
     expect(journalSection().textContent).toContain(m.library_journal_untouched());
-    await act(async () => {
+    await settle(async () => {
       button(m.library_occurrence_save()).click();
       button(m.library_occurrence_save()).click();
     });
@@ -344,41 +351,44 @@ test('Record and correct exact progress and a selected-field journal with retain
     const captured = structuredClone(journalWrites[0]!);
     expect(captured.body).toEqual({ revision: 0, finishDate: { year: 2024, month: 2 } });
     // Read admission retires the private reader while the same actor and credential retain command custody.
-    await act(async () => admit([]));
+    await settle(async () => admit([]));
     expect(host.textContent).not.toContain('Original private reflection');
     journal = { ...journal, revision: 1, finishDate: { year: 2024, month: 2 } };
-    await act(async () => {
+    await settle(async () => {
       resolveJournal!({ kind: 'saved', journal });
     });
     expect(host.textContent).not.toContain('Original private reflection');
-    await act(async () => admit());
+    await settle(async () => admit());
     expect(journalSection().textContent).toContain(m.library_journal_retry_identity());
-    await act(async () => button(m.library_occurrence_read_current()).click());
+    await settle(async () => button(m.library_occurrence_read_current()).click());
     expect(journalWrites).toHaveLength(1);
     expect(journalSection().textContent).toContain(m.library_journal_retry_identity());
-    await act(async () => button(m.library_rich_entry_retry()).click());
+    await settle(async () => button(m.library_rich_entry_retry()).click());
     expect(journalWrites).toHaveLength(2);
     expect(journalWrites[1]).toEqual(captured);
     expect(journalSection().textContent).toContain(m.library_journal_saved());
     // A definitive stale refusal retains selected fields until an explicit read and re-review.
     refuse = true;
     await setField(m.library_occurrence_start_date(), '2025');
-    await act(async () => button(m.library_journal_review()).click());
-    await act(async () => button(m.library_occurrence_save()).click());
+    await settle(async () => button(m.library_journal_review()).click());
+    await settle(async () => button(m.library_occurrence_save()).click());
     expect(journalSection().textContent).toContain(m.library_journal_draft_retained());
     expect(field(m.library_occurrence_start_date()).value).toBe('2025');
     await setField(m.library_occurrence_start_date(), '2026');
     expect(journalSection().textContent).toContain(m.library_journal_draft_retained());
     journal = { ...journal, revision: 2, reflection: 'Changed elsewhere' };
-    await act(async () => button(m.library_occurrence_read_current()).click());
-    await act(async () => button(m.library_occurrence_review_latest()).click());
+    await settle(async () => button(m.library_occurrence_read_current()).click());
+    await settle(async () => button(m.library_occurrence_review_latest()).click());
     refuse = false;
-    await act(async () => button(m.library_journal_review()).click());
-    await act(async () => button(m.library_occurrence_save()).click());
+    await settle(async () => button(m.library_journal_review()).click());
+    journal = { ...journal, revision: 3, startDate: { year: 2026 } };
+    await settle(async () => button(m.library_occurrence_save()).click());
+    expect(field(m.library_occurrence_start_date()).value).toBe('2026');
+    expect(journalSection().textContent).toContain(m.library_journal_current_revision({ revision: 3 }));
     expect(journalWrites[3]?.body).toEqual({ revision: 2, startDate: { year: 2026 } });
     expect(journalWrites[3]?.key).not.toBe(journalWrites[2]?.key);
   } finally {
-    await act(async () => root.unmount());
+    await settle(async () => root.unmount());
     stopObservation();
     queries.clear();
     window.close();
