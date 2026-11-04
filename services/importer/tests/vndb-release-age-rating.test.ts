@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BatchCommand } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { CrossMediaDumpFiles, crossMediaAliases, type CrossMediaPort } from '../src/cross-media-seed.ts';
@@ -33,22 +33,29 @@ async function authoredCopy(directory: string, age = '15') {
   return new CrossMediaDumpFiles(join(directory, 'bangumi'), directory);
 }
 
-function transport(commands: BatchCommand[], ids: Map<string, string>): ImportTransport {
+function transport(
+  commands: BatchCommand[],
+  ids: Map<string, string>,
+  receipts: Map<string, BatchWriteResult['results'][number]>,
+): ImportTransport {
   const metadata = sourceRecordMetadataFixture();
   return {
     async batchWrite(request) {
       commands.push(...request.commands);
       return {
-        results: request.commands.map((command) => ({
-          key: command.key,
-          status: 201 as const,
-          value:
-            command.op === 'create'
-              ? { id: ids.get(command.source.external_id) ?? (ids.set(command.source.external_id, randomUUID()), ids.get(command.source.external_id)!), revision: 1 }
-              : command.op === 'propose'
-                ? { candidate: randomUUID(), revision: 1 }
-                : { revision: 1 },
-        })),
+        results: request.commands.map((command) => {
+          const old = receipts.get(command.key);
+          if (old) return structuredClone(old);
+          let value: unknown;
+          if (command.op === 'create') {
+            let id = ids.get(command.source.external_id);
+            if (!id) ids.set(command.source.external_id, (id = randomUUID()));
+            value = { id, revision: 1 };
+          } else value = command.op === 'propose' ? { candidate: randomUUID(), revision: 1 } : { revision: 1 };
+          const result = { key: command.key, status: 201 as const, value };
+          receipts.set(command.key, result);
+          return structuredClone(result);
+        }),
       };
     },
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
@@ -58,8 +65,12 @@ function transport(commands: BatchCommand[], ids: Map<string, string>): ImportTr
   };
 }
 
-function port(commands: BatchCommand[], ids: Map<string, string>): CrossMediaPort {
-  const api = transport(commands, ids);
+function port(
+  commands: BatchCommand[],
+  ids: Map<string, string>,
+  receipts: Map<string, BatchWriteResult['results'][number]>,
+): CrossMediaPort {
+  const api = transport(commands, ids, receipts);
   return {
     batch: api.batchWrite,
     setSourceRecordMetadata: api.setSourceRecordMetadata!,
@@ -84,6 +95,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
   const directory = await mkdtemp(join(tmpdir(), 'vndb-release-age-'));
   const commands: BatchCommand[] = [];
   const ids = new Map<string, string>();
+  const receipts = new Map<string, BatchWriteResult['results'][number]>();
   const path = join(directory, 'state.sqlite');
   try {
     const tables = await authoredCopy(directory);
@@ -93,7 +105,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
       converterRevision: entityRevision,
     });
     const release = plan.entities.vndb.find((row) => row.key === 'r1')!;
-    const bindings = await readVndbReleaseBindings(port([], ids), []);
+    const bindings = await readVndbReleaseBindings(port([], ids, receipts), []);
     const projected = current.convert(
       { external_id: release.key, record_revision: 'unversioned', record: release.payload },
       { source: crossMediaAliases.vndb },
@@ -115,7 +127,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
         return { ...result, converter_revision: previousRevision, digest: sourceDigest(result.normalized) };
       },
     };
-    const oldImporter = new Importer({ path, transport: transport(commands, ids) });
+    const oldImporter = new Importer({ path, transport: transport(commands, ids, receipts) });
     const oldResult = await oldImporter.runRecords(legacy, records(plan.entities.vndb));
     if (oldResult.status !== 'committed') throw new Error(`${oldResult.status}: ${oldResult.diagnostic}`);
     await oldImporter.close();
@@ -125,7 +137,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
     const refreshed = await importVndbReleaseFidelity({
       tables: await authoredCopy(directory),
       path,
-      port: port(commands, ids),
+      port: port(commands, ids, receipts),
       bindings,
       destination: { origin: 'https://kernel.import.test' },
     });
@@ -148,7 +160,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
     const changed = await importVndbReleaseFidelity({
       tables: await authoredCopy(directory, '16'),
       path,
-      port: port(commands, ids),
+      port: port(commands, ids, receipts),
       bindings,
       destination: { origin: 'https://kernel.import.test' },
     });
