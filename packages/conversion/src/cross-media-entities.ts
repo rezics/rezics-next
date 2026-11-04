@@ -1628,8 +1628,7 @@ function convert(
     })),
   ];
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
-  if (omitOrganizationIdentifier)
-    diagnostics.push({ pointer: '/id', code: 'unadmitted_organization_identifier' });
+  if (omitOrganizationIdentifier) diagnostics.push({ pointer: '/id', code: 'unadmitted_organization_identifier' });
   const measurementCommandKeys = new Map<number, string>();
   for (const measurement of projected.characterMeasurements?.measurements ?? []) {
     if (!releasedCharacterQuantity(measurement.property, measurement.quantity)) {

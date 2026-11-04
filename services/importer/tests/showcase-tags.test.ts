@@ -686,7 +686,11 @@ test('reviewed tag association bounds let one association from each selected wor
           { id: 'v410', official: 't', lang: 'en', title: 'First work', latin: null },
           { id: 'v999', official: 't', lang: 'en', title: 'Second work', latin: null },
         ];
-      if (table === 'entry_meta') yield* [{ id: 'v410', revision: 1 }, { id: 'v999', revision: 1 }];
+      if (table === 'entry_meta')
+        yield* [
+          { id: 'v410', revision: 1 },
+          { id: 'v999', revision: 1 },
+        ];
     },
   };
   const projected = await projectShowcaseTagTables(input, ['v410', 'v999'], new Set(['g311']));

@@ -1791,10 +1791,7 @@ export async function planCrossMediaSeed(
       plan.entities[provider] = [...plan.entities[provider]]
         .sort((left, right) => left.key.localeCompare(right.key))
         .filter((row) => {
-          const isPerson =
-            provider === 'bangumi'
-              ? row.key.startsWith('person:')
-              : /^[sp][1-9][0-9]*$/u.test(row.key);
+          const isPerson = provider === 'bangumi' ? row.key.startsWith('person:') : /^[sp][1-9][0-9]*$/u.test(row.key);
           if (!isPerson || people++ < peopleLimit) return true;
           omitted.add(row.key);
           gap(provider, 'people', { id: row.key }, 'Development showcase people limit exceeded');
@@ -1812,9 +1809,15 @@ export async function planCrossMediaSeed(
         `Missing selected Bangumi work: ${id}`,
       );
     for (const id of selection.vndb)
-      ensure(plan.records.vndb.some((row) => row.key === id), `Missing selected VNDB work: ${id}`);
+      ensure(
+        plan.records.vndb.some((row) => row.key === id),
+        `Missing selected VNDB work: ${id}`,
+      );
     ensure(
-      plan.records.bangumi.length + plan.entities.bangumi.length + plan.records.vndb.length + plan.entities.vndb.length <=
+      plan.records.bangumi.length +
+        plan.entities.bangumi.length +
+        plan.records.vndb.length +
+        plan.entities.vndb.length <=
         showcaseLimits.records,
       'Selected showcase record limit exceeded',
     );
@@ -2892,7 +2895,8 @@ export async function runCrossMediaSeedCli(
       .filter((member) => member.source === 'vndb' && member.kind === 'work')
       .map((member) => member.key);
     let preparedPublicTags: Awaited<ReturnType<typeof prepareShowcaseTags>> | undefined;
-    let tagVocabularyRequirements: Awaited<ReturnType<typeof prepareShowcaseVndbPublicTagVocabulary>>['requirements'] = [];
+    let tagVocabularyRequirements: Awaited<ReturnType<typeof prepareShowcaseVndbPublicTagVocabulary>>['requirements'] =
+      [];
     let vocabularyAdmissions: NonNullable<ImporterOptions['vocabularyAdmission']>[] = [];
     let vndbBindings: SourceVocabularyBindings | undefined;
     if (options.selection && reviewedSubjects) {
@@ -2948,12 +2952,7 @@ export async function runCrossMediaSeedCli(
       const characterAdmissions: NonNullable<ImporterOptions['vocabularyAdmission']>[] = [];
       const roleBindings = await composeVndbCharacterVocabularyBindings(port, vndbVocabularyProfile, roleRequirements);
       const { prepareShowcaseVndbTraits } = await import('./showcase-vndb-traits.ts');
-      const reviewedTraits = await prepareShowcaseVndbTraits(
-        plan,
-        characterVocabulary.plan,
-        port,
-        reviewedSubjects,
-      );
+      const reviewedTraits = await prepareShowcaseVndbTraits(plan, characterVocabulary.plan, port, reviewedSubjects);
       characterAdmissions.push(reviewedTraits.vocabularyAdmission);
       characterAdmissions.push(
         vndbCharacterVocabularyAdmission(roleBindings, { ...characterVocabulary.plan, traits: [] }),
@@ -3006,9 +3005,7 @@ export async function runCrossMediaSeedCli(
       },
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
-    let publicTags:
-      | Awaited<ReturnType<typeof importShowcaseTags>>
-      | Awaited<ReturnType<typeof prepareShowcaseTags>>;
+    let publicTags: Awaited<ReturnType<typeof importShowcaseTags>> | Awaited<ReturnType<typeof prepareShowcaseTags>>;
     if (preparedPublicTags) {
       publicTags = preparedPublicTags;
     } else {
@@ -3407,12 +3404,12 @@ export async function runCrossMediaSeedCli(
           ...(books
             ? {
                 books: {
-            family: books.family,
-            selected: books.selected,
-            conversions: books.conversions,
-            identities: books.identities,
-            gaps: books.gaps,
-            creditGaps: books.creditGaps,
+                  family: books.family,
+                  selected: books.selected,
+                  conversions: books.conversions,
+                  identities: books.identities,
+                  gaps: books.gaps,
+                  creditGaps: books.creditGaps,
                 },
               }
             : {}),

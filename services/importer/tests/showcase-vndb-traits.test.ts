@@ -100,7 +100,11 @@ test('the development selector keeps its five exact works and only their direct 
     ],
     'vndb/vn_relations': [{ id: 'v2002', vid: 'v8', relation: 'seq' }],
     'vndb/releases_vn': [{ id: 'r9', vid: 'v2002', rtype: 'complete' }],
-    'vndb/vn_staff': Array.from({ length: 65 }, (_, index) => ({ id: 'v2002', aid: String(index + 1), role: 'scenario' })),
+    'vndb/vn_staff': Array.from({ length: 65 }, (_, index) => ({
+      id: 'v2002',
+      aid: String(index + 1),
+      role: 'scenario',
+    })),
     'vndb/staff_alias': Array.from({ length: 65 }, (_, index) => ({
       id: `s${index + 1}`,
       aid: String(index + 1),

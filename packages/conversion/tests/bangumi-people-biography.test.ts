@@ -88,9 +88,7 @@ test('authored Bangumi person summaries preserve profile, document rights and re
     throw new Error('Missing organization biography proposal');
   expect(checkBatchWrite({ commands: [organizationBiography] }, bundledRelease)).toEqual([]);
   expect(
-    organization.proposals.some(
-      (command) => command.op === 'propose' && command.statement.property.id === 'wdt:P6298',
-    ),
+    organization.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P6298'),
   ).toBe(false);
   expect(organization.diagnostics).toContainEqual({ pointer: '/id', code: 'unadmitted_organization_identifier' });
   expect(checkBatchWrite({ commands: organization.proposals }, bundledRelease)).toEqual([]);
