@@ -140,7 +140,6 @@ export function IdentityIntakePanel({
     controller.current?.abort();
     controller.current = undefined;
     running.current = false;
-    setState({ intentKey, phase: 'idle' });
     return () => controller.current?.abort();
   }, [intentKey]);
 
