@@ -66,7 +66,8 @@ mock.module('../src/library/progress-server', () => ({
   finishProgressSession: unexpectedRequest,
 }));
 const { createRoot } = await import('react-dom/client');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { within, userEvent } = await import('storybook/test');
 const { ProgressSessionPage } = await import('../src/library/progress-session');
@@ -148,8 +149,11 @@ async function mount(
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const rootRoute = createRootRoute();
+  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/en/library/progress', component: () => null });
   const router = createRouter({
-    routeTree: createRootRoute(),
+    routeTree: rootRoute.addChildren([indexRoute]),
     history: createMemoryHistory({ initialEntries: ['/en/library/progress'] }),
   });
   await router.load();
@@ -157,13 +161,15 @@ async function mount(
     act(async () =>
       root.render(
         <StrictMode>
-          <RouterContextProvider router={router}>
-            <ProgressSessionPage
-              page={p}
-              logsCursor="logs-current/+?== &公開"
-              returnContext={returnContext}
-            />
-          </RouterContextProvider>
+          <QueryClientProvider client={client}>
+            <RouterContextProvider router={router}>
+              <ProgressSessionPage
+                page={p}
+                logsCursor="logs-current/+?== &公開"
+                returnContext={returnContext}
+              />
+            </RouterContextProvider>
+          </QueryClientProvider>
         </StrictMode>,
       ),
     );
@@ -182,6 +188,7 @@ async function mount(
     close: async () => {
       await act(async () => root.unmount());
       host.remove();
+      client.clear();
     },
   };
 }

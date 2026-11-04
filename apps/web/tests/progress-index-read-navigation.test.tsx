@@ -74,7 +74,7 @@ mock.module('../src/library/progress-server', () => ({
 }));
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createRoot } = await import('react-dom/client');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { ProgressIndexPage } = await import('../src/library/progress-page');
 const {
@@ -95,8 +95,15 @@ const tick = (run: () => unknown) =>
 test('disclosed Subject navigation survives read-only active and completed rows; actions and detail keep separate admission', async () => {
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const rootRoute = createRootRoute();
+  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/en/library/progress', component: () => null });
+  const detailRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/library/progress/$id',
+    component: () => null,
+  });
   const router = createRouter({
-    routeTree: createRootRoute(),
+    routeTree: rootRoute.addChildren([indexRoute, detailRoute]),
     history: createMemoryHistory({ initialEntries: ['/en/library/progress'] }),
   });
   await router.load();
