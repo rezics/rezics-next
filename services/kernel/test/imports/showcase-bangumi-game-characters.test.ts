@@ -27,6 +27,8 @@ function sourceTables(order: unknown): CrossMediaTables {
     'bangumi/subject': [
       { id: 101, name: 'STEINS;GATE', type: 2 },
       { id: 103, name: 'STEINS;GATE Game', type: 4 },
+      { id: 104, name: 'CLANNAD', type: 2 },
+      { id: 105, name: 'Fate/stay night', type: 2 },
       { id: 201, name: 'Unrelated Game', type: 4 },
     ],
     'bangumi/subject-characters': [
@@ -50,6 +52,13 @@ function sourceTables(order: unknown): CrossMediaTables {
       { id: 1002, name: 'Voice B', type: 1 },
       { id: 1003, name: 'Unrelated Voice', type: 1 },
     ],
+    'vndb/vn': ['v1', 'v2', 'v3'].map((id) => ({ id, olang: 'ja', alias: null })),
+    'vndb/vn_titles': [
+      { id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null },
+      { id: 'v2', lang: 'ja', official: 't', title: 'CLANNAD', latin: null },
+      { id: 'v3', lang: 'ja', official: 't', title: 'Fate/stay night', latin: null },
+    ],
+    'vndb/entry_meta': ['v1', 'v2', 'v3'].map((id) => ({ id, revision: '1' })),
   };
   return {
     async *rows(provider, table) {
