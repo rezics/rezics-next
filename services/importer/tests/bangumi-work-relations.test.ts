@@ -206,7 +206,7 @@ test('production graph journals immutable relation commands and retries without 
   const missing = await reopened.deliver({
     claim: ({ external_id }) => external_id === '999' ? { state: 'pending' } : claim({ external_id }),
     nativeType: () => 'schema:TVSeries',
-    fence: async () => ({ fenced: false, securityRevision: null }),
+    fence: async ({ externalId }) => ({ fenced: externalId === '12' || externalId === '13', securityRevision: null }),
     batch: async () => {
       throw new Error('Missing endpoint reached the write transport');
     },
