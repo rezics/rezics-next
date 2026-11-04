@@ -74,6 +74,7 @@ test('native board action, authorized replay, durable projection and private ins
   await f.moderationEffect.run(event); // A duplicate delivery also converges at the native projector.
   const detail = await read(exact);
   expect(detail.response.status).toBe(200);
+  if (!detail.body) throw new Error('Expected retained decision body');
   expect(detail.response.headers.get('cache-control')).toBe('private, no-store');
   expect(detail.body).toMatchObject({
     targetKind: 'board',
