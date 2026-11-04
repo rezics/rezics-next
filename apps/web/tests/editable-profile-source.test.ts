@@ -197,4 +197,3 @@ test('an admitted actor and organization carry native editing advice through the
     expect(loaded).not.toHaveProperty(native.kind === 'actor' ? 'speakersListed' : 'handle');
   }
 });
-});

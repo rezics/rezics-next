@@ -131,12 +131,12 @@ test('The actual returned avatar/public-view fields are used and denied/unavaila
     expect(api.editor.snapshot().draft).toEqual(initial);
     expect(api.requests).toHaveLength(1);
   }
-  const { accountId: id, biography: bio, ...fields } = source();
+  const { accountId: id, biography: bio, editing, ...fields } = source();
+  const envelope = { profile: { id, handle: null, bio, ...fields }, editing };
   for (const [status, body] of [
     [401, { code: 'authentication_required' }],
     [403, { code: 'forbidden' }],
     [403, { code: 'platform_closed' }],
-    [503, { code: 'dependency_unavailable' }],
     [200, { accounts: [{ id: accountId, handle: 'public-selector' }], next: null }],
     [200, { profile: { id: mediaId, handle: null, bio, ...fields } }],
   ] as const) {
@@ -150,10 +150,20 @@ test('The actual returned avatar/public-view fields are used and denied/unavaila
     expect(api.writes).toHaveLength(0);
     expect(api.requests).toHaveLength(1);
     expect(new URL(api.requests[0]!.url).pathname).toBe(`/v1/accounts/${accountId}/profile`);
-    api.respond(200, { profile: { id, handle: null, bio, ...fields } });
+    api.respond(200, envelope);
     await api.editor.reload();
     expect(api.editor.snapshot().known).toEqual(source());
   }
+  const stalled = boundary('Bearer unchanged-credential');
+  await stalled.editor.reload();
+  stalled.respond(503, { code: 'dependency_unavailable' });
+  await stalled.editor.reload();
+  expect(stalled.editor.snapshot().phase).toBe('unavailable');
+  expect(stalled.editor.snapshot().known).toEqual(source());
+  expect(stalled.editor.snapshot().draft).toEqual(source());
+  stalled.respond(200, envelope);
+  await stalled.editor.reload();
+  expect(stalled.editor.snapshot().known).toEqual(source());
 });
 
 test('A new or unready actor never receives a prior private profile and an explicit native read denial hides cached server values without converting a transport-uncertain save into an unapplied result', async () => {
@@ -251,9 +261,9 @@ test('A new or unready actor never receives a prior private profile and an expli
     const before = editor.snapshot();
     await editor.reload();
     expect(editor.snapshot().readAuthority).toBe('denied');
-    expect(editor.snapshot().known).toBe(before.known);
-    expect(editor.snapshot().draft).toBe(before.draft);
-    expect(editor.snapshot().attempt).toBe(before.attempt);
+    expect(editor.snapshot().known).toBeNull();
+    expect(editor.snapshot().draft).toBeNull();
+    expect(editor.snapshot().attempt).toBe(unresolved ? before.attempt : null);
     const html = renderToStaticMarkup(
       createElement('div', null, createElement(ProfileCard, { editor }), createElement(PublicViewsCard, { editor })),
     );
@@ -372,7 +382,8 @@ test('retired actors ignore late read and save completions and release only thei
     finish();
     await completing;
     expect(editor.snapshot().readAuthority).toBe('denied');
-    expect(editor.snapshot().draft?.biography).toBe('Retained local words');
+    expect(editor.snapshot().known).toBeNull();
+    expect(editor.snapshot().draft).toBeNull();
     expect(editor.snapshot().attempt).toBe(original);
     expect(published).toBe(0);
     expect(reads).toBe(operation === 'read' ? 1 : 0);

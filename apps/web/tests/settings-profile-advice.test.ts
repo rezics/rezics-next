@@ -85,7 +85,17 @@ test('denial retires private values and advice while a fresh native GET still co
   const client = createKernelClient('https://kernel.example.test', {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
-      if (request.method === 'PATCH') return Response.json({ accountId: actorId });
+      if (request.method === 'PATCH') {
+        const patch = (await request.json()) as Partial<ProfileValues> & { avatar?: string | null };
+        current = {
+          ...current,
+          ...patch,
+          avatar: patch.avatar === undefined ? current.avatar : patch.avatar === null ? null : { media: patch.avatar },
+          publicViews: { ...current.publicViews, ...patch.publicViews },
+          editing: current.editing,
+        };
+        return Response.json({ accountId: actorId });
+      }
       return Response.json(nativeBody(current), { headers: { 'cache-control': 'private, no-store' } });
     }) as typeof fetch,
   });
