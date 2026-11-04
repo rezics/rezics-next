@@ -567,7 +567,9 @@ selected original thread IDs, current `pinned` and closed `actions` per row. Ful
 `pin`; current pins retain `unpin`. Current read access never supplies curation authority.
 
 The reader reuses native Board/Realm disclosure and two exact selected reading-card disclosure rounds, then
-prepares current curation and evaluates it in the final native pin snapshot. It compares source/security witnesses,
+prepares current curation and evaluates it in the final native pin snapshot. That snapshot fences the exact
+selected native home epochs and positions against their final disclosure anchors, so source changes during
+foreign preparation invalidate advice. An unrelated write in a selected home can conservatively require a retry. It compares source/security witnesses,
 Board parent, native home epochs and pin generation. A changed observed source or generation returns only
 `{ state: "stale" }`; the consumer must explicitly inspect fresh sources and restart its current Board sort without
 the prior cursor. Native dependency failure remains unavailable, separate from denial or unpinned state.
@@ -2807,7 +2809,7 @@ check uses scales [256, 1024, 4096] with the series rule.
 
 - **Touches:** Three released Board/Realm native snapshots, fresh read-decision preparations and two precise
   curation preparations/evaluations; each snapshot reads one Board generation; the two authority snapshots also read the indexed current pin prefix
-  of at most five. Two selected disclosure rounds use exact Board, Realm, thread, opening and revision keys through
+  of at most five. The final snapshot also point-reads at most 26 selected/Board partition fences. Two selected disclosure rounds use exact Board, Realm, thread, opening and revision keys through
   the existing native Accounts/Access/Realm/Subject and account-standing owners. Their pools, runner work,
   preparations, controls, evaluations and both disclosure observations remain part of the operation's cost.
 - **Bound:** Raw selection S <= 25 before all I/O; no candidate scan, history traversal, refill or pin census.
