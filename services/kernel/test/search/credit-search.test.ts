@@ -98,10 +98,16 @@ describe('bounded credited-name projection consumer', () => {
   test('additive mapping preserves the installed analyzer, names and sort definitions', () => {
     const base = subjectIndexDefinition();
     const before = structuredClone(base);
-    const mapped = creditSearchIndexDefinition(base) as { mappings: { properties: Record<string, unknown> } };
+    const mapped = creditSearchIndexDefinition(base) as {
+      mappings: { _meta: Record<string, unknown>; properties: Record<string, unknown> };
+    };
     expect(base).toEqual(before);
     expect(mapped.mappings.properties.credited_names).toMatchObject({ type: 'nested', dynamic: 'strict' });
+    expect(mapped.mappings.properties.credit_search_complete).toEqual({ type: 'boolean' });
+    expect(mapped.mappings._meta.credit_search_format).toBe(1);
     delete mapped.mappings.properties.credited_names;
+    delete mapped.mappings.properties.credit_search_complete;
+    delete mapped.mappings._meta.credit_search_format;
     expect(mapped as Record<string, unknown>).toEqual(base);
   });
 });
