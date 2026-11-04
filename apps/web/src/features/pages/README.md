@@ -228,3 +228,27 @@ native page and opaque cursor without refilling sparse pages or implying complet
 values, weight-state text and spoiler evidence visible beside separate browse and inspect controls. Actions wrap,
 have at least 44px targets and retain focus outlines in light and dark themes. All eight UI locales include these
 states; definition/Subject labels retain their native fallback language.
+
+## Work relation region returns
+
+Decision: retain the supported same-work Subject address and a single-hop opener, with stream/node and separate
+browse/evidence focus; a replaced or no-longer-admitted reading offers an explicit restart.
+
+The overview keeps the current grouped relation renderer at its existing placement. Web composes its target,
+Connections and value-inspection addresses through `subjectVisitReturn`; the receiving route validates the same
+address it consumes. Realm, finite-view node/property and opaque cursor context survive when supported by that
+route. No cursor is transplanted from a composition window into the independent Connections reader. Empty,
+unavailable, historical and withheld streams keep their own current state and their own selected-stream entry.
+
+`WorkRelation` hands back the mounted browse link or evidence summary. Returning to evidence focuses its summary
+without reopening disclosure. The locator includes the original holder/assertion, stream/node, spoiler preference,
+release and revision; these identify focus intent and confer no permission. Current native admission still decides
+whether that control exists. Missing rows, changed release/revision or spoiler preference focus the region heading
+and expose restart. Focus is consumed once for an actual address visit, so source replacement and A/B/A cannot
+replay an old locator. Equal successful replacement remounts row disclosure. Browser credential/cache observation
+uses the existing shared `browserObservation` and address lease; a retired source cannot rebind itself to recovery.
+
+Connections keeps its existing bounded history and exact reading checks. Target and inspection links retain that
+window plus the validated work-region opener. A replacement of the mounted source consumes the prior URL intent
+and requires restart before reading again, rather than replaying its old continuation. No new native call, grouping
+model, evidence renderer, continuation host, source projection or inferred target is introduced by the outer journey.

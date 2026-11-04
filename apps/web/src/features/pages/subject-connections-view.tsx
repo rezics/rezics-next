@@ -68,6 +68,7 @@ export function SubjectConnections({
 }) {
   const value = useContext(OverviewContext);
   const sequence = useRef(0);
+  const returnVisit = useRef<string | undefined>(undefined);
   const incarnation = useRef<{
     serial: number;
     page: SubjectPageData;
@@ -75,6 +76,7 @@ export function SubjectConnections({
     read: ConnectionRead;
     window: ReturnType<typeof createConnectionWindow>;
     resume?: ConnectionReturnWindow;
+    retiredReturn: boolean;
   } | null>(null);
   const reader = JSON.stringify([
     page.subject,
@@ -102,10 +104,12 @@ export function SubjectConnections({
   const current = incarnation.current;
   if (!current || current.page !== page || current.reader !== reader || current.read !== read || !lifetime.available) {
     current?.window.retire(true);
-    const resume =
-      typeof window !== 'undefined' && window.location.pathname.includes(`/subjects/${page.subject}/`)
-        ? connectionReturnWindow(window.location.hash)
-        : undefined;
+    const visitHref = typeof window !== 'undefined' && window.location.pathname.includes(`/subjects/${page.subject}/`)
+      ? `${window.location.pathname}${window.location.search}${window.location.hash}` : undefined;
+    const requested = visitHref ? connectionReturnWindow(new URL(visitHref, 'https://rezics.invalid').hash) : undefined;
+    const retiredReturn = !!requested && returnVisit.current === visitHref;
+    const resume = retiredReturn ? undefined : requested;
+    returnVisit.current = visitHref;
     const address: ConnectionAddress = {
       id: page.subject,
       locale: value.locale,
@@ -138,6 +142,7 @@ export function SubjectConnections({
       page,
       reader,
       read,
+      retiredReturn,
       window: createConnectionWindow(address, read, windowResume),
       ...(resume ? { resume } : {}),
     };
@@ -151,6 +156,7 @@ export function SubjectConnections({
       unavailable={viewer.state === 'unavailable' || !lifetime.available}
       returnTo={subjectVisitReturn(returnTo, value.locale)}
       resume={incarnation.current!.resume}
+      retiredReturn={incarnation.current!.retiredReturn}
     />
   );
 }
@@ -160,6 +166,7 @@ function connectionReturn(
   page: ConnectionPageState | undefined,
   focus?: string,
   holder?: string,
+  control?: 'browse' | 'evidence',
 ): ConnectionReturnWindow | undefined {
   if (!current.reading) return;
   const cursor = current.section.ok && 'cursor' in current.section.read ? current.section.read.cursor : undefined;
@@ -181,7 +188,7 @@ function connectionReturn(
     stream: current.stream.key,
     reading: current.reading,
     ...(cursor ? { cursor } : {}),
-    ...(focus && holder ? { focus, holder } : {}),
+    ...(focus && holder ? { focus, holder, ...(control ? { control } : {}) } : {}),
     ...(history && page ? { history, index: page.index } : {}),
   };
 }
@@ -193,6 +200,7 @@ function ConnectionsReading({
   unavailable,
   returnTo,
   resume,
+  retiredReturn,
 }: {
   window: ReturnType<typeof createConnectionWindow>;
   character: boolean;
@@ -200,6 +208,7 @@ function ConnectionsReading({
   unavailable: boolean;
   returnTo?: string | undefined;
   resume?: ConnectionReturnWindow | undefined;
+  retiredReturn: boolean;
 }) {
   const value = useContext(OverviewContext)!;
   const snapshot = useSyncExternalStore(window.subscribe, window.snapshot, window.snapshot);
@@ -208,6 +217,7 @@ function ConnectionsReading({
   const focusIntent = useRef<HTMLButtonElement | null>(null);
   const [completion, setCompletion] = useState('');
   const [returnMissing, setReturnMissing] = useState(false);
+  const [restartRequired, setRestartRequired] = useState(retiredReturn);
   const region = useRef<HTMLElement>(null);
   const restore = useRef(resume?.focus ? resume : undefined);
   useEffect(() => {
@@ -250,9 +260,9 @@ function ConnectionsReading({
   }, [snapshot]);
   useEffect(() => {
     window.activate();
-    if (ready) void window.load();
+    if (ready && !restartRequired) void window.load();
     return () => window.retire();
-  }, [window, ready]);
+  }, [window, ready, restartRequired]);
   useLayoutEffect(() => {
     const trigger = focusIntent.current;
     if (snapshot.pending.size || !trigger) return;
@@ -270,12 +280,12 @@ function ConnectionsReading({
     });
   }
   const visit = snapshot.visit;
-  const currentHref = connectionReturnHref(
+  const currentHref = withSubjectVisitReturn(connectionReturnHref(
     value.subject!,
     value.subjectLabel ?? value.unlabelled,
     value.locale,
     value.realm,
-  );
+  ), returnTo ?? '', value.locale);
   const Link = value.link;
   const link = useMemo<typeof PlainLink>(
     () => (props) => <Link {...props} href={withSubjectVisitReturn(props.href, currentHref, value.locale)} />,
@@ -321,6 +331,14 @@ function ConnectionsReading({
       ) : !ready || (!visit && snapshot.pending.size > 0) ? (
         <p role="status">{m.subject_relation_loading({}, o)}</p>
       ) : null}
+      {restartRequired && (
+        <div role="status" className="space-y-3">
+          <p>{m.subject_relation_changed({}, o)}</p>
+          <Button variant="outline" className={actionClass} onClick={() => setRestartRequired(false)}>
+            {m.subject_relation_restart({}, o)}
+          </Button>
+        </div>
+      )}
       {snapshot.failure !== undefined && (
         <div role="alert" className="space-y-3">
           <p>{failure(snapshot.failure)}</p>
@@ -471,13 +489,23 @@ function ConnectionsReading({
                           (item) => item.statement === work.statement.id && item.id === work.id,
                         );
                         if (!item || !current) return null;
-                        const returnHref = connectionReturnHref(
+                        const returnToFor = (control: 'browse' | 'evidence') => withSubjectVisitReturn(connectionReturnHref(
                           value.subject!,
                           value.subjectLabel ?? value.unlabelled,
                           value.locale,
                           value.realm,
-                          connectionReturn(current, snapshot.pages?.[group], work.statement.id, work.holder),
-                        );
+                          connectionReturn(current, snapshot.pages?.[group], work.statement.id, work.holder, control),
+                        ), returnTo ?? '', value.locale);
+                        const returnHref = returnToFor('browse');
+                        const target = restore.current;
+                        const restoreFocus = target && !snapshot.pending.size && current.section.ok &&
+                          current.reading === target.reading && current.stream.key === target.stream &&
+                          target.focus === work.statement.id && target.holder === work.holder
+                          ? {
+                            control: target.control ?? 'browse' as const,
+                            current: () => ready && restore.current === target,
+                            complete: () => { restore.current = undefined; },
+                          } : undefined;
                         const WorkLink: typeof PlainLink = (props) => (
                           <Link {...props} href={withSubjectVisitReturn(props.href, returnHref, value.locale)} />
                         );
@@ -492,6 +520,8 @@ function ConnectionsReading({
                               item={item}
                               value={{ ...rowValue, link: WorkLink }}
                               label={current.stream.label}
+                              returnToFor={returnToFor}
+                              restoreFocus={restoreFocus}
                             />
                           </div>
                         );
