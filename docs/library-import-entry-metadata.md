@@ -59,6 +59,7 @@ records, row locks, cancellation and expiry owner. MAL and AniList use this same
 request-scoped deadline, whole-document mutation receipts and 48 MiB encoded JSON limit; AniList retains addressed-row
 load/save, its complete live matching/profile observation and 4 MiB row limit. Their request digests still include
 `{sourceReviewToken,key}`; existing tokens, immutable confirmation inputs and native receipt keys are never rewritten.
+MAL review keeps the mutation outcome wrapper and the HTTP `{id,reviewToken}` result.
 Both adapters prepare live authority outside local transactions and fence the retained source and entry incarnation
 inside each fresh native command. Admission adds no operand to old native receipt inputs.
 
