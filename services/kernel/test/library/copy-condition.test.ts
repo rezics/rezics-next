@@ -50,7 +50,7 @@ test('two copies preserve independent media, packaging and original field accept
 
 test('old command operands remain absent and exact retries retain clear versus unknown', () => {
   expect(parseCopyConditionFields({ revision: 4, note: 'Existing intent' })).toEqual({});
-  const input = { mediaCondition: null, packagingCondition: 'unknown' };
+  const input = { mediaCondition: null, packagingCondition: 'unknown' } as const;
   expect(parseCopyConditionFields(JSON.parse(JSON.stringify(input)))).toEqual(input);
   for (const field of ['mediaCondition', 'packagingCondition']) {
     for (const value of [undefined, '', 'excellent', 0, false, {}, ['mint']]) {
