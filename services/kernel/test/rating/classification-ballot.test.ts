@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createRealAccess, type RealAccessFixture } from '../semantic/real-access.ts';
-import { suspendAccount } from '../support/native-suspension-driver.ts';
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -504,6 +504,16 @@ test('mounted classification ballots stay private and converge through the durab
     associationId,
     state: 'suppressed',
     pending: 'unknown',
+  });
+
+  await reinstateAccount(database.admin, accounts.voter1);
+  expect((await request('voter0', 'GET', ballotPath(subject.id, associationId, 'aggregate'))).status).toBe(503);
+  await driveWorker(partitions);
+  expect(await aggregate('voter0', subject.id, associationId)).toMatchObject({
+    state: 'published',
+    supportCount: 3,
+    opposeCount: 2,
+    falsePositiveCount: 3,
   });
 
   app = createKernel({
