@@ -251,6 +251,7 @@ async function mount() {
     await act(async () => {
       void client.refetchQueries({ queryKey: ['creator-offers-current'], type: 'active' });
     });
+    await tick();
   };
   return {
     host,
