@@ -1,18 +1,19 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { CommandUnavailableError } from '../../src/access/unavailable.ts';
 import { createPool } from '../../src/database/pool.ts';
-import { createKernel } from '../../src/http/kernel.ts';
+import { accessCommandAuthorization, type AccountActor, type Actor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { subjectPartition } from '../../src/search/source.ts';
+import { adoptCandidates, decideCandidate, proposeStatement } from '../../src/semantic/candidates.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { labelOrderKey } from '../../src/semantic/link-keys.ts';
+import { moderateStatement } from '../../src/semantic/moderation.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { createSubject } from '../../src/semantic/subject.ts';
 import { createRealAccess } from './real-access.ts';
-import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -24,7 +25,6 @@ afterAll(async () => {
   await admin.end();
 });
 
-const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(11)]]) };
 const ACTIONS = [
   'subject:create',
   'subject:read',
@@ -35,45 +35,72 @@ const ACTIONS = [
 ];
 const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000071' };
 const realAccess = await createRealAccess(admin, accounts, ACTIONS);
+const access = realAccess.access({
+  actions: new Map(ACTIONS.map((action) => [action, { anonymous: action === 'subject:read' }])),
+});
+const globalResource = { route: 0, id: GLOBAL_CONTEXT };
+const ROUTE = 0x1710;
+const deadline = () => Date.now() + 30_000;
 beforeAll(async () => {
-  for (const action of ACTIONS) await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  for (const action of ACTIONS) await realAccess.grant(globalResource, 'editor', action);
   expect(await bootstrapRelease(pool, bundledRelease)).toBe(bundledDigest);
 });
-const kernel = createKernel({
-  pool,
-  access: realAccess.access,
-  tokens,
-  receiptKeys: testReceiptKeys(),
-  routeKey: new Uint8Array(32).fill(12),
-  writeRate: realAccess.writeRate,
-});
 
-async function call(path: string, body: unknown) {
-  const response = await kernel.handle(
-    new Request(`http://kernel.test${path}`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${realAccess.bearer('editor')}`,
-        'idempotency-key': `"${randomUUID()}"`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    }),
+async function actor(): Promise<AccountActor> {
+  const authenticated: Actor = await access.authenticate(realAccess.bearer('editor'), { pool, deadline: deadline() });
+  if (authenticated.kind !== 'account') throw new TypeError('Visit fixture requires an account actor');
+  return authenticated;
+}
+async function authorization(action: string) {
+  return accessCommandAuthorization(
+    access,
+    await actor(),
+    action,
+    globalResource,
+    { pool, deadline: deadline() },
+    () => new Error(`Denied ${action}`),
   );
-  return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
-async function ok(path: string, body: unknown, status = 200) {
-  const answer = await call(path, body);
-  expect([path, answer.status]).toEqual([path, status]);
-  return answer.body;
-}
+const digest = (seed: string) => createHash('sha256').update(seed).digest();
 const GREGORIAN = 'http://www.wikidata.org/entity/Q1985727';
 const statement = (property: string, content: unknown, extra: Record<string, unknown> = {}) => ({
   property: { id: property },
   value: { type: 'value', content },
   ...extra,
 });
-const created = (body: unknown) => ok('/v1/subjects', body, 201).then((row) => row.subject as Record<string, any>);
+const sourced = (property: string, content: unknown) =>
+  statement(property, content, {
+    references: [{ parts: [statement('schema:url', `https://example.org/${content}`)] }],
+  });
+
+async function created(item: unknown) {
+  const target = { route: ROUTE, id: newId(ROUTE) };
+  const key = randomUUID();
+  const result = await createSubject(pool, {
+    actor: await actor(),
+    target,
+    idempotencyKey: key,
+    digest: digest(key),
+    item,
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorization: await authorization('subject:create'),
+  });
+  return result.subject;
+}
+
+async function propose(subject: string, content: string) {
+  const key = randomUUID();
+  return proposeStatement(pool, {
+    subject,
+    statement: sourced('schema:inLanguage', content),
+    actor: await actor(),
+    idempotencyKey: key,
+    digest: digest(key),
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorization: await authorization('statement:propose'),
+    deadline: deadline(),
+  });
+}
 
 test('the mounted source reads current selected nonrelation heads without obsolete history', async () => {
   const book = await created({
@@ -86,31 +113,35 @@ test('the mounted source reads current selected nonrelation heads without obsole
       ],
     },
   });
-  const compactId = book.statements['schema:inLanguage'][0].id as string;
-  const dateId = book.statements['schema:datePublished'][0].id as string;
+  const compactId = book.statements['schema:inLanguage'][0]!.id;
+  const dateId = book.statements['schema:datePublished'][0]!.id;
   const partition = subjectPartition(book.id);
 
-  const preferred = await ok(`/v1/subjects/${book.id}/candidates`, {
-    statement: {
-      ...statement('schema:inLanguage', 'en'),
-      references: [{ parts: [statement('schema:url', 'https://example.org/en')] }],
-    },
-  });
-  const competing = await ok(`/v1/subjects/${book.id}/candidates`, {
-    statement: {
-      ...statement('schema:inLanguage', 'fr'),
-      references: [{ parts: [statement('schema:url', 'https://example.org/fr')] }],
-    },
-  });
-  await ok(`/v1/subjects/${book.id}/candidates/${preferred.candidate}:accept`, {
-    context: GLOBAL_CONTEXT,
-    expected_head: null,
-  });
-  await ok(`/v1/subjects/${book.id}/candidates/${competing.candidate}:accept`, {
-    context: GLOBAL_CONTEXT,
-    expected_head: null,
-  });
-  await ok(`/v1/subjects/${book.id}:adopt`, {
+  const preferred = await propose(book.id, 'en');
+  const competing = await propose(book.id, 'fr');
+  for (const candidate of [preferred.candidate, competing.candidate]) {
+    const key = randomUUID();
+    await decideCandidate(pool, {
+      subject: book.id,
+      actor: await actor(),
+      idempotencyKey: key,
+      digest: digest(key),
+      authorization: await authorization('context:accept'),
+      deadline: deadline(),
+      candidate,
+      context: GLOBAL_CONTEXT,
+      decision: 'accept',
+      expectedHead: null,
+    });
+  }
+  const adoptKey = randomUUID();
+  await adoptCandidates(pool, {
+    subject: book.id,
+    actor: await actor(),
+    idempotencyKey: adoptKey,
+    digest: digest(adoptKey),
+    authorization: await authorization('context:adopt'),
+    deadline: deadline(),
     context: GLOBAL_CONTEXT,
     property: 'schema:inLanguage',
     mode: 'replace',
@@ -118,7 +149,8 @@ test('the mounted source reads current selected nonrelation heads without obsole
       { candidate: preferred.candidate, rank: 'preferred' },
       { candidate: competing.candidate, rank: 'normal' },
     ],
-    expected_head: null,
+    expectedHead: null,
+    release: { digest: bundledDigest, release: bundledRelease },
   });
 
   const neighbor = await created({
@@ -128,13 +160,19 @@ test('the mounted source reads current selected nonrelation heads without obsole
   });
   const neighborPartition = subjectPartition(neighbor.id);
   for (const language of ['it', 'pt', 'nl']) {
-    const proposed = await ok(`/v1/subjects/${neighbor.id}/candidates`, {
-      statement: {
-        ...statement('schema:inLanguage', language),
-        references: [{ parts: [statement('schema:url', `https://example.org/${language}`)] }],
-      },
+    const proposed = await propose(neighbor.id, language);
+    const key = randomUUID();
+    await moderateStatement(pool, {
+      actor: await actor(),
+      subject: neighbor.id,
+      candidate: proposed.candidate,
+      action: 'hide',
+      body: { reason: 'obsolete draft' },
+      idempotencyKey: key,
+      digest: digest(key),
+      authorization: await authorization('moderation:hide'),
+      deadline: deadline(),
     });
-    await ok(`/v1/subjects/${neighbor.id}/candidates/${proposed.candidate}:hide`, { reason: 'obsolete draft' });
   }
 
   const snapshot = await source.read(partition, [book.id]);
@@ -212,8 +250,8 @@ test('lifecycle, disclosure, qualifier change and unreadied coverage stay distin
       ],
     },
   });
-  const languageId = book.statements['schema:inLanguage'][0].id as string;
-  const dateId = book.statements['schema:datePublished'][0].id as string;
+  const languageId = book.statements['schema:inLanguage'][0]!.id;
+  const dateId = book.statements['schema:datePublished'][0]!.id;
   const partition = subjectPartition(book.id);
   const route = routeOf(book.id)!;
   const empty = await created({ type: 'schema:Book', labels: { en: 'Ready empty' } });
@@ -284,7 +322,7 @@ test('lifecycle, disclosure, qualifier change and unreadied coverage stay distin
   await admin.query(
     `INSERT INTO semantic.record_lifecycle
        (route, subject_id, candidate_id, revision, state, deletion_generation, deletion_transaction_id, deleted_at, purge_after)
-     VALUES ($1,$2,$3,1,'deleted',$4,$5, now(), now() + interval '720 hours')`,
+     SELECT $1,$2,$3,1,'deleted',$4,$5, now(), now() + interval '720 hours'`,
     [route, book.id, dateId, randomUUID(), randomUUID()],
   );
   const afterDelete = (await source.read(partition, [book.id])).subjects[0]!;
