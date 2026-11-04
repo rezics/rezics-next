@@ -8,11 +8,11 @@ type Intent = 'open' | 'more' | 'previous' | 'start' | 'stream' | 'discover';
 type Request = { address: ArcAddress; intent: Intent };
 type Admitted = { page: Ready; address: ArcAddress };
 type State = {
-  accepted?: Admitted;
+  accepted?: Admitted | undefined;
   trail: ArcAddress[];
   evicted: boolean;
-  pending?: Request;
-  failure?: Failure;
+  pending?: Request | undefined;
+  failure?: Failure | undefined;
   busy: boolean;
   version: number;
 };

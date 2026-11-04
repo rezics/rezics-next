@@ -34,12 +34,11 @@ export function useArcLifetime(input: { source: object | string; descriptor: str
   }, [client]);
   const revision = useSyncExternalStore(observation.subscribe, observation.snapshot, observation.server);
   const mounted = useRef(false);
-  const [, redraw] = useState(0);
   const makeBinding = (generation: number) => {
     const state = observation.store?.getSnapshot();
     const admitted =
       input.reader === null || (state?.state === 'signed-in' && state.observation.subject === input.reader);
-    const lease = addressLease(() => mounted.current && admitted && observation.snapshot() === revision);
+    const lease = addressLease(() => admitted && observation.snapshot() === revision);
     const ready = !observation.store || state?.state === 'signed-in' || state?.state === 'signed-out';
     return { ...input, observation, revision, lease, generation, ready, retired: ready && !admitted };
   };
@@ -64,7 +63,7 @@ export function useArcLifetime(input: { source: object | string; descriptor: str
     mounted.current = true;
     const depart = () => {
       binding.lease.retire();
-      redraw((value) => value + 1);
+      setBinding((value) => ({ ...value, retired: true, generation: value.generation + 1 }));
     };
     window.addEventListener('pagehide', depart);
     window.addEventListener('popstate', depart);
@@ -77,8 +76,8 @@ export function useArcLifetime(input: { source: object | string; descriptor: str
   }, [binding.lease]);
   // Do not probe a lease during render before the mount's layout effect admits it.
   return {
-    available: binding.ready && !binding.retired && (!mounted.current || binding.lease.current()),
+    available: binding.ready && !binding.retired,
     key: String(binding.generation),
-    current: binding.lease.current,
+    current: () => mounted.current && binding.lease.current(),
   };
 }

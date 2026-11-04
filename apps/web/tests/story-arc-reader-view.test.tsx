@@ -83,6 +83,7 @@ test('arc journey gates whole narrative/appearance rows, opens current targets, 
     };
     const props = { ...arcAddress, locale: 'en', source: {}, reader: null, transport, initial };
     await mounted.render(props);
+    expect(mounted.host.textContent).toContain('Later title');
     expect(mounted.host.textContent).not.toContain('Earlier title');
     const origin = await mounted.click(m.arc_reader_characters());
     expect(mounted.host.textContent).not.toContain('Secret character');
