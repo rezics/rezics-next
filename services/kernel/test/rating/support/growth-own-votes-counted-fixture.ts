@@ -9,8 +9,12 @@ import { identityEpochStore } from '../../../src/semantic/identity-epoch-store.t
 import * as commandTiming from '../../../src/command/timing.ts';
 import { withReadTransaction } from '../../../src/semantic/read.ts';
 import { createSubject } from '../../../src/semantic/subject.ts';
-import { seed, type CountedValues, type Row } from '../../support/growth.ts';
-import { createSourceStatisticLifecycleFixture } from '../source-statistic-lifecycle-fixture.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
+import { openGrowthDatabase, seed, type CountedValues, type Row } from '../../support/growth.ts';
+import { createRealAccess } from '../../semantic/real-access.ts';
+import { configureTestReceiptKeys } from '../../support/receipt-keys.ts';
+import { createAccess } from '../../../src/access/index.ts';
+import { accessCommandAuthorization } from '../../../src/request/access.ts';
 
 export const countedAxes = [
   'unrelated votes',
@@ -41,15 +45,42 @@ function bytes(value: unknown): number {
 }
 
 export async function createCountedGrowthFixture() {
-  const f = await createSourceStatisticLifecycleFixture();
-  const db = f.database;
+  const db = await openGrowthDatabase();
   db.pool.options.max = 1;
   try {
+    await bootstrapRelease(db.pool, bundledRelease);
+    configureTestReceiptKeys(db.pool);
+    const scopes = ['subject:create', 'subject:read', 'definitions:read', 'rating:vote'];
+    const real = await createRealAccess(db.admin, { voter: newId(0x23a1) }, scopes);
+    const access = createAccess({
+      auth: real.auth,
+      actions: new Map(
+        scopes.map((action) => [
+          action,
+          {
+            anonymous: action === 'subject:read' || action === 'definitions:read',
+          },
+        ]),
+      ),
+    });
+    const global = { route: 0, id: GLOBAL_CONTEXT };
+    await real.grant(global, 'voter', 'subject:create');
+    await real.grant(global, 'voter', 'definitions:read');
+    const actor = await access.authenticate(real.bearer('voter'), { pool: db.pool, deadline: Date.now() + 120_000 });
     const subject = async (route: number) => {
       const key = crypto.randomUUID();
       return (
         await createSubject(db.pool, {
-          ...(await f.identityCommand('subject:create')),
+          actor,
+          deadline: Date.now() + 120_000,
+          authorization: await accessCommandAuthorization(
+            access,
+            actor,
+            'subject:create',
+            global,
+            { pool: db.pool, deadline: Date.now() + 120_000 },
+            () => new Error('Denied native fixture creation'),
+          ),
           target: { route, id: newId(route) },
           idempotencyKey: key,
           digest: new Uint8Array(32).fill(7),
@@ -63,7 +94,6 @@ export async function createCountedGrowthFixture() {
     const terminal = await subject(0x6a30);
     const clear = await subject(0x6a30);
     const absent = await subject(0x6a30);
-    const { actor } = await f.identityCommand('rating:vote');
     const voterRoute = routeOf(actor.accountId)!;
     const sourceRoute = routeOf(original!)!;
     const controlHome = partitionOf(routeOf(terminal!)!);
@@ -147,8 +177,8 @@ export async function createCountedGrowthFixture() {
       const counters = measured.getStore();
       if (counters) counters.retainedBytes! += bytes(value);
     };
-    const prepare = f.access.prepare!.bind(f.access);
-    const authorize = f.access.authorize.bind(f.access);
+    const prepare = access.prepare!.bind(access);
+    const authorize = access.authorize.bind(access);
     const mappings = identityEpochStore.readMappings.bind(identityEpochStore);
     const commandPhase = commandTiming.commandPhase;
     const epoch = identityEpochStore.readEpoch.bind(identityEpochStore);
@@ -164,14 +194,14 @@ export async function createCountedGrowthFixture() {
         if (counters) counters.runnerPhases!++;
         return commandPhase(...args);
       }),
-      spyOn(f.access, 'prepare').mockImplementation(async (...args) => {
+      spyOn(access, 'prepare').mockImplementation(async (...args) => {
         const counters = measured.getStore();
         if (counters) counters.accessPreparations!++;
         const result = await prepare(...args);
         retain(result);
         return result;
       }),
-      spyOn(f.access, 'authorize').mockImplementation(async (...args) => {
+      spyOn(access, 'authorize').mockImplementation(async (...args) => {
         const counters = measured.getStore();
         if (counters) counters.accessEvaluations!++;
         const result = await authorize(...args);
@@ -191,7 +221,7 @@ export async function createCountedGrowthFixture() {
         return result;
       }),
     ];
-    const reader = createOwnCountedVoteReader({ pool: db.pool, access: f.access });
+    const reader = createOwnCountedVoteReader({ pool: db.pool, access: access });
 
     async function journey() {
       const counters = measured.getStore()!;
@@ -505,11 +535,11 @@ export async function createCountedGrowthFixture() {
       async close() {
         for (const spy of spies) spy.mockRestore();
         db.pool.off('acquire', observeClient);
-        await f.close();
+        await db.close();
       },
     };
   } catch (error) {
-    await f.close();
+    await db.close();
     throw error;
   }
 }
