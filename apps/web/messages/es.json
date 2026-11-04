@@ -8707,5 +8707,14 @@
   "search_population_retry": "Reintentar esta búsqueda de Realm",
   "search_population_restart": "Reiniciar la misma búsqueda",
   "shell_client_unavailable": "No se pudieron cargar los controles interactivos. La respuesta del servidor sigue disponible abajo. Recarga esta página para reintentarlo.",
-  "shell_client_reload": "Recargar esta página"
+  "shell_client_reload": "Recargar esta página",
+  "quotation_retry": "Reintentar la lectura",
+  "quotation_restart": "Reiniciar las citas",
+  "quotation_previous": "Página anterior",
+  "quotation_refresh": "Actualizar esta página",
+  "quotation_selected": "Cita {id}",
+  "quotation_context_concealed": "Este contexto está oculto.",
+  "quotation_context_restricted": "Este contexto está restringido.",
+  "quotation_context_missing": "Falta este contexto.",
+  "quotation_context_withheld": "Este contexto está reservado."
 }

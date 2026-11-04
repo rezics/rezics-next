@@ -8707,5 +8707,14 @@
   "search_population_retry": "이 Realm 검색 재시도",
   "search_population_restart": "같은 검색 다시 시작",
   "shell_client_unavailable": "대화형 컨트롤을 불러오지 못했습니다. 아래 서버 응답은 계속 볼 수 있습니다. 페이지를 새로고침해 다시 시도하세요.",
-  "shell_client_reload": "이 페이지 새로고침"
+  "shell_client_reload": "이 페이지 새로고침",
+  "quotation_retry": "이 읽기 다시 시도",
+  "quotation_restart": "인용 처음부터 보기",
+  "quotation_previous": "이전 페이지",
+  "quotation_refresh": "이 페이지 새로 고침",
+  "quotation_selected": "인용 {id}",
+  "quotation_context_concealed": "이 맥락은 숨겨져 있습니다.",
+  "quotation_context_restricted": "이 맥락은 접근이 제한됩니다.",
+  "quotation_context_missing": "이 맥락이 없습니다.",
+  "quotation_context_withheld": "이 맥락은 공개되지 않았습니다."
 }

@@ -8,6 +8,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug/quotations')({
   validateSearch: (search: Record<string, unknown>) => {
     const quote = search.quote;
     const returnTo = search.returnTo;
+    const quotationReturn = search.quotationReturn;
+    if (quotationReturn !== undefined && (typeof quotationReturn !== 'string' || quotationReturn.length > 128)) throw notFound();
     if (quote !== undefined && (typeof quote !== 'string' || !/^[0-9a-f-]{36}$/i.test(quote))) throw notFound();
     if (
       returnTo !== undefined &&
@@ -19,6 +21,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/quotations')({
     )
       throw notFound();
     return {
+      quotationReturn: typeof quotationReturn === 'string' ? quotationReturn : undefined,
       quote: typeof quote === 'string' ? quote : undefined,
       returnTo: typeof returnTo === 'string' ? returnTo : undefined,
     };

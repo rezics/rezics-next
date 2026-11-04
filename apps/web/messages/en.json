@@ -8799,5 +8799,14 @@
   "search_population_retry": "Retry this Realm search",
   "search_population_restart": "Restart the same search",
   "shell_client_unavailable": "Interactive controls could not load. The server response below is still available. Reload this page to try again.",
-  "shell_client_reload": "Reload this page"
+  "shell_client_reload": "Reload this page",
+  "quotation_retry": "Retry this read",
+  "quotation_restart": "Restart quotations",
+  "quotation_previous": "Previous page",
+  "quotation_refresh": "Refresh this page",
+  "quotation_selected": "Quotation {id}",
+  "quotation_context_concealed": "This context is concealed.",
+  "quotation_context_restricted": "This context is restricted.",
+  "quotation_context_missing": "This context is missing.",
+  "quotation_context_withheld": "This context is withheld."
 }

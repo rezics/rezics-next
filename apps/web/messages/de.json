@@ -8707,5 +8707,14 @@
   "search_population_retry": "Diese Realm-Suche wiederholen",
   "search_population_restart": "Dieselbe Suche neu starten",
   "shell_client_unavailable": "Die interaktiven Bedienelemente konnten nicht geladen werden. Die Serverantwort bleibt unten verfügbar. Lade diese Seite erneut.",
-  "shell_client_reload": "Diese Seite neu laden"
+  "shell_client_reload": "Diese Seite neu laden",
+  "quotation_retry": "Lesen erneut versuchen",
+  "quotation_restart": "Zitate neu starten",
+  "quotation_previous": "Vorherige Seite",
+  "quotation_refresh": "Diese Seite aktualisieren",
+  "quotation_selected": "Zitat {id}",
+  "quotation_context_concealed": "Dieser Kontext ist verborgen.",
+  "quotation_context_restricted": "Dieser Kontext ist eingeschränkt.",
+  "quotation_context_missing": "Dieser Kontext fehlt.",
+  "quotation_context_withheld": "Dieser Kontext wird zurückgehalten."
 }
