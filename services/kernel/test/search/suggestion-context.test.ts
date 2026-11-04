@@ -58,31 +58,47 @@ test('one current batch preserves the qualified role, partial date and admitted 
 });
 
 test('missing context is unavailable and mismatched or duplicate identities cannot complete a page', async () => {
-  const unavailable = await completeSuggestionWorkContext({ subjects: [row], as_of: '2026-11-04T00:00:00Z' }, {
-    languages: ['en'],
-    deadline: Date.now() + 10_000,
-  });
+  const unavailable = await completeSuggestionWorkContext(
+    { subjects: [row], as_of: '2026-11-04T00:00:00Z' },
+    {
+      languages: ['en'],
+      deadline: Date.now() + 10_000,
+    },
+  );
   expect(unavailable.subjects[0]?.workContext).toEqual({ subjectId, status: 'unavailable' });
 
   const concealed: SuggestionWorkContext = { subjectId, status: 'withheld' };
   await expect(
-    completeSuggestionWorkContext({ subjects: [row], as_of: '2026-11-04T00:00:00Z' }, {
-      languages: ['en'],
-      deadline: Date.now() + 10_000,
-      reader: async () => ({ contexts: [concealed], async isCurrent() { return true; } }),
-    }),
-  ).resolves.toMatchObject({ subjects: [{ workContext: concealed }] });
-
-  for (const contexts of [
-    [{ ...concealed, subjectId: creatorId }],
-    [concealed, concealed],
-  ]) {
-    await expect(
-      completeSuggestionWorkContext({ subjects: [row], as_of: '2026-11-04T00:00:00Z' }, {
+    completeSuggestionWorkContext(
+      { subjects: [row], as_of: '2026-11-04T00:00:00Z' },
+      {
         languages: ['en'],
         deadline: Date.now() + 10_000,
-        reader: async () => ({ contexts, async isCurrent() { return true; } }),
-      }),
+        reader: async () => ({
+          contexts: [concealed],
+          async isCurrent() {
+            return true;
+          },
+        }),
+      },
+    ),
+  ).resolves.toMatchObject({ subjects: [{ workContext: concealed }] });
+
+  for (const contexts of [[{ ...concealed, subjectId: creatorId }], [concealed, concealed]]) {
+    await expect(
+      completeSuggestionWorkContext(
+        { subjects: [row], as_of: '2026-11-04T00:00:00Z' },
+        {
+          languages: ['en'],
+          deadline: Date.now() + 10_000,
+          reader: async () => ({
+            contexts,
+            async isCurrent() {
+              return true;
+            },
+          }),
+        },
+      ),
     ).rejects.toMatchObject({ code: 'index_not_ready' });
   }
 });
@@ -90,17 +106,22 @@ test('missing context is unavailable and mismatched or duplicate identities cann
 test('changed context identity retires the completed page before it can succeed', async () => {
   let completeCalled = false;
   await expect(
-    completeSuggestionWorkContext({ subjects: [row], as_of: '2026-11-04T00:00:00Z' }, {
-      languages: ['en'],
-      deadline: Date.now() + 10_000,
-      reader: async () => ({
-        contexts: [{ subjectId, status: 'withheld' }],
-        async isCurrent() { return false; },
-      }),
-      async complete() {
-        completeCalled = true;
+    completeSuggestionWorkContext(
+      { subjects: [row], as_of: '2026-11-04T00:00:00Z' },
+      {
+        languages: ['en'],
+        deadline: Date.now() + 10_000,
+        reader: async () => ({
+          contexts: [{ subjectId, status: 'withheld' }],
+          async isCurrent() {
+            return false;
+          },
+        }),
+        async complete() {
+          completeCalled = true;
+        },
       },
-    }),
+    ),
   ).rejects.toBeInstanceOf(ProblemError);
   expect(completeCalled).toBe(true);
 });

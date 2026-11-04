@@ -33,7 +33,7 @@ import {
   type SearchSortValue,
 } from './cursor.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
-import { checkHits, type FactClause } from './disclosure/check.ts';
+import { checkHits, type FactClause, type Hit as CheckedHit } from './disclosure/check.ts';
 import { admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
@@ -1787,7 +1787,7 @@ export function createSearchService({
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
       const options = validateHitOptions({ languages });
       const contextDeadline = read?.deadline ?? Date.now() + 10_000;
-      const verifySuggestionHits = async (hits: readonly NativeSearchHit[], expected: readonly Result[]) => {
+      const verifySuggestionHits = async (hits: readonly CheckedHit[], expected: readonly Result[]) => {
         const { passed: current } = await sourceRequest(() =>
           checkHits(
             source,
@@ -1795,7 +1795,9 @@ export function createSearchService({
             new Map(),
           ),
         );
-        const projected = new Map(current.map(({ subject }) => [subject.id, project(subject, options.languages)]));
+        const projected = new Map(
+          current.map(({ subject }) => [subject.id, project(subject, options.languages ?? [])]),
+        );
         return (
           projected.size === expected.length &&
           expected.every((subject) => isDeepStrictEqual(projected.get(subject.id), subject))
@@ -1803,11 +1805,11 @@ export function createSearchService({
       };
       const completePage = <T extends Result>(
         page: { subjects: readonly T[]; as_of: string },
-        hits?: readonly NativeSearchHit[],
+        hits?: readonly CheckedHit[],
       ) =>
         completeSuggestionWorkContext(page, {
           reader: suggestionWorkContext,
-          languages: options.languages,
+          languages: options.languages ?? [],
           deadline: contextDeadline,
           complete: read?.complete,
           ...(hits
@@ -1938,7 +1940,10 @@ export function createSearchService({
             subjects: visible.map(({ subject }) => project(subject, options.languages)),
             as_of: await asOf(generation),
           };
-          const response = await completePage(page, visible.map(({ hit }) => hit));
+          const response = await completePage(
+            page,
+            visible.map(({ hit }) => hit),
+          );
           if ((await indexRequest(freshAliasGeneration)) !== generation)
             throw new ProblemError('search_restart_required');
           const final = await bound.operations.readStatus(
@@ -1969,7 +1974,10 @@ export function createSearchService({
         subjects: visible.map(({ subject }) => project(subject, options.languages)),
         as_of: await asOf(generation),
       };
-      const response = await completePage(page, visible.map(({ hit }) => hit));
+      const response = await completePage(
+        page,
+        visible.map(({ hit }) => hit),
+      );
       if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
       return response;
     },
