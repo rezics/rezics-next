@@ -23,7 +23,7 @@ test('type 3 uses MusicAlbum without inventing tracks or an album/recording spli
   const bootstrap = convertBangumi(
     input(subject(3, { platform: '0', infobox: '{{Infobox Album\n|碟片=1\n|曲目=A / 3:21\n}}' })),
   );
-  expect(converter_revision).toBe('bangumi@10');
+  expect(converter_revision).toBe('bangumi@11');
   expect(bootstrap.outcome).toBe('converted');
   expect(bootstrap.proposals[0]).toMatchObject({
     op: 'create',

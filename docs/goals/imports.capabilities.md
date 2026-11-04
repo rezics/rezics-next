@@ -770,8 +770,9 @@ not additional check requests.
   same-title extras stay excluded; ISBN does not invent an edition; missing
   volumes and missing author-role bindings stay gaps. Refresh keeps the same
   book, volume and person identities. Decision: type 1 Book/BookSeries dispatch
-  uses the current `bangumi@10` converter, preserving Book names, TVAnime
-  original-run and Game player-count while adding TVAnime work evidence. Decision: selected Book Girl
+  uses the current `bangumi@11` converter, preserving Book names, TVAnime
+  original-run, Game player-count and TVAnime work evidence while adding Game
+  destinations. Decision: selected Book Girl
   records join the common showcase manifest; book review gaps stay in the seed
   books section so they do not fail Steins;Gate publication.
 - `production operator imports two VNDB staff aliases through ordinary accept and current reads`:
@@ -1350,7 +1351,7 @@ without a native alternate-name statement.
 
 The production cross-media planner now streams the acquired `chars_names` and
 `chars_alias` COPY tables and joins only exact selected character IDs from
-`chars_vns`. `cross-media-entities@10` preserves localized `schema:name` facts,
+`chars_vns`. `cross-media-entities@11` preserves localized `schema:name` facts,
 unqualified Romanized alternate names and alias alternate names with their
 exact `rezics:spoilerLevel` qualifier. Invalid qualification withholds the
 whole alias. Qualified text does not enter bootstrap labels or aliases, and
@@ -1442,7 +1443,7 @@ projection and digest.
 ## Bangumi character source names
 
 Selected default Bangumi character records retain their exact `infobox` payload
-through `planCrossMediaSeed` and the shared `cross-media-entities@10` converter.
+through `planCrossMediaSeed` and the shared `cross-media-entities@11` converter.
 The reviewed `Crt` grammar supplies cited `schema:name` facts from `name`,
 `name_cn` and `简体中文名`, plus cited `schema:alternateName` facts from its
 labelled `别名` rows. A malformed alias group is withheld as a whole; usable
@@ -1471,8 +1472,8 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
 
 Decision: see [Bangumi TVAnime work evidence](../../packages/conversion/README.md#bangumi-tv-anime-work-evidence).
 
-Ordinary conversion uses `bangumi@10`. The selected-family Bangumi caller uses
-`cross-media-entities@10+bangumi@10` so source refresh replays the new mapping
+Ordinary conversion uses `bangumi@11`. The selected-family Bangumi caller uses
+`cross-media-entities@11+bangumi@11` so source refresh replays the new mapping
 under an honest revision without revising the VNDB adapter. Only the exact
 TVAnime `链接` and `Copyright` fields are admitted. Descriptive destinations
 retain their URL spelling and cite the Bangumi subject record; copyright
@@ -1548,8 +1549,30 @@ additional selected source key as an explicit omission.
 
 Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
 
-The selected default Bangumi seed already elects character IDs through the selected works' `subject-characters` rows and carries each exact `character` row into the common source registration. `cross-media-entities@10` reads the pinned Crt infobox for `身高`, `体重` and `血型`; the source scalar and indexed path enter deterministic source evidence. Only explicit released centimetres/metres and kilograms/grams become quantities. Blank and explicit unknown values remain unknown; unitless, ranged, approximate, fictional-unit, mixed-prose, duplicate and over-bound values remain unavailable field evidence. Blood type stays withheld because the repository has no Bangumi blood-type source vocabulary binding to current native Concepts. Character identity remains the selected `character:<id>` binding.
+The selected default Bangumi seed already elects character IDs through the selected works' `subject-characters` rows and carries each exact `character` row into the common source registration. `cross-media-entities@11` reads the pinned Crt infobox for `身高`, `体重` and `血型`; the source scalar and indexed path enter deterministic source evidence. Only explicit released centimetres/metres and kilograms/grams become quantities. Blank and explicit unknown values remain unknown; unitless, ranged, approximate, fictional-unit, mixed-prose, duplicate and over-bound values remain unavailable field evidence. Blood type stays withheld because the repository has no Bangumi blood-type source vocabulary binding to current native Concepts. Character identity remains the selected `character:<id>` binding.
 
 - Touches: one selected Character record, at most one released height and one weight fact, bounded source evidence, and sanitized field-path diagnostics. Existing names, kind, appearance and licensed summary handling remain on their current paths.
 - Bound: 65,536 UTF-8 source bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 quantity facts and 16 diagnostics. Unsupported or oversized values do not create partial quantities; the existing converter command ceiling and common publication manifest remain authoritative.
 - Growth check: conversion `bangumi-character-measurements.test.ts` covers explicit source units, unknown/unitless and unsupported values, independent field removal and caps. Kernel `bangumi-character-measurements.test.ts` covers selected identity, exact source citation, proposal versus public adoption, journal reopen and current-fence suppression; its native execution is deferred to integration.
+
+## Bangumi Game web destinations
+
+Decision: preserve admitted URL bytes and withhold labelled destinations until a
+released source contract can preserve their platform, region or edition meaning.
+
+Ordinary conversion uses `bangumi@11`; selected-family registration uses the
+combined `cross-media-entities@11+bangumi@11` revision. Exact Game-template
+`website` and `链接` occurrences propose separate `schema:url` and `wdt:P973`
+facts with the Bangumi record citation. Unsafe, malformed and labelled values
+remain unavailable while independent valid facts proceed. The existing journal,
+acknowledged UUID, review/adoption and public current-read seams are reused.
+
+- Touches: one type-4 Game and at most 16 destination candidates across both
+  fields; no fetcher or new publisher.
+- Bound: 65,536 source bytes and characters, depth 2, 64 fields, 4,096 bytes per
+  selected field, 16 candidates and at most 16 sanitized omissions.
+- Growth check: importer `bangumi-game-web-destinations.test.ts` covers
+  conversion, citations, unsafe and qualified omissions, malformed mixed input
+  and overflow. Kernel `bangumi-game-web-destinations.test.ts` authors the
+  same-UUID native review/adoption/current-read journey; no live source
+  observation is claimed.

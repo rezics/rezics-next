@@ -1532,7 +1532,7 @@ coordinator and source registration. `vndb-character-profile@1` emits a
 and `o`. Literal `unknown`, COPY null, missing, unsupported and malformed
 values produce bounded omissions; none resolves by label or nearby Concept.
 The classification input and its omission reason enter the deterministic
-projection under `cross-media-entities@10`, so a same-source refresh can offer
+projection under `cross-media-entities@11`, so a same-source refresh can offer
 new support without inventing an upstream revision. Character identity, names
 and height/weight survive this projection together.
 
@@ -1693,7 +1693,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB character names and qualified aliases
 
 - Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
-- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@10` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@11` makes newly supported rows available on refresh even when source bytes are unchanged.
 - Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
@@ -2186,7 +2186,7 @@ revision bump.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
-selected release payload and convert them through `cross-media-entities@10`.
+selected release payload and convert them through `cross-media-entities@11`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
@@ -2246,9 +2246,9 @@ volume 26) from the pinned dump relation check, walks only 1002/1003 novel
 members, and delivers authors through the existing creator-credit helper.
 Steins;Gate remains the required VN/anime showcase; this book family is a
 separate actual source family. Decision: type 1 Book/BookSeries dispatch uses
-the current `bangumi@10` converter, preserving Book names, TVAnime original-run
-and Game player-count while adding TVAnime work evidence. Decision: one Bangumi subject stays one
-identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
+the current `bangumi@11` converter, preserving Book names, TVAnime original-run,
+Game player-count and TVAnime work evidence while adding Game destinations.
+Decision:
 selected Book Girl records join the common showcase manifest; book review
 gaps stay in the seed books section so they do not fail Steins;Gate
 publication.
@@ -2272,8 +2272,8 @@ for these source Concepts.
 ### Bangumi TVAnime subject names
 
 Ordinary Bangumi registration and selected-family type 2 rows reach
-`convertBangumi`; the ordinary caller uses `bangumi@10` and the selected-family
-registration uses `cross-media-entities@10+bangumi@10`. Both share the pure TVAnime
+`convertBangumi`; the ordinary caller uses `bangumi@11` and the selected-family
+registration uses `cross-media-entities@11+bangumi@11`. Both share the pure TVAnime
 field extraction and existing journal, source metadata admission, citations,
 candidate review, adoption and current-read flow. No additional seed publisher or
 identity lookup is involved. The importer keeps the exact Bangumi subject alias
@@ -2294,7 +2294,7 @@ digest and acknowledged native UUID.
 ### Bangumi television original run
 
 Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@10`,
+`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@11`,
 retaining the original-run mapping alongside newer TVAnime evidence. Selected-family seed uses that same converter; this
 journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
 schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
@@ -2314,9 +2314,9 @@ date is not completion or access authority.
 ### Bangumi Game player count
 
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
-`游玩人数` on type 4 through current `bangumi@10`, retaining original-run and
+`游玩人数` on type 4 through current `bangumi@11`, retaining original-run and
 work-evidence mappings. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@10+bangumi@10` registration; this journey adds no
+existing combined `cross-media-entities@11+bangumi@11` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
@@ -2551,8 +2551,8 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 ### Bangumi TVAnime subject names
 
 Ordinary Bangumi registration and selected-family type 2 rows reach
-`convertBangumi`; the ordinary caller uses `bangumi@10` and the selected-family
-registration uses `cross-media-entities@10+bangumi@10`. Both share the pure TVAnime
+`convertBangumi`; the ordinary caller uses `bangumi@11` and the selected-family
+registration uses `cross-media-entities@11+bangumi@11`. Both share the pure TVAnime
 field extraction and existing journal, source metadata admission, citations,
 candidate review, adoption and current-read flow. No additional seed publisher or
 identity lookup is involved. The importer keeps the exact Bangumi subject alias
@@ -2609,7 +2609,7 @@ aliases use `und`. A malformed field is withheld as a whole while independent
 source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@10+bangumi@10` registration, record bindings,
+uses its existing `cross-media-entities@11+bangumi@11` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh
@@ -2632,6 +2632,32 @@ Decision: trim only horizontal template/list-boundary whitespace; `链接` remai
 
 Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` are admitted. Descriptive destinations preserve their source spelling and cite the Bangumi subject record; notices remain verbatim `schema:copyrightNotice` values and grant no licence or media permission. Malformed neighbors are bounded, source-free omissions; summary and cover rights remain separate.
 
-- Touches: ordinary `bangumi@10` and selected-family `cross-media-entities@10+bangumi@10` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
+- Touches: ordinary `bangumi@11` and selected-family `cross-media-entities@11+bangumi@11` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
 - Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
 - Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.
+
+## Bangumi Game web destinations
+
+Ordinary Bangumi registration uses `bangumi@11`. The selected-family default
+passes the same Game conversion through its existing
+`cross-media-entities@11+bangumi@11` revision. Exact `website` and `链接`
+occurrences become separate `schema:url` and `wdt:P973` proposals with the
+Bangumi record citation and exact occurrence evidence. The existing importer
+journal, acknowledged UUID recovery, independent native review/adoption and
+public current-read path remain in use. Ordinary credentials remain
+proposal-only; local showcase review adopts each property separately.
+
+Malformed, unsafe or labelled destinations stay unavailable without suppressing
+valid sibling destinations or independent facts. Conversion is capped at 16
+candidates across both fields, with explicit overflow omissions. No destination
+is fetched or followed.
+
+- Touches: one ordinary or selected-family type-4 Game and its two independent
+  destination properties; no new publisher or fetcher.
+- Bound: 65,536 source bytes and characters, depth 2, 64 fields, 4,096 bytes
+  per selected field, 16 candidates and 16 sanitized omissions; existing
+  envelope, journal, review and public-read limits continue to apply.
+- Growth check: `tests/bangumi-game-web-destinations.test.ts` covers ordinary
+  conversion and omissions. The source-shaped native review/adoption/current-read
+  fixture is `test/imports/bangumi-game-web-destinations.test.ts`; execution is
+  deferred to the controller, and no live-data walkthrough is claimed.

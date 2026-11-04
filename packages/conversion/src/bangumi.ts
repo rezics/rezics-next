@@ -11,6 +11,10 @@ import { ConversionError, type ConversionInput, type ConvertedRecord } from './i
 import { bangumiEditionFactsWithheldOnWork, parseBangumiBookInfobox } from './bangumi-book-profile.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { bangumiDiagnosticLimit, extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
+import {
+  projectBangumiGameWebDestinations,
+  type BangumiGameDestinationEvidence,
+} from './bangumi-game-web-destinations.ts';
 import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
 import {
   checkCoverIntent,
@@ -24,12 +28,12 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@10';
+export const converter_revision = 'bangumi@11';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Thirteen projected top-level fields; at most nine commands, one cover intent,
+// Thirteen projected top-level fields; at most 32 commands, one cover intent,
 // and one citation envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
@@ -57,6 +61,7 @@ export type BangumiConversion = ConvertedRecord<BatchCommand> & {
   /** Deferred assets have no container; only mediaImportIntents are executable. */
   coverAssets: DeferredCover[];
   mediaImportIntents: MediaImportRequest[];
+  gameWebDestinationEvidence?: readonly BangumiGameDestinationEvidence[];
   sourceMetadata: {
     recordUrl: string;
     summary: { language: string; takedownEligible: true };
@@ -316,6 +321,12 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     facts.push(statement);
   }
   facts.push(...extractedFields.workEvidence.map((item) => fact(item.property, item.value)));
+  const gameWebDestinations = record.type === 4 ? projectBangumiGameWebDestinations(record.infobox) : undefined;
+  const gameDestinationKeys = new Map<number, string>();
+  for (const destination of gameWebDestinations?.destinations ?? []) {
+    gameDestinationKeys.set(facts.length, `game-destination:${destination.field}:${destination.pointer}`);
+    facts.push(fact(destination.property, destination.url));
+  }
   if (record.meta_tags?.includes('后宫')) {
     const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
     const dictionary = context.resolvedReferences;
@@ -374,6 +385,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       const content = statement.value.type === 'value' ? statement.value.content : undefined;
       const field =
         nameFields.get(statement) ??
+        gameDestinationKeys.get(index) ??
         ((property === 'schema:name' || property === 'schema:alternateName') &&
         content &&
         typeof content === 'object' &&
@@ -456,14 +468,21 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         ...retainedFieldDiagnostics(
           record,
           extractedFields.diagnostics,
-          television.handledInfobox || playerCount.handledInfobox || bookTitleProfile,
+          television.handledInfobox ||
+            playerCount.handledInfobox ||
+            gameWebDestinations?.handledInfobox === true ||
+            bookTitleProfile,
         ),
         ...television.diagnostics,
         ...playerCount.diagnostics,
+        ...(gameWebDestinations?.diagnostics ?? []),
       ]),
     ],
     coverAssets,
     mediaImportIntents,
+    ...(gameWebDestinations?.evidence.length
+      ? { gameWebDestinationEvidence: gameWebDestinations.evidence }
+      : {}),
     sourceMetadata,
   };
 }

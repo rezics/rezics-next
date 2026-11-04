@@ -421,7 +421,7 @@ and `o`; the official
 [VNDB schema](https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=55866ce6cb150d2de85e5f204828eafae5e50bc5)
 defines `blood_type` as `unknown`, `a`, `b`, `ab` and `o`.
 
-`cross-media-entities@10` retains the classification input in the deterministic
+`cross-media-entities@11` retains the classification input in the deterministic
 digest, preserves measurement cells when the character-name projection is
 present, and records actual versus spoiler gender as separate source variants.
 Only the four explicit blood types reach `vndb-vocabulary@3`; the bounded
@@ -443,7 +443,7 @@ assert Wikidata equivalence. The native gender qualifier gap stays explicit.
 
 ### VNDB release titles
 
-`cross-media-entities@10` projects admitted `releases_titles` rows onto
+`cross-media-entities@11` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -465,7 +465,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@10` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@11` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -544,7 +544,7 @@ Decision: platform and medium projections advance the converter from `@6` to `@7
 
 ### VNDB character names and aliases
 
-`cross-media-entities@10` projects selected `chars_names` and `chars_alias`
+`cross-media-entities@11` projects selected `chars_names` and `chars_alias`
 rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
 `schema:name`; its explicit romanized `latin` cell becomes an unqualified
 `schema:alternateName` using the source language with a `Latn` script subtag.
@@ -565,7 +565,7 @@ rejected rather than truncated.
 
 ### Bangumi character names and aliases
 
-`cross-media-entities@10` reads only the selected character's `name`, `name_cn`
+`cross-media-entities@11` reads only the selected character's `name`, `name_cn`
 and the pinned `Crt` infobox fields `简体中文名` and labelled `别名` rows. Top-level
 `name` remains `und`, `name_cn` remains `zh`, and `简体中文名` is a `zh-Hans`
 preferred name. Every supported `别名` row is an alternate name; its exact label
@@ -594,7 +594,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@10` preserves the current Bangumi physical profile, VNDB character names and staff aliases, release titles, minimum age and GTIN while adding Bangumi character names and verified VNDB blood types.
+Combined revision decision: `cross-media-entities@11` preserves the current Bangumi physical profile, TVAnime work evidence, VNDB character names and staff aliases, release titles, minimum age and GTIN while adding Bangumi character names, verified VNDB blood types and Game destinations.
 
 ### VNDB native alternate-name contract
 
@@ -996,7 +996,7 @@ malformed or mixed occurrences contribute no names.
 
 ### Bangumi character physical profile
 
-`cross-media-entities@10` parses only `血型`, `身高` and `体重` from the
+`cross-media-entities@11` parses only `血型`, `身高` and `体重` from the
 [pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
 weights keep explicit kilograms/grams as released exact quantities. The
 original scalar and indexed field path enter normalized source evidence, so an
@@ -1056,16 +1056,15 @@ identity; the connected native acceptance is
 
 ## Bangumi book grain
 
-The current `bangumi@10` converter dispatches type 1 Book versus BookSeries from
+The current `bangumi@11` converter dispatches type 1 Book versus BookSeries from
 the source series flag, novel platform and wiki template. Comic/manga stays
 generic Book so a novel family is never filled with manga. Type 1 cites a
 parseable `date` as `schema:datePublished` on Book or BookSeries. ISBN,
 publisher and pages stay off the work as withheld edition assertions; volume
 counts stay counts.
-Decision: type 1 Book/BookSeries dispatch remains in `bangumi@10`, preserving
-TVAnime names, Book-template names, original-run and Game player-count while the
-same honest revision adds TVAnime work evidence. One Bangumi subject stays one
-identity; ISBN does not create a `bf:Instance`.
+Decision: type 1 Book/BookSeries dispatch remains in `bangumi@11`, preserving
+TVAnime names, Book-template names, original-run, Game player-count and TVAnime
+work evidence while the same honest revision adds Game destinations.
 
 ## Bangumi TVAnime work evidence
 
@@ -1073,7 +1072,7 @@ Decision: plain TVAnime `链接` values become cited `wdt:P973` facts;
 `官方网站` stays with the separate `schema:url` mapping, and the parser removes
 only horizontal template/list boundary whitespace.
 
-`bangumi@10` also consumes the exact pinned TVAnime `链接` and `Copyright`
+`bangumi@11` also consumes the exact pinned TVAnime `链接` and `Copyright`
 fields. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
 source spelling and URL bytes are kept, and the URL is never a source citation
 or identity claim. A plain notice becomes `schema:copyrightNotice` with its
@@ -1089,8 +1088,8 @@ diagnostics. The exact selected TVSeries schema bounds both URLs and notices to
 descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
-- Touches: ordinary `bangumi@10` and selected-family
-  `cross-media-entities@10+bangumi@10` publication for one TVAnime source record,
+- Touches: ordinary `bangumi@11` and selected-family
+  `cross-media-entities@11+bangumi@11` publication for one TVAnime source record,
   its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights
@@ -1100,3 +1099,33 @@ Values are rejected on overflow; none are truncated or canonicalized.
   repair. Kernel `test/imports/bangumi-work-evidence.test.ts` authors ordinary
   independent acceptance/adoption, reopen/current reads and facts-fence behavior;
   neither fixture claims a real-dump walkthrough.
+
+## Bangumi Game web destinations
+
+Decision: preserve admitted URL bytes and withhold labelled destinations until a
+released source contract can preserve their platform, region or edition meaning.
+
+Only exact type-4 `{{Infobox Game` occurrences for `website` and `链接` are
+considered. `website` proposes `schema:url`; `链接` proposes `wdt:P973`. Fully
+parsed unqualified URLs retain their exact spelling, including query and
+fragment bytes, and cite the Bangumi subject record. Credentials, controls,
+unsupported schemes, malformed mixed structures and labelled qualifiers are
+withheld. A bad occurrence does not suppress a valid sibling or unrelated
+names, dates, player counts, credits or covers. The properties remain
+independent when they contain the same URL.
+
+Ordinary conversion uses `bangumi@11`; selected-family imports use the existing
+combined `cross-media-entities@11+bangumi@11` registration and journal. Each
+occurrence keeps its exact field pointer in bounded evidence. A conversion
+offers at most 16 destination candidates across both fields; overflow produces
+an explicit bounded omission. No links are fetched or followed.
+
+- Touches: one Game record, its `website` and `链接` facts, exact occurrence
+  evidence, and existing review/adoption/current-read APIs.
+- Bound: 65,536 infobox bytes and characters, depth 2, 64 fields, 4,096 bytes
+  per selected field, 16 candidates and at most 16 sanitized omissions.
+- Growth check: importer `tests/bangumi-game-web-destinations.test.ts` covers
+  distinct properties, exact citations, unsafe and qualified omissions, a
+  malformed mixed field and overflow. The same-UUID native scenario is
+  `services/kernel/test/imports/bangumi-game-web-destinations.test.ts`; its
+  source-shaped fixture makes no claim of live source observation.
