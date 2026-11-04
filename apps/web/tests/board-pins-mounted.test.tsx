@@ -295,7 +295,12 @@ test('unknown retry keeps its original command and missing rows move focus to th
   toggles[0]!.focus();
   await act(async () => toggles[0]!.click());
   await settle(() => toggles[0]?.getAttribute('aria-expanded') === 'true');
-  console.log('PIN DIALOG DEBUG', document.body.innerHTML.slice(-5000));
+  console.log(
+    'PIN DIALOG DEBUG',
+    [...document.querySelectorAll('[data-slot="alert-dialog-content"], [role="dialog"], [role="alertdialog"]')].map(
+      (node) => [node.getAttribute('data-slot'), node.getAttribute('role'), node.textContent],
+    ),
+  );
   const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
   await settle(() => !!dialog());
   const confirmation = dialog();
