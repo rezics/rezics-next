@@ -1098,7 +1098,10 @@ export function accessRoutes(
               const current = await withConnection(dependencies.pool, (client) =>
                 readAccountPreferences(client, params.accountId),
               );
-              throw new ProblemError('conflict', { extensions: { page: withPreferencePage(current).page } });
+              // runCommand reached a conflict only after its current account:update check admitted this attempt.
+              throw new ProblemError('conflict', {
+                extensions: { page: withPreferencePage(current, { writable: true }).page },
+              });
             }
           });
           session.record(outcome);

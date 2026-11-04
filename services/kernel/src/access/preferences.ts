@@ -178,12 +178,12 @@ function notificationOverrides(notifications: Notifications): NotificationsPatch
   );
 }
 
-const preferencePageActions: readonly PreferencePageActionName[] = ['edit', 'reset'];
+const preferencePageActions = ['edit', 'reset'] as const;
 
-/** In-memory Settings page for a preference read. Self-read admits edit and reset; PATCH still checks update. */
+/** In-memory catalogue projection. Edit and reset advice comes from the current update observation. */
 export function projectPreferencePage(
   preferences: Pick<AccountPreferences, 'notifications' | 'version'>,
-  actions: readonly PreferencePageActionName[] = preferencePageActions,
+  input: { writable: boolean },
 ): PreferencePage {
   return {
     version: preferences.version,
@@ -193,24 +193,26 @@ export function projectPreferencePage(
       default: entry.default,
       enabled: entry.optional ? preferences.notifications[entry.kind as OptionalNotificationKind] : true,
     })),
-    actions: actions.map((name) => ({ name, expectedVersion: preferences.version })),
+    actions: input.writable
+      ? preferencePageActions.map((name) => ({ name, expectedVersion: preferences.version }))
+      : [],
   };
 }
 
 export function withPreferencePage<T extends Pick<AccountPreferences, 'notifications' | 'version'>>(
   preferences: T,
-  actions: readonly PreferencePageActionName[] = preferencePageActions,
+  input: { writable: boolean },
 ): T & { page: PreferencePage } {
-  return { ...preferences, page: projectPreferencePage(preferences, actions) };
+  return { ...preferences, page: projectPreferencePage(preferences, input) };
 }
 
 /** One 200 envelope: catalogue `page` plus Reading viewer/actions. */
 export function withReadingPreferencePage(
   preferences: AccountPreferences,
-  input: { writable: boolean } = { writable: true },
+  input: { writable: boolean },
 ): AccountPreferences & { page: PreferencePage } & PreferenceReadingAdvice {
   return {
-    ...withPreferencePage(preferences),
+    ...withPreferencePage(preferences, input),
     ...projectReadingAdvice(preferences, input),
   };
 }

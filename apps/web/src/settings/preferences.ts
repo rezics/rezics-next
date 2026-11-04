@@ -370,6 +370,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function onlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => keys.includes(key));
+}
+
 const shelfScope = /^(?:all|[A-Za-z][A-Za-z0-9+.-]*:\S+)$/;
 function validShelfPatch(value: unknown): value is ShelfPreferencePatch | null {
   if (value === null) return true;
@@ -562,12 +566,13 @@ function present(preferences: unknown): ReadingPreferences | undefined {
 function presentPageKind(value: unknown): PreferencePageKind | undefined {
   if (
     !isRecord(value) ||
+    !onlyKeys(value, ['kind', 'optional', 'default', 'enabled']) ||
     typeof value.kind !== 'string' ||
     !/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(value.kind) ||
     typeof value.optional !== 'boolean' ||
     typeof value.default !== 'boolean' ||
     typeof value.enabled !== 'boolean' ||
-    (!value.optional && !value.enabled)
+    (!value.optional && (!value.default || !value.enabled))
   )
     return undefined;
   return { kind: value.kind, optional: value.optional, default: value.default, enabled: value.enabled };
@@ -576,6 +581,7 @@ function presentPageKind(value: unknown): PreferencePageKind | undefined {
 function presentPageAction(value: unknown): PreferencePageAction | undefined {
   if (
     !isRecord(value) ||
+    !onlyKeys(value, ['name', 'expectedVersion']) ||
     (value.name !== 'edit' && value.name !== 'reset') ||
     !Number.isSafeInteger(value.expectedVersion) ||
     (value.expectedVersion as number) < 0
@@ -586,11 +592,19 @@ function presentPageAction(value: unknown): PreferencePageAction | undefined {
 
 /** The native catalogue projection, or `undefined` when it is missing or not a closed page. */
 export function presentPreferencePage(value: unknown, version?: number): PreferencePage | undefined {
-  if (!isRecord(value) || !Array.isArray(value.kinds) || value.kinds.length < 1 || value.kinds.length > 32)
+  if (
+    !isRecord(value) ||
+    !onlyKeys(value, ['version', 'kinds', 'actions']) ||
+    !Number.isSafeInteger(value.version) ||
+    (value.version as number) < 0 ||
+    !Array.isArray(value.kinds) ||
+    value.kinds.length < 1 ||
+    value.kinds.length > 32
+  )
     return undefined;
   if (!Array.isArray(value.actions) || value.actions.length > 2) return undefined;
-  const pageVersion = Number.isSafeInteger(value.version) ? (value.version as number) : version;
-  if (pageVersion === undefined || pageVersion < 0) return undefined;
+  const pageVersion = value.version as number;
+  if (version !== undefined && pageVersion !== version) return undefined;
   const kinds = value.kinds.map(presentPageKind);
   const actions = value.actions.map(presentPageAction);
   if (kinds.some((entry) => !entry) || actions.some((entry) => !entry)) return undefined;
@@ -598,6 +612,7 @@ export function presentPreferencePage(value: unknown, version?: number): Prefere
   if (new Set(presentedKinds.map((entry) => entry.kind)).size !== presentedKinds.length) return undefined;
   const presentedActions = actions as PreferencePageAction[];
   if (new Set(presentedActions.map((entry) => entry.name)).size !== presentedActions.length) return undefined;
+  if (presentedActions.length === 1) return undefined;
   if (presentedActions.some((entry) => entry.expectedVersion !== pageVersion)) return undefined;
   return { version: pageVersion, kinds: presentedKinds, actions: presentedActions };
 }
@@ -625,18 +640,49 @@ function presentNotifications(value: unknown, page?: PreferencePage): Notificati
   return { ...value } as NotificationPreferences;
 }
 
-function pageFrom(value: unknown, version?: number): PreferencePage | undefined {
+function currentPageFrom(
+  value: unknown,
+  version: number,
+  expectedWritable?: boolean,
+): PreferencePage | undefined {
+  const keys = [
+    'spoilerLevel',
+    'suitability',
+    'shelf',
+    'notifications',
+    'version',
+    'page',
+    'viewerState',
+    'allowedActions',
+    'reading',
+  ] as const;
+  if (
+    !isRecord(value) ||
+    !onlyKeys(value, keys) ||
+    keys.some((key) => !(key in value)) ||
+    !isRecord(value.notifications) ||
+    Object.values(value.notifications).some((enabled) => typeof enabled !== 'boolean')
+  )
+    return undefined;
+  const advice = decodePreferenceAdvice(value);
+  if (!advice || !advice.allowedActions.read.allowed) return undefined;
+  const writable = advice.allowedActions.update.allowed;
+  if (expectedWritable !== undefined && writable !== expectedWritable) return undefined;
+  const page = presentPreferencePage(value.page, version);
+  if (
+    !page ||
+    preferencePageAllows(page, 'edit') !== writable ||
+    preferencePageAllows(page, 'reset') !== writable
+  )
+    return undefined;
+  return page;
+}
+
+function conflictPageFrom(value: unknown): PreferencePage | undefined {
   if (!isRecord(value)) return undefined;
   const problem = isRecord(value.value) ? value.value : isRecord(value.problem) ? value.problem : value;
-  const page = problem.page ?? value.page;
-  const pageVersion =
-    version ??
-    (isRecord(page) && Number.isSafeInteger(page.version)
-      ? (page.version as number)
-      : Number.isSafeInteger(value.version)
-        ? (value.version as number)
-        : undefined);
-  return presentPreferencePage(page, pageVersion);
+  if (problem.code !== 'conflict') return undefined;
+  return presentPreferencePage(problem.page ?? value.page);
 }
 
 /** The Auth site owns password, passkeys and sessions; the settings page only links to them. */
@@ -669,8 +715,7 @@ export async function loadSettingsPage(
         securityHref: securityHref(sessionEnv),
       };
     }
-    const data = result.data as ReadingPreferences & { notifications?: unknown; page?: unknown };
-    const page = pageFrom(data, preferences.version);
+    const page = currentPageFrom(result.data, preferences.version);
     const notifications = page ? optionalNotifications(page) : undefined;
     return {
       signedIn: true,
@@ -744,9 +789,8 @@ export async function changeNotifications(
       } as { 'idempotency-key': string; 'content-type': string },
     });
     if (!result.error && result.data) {
-      const data = result.data as ReadingPreferences & { notifications?: unknown; page?: unknown };
-      const preferences = present(data);
-      const page = pageFrom(data, preferences?.version);
+      const preferences = present(result.data);
+      const page = preferences ? currentPageFrom(result.data, preferences.version, true) : undefined;
       const notifications = page ? optionalNotifications(page) : undefined;
       if (!notifications || !preferences || !page)
         return {
@@ -757,8 +801,9 @@ export async function changeNotifications(
       return { ok: true, notifications, version: preferences.version, page };
     }
     const failure = failureDetails(result.error, statusOf(result), result.headers);
-    const page = pageFrom(result.error, undefined);
     const refused = writeFailure(failure);
+    const page =
+      failure.status === 409 && failure.code === 'conflict' ? conflictPageFrom(result.error) : undefined;
     return page ? { ...refused, page } : refused;
   } catch (error) {
     const failure = failureDetails(error);

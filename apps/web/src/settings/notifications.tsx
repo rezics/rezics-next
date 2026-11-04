@@ -92,7 +92,8 @@ export function NotificationsCard({
   const readFailed = state.readOrigin !== null && (state.phase === 'failed' || state.phase === 'uncertain');
   const needsReload = !readFailed && (state.phase === 'conflict' || state.phase === 'failed');
   const localEdit = !!state.pending || readFailed || ['conflict', 'review', 'reloading'].includes(state.phase);
-  const rowDisabled = disabled || (waiting && !localEdit) || !preferencePageAllows(state.known.page, 'edit');
+  const canEdit = preferencePageAllows(state.known.page, 'edit');
+  const rowDisabled = disabled || (waiting && !localEdit) || !canEdit;
   const restoreDisabled =
     waiting ||
     disabled ||
@@ -110,6 +111,7 @@ export function NotificationsCard({
           <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_notifications_text()}</CardDescription>
+        {!canEdit ? <CardDescription>{m.settings_notifications_read_only()}</CardDescription> : null}
         <CardDescription>
           {localEdit || state.intent !== undefined
             ? m.settings_notifications_draft_help()

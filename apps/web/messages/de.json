@@ -1396,6 +1396,7 @@
   "settings_notification_moderation_decision": "Moderations-, Meldungs- und Einspruchsergebnisse",
   "settings_notification_save": "Speichern",
   "settings_notifications_heading": "Benachrichtigungen",
+  "settings_notifications_read_only": "Du kannst die gespeicherten Einstellungen ansehen, aber die aktuellen Kontoberechtigungen erlauben keine Änderungen.",
   "settings_notifications_mandatory": "Moderationsentscheidungen zu deinen Inhalten sowie Ergebnisse von Meldungen und Einsprüchen werden immer gesendet.",
   "settings_notifications_policy_heading": "Immer gesendet",
   "settings_notifications_default_on": "Standard: an",

@@ -7,6 +7,7 @@ import {
   changeNotifications,
   loadSettingsPage,
   optionalNotifications,
+  type NotificationPreferences,
   type PreferencePage,
 } from '../src/settings/preferences';
 import { NotificationEditor } from '../src/settings/notification-recovery';
@@ -18,7 +19,35 @@ const idempotencyKey = '123e4567-e89b-42d3-a456-426614174000';
 const reading = { spoilerLevel: 1, suitability: 'blur', version: 7, shelf: {} };
 const optional = { reply: true, mention: true, thread_watch: true, board_activity: true };
 const page = settingsPreferencePage(optional, 7);
-const envelope = { ...reading, notifications: optional, page };
+const advice = {
+  viewerState: 'current',
+  allowedActions: { read: { allowed: true }, update: { allowed: true } },
+  reading: {
+    supported: { spoilerLevels: [0, 1, 2], suitability: ['blur', 'show'] },
+    effective: { spoilerLevel: 1, suitability: 'blur' },
+    defaults: { spoilerLevel: 0, suitability: 'blur' },
+  },
+};
+
+function accountEnvelope(notifications: NotificationPreferences, version: number, writable = true) {
+  const currentPage = settingsPreferencePage(notifications, version);
+  return {
+    spoilerLevel: 1,
+    suitability: 'blur',
+    shelf: {},
+    notifications,
+    version,
+    page: writable ? currentPage : { ...currentPage, actions: [] },
+    viewerState: 'current',
+    allowedActions: {
+      read: { allowed: true },
+      update: writable ? { allowed: true } : { allowed: false, reason: 'not_authorized' },
+    },
+    reading: advice.reading,
+  };
+}
+
+const envelope = accountEnvelope(optional, 7);
 
 function harness(reply: () => Response, method: 'GET' | 'POST' = 'GET') {
   const calls: Request[] = [];
@@ -64,7 +93,7 @@ test('Settings keeps owner-supplied optional kinds and writes only the submitted
   expect(await loadSettingsPage(read.client, read.request, read.env)).toEqual({
     signedIn: true,
     accountId: 'alice',
-    preferences: reading,
+    preferences: { ...reading, advice },
     notifications: optional,
     page,
     securityHref: 'https://auth.example.test/security',
@@ -73,7 +102,8 @@ test('Settings keeps owner-supplied optional kinds and writes only the submitted
   expect(read.sessionReads()).toBe(1);
 
   const next = settingsPreferencePage({ ...optional, reply: false }, 8);
-  const write = harness(() => Response.json({ ...reading, version: 8, notifications: optional, page: next }), 'POST');
+  const saved = { ...optional, reply: false };
+  const write = harness(() => Response.json(accountEnvelope(saved, 8)), 'POST');
   expect(
     await changeNotifications(write.client, write.request, write.env, {
       expectedVersion: 7,
@@ -101,14 +131,19 @@ test('missing pages and malformed maps never become enabled controls or a confir
         actions: [],
       },
     },
+    { ...accountEnvelope(optional, 7), viewerState: 'retired' },
+    { ...accountEnvelope(optional, 7), page: { ...page, actions: [] } },
   ]) {
     const read = harness(() => Response.json(body));
-    expect(await loadSettingsPage(read.client, read.request, read.env)).toEqual({
+    const result = await loadSettingsPage(read.client, read.request, read.env);
+    expect(result).toMatchObject({
       signedIn: true,
       accountId: 'alice',
       preferences: reading,
       securityHref: 'https://auth.example.test/security',
     });
+    expect(result.signedIn && 'page' in result ? result.page : undefined).toBeUndefined();
+    expect(result.signedIn && 'notifications' in result ? result.notifications : undefined).toBeUndefined();
     const write = harness(() => Response.json(body), 'POST');
     expect(
       await changeNotifications(write.client, write.request, write.env, {
@@ -120,6 +155,16 @@ test('missing pages and malformed maps never become enabled controls or a confir
     expect(read.calls).toHaveLength(1);
     expect(write.calls).toHaveLength(1);
   }
+});
+
+test('a readable account with denied update keeps confirmed values and receives no edit or reset actions', async () => {
+  const read = harness(() => Response.json(accountEnvelope(optional, 7, false)));
+  expect(await loadSettingsPage(read.client, read.request, read.env)).toMatchObject({
+    signedIn: true,
+    preferences: { version: 7, advice: { viewerState: 'current', allowedActions: { update: { allowed: false } } } },
+    notifications: optional,
+    page: { version: 7, kinds: page.kinds, actions: [] },
+  });
 });
 
 test('Settings preserves preparing, closed and unavailable native read and write failures', async () => {
@@ -206,7 +251,7 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
                 { code: 'invalid_request', retryable: false, request_id: 'native-refusal', detail: 'private' },
                 { status: 422, headers: { 'retry-after': retryAfter } },
               )
-            : Response.json({ ...reading, version: 8, notifications: { ...optional, reply: false }, page: next }),
+            : Response.json(accountEnvelope({ ...optional, reply: false }, 8)),
         'POST',
       );
       const editor = new NotificationEditor(page, {
@@ -258,12 +303,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
   const clock = spyOn(Date, 'now').mockImplementation(() => now);
   try {
     const receiptNotifications = { ...optional, reply: false };
-    const receipt = {
-      ...reading,
-      version: 8,
-      notifications: receiptNotifications,
-      page: settingsPreferencePage(receiptNotifications, 8),
-    };
+    const receipt = accountEnvelope(receiptNotifications, 8);
     let step = 0;
     const transport = harness(() => {
       step++;
@@ -278,12 +318,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
         step === 5
           ? { ...optional, reply: true, mention: true }
           : { ...optional, reply: false, mention: false, thread_watch: false };
-      return Response.json({
-        ...reading,
-        version,
-        notifications,
-        page: settingsPreferencePage(notifications, version),
-      });
+      return Response.json(accountEnvelope(notifications, version));
     }, 'POST');
     const confirmed: number[] = [];
     const editor = new NotificationEditor(page, {
