@@ -153,12 +153,34 @@ function parseReviewDestinationPage(value: unknown): ReviewDestinationPage {
       },
     };
   });
+  const state = page.state as ReviewDestinationPage['state'];
+  const viewerState = (page.viewer as Record<string, unknown>).state as 'current' | 'denied';
+  const next = page.next as string | null;
+  if (
+    (state === 'choices' && (!context || items.length === 0 || viewerState !== 'current')) ||
+    (state === 'sparse' && (!context || items.length !== 0 || next === null || viewerState !== 'current')) ||
+    (state === 'no-destinations' && (!context || items.length !== 0 || next !== null || viewerState !== 'current')) ||
+    (state === 'exhausted' && (!context || items.length !== 0 || next !== null || viewerState !== 'current')) ||
+    (state === 'expired' && (!context || items.length !== 0 || next !== null || viewerState !== 'current')) ||
+    (state === 'denied' && (items.length !== 0 || next !== null)) ||
+    (viewerState === 'denied' && state !== 'denied') ||
+    (context !== null &&
+      items.some(
+        (item) =>
+          item.native.subjectIds[0] !== context.subject.id ||
+          item.native.subjectSource.partition !== context.subject.source.partition ||
+          item.native.subjectSource.epoch !== context.subject.source.epoch ||
+          item.native.subjectSource.position !== context.subject.source.position ||
+          item.native.realmHeadRevisionId !== context.realm.headRevisionId,
+      ))
+  )
+    throw new Error('Review destination response is unavailable');
   return {
-    state: page.state as ReviewDestinationPage['state'],
-    viewer: { state: (page.viewer as Record<string, unknown>).state as 'current' | 'denied' },
+    state,
+    viewer: { state: viewerState },
     context,
     items,
-    next: page.next as string | null,
+    next,
   };
 }
 

@@ -154,7 +154,7 @@ export const SelectCurrentDestination: Story = {
     await expect(boardButton).toHaveFocus();
     await expect(boardButton.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     await expect(boardButton.scrollWidth).toBeLessThanOrEqual(boardButton.clientWidth);
-    await expect(observed[0]?.query).toContain('subjectId=');
+    await expect(destinationCalls()[0]?.query).toContain('subjectId=');
     await expect(canvasElement.querySelector('a[href*="/threads/"]')).toBeNull();
   },
 };

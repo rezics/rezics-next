@@ -10,6 +10,7 @@ import type { ReviewDestinationPage } from '../threads/review-board-choices';
 import { reviewThreadHref } from '../threads/review-policy';
 import {
   beginReviewEntryRead,
+  cancelReviewEntryRead,
   claimReviewEntryNavigation,
   expectedReviewReader,
   finishReviewEntryRead,
@@ -57,7 +58,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
 
   function retireRead(kind: 'realms' | 'boards') {
     const previous = tickets.current[kind];
-    if (previous) finishReviewEntryRead(previous);
+    if (previous) cancelReviewEntryRead(previous);
     tickets.current[kind] = null;
   }
 
@@ -79,7 +80,10 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
     try {
       const expected = await expectedReviewReader(ticket.visit);
       if (!reviewEntryReadIsCurrent(ticket)) return;
-      const result = (await readMyRealmsPageForReview({ data: { expected, ...(cursor ? { cursor } : {}) } })) as ReviewMyRealmsRead;
+      const result = (await readMyRealmsPageForReview({
+        data: { expected, ...(cursor ? { cursor } : {}) },
+        signal: ticket.controller.signal,
+      })) as ReviewMyRealmsRead;
       if (!reviewEntryReadIsCurrent(ticket)) return;
       if (result.kind !== 'ready' || !result.page.signedIn || !sameReviewReader(expected, result.provenance)) {
         setRealms({ state: 'failed', ...(cursor === undefined ? {} : { cursor }), expired: false });
@@ -118,6 +122,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
           ...(cursor === undefined ? {} : { cursor }),
           expected,
         },
+        signal: ticket.controller.signal,
       })) as ReaderResult;
       if (!reviewEntryReadIsCurrent(ticket)) return;
       if (result.kind !== 'ready' || !sameReviewReader(expected, result.provenance)) {
@@ -167,6 +172,7 @@ function WriteReviewVisitView({ visit }: { visit: ReturnType<typeof useWriteRevi
           locale: ticket.visit.target.locale,
           expected,
         },
+        signal: ticket.controller.signal,
       })) as ReaderResult;
       if (!reviewEntryReadIsCurrent(ticket)) return;
       if (result.kind !== 'ready' || !sameReviewReader(expected, result.provenance)) {
