@@ -193,6 +193,15 @@ export function useOwnVotesCurrentOrigin(
     const requestNumber = responseReads.current.started;
     const responseSubject = origin.subject;
     const departureAdmission = store.read();
+    const admissionCurrent = () => {
+      const currentAdmission = store.read();
+      return !!responseSubject &&
+        getLocale() === locale &&
+        currentAdmission.subject === responseSubject &&
+        currentAdmission.viewer === departureAdmission.viewer &&
+        currentAdmission.dispatch[0] === departureAdmission.dispatch[0] &&
+        currentAdmission.allowed[0] === true;
+    };
     const canRead = () =>
       !invalidAddress && getLocale() === locale && address.isCurrent() && origin.current(0, false);
     return {
@@ -202,17 +211,9 @@ export function useOwnVotesCurrentOrigin(
       cursor,
       locale,
       source: OWN_VOTES_SOURCE,
+      admissionCurrent,
       eligible: () => {
-        const currentAdmission = store.read();
-        if (
-          !responseSubject ||
-          getLocale() !== locale ||
-          currentAdmission.subject !== responseSubject ||
-          currentAdmission.viewer !== departureAdmission.viewer ||
-          currentAdmission.dispatch[0] !== departureAdmission.dispatch[0] ||
-          currentAdmission.allowed[0] !== true
-        )
-          return false;
+        if (!admissionCurrent()) return false;
         const state = client.getQueryState(options.queryKey);
         // Keep custody through its own exact refresh response, but retire it for any other replacement.
         if (!state || state.dataUpdateCount === responseCount) return true;

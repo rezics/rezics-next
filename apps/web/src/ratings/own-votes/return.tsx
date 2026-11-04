@@ -12,6 +12,7 @@ export type OwnVotesReturnOwner = {
   cursor: string | null;
   locale: string;
   source: string;
+  admissionCurrent: () => boolean;
   eligible: () => boolean;
   canRead: () => boolean;
   validateResult: (result: unknown) => OwnVotesRead | null;
@@ -186,7 +187,7 @@ export function useOwnVotesReturnReceipt(historyKey: string, cursor: string | nu
   const onRatings = routePath(pathname) === '/library/ratings';
   const currentOwner =
     receipt?.phase === 'refreshing' || receipt?.phase === 'resolved'
-      ? receipt.owner.canRead()
+      ? receipt.owner.admissionCurrent()
       : receipt?.owner.eligible();
   const valid =
     !!receipt &&
