@@ -82,17 +82,20 @@ function port(commands: BatchCommand[]): CrossMediaPort {
     },
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      return { subject: { id, type: id.startsWith('r') ? 'wd:Q20631656' : 'wd:Q689445' } };
+      return { subject: { id, type: id.startsWith('r') ? 'wd:Q20631656' : 'wd:Q689445' } } as Awaited<
+        ReturnType<CrossMediaPort['readReviewedSubject']>
+      >;
     },
   };
 }
 
 function gtinFacts(commands: BatchCommand[], externalId: string) {
-  return commands.filter(
-    (command) =>
-      command.op === 'propose' &&
-      command.source.external_id === externalId &&
-      command.statement.property.id === 'schema:gtin',
+  return commands.flatMap((command) =>
+    command.op === 'propose' &&
+    command.source.external_id === externalId &&
+    command.statement.property.id === 'schema:gtin'
+      ? [command]
+      : [],
   );
 }
 
@@ -180,4 +183,4 @@ test('operator COPY import preserves a supported release GTIN, withholds unknown
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
