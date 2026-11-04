@@ -46,7 +46,7 @@ const { m } = await import('../src/paraglide/messages.js');
 const search = workbenchSearch({ queue: 'appeals', board: 'board', case: 'appeal', cursor: 'captured' });
 const session = { state: 'signed-in', subject: 'moderator', csrfToken: 'csrf' };
 const origin = { subject: session.subject, csrfFingerprint: await privateReaderFingerprint(session.csrfToken) };
-// Independent presentation fixture. Native composed delivery is still absent from the installed client.
+// Presentation fixture; the mounted composed transport case below uses the installed client.
 const selected = {
   id: 'appeal',
   decisionId: 'decision',
@@ -159,7 +159,7 @@ test('same-input inspection retries recover keyboard focus and show a resolved s
 });
 
 test('pointer retry and moved focus do not steal focus; session replacement fences late inspection', async () => {
-  for (const mode of ['pointer', 'moved', 'session']) {
+  for (const mode of ['pointer', 'moved', 'session', 'account']) {
     let finish!: (value: WorkbenchRead) => void;
     await mount(
       page('unavailable'),
@@ -172,14 +172,14 @@ test('pointer retry and moved focus do not steal focus; session replacement fenc
     const elsewhere = document.createElement('button');
     document.body.append(elsewhere);
     if (mode === 'moved') elsewhere.focus();
-    if (mode === 'session') {
-      cache.setQueryData(['session'], { ...session, csrfToken: 'replacement' });
+    if (mode === 'session' || mode === 'account') {
+      cache.setQueryData(['session'], { ...session, ...(mode === 'account' ? { subject: 'foreign' } : { csrfToken: 'replacement' }) });
       await flush();
     }
     await act(async () => finish(page('ready', true)));
     expect(document.activeElement).not.toBe(host.querySelector('article'));
     if (mode === 'moved') expect(document.activeElement).toBe(elsewhere);
-    if (mode === 'session') expect(host.textContent).not.toContain('Reviewed.');
+    if (mode === 'session' || mode === 'account') expect(host.textContent).not.toContain('Reviewed.');
     await act(async () => root!.unmount());
     root = undefined;
     cache.clear();
@@ -216,4 +216,33 @@ test('an uncertain selected resolution fences refresh and retries its original c
   expect(sent).toHaveLength(2);
   expect(sent[1]).toBe(sent[0]);
   expect(sent[0]).toMatchObject({ id: selected.id, statement: 'Review this.', outcome: 'uphold' });
+});
+
+
+test('mounted exact retry receives the installed composed operation outside the retained page', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { readWorkbenchPage } = await import('../src/moderation/workbench-queue/read');
+  const source = { partition: 0, epoch: 1, position: '12' };
+  const requests: string[] = [];
+  const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
+    requests.push(new Request(input, init).url);
+    if (requests.length < 3) return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+    return Response.json({ appeals: [], next: 'sparse-next', provenance: { actorId: session.subject, session: { clientId: 'web', authnEpoch: 1 }, source },
+      selectedAppeal: { ...selected, source, resolution: { outcome: 'upheld', statement: 'Native retained outcome.', resolvedAt: selected.createdAt },
+        resolutionCommand: { operationId: 'moderation_appeal.resolve', method: 'POST', path: '/v1/moderation-appeals/appeal:resolve' } } },
+      { headers: { 'rezics-session-token': 'opaque-native' } });
+  } });
+  const credential = `Bearer ${btoa('{}')}.${btoa(JSON.stringify({ sub: session.subject, client_id: 'web', authn_epoch: 1 }))}.signature`;
+  const read = (input: typeof search) => readWorkbenchPage(client, input, credential, origin);
+  await mount(await read(search), read);
+  await click(button(m.moderation_queue_retry()));
+  expect(document.activeElement).toBe(button(m.moderation_queue_retry()));
+  await click(button(m.moderation_queue_retry()));
+  expect(host.textContent).toContain('Native retained outcome.');
+  expect(host.textContent).not.toContain('opaque-native');
+  expect(document.activeElement).toBe(host.querySelector('article'));
+  expect(requests).toHaveLength(3);
+  expect(new Set(requests).size).toBe(1);
+  expect(new URL(requests[0]!).searchParams.get('inspect')).toBe('appeal');
+  expect(new URL(requests[0]!).searchParams.get('cursor')).toBe('captured');
 });
