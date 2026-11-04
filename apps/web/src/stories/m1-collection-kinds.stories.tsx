@@ -23,7 +23,7 @@ function Example({ layout = 'list', mixed = false }: { layout?: 'list' | 'grid';
     <PatternStory visitor="Signed Out" path={`/collections/${page.id}${layout === 'grid' ? '?layout=grid' : ''}`}>
       <div className="mx-auto w-full max-w-6xl p-4">
         <CollectionPage
-          queryKey={undefined}
+          queryKey={['collection-presentation', page.id, layout, mixed]}
           cursor={undefined}
           page={page}
           layout={layout}
