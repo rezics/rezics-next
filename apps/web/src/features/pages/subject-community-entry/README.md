@@ -25,3 +25,6 @@ must supply exact Subject/place, admitted Board, current creation advice and obs
 Board/composer authority and Subject/place/return intent through sign-in. No row, public link or empty
 region selects a creation Board. Content's additive inputs flow through the adapter and context; no
 outer placement change is required for these reading and recovery fields.
+
+Decision: preserve the complete originating Subject region URL, including its cursor and Realm/node context,
+as the return target through admitted Board entry and sign-in.
