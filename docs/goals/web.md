@@ -418,6 +418,9 @@ Viewer or CSRF replacement and deliberate departure retire the
 holder. Creation and selected-reader recovery remain independent. Semantic owns native Concept suggestion,
 proposal, review, selection and command identity; Web binds the existing generated candidate methods.
 
+Album creation stays editable during eligibility admission. Returning to editing retires that review, preserves
+the current draft and requires a fresh review before another create command.
+
 The research demonstrates source transitions and error-address mismatches. It supplies no passing browser, native,
 visual, accessibility or publication proof; those remain separate integration obligations for each outcome.
 

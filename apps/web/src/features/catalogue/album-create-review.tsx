@@ -8,6 +8,7 @@ import { albumDraft, albumFields, albumType, type AlbumItem } from './album-prof
 import type { TermDraft } from './create-subject';
 import { creationStatement, type StatementInput } from './statement-editor';
 import { DefinitionMeaning } from './definition-meaning';
+import { useLayoutEffect, useRef } from 'react';
 
 const wrap =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
@@ -105,6 +106,17 @@ export function AlbumCreateReview({
   onBack: () => void;
 }) {
   const o = { locale: locale as never };
+  const staleMessage = useRef<HTMLParagraphElement>(null);
+  const wasStale = useRef(false);
+  useLayoutEffect(() => {
+    if (
+      stale &&
+      !wasStale.current &&
+      !document.activeElement?.matches('input, textarea, select')
+    )
+      staleMessage.current?.focus();
+    wasStale.current = stale;
+  }, [stale]);
   const languages = [
     ...new Set([
       ...Object.keys(item.labels),
@@ -123,7 +135,7 @@ export function AlbumCreateReview({
       </ContentItemHeading>
       <p className="text-sm text-muted-foreground">{m.album_create_review_intro({}, o)}</p>
       {stale && (
-        <p role="status" className="text-sm">
+        <p ref={staleMessage} role="status" tabIndex={-1} className="text-sm">
           {m.catalogue_create_review_stale({}, o)}
         </p>
       )}
