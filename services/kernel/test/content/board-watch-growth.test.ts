@@ -259,12 +259,14 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
             const unrelatedRoute = routeOf(unrelatedAccount)!;
             const selectedWatchIds = Array.from({ length: count }, () => newId(selectedRoute));
             const unrelatedWatchIds = Array.from({ length: count }, () => newId(unrelatedRoute));
+            const growSelectedIdentity = step.endsWith('-remove') || step === 'cold-thread-retry';
             if (identityKind === 'board') {
               const insertBoardHistory = `
                 INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
                 SELECT $1,$2,board,watch,true,1,${afterSelectedCreatedAt}
                 FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`;
-              await db.admin.query(insertBoardHistory, [selectedRoute, selectedAccount, resources, selectedWatchIds]);
+              if (growSelectedIdentity)
+                await db.admin.query(insertBoardHistory, [selectedRoute, selectedAccount, resources, selectedWatchIds]);
               await db.admin.query(insertBoardHistory, [
                 unrelatedRoute,
                 unrelatedAccount,
@@ -276,7 +278,13 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
                 INSERT INTO content.thread_watch(route,watcher_account_id,thread_id,watch_id,created_at)
                 SELECT $1,$2,thread,watch,${afterSelectedCreatedAt}
                 FROM unnest($3::uuid[],$4::uuid[]) n(thread,watch)`;
-              await db.admin.query(insertThreadHistory, [selectedRoute, selectedAccount, resources, selectedWatchIds]);
+              if (growSelectedIdentity)
+                await db.admin.query(insertThreadHistory, [
+                  selectedRoute,
+                  selectedAccount,
+                  resources,
+                  selectedWatchIds,
+                ]);
               await db.admin.query(insertThreadHistory, [
                 unrelatedRoute,
                 unrelatedAccount,
