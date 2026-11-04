@@ -167,7 +167,25 @@ export function accountRenamePageTransport(
             throw error;
           }
           // Revalidate the same session, floor, client and consent after native I/O.
-          await service.internal.accessTokenForProof(human);
+          try {
+            await service.internal.accessTokenForProof(human);
+          } catch (error) {
+            const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
+            if (status !== 401) throw error;
+            // Issuance also checks the native account floor. If that check fails,
+            // distinguish it from a session that disappeared during the read.
+            try {
+              await service.internal.withFreshHuman({ headers: request.headers, fresh: false }, async () => undefined);
+              return { state: 'refused' };
+            } catch (currentError) {
+              const currentStatus =
+                currentError && typeof currentError === 'object' && 'status' in currentError
+                  ? currentError.status
+                  : undefined;
+              if (currentStatus === 401) return { state: 'signed-out' };
+              throw currentError;
+            }
+          }
           if (Date.now() >= deadline) return { state: 'unavailable' };
           return page;
         },
