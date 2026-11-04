@@ -3,7 +3,6 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { operationGroups } from '../src/kernel/exposure';
-import { ReporterHistoryCurrent, ReporterHistoryPage } from '../src/moderation/reporter-history/view';
 import { reporterHistoryReturnHref, reporterHistoryStatusHref } from '../src/moderation/reporter-history/navigation';
 import { prepareReporterHistoryVisit, type ReporterHistoryReader } from '../src/moderation/reporter-history/journey';
 import type {
@@ -16,8 +15,6 @@ import { ReporterStatusPage } from '../src/moderation/reporter-status-view';
 import { libraryNavigation } from '../src/library/navigation';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, localizeHref, locales, setLocale } from '../src/paraglide/runtime.js';
-import { sessionQuery } from '../src/session/query';
-import { viewerExposureLifetime, viewerExposureQuery } from '../src/kernel/viewer-exposure';
 
 const reportId = '11111111-1111-8111-8111-123411111111';
 const secondReportId = '33333333-3333-8333-8333-345633333333';
@@ -89,45 +86,6 @@ test('My reports is a signed-in Library destination without a private operation 
   ).toBe(cursor);
 });
 
-test('localized page states distinguish preparation, completion, denial, continuation retry, selection and expiry', () => {
-  const currentLocale = getLocale();
-  setLocale('en', { reload: false });
-  const render = (result: Parameters<typeof ReporterHistoryPage>[0]['result'], query: ReporterHistoryQuery = {}) =>
-    renderToStaticMarkup(createElement(ReporterHistoryPage, { result, query }));
-  try {
-    const preparing = render({
-      state: 'loaded',
-      nativeSourceFingerprint: 'source',
-      page: { ...page([], undefined), state: 'preparing' },
-    });
-    expect(preparing).toContain('report history is being prepared');
-    expect(preparing).not.toContain('You have not submitted any reports');
-    expect(render({ state: 'loaded', nativeSourceFingerprint: 'source', page: page([], undefined) })).toContain(
-      'You have not submitted any reports',
-    );
-    expect(render({ state: 'denied' })).toContain('not available for this session');
-    expect(render({ state: 'unavailable' }, { cursor: 'same-frontier' })).toContain('next page could not be loaded');
-    expect(
-      render({ state: 'loaded', nativeSourceFingerprint: 'source', page: page([], undefined) }, { reportId }),
-    ).toContain('selected report is unavailable');
-    expect(render({ state: 'expired' }, { cursor: 'expired-frontier', reportId })).toContain('Start over');
-
-    const cursor = 'opaque/+%2F cursor';
-    const back = reporterHistoryReturnHref({ historyCursor: cursor, historyReportId: reportId }, reportId)!;
-    const status = renderToStaticMarkup(
-      createElement(ReporterStatusPage, { state: 'closed', returnHref: localizeHref(back) }),
-    );
-    expect(status).toContain(m.reporter_history_return());
-
-    for (const locale of locales) {
-      setLocale(locale, { reload: false });
-      expect(render({ state: 'denied' })).toContain(m.reporter_history_denied());
-    }
-  } finally {
-    setLocale(currentLocale, { reload: false });
-  }
-});
-
 test('mounted history replaces one page, retries the exact cursor, opens selected status and retires on exposure replacement', async () => {
   const { dirname } = await import('node:path');
   const { Window } = await import(
@@ -149,6 +107,9 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
+  const { ReporterHistoryCurrent, ReporterHistoryPage } = await import('../src/moderation/reporter-history/view');
+  const { sessionQuery } = await import('../src/session/query');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -209,9 +170,6 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
   try {
     await act(async () => {
       root.render(draw());
-    });
-    await act(async () => {
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     });
     expect(container.textContent).toContain('First private report');
 
@@ -275,5 +233,45 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
       else Reflect.deleteProperty(globalThis, key);
     }
     window.close();
+  }
+});
+
+test('localized page states distinguish preparation, completion, denial, continuation retry, selection and expiry', async () => {
+  const { ReporterHistoryPage } = await import('../src/moderation/reporter-history/view');
+  const currentLocale = getLocale();
+  setLocale('en', { reload: false });
+  const render = (result: Parameters<typeof ReporterHistoryPage>[0]['result'], query: ReporterHistoryQuery = {}) =>
+    renderToStaticMarkup(createElement(ReporterHistoryPage, { result, query }));
+  try {
+    const preparing = render({
+      state: 'loaded',
+      nativeSourceFingerprint: 'source',
+      page: { ...page([], undefined), state: 'preparing' },
+    });
+    expect(preparing).toContain('report history is being prepared');
+    expect(preparing).not.toContain('You have not submitted any reports');
+    expect(render({ state: 'loaded', nativeSourceFingerprint: 'source', page: page([], undefined) })).toContain(
+      'You have not submitted any reports',
+    );
+    expect(render({ state: 'denied' })).toContain('not available for this session');
+    expect(render({ state: 'unavailable' }, { cursor: 'same-frontier' })).toContain('next page could not be loaded');
+    expect(
+      render({ state: 'loaded', nativeSourceFingerprint: 'source', page: page([], undefined) }, { reportId }),
+    ).toContain('selected report is unavailable');
+    expect(render({ state: 'expired' }, { cursor: 'expired-frontier', reportId })).toContain('Start over');
+
+    const cursor = 'opaque/+%2F cursor';
+    const back = reporterHistoryReturnHref({ historyCursor: cursor, historyReportId: reportId }, reportId)!;
+    const status = renderToStaticMarkup(
+      createElement(ReporterStatusPage, { state: 'closed', returnHref: localizeHref(back) }),
+    );
+    expect(status).toContain(m.reporter_history_return());
+
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      expect(render({ state: 'denied' })).toContain(m.reporter_history_denied());
+    }
+  } finally {
+    setLocale(currentLocale, { reload: false });
   }
 });
