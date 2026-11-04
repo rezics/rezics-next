@@ -23,7 +23,7 @@ export type TypeChoice = {
   state: PresentationChoiceState;
   availability: 'automatic' | 'released' | 'unavailable';
   label: string | null;
-  presentation: ReturnType<typeof parseListPresentation>;
+  presentation: ReturnType<typeof parseListPresentation> | null;
 };
 
 /** Type identity is a value, never a layout mode or a replacement for a member's Type. */
