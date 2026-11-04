@@ -96,10 +96,13 @@ test('selected Game creator credits use current roles, exact evidence, and stabl
 
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: Object.assign(async (input: Parameters<typeof fetch>[0]) => {
-        const url = new URL(String(input));
-        return runtime.request(`${url.pathname}${url.search}`);
-      }, { preconnect() {} }),
+      fetch: Object.assign(
+        async (input: Parameters<typeof fetch>[0]) => {
+          const url = new URL(String(input));
+          return runtime.request(`${url.pathname}${url.search}`);
+        },
+        { preconnect() {} },
+      ),
     });
     let resolution: BangumiCreditVocabularyResolution | undefined;
     async function importAndPublish(prior?: ShowcasePublicationResult) {
@@ -199,16 +202,16 @@ test('selected Game creator credits use current roles, exact evidence, and stabl
     }
     expect(cited(developerCredit, 'https://bgm.tv/subject/101#/subject-persons/101/11/position')).toBe(true);
     expect(cited(authorCredit, 'https://bgm.tv/subject/101#/subject-persons/101/12/position')).toBe(true);
-    expect(
-      work.statements['wdt:P178']?.some((statement) => valueContent(statement) === authorId),
-    ).toBe(false);
+    expect(work.statements['wdt:P178']?.some((statement) => valueContent(statement) === authorId)).toBe(false);
     const developerRead = await publicClient.readSubject(developerId);
     const authorRead = await publicClient.readSubject(authorId);
     expect(developerRead.subject).toMatchObject({ id: developerId, type: 'schema:Person' });
     expect(authorRead.subject).toMatchObject({ id: authorId, type: 'schema:Person' });
     expect(
       valueContent(
-        (developerRead.subject as { statements: Record<string, readonly BatchStatement[]> }).statements['wdt:P6298']?.[0],
+        (developerRead.subject as { statements: Record<string, readonly BatchStatement[]> }).statements[
+          'wdt:P6298'
+        ]?.[0],
       ),
     ).toBe('11');
     expect(
@@ -322,9 +325,7 @@ test('selected Game creator credits use current roles, exact evidence, and stabl
     expect(refreshedWork.statements['schema:author']?.some((statement) => valueContent(statement) === authorId)).toBe(
       true,
     );
-    expect(
-      refreshedWork.statements['wdt:P178']?.some((statement) => valueContent(statement) === authorId),
-    ).toBe(false);
+    expect(refreshedWork.statements['wdt:P178']?.some((statement) => valueContent(statement) === authorId)).toBe(false);
   } finally {
     journal.close();
     await runtime.close();

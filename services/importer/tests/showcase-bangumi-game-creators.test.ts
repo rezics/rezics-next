@@ -83,8 +83,7 @@ test('selected Game planning preserves type-4 staff occurrences and excludes Gam
   expect(bangumiStaffRoleMapping(4, 1001)).toMatchObject({
     property: 'wdt:P178',
     uri: 'https://rezics.com/schemes/bangumi/staff/1001',
-    sourceUri:
-      'https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_staffs.yml',
+    sourceUri: 'https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_staffs.yml',
   });
   expect(bangumiStaffRoleMapping(4, 1004)?.property).toBe('schema:author');
 });
