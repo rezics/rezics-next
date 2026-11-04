@@ -25,7 +25,9 @@ function convert(infobox: string) {
 }
 
 function proposals(result: RegisteredConversion) {
-  return result.proposals.filter((command): command is Extract<BatchCommand, { op: 'propose' }> => command.op === 'propose');
+  return result.proposals.filter(
+    (command): command is Extract<BatchCommand, { op: 'propose' }> => command.op === 'propose',
+  );
 }
 
 function value(command: Extract<BatchCommand, { op: 'propose' }>) {
@@ -47,7 +49,9 @@ test('Bangumi Game destinations retain exact native properties and withhold unsa
       '}}',
     ].join('\n'),
   );
-  const destinations = proposals(result).filter((command) => ['schema:url', 'wdt:P973'].includes(command.statement.property.id));
+  const destinations = proposals(result).filter((command) =>
+    ['schema:url', 'wdt:P973'].includes(command.statement.property.id),
+  );
 
   expect(registration.converter_revision).toBe(converter_revision);
   expect(registration.converter_revision).toBe('bangumi@14');
@@ -95,7 +99,9 @@ test('Game destination overflow is an explicit bounded omission', () => {
     pointer: '/infobox/fields/16',
     code: 'game_destination_limit',
   });
-  const withheld = convert(['{{Infobox Game', ...Array(16).fill('|website=javascript:alert(1)'), fields[16], '}}'].join('\n')).result;
+  const withheld = convert(
+    ['{{Infobox Game', ...Array(16).fill('|website=javascript:alert(1)'), fields[16], '}}'].join('\n'),
+  ).result;
   expect(proposals(withheld).some((command) => command.statement.property.id === 'schema:url')).toBe(false);
   expect(withheld.diagnostics).toContainEqual({ pointer: '/infobox/fields/16', code: 'game_destination_limit' });
 });

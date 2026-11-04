@@ -544,9 +544,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     ],
     coverAssets,
     mediaImportIntents,
-    ...(gameWebDestinations?.evidence.length
-      ? { gameWebDestinationEvidence: gameWebDestinations.evidence }
-      : {}),
+    ...(gameWebDestinations?.evidence.length ? { gameWebDestinationEvidence: gameWebDestinations.evidence } : {}),
     sourceMetadata,
   };
 }

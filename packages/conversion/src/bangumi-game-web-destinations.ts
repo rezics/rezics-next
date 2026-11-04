@@ -136,7 +136,10 @@ function scanGameFields(infobox: string): {
       if (active) active.nested = true;
       const nested = bangumiInfoboxBraceTransition(row.text, depth);
       if (nested.exceeded || nested.invalid) {
-        sink.add(active?.pointer ?? '/infobox', nested.exceeded ? 'infobox_depth_limit' : 'unsupported_infobox_structure');
+        sink.add(
+          active?.pointer ?? '/infobox',
+          nested.exceeded ? 'infobox_depth_limit' : 'unsupported_infobox_structure',
+        );
         structurallyInvalid = true;
         break;
       }
@@ -148,7 +151,10 @@ function scanGameFields(infobox: string): {
       if (active) active.continued = true;
       const nested = bangumiInfoboxBraceTransition(row.text, depth);
       if (nested.exceeded || nested.invalid) {
-        sink.add(active?.pointer ?? '/infobox', nested.exceeded ? 'infobox_depth_limit' : 'unsupported_infobox_structure');
+        sink.add(
+          active?.pointer ?? '/infobox',
+          nested.exceeded ? 'infobox_depth_limit' : 'unsupported_infobox_structure',
+        );
         structurallyInvalid = true;
         break;
       }
@@ -217,7 +223,9 @@ function scanGameFields(infobox: string): {
   };
 }
 
-function parseDestination(value: string):
+function parseDestination(
+  value: string,
+):
   | { url: string }
   | { code: 'malformed_game_destination' | 'qualified_game_destination' | 'invalid_game_destination_url' } {
   const candidate = value.replace(horizontalSpace, '');

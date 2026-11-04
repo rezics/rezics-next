@@ -49,9 +49,14 @@ function statementValue(statement: Pick<BatchStatement, 'value'>) {
 }
 
 function isGameSource(source: unknown): boolean {
-  return source !== null && typeof source === 'object' &&
-    'external_id' in source && source.external_id === gameExternalId &&
-    'source' in source && source.source === crossMediaAliases.bangumi;
+  return (
+    source !== null &&
+    typeof source === 'object' &&
+    'external_id' in source &&
+    source.external_id === gameExternalId &&
+    'source' in source &&
+    source.source === crossMediaAliases.bangumi
+  );
 }
 
 function publicValues(reading: unknown, property: string) {
@@ -123,8 +128,14 @@ test('selected Bangumi Game destinations survive independent review, correction 
       return id;
     }
     const infobox = (link: string) =>
-      ['{{Infobox Game', `|website=${website}`, `|链接=${link}`,
-        '|website=javascript:alert(1)', '|链接=[[https://edition.example/game|Switch edition]]', '}}'].join('\n');
+      [
+        '{{Infobox Game',
+        `|website=${website}`,
+        `|链接=${link}`,
+        '|website=javascript:alert(1)',
+        '|链接=[[https://edition.example/game|Switch edition]]',
+        '}}',
+      ].join('\n');
 
     const first = await run(infobox(`${descriptive} with mixed prose`));
     expect(first.plan.records.bangumi.some((record) => record.key === gameExternalId)).toBe(true);
@@ -134,25 +145,31 @@ test('selected Bangumi Game destinations survive independent review, correction 
       context: globalContext,
       limit: 100,
     });
-    const websiteCandidate = websitePage.candidates.filter((candidate) => 'statement' in candidate).find(
-      (candidate) =>
-        isGameSource(candidate.source) &&
-        candidate.statement.property.id === 'schema:url' &&
-        statementValue(candidate.statement) === website,
-    );
+    const websiteCandidate = websitePage.candidates
+      .filter((candidate) => 'statement' in candidate)
+      .find(
+        (candidate) =>
+          isGameSource(candidate.source) &&
+          candidate.statement.property.id === 'schema:url' &&
+          statementValue(candidate.statement) === website,
+      );
     expect(websiteCandidate?.source).toMatchObject({
       source: crossMediaAliases.bangumi,
       external_id: gameExternalId,
       record_revision: 'unversioned',
       converter_revision: crossMediaBangumiRevision,
     });
-    expect(websitePage.candidates.filter((candidate) => 'source' in candidate && isGameSource(candidate.source))).toHaveLength(1);
+    expect(
+      websitePage.candidates.filter((candidate) => 'source' in candidate && isGameSource(candidate.source)),
+    ).toHaveLength(1);
     const malformedPage = await runtime.importTransport.reviewedCandidates(subjectId, {
       property: 'wdt:P973',
       context: globalContext,
       limit: 100,
     });
-    expect(malformedPage.candidates.some((candidate) => 'source' in candidate && isGameSource(candidate.source))).toBe(false);
+    expect(malformedPage.candidates.some((candidate) => 'source' in candidate && isGameSource(candidate.source))).toBe(
+      false,
+    );
 
     await publish(first);
     expect(publicValues(await publicClient.readSubject(subjectId), 'schema:url')).toContain(website);
@@ -168,12 +185,14 @@ test('selected Bangumi Game destinations survive independent review, correction 
       context: globalContext,
       limit: 100,
     });
-    const descriptiveCandidate = descriptivePage.candidates.filter((candidate) => 'statement' in candidate).find(
-      (candidate) =>
-        isGameSource(candidate.source) &&
-        candidate.statement.property.id === 'wdt:P973' &&
-        statementValue(candidate.statement) === descriptive,
-    );
+    const descriptiveCandidate = descriptivePage.candidates
+      .filter((candidate) => 'statement' in candidate)
+      .find(
+        (candidate) =>
+          isGameSource(candidate.source) &&
+          candidate.statement.property.id === 'wdt:P973' &&
+          statementValue(candidate.statement) === descriptive,
+      );
     expect(descriptiveCandidate?.id).toBeTruthy();
     expect(descriptiveCandidate?.source).toMatchObject({
       source: crossMediaAliases.bangumi,
