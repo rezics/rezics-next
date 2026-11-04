@@ -61,7 +61,7 @@ function CharacterFacts(reading: ProfileReading) {
       <div className="flex min-w-0 flex-wrap gap-3" data-slot="character-reader-destinations">
         <CharacterRelationshipsEntry id={read.subject.id} label={label.text} locale={locale} link={Link} />
         <a className="inline-flex min-h-11 items-center underline" href="#connections">
-          {m.character_work_title({}, o)}
+          {m.character_identity_visit_open({}, o)}
         </a>
       </div>
       {(Object.keys(groups) as (keyof typeof groups)[]).map((kind) => {

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from 'react';
+import { lazy, Suspense, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { CreditAssertion, CreditVisit } from '../catalogue/credit-inspection/model';
@@ -54,6 +54,7 @@ function contentIdentity(value: unknown): string {
 function ItemCard({
   item,
   value,
+  link,
   listPresentationFor,
   facts,
   credit = false,
@@ -63,6 +64,7 @@ function ItemCard({
 }: {
   item: Item;
   value: RowValue;
+  link?: RowValue['link'];
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
   facts?: Readonly<Record<string, readonly Fact[]>>;
   credit?: boolean;
@@ -120,11 +122,12 @@ function ItemCard({
   ) : (
     <CoverCard
       link={
-        catalogue
+        link ??
+        (catalogue
           ? (props) => <CatalogueTargetLink {...props} locale={value.locale} />
           : exactEdition
             ? ExactEditionLink
-            : value.link
+            : value.link)
       }
       {...(!catalogue || catalogue.context.target ? { href } : {})}
       title={title}
@@ -168,6 +171,7 @@ export function CoverList({
   items,
   value,
   label,
+  itemVisit,
   preview = false,
   listPresentationFor,
   memberFacts,
@@ -178,6 +182,8 @@ export function CoverList({
   items: Item[];
   value: RowValue & { subject?: string | null };
   label: string;
+  /** Optional per-row destination and disclosed assertion focus for bounded visit adapters. */
+  itemVisit?: (item: Item) => { link?: RowValue['link']; holder?: string; details?: ReactNode } | undefined;
   preview?: boolean;
   /** Optional adapter for a presentation already resolved from the current released Type hierarchy. */
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
@@ -252,12 +258,14 @@ export function CoverList({
     const occurrence = occurrences.get(identity) ?? 0;
     occurrences.set(identity, occurrence + 1);
     const key = `${identity}:${occurrence}`;
+    const visit = itemVisit?.(item);
     const facts = memberFacts && Object.hasOwn(memberFacts, item.id) ? memberFacts[item.id] : undefined;
     const card = (
       <ItemCard
         key={key}
         item={item}
         value={value}
+        {...(visit?.link ? { link: visit.link } : {})}
         credit={credits}
         {...(item.credit && creditVisit
           ? {
@@ -285,8 +293,17 @@ export function CoverList({
         <div data-statement={item.statement}>{card}</div>
       </li>
     ) : (
-      <div key={key} role="listitem" data-statement={item.statement} className="min-w-0">
+      <div
+        key={key}
+        role="listitem"
+        data-statement={item.statement}
+        {...(item.statement && visit?.holder
+          ? { 'data-connection-statement': item.statement, 'data-connection-holder': visit.holder }
+          : {})}
+        className="min-w-0"
+      >
         {card}
+        {visit?.details}
       </div>
     );
   });
