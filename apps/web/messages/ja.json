@@ -2489,6 +2489,8 @@
   "settings_reading_preview_cover_blur": "Cover withheld for suitability",
   "settings_reading_reset": "Use native defaults",
   "settings_reading_effective": "Current: {spoilers}; {images}. Native default: {defaultSpoilers}; {defaultImages}.",
+  "settings_reading_retained_choice": "保持された下書きの選択は「{choice}」です。現在の読書設定ではこの選択肢は提供されていません。利用可能な選択肢を選ぶか、確認済みの設定を使用してください。",
+  "settings_reading_suitability_single": "現在利用できるのは「{choice}」のみのため、この設定は読み取り専用です。",
   "settings_reading_read_only_title": "Reading settings cannot be changed",
   "settings_reading_read_only_text": "You can see the confirmed settings. Changing them is not allowed for this sign-in.",
   "settings_reading_choices_unavailable_title": "Reading choices unavailable",

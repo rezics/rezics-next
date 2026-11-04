@@ -2,6 +2,7 @@ import type {
   NativePreferenceFailure,
   PreferenceChange,
   PreferenceWriteResult,
+  ReadingAdvice,
   ReadingPreferences,
   SettingsPage,
 } from './preferences';
@@ -60,6 +61,16 @@ export function readingAdviceFor(values: ReadingValues, writable = true): NonNul
       defaults: { spoilerLevel: 0, suitability: 'blur' },
     },
   };
+}
+
+export function readingChangeAdmitted(
+  change: Readonly<PreferenceChange>,
+  supported: ReadingAdvice['reading']['supported'],
+): boolean {
+  return (
+    (change.spoilerLevel === undefined || supported.spoilerLevels.includes(change.spoilerLevel)) &&
+    (change.suitability === undefined || supported.suitability.includes(change.suitability))
+  );
 }
 
 function isSpoilerLevel(value: unknown): value is ReadingValues['spoilerLevel'] {

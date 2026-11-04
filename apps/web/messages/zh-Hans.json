@@ -2489,6 +2489,8 @@
   "settings_reading_preview_cover_blur": "Cover withheld for suitability",
   "settings_reading_reset": "Use native defaults",
   "settings_reading_effective": "Current: {spoilers}; {images}. Native default: {defaultSpoilers}; {defaultImages}.",
+  "settings_reading_retained_choice": "保留的草稿选项为“{choice}”。当前阅读设置不再提供此本地选项。请选择可用选项，或使用已确认的设置。",
+  "settings_reading_suitability_single": "当前仅提供“{choice}”，因此此设置为只读。",
   "settings_reading_read_only_title": "Reading settings cannot be changed",
   "settings_reading_read_only_text": "You can see the confirmed settings. Changing them is not allowed for this sign-in.",
   "settings_reading_choices_unavailable_title": "Reading choices unavailable",

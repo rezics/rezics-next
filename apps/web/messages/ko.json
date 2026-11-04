@@ -2489,6 +2489,8 @@
   "settings_reading_preview_cover_blur": "Cover withheld for suitability",
   "settings_reading_reset": "Use native defaults",
   "settings_reading_effective": "Current: {spoilers}; {images}. Native default: {defaultSpoilers}; {defaultImages}.",
+  "settings_reading_retained_choice": "보존된 초안의 선택은 “{choice}”입니다. 현재 읽기 설정에서는 이 로컬 선택을 더 이상 제공하지 않습니다. 사용 가능한 선택을 고르거나 확인된 설정을 사용하세요.",
+  "settings_reading_suitability_single": "현재 “{choice}”만 제공되므로 이 설정은 읽기 전용입니다.",
   "settings_reading_read_only_title": "Reading settings cannot be changed",
   "settings_reading_read_only_text": "You can see the confirmed settings. Changing them is not allowed for this sign-in.",
   "settings_reading_choices_unavailable_title": "Reading choices unavailable",

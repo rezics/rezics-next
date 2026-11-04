@@ -2489,6 +2489,8 @@
   "settings_reading_preview_cover_blur": "Cover withheld for suitability",
   "settings_reading_reset": "Use native defaults",
   "settings_reading_effective": "Current: {spoilers}; {images}. Native default: {defaultSpoilers}; {defaultImages}.",
+  "settings_reading_retained_choice": "Votre brouillon conservé indique « {choice} ». Les paramètres de lecture actuels ne proposent plus ce choix local. Choisissez une option disponible ou utilisez les paramètres confirmés.",
+  "settings_reading_suitability_single": "Seul « {choice} » est proposé actuellement ; ce paramètre est en lecture seule.",
   "settings_reading_read_only_title": "Reading settings cannot be changed",
   "settings_reading_read_only_text": "You can see the confirmed settings. Changing them is not allowed for this sign-in.",
   "settings_reading_choices_unavailable_title": "Reading choices unavailable",
