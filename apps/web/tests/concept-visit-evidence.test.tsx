@@ -3,11 +3,7 @@ import { createRequire } from 'node:module';
 import { act, createElement as h, type ReactNode } from 'react';
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import {
-  conceptSourceFits,
-  readSourceConcept,
-  type ConceptStatement,
-} from '../src/features/catalogue/source-concept-explorer';
+import type { ConceptStatement } from '../src/features/catalogue/source-concept-explorer';
 import type { FollowWriteInput } from '../src/library/follow-records';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -83,6 +79,7 @@ function source(spoiler = false): SubjectRead {
   };
 }
 async function read(native = source()) {
+  const { readSourceConcept } = await import('../src/features/catalogue/source-concept-explorer');
   const client = {
     subjects: () => ({
       get: async () => ({ status: 200, data: native }),
@@ -285,6 +282,7 @@ test('account and session replacement cannot restore a previous reveal through A
 });
 
 test('source admission counts bytes, parts and repeated disclosed summary expansion before rendering', async () => {
+  const { conceptSourceFits } = await import('../src/features/catalogue/source-concept-explorer');
   expect(conceptSourceFits(source())).toBe(true);
   const large = source();
   large.subject.descriptions.en = '界'.repeat(400_000);

@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { defaultReader, type Reader } from '../../subject/reader';
 import { useSession } from '../../session/query';
 import { FollowTargetControl } from '../../library/follow-target-control';
-import { ConceptAssociations, ConceptAliases } from './source-concept-reading/associations';
+import { ConceptAssociations, ConceptAliases, ConceptWorksDisclosure } from './source-concept-reading/associations';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
 import type { ConceptRead } from '../catalogue/source-concept-explorer';
 import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './source-concept-reading/hierarchy';
@@ -239,12 +239,21 @@ function ConceptVisitView({
         </div>
       )}
       {read?.ok && (
-        <ConceptTaggedWorks
+        <ConceptWorksDisclosure
+          key={JSON.stringify([source.generation, reader, visit.completed])}
           read={read}
+          reader={reader}
           locale={locale}
-          route={{ ...(worksRoute ?? {}), role, returnTo }}
-          onChange={onWorksChange}
-        />
+        >
+          {(presentation) => (
+            <ConceptTaggedWorks
+              read={presentation}
+              locale={locale}
+              route={{ ...(worksRoute ?? {}), role, returnTo }}
+              onChange={onWorksChange}
+            />
+          )}
+        </ConceptWorksDisclosure>
       )}
       {returnTo && (
         <a className={linkClass} href={returnTo}>
