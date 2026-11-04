@@ -16,12 +16,13 @@ import {
   type HandoffKind,
 } from '../operator-transfer-handoff';
 import {
-  managementSession,
   parseTransferRequest,
   prepareTransfer,
   readOperatorRelation,
+  readOperatorTransferPage,
   reauthenticateTransfer,
-  sameRelation,
+  refreshTransferAdvice,
+  reviewDestinationTransfer,
   restoreTransferAttempt,
   storeTransferAttempt,
   submitTransferAttempt,
@@ -149,6 +150,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   const [result, setResult] = useState<TransferResult | null>(null);
   const [current, setCurrent] = useState<OperatorRelation | null>(null);
   const [needsProof, setNeedsProof] = useState(false);
+  const [nativeAdvice, setNativeAdvice] = useState<'source' | 'destination' | null>(null);
   const [reconfirmed, setReconfirmed] = useState(false);
   const [invalidContinuation, setInvalidContinuation] = useState(false);
   const [email, setEmail] = useState('');
@@ -175,15 +177,16 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     requestText,
     acceptance,
     invalidContinuation,
+    needsProof,
   });
-  state.current = { session, result, attempt, subject, destination, requestText, acceptance, invalidContinuation };
+  state.current = { session, result, attempt, subject, destination, requestText, acceptance, invalidContinuation, needsProof };
   const protectedWork = () => {
     const value = state.current;
     return (
       !retired.current &&
       !value.invalidContinuation &&
       value.session?.kind === 'ready' &&
-      Boolean(value.session.scopes?.includes('account:manage')) &&
+      !value.needsProof &&
       value.result?.kind !== 'current' &&
       Boolean(
         value.attempt ||
@@ -212,6 +215,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     busy.current = false;
     retryRead.current = null;
     setAttempt(null);
+    setResult(null);
+    setCurrent(null);
     setConfirmed(false);
     setPending(false);
     setSubject('');
@@ -221,6 +226,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setPassword('');
     setEmail('');
     setFileFeedback(null);
+    setNativeAdvice(null);
+    setUncertain(false);
   }
   async function validateCaller() {
     const started = view.current;
@@ -228,14 +235,25 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (retired.current || owner?.kind !== 'ready') return;
     const caller = await loadAccountSession();
     if (started !== view.current) return;
-    if (
-      caller.kind === 'signed-out' ||
-      (caller.kind === 'ready' && (caller.accountId !== owner.accountId || !caller.scopes?.includes('account:manage')))
-    ) {
+    if (caller.kind === 'signed-out' || (caller.kind === 'ready' && caller.accountId !== owner.accountId)) {
       retire();
       setSession(caller);
       setInvalidContinuation(true);
       setResult({ kind: 'failure', reason: 'account-changed' });
+      return;
+    }
+    if (caller.kind !== 'ready') return;
+    const readiness = await readOperatorTransferPage({ kind: 'readiness' }, owner.accountId);
+    if (started !== view.current) return;
+    if ('kind' in readiness && readiness.kind === 'failure') {
+      if (readiness.reason === 'unavailable') offerReadRetry(() => validateCaller());
+      return;
+    }
+    if (readiness.viewer.kind !== 'ready') {
+      retire();
+      setSession(caller);
+      setNeedsProof(readiness.viewer.kind === 'authentication-required');
+      setInvalidContinuation(readiness.viewer.kind === 'signed-out' || readiness.viewer.kind === 'refused');
     }
   }
   useEffect(() => {
@@ -271,8 +289,10 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setAttempt(null);
     setResult(null);
     setCurrent(null);
+    setNativeAdvice(null);
     setReconfirmed(false);
     setInvalidContinuation(false);
+    setNeedsProof(false);
     setUncertain(false);
     retryRead.current = null;
     setReadRecovery(false);
@@ -292,16 +312,35 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (result || reconfirmed || fileFeedback || readRecovery) notice.current?.focus();
   }, [result, reconfirmed, fileFeedback, readRecovery]);
 
-  async function loadPageSession(supplied?: AccountSessionResult) {
+  async function loadPageSession(supplied?: AccountSessionResult): Promise<TransferFailure | void> {
     const started = view.current;
     const value = supplied ?? (await loadAccountSession());
     if (started !== view.current) return;
     setSession(value);
-    setNeedsProof(value.kind === 'ready' && !managementSession(value));
     // An unavailable read says nothing about the saved attempt's owner.
     if (value.kind === 'failure') {
       offerReadRetry(() => loadPageSession());
-      return;
+      return { kind: 'failure', reason: 'unavailable' };
+    }
+    const readiness = await readOperatorTransferPage(
+      { kind: 'readiness' },
+      value.kind === 'ready' ? value.accountId : undefined,
+    );
+    if (started !== view.current) return;
+    if ('kind' in readiness && readiness.kind === 'failure') {
+      offerReadRetry(() => loadPageSession());
+      return readiness;
+    }
+    if (value.kind === 'ready' && readiness.viewer.kind === 'signed-out') {
+      retire();
+      setSession({ kind: 'signed-out' });
+      setInvalidContinuation(true);
+      return { kind: 'failure', reason: 'account-changed' };
+    }
+    setNeedsProof(readiness.viewer.kind === 'authentication-required');
+    if (readiness.viewer.kind === 'refused') {
+      setInvalidContinuation(true);
+      return { kind: 'failure', reason: 'denied' };
     }
     const saved = restoreTransferAttempt();
     if (saved === 'invalid' || (saved && (value.kind !== 'ready' || saved.accountId !== value.accountId))) {
@@ -313,9 +352,18 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       setAcceptance(saved.acceptance ?? '');
       setReconfirmed(true);
       // A previous submit may have reached native even if its response was lost.
-      if (saved.phase === 'execute') {
+      if (saved.phase === 'execute' || saved.phase === 'readback') {
         setUncertain(true);
         setResult({ kind: 'failure', reason: 'uncertain' });
+      }
+      if (saved.phase === 'approve' && readiness.viewer.kind === 'ready') {
+        const advice = await refreshTransferAdvice(saved);
+        if (started !== view.current) return;
+        if (advice) {
+          showFailure(advice);
+          if (advice.reason === 'unavailable') offerReadRetry(() => retryAttemptRead(saved));
+        }
+        else setNativeAdvice(saved.side);
       }
       if (saved.phase === 'accepted') setResult({ kind: 'accepted', reference: saved.reference! });
     }
@@ -338,10 +386,19 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   }
   async function readCurrent(value: TransferAttempt) {
     const started = view.current;
+    const acknowledged = state.current.result?.kind === 'acknowledged' ? state.current.result : null;
     const relation = await readOperatorRelation(value.request.previous.subjectAccountId, value.accountId);
     if (started !== view.current) return;
-    if (relation.kind !== 'ready') return relation;
+    if (relation.kind !== 'ready') {
+      if (acknowledged) {
+        setResult({ ...acknowledged, readback: relation });
+        if (relation.reason === 'unavailable') offerReadRetry(() => readCurrent(value));
+        return;
+      }
+      return relation;
+    }
     setCurrent(relation.relation);
+    if (acknowledged) setResult({ ...acknowledged, readback: { kind: 'current', relation: relation.relation } });
   }
 
   async function perform(action: () => Promise<void>) {
@@ -363,6 +420,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   }
   function showFailure(value: TransferFailure) {
     setResult(value);
+    setNativeAdvice(null);
     if (value.reason === 'uncertain') setUncertain(true);
     if (['account-changed', 'step-up', 'denied'].includes(value.reason)) clearImported();
     if (value.reason === 'step-up') {
@@ -390,6 +448,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setAttempt(value);
     setResult(null);
     setCurrent(null);
+    setNativeAdvice(null);
     setConfirmed(false);
   }
   function prepare(event: FormEvent) {
@@ -401,7 +460,10 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       const value = await prepareTransfer(subject.trim(), destination.trim(), session.accountId);
       if (started !== view.current) return;
       if ('kind' in value) return value;
-      else install({ accountId: session.accountId, request: value, side: 'source', phase: 'approve' });
+      else {
+        install({ accountId: session.accountId, request: value, side: 'source', phase: 'approve' });
+        setNativeAdvice('source');
+      }
     });
   }
   function review(event: FormEvent) {
@@ -419,20 +481,37 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (session?.kind !== 'ready' || needsProof || invalidContinuation || uncertain) return;
     const started = view.current;
     readPage(async () => {
-      const relation = await readOperatorRelation(request.previous.subjectAccountId, session.accountId);
+      const failure = await reviewDestinationTransfer(request, session.accountId);
       if (started !== view.current) return;
-      if (relation.kind !== 'ready') return relation;
-      // Native approve repeats the exact tuple/version check after review.
-      if (!sameRelation(relation.relation, request)) {
-        showFailure({ kind: 'failure', reason: 'conflict' });
-        return;
-      }
+      if (failure) return failure;
       install({ accountId: session.accountId, request, side: 'destination', phase: 'approve' });
+      setNativeAdvice('destination');
     });
+  }
+  function reviewAttempt() {
+    if (!attempt || session?.kind !== 'ready' || needsProof || invalidContinuation) return;
+    const selected = attempt;
+    readPage(async () => {
+      const failure = await refreshTransferAdvice(selected);
+      if (!failure) setNativeAdvice(selected.side);
+      return failure;
+    });
+  }
+  async function retryAttemptRead(value: TransferAttempt): Promise<TransferFailure | void> {
+    if (value.phase !== 'approve') return readCurrent(value);
+    const failure = await refreshTransferAdvice(value);
+    if (!failure) setNativeAdvice(value.side);
+    return failure ?? undefined;
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!attempt || !confirmed || needsProof || invalidContinuation) return;
+    if (
+      !attempt ||
+      !confirmed ||
+      needsProof ||
+      invalidContinuation ||
+      (attempt.phase === 'approve' && nativeAdvice !== attempt.side)
+    ) return;
     const started = view.current;
     void perform(async () => {
       const value = { ...attempt, ...(attempt.side === 'source' ? { acceptance } : {}) };
@@ -452,11 +531,16 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       if (outcome.kind === 'failure') {
         showFailure(outcome);
         // Read recovery never repeats approve/execute, even after an uncertain write.
-        if (outcome.reason === 'unavailable') offerReadRetry(() => readCurrent(liveAttempt.current ?? value));
+        if (outcome.reason === 'unavailable') offerReadRetry(() => retryAttemptRead(liveAttempt.current ?? value));
       } else {
         setUncertain(false);
         setResult(outcome);
+        setNativeAdvice(null);
         if (outcome.kind === 'current') setCurrent(outcome.relation);
+        if (outcome.kind === 'acknowledged') {
+          if (outcome.readback.kind === 'current') setCurrent(outcome.readback.relation);
+          else offerReadRetry(() => readCurrent(liveAttempt.current ?? value));
+        }
       }
     });
   }
@@ -475,10 +559,31 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       setPassword('');
       if (outcome) showFailure(outcome);
       else {
+        if (attempt?.phase === 'approve') {
+          const advice = await refreshTransferAdvice(attempt);
+          if (started !== view.current) return;
+          if (advice) {
+            showFailure(advice);
+            return;
+          }
+          setNativeAdvice(attempt.side);
+        } else {
+          const readiness = await readOperatorTransferPage({ kind: 'readiness' }, session.accountId);
+          if (started !== view.current) return;
+          if ('kind' in readiness && readiness.kind === 'failure') {
+            showFailure(readiness);
+            return;
+          }
+          const authentication = pageFailure(readiness);
+          if (authentication) {
+            setNeedsProof(authentication.reason === 'step-up');
+            showFailure(authentication);
+            return;
+          }
+        }
         setNeedsProof(false);
         setReconfirmed(true);
         setConfirmed(false);
-        clearImported();
         if (attempt?.phase === 'accepted') setResult({ kind: 'accepted', reference: attempt.reference! });
         else if (!uncertain) setResult(null);
       }
@@ -516,6 +621,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       return;
     }
     setConfirmed(false);
+    setNativeAdvice(null);
     if (imported.kind === 'request') setRequestText(imported.text);
     else setAcceptance(imported.text);
     setFileFeedback({
@@ -566,7 +672,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         <p>{m.auth_transfer_guide_orientation()}</p>
         {!session ? <p role="status">{m.auth_inventory_loading()}</p> : null}
         {session?.kind === 'signed-out' ? (
-          <p>
+          <p role="status">
+            {m.auth_transfer_signed_out()}{' '}
             <a href="/login">{m.auth_security_sign_in()}</a>
           </p>
         ) : null}
@@ -589,6 +696,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
               {m.auth_account_delete_retry()}
             </Button>
           ) : null}
+          {pending ? <p role="status">{m.auth_transfer_pending()}</p> : null}
           {result?.kind === 'failure' ? (
             <ErrorAlert>
               {errorMessage(result)}
@@ -617,6 +725,23 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             </>
           ) : null}
           {result?.kind === 'current' ? <p>{m.auth_transfer_observed()}</p> : null}
+          {result?.kind === 'acknowledged' ? (
+            <div role="status">
+              <h2>{m.auth_transfer_acknowledged()}</h2>
+              <details>
+                <summary className="min-h-11 cursor-pointer py-3">{m.auth_transfer_handoff_technical()}</summary>
+                <Field>
+                  <FieldLabel htmlFor="transfer-acknowledgment">{m.auth_transfer_acceptance()}</FieldLabel>
+                  <Textarea id="transfer-acknowledgment" value={result.reference} readOnly />
+                </Field>
+              </details>
+              {result.readback.kind === 'current' ? (
+                <p>{m.auth_transfer_observed()}</p>
+              ) : (
+                <p role="alert">{m.auth_transfer_current_unavailable()}</p>
+              )}
+            </div>
+          ) : null}
         </div>
         {needsProof && !invalidContinuation ? (
           <form className="auth-login-form" onSubmit={authenticate} method="post" action="/signin">
@@ -730,6 +855,12 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
               <dd>{attempt.request.operatorAccountId}</dd>
             </dl>
             <p>{m.auth_transfer_handoff_consequences()}</p>
+            {attempt.side === 'destination' ? <p>{m.auth_transfer_imported_request_provenance()}</p> : null}
+            {attempt.side === 'source' ? (
+              <p>{m.auth_transfer_native_advice_source()}</p>
+            ) : (
+              <p>{m.auth_transfer_native_advice_destination()}</p>
+            )}
             {attempt.side === 'source' ? (
               <>
                 <p>
@@ -757,13 +888,13 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
                 <Textarea id="transfer-request" value={JSON.stringify(attempt.request)} readOnly />
               </Field>
             </details>
-            {attempt.side === 'source' && attempt.phase === 'approve' && !attempt.acceptance ? (
+            {attempt.phase === 'approve' && nativeAdvice !== attempt.side ? (
               <Button
                 variant="outline"
-                disabled={locked || uncertain || Boolean(attempt.reference)}
-                onClick={() => reviewRequest(attempt.request)}
+                disabled={locked || Boolean(attempt.reference)}
+                onClick={reviewAttempt}
               >
-                {m.auth_transfer_review_same_person()}
+                {attempt.side === 'source' ? m.auth_transfer_review_same_person() : m.auth_transfer_native_review()}
               </Button>
             ) : null}
             {attempt.side === 'destination' ? (
@@ -808,6 +939,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
                             setFileFeedback(null);
                             setAcceptance(event.target.value);
                             setConfirmed(false);
+                            setNativeAdvice(null);
                           }}
                           maxLength={4096}
                           readOnly={locked || !acceptanceEditable}
@@ -823,7 +955,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
                       type="checkbox"
                       checked={confirmed}
                       onChange={(event) => setConfirmed(event.target.checked)}
-                      disabled={pending || needsProof || invalidContinuation}
+                      disabled={pending || needsProof || invalidContinuation ||
+                        (attempt.phase === 'approve' && nativeAdvice !== attempt.side)}
                       required
                     />
                     {attempt.side === 'source'
@@ -838,6 +971,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
                     !confirmed ||
                     needsProof ||
                     invalidContinuation ||
+                    (attempt.phase === 'approve' && nativeAdvice !== attempt.side) ||
                     (attempt.side === 'source' && !acceptance)
                   }
                   aria-busy={pending}

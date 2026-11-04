@@ -1,6 +1,11 @@
 import { authPost, type AuthPostResult } from './api';
 import { loadAccountSession, type AccountSessionResult } from './account-operations';
 import { managementOperationProfile } from '@rezics/auth-contract';
+import {
+  requestOperatorTransferPage,
+  type OperatorTransferPageInput,
+  type OperatorTransferPageResponse,
+} from './operator-transfer-page';
 
 // Closed private native source; its tuple/version is never transfer approval.
 export const OPERATOR_RELATION_PATH = '/account-management/operators/relation';
@@ -32,6 +37,7 @@ export type RelationResult = { kind: 'ready'; relation: OperatorRelation } | Tra
 export type TransferResult =
   | { kind: 'accepted'; reference: string }
   | { kind: 'current'; relation: OperatorRelation }
+  | { kind: 'acknowledged'; reference: string; readback: { kind: 'current'; relation: OperatorRelation } | TransferFailure }
   | TransferFailure;
 
 const storageKey = 'rezics.operator-transfer.attempt';
@@ -85,16 +91,6 @@ export function sameRelation(left: OperatorRelation, right: OperatorRelation): b
     left.previous.reservationId === right.previous.reservationId
   );
 }
-export function managementSession(
-  session: AccountSessionResult,
-): session is Extract<AccountSessionResult, { kind: 'ready' }> {
-  return (
-    session.kind === 'ready' &&
-    session.clientId === OPERATOR_MANAGEMENT_PROFILE.client_id &&
-    session.scopes?.length === 1 &&
-    session.scopes[0] === 'account:manage'
-  );
-}
 function failure(result: Exclude<AuthPostResult, { ok: true }>, mutation = false): TransferFailure {
   return {
     kind: 'failure',
@@ -117,23 +113,127 @@ async function boundSession(accountId: string): Promise<TransferFailure | null> 
   if (session.kind === 'failure') return { kind: 'failure', reason: 'unavailable' };
   if (session.kind !== 'ready' || session.accountId !== accountId)
     return { kind: 'failure', reason: 'account-changed' };
-  if (!managementSession(session)) return { kind: 'failure', reason: 'step-up' };
   return null;
 }
-export async function readOperatorRelation(subjectAccountId: string, accountId: string): Promise<RelationResult> {
-  const denied = await boundSession(accountId);
+function exactFields(value: Record<string, unknown>, names: string[]) {
+  return Object.keys(value).sort().join(',') === [...names].sort().join(',');
+}
+function pageResponse(value: unknown): value is OperatorTransferPageResponse {
+  if (!record(value) || !exactFields(value, ['viewer', 'review']) || !record(value.viewer) || !record(value.review))
+    return false;
+  const { viewer, review } = value;
+  if (viewer.kind === 'ready' && !exactFields(viewer, ['kind'])) return false;
+  else if (
+    viewer.kind === 'authentication-required' &&
+    (!exactFields(viewer, ['kind', 'continuation']) || viewer.continuation !== 'operator-transfer')
+  )
+    return false;
+  else if (viewer.kind === 'signed-out' && !exactFields(viewer, ['kind'])) return false;
+  else if (viewer.kind === 'refused' && !exactFields(viewer, ['kind'])) return false;
+  else if (!['ready', 'authentication-required', 'signed-out', 'refused'].includes(String(viewer.kind))) return false;
+  if (review.kind === 'readiness') return exactFields(review, ['kind']);
+  if (['missing', 'refused', 'changed', 'unavailable'].includes(String(review.kind)))
+    return exactFields(review, ['kind']);
+  if (review.kind === 'source') {
+    if (!exactFields(review, ['kind', 'relation', 'action']) || review.action !== 'allowed' || !record(review.relation))
+      return false;
+    const relation = review.relation;
+    return (
+      exactFields(relation, ['previous', 'expectedVersion']) &&
+      isRelation(relation)
+    );
+  }
+  if (review.kind === 'destination')
+    return (
+      exactFields(review, ['kind', 'destinationAccountId', 'action']) &&
+      text(review.destinationAccountId) &&
+      ['allowed', 'denied'].includes(String(review.action))
+    );
+  return false;
+}
+export function pageFailure(page: OperatorTransferPageResponse): TransferFailure | null {
+  if (page.viewer.kind === 'authentication-required') return { kind: 'failure', reason: 'step-up' };
+  if (page.viewer.kind === 'signed-out') return { kind: 'failure', reason: 'denied' };
+  if (page.viewer.kind === 'refused') return { kind: 'failure', reason: 'denied' };
+  return null;
+}
+export async function reviewDestinationTransfer(
+  request: TransferRequest,
+  accountId: string,
+): Promise<TransferFailure | null> {
+  const page = await readOperatorTransferPage({ kind: 'destination', request }, accountId);
+  if ('kind' in page && page.kind === 'failure') return page;
+  const denied = pageFailure(page);
   if (denied) return denied;
-  // POST supplies Origin; Auth rechecks the human and native management authority.
-  const result = await authPost<unknown>(OPERATOR_RELATION_PATH, { subjectAccountId });
-  if (!result.ok) return failure(result);
   if (
-    !record(result.body) ||
-    !fields(result.body, ['previous', 'expectedVersion']) ||
-    !isRelation(result.body) ||
-    result.body.previous.subjectAccountId !== subjectAccountId
+    page.review.kind === 'destination' &&
+    page.review.destinationAccountId === request.operatorAccountId &&
+    page.review.action === 'allowed'
+  )
+    return null;
+  if (page.review.kind === 'changed') return { kind: 'failure', reason: 'conflict' };
+  if (page.review.kind === 'refused' || page.review.kind === 'destination')
+    return { kind: 'failure', reason: 'denied' };
+  return { kind: 'failure', reason: page.review.kind === 'missing' ? 'invalid' : 'unavailable' };
+}
+export async function refreshTransferAdvice(attempt: TransferAttempt): Promise<TransferFailure | null> {
+  const input: OperatorTransferPageInput = attempt.side === 'source'
+    ? { kind: 'source', subjectAccountId: attempt.request.previous.subjectAccountId }
+    : { kind: 'destination', request: attempt.request };
+  const page = await readOperatorTransferPage(input, attempt.accountId);
+  if ('kind' in page && page.kind === 'failure') return page;
+  const denied = pageFailure(page);
+  if (denied) return denied;
+  if (attempt.side === 'source') {
+    if (page.review.kind === 'source' && sameRelation(page.review.relation, attempt.request)) return null;
+    if (page.review.kind === 'refused') return { kind: 'failure', reason: 'denied' };
+    if (page.review.kind === 'changed' || page.review.kind === 'missing')
+      return { kind: 'failure', reason: 'conflict' };
+    return { kind: 'failure', reason: 'unavailable' };
+  }
+  if (
+    page.review.kind === 'destination' &&
+    page.review.destinationAccountId === attempt.request.operatorAccountId &&
+    page.review.action === 'allowed'
+  )
+    return null;
+  if (page.review.kind === 'refused' || page.review.kind === 'destination')
+    return { kind: 'failure', reason: 'denied' };
+  return { kind: 'failure', reason: page.review.kind === 'changed' ? 'conflict' : 'unavailable' };
+}
+export async function readOperatorTransferPage(
+  input: OperatorTransferPageInput,
+  accountId?: string,
+): Promise<OperatorTransferPageResponse | TransferFailure> {
+  if (accountId) {
+    const denied = await boundSession(accountId);
+    if (denied) return denied;
+  }
+  const result = await requestOperatorTransferPage(input);
+  if (!result.ok) return failure(result);
+  if (!pageResponse(result.body)) return { kind: 'failure', reason: 'unavailable' };
+  if (
+    (input.kind === 'readiness' && result.body.viewer.kind === 'ready' && result.body.review.kind !== 'readiness') ||
+    (input.kind === 'source' && result.body.review.kind === 'source' &&
+      result.body.review.relation.previous.subjectAccountId !== input.subjectAccountId) ||
+    (input.kind === 'destination' && result.body.review.kind === 'destination' &&
+      result.body.review.destinationAccountId !== input.request.operatorAccountId)
   )
     return { kind: 'failure', reason: 'unavailable' };
-  return { kind: 'ready', relation: result.body };
+  return result.body;
+}
+export async function readOperatorRelation(subjectAccountId: string, accountId: string): Promise<RelationResult> {
+  const result = await readOperatorTransferPage({ kind: 'source', subjectAccountId }, accountId);
+  if ('kind' in result && result.kind === 'failure') return result;
+  const denied = pageFailure(result);
+  if (denied) return denied;
+  if (result.review.kind === 'source' && result.review.relation.previous.subjectAccountId === subjectAccountId)
+    return { kind: 'ready', relation: result.review.relation };
+  return {
+    kind: 'failure',
+    reason: result.review.kind === 'changed' || result.review.kind === 'missing' ? 'conflict' :
+      result.review.kind === 'refused' ? 'denied' : 'unavailable',
+  };
 }
 export async function prepareTransfer(
   subjectAccountId: string,
@@ -141,10 +241,16 @@ export async function prepareTransfer(
   accountId: string,
 ): Promise<TransferRequest | TransferFailure> {
   if (!text(subjectAccountId) || !text(operatorAccountId)) return { kind: 'failure', reason: 'invalid' };
-  const current = await readOperatorRelation(subjectAccountId, accountId);
-  if (current.kind !== 'ready') return current;
+  const page = await readOperatorTransferPage({ kind: 'source', subjectAccountId }, accountId);
+  if ('kind' in page && page.kind === 'failure') return page;
+  const denied = pageFailure(page);
+  if (denied) return denied;
+  if (page.review.kind !== 'source')
+    return { kind: 'failure', reason: page.review.kind === 'missing' || page.review.kind === 'changed' ? 'conflict' :
+      page.review.kind === 'refused' ? 'denied' : 'unavailable' };
+  const current = page.review.relation;
   const request = {
-    ...current.relation,
+    ...current,
     version: 1 as const,
     operatorAccountId,
     sourceOperationKey: crypto.randomUUID(),
@@ -228,9 +334,8 @@ export async function submitTransferAttempt(
           acceptance: attempt.acceptance!,
         };
   if (attempt.phase === 'approve') {
-    const current = await readOperatorRelation(request.previous.subjectAccountId, attempt.accountId);
-    if (current.kind !== 'ready') return current;
-    if (!sameRelation(current.relation, request)) return { kind: 'failure', reason: 'conflict' };
+    const advice = await refreshTransferAdvice(attempt);
+    if (advice) return advice;
     if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
     const approved = await authPost<unknown>('/account-operations/approve', {
       operationKey: request.sourceOperationKey,
@@ -274,15 +379,19 @@ export async function submitTransferAttempt(
     if (!save(attempt)) return { kind: 'failure', reason: 'uncertain' };
   }
   const current = await readOperatorRelation(request.previous.subjectAccountId, attempt.accountId);
-  if (current.kind !== 'ready') return current;
+  if (current.kind !== 'ready') return { kind: 'acknowledged', reference: attempt.reference!, readback: current };
   // An acknowledgement never substitutes for this independently authorized read.
   if (
     current.relation.previous.operatorAccountId !== request.operatorAccountId ||
     BigInt(current.relation.expectedVersion) <= BigInt(request.expectedVersion) ||
     current.relation.previous.reservationId === request.previous.reservationId
   )
-    return { kind: 'failure', reason: 'uncertain' };
-  return { kind: 'current', relation: current.relation };
+    return {
+      kind: 'acknowledged',
+      reference: attempt.reference!,
+      readback: { kind: 'failure', reason: 'conflict' },
+    };
+  return { kind: 'acknowledged', reference: attempt.reference!, readback: { kind: 'current', relation: current.relation } };
 }
 
 /** Reauthentication stays on the transfer page; there is no return URL. The

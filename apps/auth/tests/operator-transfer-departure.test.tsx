@@ -50,6 +50,39 @@ async function setup(saved?: TransferAttempt) {
     </RouterContextProvider>
   );
   const page = await open(view(), session);
+  const queuedFetch = globalThis.fetch;
+  await flush();
+  await flush(() => page.calls[0]!.resolve(Response.json(session)));
+  await flush(() =>
+    page.calls[1]!.resolve(Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } })),
+  );
+  if (saved?.phase === 'approve') {
+    await flush(() => page.calls[2]!.resolve(Response.json(session)));
+    await flush(() =>
+      page.calls[3]!.resolve(
+        saved.side === 'source'
+          ? Response.json({
+              viewer: { kind: 'ready' },
+              review: { kind: 'source', relation: { previous: saved.request.previous, expectedVersion: saved.request.expectedVersion }, action: 'allowed' },
+            })
+          : Response.json({
+              viewer: { kind: 'ready' },
+              review: { kind: 'destination', destinationAccountId: saved.request.operatorAccountId, action: 'allowed' },
+            }),
+      ),
+    );
+  }
+  page.calls.splice(0);
+  globalThis.fetch = ((input, init) => {
+    const path = String(input);
+    if (path === '/session') return Promise.resolve(Response.json(session));
+    if (path === '/account-management/operators/transfer-review') {
+      const body = JSON.parse(String(init?.body));
+      if (body.kind === 'readiness')
+        return Promise.resolve(Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } }));
+    }
+    return queuedFetch(input, init);
+  }) as typeof fetch;
   const choose = (label: string) => flush(() => button(page.host, label)!.click());
   const navigate = () =>
     flush(() => {
@@ -121,7 +154,12 @@ test('imported request and exact reviewed transfer survive Stay; Leave discards 
   expect(page.input('request-input').value).toBe(text);
   await page.submit('request-input');
   await flush(() =>
-    page.calls[0]!.resolve(Response.json({ previous: source.request.previous, expectedVersion: '12' })),
+    page.calls[0]!.resolve(
+      Response.json({
+        viewer: { kind: 'ready' },
+        review: { kind: 'destination', destinationAccountId: source.request.operatorAccountId, action: 'allowed' },
+      }),
+    ),
   );
   const attempt = restoreTransferAttempt();
   await flush(() => page.input('confirm').click());
@@ -144,7 +182,12 @@ for (const stage of ['relation', 'approval'])
     await page.submit('confirm');
     if (stage === 'approval')
       await flush(() =>
-        page.calls[0]!.resolve(Response.json({ previous: source.request.previous, expectedVersion: '12' })),
+        page.calls[0]!.resolve(
+          Response.json({
+            viewer: { kind: 'ready' },
+            review: { kind: 'source', relation: { previous: source.request.previous, expectedVersion: '12' }, action: 'allowed' },
+          }),
+        ),
       );
     const original = restoreTransferAttempt();
     await page.navigate();
@@ -159,7 +202,10 @@ for (const stage of ['relation', 'approval'])
         .resolve(
           stage === 'approval'
             ? approval()
-            : Response.json({ previous: source.request.previous, expectedVersion: '12' }),
+            : Response.json({
+                viewer: { kind: 'ready' },
+                review: { kind: 'source', relation: { previous: source.request.previous, expectedVersion: '12' }, action: 'allowed' },
+              }),
         ),
     );
     expect(restoreTransferAttempt()).toEqual(original);
@@ -173,8 +219,15 @@ test('reconciled results leave normally and permission loss revokes a draft with
   await flush(() =>
     page.calls[0]!.resolve(
       Response.json({
-        previous: { ...source.request.previous, operatorAccountId: 'new', reservationId: 'next' },
-        expectedVersion: '13',
+        viewer: { kind: 'ready' },
+        review: {
+          kind: 'source',
+          action: 'allowed',
+          relation: {
+            previous: { ...source.request.previous, operatorAccountId: 'new', reservationId: 'next' },
+            expectedVersion: '13',
+          },
+        },
       }),
     ),
   );
