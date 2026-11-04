@@ -305,12 +305,12 @@ async function readReservation(id: string, signal: AbortSignal): Promise<Reserve
   return media;
 }
 
-async function poll(id: string, signal: AbortSignal): Promise<ReservedMedia> {
+async function poll(id: string, signal: AbortSignal, initial?: ReservedMedia): Promise<ReservedMedia> {
   const started = Date.now();
   let delay = initialDelay;
   for (let read = 0; read < maxReads; read += 1) {
     throwIfAborted(signal);
-    const media = await readReservation(id, signal);
+    const media = read === 0 && initial ? initial : await readReservation(id, signal);
     throwIfAborted(signal);
     if (media.state === 'available' || media.state === 'rejected') return media;
     const wait = Math.min(delay, maxDelay);
@@ -321,9 +321,14 @@ async function poll(id: string, signal: AbortSignal): Promise<ReservedMedia> {
   throw new UploadRefusal('unavailable');
 }
 
-async function readUploadedImage(mediaId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
+async function readUploadedImage(
+  mediaId: string,
+  file: File,
+  signal: AbortSignal,
+  initial?: ReservedMedia,
+): Promise<UploadedImage> {
   try {
-    const settled = await poll(mediaId, signal);
+    const settled = await poll(mediaId, signal, initial);
     if (settled.state !== 'available') throw new UploadRefusal('rejected');
     const size = await naturalSize(file, signal);
     return { src: mediaId, width: size.width, height: size.height };
@@ -402,7 +407,7 @@ export async function resumeReplyImageUpload(mediaId: string, file: File, signal
     if (current.mediaType !== file.type || current.byteCount !== file.size) throw new UploadRefusal('unavailable');
     if (current.state === 'rejected') throw new UploadRefusal('rejected');
     if (current.state === 'reserved') await putBytes(current, file, signal);
-    return await readUploadedImage(mediaId, file, signal);
+    return await readUploadedImage(mediaId, file, signal, current);
   } catch (error) {
     throwIfAborted(signal);
     if (isAbort(error)) throw error;

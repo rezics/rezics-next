@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 
-mock.module('../src/session/query', () => ({ sessionCsrfToken: () => 'site-csrf' }));
+const session = await import('../src/session/query');
 const { resumeReplyImageUpload, uploadReplyImage, uploadAvatar, UploadRefusal } = await import('../src/threads/upload');
 const { ReplyImageUploadRecovery } = await import('../src/threads/media-upload-recovery');
 
@@ -48,6 +48,7 @@ function fastBackoff() {
 }
 
 beforeEach(() => {
+  spyOn(session, 'sessionCsrfToken').mockReturnValue('site-csrf');
   calls.length = 0;
   closeBitmap.mockClear();
   decode.mockReset();
@@ -266,14 +267,16 @@ test('abort remains cancellation before resume, during byte upload and while wai
     uploading.abort();
     throw new Error('transport failed during cancellation');
   });
-  await expect(uploadReplyImage('original-thread', file, uploading.signal)).rejects.toBe(uploading.signal.reason);
+  const uploadAbort = await uploadReplyImage('original-thread', file, uploading.signal).catch((error) => error);
+  expect(uploadAbort).toBe(uploading.signal.reason);
   expect(calls.map(({ init }) => init.method)).toEqual(['POST', 'PUT']);
 
   calls.length = 0;
   const resuming = new AbortController();
   intercept(() => media('uploaded'));
   spyOn(globalThis, 'setTimeout').mockImplementation(() => originalTimeout(() => resuming.abort(), 0));
-  await expect(resumeReplyImageUpload(mediaId, file, resuming.signal)).rejects.toBe(resuming.signal.reason);
+  const resumeAbort = await resumeReplyImageUpload(mediaId, file, resuming.signal).catch((error) => error);
+  expect(resumeAbort).toBe(resuming.signal.reason);
   expect(calls.map(({ path, init }) => [init.method, path])).toEqual([['GET', mediaPath]]);
   expect(decode).not.toHaveBeenCalled();
 });
