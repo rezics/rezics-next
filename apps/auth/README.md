@@ -3,7 +3,6 @@
 For the complete loopback stack, generated keys, persona and reset command, see
 [Local development stack](../../docs/development/local-stack.md). Run `task dev:infra` then `task dev` from the repository root.
 
-
 Auth is a TanStack Start app on Cloudflare Workers. Its page frame is served at the unprefixed paths /login, /signup,
 /consent, /recovery, /security and /step-up. Each page contains the REZICS brand header and a localized heading.
 Paraglide supplies the eight launch locales.
