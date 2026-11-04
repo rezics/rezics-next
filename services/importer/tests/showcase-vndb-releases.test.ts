@@ -266,7 +266,18 @@ function port(
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
       const row = known[id];
-      if (!row) return { subject: { id } } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      if (!row) {
+        const sourceId = [...created].find(([, subjectId]) => subjectId === id)?.[0];
+        return {
+          subject: sourceId
+            ? {
+                id,
+                type: 'wd:Q20631656',
+                statements: { 'wdt:P3180': [{ value: { type: 'value', content: sourceId } }] },
+              }
+            : { id },
+        } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      }
       return row as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
   };
@@ -648,7 +659,18 @@ test('malformed and retracted source states withhold only affected claims', asyn
       true,
     );
     expect(first.gaps.some((row) => row.reason.includes('finite reviewed inventory'))).toBe(true);
-    expect(plan.gaps.some((row) => row.reason.includes('supersession'))).toBe(true);
+    expect(
+      plan.edges.some((edge) => edge.table === 'releases_supersedes' && edge.holder === 'r1' && edge.target === 'r5'),
+    ).toBe(false);
+    expect(
+      plan.gaps.some(
+        (row) =>
+          row.fields.includes('releases_supersedes.id') &&
+          row.fields.includes('releases_supersedes.rid') &&
+          row.record.id === 'r1' &&
+          row.record.rid === 'r5',
+      ),
+    ).toBe(true);
     expect(JSON.stringify(proposed)).not.toContain('wdt:P155');
     const workId = first.identities.find((row) => row.key === 'v1')?.subjectId;
     const releaseId = first.identities.find((row) => row.key === 'r1')?.subjectId;
