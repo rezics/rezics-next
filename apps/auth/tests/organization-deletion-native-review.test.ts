@@ -159,7 +159,20 @@ test('default review distinguishes safe outcomes and refuses changed sessions, p
 test('review transport rejects browser identity, bearer and cross-origin inputs before native I/O', async () => {
   const f = fixture();
   for (const [body, headers] of [
+    [{ organizationId: 'invalid' }, {}],
     [{ organizationId, humanAccountId: human }, {}],
+    [
+      {
+        organizationId,
+        actor: human,
+        client: 'website',
+        scope: ['account:delete'],
+        role: 'owner',
+        action: 'delete',
+        authority: true,
+      },
+      {},
+    ],
     [{ organizationId }, { authorization: 'Bearer browser' }],
     [{ organizationId }, { origin: 'https://foreign.test' }],
     [{ organizationId }, { 'sec-fetch-site': 'cross-site' }],
