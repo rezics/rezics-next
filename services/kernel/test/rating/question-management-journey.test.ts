@@ -1,11 +1,15 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Account, Method } from '../../../../specs/community-driver.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { GLOBAL_CONTEXT, bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { readQuestionManagementPage } from '../../src/rating/question-management.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import labelPage from '../../src/rating/question-label-page.sql';
+import { createRealAccess } from '../semantic/real-access.ts';
+import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
 import {
@@ -324,3 +328,175 @@ test.serial('management keeps deleted caption authors canonical and failed histo
     await closeCommunityDrivers();
   }
 }, 600_000);
+
+test('Realm management keeps raw, selected, byte and cursor bounds under independent unrelated growth', async () => {
+  const route = 0x5371;
+  const ownerId = newId(route);
+  const spaceId = newId(route);
+  const realmId = newId(route);
+  const spaceRevisionId = newId(route);
+  const realmRevisionId = newId(route);
+  const targetId = newId(route);
+  const prefix = `80000000-0000-7000-8000-${route.toString(16).padStart(4, '0')}`;
+  const unrelatedId = `${prefix}00000000`;
+  const database = await openGrowthDatabase();
+  database.pool.options.max = 1;
+  try {
+    await bootstrapRelease(database.pool, bundledRelease);
+    const realAccess = await createRealAccess(database.admin, { owner: ownerId }, ['realm:read', 'realm:manage']);
+    const now = new Date();
+    const transactionId = randomUUID();
+    const setupClient = await database.admin.connect();
+    try {
+      await setupClient.query('BEGIN');
+      await setupClient.query(
+      `INSERT INTO community.space (route, space_id, state, head_revision_id, created_at, creator)
+       VALUES ($1, $2, 'active', $3, $4, $5)`,
+        [route, spaceId, spaceRevisionId, now, ownerId],
+      );
+      await setupClient.query(
+      `INSERT INTO community.space_revision
+         (route, space_id, revision_id, predecessor, title, summary, created_at, author)
+       VALUES ($1, $2, $3, NULL, 'Question management growth', '', $4, $5)`,
+        [route, spaceId, spaceRevisionId, now, ownerId],
+      );
+      await setupClient.query(
+      `INSERT INTO community.realm
+         (route, realm_id, space_id, state, visibility, context_id, head_revision_id, created_at, creator)
+       VALUES ($1, $2, $3, 'active', 'protected', $4, $5, $6, $7)`,
+        [route, realmId, spaceId, GLOBAL_CONTEXT, realmRevisionId, now, ownerId],
+      );
+      await setupClient.query(
+      `INSERT INTO community.realm_revision
+         (route, realm_id, revision_id, predecessor, title, summary, visibility, context_id, created_at, author)
+       VALUES ($1, $2, $3, NULL, 'Question management growth', '', 'protected', $4, $5, $6)`,
+        [route, realmId, realmRevisionId, GLOBAL_CONTEXT, now, ownerId],
+      );
+      await setupClient.query(
+      `INSERT INTO access.resource_initialization
+         (route, resource_id, resource_type, creator_id, initialized_at)
+       VALUES ($1, $2, 'community.space', $4, $5), ($1, $3, 'community.realm', $4, $5)`,
+        [route, spaceId, realmId, ownerId, now],
+      );
+      await setupClient.query(
+      `INSERT INTO access.resource_role_grant
+         (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
+       VALUES ($1, $2, 'identity', $3, '', 'community.realm.owner', '(,)', $4),
+              ($1, $5, 'identity', $3, '', 'community.space.owner', '(,)', $4)`,
+        [route, realmId, ownerId, transactionId, spaceId],
+      );
+      await setupClient.query(
+      `INSERT INTO rating.question
+         (id, owner_id, realm_id, revision, meaning, label, grain, minimum_units, maximum_units, step_units)
+       VALUES ($1, $2, $3, 1, 'Recorded target definition', 'Target question', 'release', 0, 20, 2),
+              ($4, $2, $3, 1, 'Unrelated definition', 'Unrelated question', 'release', 0, 20, 2)`,
+        [targetId, ownerId, realmId, unrelatedId],
+      );
+      await setupClient.query(
+      `INSERT INTO rating.question_label_head (question_id, revision, label) VALUES ($1, 1, 'Unrelated question')`,
+        [unrelatedId],
+      );
+      await setupClient.query('COMMIT');
+    } catch (error) {
+      await setupClient.query('ROLLBACK');
+      throw error;
+    } finally {
+      setupClient.release();
+    }
+    const access = realAccess.access({ actions: new Map() });
+    const actor = await access.authenticate(realAccess.bearer('owner'), {
+      pool: database.pool,
+      deadline: Date.now() + 30_000,
+    });
+    const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(57)]]) };
+    const input = { realmId, selectedQuestionId: targetId };
+    const read = () =>
+      readQuestionManagementPage(
+        { pool: database.pool, access, tokens },
+        actor,
+        input,
+        Date.now() + 30_000,
+      );
+    const axes = ['questions', 'caption revisions', 'votes', 'authority'] as const;
+    for (const axis of axes) {
+      const report = await checkGrowth(database, {
+        name: `Realm question management under independent ${axis} growth`,
+        scales: [256, 1024, 4096],
+        repetitions: 2,
+        includeBackends: true,
+        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+        indexProbes: 256,
+        grow: async (_db, scale, previous) => {
+          if (axis === 'questions')
+            await database.admin.query(
+              `INSERT INTO rating.question
+                 (id, owner_id, realm_id, revision, meaning, label, grain, minimum_units, maximum_units, step_units)
+               SELECT ($1 || lpad(to_hex(n), 8, '0'))::uuid, $2, $3, 1,
+                      'Unrelated definition ' || n::text, 'Unrelated question ' || n::text,
+                      'release', 0, 20, 2
+               FROM generate_series($4::int, $5::int) AS n`,
+              [prefix, ownerId, realmId, previous + 1, scale],
+            );
+          else if (axis === 'caption revisions')
+            await database.admin.query(
+              `INSERT INTO rating.question_label_revision (question_id, revision, label, author_id, changed_at)
+               SELECT $1, n + 1, 'Unrelated caption ' || n::text, $2, $3
+               FROM generate_series($4::int, $5::int) AS n`,
+              [unrelatedId, ownerId, now, previous + 1, scale],
+            );
+          if (axis === 'caption revisions')
+            await database.admin.query(
+              `UPDATE rating.question_label_head SET revision = $2, label = 'Unrelated current caption'
+               WHERE question_id = $1`,
+              [unrelatedId, scale + 1],
+            );
+          else if (axis === 'votes')
+            await database.admin.query(
+              `INSERT INTO rating.vote
+                 (route, voter_id, question_id, target_id, counted_target, counted_revision, units, revision,
+                  changed_at, transaction_id)
+               SELECT $1, ($2 || lpad(to_hex(n + 10000), 8, '0'))::uuid, $3,
+                      ($2 || lpad(to_hex(n + 20000), 8, '0'))::uuid, NULL, 1, 10, 1, $4, gen_random_uuid()
+               FROM generate_series($5::int, $6::int) AS n`,
+              [route, prefix, unrelatedId, now, previous + 1, scale],
+            );
+          else
+            await database.admin.query(
+              `INSERT INTO access.resource_grant
+                 (route, resource_id, subject_id, action, valid, transaction_id)
+               SELECT $1, ($2 || lpad(to_hex(n + 30000), 8, '0'))::uuid,
+                      ($2 || lpad(to_hex(n + 40000), 8, '0'))::uuid, 'realm:read', '(,)', gen_random_uuid()
+               FROM generate_series($3::int, $4::int) AS n`,
+              [route, prefix, previous + 1, scale],
+            );
+        },
+        operation: async () => {
+          const page = await read();
+          expect(page.directory.ratingQuestions).toHaveLength(20);
+          expect(page.directory.next).toEqual(expect.any(String));
+          expect(page.directory.next!.length).toBeLessThanOrEqual(4096);
+          expect(page.selected?.question.id).toBe(targetId);
+          expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(1_048_576);
+          return page;
+        },
+      });
+      const relations = [
+        ...new Set(
+          report.samples.flatMap(({ repetitions }) => repetitions.flatMap(({ relations }) => Object.keys(relations))),
+        ),
+      ];
+      assertGrowthAccessPaths(report.name, report.samples, relations);
+      for (const sample of report.samples) {
+        expect(sample.backendRepetitions).toHaveLength(2);
+        for (const cost of sample.repetitions) {
+          expect(cost.rows).toBeGreaterThan(0);
+          expect(cost.statements).toBeGreaterThan(0);
+          expect(cost.blocks).toBeGreaterThan(0);
+          expect(cost.failedStatements ?? {}).toEqual({});
+        }
+      }
+    }
+  } finally {
+    await database.close();
+  }
+}, 1_800_000);
