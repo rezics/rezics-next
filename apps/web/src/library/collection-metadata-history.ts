@@ -37,10 +37,7 @@ export type CollectionMetadataHistorySnapshot = {
   description: string | null;
   visibility: 'private' | 'unlisted' | 'public';
   presentationKind: string | null;
-  cover:
-    | { state: 'none' }
-    | { state: 'unavailable' }
-    | { state: 'available'; mediaId: string };
+  cover: { state: 'none' } | { state: 'unavailable' } | { state: 'available'; mediaId: string };
 };
 
 export type CollectionMetadataHistoryChange = {
@@ -66,6 +63,10 @@ export type CollectionMetadataHistoryChangeInput = { collectionId: string; revis
 
 /** Typed receiving seam; the published KernelClient history methods are not installed on this source yet. */
 export type CollectionMetadataHistorySource = {
-  readPage: (input: CollectionMetadataHistoryPageInput) => Promise<CollectionMetadataHistoryRead<CollectionMetadataHistoryPage>>;
-  readChange: (input: CollectionMetadataHistoryChangeInput) => Promise<CollectionMetadataHistoryRead<CollectionMetadataHistoryChange>>;
+  readPage: (
+    input: CollectionMetadataHistoryPageInput,
+  ) => Promise<CollectionMetadataHistoryRead<CollectionMetadataHistoryPage>>;
+  readChange: (
+    input: CollectionMetadataHistoryChangeInput,
+  ) => Promise<CollectionMetadataHistoryRead<CollectionMetadataHistoryChange>>;
 };

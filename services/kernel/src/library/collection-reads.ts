@@ -497,11 +497,7 @@ export function createCollectionReads(
     };
   }
 
-  function historyBasis(
-    row: StoredCollection,
-    viewer: AccountActor,
-    account: Account,
-  ): CollectionMetadataHistoryBasis {
+  function historyBasis(row: StoredCollection, viewer: AccountActor, account: Account): CollectionMetadataHistoryBasis {
     if (row.curatorAccountId === null) throw notFound();
     return {
       collectionRevision: row.revision,
@@ -604,9 +600,13 @@ export function createCollectionReads(
       if (!change) throw notFound();
       return { basis: historyBasis(row, viewer, account), change: collectionMetadataHistoryEntry(change) };
     });
-    const mediaIds = [...new Set([first.change.before.coverMediaId, first.change.after.coverMediaId].filter(
-      (value): value is string => value !== null,
-    ))];
+    const mediaIds = [
+      ...new Set(
+        [first.change.before.coverMediaId, first.change.after.coverMediaId].filter(
+          (value): value is string => value !== null,
+        ),
+      ),
+    ];
     const covers = new Map<string, Awaited<ReturnType<typeof readablePresentationCover>>>();
     await Promise.all(
       mediaIds.map(async (mediaId) => {
@@ -625,12 +625,13 @@ export function createCollectionReads(
     });
     if (JSON.stringify(first) !== JSON.stringify(final)) throw new ProblemError('dependency_unavailable');
     const present = (snapshot: typeof first.change.before): CollectionMetadataHistorySnapshot => {
-      const summary = snapshot.coverMediaId === null ? null : covers.get(snapshot.coverMediaId) ?? null;
-      const cover = snapshot.coverMediaId === null
-        ? { state: 'none' as const }
-        : summary
-          ? { state: 'available' as const, mediaId: snapshot.coverMediaId, summary }
-          : { state: 'unavailable' as const };
+      const summary = snapshot.coverMediaId === null ? null : (covers.get(snapshot.coverMediaId) ?? null);
+      const cover =
+        snapshot.coverMediaId === null
+          ? { state: 'none' as const }
+          : summary
+            ? { state: 'available' as const, mediaId: snapshot.coverMediaId, summary }
+            : { state: 'unavailable' as const };
       return {
         title: snapshot.title,
         description: snapshot.description,

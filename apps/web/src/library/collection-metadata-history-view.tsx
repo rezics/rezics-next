@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
-import {
-  readCollectionMetadataHistoryChange,
-  readCollectionMetadataHistoryPage,
-} from './collection-commands';
+import { readCollectionMetadataHistoryChange, readCollectionMetadataHistoryPage } from './collection-commands';
 import type {
   CollectionMetadataHistoryChange,
   CollectionMetadataHistoryField,
@@ -116,9 +113,11 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
       .readPage({ collectionId, cursor, limit: 25 })
       .then((result) => {
         if (!live || !current.current()) return;
-        setPage(result.state === 'available' && currentPage(result.value, collectionId)
-          ? { state: 'available', value: result.value }
-          : { state: 'unavailable' });
+        setPage(
+          result.state === 'available' && currentPage(result.value, collectionId)
+            ? { state: 'available', value: result.value }
+            : { state: 'unavailable' },
+        );
       })
       .catch(() => {
         if (live && current.current()) setPage({ state: 'unavailable' });
@@ -136,12 +135,15 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
       const results = await Promise.all(selected.map((revision) => source.readChange({ collectionId, revision })));
       if (!current.current()) return;
       if (
-        results.some((result, index) =>
-          result.state !== 'available' ||
-          !currentChange(result.value, collectionId, selected[index]!) ||
-          !sameBasis(result.value.basis, reviewedBasis),
-        )
-      || !basis.current || !sameBasis(basis.current, reviewedBasis)) {
+        results.some(
+          (result, index) =>
+            result.state !== 'available' ||
+            !currentChange(result.value, collectionId, selected[index]!) ||
+            !sameBasis(result.value.basis, reviewedBasis),
+        ) ||
+        !basis.current ||
+        !sameBasis(basis.current, reviewedBasis)
+      ) {
         setComparison({ state: 'unavailable' });
         return;
       }
@@ -159,13 +161,9 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
 
   return (
     <details id="collection-metadata-history" className="rounded-2xl border border-border bg-card p-4 sm:p-6">
-      <summary className="min-h-11 cursor-pointer py-2 font-medium">
-        {m.library_collection_metadata_history()}
-      </summary>
+      <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_collection_metadata_history()}</summary>
       <div className="space-y-4 pt-3">
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          {m.library_collection_metadata_history_description()}
-        </p>
+        <p className="max-w-3xl text-sm text-muted-foreground">{m.library_collection_metadata_history_description()}</p>
         {page.state === 'loading' ? <p role="status">{m.library_collection_metadata_history_loading()}</p> : null}
         {page.state === 'unavailable' ? (
           <div role="alert" className="space-y-2">
@@ -219,7 +217,12 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
               </ul>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" disabled={selected.length !== 2} onClick={() => void compareSelected()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={selected.length !== 2}
+                onClick={() => void compareSelected()}
+              >
                 {m.library_collection_metadata_history_compare()}
               </Button>
               {cursor ? (
@@ -232,7 +235,10 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
                   {m.library_collection_metadata_history_next_page()}
                 </Button>
               ) : null}
-              <a className="inline-flex min-h-11 items-center rounded-lg px-3 underline underline-offset-4" href="#collection-edit-form">
+              <a
+                className="inline-flex min-h-11 items-center rounded-lg px-3 underline underline-offset-4"
+                href="#collection-edit-form"
+              >
                 {m.library_collection_metadata_history_return_editor()}
               </a>
             </div>
@@ -247,7 +253,9 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
                 <table className="min-w-[48rem] w-full border-collapse text-start text-sm">
                   <thead>
                     <tr className="bg-muted/50">
-                      <th scope="col" className="p-3">{m.library_collection_metadata_history_field()}</th>
+                      <th scope="col" className="p-3">
+                        {m.library_collection_metadata_history_field()}
+                      </th>
                       {selectedDetails.map((change) => (
                         <th scope="col" colSpan={2} key={change.revision} className="p-3">
                           {m.library_collection_metadata_history_revision({ revision: change.revision })}
@@ -257,20 +265,32 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
                     <tr>
                       <th scope="col" className="p-3" />
                       {selectedDetails.flatMap((change) => [
-                        <th scope="col" key={`${change.revision}-before`} className="p-3">{m.library_collection_metadata_history_before()}</th>,
-                        <th scope="col" key={`${change.revision}-after`} className="p-3">{m.library_collection_metadata_history_after()}</th>,
+                        <th scope="col" key={`${change.revision}-before`} className="p-3">
+                          {m.library_collection_metadata_history_before()}
+                        </th>,
+                        <th scope="col" key={`${change.revision}-after`} className="p-3">
+                          {m.library_collection_metadata_history_after()}
+                        </th>,
                       ])}
                     </tr>
                   </thead>
                   <tbody>
                     {fields.map((field) => (
                       <tr key={field} className="border-t border-border align-top">
-                        <th scope="row" className="p-3">{fieldLabel(field)}</th>
+                        <th scope="row" className="p-3">
+                          {fieldLabel(field)}
+                        </th>
                         {selectedDetails.flatMap((change) => [
-                          <td key={`${change.revision}-${field}-before`} className="max-w-64 whitespace-pre-wrap break-words p-3">
+                          <td
+                            key={`${change.revision}-${field}-before`}
+                            className="max-w-64 whitespace-pre-wrap break-words p-3"
+                          >
                             {value(change.before, field)}
                           </td>,
-                          <td key={`${change.revision}-${field}-after`} className="max-w-64 whitespace-pre-wrap break-words p-3">
+                          <td
+                            key={`${change.revision}-${field}-after`}
+                            className="max-w-64 whitespace-pre-wrap break-words p-3"
+                          >
                             {value(change.after, field)}
                           </td>,
                         ])}

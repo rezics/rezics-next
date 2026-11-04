@@ -291,7 +291,8 @@ export async function completeCollectionSourceOutput(
       throw conflict();
     const command = currentCommand(tx);
     const before = await readCollection(tx, input.route, input.collectionId);
-    if (!before || before.revision !== source.revision || before.curatorAccountId !== source.accountId) throw conflict();
+    if (!before || before.revision !== source.revision || before.curatorAccountId !== source.accountId)
+      throw conflict();
     const changed = await tx.query(
       `UPDATE library.collection SET visibility=$5,revision=revision+1,
          updated_at=$6::timestamptz,transaction_id=$7

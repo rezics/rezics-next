@@ -195,7 +195,11 @@ export async function pageCollectionMetadataHistory(
     limit: number;
   },
 ) {
-  if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE + 1)
+  if (
+    !Number.isSafeInteger(input.limit) ||
+    input.limit < 1 ||
+    input.limit > COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE + 1
+  )
     throw new RangeError('Invalid Collection metadata history page size');
   return page.run(client, {
     route: input.route,
@@ -217,12 +221,16 @@ export async function readCollectionMetadataHistoryEntry(
   client: Client,
   input: { route: number; collectionId: string; curatorAccountId: string; revision: number },
 ) {
-  return (await read.run(client, {
-    route: input.route,
-    collection_id: input.collectionId,
-    curator_account_id: input.curatorAccountId,
-    revision: input.revision,
-  }))[0] ?? null;
+  return (
+    (
+      await read.run(client, {
+        route: input.route,
+        collection_id: input.collectionId,
+        curator_account_id: input.curatorAccountId,
+        revision: input.revision,
+      })
+    )[0] ?? null
+  );
 }
 
 export function collectionMetadataHistoryEntry(row: {
