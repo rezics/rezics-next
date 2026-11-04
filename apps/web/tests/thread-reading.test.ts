@@ -24,13 +24,13 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ThreadReading } = await import('../src/threads/thread-reading');
 const { ThreadReadingHeader, ThreadReadingPost } = await import('../src/routes/threads/$id_.$slug');
 
-async function readingPage(): Promise<ThreadReadingPage> {
+async function readingPage(activity?: unknown, cursor?: string): Promise<ThreadReadingPage> {
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const path = new URL(new Request(input, init).url).pathname;
       if (path.endsWith('/reading-page'))
         return Response.json(
-          authoredReadingPage(
+          Object.assign(authoredReadingPage(
             thread.thread as ReadingPage['thread'],
             posts.posts.filter((post) => post.id !== thread.thread.firstPost.id) as ReadingPage['replies']['items'],
             accounts.accounts
@@ -41,7 +41,7 @@ async function readingPage(): Promise<ThreadReadingPage> {
                 handle: 'handle' in account ? account.handle : null,
                 avatar: null,
               })),
-          ),
+          ), activity === undefined ? {} : { conversationActivity: activity }),
         );
       if (path.endsWith('/posts')) return Response.json(posts);
       if (path.includes('/boards/')) return Response.json(board);
@@ -53,16 +53,17 @@ async function readingPage(): Promise<ThreadReadingPage> {
     client,
     new Request('https://rezics.test/'),
     {},
-    { id: thread.thread.id },
+    { id: thread.thread.id, ...(cursor === undefined ? {} : { cursor }) },
     { sitekey: '', scriptUrl: '' },
     'anonymous',
   );
   if ('redirect' in page) throw new Error('The recorded reading page must not redirect');
   return { ...page, provenanceSubjects: page.subjects };
 }
-async function render(page: ThreadReadingPage, personal?: ThreadReadingPersonal) {
+async function render(page: ThreadReadingPage, personal?: ThreadReadingPersonal, pageCurrent = true) {
   const region = createElement(ThreadReading, {
     page,
+    pageCurrent,
     personal,
     Post: ThreadReadingPost,
     session: personal ? 'signed-in' : 'signed-out',
@@ -237,4 +238,28 @@ test('Default thread reading renders the conversation before secondary history a
   expect(html).toContain(`href="/en/@${handle}"`);
   expect(html).toContain('class="block min-w-0 truncate"');
   expect(html).toContain(m.thread_post_edited());
+});
+
+test('native page activity stays independent of loaded replies across opening, continuation and return', async () => {
+  for (const cursor of [undefined, 'opaque:/+?=&next', undefined]) {
+    const page = await readingPage({ state: 'current', cohort: 'public', count: { kind: 'lower-bound', value: 10_000 }, lastActivityAt: '2026-11-04T00:00:00.000Z' }, cursor);
+    const html = await render(page);
+    expect(html).toContain('Replies: 10,000+');
+    expect(html).toContain('At least 10,000 replies');
+    expect(html).toContain('<time dateTime="2026-11-04T00:00:00.000Z"');
+    expect(html.indexOf('data-slot="thread-activity"')).toBeLessThan(html.indexOf('id="thread-posts-heading"'));
+    expect(await render(page, undefined, false)).not.toContain('Replies: 10,000+');
+    page.composed!.viewer = { kind: 'account', id: thread.thread.authorId };
+    expect(await render(page)).not.toContain('Replies: 10,000+');
+  }
+  const zero = await render(await readingPage({ state: 'current', cohort: 'public', count: { kind: 'exact', value: 0 }, lastActivityAt: null }));
+  expect(zero).toContain('Replies: 0');
+  expect(zero).not.toContain(m.board_thread_last_activity({ time: '' }));
+  for (const activity of [undefined, { state: 'withheld' }, { state: 'unavailable', retryable: true }]) {
+    const html = await render(await readingPage(activity));
+    expect(html).toContain(m.board_thread_activity_unavailable());
+    expect(html).toContain(m.thread_post_refresh());
+    expect(html).not.toContain('Replies: 0');
+    expect(html).toContain('data-slot="document-body"');
+  }
 });

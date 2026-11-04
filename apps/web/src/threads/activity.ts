@@ -1,3 +1,5 @@
+import type { ReadingPageResponse } from '@rezics/client';
+
 /** How lively a thread is, when the kernel's thread read says so. */
 export type ThreadActivity = { replyCount: number | null; lastActivityAt: string | null };
 export type ConversationReplyCount = { kind: 'exact' | 'lower-bound'; value: number };
@@ -58,5 +60,3 @@ export function readingConversationActivity(page: ReadingPageResponse): Conversa
 export function formatConversationReplyCount(count: ConversationReplyCount, locale: string): string {
   return `${new Intl.NumberFormat(locale).format(count.value)}${count.kind === 'lower-bound' ? '+' : ''}`;
 }
-import type { ReadingPageResponse } from '@rezics/client';
-
