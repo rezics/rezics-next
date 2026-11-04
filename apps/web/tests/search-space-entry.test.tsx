@@ -204,6 +204,7 @@ test('mounted Search preserves visit on failed follow, refreshes one aggregate o
     admitted: ['personal_library'],
   });
   const source: DiscoveryState = { status: 'ready', page: fixture() };
+  const capabilities = { release: '', exposure: JSON.stringify(['personal_library']), entries: {}, vote: false };
   let reads = 0,
     following = false,
     pending = deferred<FollowWriteResult>();
@@ -224,7 +225,7 @@ test('mounted Search preserves visit on failed follow, refreshes one aggregate o
           late.push(request);
           return request.promise;
         }
-        return { state: { status: 'ready', page: fixture(following) }, capabilities: null };
+        return { state: { status: 'ready', page: fixture(following) }, capabilities };
       },
       writeSpaceFollow: async (command) => {
         writes.push(command);
@@ -289,9 +290,9 @@ test('mounted Search preserves visit on failed follow, refreshes one aggregate o
     const oldHit = retired.hits[0]!;
     if (oldHit.summary.kind !== 'space') throw new Error('Space fixture');
     oldHit.summary.value.presentation!.identity.name = 'Retired response';
-    await act(async () => late[0]!.resolve({ state: { status: 'ready', page: retired }, capabilities: null }));
+    await act(async () => late[0]!.resolve({ state: { status: 'ready', page: retired }, capabilities }));
     expect(host.textContent).not.toContain('Retired response');
-    await act(async () => late[1]!.resolve({ state: { status: 'ready', page: fixture(true) }, capabilities: null }));
+    await act(async () => late[1]!.resolve({ state: { status: 'ready', page: fixture(true) }, capabilities }));
     expect(follow().disabled).toBe(false);
     pending = deferred();
     await act(async () => follow().click());
