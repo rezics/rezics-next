@@ -265,18 +265,24 @@ const pageIdentity = (page: RulePage) =>
 /** Scope changes retire private state synchronously; a cached page needs a fresh private read to return. */
 export function CollectionRuleEditor(props: EditorProps) {
   const { page, viewerId, collectionId, admitted } = props;
+  const hasCredential = !!(props.currentCsrf ? props.currentCsrf() : props.csrfToken);
   const canRead =
-    !!viewerId && !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.get');
-  const canSave = !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.update');
+    hasCredential &&
+    !!viewerId &&
+    !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.get');
+  const canSave = hasCredential && !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.update');
   const canLabel = !!admitted?.includes('library_label.list');
   const scope = JSON.stringify(
-    props.isOwnerCurrent ? [viewerId, collectionId] : [viewerId, collectionId, canRead, canSave, canLabel],
+    props.isOwnerCurrent
+      ? [viewerId, collectionId, hasCredential]
+      : [viewerId, collectionId, hasCredential, canRead, canSave, canLabel],
   );
   const latest = useRef({ page, scope });
   if (latest.current.page !== page || latest.current.scope !== scope) latest.current = { page, scope };
   const origin = latest.current;
   const sourceCurrent = () => latest.current === origin && (props.isCurrent?.() ?? true);
   const owned =
+    hasCredential &&
     canRead &&
     canSave &&
     (page.state === 'new' || page.state === 'ready') &&

@@ -458,6 +458,7 @@ sender, credential, request and key. Confirmed saves and authority retirement cl
 Decision: the rule editor's primary submit is the explicit “Save and view results” choice. After native confirmation it
 returns to that saved identity's first results page and reads the admitted current rule; the separate results link is
 the explicit leave-without-save choice and retains only its validated supported context.
+Decision: absence of the current CSRF credential retires editor-local private rule data; a nonempty credential rotation keeps the current owner view while an uncertain retry retains its original captured credential.
 
 <a id="selected-whole-query-publication-contract-native-bodies-pending"></a>
 
