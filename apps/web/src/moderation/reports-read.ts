@@ -201,9 +201,10 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     if (!input || typeof input !== 'object') throw notFound();
     const value = input as Record<string, unknown>;
-    const reportId = typeof value.reportId === 'string' && value.reportId.length > 0 && value.reportId.length <= 128
-      ? value.reportId
-      : undefined;
+    const reportId =
+      typeof value.reportId === 'string' && value.reportId.length > 0 && value.reportId.length <= 128
+        ? value.reportId
+        : undefined;
     if (typeof value.boardId !== 'string' || value.boardId.length > 128) throw notFound();
     if (value.threadId !== undefined && (typeof value.threadId !== 'string' || value.threadId.length > 128))
       throw notFound();
@@ -269,9 +270,12 @@ export async function readModerationReportPage(
           revisions: [],
           ...identity,
           inspection: undefined,
-          state: result.status === 404 ? ('unavailable' as const) : result.status === 401 || result.status === 403
-            ? ('denied' as const)
-            : ('error' as const),
+          state:
+            result.status === 404
+              ? ('unavailable' as const)
+              : result.status === 401 || result.status === 403
+                ? ('denied' as const)
+                : ('error' as const),
         };
       }
       const inspected = reportInspectionEnvelope(result.data, data.reportId);
@@ -368,7 +372,10 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 /** Public response seam until the shared client declaration includes inspection. */
-function reportInspectionEnvelope(value: unknown, requestedId: string): {
+function reportInspectionEnvelope(
+  value: unknown,
+  requestedId: string,
+): {
   report: Report;
   target: ResolvedReportTarget;
   revision: ReportTargetValue | null;
@@ -422,7 +429,11 @@ function reportInspectionEnvelope(value: unknown, requestedId: string): {
   if (report.revisionId && postRevision?.revisionId && postRevision.revisionId !== report.revisionId) return null;
   return {
     report,
-    target: { key: `${report.target.kind}:${report.target.id}`, kind: report.target.kind, value: currentValue as ReportTargetValue | null },
+    target: {
+      key: `${report.target.kind}:${report.target.id}`,
+      kind: report.target.kind,
+      value: currentValue as ReportTargetValue | null,
+    },
     revision: revisionValue,
     inspection: {
       currentState,

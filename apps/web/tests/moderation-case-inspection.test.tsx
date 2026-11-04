@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
+import { readModerationReportPage, reportReadKey, type ReportReadInput } from '../src/moderation/reports-read';
 import {
-  readModerationReportPage,
-  reportReadKey,
-  type ReportReadInput,
-} from '../src/moderation/reports-read';
-import { parseWorkbenchCaseSearch, workbenchCaseInput, workbenchCaseQueueHref } from '../src/moderation/workbench-case/read-model';
+  parseWorkbenchCaseSearch,
+  workbenchCaseInput,
+  workbenchCaseQueueHref,
+} from '../src/moderation/workbench-case/read-model';
 
 const reportId = '0192f3a0-6c1e-7b2a-9d4e-000000000101';
 const postId = '0192f3a0-6c1e-7b2a-9d4e-000000000102';

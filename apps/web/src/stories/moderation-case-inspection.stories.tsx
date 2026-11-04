@@ -14,7 +14,8 @@ const report: Report = {
   reason: 'spam',
   evidence: Array.from(
     { length: 7 },
-    (_, index) => `Evidence paragraph ${index + 1}: this is the complete reporter statement attached to the selected case.`,
+    (_, index) =>
+      `Evidence paragraph ${index + 1}: this is the complete reporter statement attached to the selected case.`,
   ).join('\n\n'),
   createdAt: '2026-10-01T09:30:00.000Z',
   outcome: null,
@@ -24,11 +25,22 @@ const report: Report = {
 const current: ResolvedReportTarget = {
   key: `post:${report.target.id}`,
   kind: 'post',
-  value: { post: { id: report.target.id, availability: 'available', body: 'The current post after the reported revision changed.' } },
+  value: {
+    post: {
+      id: report.target.id,
+      availability: 'available',
+      body: 'The current post after the reported revision changed.',
+    },
+  },
 };
 
 const revision = {
-  post: { id: report.target.id, revisionId: report.revisionId, availability: 'available', body: 'The exact revision selected when the report was created.' },
+  post: {
+    id: report.target.id,
+    revisionId: report.revisionId,
+    availability: 'available',
+    body: 'The exact revision selected when the report was created.',
+  },
 };
 
 const currentDestination = {
@@ -78,7 +90,9 @@ export const ReportedAndCurrent: Story = {
     first.focus();
     await expect(first).toHaveFocus();
     await userEvent.tab();
-    await expect(canvas.getByRole('link', { name: m.moderation_current_thread({ id: currentDestination.threadId }) })).toHaveFocus();
+    await expect(
+      canvas.getByRole('link', { name: m.moderation_current_thread({ id: currentDestination.threadId }) }),
+    ).toHaveFocus();
   },
 };
 
@@ -94,6 +108,8 @@ export const CurrentTargetWithheld: Story = {
     await expect(canvas.getByRole('status')).toHaveTextContent(m.moderation_target_withheld());
     await expect(canvas.queryByText('PRIVATE CURRENT BODY')).not.toBeInTheDocument();
     await expect(canvas.getByText('The exact revision selected when the report was created.')).toBeVisible();
-    await expect(canvas.queryByRole('navigation', { name: m.moderation_current_destination() })).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole('navigation', { name: m.moderation_current_destination() }),
+    ).not.toBeInTheDocument();
   },
 };

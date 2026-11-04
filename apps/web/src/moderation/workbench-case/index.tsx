@@ -226,11 +226,17 @@ export function WorkbenchCaseDetail({
         ) : null}
         {destination ? (
           <nav aria-label={m.moderation_current_destination()} className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-            <a className="min-h-11 break-all underline underline-offset-4" href={localizeHref(`/boards/${encodeURIComponent(destination.boardId)}`)}>
+            <a
+              className="min-h-11 break-all underline underline-offset-4"
+              href={localizeHref(`/boards/${encodeURIComponent(destination.boardId)}`)}
+            >
               {m.moderation_current_board({ id: destination.boardId })}
             </a>
             {destination.threadId ? (
-              <a className="min-h-11 break-all underline underline-offset-4" href={localizeHref(`/threads/${encodeURIComponent(destination.threadId)}`)}>
+              <a
+                className="min-h-11 break-all underline underline-offset-4"
+                href={localizeHref(`/threads/${encodeURIComponent(destination.threadId)}`)}
+              >
                 {m.moderation_current_thread({ id: destination.threadId })}
               </a>
             ) : null}

@@ -799,8 +799,7 @@ export async function readModerationReportReference(
   const reference = await loadReport(dependencies, reportId, context, false);
   if (!reference.value) return { ...reference, value: null };
   const target: ReportTarget = { kind: reference.value.target_kind, id: reference.value.target_id };
-  if (!(await moderationReportParentAllowed(dependencies, target, context)))
-    return { ...reference, value: null };
+  if (!(await moderationReportParentAllowed(dependencies, target, context))) return { ...reference, value: null };
 
   const record = await loadReport(dependencies, reportId, context, true);
   const finalReference = await loadReport(dependencies, reportId, context, false);
@@ -924,10 +923,10 @@ export async function readReportTargetInspection(
             : board?.value?.availability === 'withheld'
               ? 'withheld'
               : thread.value?.visibility === 'taken_down' || board?.value?.visibility === 'taken_down'
-              ? 'taken-down'
-              : selected?.availability === 'available' && board?.value?.availability === 'available'
-                ? 'available'
-                : 'unavailable';
+                ? 'taken-down'
+                : selected?.availability === 'available' && board?.value?.availability === 'available'
+                  ? 'available'
+                  : 'unavailable';
       if (status === 'available' && thread.value && board?.value) {
         current = {
           state: 'available',
@@ -961,13 +960,10 @@ export async function readReportActionAdvice(
   const target = report.target;
   const targetResource =
     target.kind === 'subject' ? globalContextAnchor.resource : { route: route(target.id), id: target.id };
-  const check = await accessCheck(
-    dependencies.access,
-    context.actor,
-    'moderation:takedown',
-    targetResource,
-    { pool: dependencies.pool, deadline: context.deadline },
-  );
+  const check = await accessCheck(dependencies.access, context.actor, 'moderation:takedown', targetResource, {
+    pool: dependencies.pool,
+    deadline: context.deadline,
+  });
   const pointId = target.kind === 'subject' ? GLOBAL_CONTEXT : target.id;
   const allowed = await snapshot(
     dependencies,

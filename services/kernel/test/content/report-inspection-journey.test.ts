@@ -182,13 +182,9 @@ test('a board-scoped moderator cannot inspect a catalogue report without current
     reporter.actor.accountId,
     ['report:create'],
   );
-  await seedGovernanceAuthority(
-    system.database.pool,
-    routeOf(targetId)!,
-    targetId,
-    reporter.actor.accountId,
-    ['subject:read'],
-  );
+  await seedGovernanceAuthority(system.database.pool, routeOf(targetId)!, targetId, reporter.actor.accountId, [
+    'subject:read',
+  ]);
   await seedGovernanceAuthority(
     system.database.pool,
     routeOf(board.body.board.id)!,
