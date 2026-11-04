@@ -148,14 +148,7 @@ export type ReleaseViolation = { pointer: string; code: 'invalid' | 'unsafe_patt
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const INTEGER = '^[+-](?:0|[1-9][0-9]*)$';
 const DECIMAL = '^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$';
-export type ValueOptions = {
-  pattern?: string;
-  minLength?: number;
-  maxLength?: number;
-  units?: string[];
-  integer?: boolean;
-  exact?: true;
-};
+export type ValueOptions = { pattern?: string; units?: string[]; integer?: boolean; exact?: true };
 
 export function valueSchema(
   datatype: 'monolingualtext',
@@ -171,29 +164,15 @@ function buildValueSchema(datatype: DataType, options: ValueOptions) {
     throw new TypeError('Exact must be true and is only supported for quantity');
   if (
     (datatype === 'document' || datatype === 'media') &&
-    (options.units !== undefined ||
-      options.integer !== undefined ||
-      options.minLength !== undefined ||
-      options.maxLength !== undefined)
+    (options.units !== undefined || options.integer !== undefined)
   )
     throw new TypeError(`Quantity options are not supported for ${datatype}`);
-  if (
-    (options.pattern !== undefined || options.minLength !== undefined || options.maxLength !== undefined) &&
-    !['string', 'external-id', 'monolingualtext'].includes(datatype)
-  )
+  if (options.pattern !== undefined && !['string', 'external-id', 'monolingualtext'].includes(datatype))
     throw new TypeError(`Patterns are not supported for ${datatype}`);
-  if (
-    (options.minLength !== undefined &&
-      (!Number.isSafeInteger(options.minLength) || options.minLength < 1 || options.minLength > 1500)) ||
-    (options.maxLength !== undefined &&
-      (!Number.isSafeInteger(options.maxLength) || options.maxLength < 1 || options.maxLength > 1500)) ||
-    (options.minLength !== undefined && options.maxLength !== undefined && options.minLength > options.maxLength)
-  )
-    throw new TypeError('String length bounds must be safe and ordered');
   const text = {
     type: 'string',
-    minLength: options.minLength ?? 1,
-    maxLength: options.maxLength ?? 1500,
+    minLength: 1,
+    maxLength: 1500,
     ...(options.pattern === undefined ? {} : { pattern: options.pattern }),
   };
   switch (datatype) {
