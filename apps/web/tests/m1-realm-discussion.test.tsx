@@ -21,13 +21,7 @@ const kernel = createKernelClient('http://kernel.local', {
 const kernelClientModule = await import('../src/kernel/client');
 mock.module('../src/kernel/client', () => ({ ...kernelClientModule, kernelClient: () => kernel }));
 
-const session = await import('../src/session/query');
-let currentSession: { state: 'signed-in' | 'signed-out'; csrfToken: string | null; subject: string | null } = {
-  state: 'signed-out',
-  csrfToken: null,
-  subject: null,
-};
-mock.module('../src/session/query', () => ({ ...session, useSession: () => currentSession }));
+const { AnonymousSessionContext } = await import('../src/session/query');
 
 const { subjectCommunityVisitReturn, withSubjectVisitReturn } =
   await import('../src/features/pages/subject-visit-navigation');
@@ -50,7 +44,11 @@ async function render(component: ReactNode, path = '/') {
   await router.load();
   try {
     return renderToStaticMarkup(
-      createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(AnonymousSessionContext.Provider, { value: true }, createElement(RouterProvider, { router })),
+      ),
     );
   } finally {
     client.clear();
@@ -111,8 +109,10 @@ test('public Realm destinations and the native discussion reader preserve their 
       `/en/boards/${boardId}`,
     );
     expect(boardHtml).toContain(boardRead.page.board.title);
+    const occurrence = boardRead.page.threads.threads.findIndex((candidate) => candidate.id === threadPage.thread.id);
+    const boardOrigin = `/en/boards/${boardId}?sort=new#board-thread-${threadPage.thread.id}--ordinary-${occurrence}`;
     expect(boardHtml).toContain(
-      `href="${threadLocation('en', { id: threadPage.thread.id, title: threadPage.thread.title })}"`,
+      `href="${threadLocation('en', { id: threadPage.thread.id, title: threadPage.thread.title }, undefined, undefined, undefined, boardOrigin)}"`,
     );
 
     const openingId = threadPage.thread.firstPost.id;
