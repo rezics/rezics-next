@@ -7,3 +7,5 @@ Presentation kind is an exact native Type or mixed when unset; ordered rows and 
 Each member keeps its own Type geometry, facts, occurrence ID and original Subject association. Ordinary member links reuse the existing comparison return protocol. Dynamic Collections keep the shared property-filter episode and owner rule host. Review derives from the existing command plan; native action advice and acknowledgement remain authoritative.
 
 References inspected: legacy-final:apps/web/features/catalogue/work-row.tsx and legacy-final:apps/web/features/catalogue/catalogue-grid.tsx (readable title/cover hierarchy and source-order layout); the shared reference INDEX.md. No legacy implementation was ported.
+
+Presentation tests retain explicit unknown/empty/unavailable context states from the existing comparison reader while checking that absent or invalid facts never become values.

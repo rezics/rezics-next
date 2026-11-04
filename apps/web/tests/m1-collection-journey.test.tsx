@@ -7,7 +7,7 @@ import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import type { PublicCollectionSummary } from '../src/search/discovery';
 import type { CollectionMember } from '../src/library/reads';
 import type { EditableCollectionPage } from '../src/library/collection-load';
-import { getLocale, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('@tanstack/react-start', () => start);
@@ -70,10 +70,10 @@ const card: PublicCollectionSummary['card'] = {
 };
 
 test('native public discovery leads to ordered/mixed and grid reading, with exact occurrence return in en, zh-Hant and ja', async () => {
-  const previous = getLocale();
+  const previous = getLocale;
   try {
     for (const locale of ['en', 'zh-Hant', 'ja'] as const) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       let cursor: string | undefined;
       const result = await readPublicCollectionPage(locale, 'opaque+/=', async (request) => {
         cursor = request.cursor;
@@ -122,7 +122,7 @@ test('native public discovery leads to ordered/mixed and grid reading, with exac
       }
     }
   } finally {
-    setLocale(previous, { reload: false });
+    overwriteGetLocale(previous);
   }
 });
 
@@ -138,6 +138,10 @@ test('current native actions govern create/add/reorder; review precedes sending 
     location: window.location,
     HTMLElement: window.HTMLElement,
     HTMLButtonElement: window.HTMLButtonElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    HTMLSelectElement: window.HTMLSelectElement,
+    FormData: window.FormData,
     Element: window.Element,
     Node: window.Node,
     Document: window.Document,
@@ -235,8 +239,12 @@ test('current native actions govern create/add/reorder; review precedes sending 
     return { ok: false, reason: calls.length === 1 ? 'unavailable' : 'invalid' };
   };
   let refreshes = 0;
+  let acknowledged = page;
   const update = spyOn(edits, 'updateCollection').mockResolvedValue({ ok: true, id: page.id, revision: 2 });
-  const moves = spyOn(edits, 'moveCollectionMember').mockResolvedValue({ ok: true, id: members[1]!.id });
+  const moves = spyOn(edits, 'moveCollectionMember').mockImplementation(async () => {
+    acknowledged = { ...page, revision: 2, members: [members[1]!, members[0]!, members[2]!] };
+    return { ok: true, id: members[1]!.id };
+  });
   const adds = spyOn(edits, 'addCollectionMember').mockResolvedValue({ ok: true, id: id(40) });
   const search = spyOn(suggestions, 'searchContentSubjects').mockResolvedValue([
     { id: members[0]!.subject!.id, title: 'Disclosed work', types: ['work'], typeLabel: 'Work', cover: null },
@@ -262,19 +270,21 @@ test('current native actions govern create/add/reorder; review precedes sending 
     await click(button(m.library_publication_retry()));
     expect(calls).toHaveLength(2);
     expect(calls[1]).toEqual(calls[0]);
-    const show = (value: EditableCollectionPage) =>
-      render(
+    const show = (value: EditableCollectionPage) => {
+      acknowledged = value;
+      return render(
         <CollectionPage
           queryKey={['collection-journey', value.viewerActions]}
           cursor={undefined}
           page={value}
           refreshPage={async () => {
             refreshes++;
-            return value;
+            return acknowledged;
           }}
-          readEditorPage={async () => value}
+          readEditorPage={async () => acknowledged}
         />,
       );
+    };
     await show({ ...page, viewerActions: { state: 'ready', actions: [] } });
     expect(button(m.library_collection_add_items())).toBeUndefined();
     await show(page);
@@ -313,6 +323,11 @@ test('current native actions govern create/add/reorder; review precedes sending 
     expect(moves).toHaveBeenCalledTimes(1);
     expect(moves.mock.calls[0]![0].data).toMatchObject({ memberId: members[1]!.id, after: null });
     expect(refreshes).toBe(2);
+    expect(
+      [...host.querySelectorAll('[data-collection-members] > li')].map((node) =>
+        node.querySelector('[data-collection-member-id]')?.getAttribute('data-collection-member-id'),
+      ),
+    ).toEqual(acknowledged.members.map((member) => member.id));
     expect(
       [...host.querySelectorAll('[data-collection-member-id]')].map((node) =>
         node.getAttribute('data-collection-member-id'),
