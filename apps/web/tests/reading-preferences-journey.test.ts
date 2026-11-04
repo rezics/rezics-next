@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
@@ -9,8 +9,17 @@ import { AppearanceControls } from '../src/shell/appearance-controls';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { ReadingDraftRecovery } = await import('../src/settings/reading-card');
+
 const latest = () => 0;
 const concurrentNotifications = { ...recording.notifications, reply: false, mention: true };
+const owner = () => ({
+  canRead: () => true,
+  canWrite: () => true,
+  version: () => 0,
+  onVersionChange: () => {},
+});
 
 test('Reading changes preserve the exact in-flight key and payload across response loss and reload actual current preference version', async () => {
   const fixture = readingFixture('lost');
@@ -34,12 +43,24 @@ test('Reading changes preserve the exact in-flight key and payload across respon
   expect(fixture.reads()).toBe(1);
   expect(draft).toEqual({ spoilerLevel: 1, suitability: 'show' });
   if (result.kind !== 'confirmed') throw new Error('Expected a confirmed readback');
-  const reviewed = readingMutation(result.preferences, draft)!;
-  expect(reviewed.idempotencyKey).not.toBe(original.idempotencyKey);
-  expect(reviewed).toMatchObject({ expectedVersion: 2, spoilerLevel: 1, suitability: 'show' });
-  expect(await sendReading(fixture.io, reviewed, false, () => 2)).toMatchObject({ kind: 'confirmed' });
-  expect(fixture.current()).toMatchObject({
-    spoilerLevel: 1,
+  const live = readingFixture('lost');
+  const recovery = new ReadingDraftRecovery(live.initial, live.io, owner());
+  await recovery.edit({ spoilerLevel: 1 });
+  expect(recovery.snapshot().pending).toMatchObject({ spoilerLevel: 1 });
+  await recovery.edit({ suitability: 'show' });
+  live.concurrent({ spoilerLevel: 2 });
+  await recovery.retry();
+  expect(recovery.snapshot()).toMatchObject({
+    phase: 'review',
+    pending: null,
+    known: { spoilerLevel: 2, suitability: 'blur', version: 2 },
+    draft: { spoilerLevel: 2, suitability: 'show' },
+  });
+  await recovery.submit();
+  expect(live.calls[2]).toMatchObject({ expectedVersion: 2, suitability: 'show' });
+  expect(live.calls[2]).not.toHaveProperty('spoilerLevel');
+  expect(live.current()).toMatchObject({
+    spoilerLevel: 2,
     suitability: 'show',
     version: 3,
     notifications: concurrentNotifications,
@@ -63,12 +84,21 @@ test('A concurrent preference update produces reviewable conflict rather than ov
   expect(fixture.calls).toHaveLength(1); // Reading current values never resubmits a draft.
   expect(draft).toEqual({ spoilerLevel: 1, suitability: 'blur' });
   if (!current.ok) throw new Error('Expected current preferences');
-  const reviewed = readingMutation(current.preferences, draft)!;
-  expect(reviewed.expectedVersion).toBe(1);
-  expect(reviewed).not.toHaveProperty('notifications');
-  expect(reviewed.idempotencyKey).not.toBe(pending.idempotencyKey);
-  expect(await sendReading(fixture.io, reviewed, false, () => 1)).toMatchObject({ kind: 'confirmed' });
-  expect(fixture.current().notifications).toEqual(concurrentNotifications);
+  const live = readingFixture('conflict');
+  const recovery = new ReadingDraftRecovery(live.initial, live.io, owner());
+  await recovery.edit({ spoilerLevel: 1 });
+  await recovery.reload();
+  expect(recovery.snapshot()).toMatchObject({
+    phase: 'review',
+    pending: null,
+    known: { spoilerLevel: 2, suitability: 'show', version: 1 },
+    draft: { spoilerLevel: 1, suitability: 'show' },
+  });
+  await recovery.submit();
+  expect(live.calls[1]).toMatchObject({ expectedVersion: 1, spoilerLevel: 1 });
+  expect(live.calls[1]).not.toHaveProperty('suitability');
+  expect(live.calls[1]!.idempotencyKey).not.toBe(pending.idempotencyKey);
+  expect(live.current().notifications).toEqual(concurrentNotifications);
 });
 
 test('an unavailable or closed readback never turns an original retry into success or supplies defaults', async () => {
