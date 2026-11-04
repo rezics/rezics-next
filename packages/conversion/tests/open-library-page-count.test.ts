@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import editionFixture from '../../../specs/fixtures/imports/open-library/edition-number-of-pages.json';
@@ -9,6 +10,11 @@ const subjectId = '00000000-0000-4000-8000-000000000001';
 const edition = editionFixture.record;
 const convert = (record: object) =>
   convertOpenLibrary({ external_id: edition.key, record_revision: String(edition.revision), record }, { subjectId });
+const pageCountProposal = (commands: readonly BatchCommand[]) =>
+  commands.find(
+    (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+      command.op === 'propose' && command.statement.property.id === 'schema:numberOfPages',
+  );
 
 test('observed edition pages are a released cited unit quantity and change source evidence', () => {
   expect(editionFixture._fixture).toMatchObject({
@@ -18,11 +24,9 @@ test('observed edition pages are a released cited unit quantity and change sourc
   });
   const result = convert(edition);
   expect(result.normalizedRecord.number_of_pages).toBe(96);
-  const proposal = result.proposals.find(
-    (command) => command.op === 'propose' && command.statement.property.id === 'schema:numberOfPages',
-  );
+  const proposal = pageCountProposal(result.proposals);
   expect(proposal).toBeDefined();
-  if (!proposal || proposal.op !== 'propose') throw new Error('Missing edition page-count proposal');
+  if (!proposal || proposal.statement.value.type !== 'value') throw new Error('Missing edition page-count proposal');
   expect(proposal.statement.value.content).toEqual({ amount: '+96', unit: '1' });
   expect(proposal.statement.references[0]?.parts).toEqual(
     expect.arrayContaining([
@@ -46,11 +50,11 @@ test('observed edition pages are a released cited unit quantity and change sourc
   expect(convert({ ...edition, number_of_pages: Number.MAX_SAFE_INTEGER }).normalizedRecord.number_of_pages).toBe(
     Number.MAX_SAFE_INTEGER,
   );
-  expect(
-    convert({ ...edition, number_of_pages: Number.MAX_SAFE_INTEGER }).proposals.find(
-      (command) => command.op === 'propose' && command.statement.property.id === 'schema:numberOfPages',
-    )?.statement,
-  ).toBeDefined();
+  const maxPageProposal = pageCountProposal(convert({ ...edition, number_of_pages: Number.MAX_SAFE_INTEGER }).proposals);
+  expect(maxPageProposal).toBeDefined();
+  if (!maxPageProposal || maxPageProposal.statement.value.type !== 'value')
+    throw new Error('Missing maximum safe page-count proposal');
+  expect(maxPageProposal.statement.value.content).toEqual({ amount: `+${Number.MAX_SAFE_INTEGER}`, unit: '1' });
   expect(convert({ ...edition, number_of_pages: 97 }).digest).not.toBe(result.digest);
 
   const work = { ...workFixture.record, number_of_pages: 96 };
