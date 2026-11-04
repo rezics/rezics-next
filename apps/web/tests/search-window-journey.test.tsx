@@ -13,13 +13,14 @@ mock.module('../src/search/search', () => ({
     data,
     signal,
   }: {
-    data: { query: string; cursor?: string; facetValues: Record<string, string[]> };
+    data: { query: string; cursor?: string; ratingPopulation?: string; facetValues: Record<string, string[]> };
     signal?: AbortSignal;
   }) => {
     const params: SearchLoaderDeps = {
       query: data.query,
       facets: data.facetValues,
       cursor: data.cursor,
+      ratingPopulation: data.ratingPopulation,
       type: undefined,
       sort: undefined,
     };
@@ -98,9 +99,9 @@ async function click(action: string) {
   anchor.focus();
   await act(async () => anchor.click());
 }
-async function show() {
+async function show(search = '/en/search?q=Mira') {
   reads.length = 0;
-  window.history.replaceState({}, '', '/en/search?q=Mira');
+  window.history.replaceState({}, '', search);
   setLocale('en', { reload: false });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
@@ -181,36 +182,40 @@ afterAll(() => {
   }
 });
 
-test('forward, deliberate return and native open/back re-read one address and retain query orientation', async () => {
-  await show();
-  expect(reads).toHaveLength(1);
-  expect(host.textContent).toContain('Window 1');
-  await click('next');
-  expect(reads).toHaveLength(2);
-  await finish();
-  expect(host.textContent).toContain('Window 2');
-  expect(document.activeElement).toBe(host.querySelector('[data-search-results]'));
-  await click('previous');
-  await finish();
-  expect(reads).toHaveLength(3);
-  expect(reads.at(-1)!.params.cursor).toBeUndefined();
-  expect(host.textContent).toContain('Window 1');
-  expect(host.querySelector('[data-search-window-current]')!.textContent).toContain('Mira');
-  const subject = host.querySelector<HTMLAnchorElement>('a[href*="/subjects/"]')!;
-  await act(async () => {
-    await router.navigate({ href: subject.getAttribute('href')! });
-  });
-  expect(host.textContent).toContain('Native subject');
-  await act(async () => {
-    router.history.back();
-    await window.happyDOM.whenAsyncComplete();
-  });
-  expect(reads).toHaveLength(4);
-  expect(host.textContent).not.toContain('Mira Reading Room');
-  await finish();
-  expect(host.textContent).toContain('Mira Reading Room');
-  expect(host.textContent).toContain('Window 1');
-});
+test.each([undefined, crypto.randomUUID()])(
+  'forward, return and native open/back re-read one address (rating basis %s)',
+  async (ratingPopulation) => {
+    await show('/en/search?q=Mira' + (ratingPopulation ? `&ratingPopulation=${ratingPopulation}` : ''));
+    expect(reads).toHaveLength(1);
+    expect(host.textContent).toContain('Window 1');
+    await click('next');
+    expect(reads).toHaveLength(2);
+    await finish();
+    expect(host.textContent).toContain('Window 2');
+    expect(document.activeElement).toBe(host.querySelector('[data-search-results]'));
+    await click('previous');
+    await finish();
+    expect(reads).toHaveLength(3);
+    expect(reads.at(-1)!.params.cursor).toBeUndefined();
+    expect(reads.at(-1)!.params.ratingPopulation).toBe(ratingPopulation);
+    expect(host.textContent).toContain('Window 1');
+    expect(host.querySelector('[data-search-window-current]')!.textContent).toContain('Mira');
+    const subject = host.querySelector<HTMLAnchorElement>('a[href*="/subjects/"]')!;
+    await act(async () => {
+      await router.navigate({ href: subject.getAttribute('href')! });
+    });
+    expect(host.textContent).toContain('Native subject');
+    await act(async () => {
+      router.history.back();
+      await window.happyDOM.whenAsyncComplete();
+    });
+    expect(reads).toHaveLength(4);
+    expect(host.textContent).not.toContain('Mira Reading Room');
+    await finish();
+    expect(host.textContent).toContain('Mira Reading Room');
+    expect(host.textContent).toContain('Window 1');
+  },
+);
 
 test('restart is explicit, duplicate activation is bounded and reader replacement retires pending focus', async () => {
   await show();
