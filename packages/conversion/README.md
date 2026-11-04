@@ -954,29 +954,49 @@ The caller owns current native trust; dictionary syntax is no proof of authority
 The production Importer/CLI obtains the dictionary through its existing
 `identifierLookup`, after explicit reviewed seeding. Normalization and digesting
 remain pure; the source-only digest includes the ordered metadata tags and excludes
-bindings. Supported records visit twelve top-level fields and produce at most nine
+bindings. Supported records visit twelve top-level fields and produce at most 92
 commands and one cover intent; byte caps remain unchanged. The new keyword adds one bounded citation and one qualifier.
 
-## Bangumi TVAnime subject names
+## Bangumi TVAnime subject profiles
 
-`bangumi@9` consumes only `中文名` and `别名` from the exact pinned
-`{{Infobox animanga/TVAnime` template on Bangumi type 2 `schema:TVSeries` records.
-The ordinary Bangumi converter and selected-family registrations share this pure extraction.
-The existing top-level `name` and `name_cn` bootstrap labels keep their current
-meanings; infobox names become cited native name facts after subject binding and
-do not set `inLanguage`. The complete infobox remains in the existing bounded
-projection and digest for raw change detection.
+`bangumi@10` consumes `中文名`, `别名` and `官方网站` only from the exact pinned
+`{{Infobox animanga/TVAnime` template on Bangumi type-2 `schema:TVSeries`
+records. Ordinary conversion and selected-family registration share this pure
+profile extraction. Top-level `name` and `name_cn` retain their bootstrap
+meanings; infobox names become cited facts after subject binding and do not set
+`inLanguage`. The complete infobox remains in the bounded projection and
+semantic digest for raw-change detection.
 
 The scalar `中文名` is `zh`. Scalar and bullet-list `别名` values are `und`,
-because the pinned template defines no alias-language syntax. Equal property,
-language and exact-text tuples deduplicate; other spellings remain separate.
-Nested templates, links, unknown keys and unconsumed TVAnime fields are bounded
-omissions, with no source prose copied into diagnostics. Parsing scans at most 64
-field occurrences, retains at most 24 distinct name values, and shares a 16-item
-diagnostic cap with retained source-field, TVAnime run and Game player-count
-omissions. Each field
-occurrence is staged until its complete scalar or bullet-list form is known;
-malformed or mixed occurrences contribute no names.
+because the pinned template defines no alias-language syntax. The website field
+accepts one literal HTTP(S) URL per occurrence. It preserves source spelling and
+path, query and fragment; malformed, relative, unsupported-scheme, mixed-list
+and wiki-markup values are bounded omissions. Exact URL duplicates coalesce;
+different address strings remain separate proposals. The native property is
+single-valued, so independent review still selects its exact candidate. Every
+website fact cites the Bangumi subject record; that citation is distinct from
+the URL fact. No destination is fetched, followed or used to resolve identity.
+
+Equal name property/language/text tuples deduplicate; other spellings remain
+separate. Nested templates, links, unknown keys and unconsumed TVAnime fields
+are bounded omissions without source prose in diagnostics. Parsing scans at
+most 64 field occurrences, retains at most 24 distinct name values and 64
+websites, and shares a 16-item diagnostic cap with retained source-field,
+TVAnime run and Game player-count omissions. Each occurrence is staged until
+its complete scalar or bullet-list form is known; malformed or mixed
+occurrences contribute no name or website facts.
+
+- Touches: one exact selected TVAnime record, at most 24 name facts, 64 website
+  facts and 16 bounded omission diagnostics; every website fact cites the source
+  record.
+- Bound: the existing 65,536-character projection, 64 infobox fields, 1,500
+  characters per website and at most 92 ordinary assertions; no destination
+  requests are made.
+- Growth check: `tests/bangumi-official-websites.test.ts` covers ordinary and
+  selected-family conversion, refresh, exact citation and unsupported input.
+  The separate current-public-read journey is authored in
+  `services/kernel/test/imports/bangumi-official-websites.test.ts`; its native
+  execution remains controller-owned.
 
 ### Bangumi character physical profile
 

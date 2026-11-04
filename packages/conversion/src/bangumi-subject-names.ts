@@ -12,6 +12,12 @@ export type BangumiNameExtraction = Readonly<{
   names: readonly BangumiSubjectName[];
   diagnostics: readonly BangumiNameDiagnostic[];
 }>;
+export type BangumiOfficialWebsite = Readonly<{ url: string; pointer: string }>;
+export type BangumiSubjectProfileExtraction = Readonly<{
+  names: readonly BangumiSubjectName[];
+  officialWebsites: readonly BangumiOfficialWebsite[];
+  diagnostics: readonly BangumiNameDiagnostic[];
+}>;
 
 const nameLimit = 24;
 const fieldLimit = 64;
@@ -55,6 +61,35 @@ function plainName(value: string): string | undefined {
   return text;
 }
 
+function officialWebsiteUrl(value: string): string | undefined {
+  if (
+    value.length > 1500 ||
+    !value.isWellFormed() ||
+    !/^https?:\/\/[^\s]+$/u.test(value) ||
+    /[\u0000-\u0020\u007f-\u009f\\]/u.test(value) ||
+    /%(?![0-9a-f]{2})/iu.test(value) ||
+    value.includes('{{') ||
+    value.includes('}}') ||
+    value.includes('[[') ||
+    value.includes(']]') ||
+    value.includes('|')
+  )
+    return;
+  try {
+    const parsed = new URL(value);
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      !parsed.hostname ||
+      parsed.username ||
+      parsed.password
+    )
+      return;
+  } catch {
+    return;
+  }
+  return value;
+}
+
 function compareNames(left: BangumiSubjectName, right: BangumiSubjectName): number {
   const a = `${left.property}\u0000${left.language}\u0000${left.text}`;
   const b = `${right.property}\u0000${right.language}\u0000${right.text}`;
@@ -65,7 +100,7 @@ function compareNames(left: BangumiSubjectName, right: BangumiSubjectName): numb
  * Extract only the admitted TVAnime or Book name fields. Unknown fields and wiki
  * structures remain bounded omissions; source spelling inside plain values is kept.
  */
-export function extractBangumiSubjectNames(
+export function extractBangumiSubjectProfile(
   record: {
     readonly type: number;
     readonly name: string;
@@ -73,9 +108,11 @@ export function extractBangumiSubjectNames(
     readonly infobox?: string;
   },
   nativeType: string,
-): BangumiNameExtraction {
+): BangumiSubjectProfileExtraction {
   const names: BangumiSubjectName[] = [];
   const seen = new Set<string>();
+  const officialWebsites: BangumiOfficialWebsite[] = [];
+  const seenWebsites = new Set<string>();
   const diagnostics: BangumiNameDiagnostic[] = [];
   let diagnosticOverflow = false;
   let fieldOverflow = false;
@@ -103,7 +140,8 @@ export function extractBangumiSubjectNames(
   if (record.name_cn?.trim()) addTopLevel('schema:name', 'zh', record.name_cn);
   const book = record.type === 1 && nativeType === 'schema:Book';
   const tvAnime = record.type === 2 && nativeType === 'schema:TVSeries';
-  if ((!book && !tvAnime) || record.infobox === undefined) return { names: names.sort(compareNames), diagnostics };
+  if ((!book && !tvAnime) || record.infobox === undefined)
+    return { names: names.sort(compareNames), officialWebsites, diagnostics };
 
   const infobox = record.infobox;
   const iterator = sourceLines(infobox);
@@ -118,7 +156,7 @@ export function extractBangumiSubjectNames(
   }
   if (!header || (book ? !isBangumiBookTemplateHead(header.line) : !isBangumiTVAnimeTemplateHead(header.line))) {
     omit('/infobox', 'unsupported_infobox_template');
-    return { names: names.sort(compareNames), diagnostics };
+    return { names: names.sort(compareNames), officialWebsites, diagnostics };
   }
 
   let fields = 0;
@@ -127,6 +165,23 @@ export function extractBangumiSubjectNames(
   let active: NameField | undefined;
 
   const finishField = (field: NameField | undefined, complete = true) => {
+    if (field?.key === '官方网站' && tvAnime) {
+      if (!complete) {
+        omit(field.pointer, 'unsupported_infobox_structure');
+        return;
+      }
+      if (field.unsupported || field.values.length !== 1 || field.form !== 'scalar') {
+        omit(field.pointer, 'unsupported_infobox_website_form');
+        return;
+      }
+      const url = officialWebsiteUrl(field.values[0]!);
+      if (url === undefined) omit(field.pointer, 'unsupported_infobox_website_form');
+      else if (!seenWebsites.has(url)) {
+        seenWebsites.add(url);
+        officialWebsites.push({ url, pointer: field.pointer });
+      }
+      return;
+    }
     if (!field || (field.key !== '中文名' && field.key !== '别名')) return;
     if (!complete) {
       omit(field.pointer, 'unsupported_infobox_structure');
@@ -212,11 +267,16 @@ export function extractBangumiSubjectNames(
           active.form = 'scalar';
           active.values.push(value);
         }
-      } else if (!(tvAnime && bangumiTelevisionRunKeys.has(key))) omit(pointer, 'unsupported_infobox_key');
+      } else if (!(tvAnime && (bangumiTelevisionRunKeys.has(key) || key === '官方网站')))
+        omit(pointer, 'unsupported_infobox_key');
       continue;
     }
     if (!active) {
       omit(`/infobox/lines/${row.number}`, 'unsupported_infobox_structure');
+      continue;
+    }
+    if (active.key === '官方网站') {
+      active.unsupported = true;
       continue;
     }
     if (active.key !== '中文名' && active.key !== '别名') continue;
@@ -238,5 +298,19 @@ export function extractBangumiSubjectNames(
   finishField(active, closed);
   if (!closed) omit('/infobox', 'unsupported_infobox_structure');
   if (trailing) omit('/infobox', 'unsupported_infobox_structure');
-  return { names: names.sort(compareNames), diagnostics };
+  return { names: names.sort(compareNames), officialWebsites, diagnostics };
+}
+
+/** Backward-compatible projection for callers that only consume the name fields. */
+export function extractBangumiSubjectNames(
+  record: {
+    readonly type: number;
+    readonly name: string;
+    readonly name_cn?: string;
+    readonly infobox?: string;
+  },
+  nativeType: string,
+): BangumiNameExtraction {
+  const profile = extractBangumiSubjectProfile(record, nativeType);
+  return { names: profile.names, diagnostics: profile.diagnostics };
 }

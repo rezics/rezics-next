@@ -1396,35 +1396,33 @@ The local task reuses Accounts' development persona and private seed wiring, the
 - Bound: publication reads only selected records, four finite reviewed Bangumi vocabulary identities, their current bindings and exact subject/property pages. Cover lookup is sequential over at most 256 selected Bangumi works with a 1 MiB API response cap; only the validated image URL enters the existing media resolver, which uses the importer's exact record bindings, status recovery and current cover fence. There is no pending-candidate scan, unsupported-tag inference or change to ordinary importer publication.
 - Growth check: `services/importer/tests/showcase-media.test.ts` covers source validation, pending receipt and same-state recovery; `services/importer/tests/showcase-publication.test.ts` retains candidate journal coverage; `services/importer/tests/showcase-bangumi-genres.test.ts` covers exact source binding and recovery. `services/kernel/test/imports/showcase-media.test.ts` and `services/kernel/test/imports/showcase-bangumi-genres.test.ts` cover native publication paths but remain deferred to integration; no native pass or database growth series is claimed here.
 
-## Bangumi TVAnime subject names
+## Bangumi TVAnime official websites
 
-Decision: the pinned TVAnime grammar gives `中文名` Chinese language but no
-language syntax for aliases, so scalar and bullet-list `别名` values remain
-`und` and are never relabelled from provider, glyphs or work country.
+Decision: accept one literal HTTP(S) `官方网站` value per field occurrence. Exact URL duplicates coalesce; distinct addresses remain separate candidates under the single-valued released property. Do not normalize hosts or split lists.
 
-Ordinary Bangumi conversion and the selected-family type 2 route share one pure
-extractor. Exact `中文名` and scalar or bullet-list `别名` values become
-`schema:name` or `schema:alternateName` facts with the exact Bangumi subject
-citation after the source identity is bound. Existing top-level `name` and
-`name_cn` labels remain unchanged; name facts do not assert work language.
-Repeated keys are considered independently, exact property/language/text tuples
-deduplicate, and other names remain distinct. Only the pinned template and these
-two fields are consumed. Unsupported keys and forms produce bounded diagnostics
-without source prose. The original infobox stays in the existing bounded source
-projection and digest.
+The ordinary converter advances from `bangumi@9` to `bangumi@10`, preserving
+the current TVAnime names, original-run facts and Game player-count mapping.
+Ordinary registration and selected-family seeding share the bounded profile
+extractor. Only the exact type-2 `{{Infobox animanga/TVAnime` profile is
+eligible. Each supported URL becomes a cited `schema:url` proposal whose
+provenance remains the exact Bangumi source record. URL source spelling and
+path, query and fragment meaning are retained; the record URL never substitutes
+for the work's website. The existing importer journal and common publisher keep
+ordinary import proposal-only, candidate acceptance and adoption separate, and
+current public-read verification on the acknowledged work. Changed input offers
+a new proposal without rewriting independently adopted assertions; absent or
+unsupported values do not retract them.
 
-- Touches: one source record, at most 24 total distinct name values and at most
-  16 omission diagnostics, with one source citation per proposed fact.
-- Bound: no more than 65,536 infobox characters or 64 field occurrences are
-  scanned; the parser does not recurse through arbitrary wiki markup or retain
-  arbitrary keys. The existing journal, source rights admission and facts fence
-  govern proposals and refresh.
-- Growth check: `services/importer/tests/bangumi-subject-names.test.ts` exercises
-  the selected-family JSONL operator, exact proposals/citations, neighbor
-  exclusion, unchanged and changed input, identity reuse and bounded omissions.
-  `services/kernel/test/imports/bangumi-subject-names.test.ts` authors the
-  ordinary production-caller review, adoption, reopen and facts-fence journey;
-  its native execution remains controller-owned.
+- Touches: one selected TVAnime record, at most 64 website facts and 16 bounded
+  omission diagnostics, each fact cited to its exact source record.
+- Bound: 65,536 projection characters, 64 visited infobox fields, 1,500
+  characters per URL and at most 92 converted assertions; no destination
+  requests are made.
+- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
+  covers ordinary/default proposals, stable work identity, source refresh and an
+  unsupported representation. `services/kernel/test/imports/bangumi-official-websites.test.ts`
+  covers independent adoption, a current public viewer read and fencing; native
+  execution remains controller-owned and the M1 walkthrough remains separate.
 
 ## Bangumi character source names
 
