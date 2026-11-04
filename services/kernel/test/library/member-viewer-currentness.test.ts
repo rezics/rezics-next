@@ -1,14 +1,16 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
+import { randomUUID } from 'node:crypto';
 import { routeOf } from '../../src/route/route.ts';
 import { assertMemberPageCurrent } from '../../src/library/member-viewer-currentness.ts';
 import { assertShelfPageCurrent } from '../../src/library/shelf-viewer-currentness.ts';
-import { createCollectionListFactsFixture } from './support/collection-list-facts-fixture.ts';
+import { createListPresentationFixture } from '../semantic/support/list-presentation-fixture.ts';
 
-let fixture: Awaited<ReturnType<typeof createCollectionListFactsFixture>>;
+let fixture: Awaited<ReturnType<typeof createListPresentationFixture>>;
 
 beforeAll(async () => {
-  fixture = await createCollectionListFactsFixture();
+  fixture = await createListPresentationFixture({ poolMax: 1 });
+  await fixture.checked('POST', '/v1/platform/exposure/collections:open', {}, 'operator');
 }, 180_000);
 
 afterAll(async () => {
@@ -89,9 +91,16 @@ test.serial(
   async () => {
     const book = await fixture.create('schema:Book');
     await fixture.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'completed' }, 'editor');
-    const collection = await fixture.collection([book, book]);
-    const initial = await fixture.get(collection.id);
-    const initialPage = (await initial.json()) as {
+    const { collection } = await fixture.checked('POST', '/v1/collections', {
+      title: 'Viewer currentness',
+      visibility: 'public',
+    });
+    for (const subjectId of [book, book])
+      await fixture.checked('POST', `/v1/collections/${collection.id}/members`, { subjectId });
+    const read = () => fixture.call('GET', `/v1/collections/${collection.id}/members?view=FULL`, undefined, 'editor');
+    const initial = await read();
+    expect(initial.status).toBe(200);
+    const initialPage = initial.body as {
       members: Array<{ id: string; subjectId: string }>;
       viewerFacts?: { state: string; rows?: Array<{ rowKey: string }> };
     };
@@ -109,15 +118,15 @@ test.serial(
         [routeOf(collection.id), collection.id, removed.id],
       ),
     );
-    let response: Response;
+    let response: Awaited<ReturnType<typeof read>>;
     try {
-      response = await fixture.get(collection.id);
+      response = await read();
     } finally {
       interleave.restore();
     }
     expect(interleave.interleaved()).toBe(true);
-    expect(response!.status).toBe(409);
-    const problem = await response!.json();
+    expect(response.status).toBe(409);
+    const problem = response.body;
     expect(problem).toMatchObject({ code: 'stale_cursor' });
     expect(problem).not.toHaveProperty('members');
     expect(problem).not.toHaveProperty('viewerFacts');
@@ -149,15 +158,17 @@ test('shelf currentness preserves the original cursor and rejects changed rows o
 test.serial('shelf route withholds a row whose native Entry changes during viewer overlay', async () => {
   const book = await fixture.create('schema:Book');
   await fixture.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'completed' }, 'editor');
-  const editor = await fixture.deps('editor');
-  if (editor.actor.kind !== 'account') throw new Error('Editor fixture must authenticate');
-  const token = await fixture.credential(editor.actor.scopes);
+  await fixture.db.admin.query(
+    `INSERT INTO access.exposure_opening ("group",valid,transaction_id)
+     VALUES ('personal_library',tstzrange('2020-01-01T00:00:00Z',NULL,'[)'),$1),
+            ('reading_progress',tstzrange('2020-01-01T00:00:00Z',NULL,'[)'),$2)`,
+    [randomUUID(), randomUUID()],
+  );
   const path = '/v1/libraryEntries?view=FULL&orderBy=createdAt&direction=desc&limit=10';
-  const read = () =>
-    fixture.kernel.handle(new Request(`http://kernel.test${path}`, { headers: { authorization: `Bearer ${token}` } }));
+  const read = () => fixture.call('GET', path, undefined, 'editor');
   const initial = await read();
   expect(initial.status).toBe(200);
-  expect(((await initial.json()) as { libraryEntries: Array<{ subjectId: string }> }).libraryEntries).toMatchObject([
+  expect((initial.body as { libraryEntries: Array<{ subjectId: string }> }).libraryEntries).toMatchObject([
     { subjectId: book },
   ]);
 
@@ -167,15 +178,15 @@ test.serial('shelf route withholds a row whose native Entry changes during viewe
       [routeOf(fixture.accounts.editor), fixture.accounts.editor, book],
     ),
   );
-  let response: Response;
+  let response: Awaited<ReturnType<typeof read>>;
   try {
     response = await read();
   } finally {
     interleave.restore();
   }
   expect(interleave.interleaved()).toBe(true);
-  expect(response!.status).toBe(503);
-  const problem = await response!.json();
+  expect(response.status).toBe(503);
+  const problem = response.body;
   expect(problem).toMatchObject({ code: 'semantic_not_ready' });
   expect(problem).not.toHaveProperty('libraryEntries');
   expect(problem).not.toHaveProperty('viewerFacts');
