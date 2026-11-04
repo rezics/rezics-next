@@ -1,43 +1,39 @@
 ---
 {
-  "goal": "accounts",
-  "manager": "accounts",
-  "kind": "implementation",
-  "paths": [
-    "services/auth/src/organization-creation-page.ts",
-    "services/auth/src/host.ts",
-    "services/auth/test/organization-creation-page.test.ts",
-    "services/kernel/src/access/organization-creation-page-source.ts",
-    "services/kernel/src/access/native-account-bindings.ts",
-    "services/kernel/test/access/organization-creation-page.test.ts",
-    "apps/auth/src/organization-creation-page.ts",
-    "apps/auth/src/routes/organizations.new.tsx",
-    "apps/auth/tests/organization-creation-page.test.ts",
-    "apps/auth/src/stories/accounts-operations/organizations/organizations.stories.tsx",
-    "apps/auth/messages/*.json",
-    "apps/auth/README.md",
-    "apps/auth/tests/organization-create.test.tsx",
-    "apps/auth/tests/organization-create-departure.test.tsx"
-  ],
-  "riskAreas": [
-    "authorization",
-    "account",
-    "disclosure"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "estimate": {
-    "lines": 2000,
-    "files": 18
-  },
-  "acceptance": {
-    "tests": [
-      "bun test services/auth/test/organization-creation-page.test.ts",
-      "bun run --cwd services/kernel check test/access/organization-creation-page.test.ts",
-      "bun test apps/auth/tests/organization-creation-page.test.ts apps/auth/tests/organization-create.test.tsx apps/auth/tests/organization-create-departure.test.tsx"
-    ]
-  }
+  'goal': 'accounts',
+  'manager': 'accounts',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/auth/src/organization-creation-page.ts',
+      'services/auth/src/host.ts',
+      'services/auth/test/organization-creation-page.test.ts',
+      'services/kernel/src/access/organization-creation-page-source.ts',
+      'services/kernel/src/access/native-account-bindings.ts',
+      'services/kernel/test/access/organization-creation-page.test.ts',
+      'apps/auth/src/organization-creation-page.ts',
+      'apps/auth/src/routes/organizations.new.tsx',
+      'apps/auth/tests/organization-creation-page.test.ts',
+      'apps/auth/src/stories/accounts-operations/organizations/organizations.stories.tsx',
+      'apps/auth/messages/*.json',
+      'apps/auth/README.md',
+      'apps/auth/tests/organization-create.test.tsx',
+      'apps/auth/tests/organization-create-departure.test.tsx',
+    ],
+  'riskAreas': ['authorization', 'account', 'disclosure'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'estimate': { 'lines': 2000, 'files': 18 },
+  'acceptance':
+    {
+      'tests':
+        [
+          'bun test services/auth/test/organization-creation-page.test.ts',
+          'bun run --cwd services/kernel check test/access/organization-creation-page.test.ts',
+          'bun test apps/auth/tests/organization-creation-page.test.ts apps/auth/tests/organization-create.test.tsx apps/auth/tests/organization-create-departure.test.tsx',
+        ],
+    },
 }
 ---
 
