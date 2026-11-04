@@ -1,9 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  EMPTY_RECOVERY_LIMITS,
-  emptyRecoveryPrefixes,
-  readEmptyRecovery,
-} from '../../src/search/empty-recovery.ts';
+import { EMPTY_RECOVERY_LIMITS, emptyRecoveryPrefixes, readEmptyRecovery } from '../../src/search/empty-recovery.ts';
 
 test('empty recovery uses at most two native prefixes and returns only bounded near titles at the same cut', async () => {
   expect(emptyRecoveryPrefixes('prejudise')).toEqual(['pre', 'pr']);
@@ -31,7 +27,10 @@ test('empty recovery uses at most two native prefixes and returns only bounded n
 });
 
 test('recovery refuses mismatched freshness and preserves explicit action advice when a source is preparing', async () => {
-  const actions = [{ kind: 'edit-query' as const }, { kind: 'remove-facet' as const, property: 'schema:genre', value: 'fiction' }];
+  const actions = [
+    { kind: 'edit-query' as const },
+    { kind: 'remove-facet' as const, property: 'schema:genre', value: 'fiction' },
+  ];
   const stale = await readEmptyRecovery({
     query: 'prejudise',
     asOf: 'first-cut',
