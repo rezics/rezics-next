@@ -24,8 +24,7 @@ export async function loadReporterHistory(
       fetch: { cache: 'no-store', ...(signal ? { signal } : {}) },
     });
     if (response.error) {
-      if ([401, 403, 404].includes(response.status))
-        return { state: 'denied' };
+      if ([401, 403, 404].includes(response.status)) return { state: 'denied' };
       const value: unknown = response.error.value;
       const code = value && typeof value === 'object' && 'code' in value ? value.code : undefined;
       if (

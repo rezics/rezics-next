@@ -22,7 +22,10 @@ export const readReporterHistory = createServerFn({ method: 'GET' })
       const readerOrigin = await preparedPrivateReaderOrigin(request, authorization);
       if (!authorization || !readerOrigin) return { readerOrigin: null, result: { state: 'denied' } };
       if (!hasKernelOrigin()) return { readerOrigin, result: { state: 'unavailable' } };
-      return { readerOrigin, result: await loadReporterHistory(kernelClient(undefined, authorization), data, request.signal) };
+      return {
+        readerOrigin,
+        result: await loadReporterHistory(kernelClient(undefined, authorization), data, request.signal),
+      };
     } catch {
       return { readerOrigin: null, result: { state: 'unavailable' } };
     }
