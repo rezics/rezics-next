@@ -345,6 +345,7 @@ type UnreadNoticeRead = Awaited<ReturnType<NoticeInboxClient['count']['get']>>;
 export type NoticeInboxPage = NonNullable<NoticeInboxRead['data']>;
 export type NoticeInboxItem = NoticeInboxPage['items'][number];
 export type UnreadNoticeSummary = NonNullable<UnreadNoticeRead['data']>;
+export type { InboxNoticeSelection } from './kernel/content/notice-inbox-selection.ts';
 export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
   ((...args: Parameters<SubjectsClient>) => ClassificationCompatibility<SubjectPath>);
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];

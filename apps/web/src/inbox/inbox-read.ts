@@ -14,6 +14,13 @@ import { threadLocation } from '../threads/thread-href';
 export const INBOX_PAGE_SIZE = 20;
 /** One composed private list read; disclosure and destinations arrive with each admitted item. */
 export const INBOX_PAGE_KERNEL_READ_CEILING = 1;
+export const INBOX_SELECTIONS = ['all', 'unread'] as const;
+export type InboxSelection = (typeof INBOX_SELECTIONS)[number];
+export const DEFAULT_INBOX_SELECTION: InboxSelection = 'all';
+
+export type InboxPageMarkSeen = { method: 'POST'; path: string; through: string };
+export type InboxPageActions = { markSeen: InboxPageMarkSeen | null };
+export type InboxPageViewer = { accountId: string };
 
 type NoticeRead = Awaited<ReturnType<ReturnType<KernelClient['accounts']>['notifications']['get']>>;
 type NativeNotice = NonNullable<NoticeRead['data']>['items'][number];
@@ -39,7 +46,13 @@ export type InboxNotice = {
   /** Retained for older presentation fixtures; the native wire uses thread_watch/board_activity. */
   watch?: 'thread' | 'board';
 };
-type NoticePage = { items: InboxNotice[]; next: string | null };
+type NoticePage = {
+  items: InboxNotice[];
+  next: string | null;
+  viewer: InboxPageViewer;
+  selection: InboxSelection;
+  actions: InboxPageActions;
+};
 type ResolvedNotice = InboxNotice & {
   href?: string;
   text: string;
@@ -47,7 +60,13 @@ type ResolvedNotice = InboxNotice & {
   actorName?: string;
   context?: string;
 };
-export type ResolvedInboxPage = { items: ResolvedNotice[]; next: string | null };
+export type ResolvedInboxPage = {
+  items: ResolvedNotice[];
+  next: string | null;
+  viewer: InboxPageViewer;
+  selection: InboxSelection;
+  actions: InboxPageActions;
+};
 
 export type NativeInboxFailure = {
   status: number | null;
@@ -59,7 +78,15 @@ export type NativeInboxFailure = {
 
 export type InboxPage =
   | { signedIn: false }
-  | { signedIn: true; state: 'ready'; items: ResolvedNotice[]; next: string | null }
+  | {
+      signedIn: true;
+      state: 'ready';
+      items: ResolvedNotice[];
+      next: string | null;
+      viewer: InboxPageViewer;
+      selection: InboxSelection;
+      actions: InboxPageActions;
+    }
   | {
       signedIn: true;
       state: 'closed' | 'preparing' | 'unavailable';
@@ -293,21 +320,105 @@ function projectNativeNotice(item: NativeNotice): InboxNotice {
   };
 }
 
+export function isInboxSelection(value: unknown): value is InboxSelection {
+  return value === 'all' || value === 'unread';
+}
+
+function validPageViewer(value: unknown, accountId?: string): value is InboxPageViewer {
+  return (
+    isRecord(value) &&
+    exactKeys(value, ['accountId']) &&
+    noticeId(value.accountId) &&
+    (accountId === undefined || value.accountId === accountId)
+  );
+}
+
+function bulkMarkSeenPath(accountId: string) {
+  return `/v1/accounts/${encodeURIComponent(accountId)}/notifications:markSeen`;
+}
+
+function validPageActions(
+  value: unknown,
+  items: readonly InboxNotice[],
+  next: string | null,
+  selection: InboxSelection,
+  accountId: string,
+): value is InboxPageActions {
+  if (!isRecord(value) || !exactKeys(value, ['markSeen'])) return false;
+  const admitted = value.markSeen;
+  if (admitted === null) return true;
+  if (
+    !isRecord(admitted) ||
+    !exactKeys(admitted, ['method', 'path', 'through']) ||
+    admitted.method !== 'POST' ||
+    admitted.path !== bulkMarkSeenPath(accountId) ||
+    !noticeId(admitted.through)
+  )
+    return false;
+  const through = items.find((item) => item.id === admitted.through);
+  if (!through || !items.some((item) => item.unread)) return false;
+  if (selection === 'unread' && next !== null) return false;
+  return through.id === items[0]?.id;
+}
+
+export function inboxPageActions(
+  items: readonly { id: string; unread: boolean }[],
+  next: string | null,
+  selection: InboxSelection,
+  accountId: string,
+): InboxPageActions {
+  const newest = items[0];
+  if (!newest || !items.some((item) => item.unread) || (selection === 'unread' && next !== null))
+    return { markSeen: null };
+  return { markSeen: { method: 'POST', path: bulkMarkSeenPath(accountId), through: newest.id } };
+}
+
+export function nativeInboxEnvelope<T extends { id: string; unread: boolean }>(
+  items: readonly T[],
+  next: string | null,
+  accountId: string,
+  selection: InboxSelection = DEFAULT_INBOX_SELECTION,
+) {
+  return {
+    items: [...items],
+    next,
+    viewer: { accountId },
+    selection,
+    actions: inboxPageActions(items, next, selection, accountId),
+  };
+}
+
+export function readyInboxPage<T extends { id: string; unread: boolean }>(
+  items: readonly T[],
+  next: string | null,
+  accountId: string,
+  selection: InboxSelection = DEFAULT_INBOX_SELECTION,
+) {
+  return { signedIn: true as const, state: 'ready' as const, ...nativeInboxEnvelope(items, next, accountId, selection) };
+}
+
 /** A malformed or unknown row fails the complete page; the native page already owns disclosure and destinations. */
 export function decodeInboxPage(value: unknown, accountId?: string): NoticePage {
   if (
     !isRecord(value) ||
-    !exactKeys(value, ['items', 'next']) ||
+    !exactKeys(value, ['items', 'next', 'viewer', 'selection', 'actions']) ||
     !Array.isArray(value.items) ||
     value.items.length > INBOX_PAGE_SIZE ||
-    !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096))
+    !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096)) ||
+    !isInboxSelection(value.selection) ||
+    !validPageViewer(value.viewer, accountId)
   )
     throw new InboxReadError({ status: 200 });
   const items = value.items.map((item) => {
-    if (!validNotice(item, accountId)) throw new InboxReadError({ status: 200 });
+    if (!validNotice(item, accountId ?? value.viewer.accountId)) throw new InboxReadError({ status: 200 });
     return projectNativeNotice(item);
   });
-  return { items, next: value.next as string | null };
+  const next = value.next as string | null;
+  const selection = value.selection;
+  const viewer = value.viewer;
+  if (!validPageActions(value.actions, items, next, selection, viewer.accountId))
+    throw new InboxReadError({ status: 200 });
+  return { items, next, viewer, selection, actions: value.actions };
 }
 
 /** Convert only native action identities to existing localized routes; never consume a supplied URL. */
@@ -343,6 +454,9 @@ export function inboxTargetContext(target: NativeTarget | undefined): string | u
 /** The composed response supplies owner summary, current actor and target disclosure without point reads. */
 export async function resolveInboxItems(page: NoticePage): Promise<ResolvedInboxPage> {
   return {
+    viewer: page.viewer,
+    selection: page.selection,
+    actions: page.actions,
     items: page.items.map((notice) => {
       const native = notice.actor && notice.target && notice.actions;
       const actorName = notice.actor?.state === 'available' ? notice.actor.displayName.trim() : undefined;
@@ -365,15 +479,21 @@ function authHeaders(authorization: string) {
   return { authorization };
 }
 
+export type InboxPageQuery = { selection: InboxSelection; cursor?: string };
+
 async function readNoticePage(
   client: Pick<KernelClient, 'accounts'>,
   accountId: string,
   authorization: string,
-  cursor: string | undefined,
+  query: InboxPageQuery,
   signal?: AbortSignal,
 ) {
   const result = await client.accounts({ accountId }).notifications.get({
-    query: { limit: INBOX_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+    query: {
+      limit: INBOX_PAGE_SIZE,
+      selection: query.selection,
+      ...(query.cursor ? { cursor: query.cursor } : {}),
+    } as { limit: number; cursor?: string },
     headers: authHeaders(authorization),
     ...(signal ? { fetch: { signal } } : {}),
   });
@@ -383,14 +503,20 @@ async function readNoticePage(
 }
 
 /** One native page contains all current disclosure and exact admitted destinations. */
+function inboxPageQueryOf(value: InboxPageQuery | string | undefined): InboxPageQuery {
+  if (value === undefined) return { selection: DEFAULT_INBOX_SELECTION };
+  if (typeof value === 'string') return { selection: DEFAULT_INBOX_SELECTION, cursor: value };
+  return { selection: value.selection, ...(value.cursor ? { cursor: value.cursor } : {}) };
+}
+
 export async function loadInboxPage(
   client: KernelClient,
   accountId: string,
   authorization: string,
-  cursor?: string,
+  query: InboxPageQuery | string = { selection: DEFAULT_INBOX_SELECTION },
   signal?: AbortSignal,
 ): Promise<ResolvedInboxPage> {
-  return resolveInboxItems(await readNoticePage(client, accountId, authorization, cursor, signal));
+  return resolveInboxItems(await readNoticePage(client, accountId, authorization, inboxPageQueryOf(query), signal));
 }
 
 export const setInboxResponsePolicy = createServerFn({ method: 'GET' }).handler(() => {
@@ -399,7 +525,7 @@ export const setInboxResponsePolicy = createServerFn({ method: 'GET' }).handler(
 });
 
 export const readInboxPage = createServerFn({ method: 'GET' })
-  .validator((input: unknown) => {
+  .validator((input: unknown): InboxPageQuery => {
     const value = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
     if (
       'cursor' in value &&
@@ -407,7 +533,12 @@ export const readInboxPage = createServerFn({ method: 'GET' })
       (typeof value.cursor !== 'string' || value.cursor.length > 4096)
     )
       throw new Error('Invalid inbox cursor');
-    return typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {};
+    const selection = value.selection === undefined ? DEFAULT_INBOX_SELECTION : value.selection;
+    if (!isInboxSelection(selection)) throw new Error('Invalid inbox selection');
+    return {
+      selection,
+      ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
+    };
   })
   .handler(async ({ data }): Promise<InboxPage> => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -420,7 +551,7 @@ export const readInboxPage = createServerFn({ method: 'GET' })
       return {
         signedIn: true,
         state: 'ready',
-        ...(await loadInboxPage(kernelClient(), accountId, authorization, data.cursor, request.signal)),
+        ...(await loadInboxPage(kernelClient(), accountId, authorization, data, request.signal)),
       };
     } catch (error) {
       return inboxReadFailure(error);

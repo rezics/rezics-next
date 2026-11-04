@@ -10,7 +10,7 @@ import {
   confirmInboxNoticeSeen,
 } from '../src/inbox/inbox-pagination';
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { decodeInboxPage, inboxReadFailure, loadInboxPage, markInboxNoticeSeen, resolveInboxItems } =
+const { decodeInboxPage, inboxReadFailure, loadInboxPage, markInboxNoticeSeen, nativeInboxEnvelope, resolveInboxItems } =
   await import('../src/inbox/inbox-read');
 type Notice = import('../src/inbox/inbox-read').InboxNotice;
 
@@ -85,7 +85,7 @@ test('Inbox uses one composed page for current disclosure, installed kinds and a
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       requests.push(request);
-      return Response.json({ items: composed, next: 'opaque/+continuation==' });
+      return Response.json(nativeInboxEnvelope(composed, 'opaque/+continuation==', 'alice'));
     }) as typeof fetch,
   });
   const page = await loadInboxPage(client, 'alice', 'Bearer alice', 'opaque/+input==');
@@ -115,7 +115,9 @@ test('Inbox uses one composed page for current disclosure, installed kinds and a
   });
   expect(page.next).toBe('opaque/+continuation==');
   expect(requests).toHaveLength(1);
-  expect(new URL(requests[0]!.url).searchParams.toString()).toBe('limit=20&cursor=opaque%2F%2Binput%3D%3D');
+  expect(new URL(requests[0]!.url).searchParams.toString()).toBe(
+    'limit=20&selection=all&cursor=opaque%2F%2Binput%3D%3D',
+  );
   expect(requests[0]!.headers.get('authorization')).toBe('Bearer alice');
 });
 
@@ -127,17 +129,19 @@ test('sparse continuation preserves its cursor and a failed page remains unavail
       const request = new Request(input, init);
       const url = new URL(request.url);
       cursors.push(url.searchParams.get('cursor'));
-      return Response.json({ items: [], next: url.searchParams.has('cursor') ? null : cursor });
+      return Response.json(
+        nativeInboxEnvelope([], url.searchParams.has('cursor') ? null : cursor, 'alice'),
+      );
     }) as typeof fetch,
   });
   const firstPage = await loadInboxPage(client, 'alice', 'Bearer alice');
   let state = receiveInboxPage(emptyInboxPagination, { signedIn: true, state: 'ready', ...firstPage });
-  expect(readableInboxPage(state)).toEqual({ items: [], next: cursor });
+  expect(readableInboxPage(state)).toMatchObject({ items: [], next: cursor });
   state = nextInboxPage(state);
   expect(state.cursor).toBe(cursor);
   const continued = await loadInboxPage(client, 'alice', 'Bearer alice', state.cursor);
   state = receiveInboxPage(state, { signedIn: true, state: 'ready', ...continued });
-  expect(readableInboxPage(state)).toEqual({ items: [], next: null });
+  expect(readableInboxPage(state)).toMatchObject({ items: [], next: null });
   expect(cursors).toEqual([null, cursor]);
 
   const unavailable = createKernelClient('http://kernel.local', {
@@ -149,16 +153,22 @@ test('sparse continuation preserves its cursor and a failed page remains unavail
 });
 
 test('a successful continuation replaces the prior page window', async () => {
-  const first = await resolveInboxItems({
-    items: Array.from({ length: 20 }, (_, index) => notice(`first-${index}`, 'reply')),
-    next: 'opaque-next',
-  });
+  const first = await resolveInboxItems(
+    nativeInboxEnvelope(
+      Array.from({ length: 20 }, (_, index) => notice(`first-${index}`, 'reply')),
+      'opaque-next',
+      'alice',
+    ),
+  );
   let state = receiveInboxPage(emptyInboxPagination, { signedIn: true, state: 'ready', ...first });
   state = nextInboxPage(state);
-  const second = await resolveInboxItems({
-    items: Array.from({ length: 20 }, (_, index) => notice(`second-${index}`, 'reply')),
-    next: null,
-  });
+  const second = await resolveInboxItems(
+    nativeInboxEnvelope(
+      Array.from({ length: 20 }, (_, index) => notice(`second-${index}`, 'reply')),
+      null,
+      'alice',
+    ),
+  );
   state = receiveInboxPage(state, { signedIn: true, state: 'ready', ...second });
   expect(state.earlier).toBeNull();
   expect(readableInboxPage(state)?.items.map(({ id }) => id)).toEqual(
@@ -187,10 +197,9 @@ test('one-item acknowledgement uses only its notice identity and changes no neig
   expect(request.headers.get('idempotency-key')).toBe(JSON.stringify(attempt.idempotencyKey));
   expect(await request.text()).toBe('');
 
-  const resolved = await resolveInboxItems({
-    items: [notice('chosen', 'reply'), notice('neighbor', 'mention')],
-    next: null,
-  });
+  const resolved = await resolveInboxItems(
+    nativeInboxEnvelope([notice('chosen', 'reply'), notice('neighbor', 'mention')], null, 'alice'),
+  );
   const initial = receiveInboxPage(emptyInboxPagination, { signedIn: true, state: 'ready', ...resolved });
   const confirmed = confirmInboxNoticeSeen(initial, 'chosen');
   expect(confirmed.current?.items.map(({ id, unread }) => [id, unread])).toEqual([
@@ -208,7 +217,7 @@ test('fixed 20-row visits do not fan out or retain unrelated notices across 1, 1
       ...pageRows,
       ...Array.from({ length: unrelated }, (_, index) => notice(`unrelated-${index}`, 'reply')),
     ];
-    const pageWire = JSON.stringify({ items: serverRows.slice(0, 20), next: null });
+    const pageWire = JSON.stringify(nativeInboxEnvelope(serverRows.slice(0, 20), null, 'alice'));
     for (const visits of [1, 10, 100]) {
       let requests = 0;
       let wireBytes = 0;
@@ -243,7 +252,7 @@ test('unknown native rows fail closed instead of becoming replies', () => {
     { ...valid, actions: { ...valid.actions!, open: { kind: 'url', href: 'https://outside.test' } } },
     { ...valid, extra: true },
   ])
-    expect(() => decodeInboxPage({ items: [valid, invalid], next: null }, 'alice')).toThrow();
+    expect(() => decodeInboxPage(nativeInboxEnvelope([valid, invalid], null, 'alice'), 'alice')).toThrow();
 
   const genericOutcome = {
     ...notice('generic-outcome', 'moderation_decision'),
@@ -254,5 +263,5 @@ test('unknown native rows fail closed instead of becoming replies', () => {
       markSeen: { method: 'POST' as const, path: '/v1/accounts/alice/notifications/generic-outcome:markSeen' },
     },
   };
-  expect(decodeInboxPage({ items: [genericOutcome], next: null }, 'alice').items[0]?.actions?.open).toBeNull();
+  expect(decodeInboxPage(nativeInboxEnvelope([genericOutcome], null, 'alice'), 'alice').items[0]?.actions?.open).toBeNull();
 });

@@ -24,6 +24,12 @@ export type InboxDependencies = Readonly<{
   now?: () => Date;
 }>;
 
+export const INBOX_SELECTIONS = ['all', 'unread'] as const;
+export type InboxSelection = (typeof INBOX_SELECTIONS)[number];
+export const DEFAULT_INBOX_SELECTION: InboxSelection = 'all';
+const LIST_CURSOR_EPOCH = 2;
+const MARK_SEEN_METHOD = 'POST' as const;
+
 export type InboxItem = Readonly<{
   id: string;
   kind: NoticeCandidate['kind'];
@@ -43,6 +49,15 @@ export type InboxItem = Readonly<{
   unread: boolean;
 }>;
 
+export type InboxPageMarkSeen = Readonly<{ method: 'POST'; path: string; through: string }>;
+export type InboxListPage = Readonly<{
+  items: InboxItem[];
+  next: string | null;
+  viewer: Readonly<{ accountId: string }>;
+  selection: InboxSelection;
+  actions: Readonly<{ markSeen: InboxPageMarkSeen | null }>;
+}>;
+
 export type UnreadNoticeSummary = Readonly<{
   count: number;
   capped: boolean;
@@ -51,7 +66,12 @@ export type UnreadNoticeSummary = Readonly<{
 }>;
 
 const LIST_ROUTE = 'GET /v1/accounts/{accountId}/notifications';
-const CANDIDATE_FACTOR = 4;
+export const INBOX_CANDIDATE_FACTOR = 4;
+export const INBOX_CANDIDATE_SCAN_CEILING = 200;
+
+export function inboxCandidateScanLimit(pageSize: number): number {
+  return Math.min(pageSize * INBOX_CANDIDATE_FACTOR, INBOX_CANDIDATE_SCAN_CEILING);
+}
 const SUMMARY_CANDIDATE_LIMIT = 200;
 export class InvalidInboxCursorError extends Error {}
 export class InboxViewerUnavailableError extends Error {}
@@ -124,19 +144,43 @@ function unreadSql(): string {
            (n.created_at,n.notice_id) > (s.seen_created_at,s.seen_notice_id))`;
 }
 
+function inboxSelection(value: InboxSelection | undefined): InboxSelection {
+  if (value === undefined) return DEFAULT_INBOX_SELECTION;
+  if (value === 'all' || value === 'unread') return value;
+  throw new RangeError('Invalid selection');
+}
+
+function markSeenPath(accountId: string): string {
+  return `/v1/accounts/${accountId}/notifications:markSeen`;
+}
+
+function pageMarkSeen(accountId: string, items: readonly InboxItem[], next: string | null, selection: InboxSelection) {
+  const newest = items[0];
+  if (!newest || !items.some((item) => item.unread)) return null;
+  // Unread continuation still has unseen later notices; do not admit a through-id from this page.
+  if (selection === 'unread' && next !== null) return null;
+  return { method: MARK_SEEN_METHOD, path: markSeenPath(accountId), through: newest.id };
+}
+
 export async function listNoticeInbox(
   dependencies: InboxDependencies,
   accountId: string,
-  input: { limit: number; cursor?: string },
-): Promise<{ items: InboxItem[]; next: string | null }> {
+  input: { limit: number; cursor?: string; selection?: InboxSelection },
+): Promise<InboxListPage> {
   const accountRoute = route(accountId);
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 50) throw new RangeError('Invalid limit');
+  const selection = inboxSelection(input.selection);
   const actor = readerActor(dependencies, accountId);
   await assertCurrentInboxViewer(dependencies, accountId);
   const binding = {
     route: LIST_ROUTE,
     viewer: accountId,
-    query: { limit: input.limit, clientId: actor.clientId, authnEpoch: actor.authnEpoch },
+    query: {
+      limit: input.limit,
+      selection,
+      clientId: actor.clientId,
+      authnEpoch: actor.authnEpoch,
+    },
   } as const;
   let after: [string, string] | null = null;
   if (input.cursor !== undefined) {
@@ -148,7 +192,7 @@ export async function listNoticeInbox(
     );
     if (
       !value.ok ||
-      value.epoch !== 2 ||
+      value.epoch !== LIST_CURSOR_EPOCH ||
       value.after.length !== 2 ||
       typeof value.after[0] !== 'string' ||
       typeof value.after[1] !== 'string'
@@ -156,14 +200,15 @@ export async function listNoticeInbox(
       throw new InvalidInboxCursorError('Invalid list cursor');
     after = [value.after[0], value.after[1]];
   }
-  const candidateLimit = Math.min(input.limit * CANDIDATE_FACTOR, 200);
+  const candidateLimit = inboxCandidateScanLimit(input.limit);
   const rows = await withConnection(dependencies.pool, async (client) => {
     const values: unknown[] = [accountRoute, accountId];
     let seek = '';
     if (after !== null) {
       values.push(after[0], after[1]);
-      seek = 'AND (n.created_at,n.notice_id) < ($3::timestamptz,$4::uuid)';
+      seek = `AND (n.created_at,n.notice_id) < ($${values.length - 1}::timestamptz,$${values.length}::uuid)`;
     }
+    const unreadSeek = selection === 'unread' ? `AND ${unreadSql()}` : '';
     values.push(candidateLimit);
     const result = await client.query(
       `SELECT n.notice_id, n.kind, n.created_at, n.created_at::text AS created_at_key,
@@ -171,7 +216,7 @@ export async function listNoticeInbox(
               ${unreadSql()} AS unread
        FROM content.notice AS n
        LEFT JOIN content.notice_seen AS s ON s.route=n.route AND s.account_id=n.recipient_id
-       WHERE n.route=$1 AND n.recipient_id=$2 ${seek}
+       WHERE n.route=$1 AND n.recipient_id=$2 ${seek} ${unreadSeek}
        ORDER BY n.created_at DESC,n.notice_id DESC LIMIT $${values.length}`,
       values,
     );
@@ -219,11 +264,17 @@ export async function listNoticeInbox(
       ? await encodeListCursor(
           dependencies.tokens,
           binding,
-          { epoch: 2, after: [lastScanned.created_at_key, lastScanned.notice_id] },
+          { epoch: LIST_CURSOR_EPOCH, after: [lastScanned.created_at_key, lastScanned.notice_id] },
           dependencies.now?.() ?? new Date(),
         )
       : null;
-  return { items, next };
+  return {
+    items,
+    next,
+    viewer: { accountId },
+    selection,
+    actions: { markSeen: pageMarkSeen(accountId, items, next, selection) },
+  };
 }
 
 export async function countUnreadNotices(

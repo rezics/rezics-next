@@ -26,6 +26,7 @@ import {
   readableInboxPage,
   receiveInboxPage,
   restartInboxPage,
+  selectInboxPage,
 } from './inbox-pagination';
 import {
   inboxTargetContext,
@@ -33,6 +34,7 @@ import {
   type InboxNoticeSeenAttempt,
   type InboxPage,
   type InboxSeenAttempt,
+  type InboxSelection,
   type NativeInboxFailure,
   type ResolvedInboxPage,
 } from './inbox-read';
@@ -66,7 +68,7 @@ export function InboxRows({
   acknowledgementBlocked = false,
   confirmedNoticeId,
 }: {
-  page: ResolvedInboxPage;
+  page: Pick<ResolvedInboxPage, 'items' | 'next'>;
   onLoadMore?: () => void;
   loading?: boolean;
   onMarkSeen?: (noticeId: string) => void;
@@ -287,13 +289,12 @@ export function ViewerInboxPage({
 }) {
   const queryClient = useQueryClient();
   const [pagination, setPagination] = useState(emptyInboxPagination);
-  const [unreadOnly, setUnreadOnly] = useState(false);
   const boundaryId = useId();
   const boundary = useRef<HTMLHeadingElement>(null);
   const continuation = useRef<{ cursor: string } | null>(null);
   const [continuing, setContinuing] = useState(false);
   const [continuationMessage, setContinuationMessage] = useState('');
-  const { cursor } = pagination;
+  const { cursor, selection } = pagination;
   const markedThrough = useRef<string | null>(null);
   const seenAttempt = useRef<InboxSeenAttempt | null>(null);
   const seenLoaded = useRef<ReadonlySet<string> | null>(null);
@@ -311,15 +312,14 @@ export function ViewerInboxPage({
   const accessPending = useRef(false);
   const [checkingAccess, setCheckingAccess] = useState(false);
   const [accessCheck, setAccessCheck] = useState<'checked' | 'unavailable'>();
-  const pageQuery = useQuery(inboxPageQuery(viewer, cursor, loadPage));
+  const pageQuery = useQuery(inboxPageQuery(viewer, cursor, loadPage, selection));
   const received = receiveInboxPage(pagination, pageQuery.data, pageQuery.isError);
   // Reconcile in this render so a native denial cannot commit even one frame of retained rows.
   if (received !== pagination) setPagination(received);
   const readable = readableInboxPage(received);
-  const unreadItems = readable?.items.filter((item) => item.unread) ?? [];
-  const hasUnreadLoaded = unreadItems.length > 0;
-  const visibleItems = unreadOnly ? unreadItems : (readable?.items ?? []);
+  const visibleItems = readable?.items ?? [];
   const page = pageQuery.data?.signedIn && pageQuery.data.state === 'ready' ? pageQuery.data : null;
+  const admittedMarkSeen = page?.actions.markSeen ?? null;
   const operationState = pageQuery.data?.signedIn && pageQuery.data.state !== 'ready' ? pageQuery.data : null;
   const waiting = usePreferenceRetry(operationState?.failure);
   const seenWaiting = usePreferenceRetry(seenFailure);
@@ -385,6 +385,7 @@ export function ViewerInboxPage({
           // and authoritative replacements before touching retained local flags.
           const refreshed = queryClient.getQueryState<InboxPage>([
             ...inboxViewerQueryKey(viewer),
+            current.selection,
             current.cursor ?? null,
           ]);
           return confirmLoadedInboxSeen(
@@ -431,6 +432,7 @@ export function ViewerInboxPage({
           if (!active.current || !viewer.isCurrent()) return current;
           const refreshed = queryClient.getQueryState<InboxPage>([
             ...inboxViewerQueryKey(viewer),
+            current.selection,
             current.cursor ?? null,
           ]);
           return confirmInboxNoticeSeen(
@@ -460,8 +462,7 @@ export function ViewerInboxPage({
       !inboxViewerCsrfToken(queryClient, viewer) ||
       !viewer.isCurrent() ||
       !page ||
-      !readable?.items.length ||
-      !hasUnreadLoaded ||
+      !admittedMarkSeen ||
       noticeAttempt.current !== null ||
       seenAttempt.current ||
       seenFailure ||
@@ -472,15 +473,30 @@ export function ViewerInboxPage({
       seenWaiting
     )
       return;
-    const latest = readable.items[0];
-    if (!latest || markedThrough.current === latest.id) return;
-    const attempt: InboxSeenAttempt = { through: latest.id, idempotencyKey: crypto.randomUUID() };
+    if (markedThrough.current === admittedMarkSeen.through) return;
+    const attempt: InboxSeenAttempt = { through: admittedMarkSeen.through, idempotencyKey: crypto.randomUUID() };
     seenAttempt.current = attempt;
-    // Native loaded order puts this target first. Keep its bounded eligible IDs with the
-    // original attempt across unknown outcomes; later arrivals cannot join an exact retry.
-    seenLoaded.current = new Set(readable.items.map((item) => item.id));
+    // Keep this page's bounded eligible IDs with the original attempt; later arrivals cannot join an exact retry.
+    seenLoaded.current = new Set(readable?.items.map((item) => item.id) ?? []);
     setSeenConfirmed(false);
     void sendSeenAttempt(attempt);
+  };
+
+  const chooseSelection = (next: InboxSelection) => {
+    if (
+      !active.current ||
+      !viewer.isCurrent() ||
+      pageQuery.isFetching ||
+      noticeAttempt.current !== null ||
+      accessPending.current ||
+      waiting
+    )
+      return;
+    const first = selectInboxPage(received, next);
+    if (first === received) return;
+    void queryClient.cancelQueries({ queryKey: inboxViewerQueryKey(viewer) });
+    queryClient.removeQueries({ queryKey: inboxViewerQueryKey(viewer) });
+    setPagination(first);
   };
 
   const markNoticeSeen = (noticeId: string) => {
@@ -625,9 +641,11 @@ export function ViewerInboxPage({
           ? m.inbox_closed()
           : operationState?.state === 'preparing'
             ? m.inbox_preparing()
-            : accessRefused(operationState?.failure)
-              ? m.inbox_read_denied()
-              : m.inbox_unavailable()}
+            : operationState?.failure.code === 'invalid_cursor'
+              ? m.inbox_invalid_cursor()
+              : accessRefused(operationState?.failure)
+                ? m.inbox_read_denied()
+                : m.inbox_unavailable()}
       </p>
       {cursor !== undefined && readable?.items.length ? (
         <p className="mt-2 text-sm text-muted-foreground">{m.inbox_page_retry_hint()}</p>
@@ -761,18 +779,18 @@ export function ViewerInboxPage({
                 <Button
                   type="button"
                   variant="outline"
-                  aria-pressed={!unreadOnly}
+                  aria-pressed={selection === 'all'}
                   className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
-                  onClick={() => setUnreadOnly(false)}
+                  onClick={() => chooseSelection('all')}
                 >
                   {m.inbox_triage_filter_all()}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  aria-pressed={unreadOnly}
+                  aria-pressed={selection === 'unread'}
                   className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
-                  onClick={() => setUnreadOnly(true)}
+                  onClick={() => chooseSelection('unread')}
                 >
                   {m.inbox_triage_filter_unread()}
                 </Button>
@@ -789,7 +807,7 @@ export function ViewerInboxPage({
                 </Button>
               ) : null}
               <p className="text-sm text-muted-foreground">{m.inbox_triage_scope()}</p>
-              {hasUnreadLoaded && !seenFailure && readable.items[0]?.id !== markedThrough.current ? (
+              {admittedMarkSeen && !seenFailure && admittedMarkSeen.through !== markedThrough.current ? (
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">{m.inbox_triage_mark_help()}</p>
                   <Button
@@ -822,18 +840,12 @@ export function ViewerInboxPage({
               !failed && !pageQuery.isFetching ? (
                 <p className="mt-6 text-muted-foreground">{m.inbox_empty()}</p>
               ) : null
-            ) : unreadOnly && !hasUnreadLoaded ? (
+            ) : readable.items.length === 0 ? (
               <section className="mt-6 space-y-3">
                 <p role="status" className="text-muted-foreground">
-                  {readable.items.length === 0 && !readable.next ? m.inbox_empty() : m.inbox_triage_no_unread_loaded()}
+                  {selection === 'unread' ? m.inbox_triage_no_unread_loaded() : m.inbox_triage_no_loaded()}
                 </p>
-                {readable.next ? <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p> : null}
-              </section>
-            ) : !unreadOnly && readable.items.length === 0 ? (
-              <section className="mt-6 space-y-3">
-                <p role="status" className="text-muted-foreground">
-                  {m.inbox_triage_no_loaded()}
-                </p>
+                <p className="text-sm text-muted-foreground">{m.inbox_selection_sparse()}</p>
                 {readable.next ? <p className="text-sm text-muted-foreground">{m.inbox_triage_older_pages()}</p> : null}
               </section>
             ) : (

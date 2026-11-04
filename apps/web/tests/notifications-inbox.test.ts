@@ -16,7 +16,8 @@ import {
   restartInboxPage,
 } from '../src/inbox/inbox-pagination';
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { decodeInboxPage, resolveInboxItems } = await import('../src/inbox/inbox-read');
+const { decodeInboxPage, nativeInboxEnvelope, readyInboxPage, resolveInboxItems } =
+  await import('../src/inbox/inbox-read');
 const { unreadBadgeLabel } = await import('../src/inbox/unread-badge');
 type InboxNotice = import('../src/inbox/inbox-read').InboxNotice;
 
@@ -93,15 +94,18 @@ function notice(overrides: Partial<InboxNotice> = {}, accountId = 'reporter-1'):
 }
 
 test('the composed notice supplies current summaries and exact localized destinations without hydration IO', async () => {
-  const page = await resolveInboxItems({
-    items: [
-      notice({ id: 'reply-雪', threadId: 'thread-雪', postId: 'post-雪' }),
-      notice({ id: 'mention', kind: 'mention', threadId: thread, postId: 'mentioned-post' }),
-      notice({ id: 'report', kind: 'moderation_decision', reportId: report, decisionId: null }),
-      notice({ id: 'decision', kind: 'moderation_decision', reportId: null, decisionId: decision }),
-    ],
-    next: 'opaque/+cursor==',
-  });
+  const page = await resolveInboxItems(
+    nativeInboxEnvelope(
+      [
+        notice({ id: 'reply-雪', threadId: 'thread-雪', postId: 'post-雪' }),
+        notice({ id: 'mention', kind: 'mention', threadId: thread, postId: 'mentioned-post' }),
+        notice({ id: 'report', kind: 'moderation_decision', reportId: report, decisionId: null }),
+        notice({ id: 'decision', kind: 'moderation_decision', reportId: null, decisionId: decision }),
+      ],
+      'opaque/+cursor==',
+      'reporter-1',
+    ),
+  );
   expect(page.items.map((item) => item.href)).toEqual([
     `/${getLocale()}/threads/thread-%E9%9B%AA/a-current-thread?post=post-%E9%9B%AA#post-post-%E9%9B%AA`,
     `/${getLocale()}/threads/${thread}/a-current-thread?post=mentioned-post#post-mentioned-post`,
@@ -125,9 +129,11 @@ test('unreadable ordinary notices fail the page while reporter outcomes remain o
       markSeen: { method: 'POST', path: '/v1/accounts/reporter-1/notifications/withheld:markSeen' },
     },
   });
-  expect(() => decodeInboxPage({ items: [withheld], next: null }, 'reporter-1')).toThrow();
+  expect(() => decodeInboxPage(nativeInboxEnvelope([withheld], null, 'reporter-1'), 'reporter-1')).toThrow();
   const reportNotice = notice({ id: 'report', kind: 'moderation_decision', reportId: report, decisionId: null });
-  const page = await resolveInboxItems(decodeInboxPage({ items: [reportNotice], next: null }, 'reporter-1'));
+  const page = await resolveInboxItems(
+    decodeInboxPage(nativeInboxEnvelope([reportNotice], null, 'reporter-1'), 'reporter-1'),
+  );
   expect(page.items[0]).toMatchObject({ href: `/${getLocale()}/moderation/reports/${report}`, unavailable: true });
   expect(JSON.stringify(page.items[0])).not.toContain('Hidden target text');
 });
@@ -162,7 +168,7 @@ test('the composed native post action gets its exact Thread post anchor without 
       const path = new URL(request.url).pathname;
       requests.push(`${request.method} ${path}`);
       if (path === '/v1/accounts/reporter-1/notifications')
-        return Response.json({ items: [readableNotice], next: null });
+        return Response.json(nativeInboxEnvelope([readableNotice], null, 'reporter-1'));
       throw new Error(`Unexpected point read ${path}`);
     }) as typeof fetch,
   });
@@ -213,7 +219,7 @@ test('a reporter notice keeps its admitted status destination with withheld targ
           calls.push(`${request.method} ${path}`);
           expect(request.headers.get('authorization')).toBe('Bearer reporter');
           if (path === '/v1/accounts/reporter-1/notifications')
-            return Response.json({ items: [currentReporterNotice], next: 'native-continuation' });
+            return Response.json(nativeInboxEnvelope([currentReporterNotice], 'native-continuation', 'reporter-1'));
           expect(path).toBe(`/v1/reports/${report}`);
           return Response.json({
             report: {
@@ -259,7 +265,8 @@ test('report destination reads remain reporter-scoped after the Inbox admits the
     const client = createKernelClient('http://kernel.local', {
       fetch: (async (input, init) => {
         const path = new URL(new Request(input, init).url).pathname;
-        if (path.endsWith('/notifications')) return Response.json({ items: [reporterNotice], next: null });
+        if (path.endsWith('/notifications'))
+          return Response.json(nativeInboxEnvelope([reporterNotice], null, 'reporter-1'));
         expect(path).toBe(`/v1/reports/${report}`);
         return Response.json(
           status === 200
@@ -620,10 +627,13 @@ test('rejected native cursors retry the identical GET and only an explicit resta
             );
           }
           firstPages++;
-          return Response.json({
-            items: [0, 1].map((index) => notice({ id: `${firstPages === 1 ? 'old' : 'current'}-${index}` }, 'reader')),
-            next: firstPages === 1 ? cursor : null,
-          });
+          return Response.json(
+            nativeInboxEnvelope(
+              [0, 1].map((index) => notice({ id: `${firstPages === 1 ? 'old' : 'current'}-${index}` }, 'reader')),
+              firstPages === 1 ? cursor : null,
+              'reader',
+            ),
+          );
         }
         throw new Error(`Unexpected point read ${url.pathname}`);
       }) as typeof fetch,
@@ -679,12 +689,10 @@ test('discarded page responses cannot repopulate a restarted chain or outlive a 
       });
       const oldPage = deferred<InboxPage>();
       const old = client.fetchQuery(inboxPageQuery(viewer, undefined, () => oldPage.promise)).catch(() => null);
-      const loaded = receiveInboxPage(emptyInboxPagination, {
-        signedIn: true,
-        state: 'ready',
-        items: [],
-        next: 'rejected-cursor',
-      });
+      const loaded = receiveInboxPage(
+        emptyInboxPagination,
+        readyInboxPage([], 'rejected-cursor', 'alice'),
+      );
       const rejected = receiveInboxPage(nextInboxPage(loaded), {
         signedIn: true,
         state: 'unavailable',
@@ -705,20 +713,23 @@ test('discarded page responses cannot repopulate a restarted chain or outlive a 
         client.setQueryData(['session'], { state: 'unavailable', subject: null, csrfToken: null });
         client.setQueryData(['session'], { state: 'signed-in', subject: 'bob', csrfToken: 'same-token' });
       }
-      const current: InboxPage = { signedIn: true, state: 'ready', items: [], next: null };
+      const current: InboxPage = readyInboxPage([], null, 'alice');
       currentPage.resolve(current);
       const result = await fresh;
       expect(await coalesced).toBe(result);
-      const obsolete: InboxPage = {
-        signedIn: true,
-        state: 'ready',
-        items: [{ ...notice(), text: 'Old private content', unavailable: false }],
-        next: 'old-continuation',
-      };
+      const obsolete: InboxPage = readyInboxPage(
+        [{ ...notice(), text: 'Old private content', unavailable: false }],
+        'old-continuation',
+        'alice',
+      );
       oldPage.resolve(obsolete);
       await old;
       expect(client.getQueryData(query.queryKey)).toEqual(loseViewer ? undefined : current);
-      expect(readableInboxPage(receiveInboxPage(reset, result))).toEqual(loseViewer ? null : { items: [], next: null });
+      expect(readableInboxPage(receiveInboxPage(reset, result))).toEqual(
+        loseViewer
+          ? null
+          : { items: [], next: null, viewer: { accountId: 'alice' }, selection: 'all', actions: { markSeen: null } },
+      );
       expect(client.getQueryData(countKey)).toMatchObject({ count: 7 });
       expect(client.getQueryState(countKey)?.isInvalidated).toBe(false);
       if (loseViewer) expect(client.getQueryData(inboxPageQuery(store.snapshot()!).queryKey)).toBeUndefined();

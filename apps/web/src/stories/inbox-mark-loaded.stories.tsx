@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
-import type { InboxPage, ResolvedInboxPage } from '../inbox/inbox-read';
+import { readyInboxPage, type InboxPage, type InboxPageQuery, type ResolvedInboxPage } from '../inbox/inbox-read';
 import { currentInboxViewer } from '../inbox/inbox-viewer';
 import { inboxViewerQueryKey } from '../inbox/inbox-query';
 import { sessionQuery } from '../session/query';
@@ -68,22 +68,19 @@ function createJourney() {
     refresh: async () => {},
     retire: () => {},
     resume: () => {},
-    loadPage: async function (cursor?: string): Promise<InboxPage> {
-      this.reads.push(cursor);
+    loadPage: async function (query: InboxPageQuery): Promise<InboxPage> {
+      this.reads.push(query.cursor);
       if (this.denied) return { signedIn: true, state: 'unavailable', failure: { status: 403, code: 'forbidden' } };
-      if (cursor !== undefined && cursor !== continuation) throw new Error('Inbox paged without a deliberate action');
-      return {
-        signedIn: true,
-        state: 'ready',
-        items:
-          cursor === undefined
-            ? [
-                ...(this.newerArrival ? [notice(arrival)] : []),
-                notice(newest, !this.confirmed || this.authoritativeUnread),
-              ]
-            : [notice(older, !this.confirmed), notice(oldest, !this.confirmed)],
-        next: cursor === undefined ? continuation : unloaded,
-      };
+      if (query.cursor !== undefined && query.cursor !== continuation)
+        throw new Error('Inbox paged without a deliberate action');
+      const items =
+        query.cursor === undefined
+          ? [
+              ...(this.newerArrival ? [notice(arrival)] : []),
+              notice(newest, !this.confirmed || this.authoritativeUnread),
+            ]
+          : [notice(older, !this.confirmed), notice(oldest, !this.confirmed)];
+      return readyInboxPage(items, query.cursor === undefined ? continuation : unloaded, 'alice', query.selection);
     },
   };
 }

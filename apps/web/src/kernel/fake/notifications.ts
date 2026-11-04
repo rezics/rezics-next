@@ -25,11 +25,84 @@ const ownReport: ReporterStatus = {
   resolvedAt: '2026-10-28T08:00:00.000Z',
   targetAvailability: 'available',
 };
-const fixtures = {
+function availableActor(accountId: string) {
+  return {
+    state: 'available' as const,
+    accountId,
+    displayName: 'Momo',
+    handle: 'momo',
+    avatarUrl: null,
+    automated: false,
+  };
+}
+const systemActor = {
+  state: 'system' as const,
+  displayName: 'Moderation team' as const,
+  handle: null,
+  avatarUrl: null,
+};
+const withheldTarget = {
+  state: 'withheld' as const,
+  threadId: null,
+  postId: null,
+  boardId: null,
+  threadTitle: null,
+  boardTitle: null,
+};
+
+function composeNotice(
+  item: {
+    id: string;
+    kind: 'reply' | 'moderation_decision';
+    createdAt: string;
+    actorId: string | null;
+    threadId: string | null;
+    postId: string | null;
+    decisionId: string | null;
+    reportId: string | null;
+    unread: boolean;
+  },
+  accountId: string,
+) {
+  const report = item.kind === 'moderation_decision' && item.reportId;
+  const decision = item.kind === 'moderation_decision' && item.decisionId;
+  const open = report
+    ? { kind: 'report_outcome' as const, reportId: item.reportId! }
+    : decision
+      ? { kind: 'moderation_decision' as const, decisionId: item.decisionId! }
+      : item.threadId && item.postId
+        ? { kind: 'thread_post' as const, threadId: item.threadId, postId: item.postId }
+        : null;
+  return {
+    ...item,
+    actor: item.actorId ? availableActor(item.actorId) : systemActor,
+    target: item.threadId
+      ? {
+          state: 'available' as const,
+          threadId: item.threadId,
+          postId: item.postId,
+          boardId: null,
+          threadTitle: 'Current discussion',
+          boardTitle: null,
+        }
+      : withheldTarget,
+    summary: report
+      ? 'your report was actioned'
+      : decision
+        ? 'a moderation outcome was recorded'
+        : 'A useful update summary',
+    actions: {
+      open,
+      markSeen: { method: 'POST' as const, path: `/v1/accounts/${accountId}/notifications/${item.id}:markSeen` },
+    },
+  };
+}
+
+const fixtureRows = {
   mixed: [
     {
       id: '01a17a3b-0884-721b-91ef-d7ffd7bb5801',
-      kind: 'reply',
+      kind: 'reply' as const,
       createdAt: '2026-10-29T09:45:00.000Z',
       actorId: storyActor,
       threadId: storyThread,
@@ -40,7 +113,7 @@ const fixtures = {
     },
     {
       id: '01a17a3b-0884-721b-91ef-d7ffd7bb5802',
-      kind: 'moderation_decision',
+      kind: 'moderation_decision' as const,
       createdAt: '2026-10-28T08:00:00.000Z',
       actorId: null,
       threadId: null,
@@ -51,7 +124,7 @@ const fixtures = {
     },
     {
       id: '01a17a3b-0884-721b-91ef-d7ffd7bb5803',
-      kind: 'moderation_decision',
+      kind: 'moderation_decision' as const,
       createdAt: '2026-10-26T08:00:00.000Z',
       actorId: null,
       threadId: null,
@@ -64,7 +137,7 @@ const fixtures = {
   unavailable: [
     {
       id: '01a17a3b-0884-721b-91ef-d7ffd7bb5804',
-      kind: 'moderation_decision',
+      kind: 'moderation_decision' as const,
       createdAt: '2026-10-29T09:45:00.000Z',
       actorId: null,
       threadId: null,
@@ -77,7 +150,7 @@ const fixtures = {
   many: [
     {
       id: '01a17a3b-0884-721b-91ef-d7ffd7bb5805',
-      kind: 'reply',
+      kind: 'reply' as const,
       createdAt: '2026-10-29T09:45:00.000Z',
       actorId: storyActor,
       threadId: storyThread,
@@ -90,7 +163,7 @@ const fixtures = {
   'row-overlay': [
     {
       id: '01a17a3b-0884-721b-91ef-d7ffd7bb5806',
-      kind: 'reply',
+      kind: 'reply' as const,
       createdAt: '2026-10-29T09:45:00.000Z',
       actorId: storyActor,
       threadId: storyThread,
@@ -101,7 +174,7 @@ const fixtures = {
     },
     {
       id: '01a17a3b-0884-721b-91ef-d7ffd7bb5807',
-      kind: 'moderation_decision',
+      kind: 'moderation_decision' as const,
       createdAt: '2026-10-28T08:00:00.000Z',
       actorId: null,
       threadId: null,
@@ -111,7 +184,48 @@ const fixtures = {
       unread: false,
     },
   ],
-} as const;
+};
+
+function inboxEnvelope(
+  accountId: string,
+  items: ReturnType<typeof composeNotice>[],
+  next: string | null,
+  selection: 'all' | 'unread',
+) {
+  const visible = selection === 'unread' ? items.filter((item) => item.unread) : items;
+  const newest = visible[0];
+  return {
+    items: visible,
+    next,
+    viewer: { accountId },
+    selection,
+    actions: {
+      markSeen:
+        newest && visible.some((item) => item.unread) && !(selection === 'unread' && next !== null)
+          ? { method: 'POST' as const, path: `/v1/accounts/${accountId}/notifications:markSeen`, through: newest.id }
+          : null,
+    },
+  };
+}
+
+function listPage(
+  request: Request,
+  rows: (typeof fixtureRows)[keyof typeof fixtureRows] | readonly (typeof fixtureRows.mixed)[number][],
+  next: string | null,
+) {
+  const url = new URL(request.url);
+  const accountId = url.pathname.split('/')[3]!;
+  const selection = url.searchParams.get('selection') === 'unread' ? 'unread' : 'all';
+  return {
+    status: 200,
+    ...inboxEnvelope(
+      accountId,
+      rows.map((row) => composeNotice(row, accountId)),
+      next,
+      selection,
+    ),
+  };
+}
 
 export const inboxReadRecoveryStory = { reads: 0 };
 export const inboxSeenRecoveryStory = { commands: [] as { through: unknown; key: string | null }[] };
@@ -156,11 +270,11 @@ const list: FakeRoute = {
       inboxSeenAccessStory.pageReads++;
       if (inboxSeenAccessStory.pageReads === 2)
         return { status: 403, code: 'forbidden', retryable: false, request_id: 'story-inbox-read-denied' };
-      return {
-        status: 200,
-        items: inboxSeenAccessStory.pageReads === 1 ? fixtures.mixed : [fixtures.many[0], ...fixtures.mixed],
-        next: null,
-      };
+      return listPage(
+        request,
+        inboxSeenAccessStory.pageReads === 1 ? fixtureRows.mixed : [fixtureRows.many[0]!, ...fixtureRows.mixed],
+        null,
+      );
     }
     if (fixture === 'triage-journey') {
       inboxTriageStory.pageReads++;
@@ -169,21 +283,23 @@ const list: FakeRoute = {
         return { status: 403, code: 'forbidden', retryable: false, request_id: 'story-inbox-triage-read-denied' };
       }
       if (url.searchParams.get('cursor') === 'story-triage-older')
-        return { status: 200, items: [fixtures.mixed[1], fixtures.mixed[2]], next: null };
-      return {
-        status: 200,
-        items: [{ ...fixtures.mixed[0], unread: false }],
-        next: 'story-triage-older',
-      };
+        return listPage(request, [fixtureRows.mixed[1]!, fixtureRows.mixed[2]!], null);
+      return listPage(request, [{ ...fixtureRows.mixed[0]!, unread: false }], 'story-triage-older');
     }
+    if (fixture === 'sparse-unread')
+      return listPage(
+        request,
+        url.searchParams.has('cursor') ? fixtureRows.mixed : [],
+        url.searchParams.has('cursor') ? null : 'story-sparse-unread',
+      );
     if (fixture?.startsWith('seen-'))
       return url.searchParams.has('cursor')
-        ? { status: 200, items: fixtures.unavailable, next: null }
-        : { status: 200, items: fixtures.mixed, next: fixture === 'seen-wait' ? 'story-seen-next' : null };
+        ? listPage(request, fixtureRows.unavailable, null)
+        : listPage(request, fixtureRows.mixed, fixture === 'seen-wait' ? 'story-seen-next' : null);
     if (fixture === 'retry-after') {
       inboxReadRecoveryStory.reads += 1;
       if (inboxReadRecoveryStory.reads > 1)
-        return recordings['notifications-inbox-empty'] ?? { status: 200, items: [], next: null };
+        return recordings['notifications-inbox-empty'] ?? listPage(request, [], null);
       return {
         status: 503,
         headers: { 'Retry-After': '2' },
@@ -217,10 +333,10 @@ const list: FakeRoute = {
         retryable: true,
         request_id: 'story-inbox-unavailable',
       };
-    if (fixture?.startsWith('report-')) return { status: 200, items: [fixtures.mixed[1]], next: null };
+    if (fixture?.startsWith('report-')) return listPage(request, [fixtureRows.mixed[1]!], null);
     return fixture === 'empty' || !fixture
-      ? (recordings['notifications-inbox-empty'] ?? { status: 200, items: [], next: null })
-      : { status: 200, items: fixtures[fixture as keyof typeof fixtures] ?? [], next: null };
+      ? (recordings['notifications-inbox-empty'] ?? listPage(request, [], null))
+      : listPage(request, fixtureRows[fixture as keyof typeof fixtureRows] ?? [], null);
   },
   fixture: ({ request }) => {
     const path = new URL(request.url).pathname;
@@ -232,7 +348,7 @@ const list: FakeRoute = {
           basis: 'current-visible-unread',
           witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
         }
-      : { status: 200, items: [], next: null };
+      : listPage(request, [], null);
   },
 };
 

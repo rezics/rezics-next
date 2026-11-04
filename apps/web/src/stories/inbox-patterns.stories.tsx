@@ -2,7 +2,13 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView, InboxRows } from '../inbox/inbox-page';
-import { readInboxPage, type InboxPage, type ResolvedInboxPage } from '../inbox/inbox-read';
+import {
+  readInboxPage,
+  readyInboxPage,
+  type InboxPage,
+  type InboxPageQuery,
+  type ResolvedInboxPage,
+} from '../inbox/inbox-read';
 import { UnreadBadgeView } from '../inbox/unread-badge';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -37,7 +43,8 @@ const fourthCursor = 'opaque.signed+fourth/cursor==';
 function PaginationExample({ denied = false }: { denied?: boolean }) {
   const loadPage = useMemo(() => {
     let attempts = 0;
-    return async (cursor?: string): Promise<InboxPage> => {
+    return async (query: InboxPageQuery): Promise<InboxPage> => {
+      const cursor = query.cursor;
       if (cursor === secondCursor) {
         attempts++;
         if (denied) return { signedIn: true, state: 'unavailable', failure: { status: 403, code: 'forbidden' } };
@@ -48,14 +55,14 @@ function PaginationExample({ denied = false }: { denied?: boolean }) {
             failure: { status: 503, code: 'dependency_unavailable', retryable: true },
           };
       }
-      if (cursor === thirdCursor) return { signedIn: true, state: 'ready', items: [], next: fourthCursor };
-      // Only the IO sequence is controlled; rows still come from the existing inbox source adapter.
-      const page = await readInboxPage({ data: {} });
+      const page = await readInboxPage({ data: { selection: query.selection } });
       if (!page.signedIn || page.state !== 'ready') return page;
-      if (cursor === undefined) return { ...page, items: page.items.slice(0, 1), next: secondCursor };
-      if (cursor === secondCursor) return { ...page, items: page.items.slice(0, 2), next: thirdCursor };
+      if (cursor === thirdCursor) return readyInboxPage([], fourthCursor, page.viewer.accountId, query.selection);
+      if (cursor === undefined) return readyInboxPage(page.items.slice(0, 1), secondCursor, page.viewer.accountId, query.selection);
+      if (cursor === secondCursor)
+        return readyInboxPage(page.items.slice(0, 2), thirdCursor, page.viewer.accountId, query.selection);
       await expect(cursor).toBe(fourthCursor);
-      return { ...page, items: page.items.slice(1), next: null };
+      return readyInboxPage(page.items.slice(1), null, page.viewer.accountId, query.selection);
     };
   }, [denied]);
   return (
@@ -85,14 +92,15 @@ export const PaginationRecovery: Story = {
     await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(2));
     await expect(view.queryByText(m.inbox_page_retry_hint())).toBeNull();
     await userEvent.click(view.getByRole('button', { name: m.inbox_load_more() }));
-    await waitFor(() => expect(view.getByRole('button', { name: m.inbox_load_more() })).toBeEnabled());
-    await expect(list.getAllByRole('listitem')).toHaveLength(2);
+    await waitFor(() => expect(view.getByRole('button', { name: m.inbox_next_page() })).toBeEnabled());
+    await expect(view.queryByRole('list')).toBeNull();
     await expect(view.queryByText(m.inbox_empty())).toBeNull();
-    await userEvent.click(view.getByRole('button', { name: m.inbox_load_more() }));
-    await waitFor(() => expect(list.getAllByRole('listitem')).toHaveLength(3));
+    await view.findByText(m.inbox_selection_sparse());
+    await userEvent.click(view.getByRole('button', { name: m.inbox_next_page() }));
+    const replaced = within(await view.findByRole('list'));
+    await waitFor(() => expect(replaced.getAllByRole('listitem')).toHaveLength(2));
     await expect(view.queryByRole('button', { name: m.inbox_load_more() })).toBeNull();
-    await expect(list.getAllByRole('listitem').map((row) => row.getAttribute('data-notice-id'))).toEqual([
-      '01a17a3b-0884-721b-91ef-d7ffd7bb5801',
+    await expect(replaced.getAllByRole('listitem').map((row) => row.getAttribute('data-notice-id'))).toEqual([
       '01a17a3b-0884-721b-91ef-d7ffd7bb5802',
       '01a17a3b-0884-721b-91ef-d7ffd7bb5803',
     ]);
@@ -128,8 +136,9 @@ function EmptyFilterContinuationCase({ mode }: { mode: 'unread' | 'all-empty' })
   const [requestedCursors, setRequestedCursors] = useState<Array<string | null>>([]);
   const loadPage = useMemo(() => {
     let continuationAttempts = 0;
-    return async (cursor?: string): Promise<InboxPage> => {
+    return async (query: InboxPageQuery): Promise<InboxPage> => {
       await Promise.resolve();
+      const cursor = query.cursor;
       setRequestedCursors((current) => [...current, cursor ?? null]);
       if (mode === 'unread' && cursor === unreadContinuationCursor && continuationAttempts++ === 0)
         return {
@@ -144,28 +153,26 @@ function EmptyFilterContinuationCase({ mode }: { mode: 'unread' | 'all-empty' })
           failure: { status: 503, code: 'dependency_unavailable', retryable: true },
         };
 
-      const source = await readInboxPage({ data: {} });
+      const source = await readInboxPage({ data: { selection: query.selection } });
       if (!source.signedIn || source.state !== 'ready') return source;
+      const accountId = source.viewer.accountId;
       if (cursor === undefined) {
-        return mode === 'unread'
-          ? {
-              ...source,
-              items: source.items.slice(0, 1).map((item) => ({ ...item, unread: false })),
-              next: unreadContinuationCursor,
-            }
-          : { ...source, items: [], next: emptyContinuationCursor };
+        return query.selection === 'unread' || mode === 'all-empty'
+          ? readyInboxPage([], query.selection === 'unread' ? unreadContinuationCursor : emptyContinuationCursor, accountId, query.selection)
+          : readyInboxPage(
+              source.items.slice(0, 1).map((item) => ({ ...item, unread: false })),
+              unreadContinuationCursor,
+              accountId,
+              query.selection,
+            );
       }
       if (mode === 'all-empty' && cursor === emptyContinuationCursor)
-        return { ...source, items: [], next: emptyRetryCursor };
+        return readyInboxPage([], emptyRetryCursor, accountId, query.selection);
 
       await expect(cursor).toBe(mode === 'unread' ? unreadContinuationCursor : emptyRetryCursor);
-      return mode === 'unread'
-        ? {
-            ...source,
-            items: source.items.slice(1, 2).map((item) => ({ ...item, unread: false })),
-            next: null,
-          }
-        : { ...source, next: null };
+      return query.selection === 'unread'
+        ? readyInboxPage([], null, accountId, query.selection)
+        : readyInboxPage(source.items.slice(1, 2), null, accountId, query.selection);
     };
   }, [mode]);
 

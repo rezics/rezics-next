@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
-import type { InboxPage, ResolvedInboxPage } from '../inbox/inbox-read';
+import { readyInboxPage, type InboxPage, type InboxPageQuery, type ResolvedInboxPage } from '../inbox/inbox-read';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AppShell } from '../shell/shell';
@@ -65,25 +65,24 @@ function items(): ResolvedInboxPage['items'] {
 }
 
 function Example({ state }: { state: 'mixed' | 'inaccessible' | 'failed' }) {
-  const loadPage = async (): Promise<InboxPage> =>
+  const loadPage = async (query: InboxPageQuery): Promise<InboxPage> =>
     state === 'failed'
       ? { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true } }
-      : {
-          signedIn: true,
-          state: 'ready',
-          next: null,
-          items:
-            state === 'mixed'
-              ? items()
-              : items()
-                  .slice(0, 2)
-                  .map(({ href: _href, actorName: _actorName, ...item }) => ({
-                    ...item,
-                    actorId: null,
-                    text: '',
-                    unavailable: true,
-                  })),
-        };
+      : readyInboxPage(
+          state === 'mixed'
+            ? items()
+            : items()
+                .slice(0, 2)
+                .map(({ href: _href, actorName: _actorName, ...item }) => ({
+                  ...item,
+                  actorId: null,
+                  text: '',
+                  unavailable: true,
+                })),
+          null,
+          'alice',
+          query.selection,
+        );
   return (
     <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
       <AppShell>
