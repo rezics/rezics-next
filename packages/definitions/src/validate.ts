@@ -416,7 +416,9 @@ export function checkSubjectRelease(
     }
     if (property.datatype === 'quantity' && record(content) && typeof content.amount === 'string') {
       if (
-        (property.minimum !== undefined && compareDecimal(content.amount, String(property.minimum)) < 0) ||
+        (property.minimum !== undefined &&
+          (compareDecimal(content.amount, String(property.minimum)) < 0 ||
+            (property.minimumExclusive === true && compareDecimal(content.amount, String(property.minimum)) === 0))) ||
         (property.maximum !== undefined && compareDecimal(content.amount, String(property.maximum)) > 0)
       )
         add(`${pointer}/amount`, 'out_of_range');
@@ -426,7 +428,9 @@ export function checkSubjectRelease(
         if (
           (bound === 'lowerBound' && compareDecimal(value, content.amount) > 0) ||
           (bound === 'upperBound' && compareDecimal(value, content.amount) < 0) ||
-          (property.minimum !== undefined && compareDecimal(value, String(property.minimum)) < 0) ||
+          (property.minimum !== undefined &&
+            (compareDecimal(value, String(property.minimum)) < 0 ||
+              (property.minimumExclusive === true && compareDecimal(value, String(property.minimum)) === 0))) ||
           (property.maximum !== undefined && compareDecimal(value, String(property.maximum)) > 0)
         )
           add(`${pointer}/${bound}`, 'out_of_range');

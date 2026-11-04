@@ -10,6 +10,10 @@ properties:
   schema:creativeWorkStatus: 'Status des Werks'
   schema:genre: 'Genre'
   skos:closeMatch: 'ähnlicher Begriff'
+  rezics:sourceTagWeight: 'Quellengewicht des Schlagworts'
+  rezics:sourceTagWeightMetric: 'Kennzahl des Quellengewichts'
+  rezics:sourceSnapshot: 'Quellen-Snapshot'
+  rezics:sourceTagId: 'VNDB-Schlagwort-ID'
 inverseProperties:
   wdt:P7937: 'Werke dieser Form'
   skos:inScheme: 'Begriffe dieses Schemas'
@@ -31,3 +35,7 @@ propertyDescriptions:
   schema:creativeWorkStatus: 'Ein Konzept für Entwicklungs- oder Veröffentlichungsstatus dieses Werks oder dieser Veröffentlichung; Vollständigkeit einer Veröffentlichung für ein Werk steht an der Werkzuordnung.'
   schema:genre: 'Ein Genrekonzept für dieses Werk, etwa Science-Fiction.'
   skos:closeMatch: 'Ein anderes Konzept mit eng entsprechender Bedeutung; weder Gleichsetzung noch automatische Filtererweiterung.'
+  rezics:sourceTagWeight: 'Exakter aggregierter Quellenwert dieser Zuordnung. VNDB tags.rating liegt auf der Skala (0,3] und ist weder REZICS-Stimme noch Konfidenz.'
+  rezics:sourceTagWeightMetric: 'Die typisierte Quellenkennzahl, die Skala und Bedeutung eines Quellengewichts festlegt.'
+  rezics:sourceSnapshot: 'SHA-256-Prüfsumme der exakten, nicht versionierten, zitierten Anbieterantwort.'
+  rezics:sourceTagId: 'Anbieterkennung dieses Schlagworts im zitierten VNDB-Datensatz.'
