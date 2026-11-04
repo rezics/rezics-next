@@ -137,12 +137,18 @@ test('main and phone navigation mark the current page, and followed communities 
     );
     expect(phone).toContain('aria-label="Phone navigation"');
     expect(phone).toContain('href="/en/library" aria-current="page"');
-    expect(phone).toMatch(/<a[^>]*href="\/en\/settings"[^>]*>You<\/a>/);
-    expect(phone).not.toMatch(/contents">[^<]*href="\/en\/settings"/);
   } finally {
     hydration.mockRestore();
     operation.mockRestore();
   }
+});
+
+test('the phone You fallback is a settings link, not serialized markup', () => {
+  const phone = html(
+    <PhoneNavigationView pathname="/library" library signedIn actions={[]} account={<button>You</button>} />,
+  );
+  expect(phone).toMatch(/<a[^>]*href="\/en\/settings"[^>]*>You<\/a>/);
+  expect(phone).not.toMatch(/contents">[^<]*href="\/en\/settings"/);
 });
 
 test('only readable active followed Spaces become navigation, grouped as Realms when readable, with bounded enrichment', async () => {
