@@ -6,8 +6,8 @@ import {
 } from '../../src/content/board-pin-advice.ts';
 
 const boardId = '0199f001-0000-7000-8000-000000000001';
-const threadId = '0199f002-0000-7000-8000-000000000002';
-const sourceRevisionId = '0199f002-0000-7000-8000-000000000003';
+const threadId = '0199f002-0000-7000-8000-001000000002';
+const sourceRevisionId = '0199f002-0000-7000-8000-001000000003';
 const selection = [{ threadId, placeId: boardId, sourceRevisionId }];
 const observation = (): BoardPinAdviceObservation => ({
   boardId,
@@ -28,6 +28,7 @@ test('selected advice rejects duplicates, oversize and foreign places before obs
     Array.from({ length: 26 }, () => selection[0]!),
     [{ ...selection[0]!, placeId: threadId }],
     [{ ...selection[0]!, sourceRevisionId: 'not-an-id' }],
+    [{ ...selection[0]!, sourceRevisionId: boardId }],
   ])
     expect(() => normalizeBoardPinAdviceSelection(boardId, invalid)).toThrow();
 });
