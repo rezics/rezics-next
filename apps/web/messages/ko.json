@@ -8433,5 +8433,16 @@
   "board_watch_retry_exact": "같은 변경 다시 시도",
   "board_watch_check_again": "현재 상태 확인",
   "board_watch_inspect_conflict": "다른 변경을 하기 전에 현재 상태를 확인하세요.",
-  "board_watch_sending": "구독 변경 전송 중…"
+  "board_watch_sending": "구독 변경 전송 중…",
+  "collection_presentation_ordered": "순서 있는 목록",
+  "collection_presentation_ordered_help": "컬렉션의 기본 항목 순서로 표시합니다. 필터 결과와 다음 페이지의 순서는 전체 순위를 의미하지 않습니다.",
+  "collection_presentation_grid": "표지 격자",
+  "collection_presentation_grid_help": "기본 순서로 표지를 둘러봅니다. 각 구성원의 유형, 비율, 세부 정보는 그대로 유지됩니다.",
+  "collection_presentation_dynamic": "동적 컬렉션",
+  "collection_presentation_dynamic_help": "저장된 규칙에서 구성원을 가져옵니다. 속성 필터는 다음 페이지를 포함한 기본 결과에 적용됩니다.",
+  "collection_review_heading": "저장 전 확인",
+  "collection_review_native_help": "이 변경 사항은 초안입니다. 기본 작업의 성공이 확인되면 컬렉션을 새로 불러옵니다.",
+  "collection_review_move_start": "{title}을(를) 컬렉션 맨 앞으로 이동합니다.",
+  "collection_review_move_after": "{title}을(를) {anchor} 뒤로 이동합니다.",
+  "collection_review_add_help": "대상이 이미 구성원이더라도 컬렉션 끝에 별도 항목으로 추가합니다."
 }

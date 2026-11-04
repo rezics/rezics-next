@@ -102,8 +102,8 @@ export function CollectionMetadataEditor({
 }
 
 const dragType = 'application/x-rezics-collection-member';
-/** 44px below 768px and on a coarse pointer; dense 36px only on fine-pointer desktop. */
-const actionTargetClass = 'size-11 md:pointer-fine:size-9';
+/** Reorder and occurrence actions remain 44px for keyboard and pointer users at every width. */
+const actionTargetClass = 'size-11';
 
 /** Shared read-only ListRows for dynamic results, which have no curated member ids or notes. */
 export function CollectionSubjectList({
@@ -564,7 +564,7 @@ export function CollectionPresentationFields({
       <label className="space-y-1">
         <span>{m.library_collection_kind()}</span>
         <select
-          className="block min-h-10 w-full rounded-lg border border-border bg-background px-3"
+          className="block min-h-11 w-full rounded-lg border border-border bg-background px-3"
           value={kind ?? ''}
           disabled={disabled}
           onChange={(event) => onKindChange(event.target.value || null)}
@@ -588,7 +588,7 @@ export function CollectionPresentationFields({
         <label className="space-y-1">
           <span>{m.subject_cover()}</span>
           <select
-            className="block min-h-10 w-full rounded-lg border border-border bg-background px-3"
+            className="block min-h-11 w-full rounded-lg border border-border bg-background px-3"
             value={coverMediaId ?? ''}
             disabled={disabled}
             onChange={(event) => onCoverChange(event.target.value || null)}

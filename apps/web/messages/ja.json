@@ -8433,5 +8433,16 @@
   "board_watch_retry_exact": "同じ変更を再試行",
   "board_watch_check_again": "現在の状態を確認",
   "board_watch_inspect_conflict": "別の変更を行う前に現在の状態を確認してください。",
-  "board_watch_sending": "ウォッチ変更を送信中…"
+  "board_watch_sending": "ウォッチ変更を送信中…",
+  "collection_presentation_ordered": "順序付きリスト",
+  "collection_presentation_ordered_help": "コレクション本来の登録順で表示します。絞り込み結果や次のページの表示順は、全体の順位を示しません。",
+  "collection_presentation_grid": "カバーのグリッド",
+  "collection_presentation_grid_help": "本来の順序でカバーを閲覧します。各メンバーのタイプ、縦横比、詳細はそのまま表示します。",
+  "collection_presentation_dynamic": "動的コレクション",
+  "collection_presentation_dynamic_help": "保存したルールからメンバーを取得します。プロパティによる絞り込みは、次のページを含むネイティブの結果全体に適用されます。",
+  "collection_review_heading": "保存前の確認",
+  "collection_review_native_help": "変更はまだ下書きです。ネイティブ操作の成功が確認されると、コレクションを再読み込みします。",
+  "collection_review_move_start": "{title} をコレクションの先頭に移動します。",
+  "collection_review_move_after": "{title} を {anchor} の後に移動します。",
+  "collection_review_add_help": "同じ対象がすでに含まれていても、コレクションの末尾に別の項目として追加します。"
 }

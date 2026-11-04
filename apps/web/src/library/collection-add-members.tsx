@@ -157,7 +157,13 @@ function CollectionAddMembersForm({
         }}
         disabled={!ready || pending || frozen}
       />
-      {selected[0] ? <p className="min-w-0 whitespace-pre-wrap font-medium">{selected[0].title}</p> : null}
+      {selected[0] ? (
+        <div className="min-w-0 space-y-2 rounded-lg bg-muted/40 p-3" data-collection-add-review>
+          <p className="font-medium">{m.collection_review_heading()}</p>
+          <p className="whitespace-pre-wrap font-medium">{selected[0].title}</p>
+          <p className="text-sm text-muted-foreground">{m.collection_review_add_help()}</p>
+        </div>
+      ) : null}
       {selected.length ? (
         <details className="min-w-0" open={textSubmitted && !!collectionTextIssue('note', note) ? true : undefined}>
           <summary className="min-h-11 cursor-pointer rounded-sm py-2 text-sm text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">

@@ -1,3 +1,4 @@
+import { CollectionDiscoveryCard } from '../showcase-collection/discovery-card';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
@@ -34,7 +35,7 @@ export function PublicCollectionDiscoveryPage({
 }) {
   const options = messageOptions(locale);
   return (
-    <main className="mx-auto max-w-5xl space-y-6">
+    <main className="mx-auto w-full min-w-0 max-w-6xl space-y-6 [overflow-wrap:anywhere]">
       <PageHeading>{m.collection_discovery_heading({}, options)}</PageHeading>
       <p className="max-w-3xl text-muted-foreground">{m.collection_discovery_intro({}, options)}</p>
       {state.status === 'ready' ? (
@@ -42,22 +43,28 @@ export function PublicCollectionDiscoveryPage({
           {state.collections.length > 0 ? (
             <ul role="list" data-slot="public-collection-discovery-results" className="space-y-3">
               {state.collections.map((collection) => (
-                <li key={collection.id} className="rounded-lg border p-4">
-                  <a
-                    href={collectionHref(locale, collection.id)}
-                    lang={collection.titleLanguage}
-                    className="block min-h-11 rounded-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  >
-                    {collection.title || m.subject_value_unlabelled({}, options)}
-                  </a>
-                  {collection.description ? (
-                    <p
-                      lang={collection.descriptionLanguage}
-                      className="mt-2 text-sm leading-relaxed text-muted-foreground"
-                    >
-                      {collection.description}
-                    </p>
-                  ) : null}
+                <li key={collection.id} className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6">
+                  {collection.card ? (
+                    <CollectionDiscoveryCard card={collection.card} locale={locale} />
+                  ) : (
+                    <>
+                      <a
+                        href={collectionHref(locale, collection.id)}
+                        lang={collection.titleLanguage}
+                        className="block min-h-11 rounded-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      >
+                        {collection.title || m.subject_value_unlabelled({}, options)}
+                      </a>
+                      {collection.description ? (
+                        <p
+                          lang={collection.descriptionLanguage}
+                          className="mt-2 text-sm leading-relaxed text-muted-foreground"
+                        >
+                          {collection.description}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
                 </li>
               ))}
             </ul>

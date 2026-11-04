@@ -8433,5 +8433,16 @@
   "board_watch_retry_exact": "重试这项完全相同的变更",
   "board_watch_check_again": "检查当前状态",
   "board_watch_inspect_conflict": "请先检查当前状态再进行其他变更。",
-  "board_watch_sending": "正在提交关注变更…"
+  "board_watch_sending": "正在提交关注变更…",
+  "collection_presentation_ordered": "依序排列",
+  "collection_presentation_ordered_help": "成员按收藏集的原生条目顺序显示。筛选结果和后续页面不代表全局名次。",
+  "collection_presentation_grid": "封面网格",
+  "collection_presentation_grid_help": "按原生顺序浏览封面。每位成员保留自己的类型、比例和详细信息。",
+  "collection_presentation_dynamic": "动态收藏集",
+  "collection_presentation_dynamic_help": "成员由已保存的规则决定。属性筛选应用于原生结果，也适用于后续页面。",
+  "collection_review_heading": "保存前确认",
+  "collection_review_native_help": "这些更改仍是草稿。原生操作确认成功后，收藏集才会重新加载。",
+  "collection_review_move_start": "将 {title} 移至收藏集开头。",
+  "collection_review_move_after": "将 {title} 移至 {anchor} 之后。",
+  "collection_review_add_help": "这会在收藏集末尾新增一个独立条目，即使该主题已是成员。"
 }

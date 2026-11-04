@@ -8433,5 +8433,16 @@
   "board_watch_retry_exact": "Dieselbe Änderung erneut versuchen",
   "board_watch_check_again": "Aktuellen Status prüfen",
   "board_watch_inspect_conflict": "Prüfe den aktuellen Status, bevor du eine weitere Änderung vornimmst.",
-  "board_watch_sending": "Watch-Änderung wird gesendet…"
+  "board_watch_sending": "Watch-Änderung wird gesendet…",
+  "collection_presentation_ordered": "Geordnete Zeilen",
+  "collection_presentation_ordered_help": "Mitglieder folgen der ursprünglichen Reihenfolge der Einträge. Filter und Folgeseiten geben keinen absoluten Rang an.",
+  "collection_presentation_grid": "Coverraster",
+  "collection_presentation_grid_help": "Cover in ursprünglicher Reihenfolge ansehen. Jedes Mitglied behält seinen Typ, sein Format und seine Details.",
+  "collection_presentation_dynamic": "Dynamische Sammlung",
+  "collection_presentation_dynamic_help": "Die gespeicherte Regel bestimmt die Mitglieder. Eigenschaftsfilter gelten für das native Ergebnis einschließlich der Folgeseiten.",
+  "collection_review_heading": "Vor dem Speichern prüfen",
+  "collection_review_native_help": "Diese Änderungen sind ein Entwurf. Nach nativer Bestätigung wird die Sammlung neu geladen.",
+  "collection_review_move_start": "{title} an den Anfang der Sammlung verschieben.",
+  "collection_review_move_after": "{title} hinter {anchor} verschieben.",
+  "collection_review_add_help": "Dies fügt am Ende der Sammlung einen eigenen Eintrag hinzu, auch wenn das Thema bereits enthalten ist."
 }
