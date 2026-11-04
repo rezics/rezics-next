@@ -1,6 +1,23 @@
 import { expect, test } from 'bun:test';
+import type { KernelClient } from '@rezics/client';
 import { createImportTransport } from '../src/import-client.ts';
-import type { ClassificationAssociation } from '../src/import-contract.ts';
+import type {
+  ClassificationAssociation,
+  ImportSourceClassificationPutResult,
+  ImportSourceClassificationClearResult,
+} from '../src/import-contract.ts';
+
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Assert<T extends true> = T;
+type ClassificationAPI = ReturnType<ReturnType<KernelClient['subjects']>['source-classifications']>;
+type GeneratedPut = NonNullable<Awaited<ReturnType<ClassificationAPI['$put']['post']>>['data']>;
+type GeneratedClear = NonNullable<Awaited<ReturnType<ClassificationAPI['$clear']['post']>>['data']>;
+const generatedMutationClosure: [
+  Assert<Equal<ImportSourceClassificationPutResult, GeneratedPut>>,
+  Assert<Equal<ImportSourceClassificationClearResult, GeneratedClear>>,
+  Assert<Equal<ImportSourceClassificationPutResult['state'], 'published' | 'cleared'>>,
+  Assert<Equal<ImportSourceClassificationClearResult['state'], 'published' | 'cleared'>>,
+] = [true, true, true, true];
 
 const subjectId = '00000000-0000-4000-8000-000000000101';
 const association: ClassificationAssociation = {
@@ -10,7 +27,7 @@ const association: ClassificationAssociation = {
   targetId: '00000000-0000-4000-8000-000000000203',
   property: 'wdt:P136',
   revision: 1,
-  release: 'a'.repeat(64),
+  release: `sha256:${'a'.repeat(64)}`,
   qualifiersDigest: 'b'.repeat(64),
 };
 const digest = 'c'.repeat(64);
@@ -65,6 +82,12 @@ test('import transport posts generated classification read, put and clear client
     maxAttempts: 1,
   });
 
+  await expect(
+    transport.readSourceClassifications!({
+      subjectId,
+      associations: [{ ...association, release: 'a'.repeat(64) }],
+    }),
+  ).rejects.toThrow();
   await expect(transport.readSourceClassifications({ subjectId, associations: [association] })).resolves.toEqual([
     { state: 'unavailable', reason: 'not_observed' },
   ]);
@@ -123,4 +146,5 @@ test('import transport posts generated classification read, put and clear client
       },
     },
   ]);
+  expect(generatedMutationClosure).toEqual([true, true, true, true]);
 });

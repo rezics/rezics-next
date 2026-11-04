@@ -35,6 +35,8 @@ import {
   type ClassificationAssociation,
   type ClassificationClear,
   type ClassificationObservation,
+  type ImportSourceClassificationPutResult,
+  type ImportSourceClassificationClearResult,
   type SourceClassificationRead,
 } from './import-contract.ts';
 
@@ -731,7 +733,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         Number.isInteger(body.revision) &&
         (body.revision as number) >= 1 &&
         typeof body.release === 'string' &&
-        /^[0-9a-f]{64}$/.test(body.release) &&
+        /^sha256:[0-9a-f]{64}$/.test(body.release) &&
         typeof body.qualifiersDigest === 'string' &&
         /^[0-9a-f]{64}$/.test(body.qualifiersDigest),
     );
@@ -764,7 +766,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       idempotencyKey: string;
     },
     signal?: AbortSignal,
-  ): Promise<{ observationDigest: string; state: 'published'; figure?: unknown }> {
+  ): Promise<ImportSourceClassificationPutResult> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
     const association = associationBody(input.association);
     ensure(association.subjectId === input.subjectId);
@@ -795,9 +797,11 @@ export function createImportTransport(options: ImportTransportOptions) {
         reply !== null &&
         typeof reply.observationDigest === 'string' &&
         /^[0-9a-f]{64}$/.test(reply.observationDigest) &&
-        reply.state === 'published',
+        reply.state === 'published' &&
+        typeof reply.figure === 'object' &&
+        reply.figure !== null,
     );
-    return reply as { observationDigest: string; state: 'published'; figure?: unknown };
+    return reply as ImportSourceClassificationPutResult;
   }
   async function clearSourceClassification(
     input: {
@@ -808,7 +812,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       idempotencyKey: string;
     },
     signal?: AbortSignal,
-  ): Promise<{ observationDigest: string; state: 'cleared' }> {
+  ): Promise<ImportSourceClassificationClearResult> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
     const association = associationBody(input.association);
     ensure(association.subjectId === input.subjectId);
@@ -841,7 +845,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         /^[0-9a-f]{64}$/.test(reply.observationDigest) &&
         reply.state === 'cleared',
     );
-    return reply as { observationDigest: string; state: 'cleared' };
+    return reply as ImportSourceClassificationClearResult;
   }
   async function readPublicFigure(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));

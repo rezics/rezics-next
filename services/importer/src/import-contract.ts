@@ -40,6 +40,12 @@ type GeneratedClassificationClear = Readonly<Parameters<SourceClassificationsCli
 type GeneratedClassificationBatch = NonNullable<
   Awaited<ReturnType<SourceClassificationsClient['$read']['post']>>['data']
 >;
+export type ImportSourceClassificationPutResult = NonNullable<
+  Awaited<ReturnType<SourceClassificationsClient['$put']['post']>>['data']
+>;
+export type ImportSourceClassificationClearResult = NonNullable<
+  Awaited<ReturnType<SourceClassificationsClient['$clear']['post']>>['data']
+>;
 export type ClassificationAssociation = GeneratedClassificationPut['association'];
 export type ClassificationObservation = GeneratedClassificationPut['value'];
 export type ClassificationClear = GeneratedClassificationClear['value'];
@@ -92,7 +98,7 @@ export interface ImportTransport {
       idempotencyKey: string;
     },
     signal?: AbortSignal,
-  ): Promise<{ observationDigest: string; state: 'published'; figure?: unknown }>;
+  ): Promise<ImportSourceClassificationPutResult>;
   clearSourceClassification?(
     input: {
       subjectId: string;
@@ -102,7 +108,7 @@ export interface ImportTransport {
       idempotencyKey: string;
     },
     signal?: AbortSignal,
-  ): Promise<{ observationDigest: string; state: 'cleared' }>;
+  ): Promise<ImportSourceClassificationClearResult>;
 }
 
 export type ImportConversionContext = Omit<ConversionContext, 'source'> & { readonly source: string };

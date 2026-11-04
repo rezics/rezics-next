@@ -455,6 +455,8 @@ declaration emit for these routes stays on the compiler database. Admitted facts
 staging without a native subject. An unchanged dump record still evaluates admitted classification when
 `classificationAdmission` is configured. Ordinary import resumes sealed classification intents from the
 journal, including when admission is not reconfigured; the sealed intended carries the Semantic association.
+A Semantic association keeps its canonical release identity in the `sha256:<64 lowercase hex>` form, forwarded
+unchanged to the mounted Content methods.
 A bound association whose `subjectId` is not the native subject is withheld with no journal row and no native
 write. Only a mounted Content read returning `not_observed` admits an
 absent head; missing, stale, changed, or otherwise unavailable associations are withheld without a native

@@ -31,7 +31,7 @@ const association: ClassificationAssociation = {
   targetId: '00000000-0000-4000-8000-000000000203',
   property: 'wdt:P136',
   revision: 1,
-  release: 'a'.repeat(64),
+  release: `sha256:${'a'.repeat(64)}`,
   qualifiersDigest: 'b'.repeat(64),
 };
 
