@@ -82,8 +82,18 @@ test('structured refusals retain the original intent and one absolute retry dead
   let now = realNow();
   Date.now = () => now;
   try {
-    const initial = withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 1, shelf: { layouts: { all: 'list' } } });
-    const current = withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 4, shelf: { layouts: { all: 'list' } } });
+    const initial = withShelfAdvice({
+      spoilerLevel: 0,
+      suitability: 'blur',
+      version: 1,
+      shelf: { layouts: { all: 'list' } },
+    });
+    const current = withShelfAdvice({
+      spoilerLevel: 0,
+      suitability: 'blur',
+      version: 4,
+      shelf: { layouts: { all: 'list' } },
+    });
     const commands: Readonly<PreferenceChange>[] = [];
     let reads = 0;
     let saves = 0;

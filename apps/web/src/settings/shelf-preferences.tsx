@@ -321,7 +321,9 @@ function shelfReadSummary(shelf: ShelfPreferences) {
         .filter(([scope]) => scope !== 'all')
         .map(([scope, layout]) => (
           <div key={scope}>
-            <dt className="font-medium"><code>{scope}</code></dt>
+            <dt className="font-medium">
+              <code>{scope}</code>
+            </dt>
             <dd>{layoutName(layout)}</dd>
           </div>
         ))}
@@ -461,10 +463,7 @@ export class ShelfPreferenceDraftRecovery {
         result.reason === 'unavailable' ||
         result.reason === 'preparing' ||
         (recovering && result.reason !== 'conflict');
-      const reason =
-        result.reason === 'conflict'
-          ? 'stale_version'
-          : (`write:${result.reason}` as ShelfIssue);
+      const reason = result.reason === 'conflict' ? 'stale_version' : (`write:${result.reason}` as ShelfIssue);
       this.update({
         pending: uncertain ? pending : null,
         comparison: uncertain ? this.state.comparison : pending,
@@ -497,10 +496,7 @@ export class ShelfPreferenceDraftRecovery {
       reacquired = true;
       try {
         const read = currentPage(await this.io.read());
-        if (
-          !this.owner.canRead() ||
-          !read.preferences
-        ) {
+        if (!this.owner.canRead() || !read.preferences) {
           this.update({
             phase: 'uncertain',
             reason: read.issue ?? 'read:unavailable',
@@ -656,12 +652,7 @@ export class ShelfPreferenceDraftRecovery {
   }
 
   async reload() {
-    if (
-      !this.owner.canRead() ||
-      this.waiting() ||
-      this.state.phase === 'saving' ||
-      this.state.phase === 'reloading'
-    )
+    if (!this.owner.canRead() || this.waiting() || this.state.phase === 'saving' || this.state.phase === 'reloading')
       return;
     this.update({ phase: 'reloading', reason: undefined, failure: undefined, retryAt: 0 });
     try {
@@ -861,13 +852,15 @@ export function ShelfPreferencesCard({
         ) : null}
         {state.current
           ? unavailableSorts.map(({ tab, field }) => (
-          <p key={tab} className="text-sm text-muted-foreground">
-            {m.settings_shelf_order_unavailable({ tab: tabLabel(tab), field })}
-          </p>
+              <p key={tab} className="text-sm text-muted-foreground">
+                {m.settings_shelf_order_unavailable({ tab: tabLabel(tab), field })}
+              </p>
             ))
           : null}
         {!shelfAdvice ? (
-          state.current ? shelfReadSummary(state.known.shelf) : null
+          state.current ? (
+            shelfReadSummary(state.known.shelf)
+          ) : null
         ) : (
           <>
             {ownerMayChange ? null : (
@@ -909,12 +902,12 @@ export function ShelfPreferencesCard({
                   {state.current
                     ? state.known.shelf.gridSize
                       ? m.settings_shelf_saved({
-                        value:
-                          state.known.shelf.gridSize === 'small'
-                            ? m.library_size_small()
-                            : state.known.shelf.gridSize === 'large'
-                              ? m.library_size_large()
-                              : m.library_size_medium(),
+                          value:
+                            state.known.shelf.gridSize === 'small'
+                              ? m.library_size_small()
+                              : state.known.shelf.gridSize === 'large'
+                                ? m.library_size_large()
+                                : m.library_size_medium(),
                         })
                       : m.settings_shelf_inherited()
                     : m.settings_shelf_choices_unavailable_text()}
@@ -1063,10 +1056,7 @@ export function ShelfPreferencesCard({
                 </p>
               ) : null}
               {original ? (
-                <pre
-                  className="overflow-auto rounded bg-muted p-2 text-xs"
-                  data-original-shelf-change="true"
-                >
+                <pre className="overflow-auto rounded bg-muted p-2 text-xs" data-original-shelf-change="true">
                   {JSON.stringify(
                     { expectedVersion: original.input.expectedVersion, shelf: original.input.shelf },
                     null,
