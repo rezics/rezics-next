@@ -8,6 +8,7 @@ properties:
   wdt:P2899: 下限年齢
   wdt:P31: 分類
   wdt:P155: 前
+  rezics:releaseSupersedes: 置き換える
   wdt:P437: メディア形態
   wdt:P408: ソフトウェアエンジン
   schema:numberOfPlayers: プレイ人数
@@ -18,6 +19,7 @@ inverseProperties:
   wdt:P31: 'この種類のリリース'
   wdt:P437: 'この媒体のリリース'
   wdt:P155: '続編'
+  rezics:releaseSupersedes: '置き換えられたリリース'
   wdt:P408: 'このエンジンを使うゲーム'
   wdt:P8646: '拡張作品'
 typeDescriptions:
@@ -97,6 +99,7 @@ propertyDescriptions:
   wdt:P2899: 'リリースの年齢区分に対応する最低年齢。年（wd:Q577）単位の0以上の整数の数量です。'
   wdt:P31: '完全版、一部版、体験版などのリリース種別を示す概念。カタログ上の対象の型とは別です。'
   wdt:P155: 'この作品やリリースに先行する作品またはリリース。'
+  rezics:releaseSupersedes: '時系列上の前後関係とは別に、このリリースが置き換える特定のソフトウェアリリース。'
   wdt:P437: '光ディスクなど、リリースの頒布形式や物理媒体を表す概念。'
   wdt:P408: 'ゲームが使用するソフトウェアエンジンを示す概念。'
   schema:numberOfPlayers: '最大プレイヤー数を単位なしの整数で記録します。範囲が明記されている場合は上限を値とし、下限は別の修飾子に保存します。'

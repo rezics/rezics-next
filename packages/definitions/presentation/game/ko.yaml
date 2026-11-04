@@ -8,6 +8,7 @@ properties:
   wdt:P2899: 이용할 수 있는 최소 연령
   wdt:P31: 다음 종류에 속함
   wdt:P155: 이전
+  rezics:releaseSupersedes: 대체하는 릴리스
   wdt:P437: 유통 방법
   wdt:P408: 소프트웨어 엔진
   schema:numberOfPlayers: 플레이어 수
@@ -18,6 +19,7 @@ inverseProperties:
   wdt:P31: '이 유형의 출시판'
   wdt:P437: '이 매체의 출시판'
   wdt:P155: '후속작'
+  rezics:releaseSupersedes: '대체된 릴리스'
   wdt:P408: '이 엔진을 사용하는 게임'
   wdt:P8646: '확장 작품'
 typeDescriptions:
@@ -97,6 +99,7 @@ propertyDescriptions:
   wdt:P2899: '출시판 등급에 따른 최소 연령입니다. 년(wd:Q577) 단위의 0 이상 정수 수량입니다.'
   wdt:P31: '완전판, 부분판, 체험판 같은 출시 유형 개념입니다. 대상의 목록 유형과는 다릅니다.'
   wdt:P155: '이 작품이나 출시판에 앞서는 작품 또는 출시판입니다.'
+  rezics:releaseSupersedes: '연대순 관계와 별개로 이 출시판이 대체하는 특정 소프트웨어 출시판입니다.'
   wdt:P437: '광디스크처럼 출시판의 유통 형식이나 물리 매체를 나타내는 개념입니다.'
   wdt:P408: '게임이 사용한 소프트웨어 엔진을 나타내는 개념입니다.'
   schema:numberOfPlayers: '지원하는 최대 플레이어 수를 단위 없는 정수로 기록합니다. 명시된 범위는 상한을 값으로 삼고 하한을 별도로 한정합니다.'

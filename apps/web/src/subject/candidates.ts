@@ -266,22 +266,23 @@ export async function readCandidates(
   cursor?: string,
   slot?: CandidateSlot,
   session?: string,
+  context = candidateContext,
 ): Promise<CandidateRead> {
   try {
     // Public reading and private competition are independent. Neither uses per-value hydration.
     // Ordinary public GET carries Session continuity only; viewer authorization stays on competition.
     const publicHeaders = session ? { headers: { 'rezics-session-token': session } } : undefined;
     const [current, result] = await Promise.all([
-      client.subjects({ id }).get(publicHeaders),
+      client.subjects({ id }).get({ query: { context }, ...(publicHeaders ?? {}) }),
       property
         ? client.subjects({ id }).candidates.get({
-            query: { property, context: candidateContext, ...slot, limit: 20, ...(cursor ? { cursor } : {}) },
+            query: { property, context, ...slot, limit: 20, ...(cursor ? { cursor } : {}) },
             headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
           })
         : undefined,
     ]);
     if (!current.data || current.status !== 200) return candidateFailure(current.status);
-    if (current.data.subject.id !== id || current.data.subject.context !== candidateContext)
+    if (current.data.subject.id !== id || current.data.subject.context !== context)
       return candidateFailure(400);
     if (result && (!result.data || result.status !== 200)) return candidateFailure(result.status);
     const token = result ? new Headers(result.headers).get('rezics-session-token') : null;
@@ -458,8 +459,11 @@ export async function selectCandidate(
     const session = new Headers(result.headers).get('rezics-session-token') ?? input.session;
     let current: SubjectRead | null = null;
     try {
-      const read = await endpoint.get(session ? { headers: { 'rezics-session-token': session } } : undefined);
-      if (read.status === 200 && read.data?.subject.id === input.id && read.data.subject.context === candidateContext)
+      const read = await endpoint.get({
+        query: { context },
+        ...(session ? { headers: { 'rezics-session-token': session } } : {}),
+      });
+      if (read.status === 200 && read.data?.subject.id === input.id && read.data.subject.context === context)
         current = read.data;
     } catch {
       /* A committed command does not prove that the public reader is ready. */

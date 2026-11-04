@@ -493,7 +493,7 @@ function RelationEditorLive({
   const hasOperation = (operation: 'propose' | 'accept' | 'reject' | 'adopt') =>
     current?.viewer === 'signed-in' &&
     current.authority?.actions.state === 'available' &&
-    current.authority.actions.context === candidateContext &&
+    current.authority.actions.context === current.public.subject.context &&
     current.authority.actions.operations.includes(
       operation === 'propose'
         ? 'subject.propose'
@@ -792,6 +792,7 @@ function RelationEditorLive({
       const address = {
         property: next.property.id,
         target: next.value.content,
+        ...(current?.public.subject.context ? { context: current.public.subject.context } : {}),
         ...(key && key.value.type === 'value' ? { key: String(key.value.content) } : {}),
       };
       return validRelationSlot(address) ? address : undefined;
@@ -802,7 +803,11 @@ function RelationEditorLive({
       external?.value.type === 'value' &&
       typeof external.value.content === 'string'
     )
-      return { property: next.property.id, sameAs: external.value.content };
+      return {
+        property: next.property.id,
+        sameAs: external.value.content,
+        ...(current?.public.subject.context ? { context: current.public.subject.context } : {}),
+      };
   }
   function edit(next: RelationDraft) {
     if (!editable()) return;
@@ -838,6 +843,7 @@ function RelationEditorLive({
       draft.value.type !== 'somevalue' ||
       field?.group !== 'credit' ||
       !current?.descriptor ||
+      current.public.subject.context !== candidateContext ||
       !handoffReader ||
       !handoffReaderLive?.()
     )
@@ -898,6 +904,7 @@ function RelationEditorLive({
       !field ||
       !isRelatedWorkGroup(field.group) ||
       !current?.descriptor ||
+      current.public.subject.context !== candidateContext ||
       !handoffReader ||
       !handoffReaderLive?.() ||
       relationshipAttempted ||
@@ -1190,7 +1197,7 @@ function RelationEditorLive({
       if (
         next.authority?.disclosure !== 'available' ||
         next.authority.actions.state !== 'available' ||
-        next.authority.actions.context !== candidateContext ||
+        next.authority.actions.context !== next.public.subject.context ||
         !next.authority.actions.operations.includes('subject.propose')
       )
         return;
@@ -1453,7 +1460,9 @@ function RelationEditorLive({
         </div>
       )}
       {!current && !reading.current && !busy && <Button onClick={open}>{m.relation_open({}, options)}</Button>}
-      {current && current.public.subject.context !== candidateContext ? (
+      {current &&
+      current.authority?.actions.state === 'available' &&
+      current.authority.actions.context !== current.public.subject.context ? (
         <p
           ref={openingBoundary}
           tabIndex={-1}
