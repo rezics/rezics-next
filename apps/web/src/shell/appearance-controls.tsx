@@ -5,6 +5,7 @@ import { cn } from '@rezics/ui/utils';
 import { Globe, Monitor, Moon, Sun } from 'lucide-react';
 import { getLocale, locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { useShellStyleNonce } from './csp-rendering/style-nonce';
 const headerControlClass = 'h-11 rounded-full border border-border/60 focus-visible:ring-2 focus-visible:ring-ring';
 const noSubscription = () => () => {};
 function useHydrated() {
@@ -161,6 +162,7 @@ export function ThemeControl() {
 }
 export function LanguageControl() {
   const hydrated = useHydrated();
+  const nonce = useShellStyleNonce();
   const locale = getLocale();
   const change = async (value: string | null) => {
     if (!value || value === locale) return;
@@ -207,7 +209,7 @@ export function LanguageControl() {
             ))}
           </div>
         </details>
-        <style>{'[data-language-js]{display:none!important}'}</style>
+        <style nonce={nonce}>{'[data-language-js]{display:none!important}'}</style>
       </noscript>
     </>
   );

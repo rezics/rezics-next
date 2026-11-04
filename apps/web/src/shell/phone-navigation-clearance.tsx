@@ -41,22 +41,8 @@ export function PhoneNavigationClearance({ children }: { children: ReactNode }) 
   }, []);
 
   return (
-    <>
-      <style>{`
-        [data-phone-navigation-clearance] { --bottom-nav-height: calc(5rem + env(safe-area-inset-bottom, 0px)); }
-        @media (min-width: 768px), (display-mode: standalone) {
-          [data-phone-navigation-clearance] { --bottom-nav-height: 0px; }
-        }
-        [data-phone-navigation-clearance][data-standalone] [data-phone-navigation] {
-          display: none !important;
-        }
-        @media (display-mode: standalone) {
-          [data-phone-navigation] { display: none !important; }
-        }
-      `}</style>
-      <div ref={root} data-phone-navigation-clearance className="contents">
-        {children}
-      </div>
-    </>
+    <div ref={root} data-phone-navigation-clearance className="contents">
+      {children}
+    </div>
   );
 }

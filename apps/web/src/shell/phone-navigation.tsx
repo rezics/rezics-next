@@ -9,6 +9,7 @@ import { m } from '../paraglide/messages.js';
 import type { SessionState } from '../session/state';
 import { NavigationEntries } from './navigation-view';
 import { navigationPathMatches } from './navigation';
+import { useShellStyleNonce } from './csp-rendering/style-nonce';
 
 type Session = SessionState | 'unknown';
 /** A vertical supplies only actions it can currently offer, with its native route rechecking authority. */
@@ -117,6 +118,7 @@ export function PhoneNavigationView({
   account: ReactNode;
 }) {
   const locale = getLocale();
+  const nonce = useShellStyleNonce();
   const navigationContext = { locale, pathname };
   const signIn = `/auth/sign-in?return_to=${encodeURIComponent(`/${locale}${pathname === '/' ? '' : pathname}`)}`;
   return (
@@ -186,7 +188,7 @@ export function PhoneNavigationView({
         {m.shell_you()}
       </a>
       <noscript>
-        <style>{'[data-phone-you-js]{display:none!important}[data-phone-you-fallback]{display:flex!important}'}</style>
+        <style nonce={nonce}>{'[data-phone-you-js]{display:none!important}[data-phone-you-fallback]{display:flex!important}'}</style>
       </noscript>
     </nav>
   );

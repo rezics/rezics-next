@@ -50,6 +50,7 @@ import { useSession } from '../session/query';
 import manropeFontUrl from '@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url';
 import { resolveAccountSecurity } from './account-menu-security';
 import { PhoneNavigationClearance } from './phone-navigation-clearance';
+import { ShellStyleNonceProvider, useShellStyleNonce } from './csp-rendering/style-nonce';
 type ShellSession = NavigationSession;
 
 /** Hidden until the first Tab press; the sr-only utilities reveal it on focus. */
@@ -169,6 +170,7 @@ function NavigationColumn({ pathname, session }: { pathname: string; session: Sh
   );
 }
 function ScriptFreeNavigation({ pathname, session }: { pathname: string; session: ShellSession }) {
+  const nonce = useShellStyleNonce();
   return (
     <noscript>
       <nav aria-label={m.shell_navigation()} className="border-b border-border/60 px-3 py-2 md:hidden">
@@ -192,7 +194,7 @@ function ScriptFreeNavigation({ pathname, session }: { pathname: string; session
           </NavigationEntries>
         </ul>
       </nav>
-      <style>{'[data-open-navigation]{display:none!important}'}</style>
+      <style nonce={nonce}>{'[data-open-navigation]{display:none!important}'}</style>
     </noscript>
   );
 }
@@ -499,9 +501,10 @@ function ShellContent({
     document.cookie = `rezics_nav=${value ? 'collapsed' : 'expanded'}; Max-Age=31536000; Path=/; SameSite=Lax`;
   };
   return (
-    <PhoneNavigationClearance>
-      <PhoneCreationProvider>
-        <HeaderSearchFilterProvider>
+    <ShellStyleNonceProvider nonce={router.options.ssr?.nonce}>
+      <PhoneNavigationClearance>
+        <PhoneCreationProvider>
+          <HeaderSearchFilterProvider>
           <SidebarProvider
             className="flex-col"
             open={!railCollapsed}
@@ -556,9 +559,10 @@ function ShellContent({
               account={<AccountMenu session={session} csrfToken={csrfToken} phone />}
             />
           </SidebarProvider>
-        </HeaderSearchFilterProvider>
-      </PhoneCreationProvider>
-    </PhoneNavigationClearance>
+          </HeaderSearchFilterProvider>
+        </PhoneCreationProvider>
+      </PhoneNavigationClearance>
+    </ShellStyleNonceProvider>
   );
 }
 export function StatusPage({
