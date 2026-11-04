@@ -286,6 +286,7 @@ async function reserve(
 }
 
 async function putBytes(media: ReservedMedia, file: File, signal: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
   const response = await siteFetch(`/media/${encodeURIComponent(media.id)}`, {
     method: 'PUT',
     signal,
@@ -310,6 +311,7 @@ async function poll(id: string, signal: AbortSignal): Promise<ReservedMedia> {
   for (let read = 0; read < maxReads; read += 1) {
     throwIfAborted(signal);
     const media = await readReservation(id, signal);
+    throwIfAborted(signal);
     if (media.state === 'available' || media.state === 'rejected') return media;
     const wait = Math.min(delay, maxDelay);
     delay = Math.min(delay * 2, maxDelay);
@@ -363,6 +365,7 @@ async function uploadImage(
     throwIfAborted(signal);
     onStage?.('transfer');
     await putBytes(reserved, file, signal);
+    throwIfAborted(signal);
     onStage?.('processing');
     return await readUploadedImage(mediaId, file, signal);
   } catch (error) {
@@ -396,6 +399,7 @@ export async function resumeReplyImageUpload(mediaId: string, file: File, signal
     if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
     if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
     const current = await readReservation(mediaId, signal);
+    throwIfAborted(signal);
     if (current.mediaType !== file.type || current.byteCount !== file.size) throw new UploadRefusal('unavailable');
     if (current.state === 'rejected') throw new UploadRefusal('rejected');
     if (current.state === 'reserved') await putBytes(current, file, signal);
@@ -474,6 +478,7 @@ export async function resumeRealmImageUpload(
     if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
     if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
     const current = await readReservation(mediaId, signal);
+    throwIfAborted(signal);
     if (current.containerId !== realmId || current.mediaType !== file.type || current.byteCount !== file.size)
       throw new UploadRefusal('unavailable');
     if (current.state === 'rejected') throw new UploadRefusal('rejected');

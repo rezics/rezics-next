@@ -178,7 +178,50 @@ export const NewThreadEmpty: Story = { name: 'New thread / Empty', play: newThre
 export const NewThreadLong: Story = {
   name: 'New thread / Long',
   render: newThread,
-  play: longThreadPlay,
+  beforeEach: () => {
+    const original = globalThis.fetch;
+    let first = true;
+    let uncertain = true;
+    let byteCount = 0;
+    const mediaId = '0192f3a0-6c1e-7b2a-9d4e-000000000086';
+    const containerId = '0192f3a0-6c1e-7b2a-9d4e-000000000087';
+    globalThis.fetch = (async (input, init) => {
+      const path = new URL(String(input), window.location.href).pathname;
+      if (path !== '/media' && path !== `/media/${mediaId}`) return original(input, init);
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        byteCount = body.byteCount;
+        if (body.newThread) {
+          if (!first) return Response.json({}, { status: 409 });
+          first = false;
+        } else if (uncertain) {
+          uncertain = false;
+          throw new TypeError('Reservation response unavailable');
+        }
+      }
+      if (init?.method === 'PUT') return new Response(null, { status: 204 });
+      return Response.json({ media: { id: mediaId, containerId,
+        state: init?.method === 'POST' ? 'reserved' : 'available', mediaType: 'image/png', byteCount } });
+    }) as typeof fetch;
+    return () => { globalThis.fetch = original; };
+  },
+  play: async (context) => {
+    await longThreadPlay(context);
+    const view = within(context.canvasElement);
+    const attach = async (name: string) => {
+      await userEvent.click(view.getByRole('button', { name: m.editor_image(), exact: true }));
+      const dialog = await screen.findByRole('dialog', { name: m.editor_image() });
+      const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/F5sAAAAASUVORK5CYII='), (char) => char.charCodeAt(0));
+      await userEvent.upload(within(dialog).getByLabelText(m.editor_upload_file()), new File([bytes], name, { type: 'image/png' }));
+      return within(dialog);
+    };
+    const first = await attach('first.png');
+    await waitFor(() => expect(first.getByRole('button', { name: m.editor_insert_image() })).toBeEnabled());
+    await userEvent.click(first.getByRole('button', { name: m.editor_insert_image() }));
+    const second = await attach('second.png');
+    await expect(await second.findByRole('button', { name: m.editor_retry_upload() })).toBeEnabled();
+    // Leave the real recovery control visible; deliberate retry uses the retained command.
+  },
 };
 export const NewThreadDeparture: Story = {
   name: 'New thread / Protect changed writing on departure',
