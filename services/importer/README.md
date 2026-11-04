@@ -2209,32 +2209,36 @@ rather than a guessed mapping.
 
 ### Bangumi character identity and appearance mapping
 
-The cross-media seed operator admits Bangumi character kinds and selected
-`subject-characters` rows through the same source vocabulary mapper. It runs a
-second complete Bangumi generation after the initial source import, so changed
-role inputs and newly available bindings are re-evaluated without replacing the
-source baseline with a partial record set. The optional
-`--bangumi-character-bindings <json>` file contains a bundled `releaseDigest`,
-exact `schemes` entries (`taxonomy`, `id`, `uri`, `type`, `releaseDigest`) and
-exact `concepts` entries (`taxonomy`, `code`, `id`, `type`, `schemeId`,
-`releaseDigest`). The operator checks each configured subject through the
-current public API, including its type, source URI and Concept scheme membership.
-It never resolves a label. Missing or retracted current values remain review
-diagnostics.
+The default local showcase seed derives the character-kind and appearance-role
+requirements from actual selected Bangumi character records and type-2 anime
+`subject-characters` rows. It creates only the exact source-specific schemes and
+codes in the pinned Bangumi mappings, then sends their candidates through the
+common publication journal for separately authorized acceptance and adoption.
+It publishes a scheme before creating its Concepts, rereads each acknowledged
+UUID through the current public API, and reruns the complete Bangumi generation
+with only current exact bindings. Names never resolve identity. The explicit
+`--bangumi-character-bindings <json>` mode remains available to standalone
+operators. Appearance proposals retain their source row key, digest, citation,
+work and character identities, role Concept and supported order semantics.
+Missing, malformed, unknown or wrong-scheme roles remain bounded diagnostics;
+unsupported `schema:position` does not remove the independently useful role.
 
-- Touches: at most 64 admitted appearance rows per selected work, one character
-  kind row per admitted character, current source identities, up to two
-  ConceptSchemes and seven Concepts, and the existing complete source journal.
-- Bound: appearance projection is O(64 × selected works), with current identity
-  reads sent in pages of 16 and no catalogue or label scan. The mapper emits the
-  qualified relation only when both exact identities and the role Concept are
-  current; an unsupported `schema:position` is omitted with a structured gap.
-- Growth check: `packages/conversion/tests/bangumi-character-fidelity.test.ts`
-  and `services/importer/tests/bangumi-character-fidelity.test.ts` cover exact
-  Concepts, citation paths, missing role bindings and unsupported order. The
-  connected API scenario is
-  `services/kernel/test/imports/bangumi-character-fidelity.test.ts`; it adds no
-  physical-growth claim, and its native execution remains controller-owned.
+Decision: The default character vocabulary and appearance adapter follows Bangumi type-2 anime work rows only.
+
+- Touches: at most 64 admitted appearance rows per selected anime work, one
+  character-kind row per admitted character, current work/character identities,
+  up to two ConceptSchemes and seven Concepts, and the existing sealed local
+  publication journal.
+- Bound: appearance projection is O(64 × selected anime works), source-row
+  evidence is capped before materialization, and current identity reads stay in
+  pages of 16. The role mapper emits a qualified relation only when exact work,
+  character and current role Concept identities are available. Overflow is one
+  bounded diagnostic per work.
+- Growth check: `services/importer/tests/showcase-bangumi-characters.test.ts`
+  covers selected anime rows, kind/role separation, exact row custody and an
+  unavailable wrong-scheme binding. The native public-read and restart scenario
+  is `services/kernel/test/imports/showcase-bangumi-characters.test.ts`;
+  browser pages and inverse projections remain Web and Semantic ownership.
 
 ### Default Bangumi anime episodes
 

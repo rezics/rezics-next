@@ -24,7 +24,13 @@ import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabul
 import { subjectSlug } from '@rezics/definitions/slug';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
-import { CrossMediaGraph, graphEdgeKey, type GraphEdgeDraft } from './cross-media-bindings.ts';
+import {
+  CrossMediaGraph,
+  citedProviderBinding,
+  combineSourceVocabularyRequests,
+  graphEdgeKey,
+  type GraphEdgeDraft,
+} from './cross-media-bindings.ts';
 import {
   attachShowcaseWorkLinks,
   resolveShowcaseWorkLinkHandoffs,
@@ -40,7 +46,6 @@ import {
   type BangumiCreatorCreditGap,
 } from './bangumi-creator-credits.ts';
 import {
-  combineVocabularyRequests,
   prepareShowcaseVndbCredits,
   type VndbCreditVocabularyReferences,
   type VndbCreditVocabularyRequirement,
@@ -48,6 +53,10 @@ import {
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
 import { createPublicBulkClient } from './public-bulk-client.ts';
 import { captureShowcaseCommands, publishShowcase, ShowcaseJournal } from './showcase-publication.ts';
+import {
+  prepareShowcaseBangumiCharacterVocabulary,
+  readShowcaseBangumiCharacterVocabulary,
+} from './showcase-bangumi-characters.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
@@ -72,6 +81,8 @@ const patterns: Record<Franchise, RegExp> = {
 export const crossMediaAliases = { bangumi: 'bangumi_cross_media', vndb: 'vndb_cross_media' } as const;
 const FAMILY_CAP = 256;
 const RELATION_CAP = 4096;
+const APPEARANCE_ROW_BYTES = 16 * 1024;
+const APPEARANCE_EVIDENCE_BYTES = 4 * 1024 * 1024;
 
 /** Membership uses titles only, never synopsis mentions, credits or a shared actor. */
 export function crossMediaFranchise(...names: unknown[]): Franchise | undefined {
@@ -207,8 +218,9 @@ export type BangumiCharacterAppearance = {
   subjectId: string;
   characterId: number;
   sourceIndex: number;
-  roleCode: number | string;
+  roleCode: unknown;
   order?: number | string | null;
+  sourceRow?: Readonly<Record<string, unknown>>;
 };
 export type CrossMediaReleaseFacts = {
   works: Map<string, { devstatus: number | undefined }>;
@@ -622,23 +634,51 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const characters = new Set<number>();
   const persons = new Set<number>();
   const familyWorks = new Set(familyIds.keys());
-  const importedWorks = new Set([...plan.records.bangumi, ...plan.entities.bangumi].map((row) => row.key));
-  const selectedBangumiWorks = importedWorks;
+  const importedWorks = new Set([...plan.records.bangumi, ...plan.entities.bangumi].map((record) => record.key));
+  const selectedAnimeWorks = new Set(
+    [...plan.records.bangumi, ...plan.entities.bangumi]
+      .filter((record) => record.payload && typeof record.payload === 'object' && record.payload.type === 2)
+      .map((record) => record.key),
+  );
   const admittedAppearanceIndices = new Set<number>();
   const appearanceCounts = new Map<number, number>();
+  const appearanceOverflow = new Set<number>();
+  let appearanceEvidenceBytes = 0;
   let selectionIndex = 0;
   for await (const row of input.rows('bangumi', 'subject-characters')) {
     const sourceIndex = selectionIndex++;
     const subjectId = number(row, 'subject_id');
-    if (familyWorks.has(subjectId)) characters.add(number(row, 'character_id'));
-    if (!selectedBangumiWorks.has(String(subjectId))) continue;
     const characterId = number(row, 'character_id');
+    if (familyWorks.has(subjectId) && !selectedAnimeWorks.has(String(subjectId))) characters.add(characterId);
+    if (!selectedAnimeWorks.has(String(subjectId))) continue;
     const count = (appearanceCounts.get(subjectId) ?? 0) + 1;
     appearanceCounts.set(subjectId, count);
     if (count > 64) {
-      gap('bangumi', 'subject-characters', row, 'Per-work character appearance mapping limit exceeded');
+      if (!appearanceOverflow.has(subjectId)) {
+        gap(
+          'bangumi',
+          'subject-characters',
+          { subject_id: subjectId, character_id: characterId },
+          'Per-work character appearance mapping limit exceeded',
+        );
+        appearanceOverflow.add(subjectId);
+      }
       continue;
     }
+    const rowBytes = Buffer.byteLength(JSON.stringify(row));
+    if (rowBytes > APPEARANCE_ROW_BYTES || appearanceEvidenceBytes + rowBytes > APPEARANCE_EVIDENCE_BYTES) {
+      if (!appearanceOverflow.has(subjectId)) {
+        gap(
+          'bangumi',
+          'subject-characters',
+          { subject_id: subjectId, character_id: characterId },
+          'Selected character appearance evidence exceeds its bounded byte limit',
+        );
+        appearanceOverflow.add(subjectId);
+      }
+      continue;
+    }
+    appearanceEvidenceBytes += rowBytes;
     characters.add(characterId);
     admittedAppearanceIndices.add(sourceIndex);
   }
@@ -658,7 +698,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     const characterId = number(row, 'character_id');
     if (
       !admittedAppearanceIndices.has(sourceIndex) ||
-      !selectedBangumiWorks.has(String(subjectId)) ||
+      !selectedAnimeWorks.has(String(subjectId)) ||
       !characters.has(characterId)
     )
       continue;
@@ -672,15 +712,12 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       ...tagged(familyIds.get(number(row, 'subject_id'))),
     });
     const roleCode = row.type;
-    if (typeof roleCode !== 'number' && typeof roleCode !== 'string') {
-      gap('bangumi', 'subject-characters', row, 'Appearance role code is not a supported scalar');
-      continue;
-    }
     (plan.characterAppearances ??= []).push({
       subjectId: work,
       characterId,
       sourceIndex,
       roleCode,
+      sourceRow: Object.freeze({ ...row }),
       ...(row.order === undefined
         ? {}
         : {
@@ -1719,7 +1756,7 @@ export async function seedCrossMedia(
     extras?.vocabularyAdmission || vndbCredits
       ? {
           request(context: Parameters<NonNullable<NonNullable<ImporterOptions['vocabularyAdmission']>['request']>>[0]) {
-            return combineVocabularyRequests([
+            return combineSourceVocabularyRequests([
               extras?.vocabularyAdmission?.request?.(context),
               vndbCredits?.vocabularyAdmission.request?.(context),
             ]);
@@ -2061,9 +2098,10 @@ export async function runCrossMediaSeedCli(
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   try {
-    const result = await seedShowcaseVndbReleases({
+    let publicationPlan = structuredClone(plan);
+    let result = await seedShowcaseVndbReleases({
       tables: input,
-      plan,
+      plan: publicationPlan,
       path: statePath,
       port,
       destination: { origin: api },
@@ -2091,16 +2129,73 @@ export async function runCrossMediaSeedCli(
       known: knownTagBindings,
       destination: { origin: api },
     });
-    const showcase = journal
-      ? await publishShowcase({
-          plan,
-          result,
-          aliases: crossMediaAliases,
-          journal,
-          review: importPort,
-          publicClient: createPublicBulkClient({ origin: api }),
-        })
-      : undefined;
+    const publicClient = createPublicBulkClient({ origin: api });
+    let showcase: Awaited<ReturnType<typeof publishShowcase>> | undefined;
+    if (journal && !characterBindingsPath) {
+      const schemes = await prepareShowcaseBangumiCharacterVocabulary({
+        plan: publicationPlan,
+        port,
+        journal,
+        stage: 'schemes',
+      });
+      await publishShowcase({
+        plan: publicationPlan,
+        result,
+        aliases: crossMediaAliases,
+        journal,
+        review: importPort,
+        publicClient,
+        vocabularyRequirements: schemes.requirements,
+      });
+      const concepts = await prepareShowcaseBangumiCharacterVocabulary({
+        plan: publicationPlan,
+        port,
+        journal,
+        stage: 'concepts',
+      });
+      await publishShowcase({
+        plan: publicationPlan,
+        result,
+        aliases: crossMediaAliases,
+        journal,
+        review: importPort,
+        publicClient,
+        vocabularyRequirements: concepts.requirements,
+      });
+      const characterBindings = await readShowcaseBangumiCharacterVocabulary({ plan: publicationPlan, port, journal });
+      publicationPlan = structuredClone(plan);
+      result = await seedShowcaseVndbReleases({
+        tables: input,
+        plan: publicationPlan,
+        path: statePath,
+        port,
+        bindings: result.bindings,
+        destination: { origin: api },
+        extras: {
+          ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
+          ...(options.episodeCatalogueSubjects ? { episodeCatalogueSubjects: options.episodeCatalogueSubjects } : {}),
+        },
+        characterBindings,
+      });
+      showcase = await publishShowcase({
+        plan: publicationPlan,
+        result,
+        aliases: crossMediaAliases,
+        journal,
+        review: importPort,
+        publicClient,
+        vocabularyRequirements: concepts.requirements,
+      });
+    } else if (journal) {
+      showcase = await publishShowcase({
+        plan: publicationPlan,
+        result,
+        aliases: crossMediaAliases,
+        journal,
+        review: importPort,
+        publicClient,
+      });
+    }
     await mkdir(dirname(resultPath), { recursive: true });
     await writeFile(
       resultPath,
