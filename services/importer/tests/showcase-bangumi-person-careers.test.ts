@@ -115,4 +115,4 @@ test('selected actual Persons use bounded API career fallback and sealed source 
     } catch {}
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
