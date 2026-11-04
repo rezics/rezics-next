@@ -71,6 +71,7 @@ import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { aniListImportRoutes } from '../library/list-import-anilist-routes.ts';
 import { vndbImportRoutes } from '../library/list-import-vndb-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
+import { createContentShelfTitleSource, type ContentShelfTitleInputs } from '../library/shelf-title-content-source.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
 import { readViewerPersonalActionsPage, type ViewerPersonalActionsReader } from '../library/viewer-personal-actions.ts';
@@ -147,6 +148,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   content?: ContentRuntime &
     Pick<ContentBoardDependencies, 'cursorNow'> & {
       readConsent?: CurrentConsentReader;
+      /** Complete-input title observations; absent until Content installs its native producer. */
+      shelfTitleInputs?: ContentShelfTitleInputs;
     };
   search?: SearchRuntime;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
@@ -676,6 +679,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
   });
+  const shelfTitleSource = dependencies.content?.shelfTitleInputs
+    ? createContentShelfTitleSource(dependencies.content.shelfTitleInputs)
+    : dependencies.shelves?.titleSource;
   const personal = personalLibraryRoutes(community as unknown as ReturnType<typeof definitionRoutes>, {
     ...(dependencies.typeSourceObserved ? { typeSourceObserved: dependencies.typeSourceObserved } : {}),
     routeKey: dependencies.routeKey,
@@ -699,7 +705,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       );
     },
     ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
-    ...(dependencies.shelves?.titleSource === undefined ? {} : { titleSource: dependencies.shelves.titleSource }),
+    ...(shelfTitleSource === undefined ? {} : { titleSource: shelfTitleSource }),
     shelves: () => {
       const access = resolveAccess({ actions: actionCatalogue(personal), realmRoleReader });
       return createDefaultShelfReads({
@@ -716,6 +722,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
         }),
         ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
         ...dependencies.shelves,
+        ...(shelfTitleSource === undefined ? {} : { titleSource: shelfTitleSource }),
       });
     },
   });

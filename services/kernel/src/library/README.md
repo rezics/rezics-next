@@ -1681,7 +1681,13 @@ ranges with missing labels last and enriches only the returned rows; the page ne
 `GET /v1/libraryEntries?orderBy=title&direction=asc|desc` uses `Accept-Language` for selection; native rows add
 `titleCoverage: 'labelled' | 'missing'`. `POST /v1/libraryShelfTitlePreparation` uses the same language header and existing
 Entry-list authority and idempotency header, returning `{installation:'pending'|'installed',prepared:0..100}`.
-Content still owns installation of the current complete-input source adapter and root client publication. Their absence
+Content can install complete-input observations through `content.shelfTitleInputs`; `createContentShelfTitleSource`
+adapts that producer to the exact native port for both preparation and reads. It rejects partial/duplicate/foreign
+batches, undisclosed identities and changed source bases; a disclosed identity with no label remains missing coverage.
+Decision: Content supplies one released whole-source/batch observation; Library binds its version to owner, language
+policy and viewer lifetime without deriving currentness from loaded labels. The native Content producer remains an
+unimplemented integration seam; the adapter itself cannot establish complete-source currentness.
+Content still owns installation of that native producer and root client publication. Their absence
 is explicit preparation, including on a retained Web title URL; no default source or saved preference claims readiness.
 Receiving the published native client, automatic preparation and the native independent 64/512/4096 full-caller
 measurements remain in the continuation. Installed typing, focused cases and rendered review are separate observations;
