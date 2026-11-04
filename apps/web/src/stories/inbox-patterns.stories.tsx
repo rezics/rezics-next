@@ -310,7 +310,7 @@ export const NativeRows: Story = {
 };
 
 // Illustrative current resolved DTO only: no session, transport, new fixture world or native recording.
-const illustrativeLongContent: ResolvedInboxPage = {
+const illustrativeLongContent: Pick<ResolvedInboxPage, 'items' | 'next'> = {
   items: [
     {
       id: 'illustrative-long-token',

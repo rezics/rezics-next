@@ -405,20 +405,21 @@ export function decodeInboxPage(value: unknown, accountId?: string): NoticePage 
     !Array.isArray(value.items) ||
     value.items.length > INBOX_PAGE_SIZE ||
     !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096)) ||
-    !isInboxSelection(value.selection) ||
-    !validPageViewer(value.viewer, accountId)
+    !isInboxSelection(value.selection)
   )
     throw new InboxReadError({ status: 200 });
+  const viewer = value.viewer;
+  if (!validPageViewer(viewer, accountId)) throw new InboxReadError({ status: 200 });
   const items = value.items.map((item) => {
-    if (!validNotice(item, accountId ?? value.viewer.accountId)) throw new InboxReadError({ status: 200 });
+    if (!validNotice(item, accountId ?? viewer.accountId)) throw new InboxReadError({ status: 200 });
     return projectNativeNotice(item);
   });
   const next = value.next as string | null;
   const selection = value.selection;
-  const viewer = value.viewer;
-  if (!validPageActions(value.actions, items, next, selection, viewer.accountId))
+  const actions = value.actions;
+  if (!validPageActions(actions, items, next, selection, viewer.accountId))
     throw new InboxReadError({ status: 200 });
-  return { items, next, viewer, selection, actions: value.actions };
+  return { items, next, viewer, selection, actions };
 }
 
 /** Convert only native action identities to existing localized routes; never consume a supplied URL. */

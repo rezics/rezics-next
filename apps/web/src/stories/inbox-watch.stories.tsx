@@ -65,24 +65,20 @@ function items(): ResolvedInboxPage['items'] {
 }
 
 function Example({ state }: { state: 'mixed' | 'inaccessible' | 'failed' }) {
-  const loadPage = async (query: InboxPageQuery): Promise<InboxPage> =>
-    state === 'failed'
-      ? { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true } }
-      : readyInboxPage(
-          state === 'mixed'
-            ? items()
-            : items()
-                .slice(0, 2)
-                .map(({ href: _href, actorName: _actorName, ...item }) => ({
-                  ...item,
-                  actorId: null,
-                  text: '',
-                  unavailable: true,
-                })),
-          null,
-          'alice',
-          query.selection,
-        );
+  const loadPage = async (query: InboxPageQuery): Promise<InboxPage> => {
+    if (state === 'failed')
+      return { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true } };
+    if (state === 'mixed') return readyInboxPage(items(), null, 'alice', query.selection);
+    const inaccessible = items()
+      .slice(0, 2)
+      .map(({ href: _href, actorName: _actorName, ...item }) => ({
+        ...item,
+        actorId: null,
+        text: '',
+        unavailable: true,
+      }));
+    return readyInboxPage(inaccessible, null, 'alice', query.selection);
+  };
   return (
     <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
       <AppShell>
