@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkBatchWrite } from '@rezics/definitions/bulk';
-import { converter_revision, convertCrossMediaEntity } from '../src/cross-media-entities.ts';
+import type { Release } from '@rezics/definitions';
+import {
+  converter_revision,
+  convertCrossMediaEntity,
+  vndbCharacterQuantity,
+} from '../src/cross-media-entities.ts';
 import { createSourceRegistration } from '../../../services/importer/src/source-registry.ts';
 
 const subjectId = '00000000-0000-4000-8000-000000000001';
@@ -16,10 +21,11 @@ function character(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function quantities(output: ReturnType<typeof convertCrossMediaEntity>) {
+function quantities(output: { proposals: readonly { op: string; statement?: { property: { id: string }; value: { type?: string; content: unknown } } }[] }) {
   return Object.fromEntries(
     output.proposals.flatMap((command) =>
       command.op === 'propose' &&
+      command.statement &&
       (command.statement.property.id === 'schema:height' || command.statement.property.id === 'schema:weight') &&
       command.statement.value.type === 'value'
         ? [[command.statement.property.id, command.statement.value.content]]
@@ -47,9 +53,7 @@ test('production caller publishes exact COPY height and weight and keeps unknown
   expect(cited?.statement.references).toEqual([
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://vndb.org/c1' } }] },
   ]);
-  const unknown = convertCrossMediaEntity(character({ id: 'c2', height: null, weight: '0' }), {
-    subjectId: '00000000-0000-4000-8000-000000000002',
-  });
+  const unknown = convertCrossMediaEntity(character({ height: null, weight: '0' }), { subjectId });
   expect(unknown.normalizedRecord).toMatchObject({ height: null, weight: '0' });
   expect(quantities(unknown)).toEqual({});
   expect(unknown.diagnostics).toEqual([]);
@@ -72,4 +76,15 @@ test('source sentinels, malformed numeric cells and withdrawn units never become
   }
   expect(quantities(bound({ height: 157 }))).toEqual({});
   expect(bound({ height: 157 }).diagnostics).toContainEqual({ pointer: '/height', code: 'invalid_source_value' });
+  expect(vndbCharacterQuantity('157', 'schema:height')).toEqual({ amount: '+157', unit: centimeter });
+  expect(vndbCharacterQuantity('0', 'schema:height')).toBe('unknown');
+  expect(vndbCharacterQuantity(null, 'schema:weight')).toBe('unknown');
+  const withdrawn = structuredClone(bundledRelease) as Release;
+  withdrawn.properties['schema:height']!.units = ['http://www.wikidata.org/entity/Q11573'];
+  expect(vndbCharacterQuantity('157', 'schema:height', withdrawn)).toBe('unadmitted');
+  const removed = structuredClone(bundledRelease) as Release;
+  removed.types['wd:Q95074']!.properties = removed.types['wd:Q95074']!.properties.filter(
+    (property) => property !== 'schema:weight',
+  );
+  expect(vndbCharacterQuantity('48', 'schema:weight', removed)).toBe('unadmitted');
 });

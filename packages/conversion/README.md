@@ -323,6 +323,19 @@ frozen native COPY acceptance verifies staged empty-cell composition and public
 bulk effects. This narrow result does not establish every discovery,
 statistics, or publication capability.
 
+### VNDB character measurements
+
+`cross-media-entities@4` projects admitted `chars.height` and `chars.weight`
+COPY cells onto `wd:Q95074` as exact `schema:height` and `schema:weight`
+quantities. Height stays centimetres (`wd:Q174728`) and weight kilograms
+(`wd:Q11570`); values are not converted. The dump cell is a PostgreSQL COPY
+smallint: `\N` and exact `0` are unknown sentinels, not a measured zero.
+Malformed, signed, nonfinite, fractional or over-smallint cells stay
+addressable diagnostics. Withdrawn property or centimetre/kilogram admission
+withholds the fact. Missing measurements leave character identity intact.
+Decision: COPY `\N` and exact `0` are unknown measurement sentinels, not
+measured zero.
+
 ### VNDB release titles
 
 `cross-media-entities@3` projects admitted `releases_titles` rows onto
