@@ -5,6 +5,10 @@ import type { SessionAccess } from './guard';
 
 export type SessionUnavailablePage = { sessionUnavailable: true; signInHref: string };
 
+export function sessionUnavailablePage(signInHref: string): SessionUnavailablePage {
+  return { sessionUnavailable: true, signInHref };
+}
+
 export function isSessionUnavailablePage(value: unknown): value is SessionUnavailablePage {
   return (
     typeof value === 'object' &&
@@ -18,7 +22,7 @@ export function isSessionUnavailablePage(value: unknown): value is SessionUnavai
 
 /** Avoid private reads when the request session is unresolved; preserve unrelated failures. */
 export async function loadPrivatePage<T>(access: SessionAccess, read: () => T | Promise<T>): Promise<T | SessionUnavailablePage> {
-  const unavailable = { sessionUnavailable: true as const, signInHref: access.signInHref };
+  const unavailable = sessionUnavailablePage(access.signInHref);
   if (access.state !== 'signed-in') return unavailable;
   try {
     return await read();

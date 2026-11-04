@@ -1,6 +1,11 @@
 import { prepareExposure } from '../../kernel/exposure';
 import { requirePrivatePageAccess } from '../../session/guard';
-import { isSessionUnavailablePage, loadPrivatePage, SessionUnavailablePrompt } from '../../session/private-page';
+import {
+  isSessionUnavailablePage,
+  loadPrivatePage,
+  sessionUnavailablePage,
+  SessionUnavailablePrompt,
+} from '../../session/private-page';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, notFound } from '@tanstack/react-router';
@@ -180,7 +185,7 @@ export const Route = createFileRoute('/library/')({
           readCurrentShelfPreferences(),
         ]);
         if ('sessionUnavailable' in page && page.sessionUnavailable)
-          return { sessionUnavailable: true as const, signInHref: context.sessionAccess.signInHref };
+          return sessionUnavailablePage(context.sessionAccess.signInHref);
         return { ...page, shelfSnapshot };
       }
       const requested = {

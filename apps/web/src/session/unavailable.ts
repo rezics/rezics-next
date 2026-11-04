@@ -9,9 +9,16 @@ export function isSessionUnavailableError(error: unknown): boolean {
     const value = pending.pop();
     if (typeof value !== 'object' || value === null || seen.has(value)) continue;
     seen.add(value);
-    const record = value as Record<string, unknown>;
-    if (record.name === 'SessionUnavailableError' || record.code === SESSION_UNAVAILABLE_CODE) return true;
-    for (const key of ['problem', 'data', 'cause']) pending.push(record[key]);
+    if (
+      ('name' in value && value.name === 'SessionUnavailableError') ||
+      ('code' in value && value.code === SESSION_UNAVAILABLE_CODE)
+    )
+      return true;
+    pending.push(
+      'problem' in value ? value.problem : undefined,
+      'data' in value ? value.data : undefined,
+      'cause' in value ? value.cause : undefined,
+    );
   }
 
   return false;

@@ -14,15 +14,14 @@ const { useIsMobile } = await import('@rezics/ui/hooks/use-mobile');
 test('selection review hydrates to a phone sheet, crosses to Base UI dialog and restores its current opener', async () => {
   const browser = new Window({ url: 'https://site.test/en/library', width: 390, height: 844 });
   let width = 390;
-  const listeners = new Set<(event?: Event) => void>();
+  let mediaQuery: MediaQueryList | undefined;
   Object.defineProperty(browser, 'innerWidth', { configurable: true, get: () => width });
-  browser.matchMedia = ((query: string) => ({
-    media: query,
-    matches: width < 768,
-    onchange: null,
-    addEventListener: (_type: string, listener: (event?: Event) => void) => listeners.add(listener),
-    removeEventListener: (_type: string, listener: (event?: Event) => void) => listeners.delete(listener),
-  })) as unknown as typeof browser.matchMedia;
+  const nativeMatchMedia = browser.matchMedia.bind(browser);
+  browser.matchMedia = (query) => {
+    const current = nativeMatchMedia(query);
+    mediaQuery = current;
+    return current;
+  };
 
   const globals = {
     window: browser,
@@ -85,7 +84,7 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
 
     await act(async () => {
       width = 1024;
-      listeners.forEach((listener) => listener());
+      mediaQuery?.dispatchEvent(new browser.Event('change'));
     });
     expect(host.querySelector('output')?.getAttribute('data-mobile')).toBe('false');
     expect(browser.document.querySelector('[data-slot="dialog-content"]')).not.toBeNull();
