@@ -407,7 +407,11 @@ test('actual page confirmation and uncertain retry send byte-identical original 
   expect(canvas.getByRole('status').closest('details')).toBeNull();
   expect(canvas.getByRole('heading', { level: 3 }).textContent).toBe('Aki');
   expect(read.mock.calls).toHaveLength(2);
-  await details(canvas.getByRole('heading', { level: 3 }).closest('li')!, [readerId, realmOwnerRole, page.grants[0]!.valid]);
+  await details(canvas.getByRole('heading', { level: 3 }).closest('li')!, [
+    readerId,
+    realmOwnerRole,
+    page.grants[0]!.valid,
+  ]);
   expect(read.mock.calls).toHaveLength(2);
   await act(async () => user.click(canvas.getByRole('button', { name: m.access_retry_operation() })));
   expect(commands).toHaveLength(2);

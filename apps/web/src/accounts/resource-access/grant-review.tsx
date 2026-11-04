@@ -161,9 +161,7 @@ export function GrantReview({
           <dd>
             <code>{page.authority.accountId}</code>
           </dd>
-          {page.authority.principalId ? (
-            <dd>{m.access_delegated_by({ name: principalName })}</dd>
-          ) : null}
+          {page.authority.principalId ? <dd>{m.access_delegated_by({ name: principalName })}</dd> : null}
         </div>
         <div className="sm:col-span-2">
           <dt className="font-medium">{recipientKind}</dt>

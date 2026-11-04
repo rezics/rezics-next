@@ -185,7 +185,16 @@ function GrantForm({
     change: Omit<Change, 'key'>;
   } | null>(null);
   const signature = JSON.stringify([kind, role, action, recipient, handle, identity, groupRole, startsAt, endsAt]);
-  const advice = JSON.stringify([page.resource, page.authority, page.roles, page.actions, page.grants, page.identities, page.mutationState, grant]);
+  const advice = JSON.stringify([
+    page.resource,
+    page.authority,
+    page.roles,
+    page.actions,
+    page.grants,
+    page.identities,
+    page.mutationState,
+    grant,
+  ]);
   const [original] = useState(signature);
   useAccessDraft(signature, signature !== original, retire);
   useLayoutEffect(() => setReview(null), [signature, advice]);
@@ -251,7 +260,9 @@ function GrantForm({
   const reviewedSubject = currentReview?.change.subject;
   const reviewedIdentity =
     reviewedSubject?.kind === 'account' || reviewedSubject?.kind === 'organization'
-      ? (identity?.id === reviewedSubject.id ? identity : page.identities.find((item) => item.id === reviewedSubject.id))
+      ? identity?.id === reviewedSubject.id
+        ? identity
+        : page.identities.find((item) => item.id === reviewedSubject.id)
       : undefined;
   const recipientLabel = reviewedSubject ? subjectTitle(reviewedSubject, reviewedIdentity) : '';
   const recipientKind =
@@ -710,7 +721,9 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                         className="p-3 sm:p-4 [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]"
                         title={subjectTitle(subject, identity)}
                         headingLevel={3}
-                        metadata={grant.kind === 'role' ? rolePresentation(grant.role!).label : m.access_direct_action()}
+                        metadata={
+                          grant.kind === 'role' ? rolePresentation(grant.role!).label : m.access_direct_action()
+                        }
                         preview={
                           <>
                             <GrantContents kind={grant.kind} role={grant.role} actions={grant.actions} />
@@ -732,7 +745,8 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                           </>
                         }
                         state={
-                          identity?.state === 'deleted' || ['active', 'scheduled', 'expired'].includes(String(grant.state)) ? (
+                          identity?.state === 'deleted' ||
+                          ['active', 'scheduled', 'expired'].includes(String(grant.state)) ? (
                             <>
                               {identity?.state === 'deleted' ? (
                                 <Tombstone
@@ -838,11 +852,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                   <p>
                     <SubjectName subject={removalReview.subject} page={page} />
                   </p>
-                  <GrantContents
-                    kind={removalReview.kind}
-                    role={removalReview.role}
-                    actions={removalReview.actions}
-                  />
+                  <GrantContents kind={removalReview.kind} role={removalReview.role} actions={removalReview.actions} />
                   <p className="text-sm text-muted-foreground">
                     {m.access_valid_interval({
                       start: dateLabel(removalReview.startsAt, m.access_no_start()),

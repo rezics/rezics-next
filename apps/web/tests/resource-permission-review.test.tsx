@@ -327,8 +327,9 @@ test('removal review names the exact direct permission or returned role bundle b
       await act(async () => user.click(row.getByRole('button', { name: m.access_grant_actions() })));
       await act(async () => user.click(within(window.document.body).getByText(m.access_revoke())));
       const dialog = within(within(window.document.body as unknown as HTMLElement).getByRole('alertdialog'));
-      expect(dialog.getAllByText(item.kind === 'role' ? m.access_named_role() : m.access_direct_action()).length)
-        .toBeGreaterThan(0);
+      expect(
+        dialog.getAllByText(item.kind === 'role' ? m.access_named_role() : m.access_direct_action()).length,
+      ).toBeGreaterThan(0);
       for (const action of item.actions) expect(dialog.getByText(action, { selector: 'code' })).toBeTruthy();
       expect(saves).toHaveLength(0);
       await act(async () => user.click(dialog.getByRole('button', { name: m.access_revoke() })));

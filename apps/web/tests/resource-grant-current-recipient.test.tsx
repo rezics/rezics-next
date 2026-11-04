@@ -62,8 +62,7 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
           await click(m.access_cancel());
           const prompt = within(window.document.body as unknown as HTMLElement).getByRole('alertdialog');
           await act(async () => user.click(within(prompt).getAllByRole('button')[1]!));
-        }
-        else {
+        } else {
           if (boundary === 'resource') page.resource.id = '0192f3a0-6c1e-7b2a-a001-000100000099';
           else page.authority.accountId = page.identities[1]!.id;
           await click(m.access_reload());
