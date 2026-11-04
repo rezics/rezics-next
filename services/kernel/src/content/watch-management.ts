@@ -89,14 +89,22 @@ export async function listWatches(
   // Only the actor-home indexed range is selected. Its checkout ends before disclosure.
   const rows = await within(deadline, () =>
     withConnection(deps.pool, async (connection) => {
-      const result = await deadlineClient(connection, deadline).query<WatchRow>(
-        `SELECT watch_id::text,${source.resource}::text AS resource_id,created_at::text,${source.revision} AS revision
-       FROM ${source.table}
-       WHERE route=$1 AND watcher_account_id=$2${source.active}
-         AND ($3::timestamptz IS NULL OR (created_at,watch_id)>($3::timestamptz,$4::uuid))
-       ORDER BY created_at,watch_id LIMIT $5`,
-        [owner.route, owner.id, after?.[0] ?? null, after?.[1] ?? null, WATCH_MANAGEMENT_RAW_BUDGET],
-      );
+      const statement =
+        after === null
+          ? `SELECT watch_id::text,${source.resource}::text AS resource_id,created_at::text,${source.revision} AS revision
+             FROM ${source.table}
+             WHERE route=$1 AND watcher_account_id=$2${source.active}
+             ORDER BY created_at,watch_id LIMIT $3`
+          : `SELECT watch_id::text,${source.resource}::text AS resource_id,created_at::text,${source.revision} AS revision
+             FROM ${source.table}
+             WHERE route=$1 AND watcher_account_id=$2${source.active}
+               AND (created_at,watch_id)>($3::timestamptz,$4::uuid)
+             ORDER BY created_at,watch_id LIMIT $5`;
+      const values =
+        after === null
+          ? [owner.route, owner.id, WATCH_MANAGEMENT_RAW_BUDGET]
+          : [owner.route, owner.id, after[0], after[1], WATCH_MANAGEMENT_RAW_BUDGET];
+      const result = await deadlineClient(connection, deadline).query<WatchRow>(statement, values);
       return result.rows;
     }),
   );
