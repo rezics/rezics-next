@@ -230,7 +230,7 @@ test('a receipt never claims success when current readback differs or is unavail
     editor.edit({ displayName: 'Intended name' });
     await editor.submit('profile');
     expect(editor.snapshot().phase).toBe(unreadable ? 'uncertain' : 'review');
-    expect(editor.snapshot().draft?.displayName).toBe('Intended name');
+    expect(editor.snapshot().draft?.displayName).toBe(unreadable ? 'Intended name' : 'Another device');
     expect(!!editor.snapshot().attempt).toBe(unreadable);
     if (unreadable) {
       const capturedRetry = editor.retry.bind(editor);

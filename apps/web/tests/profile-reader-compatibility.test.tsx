@@ -505,7 +505,12 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveWrite(speakerSaveCount, { ok: true, profile: speakersAfter }, speakersAfter);
     await until(() => readRequests.length === speakerReadback + 1, 'organization speaker readback');
     await resolveRead(speakerReadback, successRead(speakersAfter));
-    await until(() => writableEditor.snapshot().phase === 'saved', 'organization speaker confirmation');
+    await until(
+      () => writableEditor.snapshot().phase === 'review' && writableEditor.snapshot().attempt === null,
+      'organization speaker confirmation with the later Profile draft retained',
+    );
+    expect(writableEditor.snapshot().known?.speakersListed).toBe(true);
+    expect(writableEditor.snapshot().draft?.displayName).toBe('Current organization');
 
     await act(async () => writableEditor.edit({ biography: 'Uncertain original command' }));
     const uncertainWrite = saveRequests.length;
