@@ -108,8 +108,8 @@ function eligibilityFromViewerActions(result: {
       viewerActions?: { action: string; operations: string[] }[];
       error?: string;
     }[];
-  };
-  error?: { value?: unknown };
+  } | null;
+  error?: { value?: unknown } | null;
 }): CreateAuthority {
   const body = result.error?.value;
   const code = problemCode(body);

@@ -695,8 +695,8 @@ function CreateSubjectFormLive({
         <CreateAuthorityStatus
           locale={locale}
           authority={observedAuthority}
-          pending={eligibilityQuery.isPending || eligibilityQuery.isFetching}
           href={profile?.href ?? `/${locale}/catalogue/new`}
+          {...(eligibilityQuery.isPending || eligibilityQuery.isFetching ? { pending: true } : {})}
           onRetry={() => {
             void refreshCreateEligibility();
           }}
@@ -1052,7 +1052,7 @@ function CreateSubjectFormLive({
                   onRefreshAuthority={() => {
                     void refreshCreateEligibility();
                   }}
-                  authorityPending={eligibilityQuery.isPending || eligibilityQuery.isFetching}
+                  {...(eligibilityQuery.isPending || eligibilityQuery.isFetching ? { authorityPending: true } : {})}
                   createHref={profile?.href ?? `/${locale}/catalogue/new`}
                 />
               ) : null}

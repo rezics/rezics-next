@@ -73,7 +73,6 @@ export function CreateAuthorityStatus({
   return (
     <div className="space-y-2">
       <p role="alert">{text}</p>
-      {authority.state === 'guest' ? signIn : null}
       {retry}
     </div>
   );
@@ -359,8 +358,8 @@ export function IdentityIntakePanel({
       <CreateAuthorityStatus
         locale={locale}
         authority={authority ?? page?.actions.createAuthority}
-        pending={authorityPending}
         href={createHref ?? `/${locale}/catalogue/new`}
+        {...(authorityPending ? { pending: true } : {})}
         {...(onRefreshAuthority ? { onRetry: onRefreshAuthority } : {})}
       />
       <div className="flex flex-wrap gap-2">
