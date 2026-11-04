@@ -2,7 +2,7 @@ import { assertPreProfileLibraryRead } from './profile-source.ts';
 import type { PoolClient } from 'pg';
 import type { ProgressMode, ProgressState } from './progress.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
-import type { LibraryProfilePin } from './profile.ts';
+import type { LibraryProgressUnitDescriptor, LibraryProfilePin } from './profile.ts';
 import changeAppend from './progress-store-change-append.sql';
 import changePage from './progress-store-change-page.sql';
 import sessionInsert from './progress-store-session-insert.sql';
@@ -222,6 +222,7 @@ export async function insertSession(
   session: ProgressSessionDraft,
   context: WriteContext,
   pin?: LibraryProfilePin,
+  meaningDescriptors?: readonly Readonly<{ mode: ProgressMode; descriptor: LibraryProgressUnitDescriptor }>[],
 ): Promise<ProgressSession> {
   assertMode(session.mode);
   const acceptedPin = pin === undefined ? null : decodeLibraryProfilePin(pin);
@@ -246,6 +247,30 @@ export async function insertSession(
     })),
   });
   if (!row) throw new Error('Library session insert returned no row');
+  if (meaningDescriptors?.length) {
+    if (!acceptedPin) throw new TypeError('Accepted progress meaning requires a profile pin');
+    const meanings = meaningDescriptors.map(({ mode, descriptor }) => ({
+      unit_id: descriptor.id,
+      mode,
+      dimension: descriptor.dimension ?? null,
+      precision: descriptor.precision ?? null,
+      minimum: descriptor.minimum ?? null,
+      maximum: descriptor.maximum ?? null,
+      total_policy: descriptor.totalPolicy ?? null,
+      identity_kind: descriptor.identity.kind,
+      structure_kind: descriptor.structure.kind,
+    }));
+    await client.query(
+      `INSERT INTO library.reading_insights_progress_meaning
+        (route,session_id,unit_id,meaning_revision,mode,profile_pin,dimension,precision,minimum,maximum,
+         total_policy,identity_kind,structure_kind)
+       SELECT $1,$2,unit_id,1,mode,$3::jsonb,dimension,precision,minimum,maximum,total_policy,identity_kind,structure_kind
+       FROM jsonb_to_recordset($4::jsonb) AS accepted(
+         unit_id text, mode text, dimension text, precision smallint, minimum numeric, maximum numeric,
+         total_policy text, identity_kind text, structure_kind text)`,
+      [route, session.id, JSON.stringify(acceptedPin), JSON.stringify(meanings)],
+    );
+  }
   return asSession(row);
 }
 

@@ -1,13 +1,15 @@
 # Private reading insights
 
-This owner document covers the retained-profile distribution projection. The complete private insights journey
-also needs current unit quantities, assessment coverage, composed viewer/actions and the reachable Web page;
-those outcomes are not installed by this increment. Existing all-time/year counts, month navigation, journals,
-assessment writers and diary allocation remain authoritative and unchanged.
+This owner document covers the retained-profile distribution projection. The native session writer now captures
+accepting unit meaning for new sessions, but the complete private insights journey still needs its maintained current
+unit aggregate, assessment coverage, composed viewer/actions and reachable Web page. Existing all-time/year counts,
+month navigation, journals, assessment writers and diary allocation remain authoritative and unchanged.
 
 Decision: Group historical completions by the entire immutable accepting profile pin, including release and accepting
 Type; show profile identity with historical labels unavailable until accepted descriptors are retained, never infer books
 or episodes from a current Type or a profile ID. Pins exceeding 1,024 encoded bytes join historical-unavailable coverage.
+Decision: Capture current-progress meaning only from the accepting pinned descriptor at native session creation; older
+rows without a captured descriptor remain unavailable, and labels or current profiles never supply historical meaning.
 
 ## Mounted panel contract
 
@@ -51,6 +53,9 @@ The migration installs synchronous native source receiving and empty derived tab
 `reading_insights_initialized=false` column; it performs no history scan. New sessions receive immediately.
 An old session receives only through an addressed mutation or the installed shelf maintenance backfill's existing
 100-row sessions phase. Receiving uses the existing native changed row operands, without a generic event dependency.
+New native sessions also retain a private descriptor snapshot for each supported primary or additional unit. The
+snapshot includes the full accepting profile pin, dimension, precision, bounds, total policy, mode, identity and
+structure, but no labels. Existing sessions have no such snapshot and remain unavailable for dimensional aggregation.
 
 Availability requires the versioned installation marker, installed all-time source counter, ready/open initialized
 shelf maintenance and equality of initialized and retained session counters. An owner with no retained sessions is
