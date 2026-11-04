@@ -238,3 +238,10 @@ The existing Web signatures remain unchanged. For example, retrying
 `apply(actor, uploadId, [{ordinal, reviewId}], record)` after a lost state acknowledgement may return
 `{uploadId,outcomes:[{ordinal,reviewId,status:'applied'}],stopped:'cancelled'}` after expiry. This acknowledges the
 original effect only; subsequent page/source reads return not found. This is a constructed shape, not acceptance evidence.
+
+Persisted lifecycle scenarios currently cannot execute past native fixture setup: subject creation reports
+`Unclassified history event type`; direct subject preparation reports
+`Exact self requires native subject:create authorization`; label review reports
+`A command must emit at least one event`. These failures also occur on the retained base. Workspace typechecking
+likewise retains the base compiler failures, beginning with the missing generated `rating/own-votes-counted` module.
+The new lifecycle cases therefore remain unverified; frozen acceptance, native growth and browser checks are deferred.

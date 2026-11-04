@@ -751,7 +751,8 @@ Done. Private evidence retains fields without admission, including simultaneous 
 `services/kernel/test/library/list-import-mal.test.ts` covers parser losses, score review/unit selection, zero and
 missing score consent, stale local votes, typed unavailable outcomes and the existing preview/review/apply, retry,
 owner isolation, malformed input, cancellation and terminal denial cases. Broader frozen acceptance and integration
-remain deferred; constructed transport examples are not execution evidence.
+remain deferred; constructed transport examples are not execution evidence. Persisted VNDB lifecycle cases remain
+unverified because native fixture setup fails on the retained base as detailed in the source owner contract.
 
 ### MAL and AniList scalar progress adoption
 
