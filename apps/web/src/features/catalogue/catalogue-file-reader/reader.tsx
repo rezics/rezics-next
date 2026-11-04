@@ -365,6 +365,7 @@ function InspectionPanel({
   fallback: () => HTMLElement | undefined;
 }) {
   const o = options(visit.locale);
+  const Link = link;
   const statement = evidence.statement;
   const association = evidence.association;
   const currentRelease = visit.digest;
