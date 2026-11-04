@@ -1,4 +1,27 @@
 types:
   schema:MusicAlbum: album
+  schema:MusicRelease: édition musicale
+  schema:MusicRecording: enregistrement
+properties:
+  schema:releaseOf: édition de
+  schema:catalogNumber: numéro de catalogue
+  schema:recordLabel: label
+  schema:track: piste
+  schema:byArtist: interprète
+  wdt:P642: de
+inverseProperties:
+  schema:releaseOf: Éditions de l’album
+  schema:recordLabel: Éditions de ce label
+  schema:track: Éditions contenant cet enregistrement
+  schema:byArtist: Enregistrements de cet interprète
 typeDescriptions:
   schema:MusicAlbum: 'Un album musical en tant qu’œuvre regroupant des pistes, indépendant d’un exemplaire ou d’une édition distribuée donnée.'
+  schema:MusicRelease: 'Une édition publiée précise d’un album musical, avec son numéro de catalogue, son format, sa date et ses enregistrements ordonnés. Distincte de l’œuvre-album, d’un exemplaire personnel, d’un fichier de lecture ou d’un enregistrement.'
+  schema:MusicRecording: 'Une interprétation enregistrée et identifiée d’une œuvre musicale, par exemple une prise d’une chanson. Distincte du regroupement d’album, d’une édition publiée, d’un fichier de lecture ou d’un exemplaire personnel.'
+propertyDescriptions:
+  schema:releaseOf: 'L’œuvre-album que cette édition publiée réalise ; l’édition n’est pas un nouveau nom pour cet album.'
+  schema:catalogNumber: 'Le numéro de catalogue attribué à cette édition par son label, conservé tel que la source l’écrit.'
+  schema:recordLabel: 'L’organisation créditée comme label ayant publié cette édition.'
+  schema:track: 'Un enregistrement identifié sur cette édition. La position, le nom crédité, le rôle, la date et l’occurrence de liste distinguent les usages répétés du même enregistrement.'
+  schema:byArtist: 'Une personne ou organisation créditée comme interprète de cet enregistrement, avec nom crédité, ordre et rôle détaillé.'
+  wdt:P642: 'Le concept d’occurrence de liste qui sépare deux associations vers le même enregistrement. Ce n’est pas un support ou une face publiés.'

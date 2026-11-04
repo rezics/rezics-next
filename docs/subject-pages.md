@@ -37,8 +37,8 @@ qualified credits and related work with human field labels from the current immu
 source provenance, distinct from editorial acceptance. Relation pages that return a following `next` token are the
 loaded page only; they never imply a complete tracklist or episode list.
 
-Type3 maps to MusicAlbum with no work/release/track split. The ordinary album contents reader consumes only admitted canonical containment streams; it does not publish tracks or recordings. MusicAlbum
-has no Library profile, so Library states, copies and progress stay unpublished. An ordinary Subject Recording destination
+Type3 maps to MusicAlbum with no work/release/track split. The ordinary album contents reader consumes only admitted canonical containment streams; it does not publish tracks or recordings. MusicAlbum, MusicRelease and MusicRecording
+have no Library profile, so Library states, copies and progress stay unpublished. An album overview offers admitted inverse `schema:releaseOf` editions as destinations. An ordinary Subject Recording destination
 is available when its distinct type and fields are admitted by that subject's pinned immutable definition release. Type6 maps pinned movie platforms to
 Movie and pinned TV-template platforms to TVSeries; unknown platform codes stay ignored. Movie and TVSeries expose the
 existing `anime.film` and `anime.series` Library controls. Opening an admitted `schema:TVSeason` or `schema:Episode`
@@ -99,13 +99,15 @@ Decision: Open each exact edition in a new tab so the bounded work view remains 
 
 The ordinary Subject overview offers the [music release reader](../apps/web/src/features/catalogue/music-release-reader/README.md)
 for a native `schema:MusicRelease` identity or descendant, independently of album contents and Recording readers.
-It names this edition's admitted album relationship, format, region, date and directed medium/recording associations.
-TBA, partial/absent dates and unsupported configuration stay distinct. Existing generic facts and correction remain
-available; missing producer music configuration is unavailable and does not publish a music vocabulary.
+It names this edition's admitted album relationship, catalogue number, format, label, date, duration and ordered
+recording associations. Region and medium-level disc or side identity stay unsupported in this slice. TBA, partial/absent
+dates and unsupported configuration stay distinct. Existing generic facts and correction remain available.
 
-Decision: music release admission requires the exact released `schema:MusicRelease` identity or a released descendant;
-optional `rezics:MusicMedium` and `schema:MusicRecording` associations use existing native operations until Semantic
-publishes their configuration. Generic release labels and provider codes do not admit them.
+Decision: music release admission requires the exact released `schema:MusicRelease` identity or a released descendant.
+`schema:MusicRecording` is published as its own Type; `rezics:MusicMedium` stays unpublished, and listing-occurrence
+Concepts on `schema:track` distinguish repeated recordings without inventing a medium. Generic release labels and
+provider codes do not admit them. Duration and distribution format reuse the existing `schema:duration` and `wdt:P437`
+slots. Track associations use Wikidata P642 targeting Concept as slotKey so the same recording can occupy two positions.
 
 ### Music edition Cost
 
@@ -152,6 +154,7 @@ The ordinary Subject Recording overview reads only the current disclosed identit
 performer, composition and release associations admitted by that subject's pinned immutable definition release.
 Recording, musical work, album and release remain distinct identities. Each association preserves its declared
 direction, role/time qualifiers and exact target; unsupported vocabulary keeps the existing Facts and correction path.
+A Recording has no Library profile until Commerce publishes one.
 
 Decision: A Recording overview preserves each property's declared direction and exact target identity, and carries only
 the validated single-hop `via` return address.

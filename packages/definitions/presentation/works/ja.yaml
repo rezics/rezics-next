@@ -1,4 +1,27 @@
 types:
   schema:MusicAlbum: アルバム
+  schema:MusicRelease: リリース
+  schema:MusicRecording: 録音
+properties:
+  schema:releaseOf: 作品
+  schema:catalogNumber: カタログ番号
+  schema:recordLabel: レーベル
+  schema:track: 収録曲
+  schema:byArtist: アーティスト
+  wdt:P642: 対象
+inverseProperties:
+  schema:releaseOf: アルバムのリリース
+  schema:recordLabel: このレーベルのリリース
+  schema:track: この録音を収録したリリース
+  schema:byArtist: このアーティストの録音
 typeDescriptions:
   schema:MusicAlbum: '楽曲をまとめた音楽アルバムの作品。特定の所蔵物や頒布版とは独立した対象です。'
+  schema:MusicRelease: 'カタログ番号・フォーマット・日付と並んだ録音を持つ、音楽アルバムの特定の刊行版。アルバム作品、個人の所蔵物、再生ファイル、個別の録音とは別です。'
+  schema:MusicRecording: '楽曲の特定の録音、たとえば一つのテイク。アルバムとしてのまとめ、刊行版、再生ファイル、個人の所蔵物とは別です。'
+propertyDescriptions:
+  schema:releaseOf: 'この刊行版が実現する音楽アルバム作品。刊行版はアルバムの別名ではありません。'
+  schema:catalogNumber: '発行レーベルがこの版に付けたカタログ番号。出典の表記どおり保存します。'
+  schema:recordLabel: 'この版を発行したレコードレーベルとして記される組織。'
+  schema:track: 'この版に載る識別済みの録音。位置、名義、役割、日付、リスト上の出現で、同一録音の繰り返しを区別します。'
+  schema:byArtist: 'この録音の演奏者として記される人物または組織。名義、並び、詳細な役割を伴います。'
+  wdt:P642: '同一録音への二つの関連を別スロットに保つリスト出現の概念。刊行されたディスクや面ではありません。'

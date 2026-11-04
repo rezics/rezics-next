@@ -7,10 +7,11 @@ import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateValue } from '../pages/data';
 import { linkClass, linkColor, PlainLink, type PageLink, type Stmt } from '../pages/shared';
-import { loadAlbumProfile } from './album-profile-actions';
+import { loadAlbumEditions, loadAlbumProfile } from './album-profile-actions';
 import { AlbumProfileEntry } from './album-profile-entry';
 import {
   musicReaderVisit,
+  type AlbumEditionRead,
   type MusicReaderVisit,
   type ProfileBound,
   type ProfileField,
@@ -231,11 +232,52 @@ export function ProfileReaderGroups({
   );
 }
 
+function EditionList({
+  editions,
+  locale,
+  link: Link,
+}: {
+  editions: Extract<AlbumEditionRead, { ok: true }>;
+  locale: string;
+  link: PageLink;
+}) {
+  const o = options(locale);
+  return (
+    <section data-slot="music-album-editions" className="min-w-0 space-y-3">
+      <ContentItemHeading level={2} className="text-xl font-semibold">
+        {m.subject_editions({}, o)}
+      </ContentItemHeading>
+      {!editions.admitted ? (
+        <p role="status">{m.music_reader_unavailable({}, o)}</p>
+      ) : editions.rows.length ? (
+        <ul className="min-w-0 space-y-2">
+          {editions.rows.map((row) => {
+            const label = row.summary?.label?.value ?? row.label ?? row.subject;
+            return (
+              <li key={`${row.subject}:${row.statement}`}>
+                <Link
+                  href={subjectHref({ id: row.subject, label }, locale).href}
+                  className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center [overflow-wrap:anywhere]`}
+                >
+                  {label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p role="status">{m.music_reader_empty({}, o)}</p>
+      )}
+    </section>
+  );
+}
+
 export function MusicAlbumReader({
   locale,
   release,
   public: publicRead,
   bounds,
+  editions,
   reason,
   loading,
   onRetry,
@@ -245,6 +287,7 @@ export function MusicAlbumReader({
   release?: Release;
   public?: SubjectRead | null;
   bounds?: readonly ProfileBound[];
+  editions?: Extract<AlbumEditionRead, { ok: true }>;
   reason?: Exclude<ProfileReaderState, 'ready' | 'empty'>;
   loading?: boolean;
   onRetry?: () => void;
@@ -255,6 +298,7 @@ export function MusicAlbumReader({
     ...(publicRead !== undefined ? { public: publicRead } : {}),
     ...(release ? { release } : {}),
     ...(bounds ? { bounds } : {}),
+    ...(editions ? { editions } : {}),
     ...(reason ? { reason } : {}),
     ...(loading ? { loading } : {}),
   });
@@ -285,6 +329,9 @@ export function MusicAlbumReader({
           link={link}
           titles={(id) => groupTitle(id, locale)}
         />
+      ) : null}
+      {visit.state === 'ready' || visit.state === 'empty' ? (
+        <EditionList editions={visit.editions} locale={locale} link={link} />
       ) : null}
       <ProfileBoundNotes bounds={visit.bounds} locale={locale} />
       <ProfileSourceList sources={visit.sources} locale={locale} />
@@ -326,7 +373,14 @@ export function MusicAlbumOverview({
       if (!reading.isCurrent()) throw new Error('Retired album source');
       const result = await loadAlbumProfile({ data: publicRead.subject.id });
       if (!reading.isCurrent()) throw new Error('Retired album source');
-      return result;
+      const editions =
+        result.ok && publicRead.subject.context
+          ? await loadAlbumEditions({
+              data: { id: publicRead.subject.id, context: publicRead.subject.context },
+            })
+          : undefined;
+      if (!reading.isCurrent()) throw new Error('Retired album source');
+      return { profile: result, editions };
     },
     retry: false,
     staleTime: Infinity,
@@ -335,14 +389,17 @@ export function MusicAlbumOverview({
     refetchOnReconnect: false,
   });
   if (!reading.available) return <p role="status">{m.music_reader_stale({}, options(locale))}</p>;
-  const release = query.data?.ok ? query.data.release : undefined;
-  const reason = query.data && !query.data.ok ? query.data.reason : query.isError ? 'unavailable' : undefined;
+  const profile = query.data?.profile;
+  const release = profile?.ok ? profile.release : undefined;
+  const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
+  const editions = query.data?.editions?.ok ? query.data.editions : undefined;
   return (
     <MusicAlbumReader
       locale={locale}
       public={publicRead}
       {...(release ? { release } : {})}
       {...(bounds ? { bounds } : {})}
+      {...(editions ? { editions } : {})}
       {...(reason ? { reason } : {})}
       {...(query.isPending ? { loading: true } : {})}
       onRetry={() => void query.refetch()}

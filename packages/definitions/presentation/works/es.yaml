@@ -1,4 +1,27 @@
 types:
   schema:MusicAlbum: álbum
+  schema:MusicRelease: edición musical
+  schema:MusicRecording: grabación
+properties:
+  schema:releaseOf: edición de
+  schema:catalogNumber: número de catálogo
+  schema:recordLabel: sello discográfico
+  schema:track: pista
+  schema:byArtist: intérprete
+  wdt:P642: de
+inverseProperties:
+  schema:releaseOf: Ediciones del álbum
+  schema:recordLabel: Ediciones de este sello
+  schema:track: Ediciones que incluyen esta grabación
+  schema:byArtist: Grabaciones de este intérprete
 typeDescriptions:
   schema:MusicAlbum: 'Un álbum musical como obra que agrupa pistas, independiente de un ejemplar o edición distribuida concreta.'
+  schema:MusicRelease: 'Una edición publicada concreta de un álbum musical, con su número de catálogo, formato, fecha y grabaciones ordenadas. Distinta de la obra-álbum, un ejemplar personal, un archivo de reproducción o una grabación.'
+  schema:MusicRecording: 'Una interpretación grabada e identificada de una obra musical, como una toma de una canción. Distinta de la agrupación del álbum, una edición publicada, un archivo de reproducción o un ejemplar personal.'
+propertyDescriptions:
+  schema:releaseOf: 'La obra-álbum que esta edición publicada realiza; la edición no es un nombre nuevo para ese álbum.'
+  schema:catalogNumber: 'El número de catálogo que el sello asignó a esta edición, guardado como texto de la fuente.'
+  schema:recordLabel: 'La organización acreditada como sello discográfico que publicó esta edición.'
+  schema:track: 'Una grabación identificada en esta edición. La posición, el nombre acreditado, el rol, la fecha y la ocurrencia de listado distinguen usos repetidos de la misma grabación.'
+  schema:byArtist: 'Una persona u organización acreditada como intérprete de esta grabación, con nombre acreditado, orden y rol detallado.'
+  wdt:P642: 'El concepto de ocurrencia de listado que mantiene en ranuras distintas dos asociaciones a la misma grabación. No es un soporte o cara publicado.'

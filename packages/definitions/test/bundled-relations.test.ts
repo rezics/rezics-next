@@ -119,7 +119,7 @@ test('credit properties are admitted on episodes and releases', () => {
     'wdt:P58',
     'wdt:P725',
   ];
-  expect(credits.map(([term]) => term).sort()).toEqual([...oldRoles, 'marcrel:fds'].sort());
+  expect(credits.map(([term]) => term).sort()).toEqual([...oldRoles, 'marcrel:fds', 'schema:byArtist'].sort());
   const applicability = {
     'schema:Episode': oldRoles,
     'bf:Instance': oldRoles,

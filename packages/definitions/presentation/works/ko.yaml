@@ -1,4 +1,27 @@
 types:
   schema:MusicAlbum: 앨범
+  schema:MusicRelease: 음반
+  schema:MusicRecording: 녹음
+properties:
+  schema:releaseOf: 원작
+  schema:catalogNumber: 카탈로그 번호
+  schema:recordLabel: 레이블
+  schema:track: 수록곡
+  schema:byArtist: 아티스트
+  wdt:P642: 대상
+inverseProperties:
+  schema:releaseOf: 앨범 발매
+  schema:recordLabel: 이 레이블의 음반
+  schema:track: 이 녹음이 실린 음반
+  schema:byArtist: 이 아티스트의 녹음
 typeDescriptions:
   schema:MusicAlbum: '여러 곡을 묶은 음악 앨범 작품입니다. 특정 소장본이나 유통 판본과는 독립적입니다.'
+  schema:MusicRelease: '카탈로그 번호, 형식, 날짜와 정렬된 녹음을 가진 음악 앨범의 특정 발행판입니다. 앨범 작품, 개인 소장본, 재생 파일, 개별 녹음과는 별개입니다.'
+  schema:MusicRecording: '음악 작품의 식별된 녹음, 예를 들어 한 곡의 테이크입니다. 앨범 묶음, 발행판, 재생 파일, 개인 소장본과는 별개입니다.'
+propertyDescriptions:
+  schema:releaseOf: '이 발행판이 실현하는 음악 앨범 작품입니다. 발행판은 그 앨범의 새 이름이 아닙니다.'
+  schema:catalogNumber: '발행 레이블이 이 판에 부여한 카탈로그 번호로, 출처 표기 그대로 저장합니다.'
+  schema:recordLabel: '이 판을 발행한 레코드 레이블로 적힌 조직입니다.'
+  schema:track: '이 판에 실린 식별된 녹음입니다. 위치, 표기 이름, 역할, 날짜, 목록 출현으로 같은 녹음의 반복을 구분합니다.'
+  schema:byArtist: '이 녹음의 연주자로 적힌 사람 또는 조직이며, 표기 이름, 순서, 세부 역할을 갖습니다.'
+  wdt:P642: '같은 녹음에 대한 두 연관을 다른 슬롯에 두는 목록 출현 개념입니다. 발행된 디스크나 면이 아닙니다.'

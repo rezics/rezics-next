@@ -6,9 +6,9 @@ The [coverage audit](../../../../../../docs/research/api-first-platform-coverage
 boundaries. Album contents and Recording destination readers remain separate owners. Destinations use the current
 ordinary Subject composition, without adding a View or changing the existing release-fidelity release types.
 
-Decision: this reader requires the exact released `schema:MusicRelease` identity (or a released descendant);
-`rezics:MusicMedium` and `schema:MusicRecording` are explicit optional association seams, never generated declarations.
-Semantic owns their publication. Labels, generic release ancestry, mappings and provider codes never admit music.
+Decision: this reader requires the exact released `schema:MusicRelease` identity (or a released descendant).
+`schema:MusicRecording` is a published Type; `rezics:MusicMedium` remains an explicit unpublished association seam.
+Labels, generic release ancestry, mappings and provider codes never admit music.
 The ordinary frame uses its native summary ancestry to discover descendants; the reader independently checks the
 current immutable Release before exposing edition facts. A missing admission offers generic facts and correction.
 
