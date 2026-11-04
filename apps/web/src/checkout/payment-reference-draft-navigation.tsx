@@ -17,22 +17,62 @@ export function hasUnsentPaymentReference(value: string, hasCapturedAttempt: boo
   return !hasCapturedAttempt && validPaymentReference(value);
 }
 
+export function sameOriginDocumentDestination(
+  anchor: HTMLAnchorElement,
+  event: MouseEvent,
+  currentHref: string,
+): string | null {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    anchor.hasAttribute('download')
+  )
+    return null;
+
+  const target = anchor.target.trim().toLowerCase();
+  if (target && target !== '_self') return null;
+
+  let current: URL;
+  let destination: URL;
+  try {
+    current = new URL(currentHref);
+    destination = new URL(anchor.href, current);
+  } catch {
+    return null;
+  }
+  if (destination.origin !== current.origin) return null;
+  if (
+    destination.pathname === current.pathname &&
+    destination.search === current.search &&
+    (destination.hash !== current.hash || anchor.getAttribute('href')?.includes('#'))
+  )
+    return null;
+  return destination.href;
+}
+
 export function PaymentReferenceDraftNavigation({
   active,
   isCurrent,
+  draftIsCurrent,
   focus,
 }: {
   active: boolean;
   isCurrent: () => boolean;
+  draftIsCurrent?: () => boolean;
   focus: () => HTMLElement | null;
 }) {
-  const live = useRef({ active, isCurrent, focus });
-  live.current = { active, isCurrent, focus };
+  const live = useRef({ active, isCurrent: draftIsCurrent ?? isCurrent, focus });
+  live.current = { active, isCurrent: draftIsCurrent ?? isCurrent, focus };
   const [open, setOpen] = useState(false);
   const pending = useRef<((discard: boolean) => void) | null>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const stayButton = useRef<HTMLButtonElement>(null);
   const discarded = useRef(false);
+  const approvedDocumentDeparture = useRef(false);
   const router = useRouter({ warn: false });
   const protectedNow = () => live.current.active && live.current.isCurrent();
 
@@ -71,12 +111,33 @@ export function PaymentReferenceDraftNavigation({
   useEffect(() => {
     if (!active) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (approvedDocumentDeparture.current) {
+        approvedDocumentDeparture.current = false;
+        return;
+      }
       if (!protectedNow()) return;
       event.preventDefault();
       event.returnValue = '';
     };
+    const documentLink = (event: MouseEvent) => {
+      const target = event.target;
+      const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
+      if (!anchor || !protectedNow()) return;
+      const destination = sameOriginDocumentDestination(anchor, event, window.location.href);
+      if (!destination) return;
+      event.preventDefault();
+      void confirmRef.current().then((discard) => {
+        if (!discard) return;
+        approvedDocumentDeparture.current = true;
+        window.location.assign(destination);
+      });
+    };
     window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
+    window.addEventListener('click', documentLink);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnload);
+      window.removeEventListener('click', documentLink);
+    };
   }, [active]);
 
   return (

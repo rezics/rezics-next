@@ -28,7 +28,7 @@ const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPr
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-const { hasUnsentPaymentReference, PaymentReferenceDraftNavigation } =
+const { hasUnsentPaymentReference, PaymentReferenceDraftNavigation, sameOriginDocumentDestination } =
   await import('../src/checkout/payment-reference-draft-navigation');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -36,6 +36,28 @@ setLocale('en', { reload: false });
 const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
+
+test('ordinary same-origin document links keep native click meanings', () => {
+  const destination = (
+    href: string,
+    options: { target?: string; download?: boolean; ctrlKey?: boolean } = {},
+  ) => {
+    const anchor = window.document.createElement('a');
+    anchor.href = href;
+    if (options.target) anchor.target = options.target;
+    if (options.download) anchor.setAttribute('download', '');
+    const event = new window.MouseEvent('click', { button: 0, bubbles: true, cancelable: true, ...options });
+    return sameOriginDocumentDestination(anchor, event, window.location.href);
+  };
+
+  expect(destination('/statement')).toBe('https://site.test/statement');
+  expect(destination('/next')).toBe('https://site.test/next');
+  expect(destination('/statement#lines')).toBeNull();
+  expect(destination('/next', { target: '_blank' })).toBeNull();
+  expect(destination('/next', { download: true })).toBeNull();
+  expect(destination('https://other.test/next')).toBeNull();
+  expect(destination('/next', { ctrlKey: true })).toBeNull();
+});
 
 test('unsent references warn on departure, Stay preserves text and focus, and discard does not submit', async () => {
   expect(hasUnsentPaymentReference('', false)).toBe(false);

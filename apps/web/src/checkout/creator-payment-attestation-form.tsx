@@ -29,6 +29,7 @@ export function CreatorPaymentAttestationFormView({
   onReferenceChange,
   admitted,
   isCurrent,
+  draftIsCurrent = isCurrent,
   onSubmit,
   onRefresh,
   refreshing,
@@ -41,6 +42,7 @@ export function CreatorPaymentAttestationFormView({
   onReferenceChange(value: string): void;
   admitted: boolean;
   isCurrent(): boolean;
+  draftIsCurrent?(): boolean;
   onSubmit(): void | Promise<void>;
   onRefresh(): void | Promise<void>;
   refreshing: boolean;
@@ -191,6 +193,7 @@ export function CreatorPaymentAttestationFormView({
           }
           isCurrent={isCurrent}
           focus={() => referenceField.current}
+          draftIsCurrent={draftIsCurrent}
         />
       )}
     </div>
@@ -274,6 +277,7 @@ export function CreatorPaymentAttestation({
       }}
       admitted={admitted}
       isCurrent={guard.isCurrent}
+      draftIsCurrent={() => current() && !!guard.csrfToken()}
       onSubmit={submit}
       onRefresh={refreshEvidence}
       refreshing={refreshing}

@@ -1,10 +1,11 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createKernelClient } from '@rezics/client';
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
 import * as start from '../.storybook/react-start';
 import { creatorStatementFixture as statement } from '../src/kernel/fake/creator-statements';
 import { CreatorPaymentAttempt } from '../src/checkout/creator-payment-attestation-state';
+import { m } from '../src/paraglide/messages.js';
 
 const subject = statement.creatorAccountId;
 const csrf = 'c'.repeat(43);
@@ -202,6 +203,7 @@ for (const [key, value] of Object.entries(globals))
   });
 const { createRoot } = await import('react-dom/client');
 const { CreatorPaymentAttestation } = await import('../src/checkout/creator-payment-attestation-form');
+const { CreatorStatementPage } = await import('../src/checkout/creator-statement-page');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
 afterAll(async () => {
@@ -295,5 +297,128 @@ test('the actual form retries captured evidence after a paid read, confirms only
     globalThis.fetch = originalFetch;
     await act(async () => root.unmount());
     host.remove();
+  }
+});
+
+test('the actual statement Refresh asks before reloading, and discarding the draft sends no payment command', async () => {
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
+  const href = `/en/creator/statements/${statement.id}`;
+  const originalHref = window.location.href;
+  window.history.replaceState({}, '', href);
+  const assigned: string[] = [];
+  const assignDescriptor = Object.getOwnPropertyDescriptor(window.location, 'assign');
+  Object.defineProperty(window.location, 'assign', {
+    configurable: true,
+    writable: true,
+    value: (destination: string | URL) => assigned.push(String(destination)),
+  });
+  const originalFetch = globalThis.fetch;
+  let writes = 0;
+  let refreshes = 0;
+  let token: string | null = csrf;
+  globalThis.fetch = (async () => {
+    writes++;
+    return Response.json({ statement: paid });
+  }) as typeof fetch;
+  const rootRoute = createRootRoute({ component: Outlet });
+  const listRoute = createRoute({ getParentRoute: () => rootRoute, path: '/creator/statements', component: () => null });
+  let rerenderSession!: () => void;
+  function StatementFixture() {
+    const [, update] = useState(0);
+    rerenderSession = () => update((version) => version + 1);
+    return createElement(CreatorStatementPage, {
+      id: statement.id,
+      locale: 'en',
+      page: { kind: 'ready', statement, lines: { kind: 'ready', lines: [], next: null } },
+      payment: createElement(CreatorPaymentAttestation, {
+        statement,
+        subject,
+        locale: 'en',
+        guard: { isCurrent: () => true, csrfToken: () => token },
+        refresh: async () => {
+          refreshes++;
+          return true;
+        },
+      }),
+    });
+  }
+  const detailRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/creator/statements/$id',
+    component: StatementFixture,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([listRoute, detailRoute]),
+    history: createMemoryHistory({ initialEntries: [`/creator/statements/${statement.id}`] }),
+  });
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const dialog = () => document.querySelector('[role="alertdialog"]');
+  const button = (label: string) =>
+    [...document.querySelectorAll('button')].find((item) => item.textContent === label)!;
+  try {
+    await act(async () => {
+      await router.load();
+      root.render(createElement(RouterProvider, { router }));
+    });
+    const field = host.querySelector<HTMLInputElement>('input')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(
+        field,
+        input.paidReference,
+      );
+      field.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+    const refresh = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
+      (anchor) => anchor.textContent?.trim() === m.statements_refresh(),
+    )!;
+    expect(refresh.href).toBe(`https://site.test${href}`);
+    const clickRefresh = async () => await act(async () => refresh.click());
+
+    await clickRefresh();
+    expect(dialog()?.textContent).toContain(m.payment_reference_draft_navigation_title());
+    expect(field.getAttribute('aria-invalid')).toBe('false');
+    await act(async () => button(m.payment_reference_draft_navigation_stay()).click());
+    expect(field.value).toBe(input.paidReference);
+    expect(field.getAttribute('aria-invalid')).toBe('false');
+    expect(document.activeElement).toBe(field);
+
+    await clickRefresh();
+    expect(dialog()).not.toBeNull();
+    await act(async () => {
+      token = null;
+      rerenderSession();
+    });
+    expect(dialog()).toBeNull();
+    expect(assigned).toEqual([refresh.href]);
+    const retiredUnload = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(retiredUnload);
+    expect(retiredUnload.defaultPrevented).toBe(false);
+
+    await act(async () => {
+      token = csrf;
+      rerenderSession();
+    });
+    await act(async () => {
+      refresh.click();
+      refresh.click();
+    });
+    expect(dialog()).not.toBeNull();
+    await act(async () => button(m.payment_reference_draft_navigation_discard()).click());
+    expect(assigned).toEqual([refresh.href, refresh.href]);
+    const unload = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+    expect([writes, refreshes]).toEqual([0, 0]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await act(async () => root.unmount());
+    router.dispose();
+    host.remove();
+    window.history.replaceState({}, '', originalHref);
+    if (assignDescriptor) Object.defineProperty(window.location, 'assign', assignDescriptor);
+    else Reflect.deleteProperty(window.location, 'assign');
   }
 });

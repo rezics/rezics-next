@@ -185,6 +185,21 @@ export const Editing: Story = {
   },
 };
 
+export const UnsentReferenceDepartureChoice: Story = {
+  render: () => render(),
+  play: async (context) => {
+    await pageReady(context);
+    const view = main(context);
+    const field = await enterReference(view, '  BANK/Exact é  ');
+    await userEvent.click(view.getByRole('link', { name: m.statements_refresh() }));
+    const dialog = within(document.body);
+    await expect(await dialog.findByRole('alertdialog')).toBeVisible();
+    await userEvent.click(dialog.getByRole('button', { name: m.payment_reference_draft_navigation_stay() }));
+    await expect(field).toHaveValue('  BANK/Exact é  ');
+    await expect(field).toHaveFocus();
+  },
+};
+
 export const FirstValidationRejection: Story = {
   render: () => render({ outcomes: ['rejected'] }),
   play: async (context) => {
