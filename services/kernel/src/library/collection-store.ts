@@ -15,6 +15,7 @@ import type {
 import collectionInsert from './collection-store-collection-insert.sql';
 import collectionRead from './collection-store-collection-read.sql';
 import collectionUpdate from './collection-store-collection-update.sql';
+import { initializeCollectionMetadataHistory } from './collection-metadata-history.ts';
 import collectionTombstone from './collection-store-collection-tombstone.sql';
 import collectionDeletionRead from './collection-store-collection-deletion-read.sql';
 import collectionRestore from './collection-store-collection-restore.sql';
@@ -118,7 +119,14 @@ export async function insertCollection(
   });
   const row = rows[0];
   if (!row) throw new Error('Collection insert returned no row');
-  return asCollection(row as CollectionResult);
+  const result = asCollection(row as CollectionResult);
+  await initializeCollectionMetadataHistory(client, {
+    route,
+    collection: result,
+    transactionId: context.transactionId,
+    time: context.time,
+  });
+  return result;
 }
 
 export async function readCollection(client: Client, route: number, id: string): Promise<Collection | null> {

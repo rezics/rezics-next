@@ -5,6 +5,7 @@ import type { CollectionCleanupPage } from './collection-retention.ts';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
 import retireFence from './native-source-custody-retire-fence.sql';
 import outputHead from './collection-source-output-head.sql';
+import metadataHistory from './collection-metadata-history-cleanup.sql';
 import { retireNativeCollectionCapturePage } from './native-source-custody.ts';
 
 // Fixed statements, each taking a single indexed parent and returning at most 100 rows.
@@ -170,6 +171,8 @@ export async function purgeSavedCollectionPage(
     keys,
   );
   if (history.rowCount) return { status: 'progress', removed: history.rowCount };
+  const metadataRows = (await metadataHistory.run(tx, { route, collection_id: input.collectionId })).length;
+  if (metadataRows) return { status: 'progress', removed: metadataRows };
   if (frozen) {
     await tx.query(
       'DELETE FROM library.collection_source_output_publication WHERE route=$1 AND collection_id=$2',

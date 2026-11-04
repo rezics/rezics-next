@@ -14,6 +14,7 @@ import { type Access, type AccessCheck, type AccountActor } from '../request/acc
 import { routeOf } from '../route/route.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
+import { initializeCollectionMetadataHistory } from './collection-metadata-history.ts';
 import type { CollectionDraft } from './collection-model.ts';
 import type { PreparationDefinition } from './members-preparation.ts';
 import read from './collection-rules-read.sql';
@@ -208,6 +209,12 @@ export async function insertSavedCollection(
     sort: rule.sort,
     release_digest: rule.releaseDigest,
     transaction_id: command.transactionId,
+    time: command.time,
+  });
+  await initializeCollectionMetadataHistory(tx, {
+    route,
+    collection: draft,
+    transactionId: command.transactionId,
     time: command.time,
   });
 }

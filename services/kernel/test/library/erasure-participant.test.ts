@@ -106,6 +106,13 @@ beforeAll(async () => {
       201,
     )
   ).collection.id;
+  await json(
+    await request(people.bob, 'PATCH', `/v1/collections/${privateId}`, {
+      revision: 1,
+      title: 'private terminal contribution with retained metadata history',
+    }),
+    200,
+  );
   unlistedId = (
     await json(
       await request(people.bob, 'POST', '/v1/collections', {
@@ -309,6 +316,15 @@ test('complete local native cleanup stays pending for shared custody and T immed
       ).rows,
     ).toEqual([]);
     for (const table of ['collection_member', 'canonical_source_fact', 'canonical_source_state'])
+      expect(
+        (
+          await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND collection_id=$2 LIMIT 1`, [
+            owner[0],
+            id,
+          ])
+        ).rows,
+      ).toEqual([]);
+    for (const table of ['collection_metadata_history', 'collection_metadata_history_state'])
       expect(
         (
           await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND collection_id=$2 LIMIT 1`, [

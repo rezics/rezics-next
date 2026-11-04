@@ -24,6 +24,7 @@ import facts from './collection-retention-facts.sql';
 import state from './collection-retention-state.sql';
 import references from './collection-retention-references.sql';
 import metadata from './collection-retention-metadata.sql';
+import metadataHistory from './collection-metadata-history-cleanup.sql';
 import head from './collection-retention-head.sql';
 import retireFence from './native-source-custody-retire-fence.sql';
 import terminalScope from './erasure-scope.sql';
@@ -130,6 +131,8 @@ async function removeLocalPage(
   if (referenceCount > 0) return { status: 'progress', removed: referenceCount };
   const removed = (await metadata.run(tx, { ...args, account_id: accountId })).length;
   if (removed > 0) return { status: 'progress', removed };
+  const historyRemoved = (await metadataHistory.run(tx, args)).length;
+  if (historyRemoved > 0) return { status: 'progress', removed: historyRemoved };
   const [result] = await head.run(tx, {
     ...args,
     account_id: accountId,

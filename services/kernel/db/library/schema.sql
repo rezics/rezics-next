@@ -2737,6 +2737,55 @@ CREATE TABLE library.collection_member (
 
 
 --
+-- Name: collection_metadata_history; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_metadata_history (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    curator_account_id uuid NOT NULL,
+    revision integer NOT NULL,
+    transaction_id uuid NOT NULL,
+    recorded_at timestamp with time zone NOT NULL,
+    changed_fields text[] NOT NULL,
+    before_title text NOT NULL,
+    after_title text NOT NULL,
+    before_description text,
+    after_description text,
+    before_visibility text NOT NULL,
+    after_visibility text NOT NULL,
+    before_presentation_kind text,
+    after_presentation_kind text,
+    before_cover_media_id uuid,
+    after_cover_media_id uuid,
+    CONSTRAINT collection_metadata_history_after_visibility_check CHECK ((after_visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text]))),
+    CONSTRAINT collection_metadata_history_before_visibility_check CHECK ((before_visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text]))),
+    CONSTRAINT collection_metadata_history_changed_fields_check CHECK (((cardinality(changed_fields) >= 1) AND (cardinality(changed_fields) <= 5))),
+    CONSTRAINT collection_metadata_history_changed_fields_check1 CHECK ((changed_fields <@ ARRAY['title'::text, 'description'::text, 'visibility'::text, 'presentationKind'::text, 'coverMediaId'::text])),
+    CONSTRAINT collection_metadata_history_revision_check CHECK ((revision >= 2))
+);
+
+
+--
+-- Name: collection_metadata_history_state; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.collection_metadata_history_state (
+    route integer NOT NULL,
+    collection_id uuid NOT NULL,
+    curator_account_id uuid NOT NULL,
+    coverage text NOT NULL,
+    known_from_revision integer NOT NULL,
+    pruned_before_revision integer,
+    transaction_id uuid NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT collection_metadata_history_state_coverage_check CHECK ((coverage = ANY (ARRAY['complete'::text, 'partial'::text, 'unknown'::text]))),
+    CONSTRAINT collection_metadata_history_state_known_from_revision_check CHECK ((known_from_revision >= 1)),
+    CONSTRAINT collection_metadata_history_state_pruned_before_revision_check CHECK (((pruned_before_revision IS NULL) OR (pruned_before_revision >= 1)))
+);
+
+
+--
 -- Name: collection_order_repair; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -5826,6 +5875,22 @@ ALTER TABLE ONLY library.collection_member
 
 ALTER TABLE ONLY library.collection_member
     ADD CONSTRAINT collection_member_pkey PRIMARY KEY (route, collection_id, member_id);
+
+
+--
+-- Name: collection_metadata_history collection_metadata_history_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_metadata_history
+    ADD CONSTRAINT collection_metadata_history_pkey PRIMARY KEY (route, collection_id, revision);
+
+
+--
+-- Name: collection_metadata_history_state collection_metadata_history_state_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_metadata_history_state
+    ADD CONSTRAINT collection_metadata_history_state_pkey PRIMARY KEY (route, collection_id);
 
 
 --
@@ -9472,6 +9537,22 @@ ALTER TABLE ONLY library.collection_kind_raw_input
 
 ALTER TABLE ONLY library.collection_member
     ADD CONSTRAINT collection_member_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: collection_metadata_history collection_metadata_history_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_metadata_history
+    ADD CONSTRAINT collection_metadata_history_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id) ON DELETE CASCADE;
+
+
+--
+-- Name: collection_metadata_history_state collection_metadata_history_state_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_metadata_history_state
+    ADD CONSTRAINT collection_metadata_history_state_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id) ON DELETE CASCADE;
 
 
 --

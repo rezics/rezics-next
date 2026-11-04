@@ -8,5 +8,7 @@ WHERE retained.route=input.route AND retained.curator_account_id=input.account_i
   AND NOT EXISTS (SELECT 1 FROM library.canonical_source_fact WHERE route=input.route AND collection_id=input.parent_id)
   AND NOT EXISTS (SELECT 1 FROM library.canonical_source_state WHERE route=input.route AND collection_id=input.parent_id)
   AND NOT EXISTS (SELECT 1 FROM library.collection_listing_history WHERE route=input.route AND collection_id=input.parent_id)
+  AND NOT EXISTS (SELECT 1 FROM library.collection_metadata_history WHERE route=input.route AND collection_id=input.parent_id)
+  AND NOT EXISTS (SELECT 1 FROM library.collection_metadata_history_state WHERE route=input.route AND collection_id=input.parent_id)
   AND NOT EXISTS (SELECT 1 FROM library.collection_source_output WHERE route=input.route AND collection_id=input.parent_id)
 RETURNING true AS removed;

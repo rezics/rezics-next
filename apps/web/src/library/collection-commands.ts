@@ -4,6 +4,13 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
+import type {
+  CollectionMetadataHistoryChange,
+  CollectionMetadataHistoryChangeInput,
+  CollectionMetadataHistoryPage,
+  CollectionMetadataHistoryPageInput,
+  CollectionMetadataHistoryRead,
+} from './collection-metadata-history';
 import { deleteCollection, updateCollection } from './collection-edit';
 import { deleteCollectionRecord, updateCollectionRecord } from './collection-records';
 import {
@@ -50,6 +57,46 @@ export function captureCollectionCommand<Data extends object>(
 
 type CollectionUpdateData = Parameters<typeof updateCollectionRecord>[3];
 type CollectionDeleteData = Parameters<typeof deleteCollectionRecord>[3];
+
+function metadataHistoryPageInput(input: unknown): CollectionMetadataHistoryPageInput {
+  if (!input || typeof input !== 'object') throw new Error('Invalid Collection metadata history page');
+  const value = input as Record<string, unknown>;
+  if (
+    !identifier(value.collectionId) ||
+    (value.cursor !== null && (typeof value.cursor !== 'string' || value.cursor.length > 4096)) ||
+    !('cursor' in value) ||
+    typeof value.limit !== 'number' ||
+    !Number.isSafeInteger(value.limit) ||
+    value.limit < 1 ||
+    value.limit > 50
+  )
+    throw new Error('Invalid Collection metadata history page');
+  const cursor = value.cursor === null ? null : typeof value.cursor === 'string' ? value.cursor : null;
+  return { collectionId: value.collectionId, cursor, limit: value.limit };
+}
+
+function metadataHistoryChangeInput(input: unknown): CollectionMetadataHistoryChangeInput {
+  if (!input || typeof input !== 'object') throw new Error('Invalid Collection metadata history revision');
+  const value = input as Record<string, unknown>;
+  if (!identifier(value.collectionId) || !revision(value.revision))
+    throw new Error('Invalid Collection metadata history revision');
+  return { collectionId: value.collectionId, revision: value.revision };
+}
+
+/** Until the retained publisher installs typed history methods, expose an unavailable result, never an empty page. */
+export const readCollectionMetadataHistoryPage = createServerFn({ method: 'GET' })
+  .validator(metadataHistoryPageInput)
+  .handler(async (): Promise<CollectionMetadataHistoryRead<CollectionMetadataHistoryPage>> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return { state: 'unavailable' };
+  });
+
+export const readCollectionMetadataHistoryChange = createServerFn({ method: 'GET' })
+  .validator(metadataHistoryChangeInput)
+  .handler(async (): Promise<CollectionMetadataHistoryRead<CollectionMetadataHistoryChange>> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return { state: 'unavailable' };
+  });
 
 /** Binds the installed metadata command; it does not create a second route or writer. */
 export function captureCollectionUpdate(data: CollectionUpdateData, csrfToken: string) {

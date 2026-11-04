@@ -117,6 +117,7 @@ import {
   applyCollectionMemberEditPlan,
   buildCollectionMemberEditPlan,
 } from './collection-editor';
+import { CollectionMetadataHistory } from './collection-metadata-history-view';
 
 const publicOrigin = createIsomorphicFn()
   .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
@@ -1862,6 +1863,7 @@ function CollectionPageLifetime({
               disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
             />
             <p className="text-sm text-muted-foreground">{m.library_collection_independent_writes()}</p>
+            <CollectionMetadataHistory collectionId={page.id} isCurrent={() => isCurrent('collection.update')} />
           </CollectionMetadataEditor>
         ) : null}
 

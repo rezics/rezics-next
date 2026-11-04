@@ -32,6 +32,7 @@ import {
   type SavedCollectionRule,
 } from './collection-rules.ts';
 import { readCollection } from './collection-store.ts';
+import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
 import { createCollectionSource, type CollectionSourceObservation, type WorkDimensions } from './collection-source.ts';
 import {
   appendCollectionSourceOutput,
@@ -419,6 +420,9 @@ export function createCollectionPublications(deps: Dependencies) {
           try {
             // The route itself is explicit public metadata consent. Transition and output activation share
             // one native transaction. Do not advance the source fence until COMPLETE selects this output.
+            const before = await readCollection(tx, route, collectionId);
+            if (!before || before.revision !== input.revision || before.curatorAccountId !== actor.accountId)
+              throw conflict();
             const changed = await tx.query(
               `UPDATE library.collection SET visibility='public', revision=revision+1,
                updated_at=$4::timestamptz, transaction_id=$5
@@ -442,6 +446,13 @@ export function createCollectionPublications(deps: Dependencies) {
             await completeCollectionSourceOutput(tx, ref);
             const collection = await readCollection(tx, route, collectionId);
             if (!collection) throw conflict();
+            await captureCollectionMetadataHistory(tx, {
+              route,
+              before,
+              after: collection,
+              transactionId: command.transactionId,
+              time: authoritativeTimeValue(command.time),
+            });
             return {
               value: {
                 collection,

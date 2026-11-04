@@ -20,6 +20,8 @@ import {
 import type { CollectionPublicationEpisode } from './collection-publication-episode-contract.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
+import { readCollection } from './collection-store.ts';
+import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
 
 /** Native receipt locator/provenance only. It carries no viewer or subject permission. */
 export type CollectionOutputPublication = Readonly<{
@@ -288,6 +290,8 @@ export async function completeCollectionSourceOutput(
     )
       throw conflict();
     const command = currentCommand(tx);
+    const before = await readCollection(tx, input.route, input.collectionId);
+    if (!before || before.revision !== source.revision || before.curatorAccountId !== source.accountId) throw conflict();
     const changed = await tx.query(
       `UPDATE library.collection SET visibility=$5,revision=revision+1,
          updated_at=$6::timestamptz,transaction_id=$7
@@ -307,6 +311,15 @@ export async function completeCollectionSourceOutput(
       ],
     );
     if (changed.rowCount !== 1) throw conflict();
+    const after = await readCollection(tx, input.route, input.collectionId);
+    if (!after) throw conflict();
+    await captureCollectionMetadataHistory(tx, {
+      route: input.route,
+      before,
+      after,
+      transactionId: command.transactionId,
+      time: authoritativeTimeValue(command.time),
+    });
     sealedMembers = seal.members;
   } else {
     source = await writer(tx, input);
