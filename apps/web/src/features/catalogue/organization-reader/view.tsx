@@ -1,11 +1,10 @@
-import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { ReadingDisclosureScope } from '@rezics/ui/cover';
 import { pickText } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import { ExternalValue, PlainLink, spoilerLevel, type LinkProps, type PageLink } from '../../pages/shared';
-import { SpoilerGate } from '../../pages/values';
 import { connectionReturnHref, subjectVisitReturn, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 import { catalogueEntries } from '../catalogue-entry';
 import { ProfileSourceList } from '../music-reader-view';
@@ -128,14 +127,6 @@ export function OrganizationReader({
     setChanged(true);
   }
   const heading = useRef<HTMLHeadingElement>(null);
-  const recovery = useRef<HTMLButtonElement>(null);
-  const focused = useRef<HTMLElement | undefined>(undefined);
-  useLayoutEffect(() => {
-    if (focused.current && !focused.current.isConnected && document.activeElement === document.body) {
-      (changed && available ? recovery.current : heading.current)?.focus();
-      focused.current = undefined;
-    }
-  });
   const o = { locale: locale as never };
   const title = pickText(read.public.subject.labels, locale);
   const href = currentHref ?? subjectHref({ id: read.public.subject.id, label: title.text }, locale).href;
@@ -143,12 +134,6 @@ export function OrganizationReader({
     <section
       data-slot="organization-reader"
       className="min-w-0 space-y-5 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center"
-      onFocusCapture={(event) => {
-        focused.current = event.target as HTMLElement;
-      }}
-      onBlurCapture={(event) => {
-        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) focused.current = undefined;
-      }}
     >
       <h2
         ref={heading}
@@ -163,7 +148,6 @@ export function OrganizationReader({
             <div className="space-y-2" role="status">
               <p>{m.organization_reader_changed({}, o)}</p>
               <button
-                ref={recovery}
                 type="button"
                 className={control}
                 onClick={() => {
@@ -211,6 +195,39 @@ export function OrganizationReader({
         </div>
       )}
     </section>
+  );
+}
+
+/** Hide removes the fact and its links immediately, including an open inspection. */
+function OrganizationFactDisclosure({
+  children,
+  locale,
+  current,
+  onHide,
+}: {
+  children: ReactNode;
+  locale: string;
+  current: () => boolean;
+  onHide: () => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const o = { locale: locale as never };
+  return (
+    <div className="min-w-0 space-y-2">
+      <button
+        type="button"
+        className={control}
+        aria-expanded={revealed}
+        onClick={() => {
+          if (!current()) return;
+          if (revealed) onHide();
+          setRevealed(!revealed);
+        }}
+      >
+        {revealed ? m.subject_spoiler_hide({}, o) : m.subject_spoiler_show({}, o)}
+      </button>
+      {revealed && children}
+    </div>
   );
 }
 
@@ -277,7 +294,7 @@ function OrganizationFacts({
   documents?: unknown;
   preferences: Reader;
   selected: Selection | undefined;
-  select: (selection: Selection) => void;
+  select: (selection: Selection | undefined) => void;
   close: () => void;
   currentHref: string;
   returnTo?: string | undefined;
@@ -400,9 +417,15 @@ function OrganizationFacts({
               return (
                 <li key={fact.id} className="min-w-0 space-y-1">
                   {spoilerLevel(fact) > preferences.spoilerLevel ? (
-                    <SpoilerGate label={m.subject_spoiler_show({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
+                    <OrganizationFactDisclosure
+                      locale={locale}
+                      current={episode.current}
+                      onHide={() => {
+                        if (inspecting) select(undefined);
+                      }}
+                    >
                       {content}
-                    </SpoilerGate>
+                    </OrganizationFactDisclosure>
                   ) : (
                     content
                   )}
