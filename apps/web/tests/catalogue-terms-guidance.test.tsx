@@ -205,7 +205,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
       }
 
       const queuedChange = (element: object, value: string) => {
-        const props = Object.keys(element)
+        const props = Object.getOwnPropertyNames(element)
           .filter((key) => key.startsWith('__reactProps$'))
           .map((key) => Reflect.get(element, key) as { onChange?: (event: unknown) => unknown } | undefined)
           .find((candidate) => typeof candidate?.onChange === 'function');
