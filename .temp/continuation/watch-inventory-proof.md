@@ -56,3 +56,13 @@ paths. Replace the README's deferred independent-growth statements with observed
 Cost section to exactly Touches, Bound and Growth check bullets. Add only missing user-visible native cases and keep
 generated files generator-owned and unrelated SQL inputs/schema snapshots unchanged. Hand Web the exact installed
 factory signature, DTO, generated/source heads and observed outcomes when generator validation succeeds.
+
+On the rebased retry, `bun run --cwd services/kernel check test/content/board-watch-management.test.ts` stopped in
+the check host's schema consistency setup before runtime cases: `Schema dump differs from db/library/schema.sql.`
+The dump included `bangumi_upload.expires_at` and `bangumi_upload_expiry`, absent from the checked-in schema dump;
+this branch did not change SQL inputs or snapshots. In the earlier focused run, the Board stop/restart ID rotation
+case passed; one setup failed `space_head_revision_fk`, and the later-row suspension case returned 200 instead of
+404. Keep those runtime observations separate from the current setup failure. The required
+`bun run --cwd services/kernel typecheck` also still fails on the known retained Kernel diagnostics, including the
+missing `packages/client/src/kernel/rating/own-votes-counted` module and unrelated importer/community/discovery
+type errors. The OpenAPI/client generation, growth measurements and broader native acceptance remain deferred.
