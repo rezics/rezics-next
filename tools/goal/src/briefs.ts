@@ -1,7 +1,7 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, win32 } from 'node:path';
-import type { AcceptancePlacement, Brief, BriefContinuation, TaskKind } from './types.ts';
+import type { AcceptancePlacement, AcceptanceRequirement, Brief, BriefContinuation, TaskKind } from './types.ts';
 import { parseProofMetadata } from './verification.ts';
 
 export type RiskOwnership = { version: number; areas: Record<string, string[]> };
@@ -10,6 +10,39 @@ export type RiskOwnership = { version: number; areas: Record<string, string[]> }
  * (2026-10-29). Briefs link evidence files instead of pasting them. Declared paths share this bound.
  */
 export const MAX_BRIEF_BYTES = defaultPolicy.brief.bytes;
+export const BRIEF_AUTHORITY_HINT = 'link an owner document section or quote the decision in the brief';
+export const SUPERSEDED_CHECK_HINT = 'remove superseded check instructions from the brief';
+const ACCEPTANCE_REQUIREMENTS: readonly AcceptanceRequirement[] = ['browser', 'native', 'root'];
+
+export function supersededCheckInstructionParagraph(markdown: string): boolean {
+  return markdown.split(/\n\s*\n/).some(
+    (section) =>
+      /\b(?:saved|historical|previous|older)\b/i.test(section) &&
+      /\b(?:prompt|instructions?|manifest|session)\b/i.test(section) &&
+      /(?:worker-check|--wait)/i.test(section),
+  );
+}
+
+export function assertBriefDispatchable(markdown: string, mainCheckout?: string): void {
+  if (markdown.includes('.temp/goal/'))
+    throw new Error(`brief must not reference .temp/goal/; ${BRIEF_AUTHORITY_HINT}`);
+  if (mainCheckout && markdown.includes(mainCheckout))
+    throw new Error(`brief must not reference the main checkout path; ${BRIEF_AUTHORITY_HINT}`);
+  if (supersededCheckInstructionParagraph(markdown))
+    throw new Error(`brief holds superseded check instructions; ${SUPERSEDED_CHECK_HINT}`);
+}
+
+function pathImpliesStories(path: string): boolean {
+  return /(?:^|\/)stories(?:\/|$)/i.test(path) || /\.stories\.[^./]+$/i.test(path);
+}
+
+export function acceptanceRequirements(
+  brief: Pick<Brief, 'kind' | 'paths' | 'acceptance'> | Partial<Brief>,
+): AcceptanceRequirement[] {
+  const required = new Set<AcceptanceRequirement>(brief.acceptance?.requires ?? []);
+  if (brief.kind === 'interface' || (brief.paths ?? []).some(pathImpliesStories)) required.add('browser');
+  return [...required];
+}
 /** Visited (i, j) cells; wildcard products larger than this stall dispatch. */
 type BriefPolicy = ControlPolicy['brief'];
 function pathMatchExceeded(): never {
@@ -374,6 +407,7 @@ export function parseBrief(
     throw new Error(
       `brief is ${bytes} bytes; keep it under ${policy.bytes} bytes and link evidence files instead of pasting them`,
     );
+  assertBriefDispatchable(markdown);
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match) throw new Error('brief needs Markdown front matter');
   const raw = object(Bun.YAML.parse(match[1]!), 'front matter');
@@ -408,6 +442,14 @@ export function parseBrief(
   const placement = acceptance.placement;
   if (placement !== undefined && placement !== 'local' && placement !== 'default')
     throw new Error('acceptance.placement must be local or default');
+  const requires =
+    acceptance.requires === undefined
+      ? undefined
+      : list(acceptance.requires, 'acceptance.requires').map((item) => {
+          if (!ACCEPTANCE_REQUIREMENTS.includes(item as AcceptanceRequirement))
+            throw new Error('acceptance.requires must be a list of browser, native and root');
+          return item as AcceptanceRequirement;
+        });
   if (commandMissing && placement !== undefined)
     throw new Error('acceptance.placement requires acceptance.command; omit placement for worker-owned validation');
   if (commandMissing && !workerOwnedAcceptance)
@@ -457,6 +499,7 @@ export function parseBrief(
       failing: boolean(acceptance.failing, 'acceptance.failing', workerOwnedAcceptance),
       ...(workerOwnedAcceptance ? { workerOwned: true as const } : {}),
       ...(placement === undefined ? {} : { placement: placement as AcceptancePlacement }),
+      ...(requires === undefined ? {} : { requires }),
     },
     estimate: { lines: estimate.lines as number, files: estimate.files as number },
     ...(raw.urgent === undefined ? {} : { urgent: boolean(raw.urgent, 'urgent') }),

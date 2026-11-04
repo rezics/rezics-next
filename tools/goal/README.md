@@ -564,7 +564,13 @@ protocol or representation meaning; they are not operator limits.
 | `policy.launchSmoke.launchErrors`                     | `8`                                  | Launch errors retained in a smoke evidence snapshot.                                                                                                                                        |
 | `policy.launchSmoke.resultCharacters`                 | `400`                                | Failed resumed-worker result excerpt characters.                                                                                                                                            |
 | `policy.launchSmoke.drainWaitMs`                      | `5000`                               | Wait for an owned worker start to settle during smoke cleanup (ms).                                                                                                                         |
-| `policy.brief.bytes`                                  | `65536`                              | Maximum brief and owner-decision input size (UTF-8 bytes).                                                                                                                                  |
+| `policy.prompt.workerRoleBytes`                       | `3500`                               | Worker role-template budget (UTF-8 bytes).                                                                                                                                                  |
+| `policy.prompt.conditionBytes`                        | `1500`                               | Combined condition-template body budget in one prompt (UTF-8 bytes).                                                                                                                        |
+| `policy.prompt.workerTotalBytes`                      | `20000`                              | Worker prompt total budget (UTF-8 bytes).                                                                                                                                                   |
+| `policy.prompt.managerRoleBytes`                      | `5000`                               | Manager role-template budget (UTF-8 bytes).                                                                                                                                                 |
+| `policy.prompt.managerOpeningBytes`                   | `30000`                              | Manager opening budget (UTF-8 bytes); oversize openings warn until Goal files finish migrating.                                                                                             |
+| `policy.prompt.researchRoleBytes`                     | `2500`                               | Research role-template budget (UTF-8 bytes).                                                                                                                                                |
+| `policy.brief.bytes`                                  | `12288`                              | Maximum brief and owner-decision input size (UTF-8 bytes).                                                                                                                                  |
 | `policy.brief.pathCharacters`                         | `65536`                              | Maximum declared path pattern characters.                                                                                                                                                   |
 | `policy.brief.pathMatchStates`                        | `1000000`                            | Maximum visited cells per path-pattern intersection.                                                                                                                                        |
 | `policy.brief.sharedPaths`                            | README, docs, generated              | Declared paths ignored by continuation overlap; landing already resolves these files.                                                                                                       |
@@ -1196,7 +1202,7 @@ replacement. Delivering that lifecycle seam remains separate work.
 
 Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths, traversal and unsupported glob syntax
 are refused. Matching walks an explicit stack and refuses after one million visited states; each pattern shares the
-64 KiB brief size bound. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
+12,288-byte brief size bound. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
 Every intersected risk area must be declared. Extend the ownership data when adding product modules. A `control-plane`
 brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks that they be split into a dev task.
 
@@ -1204,6 +1210,17 @@ Routing records the table version on each attempt. Open experiments weight work 
 by durable task sequence, starting with `high`; retries retain the original profile and version. Research is read-only.
 Bulk text prompts prohibit translation services, scripts and character mappings. Workers return a structured result
 using `worker-result.schema.json`, including any concrete blocker and the approaches tried.
+
+### Prompts
+
+Workers, managers and researchers receive prompts rendered from `tools/goal/prompts/`: `worker.md`, `manager.md`,
+`research.md`, and `conditions/<id>.md`. The renderer reads those files from disk at each launch, cached by
+modification time and size. Budgets are `policy.prompt` (worker role 3,500 bytes, conditions 1,500, worker total
+20,000, manager role 5,000, manager opening 30,000, research role 2,500) and `policy.brief.bytes` 12,288. A render
+over a budget refuses the launch and names each layer's measured size; a manager opening over its budget logs a
+warning until Goal files finish migrating. Each attempt records a prompt manifest: git blob SHAs of `AGENTS.md`, the
+role template, each condition and the brief; a hash of the policy object; and rendered bytes per layer.
+`attempts --json` exports it.
 
 ### Research
 

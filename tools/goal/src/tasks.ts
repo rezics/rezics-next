@@ -20,6 +20,7 @@ import { basename, dirname, join, resolve, relative, isAbsolute } from 'node:pat
 import {
   controlPlaneReleaseBrief,
   devProductBrief,
+  assertBriefDispatchable,
   parseBrief,
   readRiskOwnership,
   withStabilizeTarget,
@@ -30,7 +31,7 @@ import { classifyTask, readRouting, retryFallbacks, routeTask } from './routing.
 import { choosePoolWithFallback, PoolPolicyReloader } from './pools.ts';
 import { pace, readCodexSchedule } from './pacing.ts';
 import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
-import { awaitHostCapacity, launch, startsFirst, workerPrompt, type RunningWorker } from './launch.ts';
+import { applyRenderedPrompt, awaitHostCapacity, launch, renderWorkerPrompt, startsFirst, type RunningWorker } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
 import { completeRebaseConflictContext } from './conflict-progress.ts';
 import { hasLiveProcessUnder, inspectProcessIdentity, sameProcess, terminateProcessGroup } from './process.ts';
@@ -489,6 +490,7 @@ export class WorkerTasks {
       readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
       this.settings.policy?.brief,
     );
+    assertBriefDispatchable(markdown, this.settings.mainCheckout);
     if (excludingTask && Boolean(brief.urgent) !== Boolean(this.store.task(excludingTask).brief.urgent))
       throw new Error('urgent lane cannot change after dispatch');
     if (brief.goal === 'control-plane') {
@@ -1914,15 +1916,18 @@ export class WorkerTasks {
             task,
             next,
             pool,
-            workerPrompt(
-              task,
-              options.evidence,
-              undefined,
-              [],
-              this.settings.mainCheckout,
-              context,
-              this.settings.stateDirectory,
-              this.settings.policy,
+            applyRenderedPrompt(
+              this.store,
+              next,
+              renderWorkerPrompt({
+                task,
+                evidence: options.evidence,
+                resolutionFiles: [],
+                mainCheckout: this.settings.mainCheckout,
+                launchContext: context,
+                stateDirectory: this.settings.stateDirectory,
+                policy: this.settings.policy,
+              }),
             ),
             this.settings.codex,
             resumeSession,
@@ -1963,15 +1968,19 @@ export class WorkerTasks {
               installWorktreeDependencies(task.worktree, this.settings);
             }
             const context = captureLaunchContext(this.store, next, boundary, origin);
-            const prompt = workerPrompt(
-              task,
-              options.evidence,
-              options.consultation,
-              [],
-              this.settings.mainCheckout,
-              context,
-              this.settings.stateDirectory,
-              this.settings.policy,
+            const prompt = applyRenderedPrompt(
+              this.store,
+              next,
+              renderWorkerPrompt({
+                task,
+                evidence: options.evidence,
+                consultation: options.consultation,
+                resolutionFiles: [],
+                mainCheckout: this.settings.mainCheckout,
+                launchContext: context,
+                stateDirectory: this.settings.stateDirectory,
+                policy: this.settings.policy,
+              }),
             );
             retryPrepared = true;
             return await this.launcher(
@@ -2061,15 +2070,19 @@ export class WorkerTasks {
           installWorktreeDependencies(task.worktree, this.settings);
         }
         const context = captureLaunchContext(this.store, next, boundary, origin);
-        const prompt = workerPrompt(
-          task,
-          options.evidence,
-          options.consultation,
-          files,
-          this.settings.mainCheckout,
-          context,
-          this.settings.stateDirectory,
-          this.settings.policy,
+        const prompt = applyRenderedPrompt(
+          this.store,
+          next,
+          renderWorkerPrompt({
+            task,
+            evidence: options.evidence,
+            consultation: options.consultation,
+            resolutionFiles: files,
+            mainCheckout: this.settings.mainCheckout,
+            launchContext: context,
+            stateDirectory: this.settings.stateDirectory,
+            policy: this.settings.policy,
+          }),
         );
         retryPrepared = true;
         return await this.launcher(

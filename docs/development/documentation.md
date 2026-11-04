@@ -23,7 +23,8 @@ context limits. Prompt manifests calibrate them on the models REZICS runs: a bud
 say so. Budgets bound what loads at session start. An agent may read further when its question needs it; nothing mandates a whole-file read
 of a reference.
 
-Until the role templates exist, [agent conduct](agent-conduct.md) is the role text for every role.
+Role templates in `tools/goal/prompts/` are the role text. Condition byte budgets count filled condition template
+bodies; the shared wait and own-tests footer is appended once per check condition and counted in the session total.
 
 ### Rules
 

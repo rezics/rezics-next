@@ -2,7 +2,7 @@ import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import defaults from '../defaults.json';
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -12,6 +12,7 @@ import { agentEnvironmentKeys } from './agents.ts';
 import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
+import { renderManagerOpening } from './prompts.ts';
 import type { ProcessIdentity } from './process.ts';
 import type { ManagerWindows } from './windows.ts';
 
@@ -489,20 +490,16 @@ export class ManagerSessions {
     return (row?.last_written_at ?? -1) >= since;
   }
   private opening(spec: ManagerSpec, continuationFile?: string): string {
-    const command = this.services.command.join(' ');
-    return (
-      `${spec.brief}\n\nYou manage Goal ${spec.goal}; export GOAL_MANAGER=${spec.id} for control-plane commands. ` +
-      "Synthesize your workers' reports (results, decisions, conflicts, duplicated or missing work across tasks) into decisions and the next briefs. " +
-      `Your outputs are decisions and ready briefs in ${this.backlogPath(spec)}; keep at least ${this.policy.backlog.lowWater} there. ` +
-      `Act on each stopped task within ${this.policy.backlog.stoppedTaskLimitMs === HOUR_MS ? 'an hour' : `${this.policy.backlog.stoppedTaskLimitMs} ms`}: retry it with a rewritten brief, split it or cancel it; leave mechanical gates, retries and merges to the controller. ` +
-      `Completion is a proposal the control plane verifies: ${command} manager complete ${spec.id}. ` +
-      `Send only decisions, blocking questions and handoffs, at most ${this.policy.manager.messageWords} words each. Do not write receipts, status snapshots or lists of actions not taken. ` +
-      `Read your brief and ${continuationFile ? `the continuation ${continuationFile}` : 'continuation'} once per session; keep .temp/goal/${spec.id}/CONTINUATION.md under ${this.policy.manager.continuationCharacters.toLocaleString('en-US')} characters, replaced, not appended. ` +
-      'Read and acknowledge inbox events. ' +
-      (spec.engine === 'codex'
-        ? 'When no decision is pending, end the turn; do not use clock.sleep or poll: the controller resumes this thread when an inbox event arrives.'
-        : `When no decision is pending, run ${command} inbox wait ${spec.id} in the background and end the turn.`)
-    );
+    return renderManagerOpening({
+      spec,
+      continuationFile,
+      continuationText:
+        continuationFile && existsSync(continuationFile) ? readFileSync(continuationFile, 'utf8') : undefined,
+      backlogPath: this.backlogPath(spec),
+      command: this.services.command.join(' '),
+      policy: this.policy,
+      warn: (message) => this.services.onError?.(new Error(message)),
+    }).prompt;
   }
   private claudeArgv(spec: ManagerSpec, session: string[], prompt: string): string[] {
     const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;

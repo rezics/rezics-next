@@ -74,7 +74,7 @@ import {
 import type { ManagerEventKind } from './contracts.ts';
 import type { Attempt, Task } from './types.ts';
 import type { RunningWorker } from './launch.ts';
-import { capacityWaiters, checkWaitMs, launch, workerPrompt, workerActivityBaseline } from './launch.ts';
+import { applyRenderedPrompt, capacityWaiters, checkWaitMs, launch, renderWorkerPrompt, workerActivityBaseline } from './launch.ts';
 import { awaitHostCapacity, startsFirst } from './launch.ts';
 import { agentAdapter, agentCommands } from './agents.ts';
 import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetime.ts';
@@ -741,15 +741,18 @@ export class WorkerJob implements GateOutcomeSink {
           message === FINAL_REPORT_PROMPT && canResume
             ? FINAL_REPORT_PROMPT
             : [
-                workerPrompt(
-                  currentTask,
-                  canResume ? undefined : currentAttempt.evidencePath,
-                  undefined,
-                  [],
-                  this.tasks.settings.mainCheckout,
-                  context,
-                  this.tasks.settings.stateDirectory,
-                  this.tasks.settings.policy,
+                applyRenderedPrompt(
+                  this.tasks.store,
+                  currentAttempt,
+                  renderWorkerPrompt({
+                    task: currentTask,
+                    evidence: canResume ? undefined : currentAttempt.evidencePath,
+                    resolutionFiles: [],
+                    mainCheckout: this.tasks.settings.mainCheckout,
+                    launchContext: context,
+                    stateDirectory: this.tasks.settings.stateDirectory,
+                    policy: this.tasks.settings.policy,
+                  }),
                 ),
                 `The checks you started have finished or could not be found. ${message}`,
                 'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',

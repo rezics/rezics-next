@@ -25,6 +25,15 @@ export type TaskKind =
 export type IntegrationTarget = 'main' | 'integration' | 'stabilize';
 export type TaskClass = Exclude<TaskKind, 'verification'> | 'critical-path';
 export type AcceptancePlacement = 'local' | 'default';
+export type AcceptanceRequirement = 'browser' | 'native' | 'root';
+export type PromptManifest = {
+  agents: string;
+  role: string;
+  conditions: Record<string, string>;
+  brief: string;
+  policy: string;
+  layers: { role: number; conditions: number; brief: number; total: number };
+};
 /** Original integrated acceptance identity; metadata alone never authorizes native execution. */
 export type ProofMetadata = {
   journey: string;
@@ -172,6 +181,8 @@ export type Brief = {
     workerOwned?: true;
     /** Omitted briefs keep the existing placement policy; local opts into the audited local command boundary. */
     placement?: AcceptancePlacement;
+    /** Checks the outcome needs; interface briefs and paths that include stories imply browser. */
+    requires?: AcceptanceRequirement[];
   };
   /** Ordinary dev product briefs default to the routing slice ceiling when no estimate is supplied. */
   estimate: { lines: number; files: number };
@@ -231,6 +242,8 @@ export type Task = {
   pendingBriefChange?: { previousBriefHash: string; newBriefHash: string };
   /** `retry --fresh-session`: the next attempt starts a new provider session; cleared when that attempt is created. */
   freshSession?: boolean;
+  /** Checks the brief requires that this launch's conditions defer to the dev verifier. */
+  deferredAcceptance?: AcceptanceRequirement[];
   integratedBase?: string;
   integratedCommits?: string[];
   integratedCommit?: string;
@@ -424,6 +437,8 @@ export type Attempt = AttemptRef & {
   result: string;
   blocker: string | null;
   approaches: { approach: string; result: string }[];
+  /** Sources and rendered sizes of the prompt sent on this attempt; absent on older records. */
+  prompt?: PromptManifest;
 };
 export type StepClass = 'decision' | 'read' | 'edit' | 'wait' | 'check' | 'commit';
 export type Tokens = { input: number; cached: number; output: number };
@@ -472,6 +487,8 @@ export type AttemptRecord = AttemptRef & {
   earlyStop: boolean;
   /** Session-ledger usage is absent on older records and on imported non-Codex logs. */
   usage?: AttemptUsage | null;
+  /** Sources and rendered sizes of the prompt sent on this attempt; absent on older records. */
+  prompt?: PromptManifest;
 };
 export type FailureClass =
   | 'environment'

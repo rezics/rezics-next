@@ -275,7 +275,7 @@ test('local placement renders the concrete declared argv, overrides saved remote
     expect(prompt).toContain(
       "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts' '-t' 'filter'\\''s phrase'",
     );
-    expect(prompt).toContain('overrides any older prompt, saved session, remote invocation or `--wait` recipe');
+    expect(prompt).toContain('Ignore older prompt, saved session, remote invocation or `--wait` recipes');
     expect(prompt.indexOf('The acceptance placement is local')).toBeGreaterThan(
       prompt.indexOf('The task contract follows:'),
     );
@@ -426,7 +426,6 @@ const MINIMAL_RULES = [
   'return success (blocker null, `"checks":[]`)',
   'the deferred acceptance, which is neither a blocker nor a reason to wait',
   'return waiting only for a still-running check UUID this attempt started',
-  'overrides contract, saved-session and retry-manifest instructions to run acceptance or to start or poll checks',
 ];
 
 test('minimal product policy keeps supported compiler placement and the open command session at final input', () => {
