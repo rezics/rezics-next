@@ -956,7 +956,20 @@ Definitions retain their actual metadata language and fallback attribution. Exis
 aliases show their own languages and link to the terms adapter described above. `schema:name` proposals do not
 patch the title maps. The terms editor binds the mounted native writer and reports its actual availability.
 
-Creation reuses native subject input validation and the existing session BFF's `POST /v1/subjects`. It sends only
+Creation reuses native subject input validation and the existing session BFF's `POST /v1/subjects`. The visit
+returns current session-derived viewer state and the Global Context `subject.create` observation through the
+ordinary private BFF, independently of definitions, suggestions and edition reading. Guest, confirmed refusal and
+unavailable observation stay distinct. Fresh creation requires current applicable eligibility and a current admitted
+review of the exact MusicAlbum work; commands still reauthorize at execution. Edition disclosure does not authorize
+creating the work. A private draft survives temporary observation failure. Review is invalidated when its actual
+input changes. Late results after viewer, locale, route or editor lifetime replacement are rejected. An uncertain
+command retains its exact bytes and key; recovery does not reseal it, change Type or release, or become a second
+create. A validated acknowledgment keeps the exact returned UUID even when later reading fails; retry reads that
+identity without another write.
+Decision: Album creation eligibility is the current Global Context `subject.create` observation, independent of
+edition disclosure; guest is session-derived.
+
+Creation sends only
 explicitly entered terms and added assertions, qualifiers and citations; it sends no ingestion Source metadata.
 There are no default artist, date, role, part or classification assertions. Actual target search, scalar controls
 and qualified relation controls are shared with the existing editors. Artist credits use `schema:contributor`
@@ -978,6 +991,15 @@ intact. Blank values do not imply clearing. An original summary is a separate au
 language and licence. Successful proposals remain awaiting review; neither a proposal nor an aggregate submit
 claims publication. Exact returned subject/candidate IDs lead to the actual native reader or review. Failed
 creation readback retains the created ID and retries the read rather than creating again.
+
+### Create a MusicAlbum work
+
+- Touches: one current Global Context `subject.create` observation, independently bounded admitted MusicAlbum
+  definitions, and existing target/suggestion readers.
+- Bound: retain existing field, statement, qualifier, serialized-command and held-retry caps; no permission request
+  per field or suggested identity, history scan or polling.
+- Growth check: hold the parent action observation, admitted Type and initial-fact set fixed while unrelated grants,
+  identities and history grow; charge native Access preparation for the create observation.
 
 Invalid, denied and conflicting creation results retain the draft and submitted command for comparison, with an
 explicit choice to review a new attempt. Uncertain delivery freezes the exact payload/key for retry. Stale metadata

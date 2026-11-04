@@ -5,7 +5,7 @@ import { useCallback, useMemo } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import { createCatalogueAlbum, loadAlbumProfile } from './album-profile-actions';
 import { AlbumProfile, type AlbumEditors } from './album-profile-view';
 import { relationTargetSearch } from './relation-editor-search';
@@ -27,6 +27,7 @@ function AlbumProfileSessionLive({ id, locale }: { id?: string; locale: string }
       load: () => loadAlbumProfile({ data: id }),
       create: (data) => createCatalogueAlbum({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       read: (data: string) => readCreatedCatalogueSubject({ data }),
+      eligibility: () => readCatalogueCreateEligibility(),
     }),
     [id, editorWork],
   );

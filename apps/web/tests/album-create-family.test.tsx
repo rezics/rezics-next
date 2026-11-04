@@ -75,6 +75,13 @@ test('Album creation composes complete terms and initial facts while preserving 
   };
   const click = (scope: HTMLElement, name: string) =>
     act(async () => user.click(within(scope).getByRole('button', { name })));
+  const confirmAlbum = async (scope: HTMLElement) => {
+    if (within(scope).queryByRole('button', { name: m.catalogue_create_retry() }))
+      return click(scope, m.catalogue_create_retry());
+    if (within(scope).queryByRole('button', { name: m.album_create() })) return click(scope, m.album_create());
+    await click(scope, m.album_create_review());
+    if (within(scope).queryByRole('button', { name: m.album_create() })) await click(scope, m.album_create());
+  };
   const textbox = (scope: HTMLElement, name: string) =>
     within(scope).getByRole('textbox', { name }) as HTMLInputElement;
   const replace = (control: HTMLElement, value: string) =>
@@ -210,7 +217,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     const retainedId = retainedLabel.id;
     await replace(languages[2]!, 'ja');
     await replace(retainedLabel, '港の演奏');
-    await click(scope, m.album_create());
+    await confirmAlbum(scope);
     expect(writes(fixture)).toHaveLength(0);
     const errorAnchor = scope.querySelector<HTMLAnchorElement>(`a[href="#${languages[1]!.id}"]`)!;
     expect(errorAnchor).not.toBeNull();
@@ -223,7 +230,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(retainedLabel.id).toBe(retainedId);
     expect(retained.isConnected).toBe(true);
     await replace(languages[2]!, 'en');
-    await click(scope, m.album_create());
+    await confirmAlbum(scope);
     expect(writes(fixture)).toHaveLength(0); // duplicate language remains invalid
     await replace(languages[2]!, 'ja');
     await replace(textbox(retained, m.catalogue_create_description()), '完全な説明');
@@ -275,7 +282,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(fixture.calls).toEqual(beforeEdit); // picker fixture search adds no native reads
     expect(searches.length).toBeGreaterThan(0);
     const submit = queuedSubmit(scope.querySelector('form')!);
-    await click(scope, m.album_create());
+    await confirmAlbum(scope);
     await until(() => scope.textContent!.includes(m.catalogue_create_uncertain()));
     expect(writes(fixture)).toHaveLength(1);
     const original = structuredClone(writes(fixture)[0]!);
@@ -395,7 +402,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     const qualified = await add(removalPanel, 'schema:contributor');
     await select(qualified, m.relation_qualifier(), 'wdt:P1932');
     await replace(textbox(qualified, name(removal, 'wdt:P1932')), 'Qualifier only');
-    await click(removalPanel, m.album_create());
+    await confirmAlbum(removalPanel);
     const correctionLinks = () =>
       [...removalPanel.querySelectorAll<HTMLAnchorElement>('a[href^="#album-row-"]')].map((link) => link.hash);
     const correctionTargets = correctionLinks();
@@ -430,7 +437,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     const sealed = await add(removalPanel, 'schema:contributor');
     await chooseTarget(sealed, name(removal, 'schema:contributor'), 'Harbour', /Harbour Ensemble/);
     await click(sealed, m.recipe_remove_field());
-    await click(removalPanel, m.album_create());
+    await confirmAlbum(removalPanel);
     expect(commands).toHaveLength(1);
     await click(sealed, m.recipe_remove_field());
     expect(sealed.isConnected).toBe(true);
@@ -446,7 +453,7 @@ test('Album creation composes complete terms and initial facts while preserving 
       const panel = await ready(failed);
       await fillTerms(panel);
       const dateRow = await date(panel);
-      await click(panel, m.album_create());
+      await confirmAlbum(panel);
       const message =
         scenario === 'denied'
           ? m.catalogue_create_denied()
@@ -477,7 +484,7 @@ test('Album creation composes complete terms and initial facts while preserving 
         await click(dateRow, m.recipe_remove_field());
       }
       failed.setScenario('ready');
-      await click(panel, m.album_create());
+      await confirmAlbum(panel);
       await until(() => panel.textContent!.includes(m.catalogue_create_created()));
       expect(writes(failed)[1]!.key).not.toBe(first.key);
     }
@@ -556,7 +563,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     await select(secondCreator, m.relation_qualifier(), 'wdt:P1932');
     await replace(textbox(secondCreator, name(exact, 'wdt:P1932')), 'Credit');
     await replace(textbox(secondCreator, m.relation_citation()), 'https://example.com/credit');
-    await click(exactPanel, m.album_create());
+    await confirmAlbum(exactPanel);
     await until(() => commands.length === 1 && exactPanel.querySelector('form')?.getAttribute('aria-busy') === 'false');
     const corrections = [...exactPanel.querySelectorAll<HTMLAnchorElement>('[role="alert"] a')];
     expect(corrections).toHaveLength(4);
@@ -580,7 +587,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(window.document.activeElement).toBe(textbox(secondTerms, m.catalogue_create_label()));
     await replace(textbox(secondTerms, m.catalogue_create_label()), 'Corrected second name');
     rejection = false;
-    await click(exactPanel, m.album_create());
+    await confirmAlbum(exactPanel);
     await until(() => exactPanel.textContent!.includes(m.catalogue_create_reader_unavailable()));
     expect(commands[1]!.item.labels).toEqual({ en: 'First name', ja: 'Corrected second name' });
     expect(commands[1]!.item.statements['schema:contributor']![0]).toEqual(
@@ -609,7 +616,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     const locked = await ready(metadata, { transport });
     await fillTerms(locked);
     await date(locked);
-    await click(locked, m.album_create());
+    await confirmAlbum(locked);
     await until(() => locked.textContent!.includes(m.album_missing()));
     await click(locked, m.catalogue_create_review_new());
     expect(locked.querySelector('fieldset')!.matches(':disabled')).toBe(true);
@@ -636,7 +643,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     await fillTerms(missingScope);
     const missingRow = await date(missingScope);
     refresh = true;
-    await click(missingScope, m.album_create());
+    await confirmAlbum(missingScope);
     await until(() => missingRow.textContent!.includes(m.correction_stale()));
     expect(missingRow.isConnected).toBe(true);
     expect(missingRow.textContent).toContain(m.guide_missing());
@@ -646,7 +653,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     const recovery = albumFixture('reader-unavailable');
     const saved = await ready(recovery);
     await fillTerms(saved);
-    await click(saved, m.album_create());
+    await confirmAlbum(saved);
     await until(() => saved.textContent!.includes(m.catalogue_create_reader_unavailable()));
     expect(within(saved).queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
     expect(within(saved).getByText(albumId, { selector: 'code' }).textContent).toBe(albumId);
@@ -731,7 +738,9 @@ test('Album creation composes complete terms and initial facts while preserving 
     const disabled = await ready(signedOut, { session: 'signed-out' });
     expect(disabled.textContent).toContain(m.catalogue_create_signed_out());
     expect(disabled.querySelector('fieldset')!.matches(':disabled')).toBe(true);
-    expect((within(disabled).getByRole('button', { name: m.album_create() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(disabled).getByRole('button', { name: m.album_create_review() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     expect(writes(signedOut)).toHaveLength(0);
 
     // Reader changes retire actual positive writes and queued native events, including late failure/throw.
@@ -765,7 +774,7 @@ test('Album creation composes complete terms and initial facts while preserving 
       await until(() => !!host.querySelector('form'));
       await replace(textbox(host, m.catalogue_create_label()), 'Retired album');
       const oldSubmit = queuedSubmit(host.querySelector('form')!);
-      await click(host, m.album_create());
+      await confirmAlbum(host);
       await entered.promise;
       expect(writes(retired)).toHaveLength(1);
       expect(host.querySelector('form')!.getAttribute('aria-busy')).toBe('true');
@@ -785,7 +794,7 @@ test('Album creation composes complete terms and initial facts while preserving 
       expect(host.textContent).not.toContain(m.catalogue_create_created());
       expect(within(host).queryByRole('button', { name: m.catalogue_create_retry() })).toBeNull();
       await replace(textbox(host, m.catalogue_create_label()), 'Fresh album');
-      await click(host, m.album_create());
+      await confirmAlbum(host);
       await until(() => host.textContent!.includes(m.catalogue_create_created()));
       expect(writes(retired)).toHaveLength(2);
       expect(writes(retired)[1]!.key).not.toBe(writes(retired)[0]!.key);

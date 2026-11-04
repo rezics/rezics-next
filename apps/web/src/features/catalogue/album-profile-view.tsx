@@ -157,7 +157,7 @@ function AlbumProfileLive({
         )}
       </header>
       {!id && <p className="text-sm text-muted-foreground">{m.album_scope({}, o)}</p>}
-      {session !== 'signed-in' && (
+      {session !== 'signed-in' && (id || !transport.eligibility || session !== 'signed-out') && (
         <p role="status">
           {session === 'signed-out'
             ? m.catalogue_create_signed_out({}, o)
@@ -195,6 +195,7 @@ function AlbumProfileLive({
           locale={locale}
           transport={transport}
           search={search}
+          session={session}
           enabled={session === 'signed-in'}
         />
       )}
