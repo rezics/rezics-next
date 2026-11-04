@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
+import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { CrossMediaDumpFiles, crossMediaAliases, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { Importer } from '../src/importer.ts';
@@ -87,7 +88,10 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
   try {
     const tables = await authoredCopy(directory);
     const plan = await planVndbReleaseFidelity(tables);
-    const current = createSourceRegistration('vndb', { source: crossMediaAliases.vndb });
+    const current = createSourceRegistration('vndb', {
+      source: crossMediaAliases.vndb,
+      converterRevision: entityRevision,
+    });
     const release = plan.entities.vndb.find((row) => row.key === 'r1')!;
     const bindings = await readVndbReleaseBindings(port([], ids), []);
     const projected = current.convert(
