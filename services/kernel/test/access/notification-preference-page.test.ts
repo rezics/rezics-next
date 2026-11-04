@@ -1,11 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import {
-  DEFAULT_NOTIFICATIONS,
-  NOTIFICATION_KINDS,
-  type Notifications,
-} from '../../src/access/notification-kinds.ts';
+import { DEFAULT_NOTIFICATIONS, NOTIFICATION_KINDS, type Notifications } from '../../src/access/notification-kinds.ts';
 import { projectPreferencePage } from '../../src/access/preferences.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
@@ -49,8 +45,7 @@ async function call(person: { accountId: string; bearer: string }, body?: unknow
   return { status: response.status, value: await response.json() };
 }
 
-const pageOf = (notifications: Notifications, version: number) =>
-  projectPreferencePage({ notifications, version });
+const pageOf = (notifications: Notifications, version: number) => projectPreferencePage({ notifications, version });
 
 test('GET and PATCH 200 carry the catalogue page, compulsory policy and admitted edit/reset actions', async () => {
   const person = await fixture.person('preference-page-read');
