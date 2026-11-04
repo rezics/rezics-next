@@ -11,10 +11,7 @@ import { parseDiscoveryPage, parseLegacySearchPage, readDiscovery } from '../src
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { FilterRelease } from '@rezics/filter';
 import { parseReleaseSearch, releaseSearchHref, releaseSearchRequest } from '../src/search/release-search';
-import {
-  parseReleaseSearchChildrenPage,
-  parseReleaseSearchGroupsPage,
-} from '../src/search/release-search-query';
+import { parseReleaseSearchChildrenPage, parseReleaseSearchGroupsPage } from '../src/search/release-search-query';
 import { ReleaseSearchPage } from '../src/search/release-search-page';
 import { defaultParseSearch } from '@tanstack/react-router';
 import { GLOBAL, QUESTION } from '../src/features/pages/subject-ratings';
@@ -426,7 +423,9 @@ test('grouped responses retain current cards and render independent work expansi
   };
   const page = parseReleaseSearchGroupsPage(response);
   expect(page).toBeDefined();
-  expect(parseReleaseSearchGroupsPage({ ...response, groups: [...response.groups, response.groups[0]] })).toBeUndefined();
+  expect(
+    parseReleaseSearchGroupsPage({ ...response, groups: [...response.groups, response.groups[0]] }),
+  ).toBeUndefined();
   expect(parseReleaseSearchGroupsPage({ ...response, status: 'preparing' })).toBeUndefined();
   expect(
     parseReleaseSearchChildrenPage({

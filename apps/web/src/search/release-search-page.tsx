@@ -457,16 +457,16 @@ export function ReleaseSearchPage({
       )}
       {!parsed?.invalid.length && !page && (
         <div
-          role={['unavailable', 'restart', 'invalid', 'unsupported', 'denied'].includes(state.status) ? 'alert' : 'status'}
+          role={
+            ['unavailable', 'restart', 'invalid', 'unsupported', 'denied'].includes(state.status) ? 'alert' : 'status'
+          }
           aria-busy={state.status === 'loading'}
           className="grid justify-items-start gap-3 rounded-lg border p-4"
         >
           <p>{discoveryMessage(state.status, locale)}</p>
           {state.status !== 'loading' && (
             <a href={restartHref} className={buttonVariants({ variant: 'outline' })}>
-              {state.status === 'restart'
-                ? m.discovery_restart_action({}, options)
-                : m.search_facet_retry({}, options)}
+              {state.status === 'restart' ? m.discovery_restart_action({}, options) : m.search_facet_retry({}, options)}
             </a>
           )}
         </div>
@@ -528,7 +528,14 @@ export function ReleaseSearchPage({
                       </p>
                     )}
                     {viewStatus && viewStatus !== 'ready' && viewStatus !== 'preparing' && viewStatus !== 'loading' && (
-                      <div role={['unavailable', 'restart', 'invalid', 'unsupported', 'denied'].includes(viewStatus) ? 'alert' : 'status'} className="grid gap-2 py-2">
+                      <div
+                        role={
+                          ['unavailable', 'restart', 'invalid', 'unsupported', 'denied'].includes(viewStatus)
+                            ? 'alert'
+                            : 'status'
+                        }
+                        className="grid gap-2 py-2"
+                      >
                         <p>{discoveryMessage(viewStatus, locale)}</p>
                         {viewStatus === 'restart' && (
                           <a href={restartHref} className="w-fit underline">
@@ -571,9 +578,7 @@ export function ReleaseSearchPage({
       {next && parsed && (
         <nav aria-label={m.release_search_pagination({}, options)}>
           <a className={buttonVariants({ variant: 'outline' })} href={releaseSearchHref(locale, parsed.form, next)}>
-            {page?.status === 'preparing'
-              ? m.search_facet_retry({}, options)
-              : m.release_search_continue({}, options)}
+            {page?.status === 'preparing' ? m.search_facet_retry({}, options) : m.release_search_continue({}, options)}
           </a>
         </nav>
       )}

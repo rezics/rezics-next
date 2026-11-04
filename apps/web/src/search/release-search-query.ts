@@ -129,7 +129,7 @@ export function parseReleaseSearchGroupsPage(value: unknown): ReleaseSearchGroup
         return;
       const releases = raw.releases.map(releaseCard);
       if (releases.some((release) => !release)) return;
-      const cards = [work, ...releases as ReleaseSearchCard[]];
+      const cards = [work, ...(releases as ReleaseSearchCard[])];
       for (const card of cards) {
         if (identities.has(card.id)) return;
         identities.add(card.id);
@@ -179,8 +179,7 @@ async function sendGrouped(
   signal: AbortSignal | undefined,
 ): Promise<ReleaseSearchState> {
   const response = await postGrouped(request, locale, signal);
-  if (response.error || response.status !== 200)
-    return failureState(response.status, response.error ?? response.data);
+  if (response.error || response.status !== 200) return failureState(response.status, response.error ?? response.data);
   const page = parseReleaseSearchGroupsPage(response.data);
   return page ? { status: page.status, page } : { status: 'unavailable' };
 }
@@ -191,8 +190,7 @@ async function sendChildren(
   signal: AbortSignal | undefined,
 ): Promise<ReleaseSearchChildrenState> {
   const response = await postGrouped(request, locale, signal);
-  if (response.error || response.status !== 200)
-    return failureState(response.status, response.error ?? response.data);
+  if (response.error || response.status !== 200) return failureState(response.status, response.error ?? response.data);
   const page = parseReleaseSearchChildrenPage(response.data);
   return page ? { status: page.status, page } : { status: 'unavailable' };
 }

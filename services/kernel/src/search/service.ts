@@ -694,7 +694,9 @@ export function createSearchService({
     const sortFormat = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
     if (sortFormat !== SUBJECT_SORT_FORMAT) throw indexNotReady();
     const precise = containsCalendarRange(admitted);
-    const calendarFormat = precise ? await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation)) : null;
+    const calendarFormat = precise
+      ? await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation))
+      : null;
     if (precise && calendarFormat !== 1) throw indexNotReady();
     const index = subjectIndexName(prefix, generation);
     const indexUuid = await indexRequest(() => discoveryIndexUuid(client, index));
@@ -768,8 +770,7 @@ export function createSearchService({
         keys: (prior?.keys ?? 0) + value.keys,
         sourceReads: (prior?.sourceReads ?? 0) + value.sourceReads,
         completeWorkLinkReads: (prior?.completeWorkLinkReads ?? 0) + value.completeWorkLinkReads,
-        completeWorkLinkOperations:
-          (prior?.completeWorkLinkOperations ?? 0) + value.completeWorkLinkOperations,
+        completeWorkLinkOperations: (prior?.completeWorkLinkOperations ?? 0) + value.completeWorkLinkOperations,
         authorityObservations: (prior?.authorityObservations ?? 0) + value.authorityObservations,
         searchReads: (prior?.searchReads ?? 0) + value.searchReads,
       };
@@ -782,9 +783,10 @@ export function createSearchService({
     };
     const assertPhysical = async () => {
       const latestGeneration = await indexRequest(freshAliasGeneration);
-      const latestUuid = await indexRequest(() => discoveryIndexUuid(client, subjectIndexName(prefix, latestGeneration)));
-      if (latestGeneration !== generation || latestUuid !== indexUuid)
-        throw new ReleaseGroupingRestartRequired();
+      const latestUuid = await indexRequest(() =>
+        discoveryIndexUuid(client, subjectIndexName(prefix, latestGeneration)),
+      );
+      if (latestGeneration !== generation || latestUuid !== indexUuid) throw new ReleaseGroupingRestartRequired();
     };
     const assertRelease = async () => {
       if (releaseOverride) {
@@ -903,8 +905,7 @@ export function createSearchService({
       await assertPhysical();
       return { ...page, as_of: await asOf(generation) };
     } catch (error) {
-      if (error instanceof ReleaseSearchCursorInvalid)
-        invalid(child ? '/childCursor' : '/cursor', 'invalid_format');
+      if (error instanceof ReleaseSearchCursorInvalid) invalid(child ? '/childCursor' : '/cursor', 'invalid_format');
       if (error instanceof ReleaseGroupingRestartRequired) throw new ProblemError('search_restart_required');
       if (error instanceof ReleaseGroupingUnavailable) throw indexNotReady();
       throw error;

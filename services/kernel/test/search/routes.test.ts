@@ -317,14 +317,20 @@ test('grouped release and child POST requests retain viewer binding and return c
   const childRequest = { ...request, work: result.id, childCursor: 'child-token' };
   const children = await call(kernel, 'POST', '/v1/subjects:search', { token: 'reader', body: childRequest });
   expect(children.response.status).toBe(200);
-  expect(children.body).toMatchObject({ status: 'ready', children: [{ id: result.id, figure: missingFigure }], next: null });
+  expect(children.body).toMatchObject({
+    status: 'ready',
+    children: [{ id: result.id, figure: missingFigure }],
+    next: null,
+  });
   expect(calls).toEqual([
     ['releaseGroups', `account:${reader.accountId}`, request],
     ['releaseGroups', `account:${reader.accountId}`, childRequest],
   ]);
 
   calls.length = 0;
-  expect((await call(kernel, 'POST', '/v1/subjects:search', { token: 'denied', body: request })).response.status).toBe(403);
+  expect((await call(kernel, 'POST', '/v1/subjects:search', { token: 'denied', body: request })).response.status).toBe(
+    403,
+  );
   expect(calls).toEqual([]);
 });
 

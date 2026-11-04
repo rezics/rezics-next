@@ -114,7 +114,12 @@ function nameContext(context: Context) {
 function reserve(
   context: Context,
   pool: string,
-  phase: 'sourceReads' | 'completeWorkLinkReads' | 'completeWorkLinkOperations' | 'authorityObservations' | 'searchReads',
+  phase:
+    | 'sourceReads'
+    | 'completeWorkLinkReads'
+    | 'completeWorkLinkOperations'
+    | 'authorityObservations'
+    | 'searchReads',
   keys = 0,
 ) {
   context.reserve({
@@ -436,9 +441,7 @@ export function createReleaseSearchCandidateStreams(input: {
         binding: expected,
         namesAfter,
         ...(skipWorkFor ? { skipWorkFor } : {}),
-        ...(request.sort === 'relevance' && work === undefined && seenWorks.size
-          ? { seenWorks: [...seenWorks] }
-          : {}),
+        ...(request.sort === 'relevance' && work === undefined && seenWorks.size ? { seenWorks: [...seenWorks] } : {}),
       }),
       exhausted: page.exhausted && (consumed || page.keys.length === 0),
     };

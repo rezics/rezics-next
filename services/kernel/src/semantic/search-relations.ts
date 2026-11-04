@@ -859,12 +859,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         reserve,
       );
       const firstTargets = [...new Set(firstDisclosed.map(({ statement }) => statement.value))];
-      const firstCanonical = await canonicalPublicSubjects(
-        firstTargets,
-        expected,
-        firstIdentities,
-        reserve,
-      );
+      const firstCanonical = await canonicalPublicSubjects(firstTargets, expected, firstIdentities, reserve);
       const project = (
         current: NonNullable<typeof first>,
         statements: readonly { subject: string; statement: IndexedStatement }[],
@@ -914,12 +909,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         reserve,
       );
       const secondTargets = [...new Set(secondDisclosed.map(({ statement }) => statement.value))];
-      const secondCanonical = await canonicalPublicSubjects(
-        secondTargets,
-        secondExpected,
-        secondIdentities,
-        reserve,
-      );
+      const secondCanonical = await canonicalPublicSubjects(secondTargets, secondExpected, secondIdentities, reserve);
       const reprojected = project(second, secondDisclosed, secondCanonical);
       reserve(4, 0);
       if (

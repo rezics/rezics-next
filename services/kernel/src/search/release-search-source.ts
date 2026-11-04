@@ -310,7 +310,10 @@ function createHydrationSource(input: {
     count: (partition) => input.runSource(() => raw.count(partition)),
     ...(raw.matchRelationFacets
       ? {
-          matchRelationFacets: (partition: number, probes: Parameters<NonNullable<SubjectSource['matchRelationFacets']>>[1]) => {
+          matchRelationFacets: (
+            partition: number,
+            probes: Parameters<NonNullable<SubjectSource['matchRelationFacets']>>[1],
+          ) => {
             reserveRead(probes.length);
             return input.runSource(() => raw.matchRelationFacets!(partition, probes));
           },
@@ -339,7 +342,9 @@ function createHydrationSource(input: {
   const releaseTypes = new Set(admittedReleaseSearchTypes(input.release));
   const workTypes = new Set(
     Object.entries(input.release.types)
-      .filter(([type, definition]) => type === 'schema:CreativeWork' || definition.bases?.includes('schema:CreativeWork'))
+      .filter(
+        ([type, definition]) => type === 'schema:CreativeWork' || definition.bases?.includes('schema:CreativeWork'),
+      )
       .map(([type]) => type),
   );
   const properties = input.request.properties;
@@ -412,17 +417,12 @@ function createHydrationSource(input: {
         return [{ id, partition: subjectPartition(id), securityRevision: subject.securityRevision, matched: [] }];
       });
       const checked = await input.runSource(() =>
-        checkHits(
-          reserved,
-          nativeHits,
-          new Map(),
-          {
-            filter: request.filter,
-            relationProperties: input.relationProperties,
-            spoilerThreshold: request.spoilerThreshold,
-            observeRelationRelease: input.observeRelationRelease,
-          },
-        ),
+        checkHits(reserved, nativeHits, new Map(), {
+          filter: request.filter,
+          relationProperties: input.relationProperties,
+          spoilerThreshold: request.spoilerThreshold,
+          observeRelationRelease: input.observeRelationRelease,
+        }),
       );
       if (checked.relationRejected) throw new ReleaseGroupingRestartRequired();
       const matches = new Map(checked.passed.map(({ hit, subject }) => [hit.id, subject]));
