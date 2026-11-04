@@ -140,7 +140,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
       location: visit(snapshot.location, snapshot.supported),
       readCurrentLocation,
       navigate: async (href) => {
-        await router.navigate({ to: href as never });
+        await router.navigate({ href });
         return readCurrentLocation();
       },
       revalidate: async () => {
@@ -293,8 +293,8 @@ test('navigation failure offers the current safe reader and an obsolete completi
     Object.defineProperty(router, 'navigate', {
       configurable: true,
       writable: true,
-      value: (options: { to: string }) =>
-        options.to.startsWith('/zh-Hant/')
+      value: (options: { href: string }) =>
+        options.href.startsWith('/zh-Hant/')
           ? new Promise<void>((resolve) => {
               resolveOld = resolve;
             })
@@ -310,7 +310,7 @@ test('navigation failure offers the current safe reader and an obsolete completi
     await body.findByRole('status');
 
     await act(async () => {
-      await originalNavigate({ to: '/en/subjects/reader-02' as never });
+      await originalNavigate({ href: '/en/subjects/reader-02' });
     });
     await waitFor(() => expect(body.queryByRole('status')).toBeNull());
     const englishTrigger = trigger();

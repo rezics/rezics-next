@@ -105,7 +105,7 @@ function ReaderShell({ journey, children }: { journey: Journey; children?: React
     readCurrentLocation,
     navigate: async (href) => {
       if (journey === 'recovery') throw new Error('The destination could not be loaded');
-      await router.navigate({ to: href as never });
+      await router.navigate({ href });
       return readCurrentLocation();
     },
     revalidate: () => router.invalidate(),
