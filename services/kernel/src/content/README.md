@@ -3416,6 +3416,32 @@ ready population. The factory and disclosure owners remain the sole owners of th
 
 ## Native board watches and private management
 
+Decision: Board-page watch state uses the private no-store `GET /v1/boards/{id}/watch/page` companion;
+public Board HTML and cache transfers keep their existing boundary. Failed authentication, disclosure,
+dependency work or changed observations never become an unwatched revision-zero value.
+
+`board.watch_page` returns exact `boardId`, `accountId`, closed current `viewer` (`watching`, `revision`),
+`actions.watch` and `actions.unwatch` (`available`, `denied`, `not-applicable`), and the final native
+`source` (`epoch`, `position`). It checks actual account ownership, account read and update authority,
+and original Board/Realm disclosure twice. Revision or readable source changes return 409; concealed or
+unknown Boards return 404. Authentication and dependency errors retain their native status. Only an
+admitted missing exact key returns false/0. A current read never acknowledges an earlier PUT.
+This mounted producer is ready for the shared publication owner; installed declarations and the Board
+control consumer remain pending. The existing watch GET/PUT and management ABI are unchanged.
+
+### Cost: private Board watch companion
+
+- **Touches:** three current account read admissions, two account update preparations/evaluations,
+  two exact account-home watch key reads and two original Board reads, including each reader's nested
+  Board/Realm/Access/Accounts work and internal disclosure rechecks. Charge every pool, runner,
+  preparation, indexed prefix, retained body, copy and serialization separately from command work.
+- **Bound:** two selected watch rows at most, no inventory or publication scan, two bounded native
+  Board presentations and a constant-sized DTO (IDs, boolean, integer revision, three closed advice
+  values and source position). Existing native account and Board bounds apply to nested work.
+- **Growth check:** pending continuation coverage at independent 256/1024/4096 unrelated account
+  watches, Board subscribers, tombstones/rewatches, publications and Access/Accounts populations;
+  this source bound alone does not establish measured physical index work.
+
 Decision: board watch PUT sets an explicit `watching` boolean with `expectedRevision`; management requires
 `kind=thread|board`, and an unavailable row retains only its personal removal identity and subscription metadata.
 Private watch methods refuse an operator acting as a different account, even with a cursor from that account.
