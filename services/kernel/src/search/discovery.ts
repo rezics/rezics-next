@@ -11,6 +11,7 @@ import type { ViewerFactsPage } from '../library/viewer-facts.ts';
 import type { PublicFigureView } from '../rating/public-figure-http.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Fact } from './hits.ts';
+import type { EngineMatchEvidence, MatchEvidence, MatchEvidenceQuery } from './match-evidence.ts';
 import type { SubjectDocument } from './document.ts';
 import type { SearchRequest } from './service.ts';
 import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts';
@@ -112,6 +113,7 @@ export type DiscoveryHit = {
   figure?: PublicFigureView;
   listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: string[] };
   contexts?: CharacterPersonDiscoveryContexts;
+  matchEvidence?: MatchEvidence;
 };
 export type PublicCollectionDiscoverySummary = Readonly<{
   id: string;
@@ -141,6 +143,7 @@ export type DiscoveryOwnerSummary =
 type DiscoveryOwnerHitOf<K extends DiscoveryOwnerKind> = {
   key: Extract<DiscoveryPublicOwnerKey, { kind: K }>;
   summary: Extract<DiscoveryOwnerSummary, { kind: K }>;
+  matchEvidence?: MatchEvidence;
 };
 export type DiscoveryOwnerHit =
   | DiscoveryOwnerHitOf<'collection'>
@@ -193,6 +196,7 @@ export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'a
     head: number;
     release: import('@rezics/filter').FilterRelease;
   } | null>;
+  matchEvidencePlan?: MatchEvidenceQuery;
 };
 export type DiscoveryCursorKeys = KeyRing;
 export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';
@@ -376,6 +380,7 @@ export type DiscoveryEngineHit = Readonly<{
   revision: string;
   sourceVersion?: string | null;
   matched: readonly string[];
+  engineEvidence?: EngineMatchEvidence;
   sort: readonly (string | number | null)[];
 }>;
 export type DiscoveryEngineResult = Readonly<{ generation?: number; hits: readonly DiscoveryEngineHit[] }>;

@@ -5,12 +5,28 @@ import { assertCompleteSearch } from './complete-search.ts';
 import { ownQueryInput } from './query-input.ts';
 import { subjectAlias, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, type OpenSearch, SearchUnavailableError } from './opensearch.ts';
-import { HIT_TEMPLATE, type HitResult, type SearchPlan, type SearchResult } from './query.ts';
+import {
+  EVIDENCE_HIT_TEMPLATE,
+  EVIDENCE_SEARCH_TEMPLATE,
+  HIT_TEMPLATE,
+  type HitResult,
+  type SearchPlan,
+  type SearchResult,
+} from './query.ts';
+import { MATCH_EVIDENCE_LIMITS, readEngineMatchEvidence } from './match-evidence.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
 
 export type RatingQueryPlan = Pick<
   SearchPlan,
-  'query' | 'filter' | 'boost' | 'size' | 'after' | 'overflowProperties' | 'ratingPhase' | 'generation'
+  | 'query'
+  | 'filter'
+  | 'boost'
+  | 'size'
+  | 'after'
+  | 'overflowProperties'
+  | 'ratingPhase'
+  | 'generation'
+  | 'matchEvidence'
 > & { rating: PublicRatingEpoch };
 
 type Phase = 'scored' | 'unscored';
@@ -21,6 +37,20 @@ type NativePhase = PhaseHits & { total: Total };
 
 const MAX_NAME_LENGTH = 512;
 const TOTAL_LIMIT = 10_000;
+
+function boundEngineEvidencePage(hits: SearchResult['hits']): SearchResult['hits'] {
+  if (
+    hits.reduce((total, hit) => total + Buffer.byteLength(JSON.stringify(hit.engineEvidence ?? null), 'utf8'), 0) <=
+    MATCH_EVIDENCE_LIMITS.enginePageBytes
+  )
+    return hits;
+  return hits.map((hit) => ({
+    ...hit,
+    ...(hit.engineEvidence === undefined
+      ? {}
+      : { engineEvidence: { matched: [...hit.engineEvidence.matched], malformed: true } }),
+  }));
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -159,6 +189,7 @@ function validateHits(
   size: number,
   phase: Phase,
   index: string,
+  plan: RatingQueryPlan,
   after?: readonly SortValue[],
 ): SearchResult['hits'] {
   if (!Array.isArray(value) || value.length > size)
@@ -213,12 +244,16 @@ function validateHits(
     )
       throw unavailable('OpenSearch rating matched queries are malformed');
 
+    const engineEvidence = plan.matchEvidence
+      ? readEngineMatchEvidence(matchedQueries ?? [], candidate.highlight, plan.matchEvidence)
+      : undefined;
     hits.push({
       id,
       index: actualIndex,
       partition: Number(source.partition),
       securityRevision: Number(source.security_revision),
       matched: matchedQueries === undefined ? [] : [...matchedQueries],
+      ...(engineEvidence === undefined ? {} : { engineEvidence }),
       sort: [...tuple],
       ratingPhase: phase,
     });
@@ -323,6 +358,8 @@ async function requestPhase(
     has_after: !countOnly && after !== undefined,
     has_overflow: hasOverflow,
     overflow_properties: plan.overflowProperties,
+    has_match_evidence: plan.matchEvidence !== undefined,
+    match_evidence: plan.matchEvidence?.highlight,
   };
 
   let response: Awaited<ReturnType<OpenSearch['request']>>;
@@ -348,7 +385,7 @@ async function requestPhase(
   const body: unknown = response.body;
   assertCompleteSearch(body);
   if (!record(body) || !record(body.hits)) throw unavailable('OpenSearch rating response is malformed');
-  const hits = validateHits(body.hits.hits, size, phase, target, countOnly ? undefined : after);
+  const hits = validateHits(body.hits.hits, size, phase, target, plan, countOnly ? undefined : after);
   const total = body.hits.total;
   return {
     nativeTotal: record(total) ? { value: total.value, relation: total.relation } : undefined,
@@ -370,6 +407,7 @@ export async function searchRatingSubjectHits(
 ): Promise<HitResult> {
   const admitted = validatePlan(prefix, plan);
   plan = admitted;
+  const templateId = plan.matchEvidence ? EVIDENCE_HIT_TEMPLATE : HIT_TEMPLATE;
   const generation = await resolveGeneration(search, prefix, plan.generation);
   const target = subjectIndexName(prefix, generation);
   const phases: PhaseHits[] = [];
@@ -408,7 +446,7 @@ export async function searchRatingSubjectHits(
   }
   return {
     generation,
-    hits: phases.flatMap((phase) => phase.hits),
+    hits: boundEngineEvidencePage(phases.flatMap((phase) => phase.hits)),
     ...(plan.overflowProperties?.length ? { overflow: phases.some((phase) => phase.overflow) } : {}),
   };
 }
@@ -430,6 +468,7 @@ export async function searchRatingSubjects(
 ): Promise<SearchResult> {
   const admitted = validatePlan(prefix, plan);
   plan = admitted;
+  templateId = plan.matchEvidence ? EVIDENCE_SEARCH_TEMPLATE : templateId;
   const generation = await resolveGeneration(search, prefix, plan.generation);
   const target = subjectIndexName(prefix, generation);
   const epoch = admitted.rating.priorEpoch;
@@ -502,7 +541,7 @@ export async function searchRatingSubjects(
   const total = combinedTotal(a.total, b.total);
   return {
     generation,
-    hits,
+    hits: boundEngineEvidencePage(hits),
     total,
     ...(overflowProperties?.length ? { overflow: a.overflow || b.overflow } : {}),
   };

@@ -15,6 +15,7 @@ import type {
 } from './discovery.ts';
 import { discoveryKindDirectory } from './discovery-registry.ts';
 import { compileText } from './text.ts';
+import { compileMatchEvidence } from './match-evidence.ts';
 import { discoveryNativeQuery } from './discovery-query.ts';
 import { compileFilter } from './filter.ts';
 import type {
@@ -269,12 +270,14 @@ export function compileDiscoveryConsumerCapture(
       { kind: 'field', field: 'descriptions' },
     );
   const text = input.text === undefined ? undefined : compileText(input.text, { field: 'search_text', prefix: 't' });
+  const matchEvidence = text ? compileMatchEvidence(text) : undefined;
   return {
     query: discoveryNativeQuery({
       filter: plan.filter ?? none,
-      ...(text ? { query: text.query } : {}),
+      ...(text ? { query: matchEvidence!.query } : {}),
       ...(input.boost === undefined ? {} : { boost: input.boost }),
     }),
+    ...(matchEvidence ? { matchEvidence } : {}),
     dependencyKeys: keys,
   };
 }

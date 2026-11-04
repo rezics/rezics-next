@@ -8030,5 +8030,11 @@
   "discovery_score_concealed": "Score actions are not exposed to this reader.",
   "discovery_score_unavailable": "Score actions are unavailable.",
   "thread_page_invalid_cursor": "This page link is invalid or out of date. Open the first page to continue.",
-  "thread_page_restart": "Open the first page"
+  "thread_page_restart": "Open the first page",
+  "search_match_title": "Matched title",
+  "search_match_alias": "Matched alternate title",
+  "search_match_description": "Matched description",
+  "search_match_explanation": "More match details",
+  "search_match_unavailable": "Match details are unavailable.",
+  "search_match_unsupported": "Match details are not supported for this result."
 }

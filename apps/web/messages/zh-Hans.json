@@ -7955,5 +7955,11 @@
   "discovery_score_concealed": "此用户无法使用评分操作。",
   "discovery_score_unavailable": "评分操作暂时不可用。",
   "thread_page_invalid_cursor": "此页面链接无效或已过期。请从第一页继续。",
-  "thread_page_restart": "打开第一页"
+  "thread_page_restart": "打开第一页",
+  "search_match_title": "匹配的标题",
+  "search_match_alias": "匹配的别名",
+  "search_match_description": "匹配的描述",
+  "search_match_explanation": "更多匹配详情",
+  "search_match_unavailable": "匹配详情暂不可用。",
+  "search_match_unsupported": "此结果不支持匹配详情。"
 }

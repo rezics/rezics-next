@@ -7955,5 +7955,11 @@
   "discovery_score_concealed": "Les actions de notation ne sont pas accessibles à ce lecteur.",
   "discovery_score_unavailable": "Les actions de notation sont indisponibles.",
   "thread_page_invalid_cursor": "Ce lien de page est invalide ou a expiré. Ouvrez la première page pour continuer.",
-  "thread_page_restart": "Ouvrir la première page"
+  "thread_page_restart": "Ouvrir la première page",
+  "search_match_title": "Correspondance dans le titre",
+  "search_match_alias": "Correspondance dans le titre secondaire",
+  "search_match_description": "Correspondance dans la description",
+  "search_match_explanation": "Autres détails de correspondance",
+  "search_match_unavailable": "Les détails de correspondance ne sont pas disponibles.",
+  "search_match_unsupported": "Les détails de correspondance ne sont pas pris en charge pour ce résultat."
 }

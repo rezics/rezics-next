@@ -7955,5 +7955,11 @@
   "discovery_score_concealed": "Las acciones de puntuación no están habilitadas para este lector.",
   "discovery_score_unavailable": "Las acciones de puntuación no están disponibles.",
   "thread_page_invalid_cursor": "Este enlace de página no es válido o ha caducado. Abre la primera página para continuar.",
-  "thread_page_restart": "Abrir la primera página"
+  "thread_page_restart": "Abrir la primera página",
+  "search_match_title": "Coincidencia en el título",
+  "search_match_alias": "Coincidencia en el título alternativo",
+  "search_match_description": "Coincidencia en la descripción",
+  "search_match_explanation": "Más detalles de la coincidencia",
+  "search_match_unavailable": "Los detalles de la coincidencia no están disponibles.",
+  "search_match_unsupported": "Este resultado no admite detalles de coincidencia."
 }

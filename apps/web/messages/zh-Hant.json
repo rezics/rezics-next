@@ -7955,5 +7955,11 @@
   "discovery_score_concealed": "此使用者無法使用評分操作。",
   "discovery_score_unavailable": "評分操作暫時無法使用。",
   "thread_page_invalid_cursor": "此頁面連結無效或已過期。請從第一頁繼續。",
-  "thread_page_restart": "開啟第一頁"
+  "thread_page_restart": "開啟第一頁",
+  "search_match_title": "符合的標題",
+  "search_match_alias": "符合的別名",
+  "search_match_description": "符合的描述",
+  "search_match_explanation": "更多符合詳細資料",
+  "search_match_unavailable": "符合詳細資料目前無法使用。",
+  "search_match_unsupported": "此結果不支援符合詳細資料。"
 }

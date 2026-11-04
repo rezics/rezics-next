@@ -7955,5 +7955,11 @@
   "discovery_score_concealed": "この閲覧者には評価操作が公開されていません。",
   "discovery_score_unavailable": "評価操作を利用できません。",
   "thread_page_invalid_cursor": "このページのリンクは無効か、有効期限が切れています。最初のページから続けてください。",
-  "thread_page_restart": "最初のページを開く"
+  "thread_page_restart": "最初のページを開く",
+  "search_match_title": "タイトルの一致",
+  "search_match_alias": "別名の一致",
+  "search_match_description": "説明の一致",
+  "search_match_explanation": "一致の詳細",
+  "search_match_unavailable": "一致の詳細を利用できません。",
+  "search_match_unsupported": "この検索結果では一致の詳細を表示できません。"
 }

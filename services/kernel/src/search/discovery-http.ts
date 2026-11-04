@@ -10,6 +10,8 @@ import { viewerFactsResponseSchema } from '../library/viewer-facts.ts';
 import { PublicFigureSchema } from '../rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { MatchEvidenceSchema } from './http/match-evidence-schema.ts';
+import type { MatchEvidence } from './match-evidence.ts';
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const nullableText = t.Union([t.String(), t.Null()]);
@@ -191,13 +193,14 @@ const viewerFactsUnavailable = t.Object(
   },
   closed,
 );
+const currentViewerFactsSchema = viewerFactsResponseSchema.anyOf[0]!;
 const searchViewerFacts = t.Object(
   {
-    ...viewerFactsResponseSchema.properties,
+    ...currentViewerFactsSchema.properties,
     rows: t.Array(
       t.Object(
         {
-          ...viewerFactsResponseSchema.properties.rows.items.properties,
+          ...currentViewerFactsSchema.properties.rows.items.properties,
           resolvedSubjectId: t.Optional(t.String({ format: 'uuid' })),
         },
         closed,
@@ -217,6 +220,7 @@ export const DiscoveryPageSchema = t.Object(
           {
             key: key('semantic'),
             summary: t.Object({ kind: t.Literal('subject'), value: SubjectSummarySchema }, closed),
+            matchEvidence: MatchEvidenceSchema,
             labels: t.Optional(t.Record(t.String(), t.String())),
             aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
             descriptions: t.Optional(t.Record(t.String(), t.String())),
@@ -228,22 +232,35 @@ export const DiscoveryPageSchema = t.Object(
           closed,
         ),
         t.Object(
-          { key: key('accounts'), summary: t.Object({ kind: t.Literal('account'), value: accountSummary }, closed) },
+          {
+            key: key('accounts'),
+            summary: t.Object({ kind: t.Literal('account'), value: accountSummary }, closed),
+            matchEvidence: MatchEvidenceSchema,
+          },
           closed,
         ),
         t.Object(
           {
             key: collectionKey,
             summary: t.Object({ kind: t.Literal('collection'), value: collectionDiscoverySummary }, closed),
+            matchEvidence: MatchEvidenceSchema,
           },
           closed,
         ),
         t.Object(
-          { key: reviewKey, summary: t.Object({ kind: t.Literal('review'), value: reviewSummary }, closed) },
+          {
+            key: reviewKey,
+            summary: t.Object({ kind: t.Literal('review'), value: reviewSummary }, closed),
+            matchEvidence: MatchEvidenceSchema,
+          },
           closed,
         ),
         t.Object(
-          { key: spaceKey, summary: t.Object({ kind: t.Literal('space'), value: spaceSummary }, closed) },
+          {
+            key: spaceKey,
+            summary: t.Object({ kind: t.Literal('space'), value: spaceSummary }, closed),
+            matchEvidence: MatchEvidenceSchema,
+          },
           closed,
         ),
       ]),
@@ -278,13 +295,30 @@ const unavailable = (): never => {
   throw new SearchUnavailableError('Discovery response is incomplete or malformed');
 };
 
+function evidenceOrDefault(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const hit = value as Record<string, unknown>;
+  if ('matchEvidence' in hit) return hit;
+  const summary = hit.summary as { kind?: unknown } | undefined;
+  return {
+    ...hit,
+    matchEvidence: summary?.kind === 'subject' ? { state: 'absent' } : { state: 'unsupported' },
+  };
+}
+
+function evidenceOf(hit: DiscoveryUnionHit): MatchEvidence {
+  return hit.matchEvidence ?? (hit.summary.kind === 'subject' ? { state: 'absent' } : { state: 'unsupported' });
+}
+
 /** Validate the native owner reply without coercion or removal of unrecognized fields. */
 export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUnionHit {
-  if (!hitCheck.Check(value)) unavailable();
-  const { key, summary } = value as Static<typeof hitSchema>;
+  const admitted = evidenceOrDefault(value);
+  if (!hitCheck.Check(admitted)) unavailable();
+  const { key, summary, matchEvidence } = admitted as Static<typeof hitSchema>;
   if (routeOf(key.id) !== key.route || key.id !== summary.value.id) unavailable();
   if (summary.kind === 'subject') {
     if (key.owner !== 'semantic' || key.kind !== summary.value.type) unavailable();
+    if (matchEvidence.state === 'current' && matchEvidence.source.id !== key.id) unavailable();
     const figure = (value as { figure?: { questionId: string; populationId: string } }).figure;
     if (figure && (figure.questionId !== STANDARD_QUESTION_ID || figure.populationId !== GLOBAL_CONTEXT.id))
       unavailable();
@@ -296,6 +330,7 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUni
     if (contexts && [contexts.credits, contexts.appearances].some((list) => list.next && list.items.length !== 3))
       unavailable();
   }
+  if (summary.kind !== 'subject' && matchEvidence.state !== 'unsupported') unavailable();
   if (summary.kind === 'account' && (key.owner !== 'accounts' || key.kind !== 'account')) unavailable();
   if (summary.kind === 'collection') {
     if (key.owner !== 'library' || key.kind !== 'collection') unavailable();
@@ -315,8 +350,14 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUni
 
 /** Run before cursor signing as well as at the wire boundary. Empty pages still carry metadata. */
 export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPage {
-  if (!pageCheck.Check(value)) unavailable();
-  const page = value as DiscoveryHttpPage;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray((value as { hits?: unknown }).hits))
+    unavailable();
+  const normalized = {
+    ...(value as Record<string, unknown>),
+    hits: (value as { hits: unknown[] }).hits.map(evidenceOrDefault),
+  };
+  if (!pageCheck.Check(normalized)) unavailable();
+  const page = normalized as DiscoveryHttpPage;
   const identities = new Set<string>();
   for (const hit of page.hits) {
     admitDiscoveryHit(hit);
@@ -381,6 +422,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         const summary = account.summary.value;
         return {
           key: { owner: 'accounts', kind: 'account', route: account.key.route, id: account.key.id },
+          matchEvidence: structuredClone(evidenceOf(account)),
           summary: {
             kind: 'account' as const,
             value: {
@@ -397,6 +439,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         const subject = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'subject' } }>;
         return {
           key: { owner: 'semantic', kind: subject.key.kind, route: subject.key.route, id: subject.key.id },
+          matchEvidence: structuredClone(evidenceOf(subject)),
           summary: { kind: 'subject' as const, value: { ...subject.summary.value } },
           ...(subject.labels === undefined ? {} : { labels: { ...subject.labels } }),
           ...(subject.aliases === undefined
@@ -450,6 +493,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         const value = collection.summary.value;
         return {
           key: { owner: 'library', kind: 'collection', route: collection.key.route, id: collection.key.id },
+          matchEvidence: structuredClone(evidenceOf(collection)),
           summary: {
             kind: 'collection' as const,
             value: {
@@ -480,6 +524,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         const value = review.summary.value;
         return {
           key: { owner: 'content', kind: 'review', route: review.key.route, id: review.key.id },
+          matchEvidence: structuredClone(evidenceOf(review)),
           summary: {
             kind: 'review' as const,
             value: {
@@ -495,6 +540,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
       const value = space.summary.value;
       return {
         key: { owner: 'community', kind: 'space', route: space.key.route, id: space.key.id },
+        matchEvidence: structuredClone(evidenceOf(space)),
         summary: {
           kind: 'space' as const,
           value: { ...value, ...(value.realm && value.realm !== null ? { realm: { ...value.realm } } : {}) },
