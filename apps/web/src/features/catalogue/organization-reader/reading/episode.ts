@@ -1,5 +1,5 @@
 import { QueryClientContext } from '@tanstack/react-query';
-import { useCallback, useContext, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { addressLease } from '../../../../reader/lease';
 import { browserObservation } from '../../../../session/observation';
 
@@ -35,6 +35,7 @@ export function useOrganizationEpisode(source: object, descriptor: string, viewe
     !client || viewer === null || (session?.state === 'signed-in' && session.observation.subject === viewer);
   const holder = useRef<ReturnType<typeof createEpisode> | undefined>(undefined);
   const next = useRef(0);
+  const [, renderRetirement] = useState(0);
   if (!holder.current || holder.current.source !== source) {
     holder.current?.retire();
     holder.current = createEpisode(source, descriptor, viewer, cache, ++next.current);
@@ -52,7 +53,13 @@ export function useOrganizationEpisode(source: object, descriptor: string, viewe
     (!episode.admitted || !store || store.getSnapshot() === episode.session);
   useLayoutEffect(() => {
     episode.active = true;
+    const depart = () => {
+      episode.retire();
+      renderRetirement((value) => value + 1);
+    };
+    window.addEventListener('pagehide', depart);
     return () => {
+      window.removeEventListener('pagehide', depart);
       episode.active = false;
       // Effect replay is permitted; a departed address is terminal.
       queueMicrotask(() => {
