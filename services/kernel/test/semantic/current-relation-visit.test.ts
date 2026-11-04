@@ -24,9 +24,21 @@ const appearance = (character: string, age: string) => ({
   property: { id: appearanceProperty },
   value: { type: 'value' as const, content: character },
   qualifiers: [
-    { property: { id: appearanceAgeProperty }, value: { type: 'value' as const, content: { amount: age, unit: year } } },
+    {
+      property: { id: appearanceAgeProperty },
+      value: { type: 'value' as const, content: { amount: age, unit: year } },
+    },
   ],
-  references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: 'https://example.test/appearance' } }] }],
+  references: [
+    {
+      parts: [
+        {
+          property: { id: 'schema:url' },
+          value: { type: 'value' as const, content: 'https://example.test/appearance' },
+        },
+      ],
+    },
+  ],
 });
 
 async function create(type: string, label: string, statements?: Record<string, ReturnType<typeof appearance>[]>) {
@@ -138,7 +150,13 @@ test('compact and expanded appearance visits retain current qualified statements
 
   await driver.grant('steward', ['moderation:hide'], character);
   status(
-    await driver.request('steward', 'POST', `/v1/subjects/${character}:hide`, { reason: 'Conceal relation target' }, key()),
+    await driver.request(
+      'steward',
+      'POST',
+      `/v1/subjects/${character}:hide`,
+      { reason: 'Conceal relation target' },
+      key(),
+    ),
     200,
     'hide relation target',
   );
@@ -148,5 +166,7 @@ test('compact and expanded appearance visits retain current qualified statements
     `/v1/subjects/${expandedWork}/relations?property=${encodeURIComponent(appearanceProperty)}`,
   );
   status(concealed, 200, 'concealed relation target');
-  expect((concealed.body.relations as Record<string, any>[]).every((entry) => entry.summary?.id !== character)).toBe(true);
+  expect((concealed.body.relations as Record<string, any>[]).every((entry) => entry.summary?.id !== character)).toBe(
+    true,
+  );
 });
