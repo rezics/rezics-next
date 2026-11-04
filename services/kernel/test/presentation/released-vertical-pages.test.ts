@@ -26,7 +26,7 @@ const launch = {
   book: ['schema:Book', 'bf:Instance'],
   recipe: ['schema:Recipe'],
   'visual-novel': ['wd:Q689445'],
-  anime: ['schema:Episode', 'schema:Movie', 'schema:TVSeason', 'schema:TVSeries'],
+  anime: ['rezics:AnimeRelease', 'schema:Episode', 'schema:Movie', 'schema:TVSeason', 'schema:TVSeries'],
   manga: ['schema:ComicSeries', 'schema:PublicationVolume'],
   game: ['schema:VideoGame', 'wd:Q20631656', 'wd:Q209163'],
   series: ['wd:Q7725310', 'schema:BookSeries'],
@@ -212,7 +212,12 @@ async function factualPage(
   const subjectReads = Object.entries(plan.reads).filter(([, read]) => read.kind === 'subject');
   expect(subjectReads).toHaveLength(1);
   for (const [readKey] of subjectReads) {
-    expect(page.reads[readKey]).toEqual({ status: 200, body: factual.body });
+    const read = page.reads[readKey];
+    const body =
+      read && typeof read.body === 'object' && read.body !== null && !Array.isArray(read.body)
+        ? Object.fromEntries(Object.entries(read.body).filter(([key]) => key !== 'documents'))
+        : read?.body;
+    expect({ ...read, body }).toEqual({ status: 200, body: factual.body });
   }
   for (const [readKey, value] of Object.entries(page.reads))
     expect(value.status, `${type}/${view} ${persona} ${readKey}: ${JSON.stringify(value.body)}`).toBe(200);

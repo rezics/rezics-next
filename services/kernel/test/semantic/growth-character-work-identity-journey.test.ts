@@ -5,6 +5,7 @@ import { createSubject } from '../../src/semantic/subject.ts';
 import { listSubjectLinks, listSubjectRelations } from '../../src/semantic/links.ts';
 import { newId } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
 
 const appearanceProperty = 'schema:character';
@@ -27,6 +28,7 @@ const actor = {
 };
 beforeAll(async () => {
   db = await openGrowthDatabase(url);
+  configureTestReceiptKeys(db.pool);
   const digest = await bootstrapRelease(db.pool, bundledRelease);
   await createSubject(db.pool, {
     actor,

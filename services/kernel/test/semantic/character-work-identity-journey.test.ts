@@ -76,11 +76,12 @@ async function adopt(subject: string, statement: ReturnType<typeof cited>) {
   return candidate;
 }
 
-async function waitLinks(id: string, property: string, direction: 'links' | 'relations' = 'links') {
+async function waitLinks(id: string, property: string, direction: 'links' | 'relations' = 'links', count = 1) {
   const path = `/v1/subjects/${id}/${direction}?property=${encodeURIComponent(property)}&limit=20`;
   for (let step = 0; step < 40; step++) {
     const page = await driver.request('anonymous', 'GET', path);
-    if (page.status === 200 && ((page.body.links ?? page.body.relations) as unknown[] | undefined)?.length) return page;
+    const rows = (page.body.links ?? page.body.relations) as unknown[] | undefined;
+    if (page.status === 200 && (rows?.length ?? 0) >= count) return page;
     await Bun.sleep(50);
   }
   const last = await driver.request('anonymous', 'GET', path);
@@ -143,7 +144,7 @@ test('a reader follows a Character identity and work appearance ages through nat
   );
   expect(wrongQualifier.status).toBe(400);
 
-  const appearances = await waitLinks(alice, appearanceProperty);
+  const appearances = await waitLinks(alice, appearanceProperty, 'links', 2);
   const rows = appearances.body.links as {
     subject: string;
     assertion?: { qualifiers: { property: { id: string }; value: { content: unknown } }[] };
