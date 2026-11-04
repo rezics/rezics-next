@@ -171,7 +171,9 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
       trigger.focus();
       trigger.click();
     });
-  const reveal = () => click('Reveal spoiler');
+  const reveal = async () => {
+    if (button('Reveal spoiler')) await click('Reveal spoiler');
+  };
   try {
     await render();
     expect(calls).toHaveLength(0);
