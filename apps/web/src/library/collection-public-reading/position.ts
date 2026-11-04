@@ -2,11 +2,11 @@ export type CollectionPositionScope = 'first' | 'continued' | 'filtered-first' |
 
 export type CollectionPositionPage = {
   firstPage: boolean;
-  cursor?: string;
-  filterActive?: boolean;
+  cursor?: string | undefined;
+  filterActive?: boolean | undefined;
   filter?: unknown;
-  filterStatus?: string;
-  filterIgnored?: readonly unknown[];
+  filterStatus?: string | undefined;
+  filterIgnored?: readonly unknown[] | undefined;
 };
 
 export function collectionPageIsFiltered(

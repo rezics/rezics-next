@@ -76,7 +76,7 @@ export function useCollectionComparisonReturn(
       if (state === 'none' || state === 'waiting') return;
       const occurrence = /^#collection-member-([0-9a-f-]{36})$/i.exec(current.hash)?.[1];
       if (state === 'missing' && occurrence) {
-        setMissing({ address, source, id: occurrence });
+        setMissing({ address: current.address, source, id: occurrence });
         retire();
         return;
       }
