@@ -2,7 +2,7 @@
   "format": "https://rezics.com/definitions/release/1",
   "catalogue": {
     "id": "https://rezics.com/catalogue/rezics",
-    "version": "1.0.3"
+    "version": "1.0.4"
   },
   "generator": {
     "name": "@neverblink/linkml",
@@ -2133,8 +2133,13 @@
         "zh-Hans": "录音",
         "zh-Hant": "錄音"
       },
-      "mappings": ["wd:Q5057302"],
-      "bases": ["schema:CreativeWork", "schema:Thing"],
+      "mappings": [
+        "wd:Q5057302"
+      ],
+      "bases": [
+        "schema:CreativeWork",
+        "schema:Thing"
+      ],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -2168,11 +2173,19 @@
         "wdt:P179",
         "wdt:P361"
       ],
-      "facets": ["schema:byArtist", "schema:datePublished", "schema:duration", "schema:inLanguage"],
+      "facets": [
+        "schema:byArtist",
+        "schema:datePublished",
+        "schema:duration",
+        "schema:inLanguage"
+      ],
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": ["schema:duration", "schema:datePublished"]
+        "keyFacts": [
+          "schema:duration",
+          "schema:datePublished"
+        ]
       },
       "schemaOrgType": "https://schema.org/MusicRecording",
       "descriptions": {
@@ -2198,8 +2211,13 @@
         "zh-Hans": "音乐发行",
         "zh-Hant": "音樂發行"
       },
-      "mappings": ["wd:Q108041547"],
-      "bases": ["schema:CreativeWork", "schema:Thing"],
+      "mappings": [
+        "wd:Q108041547"
+      ],
+      "bases": [
+        "schema:CreativeWork",
+        "schema:Thing"
+      ],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -2238,11 +2256,20 @@
         "wdt:P361",
         "wdt:P437"
       ],
-      "facets": ["schema:releaseOf", "schema:datePublished", "wdt:P437", "schema:recordLabel", "schema:inLanguage"],
+      "facets": [
+        "schema:releaseOf",
+        "schema:datePublished",
+        "wdt:P437",
+        "schema:recordLabel",
+        "schema:inLanguage"
+      ],
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": ["schema:datePublished", "wdt:P437"]
+        "keyFacts": [
+          "schema:datePublished",
+          "wdt:P437"
+        ]
       },
       "schemaOrgType": "https://schema.org/MusicRelease",
       "descriptions": {
@@ -7815,10 +7842,17 @@
         "zh-Hans": "艺人",
         "zh-Hant": "藝人"
       },
-      "mappings": ["wd:P175"],
+      "mappings": [
+        "wd:P175"
+      ],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
+      "qualifiers": [
+        "schema:position",
+        "wdt:P1932",
+        "wdt:P3831",
+        "wdt:P518"
+      ],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -7827,7 +7861,10 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:artistOf",
-        "filter": ["wdt:P3831", "wdt:P518"],
+        "filter": [
+          "wdt:P3831",
+          "wdt:P518"
+        ],
         "inverseLabels": {
           "de": "Aufnahmen dieses Interpreten",
           "en": "Recordings by this artist",
@@ -7839,7 +7876,10 @@
           "zh-Hant": "該藝人的錄音"
         }
       },
-      "targets": ["schema:Organization", "schema:Person"],
+      "targets": [
+        "schema:Organization",
+        "schema:Person"
+      ],
       "descriptions": {
         "de": "Eine Person oder Organisation, die als Interpret dieser Aufnahme genannt wird, mit Namensnennung, Reihenfolge und genauer Rolle.",
         "en": "A person or organization credited as the performing artist of this recording, with credited-as, order and detailed role.",
@@ -7863,7 +7903,9 @@
         "zh-Hans": "目录号",
         "zh-Hant": "目錄號"
       },
-      "mappings": ["wd:P528"],
+      "mappings": [
+        "wd:P528"
+      ],
       "datatype": "string",
       "multivalued": false,
       "qualifiers": [],
@@ -7908,7 +7950,9 @@
         "order": "name",
         "inverse": "none"
       },
-      "targets": ["skos:Concept"],
+      "targets": [
+        "skos:Concept"
+      ],
       "descriptions": {
         "de": "Das Listenvorkommen-Konzept, das zwei Zuordnungen zur selben Aufnahme in getrennten Slots hält. Es ist kein veröffentlichtes Tonträger- oder Seitenschema.",
         "en": "The listing-occurrence Concept that keeps two associations to the same recording in separate slots. It is not a published disc or side medium.",
@@ -7932,7 +7976,9 @@
         "zh-Hans": "唱片公司",
         "zh-Hant": "唱片公司"
       },
-      "mappings": ["wd:P264"],
+      "mappings": [
+        "wd:P264"
+      ],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -7955,7 +8001,9 @@
           "zh-Hant": "該廠牌發行"
         }
       },
-      "targets": ["schema:Organization"],
+      "targets": [
+        "schema:Organization"
+      ],
       "descriptions": {
         "de": "Die Organisation, die als Plattenlabel dieser Ausgabe genannt wird.",
         "en": "The organization credited as the record label that issued this edition.",
@@ -8003,7 +8051,9 @@
           "zh-Hant": "專輯發行"
         }
       },
-      "targets": ["schema:MusicAlbum"],
+      "targets": [
+        "schema:MusicAlbum"
+      ],
       "descriptions": {
         "de": "Das Musikalbum-Werk, das diese veröffentlichte Ausgabe realisiert; die Ausgabe ist kein neuer Name für das Album.",
         "en": "The music album work this published edition realizes; the edition is never a new name for that album.",
@@ -8027,10 +8077,19 @@
         "zh-Hans": "曲目",
         "zh-Hant": "曲目"
       },
-      "mappings": ["wd:P658"],
+      "mappings": [
+        "wd:P658"
+      ],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": ["schema:datePublished", "schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3831", "wdt:P642"],
+      "qualifiers": [
+        "schema:datePublished",
+        "schema:position",
+        "schema:sameAs",
+        "wdt:P1932",
+        "wdt:P3831",
+        "wdt:P642"
+      ],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -8052,7 +8111,9 @@
           "zh-Hant": "收錄此錄音的發行"
         }
       },
-      "targets": ["schema:MusicRecording"],
+      "targets": [
+        "schema:MusicRecording"
+      ],
       "descriptions": {
         "de": "Eine identifizierte Aufnahme auf dieser Ausgabe. Position, Namensnennung, Rolle, Datum und Listenvorkommen trennen wiederholte Nutzungen derselben Aufnahme.",
         "en": "An identified recording on this edition. Position, credited name, role, date and listing-occurrence distinguish repeated uses of the same recording.",

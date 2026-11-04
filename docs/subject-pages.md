@@ -111,8 +111,8 @@ Concepts on `schema:track` distinguish repeated recordings without inventing a m
 provider codes do not admit them. Duration and distribution format reuse the existing `schema:duration` and `wdt:P437`
 slots. Track associations use Wikidata P642 targeting Concept as slotKey so the same recording can occupy two positions.
 The composed page reuses the file-page caller `viewer` (state and `statementPropose`) and carries native Access
-`actions` as a sibling; catalogue metadata includes MusicAlbum, MusicRelease and MusicRecording. Catalogue 1.0.3
-publishes those types while 1.0.2 file-identity bytes stay pinned.
+`actions` as a sibling; catalogue metadata includes MusicAlbum, MusicRelease and MusicRecording. Catalogue 1.0.4
+publishes sourced release status and episode-kind vocabulary while 1.0.3 music bytes stay pinned.
 
 ### Music edition Cost
 
