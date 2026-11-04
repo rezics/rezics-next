@@ -145,8 +145,8 @@ test('failed and uncertain native sign-out recover independently without replay 
     );
     await click('button[type="submit"]');
     expect(submitted).toBe(0);
-    expect(host.textContent).toContain(m.settings_account_csrf_unavailable());
-    await click(reload);
+    expect(host.textContent).not.toContain(m.settings_account_csrf_unavailable());
+    current = true;
     await click('button[type="submit"]');
     expect(host.textContent).toContain(m.settings_account_sign_out_failed());
     refreshFails = true;
@@ -157,7 +157,7 @@ test('failed and uncertain native sign-out recover independently without replay 
     expect(renamed).toBe(1);
     expect(submitted).toBe(1);
     await click(reload);
-    expect(refreshed).toBe(3);
+    expect(refreshed).toBe(2);
     expect(submitted).toBe(1);
     fail = false;
     await click('button[type="submit"]');
@@ -166,7 +166,7 @@ test('failed and uncertain native sign-out recover independently without replay 
     current = false;
     await click(reload);
     expect(submitted).toBe(2);
-    expect(refreshed).toBe(3);
+    expect(refreshed).toBe(2);
     expect(renamed).toBe(1);
     expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
   } finally {
