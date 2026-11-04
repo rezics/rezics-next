@@ -44,6 +44,8 @@ export type UnavailableConfiguration = { id: UnavailableConfigurationId; admitte
 export type IndependentlyUnreadable = { key: string; reason: CandidateFailure['reason'] };
 export type CharacterRelationshipsAddress = {
   id: string;
+  context?: string | undefined;
+  realm?: string | undefined;
   stream?: string | undefined;
   cursor?: string | undefined;
   work?: string | undefined;

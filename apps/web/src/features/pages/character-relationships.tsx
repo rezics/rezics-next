@@ -165,7 +165,11 @@ export function CharacterRelationshipsGroups({
   onSelectWork,
   onCorrect,
   onMore,
+  onPrevious,
   onRestart,
+  onTargetVisit,
+  canPrevious,
+  returnChanged,
 }: {
   id: string;
   locale: string;
@@ -183,7 +187,11 @@ export function CharacterRelationshipsGroups({
     keyboard: boolean,
   ) => void;
   onMore?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onPrevious?: (event: MouseEvent<HTMLButtonElement>) => void;
   onRestart?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onTargetVisit?: (row: CharacterAssociationRow, event: MouseEvent<HTMLAnchorElement>) => void;
+  canPrevious?: boolean;
+  returnChanged?: boolean;
 }) {
   const o = { locale: locale as never };
   const title = pickText(read.public.subject.labels, locale);
@@ -258,6 +266,7 @@ export function CharacterRelationshipsGroups({
               )}
           </p>
           {!read.caughtUp && <p role="status">{m.character_relationships_pending({}, o)}</p>}
+          {returnChanged && <p role="status">{m.character_relationships_return_changed({}, o)}</p>}
           {!read.rows.length && !read.independentlyUnreadable && <p>{m.character_relationships_empty({}, o)}</p>}
           <ul>
             {read.rows.map((row, index) => {
@@ -271,6 +280,7 @@ export function CharacterRelationshipsGroups({
                       href={subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href}
                       lang={row.summary.label?.language}
                       aria-labelledby={`${streamId}-row-${index}`}
+                      onClick={(event) => onTargetVisit?.(row, event)}
                     >
                       {row.summary.label?.value || m.subject_value_unlabelled({}, o)}
                     </ListRowLink>
@@ -349,15 +359,21 @@ export function CharacterRelationshipsGroups({
                 <li
                   key={`${row.holder}:${row.statementId}`}
                   data-slot="list-row"
+                  data-relationship-row={index}
+                  data-holder={row.holder}
+                  data-statement={row.statementId}
                   data-selected={selected ? 'true' : undefined}
                   data-vanished={vanished ? 'true' : undefined}
-                  aria-labelledby={`${streamId}-row-${index}`}
+                  aria-label={level > 0 ? m.character_relationships_concealed_row({}, o) : undefined}
+                  aria-labelledby={level > 0 ? undefined : `${streamId}-row-${index}`}
+                  tabIndex={-1}
                 >
                   <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
                     {level > 0 ? (
                       <SpoilerGate
                         label={m.character_relationships_spoiler_show({}, o)}
                         hideLabel={m.character_relationships_spoiler_hide({}, o)}
+                        unmountOnHide
                       >
                         {item}
                       </SpoilerGate>
@@ -369,7 +385,15 @@ export function CharacterRelationshipsGroups({
               );
             })}
           </ul>
+          {stream.kind === 'appearance' && selectedWork && (
+            <p className="text-sm text-muted-foreground">{m.character_relationships_work_scope({}, o)}</p>
+          )}
           <div className="flex flex-wrap gap-2">
+            {canPrevious && onPrevious && (
+              <Button className={characterRelationshipsActionClass} variant="outline" disabled={busy} onClick={onPrevious}>
+                {m.character_relationships_previous({}, o)}
+              </Button>
+            )}
             {read.next && onMore && (
               <Button className={characterRelationshipsActionClass} variant="outline" disabled={busy} onClick={onMore}>
                 {m.character_relationships_more({}, o)}
@@ -382,7 +406,7 @@ export function CharacterRelationshipsGroups({
                 disabled={busy}
                 onClick={onRestart}
               >
-                {m.character_relationships_restart({}, o)}
+                {returnChanged ? m.character_relationships_return_current({}, o) : m.character_relationships_restart({}, o)}
               </Button>
             )}
           </div>
