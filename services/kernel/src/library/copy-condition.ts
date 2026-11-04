@@ -1,4 +1,5 @@
 import type { LibraryCopyKindDescriptor, LibraryProfilePin } from './profile.ts';
+import { decodeLibraryProfilePin } from './profile-pin.ts';
 
 /** Library vocabulary, independent of catalogue labels, sellers and valuations. */
 export const COPY_CONDITION_VOCABULARY = 'physical-v1';
@@ -30,6 +31,36 @@ export type CopyConditionFacts = Readonly<{
   mediaCondition?: CopyConditionObservation;
   packagingCondition?: CopyConditionObservation;
 }>;
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function decodeObservation(value: unknown): CopyConditionObservation | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (!record(value) || Object.keys(value).length !== 3) throw new Error('Invalid stored copy condition observation');
+  const pin = decodeLibraryProfilePin(value.pin);
+  if (
+    !Object.hasOwn(value, 'value') ||
+    !pin ||
+    typeof value.kindId !== 'string' ||
+    !/^[a-z][a-z0-9_.-]{0,63}$/.test(value.kindId) ||
+    (value.value !== null && !isCopyConditionValue(value.value))
+  )
+    throw new Error('Invalid stored copy condition observation');
+  return { value: value.value, pin, kindId: value.kindId };
+}
+
+/** Decode only the private row representation; absent observations remain absent. */
+export function decodeCopyConditionFacts(mediaCondition: unknown, packagingCondition: unknown): CopyConditionFacts | undefined {
+  const media = decodeObservation(mediaCondition);
+  const packaging = decodeObservation(packagingCondition);
+  if (!media && !packaging) return undefined;
+  return {
+    ...(media === undefined ? {} : { mediaCondition: media }),
+    ...(packaging === undefined ? {} : { packagingCondition: packaging }),
+  };
+}
 
 export class CopyConditionInvalidError extends Error {
   constructor(readonly field: CopyConditionField) {

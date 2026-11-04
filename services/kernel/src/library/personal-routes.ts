@@ -27,6 +27,7 @@ import {
   EntryAnnotationCorrectionLimitError,
 } from './entry-annotation-correction.ts';
 import { CopyConflictError, CopyInvalidError, createCopyCommands } from './copies.ts';
+import { COPY_CONDITION_CHOICES } from './copy-condition.ts';
 import { attachCopyListContext } from './copy-list-context.ts';
 import {
   createEntryCommands,
@@ -180,7 +181,51 @@ const copyFields = {
   acquiredOn: t.Optional(nullable),
   disposedOn: t.Optional(nullable),
   note: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])),
+  mediaCondition: t.Optional(
+    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
+  ),
+  packagingCondition: t.Optional(
+    t.Union([t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value))), t.Null()]),
+  ),
 };
+const copyConditionValueSchema = t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value)));
+const copyConditionDisplaySchema = t.Union(
+  [
+    t.Object({ state: t.Literal('not_recorded') }, closed),
+    t.Object({ state: t.Literal('unavailable') }, closed),
+    t.Object({ state: t.Literal('cleared') }, closed),
+    t.Object({ state: t.Literal('recorded'), id: copyConditionValueSchema, label: t.String() }, closed),
+  ],
+);
+const copyConditionChoiceSchema = t.Object(
+  { id: copyConditionValueSchema, label: t.String(), description: t.String() },
+  closed,
+);
+const copyConditionEditingSchema = t.Union(
+  [
+    t.Object(
+      {
+        state: t.Literal('supported'),
+        currentness: t.Literal('current'),
+        choices: t.Array(copyConditionChoiceSchema, { minItems: COPY_CONDITION_CHOICES.length }),
+      },
+      closed,
+    ),
+    t.Object(
+      {
+        state: t.Literal('unavailable'),
+        currentness: t.Union([t.Literal('current'), t.Literal('retired'), t.Literal('unavailable')]),
+        reason: t.Union([
+          t.Literal('unsupported'),
+          t.Literal('unrecognized_vocabulary'),
+          t.Literal('retired'),
+          t.Literal('current_source_unavailable'),
+        ]),
+      },
+      closed,
+    ),
+  ],
+);
 const copySchema = t.Object(
   {
     id,
@@ -215,6 +260,9 @@ const copyPresentationSchema = t.Object(
       ),
       t.Object({ state: t.Union([t.Literal('unsupported'), t.Literal('unavailable')]) }, closed),
     ]),
+    mediaCondition: copyConditionDisplaySchema,
+    packagingCondition: copyConditionDisplaySchema,
+    conditionEditing: copyConditionEditingSchema,
   },
   closed,
 );
@@ -588,7 +636,18 @@ function shelfEntryView(entry: ShelfEntry) {
           },
   };
 }
-function copyView({ id, subjectId, kind, status, revision, location, source, acquiredOn, disposedOn, note }: Copy) {
+function copyView({
+  id,
+  subjectId,
+  kind,
+  status,
+  revision,
+  location,
+  source,
+  acquiredOn,
+  disposedOn,
+  note,
+}: Copy) {
   return {
     id,
     subjectId,

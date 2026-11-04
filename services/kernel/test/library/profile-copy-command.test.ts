@@ -568,6 +568,13 @@ test('owner detail resolves the actual stored pin, keeps accepted labels through
         state: 'supported',
         statuses: [{ id: 'licensed', label: 'Current licence', labelLanguage: 'en' }],
       },
+      mediaCondition: { state: 'not_recorded' },
+      packagingCondition: { state: 'not_recorded' },
+      conditionEditing: {
+        state: 'unavailable',
+        currentness: 'current',
+        reason: 'unsupported',
+      },
     },
   });
   const direct = await commands.readPresentedCopy(owner.actor, created.value.id, ['de']);
@@ -692,7 +699,17 @@ test('missing exact immutable Copy release never borrows current labels and tran
   } as typeof query;
   try {
     const detail = await commands.readPresentedCopy(owner.actor, created.value.id);
-    expect(detail.presentation).toEqual({ meaning: 'unavailable', statusEditing: { state: 'unavailable' } });
+    expect(detail.presentation).toEqual({
+      meaning: 'unavailable',
+      statusEditing: { state: 'unavailable' },
+      mediaCondition: { state: 'not_recorded' },
+      packagingCondition: { state: 'not_recorded' },
+      conditionEditing: {
+        state: 'unavailable',
+        currentness: 'unavailable',
+        reason: 'current_source_unavailable',
+      },
+    });
     expect(detail).toMatchObject({ id: created.value.id, kind: 'installation', status: 'licensed', revision: 1 });
   } finally {
     native.pool.query = query;

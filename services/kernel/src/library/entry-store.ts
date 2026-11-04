@@ -20,6 +20,7 @@ import entryPage from './entry-store-entry-page.sql';
 import entryRead from './entry-store-entry-read.sql';
 import entryUpdate from './entry-store-entry-update.sql';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
+import { decodeCopyConditionFacts } from './copy-condition.ts';
 import type { LibraryProfilePin } from './profile.ts';
 import {
   MAX_LIBRARY_PAGE_SIZE,
@@ -72,6 +73,7 @@ function asEntry(row: EntryResult): Entry {
 }
 
 function asCopy(row: CopyResult): Copy {
+  const conditionFacts = decodeCopyConditionFacts(row.mediaCondition, row.packagingCondition);
   return {
     id: row.id,
     accountId: row.accountId,
@@ -83,6 +85,7 @@ function asCopy(row: CopyResult): Copy {
     acquiredOn: row.acquiredOn,
     disposedOn: row.disposedOn,
     note: row.note,
+    ...(conditionFacts === undefined ? {} : { conditionFacts }),
     revision: row.revision,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
@@ -254,6 +257,8 @@ export async function insertCopy(
     acquired_on: copy.acquiredOn,
     disposed_on: copy.disposedOn,
     note: copy.note,
+    media_condition: copy.conditionFacts?.mediaCondition ?? null,
+    packaging_condition: copy.conditionFacts?.packagingCondition ?? null,
     ...acceptance,
     ...write(context),
   });
@@ -302,6 +307,8 @@ export async function updateCopy(
     acquired_on: changes.acquiredOn,
     disposed_on: changes.disposedOn,
     note: changes.note,
+    media_condition: changes.conditionFacts?.mediaCondition ?? null,
+    packaging_condition: changes.conditionFacts?.packagingCondition ?? null,
     ...acceptance,
     // Only an explicit status accepts new meaning; metadata preserves every pin.
     library_profile_pin: accepted?.statusSupplied === false ? null : acceptance.library_profile_pin,
