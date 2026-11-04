@@ -8714,5 +8714,18 @@
   "profile_contribution_actions_sign_in": "Sign in to check current contribution actions",
   "profile_contribution_actions_preparing": "Checking current contribution actions…",
   "profile_contribution_actions_unavailable": "Private actions are unavailable. You can still open each contribution.",
-  "profile_contribution_actions_retired": "These actions have expired. Return to the current page to check again."
+  "profile_contribution_actions_retired": "These actions have expired. Return to the current page to check again.",
+  "work_names_title": "Titles and aliases",
+  "work_names_unavailable": "Names are unavailable for this reading. Refresh the page to read current names.",
+  "work_names_fallback": "The page uses this supplied fallback title:",
+  "work_names_selected": "Selected page title:",
+  "work_names_original": "Original language",
+  "work_names_unknown": "Unknown",
+  "work_names_empty": "No titles or aliases supplied.",
+  "work_names_label": "Title",
+  "work_names_alias": "Alias",
+  "work_names_copy": "Copy",
+  "work_names_copied": "Copied",
+  "work_names_copy_failed": "Could not copy. Select the text to copy it.",
+  "work_names_sources": "Sources"
 }

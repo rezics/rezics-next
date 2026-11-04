@@ -1,3 +1,4 @@
+import { WorkNamesEntry } from '../catalogue/work-names/entry';
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { GameOverview } from '../catalogue/game-reader/entry';
 import { gameReaderEntry } from '../catalogue/game-reader/model';
@@ -811,6 +812,11 @@ export function SubjectPage({
                 locale={locale}
               />
             )}
+            {overview && read && !page.account && workAddress ? (
+              <WorkNamesEntry subject={read.subject} ancestors={read.summary?.types} source={page}
+                locale={locale} context={page.context?.id ?? null}
+                sourcesHref={contextHref(`${workAddress.href}/sources`, realm)} />
+            ) : null}
             {overview && read && !page.account && showcaseWork && workReturn ? (
               <WorkFranchiseOverview
                 subject={read.subject}

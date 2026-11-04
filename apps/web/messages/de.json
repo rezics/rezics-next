@@ -8622,5 +8622,18 @@
   "library_collection_metadata_history_cover_none": "Kein Titelbild",
   "library_collection_metadata_history_first_page": "Erste Seite",
   "library_collection_metadata_history_next_page": "Nächste Seite",
-  "library_collection_metadata_history_return_editor": "Zurück zum Metadateneditor"
+  "library_collection_metadata_history_return_editor": "Zurück zum Metadateneditor",
+  "work_names_title": "Titel und alternative Namen",
+  "work_names_unavailable": "Namen sind für diese Ansicht nicht verfügbar. Laden Sie die Seite neu.",
+  "work_names_fallback": "Die Seite verwendet diesen bereitgestellten Ersatztitel:",
+  "work_names_selected": "Ausgewählter Seitentitel:",
+  "work_names_original": "Originalsprache",
+  "work_names_unknown": "Unbekannt",
+  "work_names_empty": "Keine Titel oder alternativen Namen vorhanden.",
+  "work_names_label": "Titel",
+  "work_names_alias": "Alternativer Name",
+  "work_names_copy": "Kopieren",
+  "work_names_copied": "Kopiert",
+  "work_names_copy_failed": "Kopieren fehlgeschlagen. Wählen Sie den Text zum Kopieren aus.",
+  "work_names_sources": "Quellen"
 }

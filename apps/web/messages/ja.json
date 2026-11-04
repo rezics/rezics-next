@@ -8622,5 +8622,18 @@
   "library_collection_metadata_history_cover_none": "表紙なし",
   "library_collection_metadata_history_first_page": "最初のページ",
   "library_collection_metadata_history_next_page": "次のページ",
-  "library_collection_metadata_history_return_editor": "メタデータ編集に戻る"
+  "library_collection_metadata_history_return_editor": "メタデータ編集に戻る",
+  "work_names_title": "タイトルと別名",
+  "work_names_unavailable": "この読み取りでは名前を利用できません。ページを再読み込みしてください。",
+  "work_names_fallback": "ページには次の提供された代替タイトルを表示しています：",
+  "work_names_selected": "ページの選択タイトル：",
+  "work_names_original": "原語",
+  "work_names_unknown": "不明",
+  "work_names_empty": "タイトルや別名は提供されていません。",
+  "work_names_label": "タイトル",
+  "work_names_alias": "別名",
+  "work_names_copy": "コピー",
+  "work_names_copied": "コピーしました",
+  "work_names_copy_failed": "コピーできませんでした。テキストを選択してコピーしてください。",
+  "work_names_sources": "出典"
 }

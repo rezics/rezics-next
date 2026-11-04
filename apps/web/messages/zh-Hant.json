@@ -8622,5 +8622,18 @@
   "library_collection_metadata_history_cover_none": "無封面",
   "library_collection_metadata_history_first_page": "第一頁",
   "library_collection_metadata_history_next_page": "下一頁",
-  "library_collection_metadata_history_return_editor": "返回中繼資料編輯器"
+  "library_collection_metadata_history_return_editor": "返回中繼資料編輯器",
+  "work_names_title": "標題與別名",
+  "work_names_unavailable": "目前無法讀取名稱。請重新載入頁面。",
+  "work_names_fallback": "頁面使用以下已提供的備用標題：",
+  "work_names_selected": "頁面選用標題：",
+  "work_names_original": "原始語言",
+  "work_names_unknown": "未知",
+  "work_names_empty": "未提供標題或別名。",
+  "work_names_label": "標題",
+  "work_names_alias": "別名",
+  "work_names_copy": "複製",
+  "work_names_copied": "已複製",
+  "work_names_copy_failed": "無法複製。請選取文字後複製。",
+  "work_names_sources": "來源"
 }

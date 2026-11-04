@@ -1926,3 +1926,19 @@ page and selected-quotation read. Native growth measures that bounded quotation 
 speaker facts, one document) rather than the full platform overview relation widgets. Qualifiers and reference parts come from that same selected subject response; they
 add no provider or per-reference requests. Continuation replaces the visible 20-entry page. Focus revalidation repeats
 the same bounded read and hides old source controls until it completes.
+
+## Work title variants
+
+The ordinary work overview exposes the labels and aliases in its already admitted Subject reading, grouped by
+supplied language. Exact duplicates share a row within one language while retaining title and alias roles; spelling,
+punctuation and diacritics remain unchanged. The disclosure does not replace the page heading, cover or action bar.
+The selected title uses the existing composition language selection; a fallback is explained locally. Original
+language remains unknown without native evidence. Sources retains the Subject and selected Realm.
+
+Decision: the public disclosure admits at most 262,144 serialized UTF-8 bytes of labels and aliases as a whole;
+above that presentation budget it shows unavailable rather than a partial list advertised as all supplied names.
+This is a Web admission limit, not evidence of a native producer bound. No requests are made per name or language.
+Session observation changes retire the reading until a replacement page source arrives.
+
+The remaining Terms return/focus handoff, current Terms action aggregate, native producer budget derivation and
+three-scale composition acceptance are a continuation; the public disclosure does not grant correction authority.
