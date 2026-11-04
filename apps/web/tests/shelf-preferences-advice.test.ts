@@ -75,3 +75,108 @@ test('missing or denied shelf advice cannot edit, while an original uncertain co
   expect(commands).toHaveLength(1);
   expect(commands[0]).toBe(original);
 });
+
+test('structured refusals retain the original intent and one absolute retry deadline', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    const initial = withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 1, shelf: { layouts: { all: 'list' } } });
+    const current = withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 4, shelf: { layouts: { all: 'list' } } });
+    const commands: Readonly<PreferenceChange>[] = [];
+    let reads = 0;
+    let saves = 0;
+    let readState: 'closed' | 'unavailable' | 'forbidden' | 'current' = 'closed';
+    const draft = new ShelfPreferenceDraftRecovery(
+      initial,
+      {
+        save: async (input) => {
+          commands.push(input);
+          return ++saves === 1
+            ? {
+                ok: false,
+                reason: 'unavailable',
+                failure: { status: 503, code: 'dependency_unavailable', requestId: 'write-1', retryAfter: '30' },
+              }
+            : { ok: false, reason: 'unavailable' };
+        },
+        read: async () => {
+          reads++;
+          if (readState === 'closed')
+            return {
+              signedIn: true,
+              state: 'closed',
+              failure: { status: 503, code: 'platform_closed', requestId: 'read-closed' },
+              securityHref: null,
+            };
+          if (readState === 'unavailable')
+            return {
+              signedIn: true,
+              state: 'unavailable',
+              failure: { status: 503, code: 'dependency_unavailable', requestId: 'read-unavailable', retryAfter: '60' },
+              securityHref: null,
+            };
+          if (readState === 'forbidden')
+            return {
+              signedIn: true,
+              state: 'unavailable',
+              failure: { status: 403, code: 'not_authorized', requestId: 'read-forbidden' },
+              securityHref: null,
+            };
+          return { signedIn: true, preferences: current, securityHref: null };
+        },
+      },
+      owner,
+    );
+    draft.edit({ layout: 'table' }, 'layout');
+    await draft.submit();
+    const original = draft.snapshot().pending?.input;
+    const deadline = now + 30_000;
+    expect(draft.snapshot().retryAt).toBe(deadline);
+    draft.edit({ gridSize: 'small' }, 'gridSize');
+    expect(draft.snapshot().retryAt).toBe(deadline);
+    expect(Object.isFrozen(original)).toBe(true);
+    expect(Object.isFrozen(original?.shelf)).toBe(true);
+    await draft.retry();
+    expect(commands).toHaveLength(1);
+    expect(draft.snapshot().pending?.input).toBe(original);
+    now = deadline;
+    await draft.retry();
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(original);
+    expect(draft.snapshot().retryAt).toBe(0);
+
+    await draft.reload();
+    expect(draft.snapshot().reason).toBe('read:closed');
+    expect(draft.snapshot().failure?.code).toBe('platform_closed');
+    expect(draft.snapshot().pending?.input).toBe(original);
+    expect(draft.snapshot().advice).toBeUndefined();
+    expect(draft.snapshot().current).toBe(false);
+
+    readState = 'unavailable';
+    await draft.reload();
+    const readDeadline = now + 60_000;
+    expect(draft.snapshot().reason).toBe('read:unavailable');
+    expect(draft.snapshot().failure?.requestId).toBe('read-unavailable');
+    expect(draft.snapshot().retryAt).toBe(readDeadline);
+    await draft.reload();
+    expect(reads).toBe(2);
+    now = readDeadline;
+    readState = 'forbidden';
+    await draft.reload();
+    expect(draft.snapshot().reason).toBe('read:forbidden');
+    expect(draft.snapshot().failure?.status).toBe(403);
+    expect(draft.snapshot().pending?.input).toBe(original);
+    expect(draft.snapshot().dirty.has('gridSize')).toBe(true);
+
+    readState = 'current';
+    await draft.reload();
+    expect(draft.snapshot().known.version).toBe(4);
+    expect(draft.snapshot().current).toBe(true);
+    expect(draft.snapshot().draft.gridSize).toBe('small');
+    expect(draft.snapshot().pending?.input).toBe(original);
+  } finally {
+    Date.now = realNow;
+  }
+});
