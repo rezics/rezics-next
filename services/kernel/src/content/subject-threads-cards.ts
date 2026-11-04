@@ -85,9 +85,9 @@ type DocumentNode = Readonly<{
   marks?: readonly Readonly<{ type?: string }>[];
   content?: readonly DocumentNode[];
 }>;
-type CurrentCardSelection = Omit<SelectedReadingCardBatchResult['selected'][number], 'state'> & {
-  state: 'current' | 'erased';
-};
+type CurrentCardSelection =
+  | Extract<SelectedReadingCardBatchResult['selected'][number], { state: 'current' }>
+  | Extract<SelectedReadingCardBatchResult['selected'][number], { state: 'erased' }>;
 
 function presentationOf(body: unknown): Readonly<{ language: string | null; spoiler: boolean }> {
   if (!body || typeof body !== 'object') return { language: null, spoiler: false };
