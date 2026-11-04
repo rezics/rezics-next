@@ -142,12 +142,12 @@ test('a manager launches with an over-budget opening and records its prompt mani
     const started = await s.managers.start(s.spec);
     expect(started.status).toBe('running');
     expect(started.promptManifest?.overBudget).toEqual(['role', 'opening']);
+    expect(started.promptManifest?.budgets).toEqual({ role: 1, opening: 1 });
     const event = s.db.query("SELECT detail FROM flow_events WHERE stage='manager' AND action='started'").get() as {
       detail: string;
     };
     expect(JSON.parse(event.detail).prompt).toMatchObject({
       overBudget: ['role', 'opening'],
-      budgets: { role: 1, opening: 1 },
     });
   } finally {
     await s.close();

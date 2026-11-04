@@ -248,7 +248,7 @@ test('dispatch reports prompt and brief lints while retaining the task in dispat
     'A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.',
     'x'.repeat(MAX_BRIEF_BYTES + 1),
   ].join('\n');
-  brief(f.state, 'web', 'linted.md', 1, content);
+  brief(f.state, 'web', 'linted.md', 60_000, content);
 
   const sweep = await sweepBacklog(f.runtime);
 
