@@ -504,7 +504,8 @@ function SignupForm({
     event?.preventDefault();
     if (!journey.active || submitting.current) return;
     const current = controller.phase;
-    if (retrying ? current.kind !== 'uncertain' : current.kind !== 'draft') return;
+    if (retrying && current.kind !== 'uncertain') return;
+    if (!retrying && current.kind !== 'draft') return;
 
     if (!retrying) {
       clearErrors();
