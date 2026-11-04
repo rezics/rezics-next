@@ -95,6 +95,11 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
           expect(first.value.next).toBeString();
           retryCursor = first.value.next as string;
         }
+        if (step === 'opening' && source)
+          await f.db.admin.query('DELETE FROM content.board_watch_notice_work WHERE route=$1 AND post_id=$2', [
+            routeOf((source.data as { itemId: string }).itemId),
+            (source.data as { itemId: string }).itemId,
+          ]);
       }
       async function operation() {
         accessCounts.reset();
@@ -383,10 +388,6 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
           if (step === 'opening' && previous === 0) {
             const thread = await f.thread();
             source = (await f.envelope(thread.firstPost.id)).events.find(Boolean)!;
-            await db.admin.query('DELETE FROM content.board_watch_notice_work WHERE route=$1 AND post_id=$2', [
-              routeOf(thread.firstPost.id),
-              thread.firstPost.id,
-            ]);
           }
         },
         prepare,
