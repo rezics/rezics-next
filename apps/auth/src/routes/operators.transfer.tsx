@@ -1,3 +1,6 @@
+import { flushSync } from 'react-dom';
+import { rememberTransferReturn, type TransferReturnEntry } from '../operator-transfer-return';
+import { OperatorTransferReturnView } from '../operator-transfer-return-view';
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -151,6 +154,18 @@ function fileError(reason: HandoffError): string {
 export function OperatorTransferPage({ initial }: { initial?: AccountSessionResult } = {}) {
   const router = useRouter({ warn: false });
   const [reload, setReload] = useState(0);
+  const [history, setHistory] = useState<TransferReturnEntry[]>([]);
+  const unresolvedSource = useRef(false);
+  const historyRef = useRef<TransferReturnEntry[]>([]);
+  const historyFocus = useRef<HTMLHeadingElement>(null);
+  function remember(kind: TransferRecoveryKind) {
+    if (kind === 'source-unknown') unresolvedSource.current = true;
+    const next = rememberTransferReturn(historyRef.current, kind);
+    if (next !== historyRef.current) {
+      historyRef.current = next;
+      setHistory(next);
+    }
+  }
   const [session, setSession] = useState<AccountSessionResult | null>(null);
   const [attempt, setAttempt] = useState<TransferAttempt | null>(null);
   const [subject, setSubject] = useState('');
@@ -214,9 +229,12 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   function updateRecovery(value: TransferRecoveryKind) {
     recoveryKind.current = value;
     setRecovery(value);
+    remember(value);
   }
   const protectedWork = () => {
     const value = state.current;
+    if (unresolvedSource.current) return true;
+    if (value.result?.kind === 'acknowledged' && value.result.readback.kind === 'current') return false;
     if (retainsTransferWork(recoveryKind.current)) return true;
     if (retired.current || value.invalidContinuation || value.needsProof || value.session?.kind !== 'ready')
       return false;
@@ -233,21 +251,20 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       value.acceptance.trim(),
     );
   };
-  function retire() {
+  function retire(synchronous = true) {
     if (retired.current) return;
     retired.current = true;
     view.current++;
     fileRead.current++;
     const discardUnsent = unsent.current && JSON.stringify(restoreTransferAttempt()) === JSON.stringify(unsent.current);
-    const currentAttempt = state.current.attempt ?? liveAttempt.current;
+    const currentAttempt = liveAttempt.current ?? state.current.attempt;
     const inferred = transferRecoveryKind(currentAttempt, state.current.result);
-    updateRecovery(
+    const retained =
       discardUnsent
         ? 'none'
         : inferred !== 'none' || currentAttempt || state.current.result
           ? inferred
-          : recoveryKind.current,
-    );
+          : recoveryKind.current;
     // Never remove a command that may have reached native, or another view's saved work.
     if (unsent.current && JSON.stringify(restoreTransferAttempt()) === JSON.stringify(unsent.current)) {
       try {
@@ -260,6 +277,14 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     liveAttempt.current = null;
     busy.current = false;
     retryRead.current = null;
+    const clear = () => {
+    updateRecovery(retained);
+    if (discardUnsent) {
+      const next = rememberTransferReturn(historyRef.current, 'review');
+      historyRef.current = next;
+      setHistory(next);
+    }
+    setSession(null);
     setAttempt(null);
     setResult(null);
     setCurrent(null);
@@ -277,6 +302,13 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setFileFeedback(null);
     setNativeAdvice(null);
     setUncertain(false);
+    setReconfirmed(false);
+    setReadRecovery(false);
+    };
+    if (synchronous) {
+      flushSync(clear);
+      (historyFocus.current ?? notice.current)?.focus();
+    } else clear();
   }
   async function validateCaller() {
     const started = view.current;
@@ -327,11 +359,12 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     const restore = (event: PageTransitionEvent) => {
       if (event.persisted) setReload((value) => value + 1);
     };
-    window.addEventListener('pagehide', retire);
+    const hide = () => retire();
+    window.addEventListener('pagehide', hide);
     window.addEventListener('pageshow', restore);
     window.addEventListener('focus', validateCaller);
     return () => {
-      window.removeEventListener('pagehide', retire);
+      window.removeEventListener('pagehide', hide);
       window.removeEventListener('pageshow', restore);
       window.removeEventListener('focus', validateCaller);
     };
@@ -373,29 +406,33 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setSubject('');
     setDestination('');
     return () => {
-      retire();
+      retire(false);
     };
   }, [initial, reload]);
   useEffect(() => {
-    readPage(() => loadPageSession(reload === 0 ? initial : undefined));
+    readPage(() => loadPageSession(reload === 0 ? initial : undefined, reload > 0));
   }, [initial, reload]);
   useLayoutEffect(() => {
     if (result || reconfirmed || fileFeedback || readRecovery || (recovery !== 'none' && !nativeReady))
       notice.current?.focus();
   }, [result, reconfirmed, fileFeedback, readRecovery, recovery, nativeReady]);
 
-  async function loadPageSession(supplied?: AccountSessionResult): Promise<TransferFailure | void> {
+  useLayoutEffect(() => {
+    if (history.length) historyFocus.current?.focus();
+  }, [history]);
+
+  async function loadPageSession(supplied?: AccountSessionResult, recover = false): Promise<TransferFailure | void> {
     const started = view.current;
     const value = supplied ?? (await loadAccountSession());
     if (started !== view.current) return;
     setSession(value);
     setNativeReady(false);
     const saved = restoreTransferAttempt();
-    if (saved === 'invalid') updateRecovery('unreadable');
+    if (saved === 'invalid' || (!saved && unresolvedSource.current)) updateRecovery('unreadable');
     else if (saved) updateRecovery(transferRecoveryKind(saved));
     // An unavailable read says nothing about the saved attempt's owner.
     if (value.kind === 'failure') {
-      offerReadRetry(() => loadPageSession());
+      offerReadRetry(() => loadPageSession(undefined, recover));
       return { kind: 'failure', reason: 'unavailable' };
     }
     if (saved === 'invalid') {
@@ -416,7 +453,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     );
     if (started !== view.current) return;
     if (isTransferFailure(readiness)) {
-      offerReadRetry(() => loadPageSession());
+      offerReadRetry(() => loadPageSession(undefined, recover));
       return readiness;
     }
     if (value.kind !== 'ready' || readiness.viewer.kind !== 'ready') {
@@ -434,6 +471,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setInvalidContinuation(false);
     if (saved) {
       setRecoveryReviewed(false);
+      if (recover && saved.phase !== 'approve') return reviewRecovery(saved);
       if (saved.phase === 'approve') {
         const advice = await refreshTransferAdvice(saved);
         if (
@@ -458,6 +496,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setReadRecovery(true);
   }
   function readPage(action: () => Promise<TransferFailure | void>) {
+    if (busy.current || retired.current) return;
+    view.current++;
     const started = view.current;
     void perform(async () => {
       setConfirmed(false);
@@ -622,7 +662,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     }
   }
   function showFailure(value: TransferFailure) {
-    const currentAttempt = state.current.attempt ?? liveAttempt.current;
+    const currentAttempt = liveAttempt.current ?? state.current.attempt;
     const retained = transferRecoveryKind(currentAttempt, state.current.result);
     if (retained !== 'none') updateRecovery(retained);
     setNativeAdvice(null);
@@ -669,7 +709,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       needsProof ||
       invalidContinuation ||
       retired.current ||
-      retainsTransferWork(recoveryKind.current) ||
+      (retainsTransferWork(recoveryKind.current) || unresolvedSource.current) ||
       attempt ||
       restoreTransferAttempt() !== null
     )
@@ -693,7 +733,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       needsProof ||
       invalidContinuation ||
       retired.current ||
-      retainsTransferWork(recoveryKind.current) ||
+      (retainsTransferWork(recoveryKind.current) || unresolvedSource.current) ||
       attempt ||
       restoreTransferAttempt() !== null
     )
@@ -713,7 +753,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       invalidContinuation ||
       retired.current ||
       uncertain ||
-      retainsTransferWork(recoveryKind.current)
+      (retainsTransferWork(recoveryKind.current) || unresolvedSource.current)
     )
       return;
     const started = view.current;
@@ -770,6 +810,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         (next) => {
           if (started !== view.current) return false;
           liveAttempt.current = { ...next };
+          if (next.phase === 'readback') remember('source-acknowledged');
           setAttempt(liveAttempt.current);
           return storeTransferAttempt(next);
         },
@@ -788,7 +829,9 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
         if (outcome.kind === 'current') setCurrent(outcome.relation);
         if (outcome.kind === 'acknowledged') {
           if (outcome.readback.kind === 'current') setCurrent(outcome.readback.relation);
-          else offerReadRetry(() => readCurrent(liveAttempt.current ?? value));
+          else if (['account-changed', 'denied', 'step-up'].includes(outcome.readback.reason)) {
+            showFailure(outcome.readback);
+          } else offerReadRetry(() => readCurrent(liveAttempt.current ?? value));
         }
         updateRecovery(transferRecoveryKind(liveAttempt.current ?? value, outcome));
       }
@@ -796,15 +839,17 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   }
   function authenticate(event: FormEvent) {
     event.preventDefault();
-    if (session?.kind !== 'ready') return;
     const started = view.current;
     void perform(async () => {
-      const outcome = await reauthenticateTransfer(session.accountId, email, password, () => started === view.current);
+      const caller = session?.kind === 'ready' ? session : await loadAccountSession();
+      if (started !== view.current) return;
+      if (caller.kind !== 'ready') { showFailure({ kind: 'failure', reason: 'account-changed' }); return; }
+      const outcome = await reauthenticateTransfer(caller.accountId, email, password, () => started === view.current);
       if (started !== view.current) return;
       setPassword('');
       if (outcome) showFailure(outcome);
       else {
-        const readiness = await readOperatorTransferPage({ kind: 'readiness' }, session.accountId);
+        const readiness = await readOperatorTransferPage({ kind: 'readiness' }, caller.accountId);
         if (started !== view.current) return;
         if (isTransferFailure(readiness)) {
           showFailure(readiness);
@@ -822,12 +867,13 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
           setNeedsProof(false);
           return;
         }
-        if (saved && saved.accountId !== session.accountId) {
+        if (saved && saved.accountId !== caller.accountId) {
           updateRecovery(transferRecoveryKind(saved));
           showFailure({ kind: 'failure', reason: 'account-changed' });
           return;
         }
         retired.current = false;
+        setSession(caller);
         setNativeReady(true);
         setNeedsProof(false);
         setInvalidContinuation(false);
@@ -863,12 +909,22 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     (result?.kind === 'acknowledged' && result.readback.kind === 'failure' && result.readback.reason === 'unavailable');
   const recoveryCanReview =
     recoveryVisible &&
-    !retired.current &&
-    !needsProof &&
+    (retired.current || recovery === 'unreadable' || (!needsProof &&
     !invalidContinuation &&
-    ((canDisclose && recovery !== 'unreadable') || Boolean(readRecovery && retryRead.current));
+    ((canDisclose && recovery !== 'unreadable') || Boolean(readRecovery && retryRead.current))));
+  function restartRead() {
+    if (busy.current) return;
+    // A new read lifetime never reuses a retired callback or its private bindings.
+    retired.current = false;
+    fileRead.current++;
+    setInvalidContinuation(false);
+    setNeedsProof(false);
+    readPage(() => loadPageSession(undefined, true));
+  }
   function reviewCurrentRecovery() {
-    if (canDisclose && attempt) readPage(() => reviewRecovery(attempt));
+    if (retired.current) restartRead();
+    else if (recovery === 'unreadable') restartRead();
+    else if (canDisclose && attempt) readPage(() => reviewRecovery(attempt));
     else if (canDisclose) readPage(() => reviewStoredRecovery());
     else if (retryRead.current) readPage(retryRead.current);
   }
@@ -950,6 +1006,11 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     <AuthPage returnToSecurity heading={m.auth_transfer_heading()}>
       {router ? <TransferDeparture work={protectedWork} validate={validateCaller} retire={retire} /> : null}
       <div className="auth-login-form min-w-0 text-start wrap-anywhere">
+        <OperatorTransferReturnView entries={history} focusRef={historyFocus} onDismiss={() => {
+          historyRef.current = [];
+          setHistory([]);
+          notice.current?.focus();
+        }} />
         <p>{m.auth_transfer_guide_orientation()}</p>
         {!session ? <p role="status">{m.auth_inventory_loading()}</p> : null}
         {session?.kind === 'signed-out' ? (
@@ -969,6 +1030,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
               disabled={pending}
               aria-busy={pending}
               onClick={() => {
+                if (retired.current) { restartRead(); return; }
                 readPage(retryRead.current ?? (() => loadPageSession()));
               }}
             >
@@ -1063,7 +1125,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             </Button>
           </form>
         ) : null}
-        {canDisclose && !attempt && !retainsTransferWork(recoveryKind.current) ? (
+        {canDisclose && !attempt && !retainsTransferWork(recoveryKind.current) && !unresolvedSource.current ? (
           <>
             <form
               className="auth-login-form"

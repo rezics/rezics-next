@@ -139,8 +139,9 @@ test('source requires separate confirmation and keeps an acknowledged transfer s
   await flush(() => host.querySelector<HTMLInputElement>('#transfer-confirm')!.click());
   expect(calls.some(({ path }) => path === '/account-operations/approve')).toBe(false);
   await flush(() => button(host, m.auth_transfer_submit()).click());
-  expect(host.textContent).toContain(m.auth_transfer_acknowledged());
-  expect(host.textContent).toContain(m.auth_transfer_current_unavailable());
+  expect(host.textContent).toContain(m.auth_transfer_recovery_acknowledged());
+  expect(host.querySelector('#transfer-acknowledgment')).toBeNull();
+  expect(host.querySelector('#transfer-confirm')).toBeNull();
   expect(host.textContent).not.toContain(m.auth_transfer_observed());
   const stored = restoreTransferAttempt();
   expect(stored).toMatchObject({

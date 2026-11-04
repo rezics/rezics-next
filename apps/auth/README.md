@@ -606,7 +606,7 @@ refill, polling, per-row authorization or automatic command on restoration, Retr
 Imported transfer data follows the [Accounts operator contract](../../docs/accounts.md#2-operators-and-automated-accounts);
 destination presentation cannot establish source approval or execution.
 
-Operator-transfer read failures offer Retry within the same page view. A failed session read preserves the saved
+Operator-transfer read failures offer Retry within the mounted page. A failed session read preserves the saved
 attempt without treating it as an account mismatch; recovery restores it only for its initiating account and requires
 fresh confirmation. Signed-out or changed accounts cannot act on it. Relation retries repeat only the failed read;
 after a submit failure, Retry reads the current relationship and leaves approval/execution in the original explicit
@@ -615,12 +615,34 @@ generic unresolved notice and Stay/Leave protection survive authority retirement
 relationship observation never attributes that relationship to the earlier operation; an exact retry remains a
 separate, freshly reviewed and explicitly confirmed action using the retained descriptor.
 
-browser authority retirement keeps only a generic stage summary in mounted state; the existing exact descriptor remains the sole recovery record, current-state review is query-only, and a matching relation never settles an unknown execution.
+Retirement invalidates operation/read and file generations before synchronously removing private identity, review,
+credentials, handoff, references, relation and native advice from the DOM. Generic mounted history retains the first
+unresolved source execution plus the latest local review/outcome (at most two classifications), without identifiers,
+timestamps or account binding. Known source acknowledgement survives matching, failed and conflicting readback,
+missing/invalid/replaced storage and cached return. Destination acceptance is not source execution. A later
+acknowledgement, refusal or current relation never settles an earlier unknown send. Dismissal clears presentation
+only; exact descriptors and submitted markers remain under their installed ownership. Ordinary documents without
+saved evidence make no historical claim.
+
+Decision: visible current-state Retry after retirement opens a fresh bounded read lifetime using current management
+session/readiness and the exact saved descriptor; it never reuses a retired callback. Missing, invalid or replaced
+continuation cannot reconstruct private credentials or enable a replacement operation. A same-account descriptor
+still requires matching native advice and a separate human confirmation for its exact next command.
 
 An explicit current-state recovery action is bounded to one existing `/session` binding and one operator-transfer review
 request (2 Auth requests total), with zero approve or execute requests. Source execution uncertainty and acknowledged
 readback recovery read only the current relation; destination acceptance recovery rereads only destination advice.
-Unavailable reads can be retried deliberately. No polling or automatic command retry runs.
+Unavailable reads can be retried deliberately. Entry costs one session binding plus one readiness request when
+an initial session is supplied, or two session reads plus readiness otherwise. Restoring an approval-stage descriptor
+adds one session binding and one selected native advice request. Cached return and retired Retry use fresh session,
+readiness and selected recovery: at most five Auth requests (three session reads, readiness, selected review).
+An active relation/advice Retry costs two Auth requests. Each native transfer-review request retains its ten-second
+whole-call bound, including authentication and at most two selected relation reads; source preparation uses the same
+session/selected-source pair and allocates one local operation key, and destination import review uses one
+session/selected-destination pair. Browser transport retains
+its five-second bound through response-body completion. There is no list scan, refill, per-row authorization, polling,
+file replay, operation allocation, approval or execution in return/read Retry. Native command retries retain their
+original tuple, reference, operation key, deadlines, relation lock and explicit current-authorized confirmation.
 
 Departure protects meaningful input and unresolved review with Stay/Leave; only a review created here and never
 submitted is discarded, while restored attempts are conservatively retained because approval may already have reached
