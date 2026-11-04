@@ -72,7 +72,12 @@ export function decodePreferenceValues(value: unknown): PreferencePageValues | u
 
 /** Owner reading advice, or `undefined` when any choice or action field is missing or malformed. */
 export function decodePreferenceAdvice(value: unknown): PreferencePageAdvice | undefined {
-  if (!isRecord(value) || value.viewerState !== 'current' || !isRecord(value.allowedActions) || !isRecord(value.reading))
+  if (
+    !isRecord(value) ||
+    value.viewerState !== 'current' ||
+    !isRecord(value.allowedActions) ||
+    !isRecord(value.reading)
+  )
     return undefined;
   const read = actionAdvice(value.allowedActions.read);
   const update = actionAdvice(value.allowedActions.update);
@@ -95,8 +100,9 @@ export function decodePreferenceAdvice(value: unknown): PreferencePageAdvice | u
   const spoilerLevels = uniqueMembers(supported.spoilerLevels, (entry): entry is PreferenceSpoilerLevel =>
     [0, 1, 2].includes(entry as number),
   );
-  const suitabilityChoices = uniqueMembers(supported.suitability, (entry): entry is PreferenceSuitability =>
-    entry === 'blur' || entry === 'show',
+  const suitabilityChoices = uniqueMembers(
+    supported.suitability,
+    (entry): entry is PreferenceSuitability => entry === 'blur' || entry === 'show',
   );
   if (
     !spoilerLevels ||

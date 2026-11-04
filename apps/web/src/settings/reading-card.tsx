@@ -249,15 +249,7 @@ function readingLabel(values: ReadingValues) {
   };
 }
 
-function ReadingPreview({
-  ids,
-  draft,
-  confirmed,
-}: {
-  ids: string;
-  draft: ReadingValues;
-  confirmed: ReadingValues;
-}) {
+function ReadingPreview({ ids, draft, confirmed }: { ids: string; draft: ReadingValues; confirmed: ReadingValues }) {
   const draftPreview = !sameReading(draft, confirmed);
   const values = draftPreview ? draft : confirmed;
   return (
@@ -477,7 +469,9 @@ export function ReadingCard({
                   <Field orientation="horizontal">
                     <FieldContent>
                       <FieldTitle id={`${ids}-suitability-title`}>{m.settings_suitability_title()}</FieldTitle>
-                      <FieldDescription id={`${ids}-suitability-text`}>{m.settings_suitability_text()}</FieldDescription>
+                      <FieldDescription id={`${ids}-suitability-text`}>
+                        {m.settings_suitability_text()}
+                      </FieldDescription>
                     </FieldContent>
                     <Switch
                       id={`${ids}-suitability`}

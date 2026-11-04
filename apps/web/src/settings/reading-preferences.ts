@@ -45,10 +45,7 @@ export function ownerMayChangeReading(advice: ReadingPreferences['advice']): boo
   return advice?.viewerState === 'current' && advice.allowedActions.update.allowed === true;
 }
 
-export function readingAdviceFor(
-  values: ReadingValues,
-  writable = true,
-): NonNullable<ReadingPreferences['advice']> {
+export function readingAdviceFor(values: ReadingValues, writable = true): NonNullable<ReadingPreferences['advice']> {
   return {
     viewerState: 'current',
     allowedActions: {
@@ -65,7 +62,8 @@ export function readingAdviceFor(
 
 function supportedReading(preferences: ReadingPreferences): boolean {
   const advice = preferences.advice;
-  if (!advice) return [0, 1, 2].includes(preferences.spoilerLevel) && ['blur', 'show'].includes(preferences.suitability);
+  if (!advice)
+    return [0, 1, 2].includes(preferences.spoilerLevel) && ['blur', 'show'].includes(preferences.suitability);
   return (
     advice.reading.supported.spoilerLevels.includes(preferences.spoilerLevel) &&
     advice.reading.supported.suitability.includes(preferences.suitability)

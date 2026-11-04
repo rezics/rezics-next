@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
-import {
-  decodePreferenceAdvice,
-  decodePreferencePage,
-  decodePreferenceValues,
-} from '../src/preference-page.ts';
+import { decodePreferenceAdvice, decodePreferencePage, decodePreferenceValues } from '../src/preference-page.ts';
 
-const values = { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 4, shelf: {}, notifications: { reply: true } };
+const values = {
+  spoilerLevel: 1 as const,
+  suitability: 'blur' as const,
+  version: 4,
+  shelf: {},
+  notifications: { reply: true },
+};
 const envelope = {
   ...values,
   viewerState: 'current' as const,
@@ -24,7 +26,10 @@ test('a complete native preference page decodes values, supported choices and ow
 
 test('malformed choice data is unavailable rather than a guessed enum', () => {
   for (const broken of [
-    { ...envelope, reading: { ...envelope.reading, supported: { spoilerLevels: [0, 1, 3], suitability: ['blur', 'show'] } } },
+    {
+      ...envelope,
+      reading: { ...envelope.reading, supported: { spoilerLevels: [0, 1, 3], suitability: ['blur', 'show'] } },
+    },
     { ...envelope, reading: { ...envelope.reading, supported: { spoilerLevels: [0, 1, 2], suitability: ['hide'] } } },
     { ...envelope, reading: { ...envelope.reading, supported: { spoilerLevels: [1, 1], suitability: ['blur'] } } },
     { ...envelope, reading: { ...envelope.reading, effective: { spoilerLevel: 3, suitability: 'blur' } } },
@@ -47,7 +52,10 @@ test('malformed choice data is unavailable rather than a guessed enum', () => {
 test('a readable owner whose edit is disallowed remains a current viewer', () => {
   const denied = {
     ...envelope,
-    allowedActions: { read: { allowed: true as const }, update: { allowed: false as const, reason: 'not_authorized' as const } },
+    allowedActions: {
+      read: { allowed: true as const },
+      update: { allowed: false as const, reason: 'not_authorized' as const },
+    },
   };
   const page = decodePreferencePage(denied);
   expect(page?.viewerState).toBe('current');

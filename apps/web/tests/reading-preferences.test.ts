@@ -83,7 +83,12 @@ test('shared-version interleaving keeps the original key and uses the newer revi
 });
 
 test('reset is an explicit native-default patch of the reviewed version', () => {
-  const known = { spoilerLevel: 2 as const, suitability: 'show' as const, version: 9, advice: readingAdviceFor({ spoilerLevel: 2, suitability: 'show' }) };
+  const known = {
+    spoilerLevel: 2 as const,
+    suitability: 'show' as const,
+    version: 9,
+    advice: readingAdviceFor({ spoilerLevel: 2, suitability: 'show' }),
+  };
   const reset = readingReset(known)!;
   expect(reset).toMatchObject({ expectedVersion: 9, spoilerLevel: 0, suitability: 'blur' });
   expect(readingReset({ ...known, spoilerLevel: 0, suitability: 'blur' })).toBeNull();
