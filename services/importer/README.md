@@ -2207,15 +2207,14 @@ for these source Concepts.
 
 ### Bangumi TVAnime subject names
 
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@8`.
-`cross-media-entities@8` revision while the ordinary caller uses `bangumi@9`.
-Both use one pure TVAnime name extractor and the existing journal, source
-metadata admission, citations, candidate acceptance and adoption flow. No
-additional seed publisher or identity lookup is involved. The importer keeps the
-exact Bangumi subject alias and key, unversioned record state where no provider
-revision exists, the normalized digest and the acknowledged native UUID.
+Ordinary Bangumi registration and selected-family type 2 rows reach
+`convertBangumi`; the ordinary caller uses `bangumi@10` and the selected-family
+registration uses `cross-media-entities@9+bangumi@10`. Both share the pure TVAnime
+field extraction and existing journal, source metadata admission, citations,
+candidate review, adoption and current-read flow. No additional seed publisher or
+identity lookup is involved. The importer keeps the exact Bangumi subject alias
+and key, unversioned record state where no provider revision exists, normalized
+digest and acknowledged native UUID.
 
 - Touches: one selected source record, at most 24 name statements and 16 bounded
   omission diagnostics; each name carries its exact Bangumi subject citation.
@@ -2253,7 +2252,7 @@ date is not completion or access authority.
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
 `游玩人数` on type 4 through `bangumi@9`, advancing the `bangumi@8` TVAnime
 original-run mapping. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@8` registration; this journey adds no
+existing combined `cross-media-entities@9+bangumi@10` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.

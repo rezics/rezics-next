@@ -974,7 +974,7 @@ Decision: plain TVAnime `链接` values become cited `wdt:P973` facts;
 `官方网站` stays with the separate `schema:url` mapping, and the parser removes
 only horizontal template/list boundary whitespace.
 
-`bangumi@9` also consumes the exact pinned TVAnime `链接` and `Copyright`
+`bangumi@10` also consumes the exact pinned TVAnime `链接` and `Copyright`
 fields. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
 source spelling and URL bytes are kept, and the URL is never a source citation
 or identity claim. A plain notice becomes `schema:copyrightNotice` with its
@@ -990,8 +990,9 @@ diagnostics. The exact selected TVSeries schema bounds both URLs and notices to
 descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
-- Touches: one TVAnime source record, its exact Bangumi citation, admitted work
-  evidence, and the existing proposal/review/adoption/current-read path.
+- Touches: ordinary `bangumi@10` and selected-family
+  `cross-media-entities@9+bangumi@10` publication for one TVAnime source record,
+  its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights
   admission, and facts fence. No linked-page fetch or hostname identity lookup.

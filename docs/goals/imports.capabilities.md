@@ -1427,8 +1427,8 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
 
 Decision: see [Bangumi TVAnime work evidence](../../packages/conversion/README.md#bangumi-tv-anime-work-evidence).
 
-Ordinary conversion uses `bangumi@9`. The selected-family Bangumi caller uses
-`cross-media-entities@9+bangumi@9` so source refresh replays the new mapping
+Ordinary conversion uses `bangumi@10`. The selected-family Bangumi caller uses
+`cross-media-entities@9+bangumi@10` so source refresh replays the new mapping
 under an honest revision without revising the VNDB adapter. Only the exact
 TVAnime `链接` and `Copyright` fields are admitted. Descriptive destinations
 retain their URL spelling and cite the Bangumi subject record; copyright
