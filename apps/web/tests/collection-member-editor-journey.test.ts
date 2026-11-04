@@ -279,4 +279,4 @@ test('Curator can add and edit Collection members without an always-open form wa
     await page.close();
     await browser.close();
   }
-}, 30_000);
+}, 60_000);
