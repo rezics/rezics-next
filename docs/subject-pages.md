@@ -1418,12 +1418,20 @@ and inverse from the current release. Direction uses the property's labels and i
 privacy inference or automatic merge is invented on the page. Classification ballots and source figures stay with their
 existing owner.
 
-The dedicated appearances-and-relationships reading is a finite native page with an explicit continuation. Unavailable
-configuration (age-at-appearance, main-character linkage, character-to-character properties the current release does
-not admit) is named on the page. An independently unreadable stream keeps the character identity and the other groups.
-A vanished endpoint keeps its count semantics and drops the unreadable summary rather than substituting another
-subject. Type descriptors for holders on the current page are read at most four at a time, deduplicated within that
-page, and not retained between calls.
+Work appearances and Character-to-Character relations remain separate groups in the existing public Connections
+window. The Character relation presentation selects and pages that one current Relations stream; it adds no overview
+reader or target-subject reads. Incoming rows name the original holder and the released inverse meaning, with a
+separate original-property label when it differs. Every exact statement offers the existing original-assertion
+destination, while a target remains usable if statement identity is unavailable. A current page with no rows, a
+withheld summary, missing release configuration and a failed stream keep distinct states. More and Retry remain the
+single controls of the selected native window, and returning validates its stream, cursor, reading and assertion
+focus before restoring focus.
+
+Unavailable configuration (age-at-appearance, main-character linkage, character-to-character properties the current
+release does not admit) is named on the page. An independently unreadable stream keeps the character identity and the
+other groups. A vanished endpoint keeps its count semantics and drops the unreadable summary rather than substituting
+another subject. Type descriptors for holders on the current page are read at most four at a time, deduplicated within
+that page, and not retained between calls.
 
 Correction opens the existing qualified relation editor with the selected statement, slot and holder, then returns to
 the same character, stream, cursor and selected work. Candidate review and Changes remain their existing surfaces.
@@ -1440,6 +1448,13 @@ Unknown Bangumi relation codes stay unsupported provenance. Character pages reus
 envelope and add released identity meanings plus unavailable configuration; they do not introduce a second
 permission engine. Viewer-bearing `POST /v1/pages:read` stays private,
 no-store; public facts remain independently comparable after omitting viewer.
+
+Decision: source spoiler qualifiers gate the whole association until explicit reveal; reader image suitability applies to shared artwork because public summaries have no association-suitability field and withholding an image does not withhold the subject.
+
+The base-source review confirmed that Character already mounts the generic public Connections window; the new visit is
+only its relation-row presentation. Focused mounted tests and the 64/512/4096 adapter measurement exercise the
+consumer boundary. They do not establish native SQL growth or actual seeded page admission. Native producer suites
+remain with their owners, and a fixture story is not mounted-seed evidence.
 
 ## Person voice credits
 
@@ -1824,6 +1839,25 @@ stream and cursor. A newly selected stream or replaced visit retires its prior e
 The original `CONNECTION_LIMIT = 12`, `CONNECTION_BYTES = 1_048_576`, three selected-stream ceiling and explicit
 limit-25 depth-1/2 graph remain unchanged. Fingerprinting and explanation consume only the page aggregate and
 returned native window; no history, catalogue index or per-card request is added.
+
+The Character visit is a presentation of the current Relations section, not a second reader. A full initial adapter
+read uses two current page aggregates, the active/release pair and up to three selected streams: `4 + g`, at most
+seven HTTP calls. It returns at most three sections of 12 rows each (36 retained rows). One selected-stream
+replacement, including More or explicit Retry, uses five calls and replaces that section's current page rather than
+folding history; Character presentation adds no rows or calls. A successful section charges the exact UTF-8 byte
+length of `JSON.stringify(body)` through `TextEncoder`, rejecting any body over 1 MiB; three section bodies therefore
+retain at most three separately charged MiB windows. Each returned statement allows one main Snak, 16 qualifiers and
+16 references of up to 16 parts (273 Snaks maximum). The released relation DTO carries one target/holder summary per
+row and its `related` summaries use the shared summary reader's maximum 256 distinct input IDs per response. The
+charge is computed from the actual DTO, including labels, covers, qualifiers and references; no assumed label byte
+limit replaces that measurement. This is consumer request/retained-response evidence only: native relation scan rows
+and SQL work keep their original producer acceptance.
+
+Character adapter growth case: the same relation visit is measured at 64, 512 and 4,096 unrelated Subjects and
+obsolete assertions for calls, current sections/rows and UTF-8 response bytes. Focused mounted cases cover directed
+identity and incoming parent meaning, duplicate-target assertion identity, whole-association spoiler and withheld
+states, exact return and caller/Context A/B/A retirement. Source review, authored consumer tests and fixtures are
+separate evidence classes; actual seeded mounted evidence and native producer growth are not claimed here.
 
 A `via` return address admits only a same-locale canonical Subject or Realm path, with at most one Realm operand.
 No nested return chain, credential, draft or private row travels with it. A bounded Connections fragment may carry the selected native cursor and comparison locator described above. A link from a qualified note has

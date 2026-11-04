@@ -36,6 +36,8 @@ import {
 } from './subject-visit-navigation';
 import { directedWorkRelations } from './showcase-work/model';
 import { WorkRelation } from './showcase-work/relation';
+import { CharacterIdentityVisit } from '../catalogue/character-identity-visit/view';
+import { identityProperty } from '../catalogue/character-relationships/reading';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -78,6 +80,7 @@ export function SubjectConnections({
     value?.reader,
   ]);
   if (!value || !page.subject) return null;
+  const character = subjectBody(page)?.subject.type === 'wd:Q95074';
   const ready = viewer.state === 'signed-out' || (viewer.state === 'signed-in' && !!viewer.subject);
   const current = incarnation.current;
   if (!current || current.page !== page || current.reader !== reader || current.read !== read) {
@@ -118,6 +121,7 @@ export function SubjectConnections({
       key={incarnation.current!.serial}
       window={incarnation.current!.window}
       ready={ready}
+      character={character}
       unavailable={viewer.state === 'unavailable'}
       returnTo={subjectVisitReturn(returnTo, value.locale)}
       resume={incarnation.current!.resume}
@@ -128,12 +132,14 @@ export function SubjectConnections({
 function ConnectionsReading({
   window,
   ready,
+  character,
   unavailable,
   returnTo,
   resume,
 }: {
   window: ReturnType<typeof createConnectionWindow>;
   ready: boolean;
+  character: boolean;
   unavailable: boolean;
   returnTo?: string | undefined;
   resume?: ConnectionReturnWindow | undefined;
@@ -166,8 +172,12 @@ function ConnectionsReading({
     restore.current = undefined;
     const section = snapshot.visit.sections.relations;
     if (section?.section.ok && section.reading === target.reading) {
-      const row = [...(region.current?.querySelectorAll<HTMLElement>('[data-work-statement]') ?? [])].find(
-        (element) => element.dataset.workStatement === target.focus && element.dataset.workHolder === target.holder,
+      const row = [...(region.current?.querySelectorAll<HTMLElement>(
+        '[data-work-statement], [data-connection-statement]',
+      ) ?? [])].find(
+        (element) =>
+          (element.dataset.workStatement ?? element.dataset.connectionStatement) === target.focus &&
+          (element.dataset.workHolder ?? element.dataset.connectionHolder) === target.holder,
       );
       row?.querySelector<HTMLElement>('a, summary')?.focus();
     } else region.current?.querySelector<HTMLElement>('[data-connections-recovery="relations"]')?.focus();
@@ -281,7 +291,14 @@ function ConnectionsReading({
                 ) ?? [])
               : [];
           if (!choices.length)
-            return group === 'relations' ? (
+            return group === 'relations' && character ? (
+              <section key={group} aria-labelledby={`connections-${group}`} className="min-w-0 space-y-4">
+                <h3 id={`connections-${group}`} className="text-xl font-semibold">
+                  {m.character_identity_visit_heading({}, o)}
+                </h3>
+                <p role="status">{m.character_identity_visit_unavailable({}, o)}</p>
+              </section>
+            ) : group === 'relations' ? (
               <p key={group} role="status">
                 {m.work_relations_unsupported({}, o)}
               </p>
@@ -294,7 +311,7 @@ function ConnectionsReading({
               aria-busy={busy}
             >
               <h3 id={`connections-${group}`} className="text-xl font-semibold">
-                {titles[group]}
+                {character && group === 'relations' ? m.character_identity_visit_heading({}, o) : titles[group]}
               </h3>
               <label className="block min-w-0 space-y-2">
                 <span className="text-sm font-medium">{m.subject_connections_relation({}, o)}</span>
@@ -320,12 +337,22 @@ function ConnectionsReading({
                 <p role="status">{m.subject_relation_loading({}, o)}</p>
               ) : listed ? (
                 <>
-                  {listed.count && (
+                  {!(character && group === 'relations') && listed.count && (
                     <p className="text-sm text-muted-foreground tabular-nums">
                       {formatCount(listed.count, value.locale)}
                     </p>
                   )}
-                  {listed.items.length ? (
+                  {character && group === 'relations' ? (
+                    <div className="min-w-0" key={`${group}:${current?.stream.key}`}>
+                      <CharacterIdentityVisit
+                        current={current!}
+                        items={listed.items}
+                        value={{ ...rowValue, subject: rowValue.subject ?? undefined }}
+                        more={Boolean(next)}
+                        identityAvailable={choices.some((stream) => stream.property === identityProperty)}
+                      />
+                    </div>
+                  ) : listed.items.length ? (
                     <div className="min-w-0 space-y-4" key={`${group}:${current?.stream.key}`}>
                       {works.map((work) => {
                         const item = listed.items.find(
