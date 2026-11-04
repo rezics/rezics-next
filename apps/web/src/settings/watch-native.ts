@@ -67,7 +67,7 @@ export async function removeWatchNative(
         { expectedRevision: input.expectedRevision },
         {
           query: { kind: input.kind },
-          headers: { authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) },
+          headers: { 'idempotency-key': JSON.stringify(input.idempotencyKey) },
         },
       );
     if (!result.error && result.status === 200 && result.data?.removed === true) return { kind: 'removed' };
