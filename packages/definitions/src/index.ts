@@ -1,5 +1,6 @@
 /// <reference path="./recheck.d.ts" />
 import { createFilterConstruction, type FilterValidationError } from '@rezics/filter';
+import canonicalize from 'canonicalize';
 import { safePattern } from './pattern-safety.ts';
 import { constructionValidator } from './publication-construction.ts';
 export { publicationLimits, PUBLICATION_LIMITS } from './publication-construction.ts';
