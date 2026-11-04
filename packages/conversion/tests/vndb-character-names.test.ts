@@ -51,8 +51,9 @@ test('VNDB character names retain language and romanization while aliases remain
   expect(authored.normalizedRecord.chars_names).toEqual(names);
   const create = authored.proposals[0];
   if (create?.op !== 'create') throw new Error('Expected bootstrap');
-  expect(create.subject.labels).toEqual({ ja: '美咲', 'zh-Hant': '美咲' });
-  expect(create.subject.aliases).toEqual({ 'ja-Latn': ['Misaki'] });
+  expect(create.subject.labels).toEqual({ ja: '美咲', 'ja-Latn': 'Misaki', 'zh-Hant': '美咲' });
+  expect(create.subject.labels).toEqual({ ja: '美咲', 'ja-Latn': 'Misaki' });
+  expect(create.subject.aliases).toBeUndefined();
   expect(JSON.stringify(create.subject)).not.toContain('Other Name');
 
   const bound = convertCrossMediaEntity(record('c1', names, aliases), { subjectId });
