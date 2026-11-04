@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { readReporterStatus } from '../../moderation/reporter-status-read';
 import { prepareReporterStatusRead } from '../../moderation/reporter-status-read-model';
+import { reporterHistoryFocusFor } from '../../moderation/reporter-history/focus';
+import { reporterHistoryQuery } from '../../moderation/reporter-history/model';
 import { reporterHistoryReturnHref, reporterHistoryStatusSearch } from '../../moderation/reporter-history/navigation';
 import { ReporterStatusCurrent, ReporterStatusPage } from '../../moderation/reporter-status-view';
 import { m } from '../../paraglide/messages.js';
@@ -38,11 +40,21 @@ function ReporterStatusRoute() {
   const initial = Route.useLoaderData();
   const search = Route.useSearch();
   const router = useRouter();
+  const focus = reporterHistoryFocusFor(router);
   const navigation = useMemo(
     () => ({
       isCurrent: () => (router.state.location.state.__TSR_key ?? router.state.location.href) === initial.navigationKey,
       subscribe: (retire: () => void) => {
         const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+          try {
+            focus.navigating(
+              toLocation.pathname.replace(/\/$/, '') === '/moderation/reports'
+                ? reporterHistoryQuery(toLocation.search)
+                : null,
+            );
+          } catch {
+            focus.cancel();
+          }
           if ((toLocation.state.__TSR_key ?? toLocation.href) !== initial.navigationKey) retire();
         });
         // An explicit route reload replaces the read generation even at the same URL.
@@ -53,7 +65,7 @@ function ReporterStatusRoute() {
         };
       },
     }),
-    [router, initial.navigationKey, initial.generation],
+    [router, initial.navigationKey, initial.generation, focus],
   );
   const returnPath = reporterHistoryReturnHref(search, initial.id) ?? '/moderation/reports';
   return (
@@ -61,6 +73,13 @@ function ReporterStatusRoute() {
       key={initial.generation}
       initial={initial}
       navigation={navigation}
+      focus={focus}
+      onReturn={async () => {
+        focus.request(
+          reporterHistoryQuery(Object.fromEntries(new URL(returnPath, 'https://local.invalid').searchParams)),
+        );
+        await router.navigate({ href: returnPath, resetScroll: false });
+      }}
       {...(returnPath ? { returnHref: localizeHref(returnPath) } : {})}
     />
   );
@@ -70,5 +89,12 @@ function ReporterStatusRecovery({ state }: { state: 'loading' | 'concealed' }) {
   const search = Route.useSearch();
   const { id } = Route.useParams();
   const returnPath = reporterHistoryReturnHref(search, id) ?? '/moderation/reports';
-  return <ReporterStatusPage state={state} returnHref={localizeHref(returnPath)} />;
+  const router = useRouter();
+  return (
+    <ReporterStatusPage
+      state={state}
+      returnHref={localizeHref(returnPath)}
+      onReturn={() => router.navigate({ href: returnPath })}
+    />
+  );
 }

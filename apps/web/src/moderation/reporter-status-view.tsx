@@ -13,6 +13,8 @@ import {
 } from './reporter-status-read-model';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
+import type { ReporterHistoryFocus } from './reporter-history/focus';
+import { browserObservation } from '../session/observation';
 import type { ReporterStatus } from './reporter-status-model';
 
 type RetryActivation = { keyboard: boolean; source: HTMLButtonElement };
@@ -24,12 +26,27 @@ export function ReporterStatusPage(
     | { report: ReporterStatus; isCurrent?: () => boolean; onRefresh?: Retry }
     | { onRetry: Retry }
     | { state: 'loading' | 'concealed' | 'closed' }
-  ) & { returnHref?: string },
+  ) & { returnHref?: string; onReturn?: () => void | Promise<void> },
 ) {
   return (
     <section className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10" aria-labelledby="reporter-status-heading">
       <a
         href={props.returnHref ?? localizeHref('/inbox')}
+        data-reporter-history-return={props.returnHref ? '' : undefined}
+        onClick={(event) => {
+          if (
+            !props.onReturn ||
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          )
+            return;
+          event.preventDefault();
+          void props.onReturn();
+        }}
         className="mb-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
@@ -54,6 +71,8 @@ export function ReporterStatusCurrent(props: {
   initial: ReporterStatusRead;
   navigation?: ReporterStatusNavigation;
   returnHref?: string;
+  onReturn?: () => void | Promise<void>;
+  focus?: ReporterHistoryFocus;
 }) {
   return <ReporterStatusVisit key={props.initial.generation} {...props} />;
 }
@@ -62,10 +81,14 @@ function ReporterStatusVisit({
   initial,
   navigation,
   returnHref,
+  onReturn,
+  focus,
 }: {
   initial: ReporterStatusRead;
   navigation?: ReporterStatusNavigation;
   returnHref?: string;
+  onReturn?: () => void | Promise<void>;
+  focus?: ReporterHistoryFocus;
 }) {
   const cache = useQueryClient();
   const locale = getLocale();
@@ -83,9 +106,28 @@ function ReporterStatusVisit({
   )
     journey.retire();
   const result = useSyncExternalStore(journey.subscribe, journey.snapshot, journey.serverSnapshot);
+  const boundary = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (result.state !== 'loading' && boundary.current)
+      focus?.arriveStatus(boundary.current, initial.id, journey.isConnected);
+  }, [focus, initial.id, journey, result]);
   return (
     <div
+      ref={boundary}
       onClickCapture={(event) => {
+        const source = (event.target as Element).closest<HTMLElement>('a[data-reporter-history-return]');
+        if (source && event.detail === 0 && journey.isConnected()) {
+          const observation = browserObservation(cache).getSnapshot();
+          focus?.activate(source, () => {
+            const next = browserObservation(cache).getSnapshot();
+            return (
+              getLocale() === original.locale &&
+              observation.state === 'signed-in' &&
+              next.state === 'signed-in' &&
+              observation.observation === next.observation
+            );
+          });
+        }
         if ((event.target as Element).closest('a') && !journey.isConnected()) event.preventDefault();
       }}
     >
@@ -96,6 +138,7 @@ function ReporterStatusVisit({
         isCurrent={journey.isCurrent}
         retryFocusScope={journey}
         isRetryFocusScopeCurrent={journey.isConnected}
+        {...(onReturn ? { onReturn } : {})}
         {...(returnHref ? { returnHref } : {})}
       />
     </div>
@@ -109,6 +152,7 @@ export function ReporterStatusResultPage({
   isCurrent,
   retryFocusScope,
   isRetryFocusScopeCurrent,
+  onReturn,
   returnHref,
 }: {
   result: ReporterStatusResult;
@@ -118,6 +162,7 @@ export function ReporterStatusResultPage({
   retryFocusScope?: object;
   isRetryFocusScopeCurrent?: () => boolean;
   returnHref?: string;
+  onReturn?: () => void | Promise<void>;
 }) {
   const boundary = useRef<HTMLDivElement>(null);
   const retryFocusGeneration = useRef(0);
@@ -197,18 +242,19 @@ export function ReporterStatusResultPage({
       heading.focus();
     retire();
   }, [retryFocus, result, retryFocusScope, isRetryFocusScopeCurrent]);
+  const returnProps = { ...(returnHref ? { returnHref } : {}), ...(onReturn ? { onReturn } : {}) };
   const page =
     result.state === 'loaded' ? (
       <ReporterStatusPage
         report={result.report}
         {...(onRefresh ? { onRefresh } : {})}
         {...(isCurrent ? { isCurrent } : {})}
-        {...(returnHref ? { returnHref } : {})}
+        {...returnProps}
       />
     ) : result.state === 'unavailable' ? (
-      <ReporterStatusPage onRetry={retry} {...(returnHref ? { returnHref } : {})} />
+      <ReporterStatusPage onRetry={retry} {...returnProps} />
     ) : (
-      <ReporterStatusPage state={result.state} {...(returnHref ? { returnHref } : {})} />
+      <ReporterStatusPage state={result.state} {...returnProps} />
     );
   return <div ref={boundary}>{page}</div>;
 }
