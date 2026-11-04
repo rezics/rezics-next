@@ -10,8 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useSession } from '../session/query';
-import { addressLease } from '../reader/lease';
-import { browserObservation } from '../session/observation';
+import { addressLease, browserObservation } from '../session';
 
 export type CandidateWork = { reader: string; live: () => boolean };
 type Lifetime = CandidateWork & { generation: number; retire: () => void; active: () => boolean };

@@ -35,13 +35,8 @@ type NativeMembers = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['collections']>['members']['get']>>['data']
 >;
 type NativeMemberPage = Extract<NativeMembers, { members: unknown[] }>;
-type NativeUnavailableViewerFacts = {
-  state: 'unavailable';
-  reason: 'identity' | 'currentness' | 'response_limit';
-  retryable: boolean;
-};
-/** The generated declaration currently lists the current branch; keep the native schema's unavailable branch too. */
-export type CollectionViewerFacts = NonNullable<NativeMemberPage['viewerFacts']> | NativeUnavailableViewerFacts;
+/** Preserve the installed producer declaration; browser admission supplies its own unavailable outcome. */
+export type CollectionViewerFacts = NonNullable<NativeMemberPage['viewerFacts']>;
 
 export type CollectionMember = {
   facts?: Extract<Extract<NativeMembers, { members: unknown[] }>['members'][number], { id: string }>['facts'];

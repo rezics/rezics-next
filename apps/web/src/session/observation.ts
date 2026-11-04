@@ -1,6 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { normalizeSessionObservation, sessionQueryKey } from './browser-state';
 
+export type BrowserCacheEvent = Parameters<
+  Parameters<ReturnType<QueryClient['getQueryCache']>['subscribe']>[0]
+>[0];
+
 export type BrowserReader = { subject: string; id: number };
 export type BrowserObservationSnapshot =
   | { state: 'unknown' | 'inactive' | 'signed-out' }
@@ -20,14 +24,14 @@ class BrowserObservation {
   private lastUpdatedAt = 0;
   private lastQuery: unknown;
   private lastCount = 0;
-  private cacheListeners = new Set<() => void>();
+  private cacheListeners = new Set<(event: BrowserCacheEvent) => void>();
 
   constructor(private readonly client: QueryClient) {}
 
   getSnapshot = (): BrowserObservationSnapshot => this.snapshot;
 
   /** All browser readers share this cache subscription; domain response identity stays local. */
-  subscribeCache = (listener: () => void): (() => void) => {
+  subscribeCache = (listener: (event: BrowserCacheEvent) => void): (() => void) => {
     this.cacheListeners.add(listener);
     const stop = this.subscribe(() => {});
     return () => {
@@ -42,7 +46,7 @@ class BrowserObservation {
     if (this.listeners.size === 0) {
       this.stopQueryCache = this.client.getQueryCache().subscribe((event) => {
         if (isSessionKey(event.query.queryKey)) this.reconcile();
-        for (const notify of [...this.cacheListeners]) notify();
+        for (const notify of [...this.cacheListeners]) notify(event);
       });
       // A remount is a new incarnation even when the session cache still contains the same reader.
       this.reconcile(true);

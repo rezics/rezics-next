@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
-import { browserObservation } from '../../../session/observation';
+import { browserObservation } from '../../../session';
 import { m } from '../../../paraglide/messages.js';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import type { PersonStatement } from '../person-reader/model';

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { addressLease, type AddressLease } from '../../../../reader/lease';
+import { addressLease, type AddressLease } from '../../../../session';
 import { subjectVisitReturn } from '../../../pages/subject-visit-navigation';
 import type { ScreenEpisodeRead } from '../read';
 import {

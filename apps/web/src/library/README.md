@@ -174,3 +174,9 @@ all prior callbacks retire. Copy and label reading require current read admissio
 Library action adapters continue to own exact uncertain-command recovery and original operands, credential and key.
 
 Presentation decision: the Library shows the source of its effective layout and sort, and flags saved sorts or table columns that current native reads cannot honor; navigation keeps inherited choices out of the URL.
+
+Collection action vocabulary is derived from the installed root `KernelClient.viewerActions.post` callable used
+by the production Collection read. Successful empty grants stay current. Decision: until the installed
+`KernelClient.collections({ collectionId }).members.get` response publishes `viewerFacts.rows[].actions`, member
+controls remain unavailable; undocumented object fields and visible Entry/vote facts never grant navigation or
+dispatch. Preserve occurrence row keys and original Subjects while the producer delivers its typed closure.

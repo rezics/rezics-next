@@ -1,7 +1,7 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { browserObservation } from '../../../../session/observation';
-import { addressLease } from '../../../../reader/lease';
+import { browserObservation } from '../../../../session';
+import { addressLease } from '../../../../session';
 
 /** Domain identity stays in this mount; the installed browser store owns cache observation. */
 export function useArcLifetime(input: { source: object | string; descriptor: string; reader: string | null }) {

@@ -6,7 +6,7 @@ import type { SubjectOwnRating, RatingQuestion } from '../src/features/pages/sub
 import type { SubjectPersonalReadTransport, SubjectReaderObservation } from '../src/features/pages/subject-queries';
 import type { RatingWrite } from '../src/features/pages/rating-control';
 
-// UNRUN: one mounted journey over the real QueryClient, session observer, personal query factories,
+// One mounted journey over the real QueryClient, session observer, personal query factories,
 // retirement adapter and optimistic rating control. Only the prepared read/write BFF boundaries are deferred.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -529,6 +529,8 @@ test('subject preferences and own rating retire across the complete mounted read
       | 'sign-out'
       | 'viewer'
       | 'aba'
+      | 'equal-session'
+      | 'session-recreation'
       | 'subject'
       | 'locale'
       | 'view'
@@ -541,6 +543,8 @@ test('subject preferences and own rating retire across the complete mounted read
       'sign-out',
       'viewer',
       'aba',
+      'equal-session',
+      'session-recreation',
       'subject',
       'locale',
       'view',
@@ -612,6 +616,12 @@ test('subject preferences and own rating retire across the complete mounted read
             await act(async () => {
               harness.client.setQueryData(['session'], readerB);
               harness.client.setQueryData(['session'], readerA);
+              await new Promise((resolve) => setTimeout(resolve, 0));
+            });
+          } else if (retirement === 'equal-session' || retirement === 'session-recreation') {
+            await act(async () => {
+              if (retirement === 'session-recreation') harness.client.removeQueries({ queryKey: ['session'], exact: true });
+              harness.client.setQueryData(['session'], { ...readerA });
               await new Promise((resolve) => setTimeout(resolve, 0));
             });
           } else if (retirement === 'subject') {

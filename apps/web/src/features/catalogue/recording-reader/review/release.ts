@@ -3,7 +3,7 @@ import type { SubjectRead } from '@rezics/client';
 import type { SelectedContext } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { browserObservation } from '../../../../session/observation';
+import { browserObservation } from '../../../../session';
 import { useCatalogueLifetime } from '../../../../subject/candidate-lifetime';
 import { recordingReaderVisit, type RecordingVisit } from '../model';
 import type { RecordingReleaseRead } from '../read';

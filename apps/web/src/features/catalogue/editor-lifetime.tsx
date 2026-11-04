@@ -8,6 +8,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from 'react';
+import { addressLease } from '../../session';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 
 const Work = createContext<ReturnType<typeof useCatalogueLifetime> | null>(null);
@@ -30,7 +31,8 @@ export function CatalogueCurrentReading({
   const latest = useRef<object | null>(null);
   const admission = useMemo(() => {
     const token = {};
-    return { token, visible, active: () => ready && latest.current === token };
+    const lease = addressLease(() => ready && latest.current === token);
+    return { token, visible, active: lease.current };
   }, [visible, ready, revision]);
   latest.current = admission.token;
   useLayoutEffect(() => {
