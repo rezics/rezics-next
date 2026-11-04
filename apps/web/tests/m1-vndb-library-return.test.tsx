@@ -376,7 +376,6 @@ test('refused apply and foreign receipts retain original operands; source replac
 });
 
 const { createImportLibraryBrowser } = await import('../src/library/showcase-import-return/browser');
-const { loadImportLibrary } = await import('../src/library/showcase-import-return/read');
 const { importLibraryRows, importLibraryLabels } = await import('../src/library/showcase-import-return/presentation');
 const { importLibraryShelfHref, importLibraryWorkHref } =
   await import('../src/library/showcase-import-return/navigation');
