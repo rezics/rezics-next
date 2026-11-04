@@ -1,15 +1,17 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { OrganizationOverview } from '../src/features/catalogue/organization-reader/overview';
-import { OrganizationReader } from '../src/features/catalogue/organization-reader/view';
 import { organizationCurrent } from '../src/features/catalogue/organization-reader';
 import type { PeopleRead } from '../src/features/catalogue/people-profile';
 import { peopleProfileFixture } from '../src/kernel/fake/catalogue-people-profile';
 import { personReaderExample } from '../src/features/catalogue/person-reader/examples';
 import { connectionReturnHref, withSubjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { m } from '../src/paraglide/messages.js';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { OrganizationReader } = await import('../src/features/catalogue/organization-reader/view');
+const { OrganizationOverview } = await import('../src/features/catalogue/organization-reader/overview');
 
 function reading() {
   const { release, organization: publicRead } = peopleProfileFixture('ready', 'en', 'organization');
@@ -41,6 +43,12 @@ async function mounted(
   const globals = {
     window,
     document: window.document,
+    navigator: window.navigator,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
