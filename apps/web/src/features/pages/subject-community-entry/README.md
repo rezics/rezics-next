@@ -5,6 +5,8 @@
 community, refresh and verification contexts. The shared adapter applies equally to work, character
 and person pages; it never infers a placement from a title, Semantic Context or Realm membership.
 
+Decision: a title-only Subject invitation reports that details are not available yet; it does not ask readers to add facts or imply creation authority.
+
 `CommunityRegion.request` retains the exact response's request, including the original opaque cursor.
 `CommunityDisplayContext.source` retains the native Subject partition, epoch and position; Realm place
 metadata retains its Space and head revision. `CommunityThread.rowKey` distinguishes duplicate

@@ -3,7 +3,7 @@ import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
 import { useSubjectPersonalReader } from '../../features/pages/subject-personal-reader';
 import { isView, type View } from '@rezics/composition';
-import { createFileRoute, notFound, redirect, useRouter } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { subjectPageType } from '../../features/pages/subject';
@@ -260,12 +260,14 @@ function SubjectViewRoute() {
   });
   const reader = personal.reader;
   const reviewSession = session === 'unknown' ? 'unavailable' : session;
+  const currentHref = useLocation().publicHref;
   const nonce = useRouter().options.ssr?.nonce;
   const locale = getLocale();
   if (!currentReader) return <PendingPage />;
   return (
     <SubjectViewPage
       page={page}
+      currentHref={currentHref}
       {...(search.via ? { returnTo: search.via } : {})}
       subjectLabel={frame.title.text}
       curation={

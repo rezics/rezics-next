@@ -1,7 +1,6 @@
 import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
-import { useLocation } from '@tanstack/react-router';
 import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
@@ -112,6 +111,8 @@ export function pageRepresentation(context?: SelectedContext): PageRepresentatio
 
 export type OverviewValue = {
   locale: string;
+  /** The actual routed address, retained for Subject region returns. */
+  currentHref?: string;
   pageTarget?: MemberPageTarget | undefined;
   context?: SelectedContext;
   realm?: string | undefined;
@@ -1807,7 +1808,6 @@ export function RatingSummary(props: Record<string, unknown>) {
 }
 
 function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 'review' | 'discussion' }) {
-  const location = useLocation();
   const state = useOverview(props.id);
   const node = String(props.id);
   const data = useSubjectCommunity(kind, node);
@@ -1831,7 +1831,7 @@ function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 're
         subject={{ id: subject, label: value.subjectLabel ?? value.unlabelled }}
         locale={value.locale}
         href={href}
-        currentHref={location.publicHref}
+        currentHref={value.currentHref}
         paged={props.paged === true}
       />
     </div>

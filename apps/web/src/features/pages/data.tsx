@@ -788,6 +788,7 @@ export function PageData({
   locale,
   subject = null,
   subjectLabel,
+  currentHref,
   pageTarget,
   context,
   continuation,
@@ -819,6 +820,7 @@ export function PageData({
   locale: string;
   subject?: string | null;
   subjectLabel?: string;
+  currentHref?: string;
   pageTarget?: MemberPageTarget | undefined;
   context?: SelectedContext | undefined;
   continuation?: PageContinuation | undefined;
@@ -971,6 +973,7 @@ export function PageData({
     cacheReader: cacheReader ?? null,
     pageTarget: pageTarget ?? listTarget,
     subject,
+    ...(currentHref !== undefined ? { currentHref } : {}),
     ...(overviewSubjectLabel !== undefined ? { subjectLabel: overviewSubjectLabel } : {}),
     ...(account ? { account } : {}),
     ...(base !== undefined ? { agentBase: base } : {}),
