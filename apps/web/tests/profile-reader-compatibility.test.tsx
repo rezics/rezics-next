@@ -713,6 +713,63 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(remountedEditor).not.toBe(postRemovalEditor);
     await resolveRead(remountReadIndex, successRead(nativeProfile));
     await until(() => remountedEditor.snapshot().readAuthority === 'allowed', 'usable remounted profile data');
+
+    await act(async () =>
+      remountedEditor.edit({
+        displayName: 'Acknowledged profile change',
+        biography: 'Acknowledged biography',
+        links: [{ label: 'Acknowledged site', url: 'https://acknowledged.example.test' }],
+      }),
+    );
+    const acknowledgedSave = saveRequests.length;
+    await click(button(m.settings_profile_save()));
+    await until(() => saveRequests.length === acknowledgedSave + 1, 'the acknowledged profile command');
+    const acknowledgedAttempt = saveRequests[acknowledgedSave]!.attempt;
+    const acknowledgedRead = readRequests.length;
+    const capturedRetry = remountedEditor.retry.bind(remountedEditor);
+    await resolveWrite(
+      acknowledgedSave,
+      { ok: true, profile: acknowledgedAttempt.after },
+      acknowledgedAttempt.after,
+    );
+    await until(() => readRequests.length === acknowledgedRead + 1, 'the acknowledged profile readback');
+    await resolveRead(acknowledgedRead, failedRead(503));
+    await until(
+      () => remountedEditor.snapshot().acknowledged && remountedEditor.snapshot().readStatus === 'failed',
+      'acknowledged profile with a failed current read',
+    );
+    expect(host.textContent?.includes(m.settings_profile_acknowledged_stale())).toBe(true);
+    await capturedRetry();
+    expect(saveRequests).toHaveLength(acknowledgedSave + 1);
+    expect(
+      [...host.querySelectorAll('button')].filter((item) =>
+        item.textContent?.trim() === m.settings_profile_retry_save(),
+      ),
+    ).toHaveLength(0);
+
+    await act(async () => remountedEditor.edit({ displayName: 'Later local edit' }));
+    const newerProfile = {
+      ...acknowledgedAttempt.after,
+      displayName: 'Another writer',
+      biography: 'Current native biography',
+    };
+    const deliberateRead = readRequests.length;
+    await click(button(m.settings_profile_reload_current()));
+    await until(() => readRequests.length === deliberateRead + 1, 'the deliberate current profile read');
+    await resolveRead(deliberateRead, successRead(newerProfile));
+    await until(
+      () => !remountedEditor.snapshot().acknowledged && remountedEditor.snapshot().attempt === null,
+      'acknowledged recovery resolved by current values',
+    );
+    expect(saveRequests).toHaveLength(acknowledgedSave + 1);
+    expect(remountedEditor.snapshot().known?.displayName).toBe('Another writer');
+    expect(remountedEditor.snapshot().known?.biography).toBe('Current native biography');
+    expect(remountedEditor.snapshot().draft?.displayName).toBe('Later local edit');
+    expect(remountedEditor.snapshot().draft?.biography).toBe('Current native biography');
+    expect(remountedEditor.snapshot().phase).toBe('review');
+    expect(host.querySelector<HTMLInputElement>('input[id$="-displayName"]')?.value).toBe('Later local edit');
+    expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('Current native biography');
+
     await act(async () => root!.unmount());
     root = undefined;
     await flush();
