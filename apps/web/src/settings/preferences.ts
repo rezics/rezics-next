@@ -202,8 +202,8 @@ function ownedCollection(value: unknown, ownerAccountId: string): OwnedCollectio
       title,
       kind: 'builtin',
       membershipKind: 'dynamic',
-      builtinKind: value.builtinKind as OwnedCollection['builtinKind'],
-      builtin: value.builtin as OwnedCollection['builtin'],
+      builtinKind: value.builtinKind as NonNullable<OwnedCollection['builtinKind']>,
+      builtin: value.builtin as NonNullable<OwnedCollection['builtin']>,
       visibility: 'private',
       revision: null,
       allowedVisibilityActions: [],
@@ -291,9 +291,7 @@ export async function changeCollectionVisibility(
       { revision: input.revision, visibility: input.visibility },
       {
         query: { ownerManagement: true },
-        headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey) } as {
-          'idempotency-key': string;
-        },
+        headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey) },
       },
     );
     if (!result.error && result.data?.collection)

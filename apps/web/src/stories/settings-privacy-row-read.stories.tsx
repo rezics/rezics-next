@@ -42,13 +42,18 @@ const initial: OwnedCollection = {
 const withVisibility = (
   collection: OwnedCollection,
   visibility: OwnedCollection['visibility'],
-  revision = collection.revision,
+  revision = commandRevision(collection),
 ): OwnedCollection => ({
   ...collection,
   visibility,
   revision,
   allowedVisibilityActions: (['private', 'unlisted', 'public'] as const).filter((value) => value !== visibility),
 });
+
+function commandRevision(collection: OwnedCollection) {
+  if (collection.revision === null) throw new Error('Logical Collections do not have a command revision');
+  return collection.revision;
+}
 
 type RequestJournal = {
   pageReads: number;
@@ -87,7 +92,7 @@ function createJourney(report: (journal: RequestJournal) => void) {
         writeVisibility: input.visibility,
         writeHasIdempotencyKey: input.idempotencyKey ? 'yes' : 'no',
       };
-      current = withVisibility(current, 'unlisted', current.revision + 1);
+      current = withVisibility(current, 'unlisted', commandRevision(current) + 1);
       journal.conflictCurrentVisibility = current.visibility;
       publish();
       if (journal.writes !== 1) throw new Error('Unexpected additional Collection visibility write');

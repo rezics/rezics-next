@@ -32,6 +32,7 @@ export default meta;
 type Story = StoryObj;
 type Scenario =
   | 'ready'
+  | 'private'
   | 'pending'
   | 'lost'
   | 'conflict'
@@ -54,13 +55,18 @@ const initial: OwnedCollection = {
 const withVisibility = (
   collection: OwnedCollection,
   visibility: OwnedCollection['visibility'],
-  revision = collection.revision,
+  revision = commandRevision(collection),
 ): OwnedCollection => ({
   ...collection,
   visibility,
   revision,
   allowedVisibilityActions: (['private', 'unlisted', 'public'] as const).filter((value) => value !== visibility),
 });
+
+function commandRevision(collection: OwnedCollection) {
+  if (collection.revision === null) throw new Error('Logical Collections do not have a command revision');
+  return collection.revision;
+}
 
 function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
   const [transport] = useState(() => {
@@ -76,7 +82,7 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
         if (scenario === 'row-refused') return { ok: false, reason: 'unavailable' };
         if (scenario === 'pending') return new Promise(() => {});
         if (scenario === 'conflict') {
-          current = withVisibility(initial, 'unlisted', initial.revision + 1);
+          current = withVisibility(initial, 'unlisted', commandRevision(initial) + 1);
           return { ok: false, reason: 'conflict' };
         }
         if (originalKey === input.idempotencyKey) return { ok: true, collection: receipt };
@@ -85,7 +91,7 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
         receipt = current;
         if (scenario === 'lost' || scenario === 'replay-refused') {
           // Another native write happened after the committed command whose response was lost.
-          current = withVisibility(initial, initial.visibility, receipt.revision + 1);
+          current = withVisibility(initial, initial.visibility, commandRevision(receipt) + 1);
           return { ok: false, reason: 'unavailable' };
         }
         return { ok: true, collection: current };
@@ -95,7 +101,7 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
           rowReads++;
           if (rowReads === 1) return { ok: false, reason: 'forbidden' };
           if (rowReads === 2) return { ok: false, reason: 'unavailable' };
-          return { ok: true, value: withVisibility(first, 'unlisted', first.revision + 3) };
+          return { ok: true, value: withVisibility(first, 'unlisted', commandRevision(first) + 3) };
         }
         return { ok: true, value: current };
       },
@@ -363,7 +369,7 @@ function RetryDelayExample({ scenario }: { scenario: 'first-page' | 'independent
             },
           };
         const row = rows.find((row) => row.id === id)!;
-        return { ok: true, value: { ...row, revision: row.revision + 2 } };
+        return { ok: true, value: { ...row, revision: commandRevision(row) + 2 } };
       },
     };
     const read: CollectionPrivacyPageRead = async () => {
@@ -507,7 +513,7 @@ function ListRestartExample({ scenario }: { scenario: 'cursor' | 'exhausted' | '
         ok: true,
         value: {
           collections: [
-            withVisibility({ ...current, title: 'Current reading' }, 'unlisted', current.revision + 2),
+            withVisibility({ ...current, title: 'Current reading' }, 'unlisted', commandRevision(current) + 2),
           ],
           next: null,
         },
