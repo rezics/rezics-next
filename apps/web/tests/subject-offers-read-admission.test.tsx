@@ -16,7 +16,13 @@ for (const [key, value] of Object.entries(globals))
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const page: SubjectOffersData = { kind: 'ready', offers: [offer], next: 'native/+?=#cursor', projectionState: 'ready' };
+const alternative = { ...offer, id: '0192f3a0-6c1e-7b2a-9d4e-000000000099', revision: offer.revision + 1 };
+const page: SubjectOffersData = {
+  kind: 'ready',
+  offers: [offer, alternative],
+  next: 'native/+?=#cursor',
+  projectionState: 'ready',
+};
 const calls: SubjectOffersInput[] = [];
 let read = async (): Promise<SubjectOffersData> => page;
 mock.module('../src/checkout/subject-offers', () => ({
@@ -38,10 +44,11 @@ afterAll(async () => {
   await window.happyDOM.close();
 });
 
-test('tokenless session discovery retries exact pages and retires late reads on session, subject, locale and exposure changes', async () => {
+test('current page: local choices emit no reads and retire on equal replacements pages credentials origins and exposure without reviving A/B/A', async () => {
   setLocale('en', { reload: false });
   const client = new QueryClient();
   const host = window.document.createElement('div');
+  window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   let context = { subjectId: offer.targetSubjectId, subjectType: 'work', locale: 'en' };
   const observe = (state = 'signed-in', subject = 'reader-a') =>
@@ -64,25 +71,66 @@ test('tokenless session discovery retries exact pages and retires late reads on 
       expect(button).toBeDefined();
       button!.click();
     });
-  const rows = () => host.querySelectorAll('h3').length;
+  const rows = () => host.querySelectorAll('[data-content-item-slot="title"]').length;
+  const choose = async () => {
+    await flush(() => host.querySelector('li button')!.click());
+    expect(host.querySelector('[data-offer-inspection]')).not.toBeNull();
+  };
+  const noSelection = () => {
+    expect(
+      host.querySelector('[data-offer-inspection], [data-offer-comparison], button[aria-pressed="true"]'),
+    ).toBeNull();
+  };
   try {
     observe();
     await flush(render);
     await flush();
-    expect(rows()).toBe(1);
+    expect(rows()).toBe(2);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.credentialMode).toBe('session');
+    await choose();
+    const beforeChoice = calls.length;
+    await flush(() => host.querySelector('li button[aria-pressed]')!.click());
+    await flush(() => host.querySelectorAll('li button[aria-pressed]')[1]!.click());
+    await click(m.subject_choice_compare());
+    expect(host.querySelector('[data-offer-comparison]')).not.toBeNull();
+    expect(calls).toHaveLength(beforeChoice);
+    const key = client.getQueryCache().findAll({ queryKey: ['subject-offers'] })[0]!.queryKey;
+    const equal = client.getQueryData(key);
+    await flush(() => client.setQueryData(key, equal));
+    noSelection();
+    await choose();
+    await flush(() => {
+      client.setQueryData(key, { ...page, offers: [alternative] });
+      client.setQueryData(key, equal);
+    });
+    noSelection();
+    await choose();
+    await flush(() => {
+      window.history.pushState({}, '', '/en/subjects/other');
+      window.dispatchEvent(new window.PopStateEvent('popstate'));
+      window.history.pushState({}, '', '/en/subjects/example');
+      window.dispatchEvent(new window.PopStateEvent('popstate'));
+    });
+    noSelection();
+    await choose();
+    await flush(() => window.dispatchEvent(new window.Event('pagehide')));
+    await flush(() => window.dispatchEvent(new window.Event('pageshow')));
+    noSelection();
+    expect(calls).toHaveLength(beforeChoice);
+    await choose();
     read = async () => ({ kind: 'unavailable' });
     await click(m.subject_purchase_next());
     await flush();
     expect(calls.at(-1)!.cursor).toBe('native/+?=#cursor');
     expect(rows()).toBe(0);
+    noSelection();
     expect(host.textContent).toContain(m.subject_purchase_unavailable());
     read = async () => page;
     await click(m.subject_purchase_retry());
     await flush();
     expect(calls.at(-1)!.cursor).toBe('native/+?=#cursor');
-    expect(rows()).toBe(1);
+    expect(rows()).toBe(2);
     await click(m.subject_purchase_restart());
     await flush();
     expect(calls.at(-1)!.cursor).toBeUndefined();
@@ -92,6 +140,12 @@ test('tokenless session discovery retries exact pages and retires late reads on 
         observe();
       },
       () => client.setQueryData(['exposure', 'viewer'], ['reading']),
+      () =>
+        client.setQueryData(['session'], {
+          state: 'signed-in',
+          subject: 'reader-a',
+          csrfToken: 'replacement-credential',
+        }),
       () => {
         context = { ...context, subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000099' };
         render();
@@ -101,6 +155,7 @@ test('tokenless session discovery retries exact pages and retires late reads on 
         render();
       },
     ]) {
+      await choose();
       let finish!: (page: SubjectOffersData) => void;
       read = () =>
         new Promise((resolve) => {
@@ -108,13 +163,15 @@ test('tokenless session discovery retries exact pages and retires late reads on 
         });
       await click(m.subject_purchase_next({}, { locale: context.locale as 'en' | 'fr' }));
       expect(rows()).toBe(0);
+      noSelection();
       read = async () => page;
       await flush(change);
       await flush();
-      expect(rows()).toBe(1);
+      expect(rows()).toBe(2);
       expect(calls.at(-1)!.cursor).toBeUndefined();
+      noSelection();
       await flush(() => finish({ kind: 'denied', status: 403, code: null }));
-      expect(rows()).toBe(1);
+      expect(rows()).toBe(2);
     }
     await flush(() => observe('unavailable'));
     const before = calls.length;
@@ -135,5 +192,6 @@ test('tokenless session discovery retries exact pages and retires late reads on 
   } finally {
     await act(async () => root.unmount());
     client.clear();
+    host.remove();
   }
 });
