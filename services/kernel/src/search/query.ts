@@ -19,23 +19,35 @@ import { type OpenSearch, type SearchRequestWork, SearchUnavailableError } from 
 import type { RatingPhase } from './rating-cursor.ts';
 import { searchRatingSubjectHits, searchRatingSubjects } from './rating-query.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
+import {
+  MATCH_EVIDENCE_LIMITS,
+  readEngineMatchEvidence,
+  type EngineMatchEvidence,
+  type MatchEvidenceQuery,
+} from './match-evidence.ts';
 
 // Released templates keep their source and id; changes require a new version of both.
 export const HIT_TEMPLATE = 'subjects-hits-v1';
 export const SCOPE_HIT_TEMPLATE = 'subjects-scope-hits-v1';
 export const SEARCH_TEMPLATE = 'subjects-search-v2';
+export const EVIDENCE_HIT_TEMPLATE = 'subjects-hits-v2';
+export const EVIDENCE_SEARCH_TEMPLATE = 'subjects-search-v3';
 export const SUGGEST_TEMPLATE = 'subjects-suggest-v1';
 export const FACET_TEMPLATE = 'subjects-facets-v1';
 export const TOTAL_LIMIT = 10_000;
 
-const templates = [SEARCH_TEMPLATE, HIT_TEMPLATE, SCOPE_HIT_TEMPLATE, SUGGEST_TEMPLATE, 'subjects-suggest-v2'].map(
-  (name) => ({
-    name,
-    body: JSON.parse(
-      readFileSync(new URL(`../../db/search/templates/${name}.json`, import.meta.url), 'utf8'),
-    ) as unknown,
-  }),
-);
+const templates = [
+  SEARCH_TEMPLATE,
+  HIT_TEMPLATE,
+  EVIDENCE_SEARCH_TEMPLATE,
+  EVIDENCE_HIT_TEMPLATE,
+  SCOPE_HIT_TEMPLATE,
+  SUGGEST_TEMPLATE,
+  'subjects-suggest-v2',
+].map((name) => ({
+  name,
+  body: JSON.parse(readFileSync(new URL(`../../db/search/templates/${name}.json`, import.meta.url), 'utf8')) as unknown,
+}));
 
 // Kept here with its versioned id; all untrusted input is serialized through toJson.
 templates.push({
@@ -70,6 +82,7 @@ export type SearchPlan = {
   overflowProperties?: readonly string[];
   /** Internal native request allowance; never a public query or sort. */
   work?: SearchRequestWork;
+  matchEvidence?: MatchEvidenceQuery;
 };
 
 export type SubjectHit = {
@@ -82,6 +95,7 @@ export type SubjectHit = {
 export type SearchHit = SubjectHit & {
   ratingPhase?: RatingPhase;
   matched: string[];
+  engineEvidence?: EngineMatchEvidence;
   sort: SortValue[];
 };
 
@@ -99,6 +113,7 @@ type StoredHit = {
   _index: string;
   _source: { partition: number; security_revision: number };
   matched_queries?: string[];
+  highlight?: unknown;
   sort: SortValue[];
 };
 
@@ -186,7 +201,15 @@ function executeSubjects(
       'POST',
       `/${target}/_search/template`,
       structuredClone({
-        id: `${prefix}${counted ? SEARCH_TEMPLATE : HIT_TEMPLATE}`,
+        id: `${prefix}${
+          plan.matchEvidence
+            ? counted
+              ? EVIDENCE_SEARCH_TEMPLATE
+              : EVIDENCE_HIT_TEMPLATE
+            : counted
+              ? SEARCH_TEMPLATE
+              : HIT_TEMPLATE
+        }`,
         params: {
           query: plan.query,
           has_query: plan.query !== undefined,
@@ -202,6 +225,8 @@ function executeSubjects(
           has_after: plan.after !== undefined,
           has_overflow: hasOverflow,
           overflow_properties: plan.overflowProperties,
+          has_match_evidence: plan.matchEvidence !== undefined,
+          match_evidence: plan.matchEvidence?.highlight,
         },
       }),
       { query: { allow_partial_search_results: false }, ...(plan.work ? { work: plan.work } : {}) },
@@ -211,11 +236,28 @@ function executeSubjects(
       if (counted) admitSearchPayload(body, plan, prefix);
       else admitHitPayload(body, plan, prefix);
       const overflow = hasOverflow ? requireSearchOverflow(body) : false;
+      const engineEvidence = plan.matchEvidence
+        ? body.hits.hits.map((hit) =>
+            readEngineMatchEvidence(hit.matched_queries ?? [], hit.highlight, plan.matchEvidence!),
+          )
+        : undefined;
+      const evidenceBytes = engineEvidence?.reduce(
+        (total, evidence) => total + Buffer.byteLength(JSON.stringify(evidence), 'utf8'),
+        0,
+      );
+      const evidencePageOver = evidenceBytes !== undefined && evidenceBytes > MATCH_EVIDENCE_LIMITS.enginePageBytes;
       return {
         ...(plan.generation === undefined ? {} : { generation: plan.generation }),
-        hits: body.hits.hits.map((hit) => ({
+        hits: body.hits.hits.map((hit, index) => ({
           ...subjectHit(hit),
           matched: [...(hit.matched_queries ?? [])],
+          ...(plan.matchEvidence === undefined
+            ? {}
+            : {
+                engineEvidence: evidencePageOver
+                  ? { matched: [...(hit.matched_queries ?? [])], malformed: true }
+                  : engineEvidence![index],
+              }),
           sort: [...hit.sort],
         })),
         ...(counted

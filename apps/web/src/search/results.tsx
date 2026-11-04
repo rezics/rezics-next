@@ -24,6 +24,8 @@ import { m } from '../paraglide/messages.js';
 import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
 import { pickResultAliases } from './result-aliases';
 import { hitCalendarDate, releaseDateText } from './release-search-date';
+import { matchEvidenceSchema, type MatchEvidence } from './match-evidence';
+import * as v from 'valibot';
 import { resultDateFact, resultFactLabel, type ResultFactDefinitions } from './work-context/facts';
 
 type NativeHit = Extract<
@@ -40,6 +42,7 @@ export type SubjectHit = {
   facts?: Record<string, Fact[]>;
   /** An optional presentation already resolved from the release read by the caller. */
   listPresentation?: ListPresentation;
+  matchEvidence?: NativeHit['matchEvidence'];
 };
 export type ResultHit = SubjectHit & {
   descriptions?: Record<string, string>;
@@ -110,6 +113,87 @@ type ResultPresentation = {
   /** Optional adapter for an already available release presentation; it performs no reads. */
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
 };
+
+function evidenceFieldLabel(field: 'title' | 'alias' | 'description', locale: string): string {
+  const options = { locale: locale as never };
+  switch (field) {
+    case 'title':
+      return m.search_match_title({}, options);
+    case 'alias':
+      return m.search_match_alias({}, options);
+    case 'description':
+      return m.search_match_description({}, options);
+  }
+}
+
+export function MatchEvidenceView({ evidence, locale }: { evidence: MatchEvidence | undefined; locale: string }) {
+  if (!evidence || evidence.state === 'absent') return null;
+  const options = { locale: locale as never };
+  if (evidence.state === 'unsupported')
+    return (
+      <p data-slot="search-match-status" role="status" className="mt-1 text-sm text-muted-foreground">
+        {m.search_match_unsupported({}, options)}
+      </p>
+    );
+  if (evidence.state === 'unavailable')
+    return (
+      <p data-slot="search-match-status" role="status" className="mt-1 text-sm text-muted-foreground">
+        {m.search_match_unavailable({}, options)}
+      </p>
+    );
+  const parsed = v.safeParse(matchEvidenceSchema, evidence);
+  if (!parsed.success || parsed.output.state !== 'current')
+    return (
+      <p data-slot="search-match-status" role="status" className="mt-1 text-sm text-muted-foreground">
+        {m.search_match_unavailable({}, options)}
+      </p>
+    );
+  const reasons = parsed.output.reasons;
+  const primary = reasons[0];
+  if (!primary)
+    return (
+      <p data-slot="search-match-status" role="status" className="mt-1 text-sm text-muted-foreground">
+        {m.search_match_unavailable({}, options)}
+      </p>
+    );
+  const text = (reason: (typeof reasons)[number]) => {
+    const pieces = [];
+    let offset = 0;
+    for (const span of reason.spans) {
+      if (offset < span.start) pieces.push(reason.text.slice(offset, span.start));
+      pieces.push(
+        <mark key={`${span.start}:${span.end}`} className="rounded-sm bg-primary/20 font-medium text-foreground">
+          {reason.text.slice(span.start, span.end)}
+        </mark>,
+      );
+      offset = span.end;
+    }
+    if (offset < reason.text.length) pieces.push(reason.text.slice(offset));
+    return pieces;
+  };
+  const renderReason = (reason: (typeof reasons)[number], index: number) => (
+    <span key={`${reason.field}:${reason.language}:${index}`} lang={reason.language} dir="auto">
+      <span className="font-medium">{evidenceFieldLabel(reason.field, locale)}:</span> {text(reason)}
+    </span>
+  );
+  return (
+    <div data-slot="search-match-evidence" className="mt-1 min-w-0 text-sm text-muted-foreground">
+      <p data-slot="search-match-primary">{renderReason(primary, 0)}</p>
+      {reasons.length > 1 ? (
+        <details className="mt-1">
+          <summary className="min-h-11 w-fit cursor-pointer py-2 underline underline-offset-4">
+            {m.search_match_explanation({}, options)}
+          </summary>
+          <ul className="list-inside list-disc space-y-1 pb-2">
+            {reasons.slice(1).map((reason, index) => (
+              <li key={`${reason.field}:${reason.language}:${index}`}>{renderReason(reason, index + 1)}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </div>
+  );
+}
 
 /** Page-local ContentItem composition: visible title anchor, independent facts and a passive text preview. */
 export function ResultRow({
@@ -189,6 +273,7 @@ export function ResultRow({
               <span className="line-clamp-2 sm:line-clamp-1">{title}</span>
             </ContentItemTitleLink>
           </ContentItemHeading>
+          <MatchEvidenceView evidence={hit.matchEvidence} locale={locale} />
           {typeName.text || date !== undefined || aliases?.length || facts.length > 0 ? (
             <ListRowControl
               data-content-item-slot="metadata"

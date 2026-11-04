@@ -355,6 +355,9 @@ they do not expand the fixed required installation set.
 current filter evidence in the existing partial implementation; hit data is projected from the current source snapshot. Suggestions
 and item facet labels also use current source checks. This suppresses stale results while relay repair catches up,
 subject to the pending real-source/composition proof in [Indexed membership, current disclosure and convergence](#indexed-membership-current-disclosure-and-convergence).
+Match evidence is unavailable when an engine excerpt cannot be mapped uniquely to one current public title, alias or description value and language; locale fallback is never evidence. Positive named field probes retain the installed text query as the sole required clause and add no score. Engine excerpts are parsed on the server and only bounded safe text spans leave the service.
+
+Projection runs inside the existing bounded candidate and current-source pass; it adds no per-hit search or history scan. Limits are 128 zero-score field probes per query, three 128-character fragments per field and hit, 32 current text values/32 KiB scanned per hit, 256 KiB of engine evidence per page and 128 KiB of serialized evidence per page. Evidence beyond any cap is marked unavailable while the hit, ranking and cursor remain unchanged.
 It does **not** establish immediate count privacy: general search totals and facet bucket counts can still include
 stale source subjects despite current hit/value checks. The initial Search public response omits all totals,
 including verified rating lower bounds. Unsafe engine totals and facet counts must be omitted under [Filtered lists](../../../../docs/filtered-lists.md), without approximate/as_of, zero or row-length fallback. The immediate suppression authority remains

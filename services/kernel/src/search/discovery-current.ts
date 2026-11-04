@@ -27,6 +27,7 @@ import type { IndexedSubject, SubjectSnapshot, SubjectSource } from './source.ts
 import { projectCharacterPersonContexts } from './character-person.ts';
 import { chooseTexts, projectHit } from './hits.ts';
 import { ProblemError } from '../http/problem.ts';
+import { projectMatchEvidence } from './match-evidence.ts';
 
 function unavailable(): never {
   throw new SearchUnavailableError('Current discovery owner evidence is unavailable or malformed');
@@ -402,6 +403,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
               }
             : {}),
           ...(contexts === null ? {} : { contexts }),
+          matchEvidence: projectMatchEvidence(subject, candidate.engineEvidence, context.matchEvidencePlan),
         };
         admitDiscoveryHit(hit);
         passed.set(candidate, hit);
@@ -487,7 +489,11 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       for (const candidate of selected) {
         const summary = summaries.get(candidate.key.id);
         const row = selectedAccounts.get(candidate)!;
-        const hit = { key: candidate.key as DiscoveryKey, summary: { kind: 'account' as const, value: summary } };
+        const hit = {
+          key: candidate.key as DiscoveryKey,
+          summary: { kind: 'account' as const, value: summary },
+          matchEvidence: { state: 'unsupported' as const },
+        };
         admitDiscoveryHit(hit);
         if (
           !summary ||
@@ -540,8 +546,9 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
       context,
     );
     for (let index = 0; index < ownerHits.length; index++) {
-      const hit = ownerHits[index];
-      if (!hit) continue;
+      const ownerHit = ownerHits[index];
+      if (!ownerHit) continue;
+      const hit = { ...ownerHit, matchEvidence: { state: 'unsupported' as const } };
       admitDiscoveryHit(hit);
       passed.set(ownerOriginals[index]!, hit);
     }

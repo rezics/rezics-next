@@ -8289,5 +8289,11 @@
   "library_progress_discovery_action_available": "사용 가능",
   "library_progress_discovery_action_not_active": "사용할 수 없음: 세션이 활성 상태가 아닙니다.",
   "library_progress_discovery_action_not_authorized": "사용할 수 없음: 이 작업을 수행할 권한이 없습니다.",
-  "search_review_historical_question_unavailable": "당시 질문 이름과 척도를 확인할 수 없습니다. 현재 평점이 아니라 기록된 인용입니다."
+  "search_review_historical_question_unavailable": "당시 질문 이름과 척도를 확인할 수 없습니다. 현재 평점이 아니라 기록된 인용입니다.",
+  "search_match_title": "제목 일치",
+  "search_match_alias": "대체 제목 일치",
+  "search_match_description": "설명 일치",
+  "search_match_explanation": "일치 세부 정보 더 보기",
+  "search_match_unavailable": "일치 정보를 사용할 수 없습니다.",
+  "search_match_unsupported": "이 검색 결과는 일치 정보를 지원하지 않습니다."
 }

@@ -8289,5 +8289,11 @@
   "library_progress_discovery_action_available": "Verfügbar",
   "library_progress_discovery_action_not_active": "Nicht verfügbar: Die Sitzung ist nicht aktiv.",
   "library_progress_discovery_action_not_authorized": "Nicht verfügbar: Du bist nicht berechtigt, diese Aktion auszuführen.",
-  "search_review_historical_question_unavailable": "Die damalige Frage und Skala sind nicht verfügbar. Dies ist das gespeicherte Zitat, keine aktuelle Bewertung."
+  "search_review_historical_question_unavailable": "Die damalige Frage und Skala sind nicht verfügbar. Dies ist das gespeicherte Zitat, keine aktuelle Bewertung.",
+  "search_match_title": "Passender Titel",
+  "search_match_alias": "Passender Alternativtitel",
+  "search_match_description": "Passende Beschreibung",
+  "search_match_explanation": "Weitere Treffergründe",
+  "search_match_unavailable": "Treffergründe sind nicht verfügbar.",
+  "search_match_unsupported": "Treffergründe werden für dieses Ergebnis nicht unterstützt."
 }

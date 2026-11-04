@@ -13,6 +13,7 @@ import type { KernelClient } from '@rezics/client';
 import { GLOBAL, PUBLIC_RATING_SCALE, QUESTION } from '../features/pages/subject-ratings';
 import { readSearchPage } from './search-request';
 import { isPlatformClosedError } from '../kernel/platform-closed';
+import { currentEvidenceMatches, evidencePageWithinLimit, matchEvidenceSchema } from './match-evidence';
 
 type NativePage = Extract<
   NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>,
@@ -100,6 +101,7 @@ const figure: v.GenericSchema<NativeHit['figure']> = v.strictObject({
   score: v.nullable(displayRating),
 });
 const catalogueFields = {
+  matchEvidence: v.exactOptional(matchEvidenceSchema),
   labels: v.exactOptional(textMap),
   aliases: v.exactOptional(v.record(v.string(), v.array(v.string()))),
   descriptions: v.exactOptional(textMap),
@@ -260,18 +262,22 @@ const hit = v.union([
   v.object({
     key: v.strictObject({ owner: v.literal('accounts'), kind: v.literal('account'), route, id: resourceId }),
     summary: v.object({ kind: v.literal('account'), value: accountSummary }),
+    matchEvidence: v.exactOptional(matchEvidenceSchema),
   }),
   v.strictObject({
     key: v.strictObject({ owner: v.literal('library'), kind: v.literal('collection'), route, id: resourceId }),
     summary: v.strictObject({ kind: v.literal('collection'), value: publicCollectionSummary }),
+    matchEvidence: v.exactOptional(matchEvidenceSchema),
   }),
   v.strictObject({
     key: v.strictObject({ owner: v.literal('content'), kind: v.literal('review'), route, id: resourceId }),
     summary: v.strictObject({ kind: v.literal('review'), value: publicReviewSummary }),
+    matchEvidence: v.exactOptional(matchEvidenceSchema),
   }),
   v.strictObject({
     key: v.strictObject({ owner: v.literal('community'), kind: v.literal('space'), route, id: resourceId }),
     summary: v.strictObject({ kind: v.literal('space'), value: publicSpaceSummary }),
+    matchEvidence: v.exactOptional(matchEvidenceSchema),
   }),
 ]);
 const count = v.union([
@@ -399,16 +405,37 @@ export function discoveryKey(hit: DiscoveryHit): string {
   return JSON.stringify([owner, kind, route, id]);
 }
 
+function normalizeMissingEvidence(value: unknown, legacySubjects = false): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const pageValue = value as Record<string, unknown>;
+  const normalizeHit = (raw: unknown) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+    const hit = raw as Record<string, unknown>;
+    if (hit.matchEvidence !== undefined) return hit;
+    const summary = hit.summary as { kind?: unknown } | null | undefined;
+    const semantic = legacySubjects || summary?.kind === 'subject';
+    return { ...hit, matchEvidence: semantic ? { state: 'unavailable' } : { state: 'unsupported' } };
+  };
+  if (Array.isArray(pageValue.hits)) return { ...pageValue, hits: pageValue.hits.map(normalizeHit) };
+  if (Array.isArray(pageValue.subjects)) return { ...pageValue, subjects: pageValue.subjects.map(normalizeHit) };
+  return value;
+}
+
 /** Retain native order and full owner-kind-route-id identity. Incomplete owner summaries fail the whole page. */
 export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
-  const parsed = v.safeParse(page, value);
+  const parsed = v.safeParse(page, normalizeMissingEvidence(value));
   if (!parsed.success) return;
   const result = { ...parsed.output, freshness: resultFreshness(parsed.output.freshness, parsed.output.as_of) };
   if (result.emptyRecovery && new TextEncoder().encode(JSON.stringify(result.emptyRecovery)).byteLength > 16_384)
     return;
+  if (!evidencePageWithinLimit(result.hits.map((hit) => hit.matchEvidence ?? { state: 'unavailable' }))) return;
   let reviewBytes = 0;
   for (const hit of result.hits) {
     if (hit.key.id !== hit.summary.value.id) return;
+    const matchEvidence = hit.matchEvidence ?? {
+      state: hit.summary.kind === 'subject' ? 'unavailable' : 'unsupported',
+    };
+    if (!currentEvidenceMatches(matchEvidence, hit.key.id)) return;
     switch (hit.summary.kind) {
       case 'subject':
         if (hit.key.owner !== 'semantic' || hit.key.kind !== hit.summary.value.type) return;
@@ -419,12 +446,13 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
           return;
         break;
       case 'account':
-        if (hit.key.owner !== 'accounts' || hit.key.kind !== 'account') return;
+        if (hit.key.owner !== 'accounts' || hit.key.kind !== 'account' || matchEvidence.state !== 'unsupported') return;
         break;
       case 'collection':
         if (
           hit.key.owner !== 'library' ||
           hit.key.kind !== 'collection' ||
+          matchEvidence.state !== 'unsupported' ||
           hit.summary.value.card.id !== hit.key.id ||
           hit.summary.value.card.title !== hit.summary.value.title ||
           hit.summary.value.card.description !== hit.summary.value.description ||
@@ -445,7 +473,8 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
           hit.key.owner !== 'content' ||
           hit.key.kind !== 'review' ||
           hit.summary.value.kind !== 'review' ||
-          !validReviewContextBinding(hit.summary.value)
+          !validReviewContextBinding(hit.summary.value) ||
+          matchEvidence.state !== 'unsupported'
         )
           return;
         if (hit.summary.value.searchContext) {
@@ -454,7 +483,7 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
         }
         break;
       case 'space':
-        if (hit.key.owner !== 'community' || hit.key.kind !== 'space') return;
+        if (hit.key.owner !== 'community' || hit.key.kind !== 'space' || matchEvidence.state !== 'unsupported') return;
         break;
     }
   }
@@ -552,7 +581,7 @@ function validKinds(value: DiscoveryKinds): boolean {
  * make the whole legacy page unavailable without synthesizing or fetching replacement rows.
  */
 export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefined {
-  const parsed = v.safeParse(legacyPage, value);
+  const parsed = v.safeParse(legacyPage, normalizeMissingEvidence(value, true));
   if (!parsed.success) return;
   if (
     parsed.output.emptyRecovery &&
@@ -561,6 +590,8 @@ export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefi
     return;
 
   const identities = new Set<string>();
+  if (!evidencePageWithinLimit(parsed.output.subjects.map((hit) => hit.matchEvidence ?? { state: 'unavailable' })))
+    return;
   for (const { id, type, summary } of parsed.output.subjects) {
     if (summary !== null && (summary.id !== id || summary.type !== type)) {
       return;
@@ -572,6 +603,10 @@ export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefi
     }
     identities.add(identity);
   }
+  if (
+    parsed.output.subjects.some((hit) => !currentEvidenceMatches(hit.matchEvidence ?? { state: 'unavailable' }, hit.id))
+  )
+    return;
   return parsed.output;
 }
 

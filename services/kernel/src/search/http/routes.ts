@@ -36,6 +36,7 @@ import { systemClock, type KernelClock } from '../../clock.ts';
 import { PublicFigureSchema } from '../../rating/public-figure-http.ts';
 import { readEmptyRecovery, type EmptyRecoveryAction, type EmptyRecoveryCandidate } from '../empty-recovery.ts';
 import { EmptyRecoveryActionsSchema, EmptyRecoverySchema } from './empty-recovery-schemas.ts';
+import { MatchEvidenceSchema } from './match-evidence-schema.ts';
 
 type SearchServiceImplementation = ReturnType<typeof createSearchService>;
 export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> & {
@@ -118,6 +119,7 @@ const searchHit = t.Object(
     base: genericBase,
     labels: t.Record(t.String(), t.String()),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
+    matchEvidence: MatchEvidenceSchema,
     descriptions: t.Optional(t.Record(t.String(), t.String())),
     facts: t.Optional(t.Record(t.String(), t.Array(FactSchema))),
     figure: t.Ref('PublicFigure'),
