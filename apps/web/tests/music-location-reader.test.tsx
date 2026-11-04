@@ -157,6 +157,7 @@ test('exact disclosed destinations open in the route locale and return focus to 
     expect(mounted.host.textContent).toContain('2024');
     target!.focus();
     target!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    window.dispatchEvent(new Event('blur'));
     target!.blur();
     window.dispatchEvent(new Event('focus'));
     expect(document.activeElement).toBe(target);
@@ -199,4 +200,83 @@ test('a replaced Subject observation cannot restore a delayed relationship windo
   } finally {
     await mounted.close();
   }
+});
+
+test('bounded native reads preserve withheld forward rows, original occurrence identity and session chaining', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { readMusicLocation } = await import('../src/features/catalogue/music-location-reader/model');
+  const fixture = musicLocationExample('admitted-place');
+  const calls: { path: string; session: string | null }[] = [];
+  let oversize = false;
+  const boundedFetch: typeof fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      calls.push({ path: url.pathname, session: request.headers.get('rezics-session-token') });
+      const subject = !url.pathname.endsWith('/relations');
+      return new Response(
+        JSON.stringify(
+          subject
+            ? fixture.public
+            : {
+                relations: [
+                  {
+                    statement: fixture.areaRelation,
+                    target: musicAreaId,
+                    external: null,
+                    summary: null,
+                    related: {},
+                    ...(oversize ? { padding: 'x'.repeat(128 * 1024) } : {}),
+                  },
+                ],
+                freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },
+                next: null,
+              },
+        ),
+        {
+          headers: {
+            'content-type': 'application/json',
+            'rezics-session-token': subject ? 'subject-session' : 'page-session',
+          },
+        },
+      );
+    },
+    { preconnect: fetch.preconnect },
+  );
+  const client = createKernelClient('https://bounded.example', { fetch: boundedFetch });
+  const address = { ...fixture.address, stream: 'out:schema:containedInPlace', session: 'original-session' };
+  const page = await readMusicLocation(client, undefined, fixture.release, address, 'en');
+  expect(page.ok && page.session).toBe('page-session');
+  expect(calls).toHaveLength(2);
+  expect(calls.map((call) => call.session)).toEqual(['original-session', 'subject-session']);
+  expect(page.ok && page.rows[0]?.holder).toBe(fixture.address.id);
+  expect(page.ok && page.rows[0]?.statementId).toBe(fixture.areaRelation.id);
+  expect(page.ok && page.rows[0]?.summary).toBeNull();
+  if (!page.ok) throw new Error('expected a withheld endpoint with readable assertion');
+  const mounted = await ui();
+  try {
+    await mounted.render({
+      subject: fixture.public,
+      context: fixture.address.context,
+      source: fixture.source,
+      reader: null,
+      locale: 'en',
+      transport: fixture.read,
+      initial: page,
+    });
+    expect(mounted.host.querySelector('a[target="_blank"]')).toBeNull();
+    expect(mounted.host.querySelector('[data-slot="music-location-row"]')).not.toBeNull();
+  } finally {
+    await mounted.close();
+  }
+  oversize = true;
+  expect(await readMusicLocation(client, undefined, fixture.release, address, 'en')).toEqual({
+    ok: false,
+    reason: 'unavailable',
+  });
+  const before = calls.length;
+  expect(
+    await readMusicLocation(client, undefined, fixture.release, { ...address, cursor: 'x'.repeat(4097) }, 'en'),
+  ).toEqual({ ok: false, reason: 'invalid' });
+  expect(calls).toHaveLength(before);
 });

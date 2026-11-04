@@ -1,21 +1,22 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useId, useRef } from 'react';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { SubjectRead } from '@rezics/client';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
-import { CandidateValue } from '../../pages/data';
+import { ReadingValue } from './reading/value';
 import { contextHref } from '../../pages/context-navigation';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { linkClass, linkColor } from '../../pages/shared';
-import type { MusicLocationAddress, MusicLocationRead, MusicLocationTransport } from './model';
+import type { MusicLocationRead, MusicLocationTransport } from './model';
 import { musicLocationSnapshot } from './model';
+import { useMusicLocationReading } from './reading/use-reading';
+import { useEndpointReturn } from './reading/focus';
 
 const action =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const link = `${action} ${linkClass} ${linkColor} underline`;
 type Ready = Extract<MusicLocationRead, { ok: true }>;
-type Failure = Extract<MusicLocationRead, { ok: false }>;
 
 export type MusicLocationReaderProps = {
   subject: SubjectRead;
@@ -26,6 +27,8 @@ export type MusicLocationReaderProps = {
   realm?: string | undefined;
   transport: MusicLocationTransport;
   initial?: MusicLocationRead | undefined;
+  refresh?: ((stream?: string) => Promise<void>) | undefined;
+  restoreStream?: string | undefined;
 };
 
 function kindLabel(kind: Ready['kind'], locale: string) {
@@ -41,27 +44,15 @@ function kindLabel(kind: Ready['kind'], locale: string) {
 export function MusicLocationReader(props: MusicLocationReaderProps) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
-  const focused = useRef<EventTarget | null>(null);
   const snapshot = musicLocationSnapshot(props.subject.subject, props.context);
   const reading = useSubjectCommunityReading({
     source: props.source,
     reader: props.reader,
     descriptor: JSON.stringify([snapshot, props.locale, props.realm]),
   });
-  useLayoutEffect(() => {
-    if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
-      heading.current?.focus();
-  }, [reading.key, reading.available]);
   const options = { locale: props.locale as never };
   return (
-    <section
-      data-slot="music-location-reader"
-      aria-labelledby={headingId}
-      className="min-w-0 space-y-4"
-      onFocusCapture={(event) => {
-        focused.current = event.target;
-      }}
-    >
+    <section data-slot="music-location-reader" aria-labelledby={headingId} className="min-w-0 space-y-4">
       <h2 id={headingId} ref={heading} tabIndex={-1} className="text-xl font-semibold">
         {m.music_context_title({}, options)}
       </h2>
@@ -80,7 +71,7 @@ export function MusicLocationReader(props: MusicLocationReaderProps) {
   );
 }
 
-/** Keep one accepted relation window and one exact pending address. */
+/** The native reader owns admission; this window only records explicit navigation intent. */
 export function MusicLocationWindow({
   subject,
   context,
@@ -90,130 +81,129 @@ export function MusicLocationWindow({
   initial,
   current,
   focusHeading,
+  refresh,
+  restoreStream,
 }: Omit<MusicLocationReaderProps, 'source' | 'reader'> & { current: () => boolean; focusHeading: () => void }) {
   const options = { locale: locale as never };
-  const snapshot = musicLocationSnapshot(subject.subject, context);
-  const [page, setPage] = useState<Ready | undefined>(initial?.ok ? initial : undefined);
-  const [failure, setFailure] = useState<Failure | undefined>(initial && !initial.ok ? initial : undefined);
-  const [busy, setBusy] = useState(!initial);
-  const mounted = useRef(false);
-  const sequence = useRef(0);
-  const inFlight = useRef(false);
-  const pending = useRef<MusicLocationAddress>(snapshot);
-  const origin = useRef<HTMLAnchorElement | null>(null);
-  const returnFocus = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (event.detail === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey) origin.current = event.currentTarget;
-  };
-
-  useEffect(() => {
-    const restore = () => {
-      const target = origin.current;
-      origin.current = null;
-      if (!current() || !target) return;
-      if (target.isConnected && (document.activeElement === target || document.activeElement === document.body))
-        target.focus();
-      else if (!target.isConnected && document.activeElement === document.body) focusHeading();
-    };
-    window.addEventListener('focus', restore);
-    return () => window.removeEventListener('focus', restore);
-  }, [current, focusHeading]);
-
-  const read = async (address: MusicLocationAddress, trigger?: HTMLButtonElement, keyboard = false) => {
-    if (!mounted.current || !current() || inFlight.current) return;
-    inFlight.current = true;
-    const turn = ++sequence.current;
-    pending.current = address;
-    setBusy(true);
-    setFailure(undefined);
-    let result: MusicLocationRead;
-    try {
-      result = await transport(address);
-    } catch {
-      result = { ok: false, reason: 'unavailable' };
-    }
-    if (!mounted.current || !current() || sequence.current !== turn) return;
-    inFlight.current = false;
-    setBusy(false);
-    if (result.ok) {
-      setPage(result);
-      if (
-        keyboard &&
-        trigger &&
-        (trigger === document.activeElement || (!trigger.isConnected && document.activeElement === document.body))
-      )
-        focusHeading();
-    } else {
-      setFailure(result);
-      if (result.reason !== 'unavailable') setPage(undefined);
+  const reading = useMusicLocationReading({
+    snapshot: musicLocationSnapshot(subject.subject, context),
+    initial,
+    transport,
+    current,
+    refresh,
+    restoreStream,
+  });
+  const { navigation, selected, requested, failure, busy, refreshing } = reading;
+  const accepted = navigation.accepted;
+  const page = accepted?.page;
+  const returnFocus = useEndpointReturn({ accepted, current, heading: focusHeading });
+  const selectedDescriptor = page?.streams.find((stream) => stream.key === selected);
+  const retained = !!page && !!requested;
+  const disabled = busy || refreshing;
+  const failureText = () => {
+    switch (failure?.reason) {
+      case 'stale':
+        return m.music_location_changed({}, options);
+      case 'denied':
+        return m.music_context_denied({}, options);
+      case 'withheld':
+        return m.music_location_withheld({}, options);
+      case 'invalid':
+        return m.music_location_invalid({}, options);
+      default:
+        return m.music_location_unavailable({}, options);
     }
   };
-
-  useEffect(() => {
-    mounted.current = true;
-    if (!initial) void read(snapshot);
-    return () => {
-      mounted.current = false;
-      inFlight.current = false;
-      sequence.current++;
-      origin.current = null;
-    };
-    // The parent remounts this window for each source, Subject, authority or locale observation.
-  }, []);
-
-  const request = (address: MusicLocationAddress) => (event: MouseEvent<HTMLButtonElement>) => {
-    if (!busy) void read(address, event.currentTarget, event.detail === 0);
-  };
-  const address = { ...snapshot, ...(page?.session ? { session: page.session } : {}) };
-  const failureText = (reason: Failure['reason']) =>
-    reason === 'stale'
-      ? m.subject_view_changed({}, options)
-      : reason === 'denied'
-        ? m.music_context_denied({}, options)
-        : m.music_context_unavailable({}, options);
-
   return (
-    <div className="min-w-0 space-y-4" aria-busy={busy}>
-      {busy ? <p role="status">{m.music_context_loading({}, options)}</p> : null}
+    <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]" aria-busy={disabled}>
+      {selectedDescriptor ? (
+        <p data-slot="music-location-selected">
+          {m.music_location_selected({}, options)}{' '}
+          <span lang={selectedDescriptor.label.lang ?? undefined}>{selectedDescriptor.label.text}</span>
+        </p>
+      ) : null}
+      {page && page.streams.length > 0 ? (
+        <nav className="flex min-w-0 flex-wrap gap-2" aria-label={m.subject_relations({}, options)}>
+          {page.streams.map((stream) => (
+            <button
+              key={stream.key}
+              type="button"
+              aria-pressed={stream.key === selected}
+              disabled={disabled || (stream.key === selected && !failure)}
+              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+              onClick={() => void reading.select(stream.key)}
+            >
+              <span lang={stream.label.lang ?? undefined}>{stream.label.text}</span>
+            </button>
+          ))}
+        </nav>
+      ) : null}
+      <div aria-live="polite" aria-atomic="true" className="space-y-2">
+        {busy ? <p role="status">{m.music_context_loading({}, options)}</p> : null}
+        {requested ? (
+          <p>
+            {requested.address.cursor
+              ? m.music_location_requested_continuation({}, options)
+              : m.music_location_requested_start({}, options)}
+          </p>
+        ) : null}
+        {refreshing ? <p role="status">{m.music_location_refreshing({}, options)}</p> : null}
+        {reading.restoredUnavailable ? <p>{m.music_location_stream_removed({}, options)}</p> : null}
+        {reading.refreshFailed ? <p role="alert">{m.music_location_refresh_failed({}, options)}</p> : null}
+      </div>
       {failure ? (
         <div role="alert" className="space-y-2">
-          <p>{failureText(failure.reason)}</p>
-          <button
-            type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-            disabled={busy}
-            onClick={request(pending.current)}
-          >
-            {m.subject_view_retry({}, options)}
-          </button>
+          <p>{failureText()}</p>
+          {failure.reason === 'unavailable' ? (
+            <button
+              type="button"
+              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+              disabled={disabled}
+              onClick={() => void reading.retry()}
+            >
+              {m.music_location_retry({}, options)}
+            </button>
+          ) : null}
+          {failure.reason === 'stale' && refresh ? (
+            <button
+              type="button"
+              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+              disabled={disabled}
+              onClick={() => void reading.refresh()}
+            >
+              {m.music_location_refresh({}, options)}
+            </button>
+          ) : null}
+          {failure.reason === 'invalid' ? (
+            <button
+              type="button"
+              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+              disabled={disabled}
+              onClick={() => void reading.choices()}
+            >
+              {m.music_location_choices({}, options)}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {page ? (
-        <>
-          <p className="font-medium">
-            <span>{kindLabel(page.kind, locale)}</span>
+        <section
+          className="min-w-0 space-y-4"
+          aria-label={retained ? m.music_location_retained({}, options) : m.music_location_accepted({}, options)}
+        >
+          <p className="font-medium" data-slot="music-location-accepted">
+            {retained ? m.music_location_retained({}, options) : m.music_location_accepted({}, options)}
+            {' · '}
+            {kindLabel(page.kind, locale)}
             {page.identity.typeLabel.text ? (
               <span lang={page.identity.typeLabel.lang ?? undefined}> · {page.identity.typeLabel.text}</span>
             ) : null}
+            {page.stream ? <span lang={page.stream.label.lang ?? undefined}> · {page.stream.label.text}</span> : null}
           </p>
+          {retained ? <p>{m.music_location_retained_help({}, options)}</p> : null}
           {page.kind === 'unsupported' ? <p role="status">{m.music_location_unsupported({}, options)}</p> : null}
           {page.stream ? (
             <>
-              {page.streams.length > 1 ? (
-                <nav className="flex min-w-0 flex-wrap gap-2" aria-label={m.subject_relations({}, options)}>
-                  {page.streams.map((stream) => (
-                    <button
-                      key={stream.key}
-                      type="button"
-                      aria-pressed={stream.key === page.stream?.key}
-                      disabled={busy}
-                      className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-                      onClick={request({ ...address, stream: stream.key })}
-                    >
-                      <span lang={stream.label.lang ?? undefined}>{stream.label.text}</span>
-                    </button>
-                  ))}
-                </nav>
-              ) : null}
               {!page.caughtUp ? <p role="status">{m.work_parts_pending({}, options)}</p> : null}
               {page.count ? (
                 <p>
@@ -226,7 +216,7 @@ export function MusicLocationWindow({
                   )}
                 </p>
               ) : null}
-              {!page.rows.length ? <p role="status">{m.work_parts_empty({}, options)}</p> : null}
+              {!page.rows.length ? <p role="status">{m.music_location_empty({}, options)}</p> : null}
               <ul className="min-w-0 divide-y divide-border">
                 {page.rows.map((row) => {
                   const summary = row.summary;
@@ -252,7 +242,14 @@ export function MusicLocationWindow({
                               <span>{m.album_tracks_kind({}, options)}: </span>
                               <span lang={type?.lang ?? undefined}>{type?.text || summary.type}</span>
                             </p>
-                            <a className={link} href={href} target="_blank" rel="noopener" onClick={returnFocus}>
+                            <a
+                              className={link}
+                              href={href}
+                              target="_blank"
+                              rel="noopener"
+                              data-occurrence={`${row.holder}:${row.statementId}`}
+                              onClick={returnFocus}
+                            >
                               {m.album_tracks_open({}, options)}
                             </a>
                           </>
@@ -268,7 +265,7 @@ export function MusicLocationWindow({
                                   {page.labels[snak.property.id]?.text || snak.property.id}
                                 </dt>
                                 <dd>
-                                  <CandidateValue snak={snak} related={row.related} locale={locale} />
+                                  <ReadingValue snak={snak} related={row.related} locale={locale} />
                                 </dd>
                               </div>
                             ))}
@@ -287,7 +284,7 @@ export function MusicLocationWindow({
                                       {page.labels[snak.property.id]?.text || snak.property.id}
                                     </dt>
                                     <dd>
-                                      <CandidateValue snak={snak} related={row.related} locale={locale} />
+                                      <ReadingValue snak={snak} related={row.related} locale={locale} />
                                     </dd>
                                   </div>
                                 ))}
@@ -302,20 +299,41 @@ export function MusicLocationWindow({
                   );
                 })}
               </ul>
-              {page.next ? (
-                <button
-                  type="button"
-                  className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-                  disabled={busy}
-                  onClick={request({ ...address, stream: page.stream.key, cursor: page.next })}
-                >
-                  {m.work_parts_more({}, options)}
-                </button>
-              ) : null}
             </>
           ) : null}
-        </>
+        </section>
       ) : null}
+      {page?.stream ? (
+        <nav className="flex min-w-0 flex-wrap gap-2" aria-label={m.music_location_navigation({}, options)}>
+          <button
+            type="button"
+            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+            disabled={disabled || !reading.previous || !!failure || selected !== page.stream.key}
+            onClick={() => void reading.back()}
+          >
+            {m.music_location_previous({}, options)}
+          </button>
+          <button
+            type="button"
+            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+            disabled={disabled || !selected}
+            onClick={() => void reading.start()}
+          >
+            {m.music_location_start({}, options)}
+          </button>
+          {page.next && selected === page.stream.key ? (
+            <button
+              type="button"
+              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+              disabled={disabled || !!failure}
+              onClick={() => void reading.more()}
+            >
+              {m.work_parts_more({}, options)}
+            </button>
+          ) : null}
+        </nav>
+      ) : null}
+      {page && navigation.evicted && !reading.previous ? <p>{m.music_location_boundary({}, options)}</p> : null}
     </div>
   );
 }
