@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useOperation } from '../kernel/exposure';
@@ -211,14 +211,18 @@ function CreatorRead({
   };
   // A loader refresh is not a new admitted origin. Keep its observed rows/edition and
   // command operands mounted, even if that refresh omits a row or temporarily fails.
-  if (origin.isCurrent() && query.data && query.data !== display.outcome) {
+  useLayoutEffect(() => {
+    if (!origin.isCurrent() || !query.data || query.data === display.outcome) return;
     refreshFailure.value = query.data.kind === 'failed';
-    setDisplay({
-      ...display,
-      outcome: query.data,
-      value: query.data.kind === 'accepted' ? query.data.value : display.value,
-    });
-  }
+    setDisplay((current) =>
+      current.outcome === query.data
+        ? current
+        : {
+            outcome: query.data!,
+            value: query.data!.kind === 'accepted' ? query.data!.value : current.value,
+          },
+    );
+  }, [display.outcome, origin, query.data, refreshFailure]);
   if (hydrated && !origin.isCurrent()) return <Notice kind="preparing" address={address} locale={locale} />;
   if (display.value && origin.isCurrent()) origin.workspace.read = display.value;
   const data = display.value?.data;
