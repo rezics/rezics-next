@@ -402,7 +402,8 @@ test('Album recovery retires every current surface and retains private drafts an
     await showCreation();
     await settle();
     const form = host.querySelector('form')!;
-    const text = (name: string, scope = host) => within(scope).getByRole('textbox', { name }) as HTMLInputElement;
+    const text = (name: string, scope = host) =>
+      within(scope).getAllByRole('textbox', { name })[0] as HTMLInputElement;
     const type = (control: HTMLElement, value: string) => act(async () => user.type(control, value));
     await type(text(m.catalogue_create_label()), 'Private Album');
     await type(text(m.catalogue_create_description()), 'Private description');
