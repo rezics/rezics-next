@@ -4,62 +4,108 @@ Content owns boards, threads, posts, immutable documents, media state and public
 
 ## Native moderation directory
 
-Decision: mount `GET /v1/me/moderation-directory` as additive public source for the complete-input publisher;
-retain unavailable discovery until native actor-resource coverage is admitted. Ordinary membership, a readable
-Board and Access's known-resource role directory cannot establish that coverage.
+Decision: enumerate native Content Board references independently of memberships; keep the mounted directory
+unavailable until an owner authority-currentness source covers scheduled transitions and credential lifetime.
 
-The mounted `moderation.directory` operation requires a signed-in account and declares public exposure. Its
-closed input accepts `cursor` (opaque, at most 4096 characters), optional exact `realmId` and `limit` (1..20,
-default 20). Its response is owned by `moderation-directory-schemas.ts`, matching the
-[public directory consumer contract](../../../../apps/web/src/moderation/README.md#public-directory-consumer-contract).
-Ready pages have at most 20 distinct scopes, an opaque source of at most 256 characters and an exclusive horizon
-no later than 180 seconds after observation. A sparse ready page can have no items and a continuation. Each safe
-item has a Board or independently authorized Global catalogue scope, label, nullable Realm parent, closed open
-advice and supported queues; catalogue never has a parent or appeals. No counts or private report fields are
-part of this response. Every non-ready state has an empty item tuple and null continuation.
+The mounted `moderation.directory` operation requires a signed-in account and declares public exposure. Its closed
+input accepts `cursor` (opaque, at most 4096 characters), optional exact `realmId` and `limit` (1..20, default 20).
+`moderation-directory-schemas.ts` owns the public schema consumed by the complete-input publisher; routes.ts mounts
+it and register.ts installs maintenance in the existing Content worker. These source declarations do not establish
+installed client typing. Web retains its `nativeModerationDirectoryUnavailable` seam until both producer and installed
+binding are usable. No receiver or second generator is a publication prerequisite.
 
-The present native implementation calls `nativeModerationCandidateReferencesUnavailable`; it returns unavailable
-even for a moderator with exact native queue access. It cannot return a complete empty page or permission advice.
-Existing exact Board/catalogue links, queue cursors, case-by-report-ID reads and command owners remain independent.
-The Web consumer keeps `nativeModerationDirectoryUnavailable` until the usable producer and installed declarations
-are delivered. These mounted schemas are publisher inputs, not installed generated declarations.
+Ready pages contain only safe labels, native Board/catalogue scope identities, nullable safe Realm parents, supported
+queues and closed open advice. Board queues are reports, appeals and resolved; independent Global catalogue authority
+admits reports and resolved, never appeals or a parent. The scope identity supplies the existing exact Board or catalogue
+queue destination. Counts, reporters, evidence and case payloads are absent. Queue cursors and exact report-ID inspection
+remain independent. Unknown and concealed exact reads share 404 through their existing owning routes.
 
 ### Candidate coverage source contract
 
+`moderation-directory-projection.ts` owns a native candidate-reference inventory, not permission. A migration installs
+live Board registration under the source writer lock and captures the finite maximum `(route,board_id)` key. The existing
+worker resumes a committed exclusive baseline cursor in pages of 64 native rows; complete is set only after exhausting
+the cut. New registration, parent changes, rename, replacement and deletion update references and increment generation
+in the same native Content transaction. The existing registered Board-created event performs an idempotent exact current
+source projection. Duplicate delivery does not advance generation; process memory owns no baseline progress. A missing
+installation returns unavailable; an incomplete installation returns preparing, with neither items nor continuation.
+This installation covers this native Content storage source; distributed source replacement/epoch admission remains
+required before the authority-currentness port may certify ready coverage.
+
 Access's [current resource role keys](../access/README.md#current-resource-role-keys) enumerate subjects of a known
-resource. The Accounts membership inverse enumerates memberships, not all resources an actor can moderate. Neither
-is an admitted actor-resource inventory. The local unavailable seam performs no foreign calls or history repair.
-The remaining Content-owned projection must register native resources and consume existing owner events through
-the existing worker; Access continues to own grant/membership writes and exact permission evaluation.
+resource, not an actor resource inventory. The Accounts membership inverse enumerates memberships, not all resources
+an actor can moderate. Neither certifies complete actor-resource coverage. Access alone writes grants/memberships and
+evaluates exact permission. No projected candidate, membership or positive flag confers authority.
 
-Admission of an Accounts source requires a bounded keyset of actor/principal candidate references, explicit complete
-coverage and epoch, source replacement/version and the exclusive next scheduled authority boundary. References
-must include direct Board grants without Realm membership and inherited organization subjects. Membership replacement,
-revocation and future starts/ends must invalidate the observed frontier even before background upkeep catches up.
-Empty references certify empty only under complete coverage. No positive permission flags, labels or case payloads
-may be treated as authority. In the absence of this foreign contract, keep the named local seam unavailable.
+An admitted Accounts source must expose a bounded actor/principal candidate keyset, complete coverage and epoch,
+source replacement/version and exclusive next scheduled authority boundary. It must include direct Board grants without
+Realm membership and inherited organization subjects; replacement/revocation and future starts/ends must retire its
+frontier before background upkeep catches up. Complete empty coverage alone can certify an empty result. This foreign
+contract is absent on the retained base. `nativeModerationAuthorityUnavailable` remains the named local currentness seam;
+no shared Accounts or Access path is changed to invent it. Ordinary native permission checks provide booleans, not the
+complete scheduled authority lifetime, and cannot replace this missing source.
 
-The remaining producer must cap raw candidate inspection separately from visible output, seal continuation to actor,
-client/session, filters, coverage/epoch and authority horizon, then obtain exact native Access and parent disclosure
-for each selected scope. Reobserve each source after foreign work; changed, concealed, deleted, renamed or replaced
-sources withhold their labels and controls. A request never repairs grant, membership or resource history. Installation
-uses an explicit finite cut and bounded resumable pages. Duplicate delivery, restart and scheduled-boundary upkeep
-belong to the existing registered projection runner. Native read and runner growth measurements remain separate.
+### Assembly and final disclosure
 
-### Cost: unavailable directory read
+The native assembly is implemented behind a trusted authority-currentness reader, which is deliberately unbound in
+production. An empty scope input asks that reader for the actor-wide frontier covering all candidate and negative
+membership proofs. Each selected-scope input must share that epoch and provide the minimum exclusive kernel-clock
+horizon, including scheduled grants, organization replacement, source topology and verified bearer expiry. Unknown
+currentness withholds the entire page; the fixture reader in journey tests does not admit a production owner source.
 
-Touches: shared HTTP authentication, normal request admission, the constant local unavailable seam and serialization
-of one closed empty response. There are no directory storage checkouts, candidate reads, Access preparations/evaluations,
-Accounts/Realm/Subject disclosure calls, retained case bodies or projection runner calls in this operation. Shared
-authentication retains its existing native accounting; this constant seam establishes no bound for that work.
+Raw native reference inspection is separately capped at 20 plus one fixed Global check; visible output is capped at the
+requested limit. The initial page reserves one slot for catalogue. A sparse page retains its next frontier; there is no
+denial refill. Cursors bind actor, client, credential/session digest, authentication epoch, requested principal, scope
+ceiling, filters, limit, coverage generation, authority epoch and the original exclusive horizon. They never renew the
+original horizon. The opaque source carries no grants or raw frontier. Current exact Access and native Board/Realm
+parent disclosure precede and follow foreign work; final assembly compares original witnesses and reobserves coverage
+and authority. Revoked, concealed, renamed, deleted or replaced sources withhold labels and controls. Requests never
+repair any source, grant or membership history.
 
-Bound: limit 1..20, cursor at most 4096 characters and filter at most 128 characters. The seam retains zero candidate
-rows, returns zero labels/controls and serializes only state, empty items and null next. A ready page's schema limits
-are public output bounds, not evidence of bounded upstream selection, native proof or upkeep.
+### Cost: native directory assembly
 
-Growth check: focused contract tests cover schema bounds and unavailable behavior. Native authenticated read and
-actual runner measurements at independently grown 256/1024/4096 Boards, grants, actor candidates, memberships and
-repair backlog remain part of producer completion; no native Cost result is claimed for this seam.
+Touches: shared HTTP authentication/admission; initial and final installation point reads; one bounded candidate index
+range; three authority-currentness callbacks; initial and final native scope observations. Each Board observation uses
+two existing `readRealmBoard` calls and one exact moderation Access preparation/evaluation in a released resource snapshot.
+Charge all nested native Access/Accounts/Realm work, preparations, evaluations, partition reads, controls, pool checkouts,
+community presentation/rules/media/member-count work and retained bodies inside those existing readers, both disclosure
+observations, cursor encryption, copies and response serialization. No queue or case reader runs. The absent production
+currentness seam returns before native scope observations; its fixture callback establishes no foreign work bound.
+
+Bound: at most 20 raw Board references and one Global scope, 20 visible scopes, three supported queues each, 128-character
+IDs, two labels of at most 1024 characters, a 256-character opaque source and a 4096-character cursor. Reference queries
+seek `(route,board_id)` or `(realm_id,route,board_id)` before LIMIT, retaining IDs only. These local bounds do not claim a
+bound for the original native disclosure readers or the absent authority source. There is no grant/membership history
+scan or output-count-based refill. Existing disclosure readers retain their original operation-local Cost.
+
+Growth check: controller-owned native measurements at independently grown 256/1024/4096 Boards, grants, actor candidates,
+memberships and repair backlog remain required, including authentication and every nested original reader and callback.
+The focused journey tests exercise native commands/reads and assembly through an explicitly fixture currentness reader;
+they establish neither admission of that reader nor native Cost or installed typing.
+
+### Cost: native reference maintenance
+
+Touches: one installation row lock/read, one original source primary-key range of at most 64 references, up to 64 indexed
+receiving writes, one cursor/generation write and transaction controls. Live registration performs one installation lock,
+one reference upsert/delete and one generation write. Registered event delivery uses one exact current Board probe and
+one idempotent reference insert. No grant, membership or report body is copied, and no new runner is registered.
+
+Bound: 64 source and receiving rows per durable step, 16 steps per scheduled turn, constant installation state and a
+stable minute schedule. Restart resumes the committed cursor; full final pages may require an extra empty step. The
+single installation writer serializes bootstrap and live registration; contention and actual runner operations must be
+charged independently of read operations.
+
+Growth check: restart and duplicate-delivery tests cover functional replay only. Actual runner measurements against
+independently grown source and backlog populations at 256/1024/4096 remain deferred to the controller; no measured
+physical-work ceiling is claimed.
+
+Behavior references read: `legacy-final:apps/web/features/manage/safety-case-panel.tsx`,
+`legacy-final:apps/web/features/manage/settings-navigation.tsx`, `legacy-final:apps/web/features/manage/safety-queue.tsx`,
+`legacy-final:apps/web/features/realm-appeal/realm-moderation-recorded-page.tsx`, its route composer,
+`legacy-final:apps/web/features/manage/queue-view.tsx` and `legacy-final:apps/web/features/realm-appeal/panel.tsx`.
+The read-only reference index was consulted. No legacy code was ported; Web navigation and receiver ownership remain
+separate. The receiver retains affected-author, queue/scope with local Cost, exact case/appeal, remaining binding and own
+reporter history requirements, independent IDs and opaque return operands.
 
 ## Public author contribution context
 
