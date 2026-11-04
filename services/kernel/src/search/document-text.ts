@@ -16,9 +16,7 @@ export const DOCUMENT_TEXT_RECIPE = 'public-native-text-v1' as const;
 
 type Failure = 'unsupported' | 'preparing' | 'unavailable';
 export type DocumentTextCoverage = 'complete' | 'partial' | Failure;
-export type DocumentTextRead =
-  | { status: 'public'; document: DocumentView }
-  | { status: 'absent' | Failure };
+export type DocumentTextRead = { status: 'public'; document: DocumentView } | { status: 'absent' | Failure };
 
 /** A consumer seam for the native public document owner, not an alternative body reader.
  * `read` must admit public plain-text rights independently of Subject accessibility and
@@ -28,16 +26,20 @@ export type DocumentTextRead =
  * No account/reader state belongs in this public projection.
  */
 export interface PublicDocumentTextSource {
-  read(input: Readonly<{
-    subject: string;
-    reference: PageDocumentReference;
-    maxSourceBytes: number;
-  }>): Promise<DocumentTextRead>;
-  current(input: Readonly<{
-    subject: string;
-    observation: string;
-    references: readonly PageDocumentReference[];
-  }>): Promise<boolean>;
+  read(
+    input: Readonly<{
+      subject: string;
+      reference: PageDocumentReference;
+      maxSourceBytes: number;
+    }>,
+  ): Promise<DocumentTextRead>;
+  current(
+    input: Readonly<{
+      subject: string;
+      observation: string;
+      references: readonly PageDocumentReference[];
+    }>,
+  ): Promise<boolean>;
 }
 
 export type DocumentTextSelection = Readonly<{
@@ -69,7 +71,7 @@ export function selectDocumentText(
   properties: readonly string[],
   language: string,
 ): DocumentTextSelection {
-  if (!language || language.length > 64 || properties.some(property => !property || property.length > 256))
+  if (!language || language.length > 64 || properties.some((property) => !property || property.length > 256))
     throw new TypeError('Incomplete document text selection');
   if (properties.length > DOCUMENT_TEXT_COST.documents || new Set(properties).size !== properties.length)
     throw new RangeError('Document text properties exceed their bound or repeat');
@@ -80,28 +82,48 @@ export function selectDocumentText(
 
 function boundedSelection(selection: DocumentTextSelection): void {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-  if (!uuid.test(selection.subject) || !selection.observation || selection.observation.length > 2048 ||
-      selection.references.length > DOCUMENT_TEXT_COST.documents || selection.references.some(reference =>
-        !uuid.test(reference.candidate) || !uuid.test(reference.document) || !/^[0-9a-f]{64}$/.test(reference.digest) ||
-        !reference.language || reference.language.length > 64))
+  if (
+    !uuid.test(selection.subject) ||
+    !selection.observation ||
+    selection.observation.length > 2048 ||
+    selection.references.length > DOCUMENT_TEXT_COST.documents ||
+    selection.references.some(
+      (reference) =>
+        !uuid.test(reference.candidate) ||
+        !uuid.test(reference.document) ||
+        !/^[0-9a-f]{64}$/.test(reference.digest) ||
+        !reference.language ||
+        reference.language.length > 64,
+    )
+  )
     throw new RangeError('Document text selection exceeds its bound');
 }
 function retainSelection(selection: DocumentTextSelection): DocumentTextSelection {
   boundedSelection(selection);
-  return Object.freeze({ ...selection, references: Object.freeze(selection.references.map(reference => Object.freeze({ ...reference }))) });
+  return Object.freeze({
+    ...selection,
+    references: Object.freeze(selection.references.map((reference) => Object.freeze({ ...reference }))),
+  });
 }
 function binding(reference: PageDocumentReference): string {
   return JSON.stringify([reference.candidate, reference.document, reference.digest, reference.language]);
 }
 function matches(selection: DocumentTextSelection, reference: PageDocumentReference, value: DocumentView): boolean {
-  return value.subjectId === selection.subject && value.id === reference.document &&
-    value.candidateId === reference.candidate && value.digest === reference.digest &&
-    value.language === reference.language && Number.isSafeInteger(value.revision) && value.revision >= 0;
+  return (
+    value.subjectId === selection.subject &&
+    value.id === reference.document &&
+    value.candidateId === reference.candidate &&
+    value.digest === reference.digest &&
+    value.language === reference.language &&
+    Number.isSafeInteger(value.revision) &&
+    value.revision >= 0
+  );
 }
 
 /** UTF-8 prefix without splitting a Unicode code point. Prefix coverage is never complete. */
 function prefix(text: string, maximum: number): { text: string; complete: boolean } {
-  let bytes = 0, end = 0;
+  let bytes = 0,
+    end = 0;
   for (const point of text) {
     const size = Buffer.byteLength(point);
     if (bytes + size > maximum) return { text: text.slice(0, end), complete: false };
@@ -111,7 +133,9 @@ function prefix(text: string, maximum: number): { text: string; complete: boolea
   return { text, complete: true };
 }
 function identity(reference: PageDocumentReference, revision: number, text: string, complete: boolean): string {
-  return createHash('sha256').update(JSON.stringify([DOCUMENT_TEXT_RECIPE, binding(reference), revision, text, complete])).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify([DOCUMENT_TEXT_RECIPE, binding(reference), revision, text, complete]))
+    .digest('hex');
 }
 function extract(
   selection: DocumentTextSelection,
@@ -125,8 +149,13 @@ function extract(
   if (Buffer.byteLength(serializeDocument(document.body)) > DOCUMENT_TEXT_COST.sourceBytesPerDocument)
     return 'unavailable';
   const value = prefix(documentText(document.body), remaining);
-  return Object.freeze({ reference, revision: document.revision, recipe: DOCUMENT_TEXT_RECIPE,
-    extraction: identity(reference, document.revision, value.text, value.complete), ...value });
+  return Object.freeze({
+    reference,
+    revision: document.revision,
+    recipe: DOCUMENT_TEXT_RECIPE,
+    extraction: identity(reference, document.revision, value.text, value.complete),
+    ...value,
+  });
 }
 
 /** Sequential native dispatch keeps the retained body heap at one bounded document.
@@ -150,13 +179,25 @@ export async function projectDocumentText(
   try {
     if (!(await source.current(selection))) return result('unavailable');
     for (const reference of selection.references) {
-      if (!remaining) { degrade('partial'); break; }
-      const read = await source.read({ subject: selection.subject, reference,
-        maxSourceBytes: DOCUMENT_TEXT_COST.sourceBytesPerDocument });
+      if (!remaining) {
+        degrade('partial');
+        break;
+      }
+      const read = await source.read({
+        subject: selection.subject,
+        reference,
+        maxSourceBytes: DOCUMENT_TEXT_COST.sourceBytesPerDocument,
+      });
       if (read.status === 'absent') continue;
-      if (read.status !== 'public') { degrade(read.status); continue; }
+      if (read.status !== 'public') {
+        degrade(read.status);
+        continue;
+      }
       const extracted = extract(selection, reference, read.document, remaining);
-      if (typeof extracted === 'string') { degrade(extracted); continue; }
+      if (typeof extracted === 'string') {
+        degrade(extracted);
+        continue;
+      }
       documents.push(extracted);
       remaining -= Buffer.byteLength(extracted.text);
       if (!extracted.complete) degrade('partial');
@@ -175,25 +216,37 @@ export async function projectDocumentText(
  * Offsets use original UTF-16 source units, never engine HTML or normalized text offsets.
  */
 export type DocumentTextWindow = Readonly<{ start: number; end: number; text: string }>;
-export type VerifiedDocumentExcerpt = Readonly<{
-  status: 'available';
-  text: string;
-  language: string;
-  source: Readonly<{ document: string; candidate: string; digest: string; revision: number; extraction: string }>;
-  destination: Readonly<{ kind: 'subject-document'; subject: string; document: string }>;
-}> | Readonly<{ status: 'unavailable' | 'restart' }>;
+export type VerifiedDocumentExcerpt =
+  | Readonly<{
+      status: 'available';
+      text: string;
+      language: string;
+      source: Readonly<{ document: string; candidate: string; digest: string; revision: number; extraction: string }>;
+      destination: Readonly<{ kind: 'subject-document'; subject: string; document: string }>;
+    }>
+  | Readonly<{ status: 'unavailable' | 'restart' }>;
 
 function windowValid(text: string, window: DocumentTextWindow): boolean {
-  if (text.length > DOCUMENT_TEXT_COST.textBytesPerSubject || window.text.length > DOCUMENT_TEXT_COST.excerptCodePoints * 2)
+  if (
+    text.length > DOCUMENT_TEXT_COST.textBytesPerSubject ||
+    window.text.length > DOCUMENT_TEXT_COST.excerptCodePoints * 2
+  )
     return false;
   const { start, end } = window;
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > text.length)
     return false;
   // Reject surrogate halves at either edge, without normalizing source text.
-  const splitsPair = (offset: number) => offset > 0 && offset < text.length &&
-    /[\uD800-\uDBFF]/.test(text[offset - 1]!) && /[\uDC00-\uDFFF]/.test(text[offset]!);
-  return !splitsPair(start) && !splitsPair(end) && text.slice(start, end) === window.text &&
-    [...window.text].length <= DOCUMENT_TEXT_COST.excerptCodePoints;
+  const splitsPair = (offset: number) =>
+    offset > 0 &&
+    offset < text.length &&
+    /[\uD800-\uDBFF]/.test(text[offset - 1]!) &&
+    /[\uDC00-\uDFFF]/.test(text[offset]!);
+  return (
+    !splitsPair(start) &&
+    !splitsPair(end) &&
+    text.slice(start, end) === window.text &&
+    [...window.text].length <= DOCUMENT_TEXT_COST.excerptCodePoints
+  );
 }
 
 /** Final disclosure re-reads the exact native public body and fences after bounded assembly.
@@ -209,24 +262,38 @@ export async function verifyDocumentTextWindow(
   if (!source || candidate.recipe !== DOCUMENT_TEXT_RECIPE || !windowValid(candidate.text, window))
     return { status: 'unavailable' };
   const { selection } = projection;
-  const reference = selection.references.find(reference => binding(reference) === binding(candidate.reference));
-  const indexed = projection.documents.find(document => document.extraction === candidate.extraction &&
-    binding(document.reference) === binding(candidate.reference));
+  const reference = selection.references.find((reference) => binding(reference) === binding(candidate.reference));
+  const indexed = projection.documents.find(
+    (document) =>
+      document.extraction === candidate.extraction && binding(document.reference) === binding(candidate.reference),
+  );
   if (!reference || !indexed) return { status: 'restart' };
   try {
     if (!(await source.current(selection))) return { status: 'restart' };
-    const read = await source.read({ subject: selection.subject, reference,
-      maxSourceBytes: DOCUMENT_TEXT_COST.sourceBytesPerDocument });
+    const read = await source.read({
+      subject: selection.subject,
+      reference,
+      maxSourceBytes: DOCUMENT_TEXT_COST.sourceBytesPerDocument,
+    });
     if (read.status !== 'public') return { status: read.status === 'absent' ? 'restart' : 'unavailable' };
     // Reproduce this reference's original prefix budget, not the whole Subject's allowance.
     const current = extract(selection, reference, read.document, Buffer.byteLength(candidate.text));
     if (typeof current === 'string') return { status: 'unavailable' };
     if (current.extraction !== candidate.extraction || !windowValid(current.text, window)) return { status: 'restart' };
-    const excerpt: VerifiedDocumentExcerpt = { status: 'available', text: window.text, language: reference.language,
-      source: { document: reference.document, candidate: reference.candidate, digest: reference.digest,
-        revision: current.revision, extraction: current.extraction },
-      destination: { kind: 'subject-document', subject: selection.subject, document: reference.document } };
-    return await source.current(selection) ? excerpt : { status: 'restart' };
+    const excerpt: VerifiedDocumentExcerpt = {
+      status: 'available',
+      text: window.text,
+      language: reference.language,
+      source: {
+        document: reference.document,
+        candidate: reference.candidate,
+        digest: reference.digest,
+        revision: current.revision,
+        extraction: current.extraction,
+      },
+      destination: { kind: 'subject-document', subject: selection.subject, document: reference.document },
+    };
+    return (await source.current(selection)) ? excerpt : { status: 'restart' };
   } catch {
     return { status: 'unavailable' };
   }
