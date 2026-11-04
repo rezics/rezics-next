@@ -385,7 +385,9 @@ export class ShelfPreferenceDraftRecovery {
     this.owner.canWrite() &&
     this.state.phase === 'uncertain' &&
     this.state.pending !== null &&
-    this.state.advice?.allowedActions.update.allowed !== false;
+    (this.state.current
+      ? ownerMayChangeShelf(this.state.advice)
+      : this.state.advice?.allowedActions.update.allowed !== false);
   canSubmit = () => this.writable() && !this.state.pending && this.state.phase !== 'reloading';
   needsNavigationDecision = () =>
     this.state.pending !== null ||
@@ -574,7 +576,6 @@ export class ShelfPreferenceDraftRecovery {
     const changedWhileSaving = remainingDirty.size > 0;
     const changedAfterReceipt =
       current.version > receipt.version && !requestedShelfMatches(requested, current.shelf ?? {});
-    if (changedAfterReceipt) for (const key of pending.dirty) remainingDirty.add(key);
     const resetDraft = rebaseDraft(shelf, this.state.draft, remainingDirty);
     const needsReview =
       reacquired ||
