@@ -61,7 +61,13 @@ function EligibilityCopy({
   now: number;
 }) {
   const locale = getLocale();
-  if (policy?.admissionState === 'pending') return <p>{m.slow_mode_preparing()}</p>;
+  if (policy?.admissionState === 'pending' && waitUntil === null)
+    return (
+      <>
+        <p>{m.slow_mode_preparing()}</p>
+        <p>{m.slow_mode_guidance()}</p>
+      </>
+    );
   if (waitUntil !== null && waitUntil > now) {
     return (
       <>
