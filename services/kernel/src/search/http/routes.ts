@@ -116,9 +116,7 @@ const workContext = t.Union([
           object,
         ),
       ),
-      overflow: t.Optional(
-        t.Boolean(),
-      ),
+      overflow: t.Optional(t.Boolean()),
     },
     object,
   ),

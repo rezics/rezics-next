@@ -73,8 +73,7 @@ export function projectNativeSuggestionWorkContext(
   release: Release,
 ): SuggestionWorkContext {
   if (!row) throw new ProblemError('search_restart_required');
-  if (row.id.toLowerCase() !== subjectId.toLowerCase())
-    throw new ProblemError('search_restart_required');
+  if (row.id.toLowerCase() !== subjectId.toLowerCase()) throw new ProblemError('search_restart_required');
   const context = row.workContext;
   if (!context) return { subjectId, status: 'not_applicable' };
   if (!validWorkContext(context, row.id)) throw new ProblemError('index_not_ready');
@@ -134,21 +133,12 @@ export function projectNativeSuggestionWorkContext(
   };
 }
 
-function sameProjection(
-  ids: readonly string[],
-  before: NativeWorkProjection,
-  after: NativeWorkProjection,
-): boolean {
+function sameProjection(ids: readonly string[], before: NativeWorkProjection, after: NativeWorkProjection): boolean {
   return ids.every((id) => {
     if (!before.has(id) || !after.has(id)) return false;
     const first = before.get(id);
     const current = after.get(id);
-    return (
-      !!first &&
-      !!current &&
-      first.id === current.id &&
-      isDeepStrictEqual(first.workContext, current.workContext)
-    );
+    return !!first && !!current && first.id === current.id && isDeepStrictEqual(first.workContext, current.workContext);
   });
 }
 

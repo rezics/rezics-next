@@ -57,9 +57,7 @@ test('every installed header suggestion loader is admitted before truncation', a
     read(
       page(
         Array.from({ length: 9 }, (_, index) =>
-          index === 8
-            ? { ...row(index), workContext: { subjectId: id(7), status: 'withheld' } }
-            : row(index),
+          index === 8 ? { ...row(index), workContext: { subjectId: id(7), status: 'withheld' } } : row(index),
         ),
       ),
     ),

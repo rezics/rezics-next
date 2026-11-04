@@ -40,11 +40,13 @@ export type SuggestionWorkContextSnapshot = Readonly<{
   isCurrent(): Promise<boolean>;
 }>;
 
-export type SuggestionWorkContextReader = (input: Readonly<{
-  subjectIds: readonly string[];
-  languages: readonly string[];
-  deadline: number;
-}>) => Promise<SuggestionWorkContextSnapshot>;
+export type SuggestionWorkContextReader = (
+  input: Readonly<{
+    subjectIds: readonly string[];
+    languages: readonly string[];
+    deadline: number;
+  }>,
+) => Promise<SuggestionWorkContextSnapshot>;
 
 export const SUGGESTION_CONTEXT_LIMITS = Object.freeze({ subjects: 10, serializedBytes: 16_384 });
 
@@ -161,11 +163,7 @@ function validContext(value: unknown, subjectId: string): value is SuggestionWor
 
   if (value.overflow !== undefined) {
     const overflow = value.overflow;
-    if (
-      typeof overflow !== 'boolean' ||
-      overflow !== true
-    )
-      return false;
+    if (typeof overflow !== 'boolean' || overflow !== true) return false;
   }
   return true;
 }
