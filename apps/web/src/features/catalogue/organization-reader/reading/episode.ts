@@ -15,12 +15,11 @@ export function useOrganizationEpisode(
 ) {
   const client = useContext(QueryClientContext);
   const store = client ? browserObservation(client) : undefined;
-  useSyncExternalStore(
+  const session = useSyncExternalStore(
     store?.subscribe ?? noSubscribe,
     store?.getSnapshot ?? (() => undefined),
     store?.getServerSnapshot ?? (() => undefined),
   );
-  const session = store?.getSnapshot();
   const cacheSnapshot = useCallback(() => {
     if (!client) return anonymousSnapshot();
     const stamp = (key: readonly unknown[]) => {
@@ -48,9 +47,7 @@ export function useOrganizationEpisode(
         .map((query) => [query.queryHash, stamp(query.queryKey)]),
     ]);
   }, [client, session, cacheSource]);
-  useSyncExternalStore(store?.subscribeCache ?? noSubscribe, cacheSnapshot, cacheSnapshot);
-  // A replaced address binds the current getter, not the previous render's subscription snapshot.
-  const cache = cacheSnapshot();
+  const cache = useSyncExternalStore(store?.subscribeCache ?? noSubscribe, cacheSnapshot, cacheSnapshot);
   const ready =
     !client || viewer === null || (session?.state === 'signed-in' && session.observation.subject === viewer);
   const holder = useRef<ReturnType<typeof createEpisode> | undefined>(undefined);
