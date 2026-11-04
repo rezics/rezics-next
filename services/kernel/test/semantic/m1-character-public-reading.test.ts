@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { fromPlainText } from '@rezics/document';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
@@ -95,6 +95,13 @@ test('native public Character and page reads carry the exact current-language do
 test('an erased body remains unavailable while its current Character assertion stays readable', async () => {
   const subject = await create();
   const statement = subject.statements['schema:abstract'].find((row: any) => row.value.content.language === 'en');
+  await db.admin.query('UPDATE content.authored_field SET body = $1 WHERE id = $2', [
+    Buffer.from(serializeDocument(fromPlainText('A different valid body.'))),
+    statement.value.content.document,
+  ]);
+  const mismatched = await call('GET', `/v1/subjects/${subject.id}?language=en&includeDocuments=true`);
+  expect(mismatched.status).toBe(200);
+  expect(mismatched.body.documents).toEqual({});
   await db.admin.query("UPDATE content.authored_field SET availability = 'erased', body = NULL WHERE id = $1", [
     statement.value.content.document,
   ]);
