@@ -2,28 +2,24 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, createElement, useState } from 'react';
-import type { KernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
 import type { WriteFailure } from '../src/threads/actions';
 import type { SlowModePort, SlowModeRead } from '../src/threads/slow-mode';
 import recorded from '../src/kernel/recorded/thread.json';
 
-test('slow-mode units parse native policy and leave missing board methods unavailable', async () => {
-  const { parseSlowModePolicy, SLOW_MODE_INTERVALS, remainingSeconds, deadlineFromRetryAfter, nativeBoardSlowMode } =
+test('slow-mode native policy is complete, closed and independent of UI presets', async () => {
+  const { parseSlowModePolicy, SLOW_MODE_INTERVALS, remainingSeconds, deadlineFromRetryAfter } =
     await import('../src/threads/slow-mode');
   expect(SLOW_MODE_INTERVALS).toEqual([0, 30, 60, 300]);
-  expect(
-    parseSlowModePolicy({ intervalSeconds: 30, nextEligibleAt: '2026-11-03T12:00:00.000Z', canChange: true }),
-  ).toEqual({
-    intervalSeconds: 30,
-    nextEligibleAt: '2026-11-03T12:00:00.000Z',
-    canChange: true,
-    exempt: false,
-  });
-  expect(parseSlowModePolicy({ intervalSeconds: 15 })).toBeUndefined();
-  expect(remainingSeconds(deadlineFromRetryAfter(12, 1_000), 1_000)).toBe(12);
-  const client = { boards: () => ({ get() {}, reports: {} }) } as unknown as KernelClient;
-  expect(nativeBoardSlowMode(client, recorded.thread.boardId)).toBeUndefined();
+  const native = { intervalSeconds: 45, retryAt: null, nextEligibleAt: null, canChange: false,
+    exempt: false, admissionState: 'pending', retryAfterSeconds: 1 };
+  for (const intervalSeconds of [0, 45, 300, 86400])
+    expect(parseSlowModePolicy({ ...native, intervalSeconds })).toEqual({ ...native, intervalSeconds });
+  for (const body of [{}, { ...native, intervalSeconds: -1 }, { ...native, intervalSeconds: 86401 },
+    { ...native, intervalSeconds: 0.5 }, { ...native, exempt: undefined }, { policy: native },
+    { ...native, admissionState: 'allowed' }, { ...native, extra: true }])
+    expect(parseSlowModePolicy(body)).toBeUndefined();
+  expect(remainingSeconds(deadlineFromRetryAfter(86400, 1000), 1000)).toBe(86400);
 });
 
 test('setting and composer keep drafts through cooldown, update policy, recover unavailable eligibility and retire private work', async () => {
@@ -134,7 +130,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     expect(host.textContent).toContain(m.slow_mode_next_unavailable());
     read = {
       kind: 'available',
-      policy: { intervalSeconds: 0, nextEligibleAt: null, canChange: true, exempt: false },
+      policy: { intervalSeconds: 0, retryAt: null, nextEligibleAt: null, canChange: true, exempt: false, admissionState: 'ready', retryAfterSeconds: 0 },
     };
     const reloads = [...host.querySelectorAll('button')].filter((button) => button.textContent === m.slow_mode_retry());
     expect(reloads.length).toBeGreaterThan(0);
