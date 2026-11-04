@@ -106,6 +106,7 @@ export function validateCaptureEvidence(capture: Capture): void {
   requireParallel(capture.requestBytes, 'requestBytes', 'statements', capture.statements.length);
   requireParallel(capture.responseBytes, 'responseBytes', 'statements', capture.statements.length);
   requireParallel(capture.planStatements, 'planStatements', 'plans', capture.plans.length);
+  requireParallel(capture.planDatabases, 'planDatabases', 'plans', capture.plans.length);
   requireParallel(capture.statementErrors, 'statementErrors', 'statements', capture.statements.length);
   requireParallel(capture.statementErrorMessages, 'statementErrorMessages', 'statements', capture.statements.length);
   requireParallel(capture.statementBackends, 'statementBackends', 'statements', capture.statements.length);
@@ -143,6 +144,12 @@ export function validateCaptureEvidence(capture: Capture): void {
     backgroundStatementCount,
   );
   requireParallel(capture.backgroundPlanBackends, 'backgroundPlanBackends', 'backgroundPlans', backgroundPlanCount);
+  requireParallel(
+    capture.backgroundPlanDatabases,
+    'backgroundPlanDatabases',
+    'backgroundPlans',
+    backgroundPlanCount,
+  );
 
   requireOwners(capture.planStatements, 'planStatements', capture.statements.length);
   requireOwners(capture.backgroundPlanStatements, 'backgroundPlanStatements', backgroundStatementCount);

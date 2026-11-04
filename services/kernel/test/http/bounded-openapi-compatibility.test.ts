@@ -380,6 +380,10 @@ test('all mounted body routes use the shared cap or an explicitly listed bounded
   expect(bodyLimitOf(collection.hooks?.detail as Record<string, unknown>)).toBe(archiveWireBytes);
   expect(catalogueMaximum).toBeGreaterThanOrEqual(archiveWireBytes);
   expect(MAX_HTTP_BODY_LIMIT).toBeGreaterThanOrEqual(catalogueMaximum);
+  const generated = JSON.parse(await kernelContract());
+  expect(openApiDocument(kernel)).toEqual(generated);
+  expect(generated.paths['/v1/libraryArchiveMerges'].post).toBeDefined();
+  expect(generated.paths['/v1/libraryArchiveCollectionRecoveries'].post).toBeDefined();
   const server = await Bun.file(new URL('../../src/server.ts', import.meta.url)).text();
   expect(server).toContain('maxRequestBodySize: MAX_HTTP_BODY_LIMIT');
 });

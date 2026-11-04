@@ -497,6 +497,9 @@ length, and every other text field uses its UTF-8 byte length. Command tags, not
 harness's own `SET` statements are not counted. Foreground and background statement bytes are reported separately.
 Capture validation decision: optional legacy metadata may be omitted; any supplied parallel arrays must be dense and
 length-aligned, undefined plan owners remain unowned, and backend IDs are compared only when both sides are known.
+`aggregateCaptures` must return every participating database capture; `mergeGrowthCaptures` concatenates optional
+parallel evidence, including `planDatabases`, and rebases plan owners. The harness rejects a merge whose statement,
+plan or background counts differ from those listed databases.
 Growth checks support `step` and `series` rules. `series` is the default; `check.rule` selects an explicit rule, and
 `GROWTH_RULE=series` also runs checks on the step baseline under series. Any other set value of `GROWTH_RULE` is a
 configuration error. The only checks that use step by default are in `test/support/growth-baseline.ts`; each entry must

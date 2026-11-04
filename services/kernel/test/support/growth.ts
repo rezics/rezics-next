@@ -35,6 +35,7 @@ import {
   type RelationCost,
 } from './growth-cost.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
+import { validateCaptureEvidence } from './growth-capture-evidence.ts';
 import {
   addRelationIdentity,
   keyedRelationEntries,
@@ -75,6 +76,7 @@ export * from './growth-counters.ts';
 export { admitGrowthCheck, type AdmittedGrowthCheck, type GrowthCheckConfiguration } from './growth-config.ts';
 
 export * from './growth-cost.ts';
+export { mergeGrowthCaptures } from './growth-capture-merge.ts';
 export * from './growth-access-path.ts';
 export * from './growth-relation-identity.ts';
 export * from './growth-bound.ts';
@@ -768,6 +770,29 @@ function appendProfile(
   });
 }
 
+function assertAggregatedCaptures(
+  name: string,
+  merged: Capture,
+  databases: readonly { readonly name: string; readonly capture: Capture }[],
+): void {
+  validateCaptureEvidence(merged);
+  const listed = databases.map((database) => {
+    validateCaptureEvidence(database.capture);
+    return `${database.name}=${database.capture.statements.length}/${database.capture.plans.length}`;
+  });
+  const statements = databases.reduce((count, database) => count + database.capture.statements.length, 0);
+  const plans = databases.reduce((count, database) => count + database.capture.plans.length, 0);
+  const background = databases.reduce(
+    (count, database) => count + (database.capture.backgroundStatements?.length ?? 0),
+    0,
+  );
+  const mergedBackground = merged.backgroundStatements?.length ?? 0;
+  if (statements !== merged.statements.length || plans !== merged.plans.length || background !== mergedBackground)
+    throw new Error(
+      `${name}: aggregateCaptures omitted native statements, plans or background work (merged ${merged.statements.length}/${merged.plans.length}/${mergedBackground}, databases ${statements}/${plans}/${background}: ${listed.join(', ')})`,
+    );
+}
+
 function assertCatalogBound(
   name: string,
   scale: number | undefined,
@@ -1144,6 +1169,7 @@ async function runGrowthCheck(
         const aggregate = check.aggregateCaptures?.(measured.capture, measured.value);
         const measuredCapture = aggregate?.capture ?? measured.capture;
         const catalogCaptures = aggregate?.databases ?? [{ name: 'application', capture: measured.capture }];
+        assertAggregatedCaptures(check.name, measuredCapture, catalogCaptures);
         const runBackends = [
           ...new Set(
             (measuredCapture.statementBackends ?? []).filter((backend): backend is number => backend !== undefined),
