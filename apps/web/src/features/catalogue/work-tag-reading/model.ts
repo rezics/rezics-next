@@ -2,7 +2,7 @@ import type { Release } from '@rezics/definitions';
 import { facetProperties, readNativeSpoilerLevel } from '@rezics/filter';
 import type { Related, Subject } from '../../../subject/types';
 import { subjectHref } from '../../../subject/subject-href';
-import { bestRank, pageText, spoilerLevel, type Stmt } from '../../pages/shared';
+import { bestRank, pageText, type Stmt } from '../../pages/shared';
 import { typeExtends } from '../../pages/graph-browser';
 
 export const WORK_TAG_PAGE_SIZE = 12;
@@ -42,21 +42,25 @@ function identity(value: object): number {
 export function workTagSourceKey(input: {
   subject: Subject;
   related: Related;
-  definitions: Pick<Release, 'types' | 'properties'>;
+  definitions?: Pick<Release, 'types' | 'properties'> | undefined;
   locale: string;
   spoilerThreshold: number;
+  currentHref?: string | undefined;
+  realm?: string | undefined;
 }): string {
-  const { subject, related, definitions, locale, spoilerThreshold } = input;
+  const { subject, related, definitions, locale, spoilerThreshold, currentHref, realm } = input;
   return [
     identity(subject),
     identity(related),
-    identity(definitions),
+    definitions ? identity(definitions) : 'none',
     subject.id,
     subject.context,
     subject.release,
     subject.revision,
     locale,
     spoilerThreshold,
+    currentHref ?? '',
+    realm ?? '',
   ].join(':');
 }
 
@@ -75,15 +79,21 @@ export function conceptLabel(
 export function projectWorkTags(input: {
   subject: Subject;
   related: Related;
-  definitions: Pick<Release, 'types' | 'properties'>;
+  definitions?: Pick<Release, 'types' | 'properties'> | undefined;
   locale: string;
   spoilerThreshold: number;
+  currentHref?: string | undefined;
+  realm?: string | undefined;
 }): WorkTagProjection | null {
   const { subject, related, definitions, locale, spoilerThreshold } = input;
-  if (!typeExtends(definitions, subject.type, 'schema:CreativeWork')) return null;
-
   const workHref = subjectHref({ id: subject.id, label: pageText(subject.labels, locale).text }, locale).href;
   const sourceKey = workTagSourceKey(input);
+  if (!definitions) return { state: 'unavailable', rows: [], disclosedCount: 0, hasUnavailable: false, workHref, sourceKey };
+  if (!definitions.types[subject.type])
+    return { state: 'unavailable', rows: [], disclosedCount: 0, hasUnavailable: false, workHref, sourceKey };
+  if (!typeExtends(definitions, subject.type, 'schema:CreativeWork'))
+    return { state: 'unsupported', rows: [], disclosedCount: 0, hasUnavailable: false, workHref, sourceKey };
+
   const propertyIds = facetProperties(definitions, [subject.type]);
   const rows: WorkTagAssertion[] = [];
   let itemFacets = 0;
@@ -93,20 +103,26 @@ export function projectWorkTags(input: {
 
   for (const property of propertyIds) {
     const definition = definitions.properties[property];
-    if (definition?.datatype !== 'wikibase-item') continue;
+    if (
+      definition?.datatype !== 'wikibase-item' ||
+      !definition.targets?.some((target) => typeExtends(definitions, target, 'skos:Concept'))
+    )
+      continue;
     const facetLabel = pageText(definition.labels, locale);
     if (!facetLabel.text) {
       missingFacetLabel = true;
       continue;
     }
     itemFacets += 1;
-    const statements = Object.hasOwn(subject.statements, property)
-      ? (subject.statements[property] as unknown as Stmt[])
+    const supplied = Object.hasOwn(subject.statements, property)
+      ? ((subject.statements[property] ?? []) as unknown as Stmt[])
       : [];
+    const statements = subject.relationCounts ? supplied : bestRank(supplied);
 
-    for (const statement of bestRank(statements)) {
+    for (const statement of statements) {
       if (
         statement.rank === 'deprecated' ||
+        statement.property.id !== property ||
         statement.value.type !== 'value' ||
         statement.property.data_type !== 'wikibase-item' ||
         typeof statement.value.content !== 'string'
@@ -117,11 +133,15 @@ export function projectWorkTags(input: {
       const spoilerLevels = spoilerParts.map((qualifier) =>
         qualifier.value.type === 'value' ? readNativeSpoilerLevel(qualifier.value.content) : null,
       );
-      if (spoilerLevels.some((level) => level === null)) continue;
+      if (spoilerLevels.some((level) => level === null)) {
+        hasUnavailable = true;
+        continue;
+      }
       const spoilerQualifiers = spoilerParts.map((qualifier, index) => ({
         property: qualifier.property.id,
         in: [spoilerLevels[index]!],
       }));
+      const level = spoilerLevels.reduce<number>((maximum, value) => Math.max(maximum, Number(value)), 0);
 
       const row: WorkTagAssertion = {
         key: `${property}:${statement.id}`,
@@ -129,7 +149,7 @@ export function projectWorkTags(input: {
         facetLabel,
         targetId: statement.value.content,
         statement,
-        spoilerLevel: spoilerLevel(statement),
+        spoilerLevel: level,
         hasSpoilerQualifier: spoilerParts.length > 0,
         spoilerQualifiers,
       };
@@ -149,7 +169,7 @@ export function projectWorkTags(input: {
         ? 'unavailable'
         : 'unsupported'
       : rows.length === 0
-        ? missingFacetLabel
+        ? missingFacetLabel || hasUnavailable
           ? 'unavailable'
           : 'empty'
         : 'available';

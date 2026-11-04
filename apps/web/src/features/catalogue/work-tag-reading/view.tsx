@@ -6,6 +6,7 @@ import { catalogueEntries } from '../catalogue-entry';
 import { SourceTagWeight } from '../source-tag-weight';
 import { m } from '../../../paraglide/messages.js';
 import { SpoilerGate } from '../../pages/values';
+import type { WorkTagReturnSelection } from './entry';
 import { conceptLabel, WORK_TAG_PAGE_SIZE, type WorkTagAssertion, type WorkTagProjection } from './model';
 
 function queryHref(path: string, params: URLSearchParams): string {
@@ -19,15 +20,19 @@ function TagDetails({
   definitions,
   locale,
   workHref,
+  spoilerThreshold,
+  returnToFor,
 }: {
   row: WorkTagAssertion;
   related: Related;
-  definitions: Pick<Release, 'types' | 'properties'>;
+  definitions?: Pick<Release, 'types' | 'properties'> | undefined;
   locale: string;
   workHref: string;
+  spoilerThreshold: number;
+  returnToFor?: ((selection: WorkTagReturnSelection) => string) | undefined;
 }) {
   const o = { locale: locale as never };
-  const label = conceptLabel(row.targetId, related, definitions, locale);
+  const label = definitions ? conceptLabel(row.targetId, related, definitions, locale) : undefined;
   if (!label) {
     return (
       <p data-state="unavailable" role="status" className="text-sm text-muted-foreground">
@@ -37,8 +42,17 @@ function TagDetails({
   }
 
   const concept = catalogueEntries.concepts({ id: row.targetId, label: label.text, locale });
-  const conceptQuery = new URLSearchParams({ returnTo: workHref });
-  const evidenceQuery = new URLSearchParams({ role: row.property, returnTo: workHref });
+  const selection = (focus: WorkTagReturnSelection['focus']): WorkTagReturnSelection => ({
+    property: row.property,
+    statement: row.statement.id,
+    spoiler: spoilerThreshold === 1 || spoilerThreshold === 2 ? spoilerThreshold : 0,
+    focus,
+  });
+  const conceptQuery = new URLSearchParams({ returnTo: returnToFor?.(selection('browse')) ?? workHref });
+  const evidenceQuery = new URLSearchParams({
+    role: row.property,
+    returnTo: returnToFor?.(selection('evidence')) ?? workHref,
+  });
   if (row.spoilerQualifiers.length) evidenceQuery.set('tagQualifiers', JSON.stringify(row.spoilerQualifiers));
 
   return (
@@ -78,13 +92,17 @@ function TagRow({
   locale,
   spoilerThreshold,
   model,
+  workHref,
+  returnToFor,
 }: {
   row: WorkTagAssertion;
   related: Related;
-  definitions: Pick<Release, 'types' | 'properties'>;
+  definitions?: Pick<Release, 'types' | 'properties'> | undefined;
   locale: string;
   spoilerThreshold: number;
   model: WorkTagProjection;
+  workHref: string;
+  returnToFor?: ((selection: WorkTagReturnSelection) => string) | undefined;
 }) {
   const o = { locale: locale as never };
   const details = (
@@ -93,7 +111,9 @@ function TagRow({
       related={related}
       definitions={definitions}
       locale={locale}
-      workHref={model.workHref}
+      workHref={workHref}
+      spoilerThreshold={spoilerThreshold}
+      returnToFor={returnToFor}
     />
   );
   return row.spoilerLevel > spoilerThreshold ? (
@@ -115,15 +135,20 @@ export function WorkTagReadingView({
   definitions,
   locale,
   spoilerThreshold,
+  workHref,
+  returnToFor,
 }: {
   model: WorkTagProjection;
   related: Related;
-  definitions: Pick<Release, 'types' | 'properties'>;
+  definitions?: Pick<Release, 'types' | 'properties'> | undefined;
   locale: string;
   spoilerThreshold: number;
+  workHref?: string | undefined;
+  returnToFor?: ((selection: WorkTagReturnSelection) => string) | undefined;
 }) {
   const [page, setPage] = useState(0);
   const o = { locale: locale as never };
+  const returnHref = workHref ?? model.workHref;
   const start = page * WORK_TAG_PAGE_SIZE;
   const visible = model.rows.slice(start, start + WORK_TAG_PAGE_SIZE);
   const facets = new Map<string, { label: WorkTagAssertion['facetLabel']; rows: WorkTagAssertion[] }>();
@@ -182,6 +207,8 @@ export function WorkTagReadingView({
                       locale={locale}
                       spoilerThreshold={spoilerThreshold}
                       model={model}
+                      workHref={returnHref}
+                      returnToFor={returnToFor}
                     />
                   </li>
                 ))}

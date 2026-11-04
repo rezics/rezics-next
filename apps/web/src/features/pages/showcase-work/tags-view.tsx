@@ -9,6 +9,7 @@ import type { Related, Subject } from '../../../subject/types';
 import { StatementSummary } from '../../catalogue/statement-summary';
 import { statementInput } from '../../catalogue/statement-editor';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
+import { WorkTagReading } from '../../catalogue/work-tag-reading/entry';
 import { pageText } from '../shared';
 import { contextHref } from '../context-navigation';
 import {
@@ -37,7 +38,11 @@ type Props = {
 /** Production observes the existing browser/session boundary; the renderer also remains usable in page stories. */
 export const WorkConceptTagsRoute = candidateSession(function WorkConceptTagsRoute(props: Omit<Props, 'currentHref'>) {
   const currentHref = useLocation({ select: (location) => location.publicHref });
-  return <SubjectConceptTags {...props} currentHref={currentHref} />;
+  const label = pageText(props.subject.labels, props.locale).text;
+  const fallbackHref = contextHref(subjectHref({ id: props.subject.id, label }, props.locale).href, props.realm);
+  const returnToFor = (selection: WorkTagReturn) =>
+    workTagReturnHref(currentHref, fallbackHref, props.locale, selection);
+  return <WorkTagReading {...props} currentHref={currentHref} returnToFor={returnToFor} />;
 });
 
 function spoilerText(tag: WorkTag, locale: string) {
