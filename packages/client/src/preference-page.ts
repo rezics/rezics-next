@@ -42,7 +42,9 @@ export type PreferenceShelfGridSize = (typeof PREFERENCE_SHELF_GRID_SIZES)[numbe
 export type PreferenceShelfColumn = (typeof PREFERENCE_SHELF_TABLE_COLUMNS)[number];
 export type PreferenceShelfStored = {
   layouts?: Partial<Record<string, PreferenceShelfLayout>>;
-  sorts?: Partial<Record<PreferenceShelfTab, { field: PreferenceShelfSortField; direction: PreferenceShelfSortDirection }>>;
+  sorts?: Partial<
+    Record<PreferenceShelfTab, { field: PreferenceShelfSortField; direction: PreferenceShelfSortDirection }>
+  >;
   gridSize?: PreferenceShelfGridSize;
   tableColumns?: PreferenceShelfColumn[];
 };
@@ -135,10 +137,7 @@ const shelfScope = new RegExp(PREFERENCE_SHELF_LIMITS.scopePattern);
 const onlyKeys = (value: Record<string, unknown>, keys: readonly string[]) =>
   Object.keys(value).every((key) => keys.includes(key));
 
-function catalogue<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-): T[] | undefined {
+function catalogue<T extends string>(value: unknown, allowed: readonly T[]): T[] | undefined {
   if (!Array.isArray(value) || value.length < 1 || value.length > allowed.length) return undefined;
   return uniqueMembers(value, (entry): entry is T => (allowed as readonly unknown[]).includes(entry));
 }
@@ -161,7 +160,10 @@ function storedShelf(value: unknown): PreferenceShelfStored | undefined {
     stored.layouts = { ...(value.layouts as NonNullable<PreferenceShelfStored['layouts']>) };
   }
   if (value.sorts !== undefined) {
-    if (!isRecord(value.sorts) || Object.keys(value.sorts).some((tab) => !(PREFERENCE_SHELF_TABS as readonly string[]).includes(tab)))
+    if (
+      !isRecord(value.sorts) ||
+      Object.keys(value.sorts).some((tab) => !(PREFERENCE_SHELF_TABS as readonly string[]).includes(tab))
+    )
       return undefined;
     const sorts: NonNullable<PreferenceShelfStored['sorts']> = {};
     for (const [tab, entry] of Object.entries(value.sorts)) {
@@ -189,7 +191,9 @@ function storedShelf(value: unknown): PreferenceShelfStored | undefined {
       value.tableColumns.length < 1 ||
       value.tableColumns.length > PREFERENCE_SHELF_TABLE_COLUMNS.length ||
       new Set(value.tableColumns).size !== value.tableColumns.length ||
-      value.tableColumns.some((column) => !(PREFERENCE_SHELF_TABLE_COLUMNS as readonly string[]).includes(String(column)))
+      value.tableColumns.some(
+        (column) => !(PREFERENCE_SHELF_TABLE_COLUMNS as readonly string[]).includes(String(column)),
+      )
     )
       return undefined;
     stored.tableColumns = [...(value.tableColumns as PreferenceShelfColumn[])];
@@ -211,7 +215,9 @@ export function decodePreferenceShelfAdvice(value: unknown): PreferenceShelfAdvi
     !isRecord(advice.limits) ||
     !isRecord(advice.effective) ||
     !isRecord(advice.defaults) ||
-    Object.keys(advice).some((key) => key !== 'supported' && key !== 'limits' && key !== 'effective' && key !== 'defaults')
+    Object.keys(advice).some(
+      (key) => key !== 'supported' && key !== 'limits' && key !== 'effective' && key !== 'defaults',
+    )
   )
     return undefined;
   const { supported, limits } = advice;

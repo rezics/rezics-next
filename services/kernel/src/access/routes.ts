@@ -387,7 +387,11 @@ const preferences = t.Object(
       {
         supported: t.Object(
           {
-            layouts: t.Array(literals(SHELF_LAYOUTS), { minItems: 1, maxItems: SHELF_LAYOUTS.length, uniqueItems: true }),
+            layouts: t.Array(literals(SHELF_LAYOUTS), {
+              minItems: 1,
+              maxItems: SHELF_LAYOUTS.length,
+              uniqueItems: true,
+            }),
             tabs: t.Array(literals(SHELF_TABS), { minItems: 1, maxItems: SHELF_TABS.length, uniqueItems: true }),
             sortFields: t.Array(literals(SHELF_SORT_FIELDS), {
               minItems: 1,

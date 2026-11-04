@@ -109,7 +109,10 @@ test('malformed or mismatched shelf observation is omitted without guessing', ()
       shelfAdvice,
     })?.shelfAdvice,
   ).toBeUndefined();
-  expect(decodePreferenceAdvice({ ...envelope, shelfAdvice: { ...shelfAdvice, defaults: { gridSize: 'medium' } } })?.reading.defaults).toEqual({
+  expect(
+    decodePreferenceAdvice({ ...envelope, shelfAdvice: { ...shelfAdvice, defaults: { gridSize: 'medium' } } })?.reading
+      .defaults,
+  ).toEqual({
     spoilerLevel: 0,
     suitability: 'blur',
   });
