@@ -383,7 +383,9 @@ export function statementOccurrences(capture: Capture | CostFoldedCapture): Stat
           planDocumentAvailability: 'cost-folded',
           rows: summary?.rows ?? 0,
           blocks: summary?.blocks ?? 0,
-          ...(summary && summary.relationIdentities.length > 0 ? { relationIdentities: summary.relationIdentities } : {}),
+          ...(summary && summary.relationIdentities.length > 0
+            ? { relationIdentities: summary.relationIdentities }
+            : {}),
           ...(summary && summary.limitations.length > 0 ? { limitations: summary.limitations } : {}),
         };
       });

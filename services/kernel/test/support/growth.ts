@@ -203,10 +203,7 @@ export type AttemptSample = {
   }[];
 };
 
-function attemptRecords(
-  capture: Capture | CostFoldedCapture,
-  occurrences: StatementOccurrences,
-): AttemptRecord[] {
+function attemptRecords(capture: Capture | CostFoldedCapture, occurrences: StatementOccurrences): AttemptRecord[] {
   const backends = capture.statementBackends;
   if (!backends || backends.length !== capture.statements.length)
     throw new TypeError('attempts require captures with backend attribution');

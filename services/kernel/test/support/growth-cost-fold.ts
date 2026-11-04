@@ -8,21 +8,10 @@ import {
   type PlanCostEvidence,
   type RelationCost,
 } from './growth-cost.ts';
-import {
-  GrowthCaptureBudget,
-  type GrowthCaptureEvidenceSide,
-} from './growth-capture-budget.ts';
+import { GrowthCaptureBudget, type GrowthCaptureEvidenceSide } from './growth-capture-budget.ts';
 import { checkedAdd, sumFinite } from './growth-numeric.ts';
-import {
-  createPlanWalkSession,
-  explainPlanEntries,
-  type PlanWalkSession,
-} from './growth-plan-walk.ts';
-import {
-  keyedRelationEntries,
-  relationIdentityKey,
-  type RelationIdentity,
-} from './growth-relation-identity.ts';
+import { createPlanWalkSession, explainPlanEntries, type PlanWalkSession } from './growth-plan-walk.ts';
+import { keyedRelationEntries, relationIdentityKey, type RelationIdentity } from './growth-relation-identity.ts';
 
 export type FoldedPlanNotice = Readonly<{
   readonly index: number;
@@ -286,9 +275,10 @@ export class GrowthCostFolder {
     this.#budget.retainFoldedSummary(side, 'native plan provenance', 0, estimatedSnapshot(notice));
     (side === 'background' ? this.#backgroundPlanNotices : this.#planNotices).push(notice);
 
-    let statement = detail.owner === undefined
-      ? undefined
-      : (side === 'background' ? this.#background : this.#foreground).get(detail.owner);
+    let statement =
+      detail.owner === undefined
+        ? undefined
+        : (side === 'background' ? this.#background : this.#foreground).get(detail.owner);
     if (detail.owner !== undefined && statement === undefined) {
       this.#budget.retainFoldedSummary(side, 'statement occurrence summary', 0, FOLDED_OBJECT_BYTES);
       statement = occurrence(detail.owner);
@@ -381,11 +371,13 @@ export class GrowthCostFolder {
     entryIndex: number,
     queryText: string | undefined,
   ): void {
-    const limitations = side === 'background'
-      ? evidence.limitations.map((limitation) =>
-          `${notice.owner === undefined ? `Background plan backgroundPlans[${notice.index}] (statement occurrence unavailable)` : `Background plan backgroundPlans[${notice.index}] for background statement occurrence ${notice.owner}`}: ${limitation}`,
-        )
-      : evidence.limitations;
+    const limitations =
+      side === 'background'
+        ? evidence.limitations.map(
+            (limitation) =>
+              `${notice.owner === undefined ? `Background plan backgroundPlans[${notice.index}] (statement occurrence unavailable)` : `Background plan backgroundPlans[${notice.index}] for background statement occurrence ${notice.owner}`}: ${limitation}`,
+          )
+        : evidence.limitations;
     const ownerSummary = statement ?? (side === 'foreground' ? this.#unownedForeground : undefined);
     if (side === 'foreground') {
       const totals = statement ?? this.#unownedForeground;
@@ -404,7 +396,8 @@ export class GrowthCostFolder {
       ownerSummary.planEntries++;
       ownerSummary.catalogOnly = ownerSummary.catalogOnly && catalogOnly;
       if (evidence.node !== undefined) ownerSummary.node = evidence.node;
-      for (const relation of evidence.relationCosts) mergeRelation(ownerSummary.relations, relation, this.#budget, side);
+      for (const relation of evidence.relationCosts)
+        mergeRelation(ownerSummary.relations, relation, this.#budget, side);
       for (const limitation of limitations) {
         if (ownerSummary.limitations.has(limitation)) continue;
         this.#budget.retainFoldedSummary(side, 'plan limitation', 0, chargedText(limitation, 24));
@@ -426,7 +419,12 @@ export class GrowthCostFolder {
       if (queryText === undefined) {
         const limitation = `Background plan backgroundPlans[${notice.index}] entry ${entryIndex} has no native Query Text for background execution grouping`;
         if (!ownerSummary?.limitations.has(limitation)) {
-          this.#budget.retainFoldedSummary('background', 'missing background query text diagnostic', 0, chargedText(limitation, 24));
+          this.#budget.retainFoldedSummary(
+            'background',
+            'missing background query text diagnostic',
+            0,
+            chargedText(limitation, 24),
+          );
           ownerSummary?.limitations.add(limitation);
         }
         if (!this.#backgroundLimitations.has(limitation)) {
@@ -492,8 +490,11 @@ export class GrowthCostFolder {
     let plans = 0;
     const catalogIndexes = new Set(
       foregroundStatements
-        .filter(({ text, index }) =>
-          !isControlStatement(text) && this.#foreground.get(index)?.hasPlan && this.#foreground.get(index)?.catalogOnly,
+        .filter(
+          ({ text, index }) =>
+            !isControlStatement(text) &&
+            this.#foreground.get(index)?.hasPlan &&
+            this.#foreground.get(index)?.catalogOnly,
         )
         .map(({ index }) => index),
     );
@@ -550,8 +551,14 @@ export class GrowthCostFolder {
       }
     }
     const totalBlocks = checkedAdd(sharedHit, sharedRead, 'Folded total shared blocks');
-    const requestBytes = sumFinite(foregroundStatements.map(({ requestBytes }) => requestBytes), 'Request bytes');
-    const responseBytes = sumFinite(foregroundStatements.map(({ responseBytes }) => responseBytes), 'Response bytes');
+    const requestBytes = sumFinite(
+      foregroundStatements.map(({ requestBytes }) => requestBytes),
+      'Request bytes',
+    );
+    const responseBytes = sumFinite(
+      foregroundStatements.map(({ responseBytes }) => responseBytes),
+      'Response bytes',
+    );
     const backgroundRequestBytes = sumFinite(
       input.backgroundStatements.map(({ requestBytes }) => requestBytes),
       'Background request bytes',
@@ -565,8 +572,8 @@ export class GrowthCostFolder {
       if (errorCode !== null) failedStatements.set(errorCode, (failedStatements.get(errorCode) ?? 0) + 1);
     const hasBackgroundWork =
       input.backgroundStatements.length > 0 || backgroundRequestBytes > 0 || backgroundResponseBytes > 0;
-    const statementCount = foregroundStatements.filter(({ text, index }) =>
-      !isControlStatement(text) && !catalogIndexes.has(index),
+    const statementCount = foregroundStatements.filter(
+      ({ text, index }) => !isControlStatement(text) && !catalogIndexes.has(index),
     ).length;
     const relations = keyedRelationEntries(
       [...relationCosts.values()].map((relation) => ({ identity: relation.identity, value: relation })),
@@ -602,7 +609,6 @@ export class GrowthCostFolder {
       ),
     };
   }
-
 }
 
 export function isCostFoldedCapture(value: unknown): value is CostFoldedCapture {

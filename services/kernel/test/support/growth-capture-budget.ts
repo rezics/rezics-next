@@ -82,7 +82,8 @@ export class GrowthCaptureBudget {
   }
 
   retainFoldedSummary(side: GrowthCaptureEvidenceSide, evidence: string, entries: number, bytes: number): void {
-    if (!Number.isSafeInteger(entries) || entries < 0) throw new RangeError('Folded evidence entries must be non-negative');
+    if (!Number.isSafeInteger(entries) || entries < 0)
+      throw new RangeError('Folded evidence entries must be non-negative');
     if (!Number.isSafeInteger(bytes) || bytes < 0) throw new RangeError('Folded evidence bytes must be non-negative');
     this.reserve(`${side} folded ${evidence}`, entries, bytes);
   }

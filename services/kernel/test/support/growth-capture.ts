@@ -728,7 +728,9 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     ) {
       const capture = attribution.capture;
       const side = attribution.background ? 'background' : 'foreground';
-      const occurrenceIndex = attribution.background ? capture.backgroundStatementCount : capture.foregroundStatementCount;
+      const occurrenceIndex = attribution.background
+        ? capture.backgroundStatementCount
+        : capture.foregroundStatementCount;
       try {
         capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
         const index = attribution.background ? capture.backgroundStatementCount++ : capture.foregroundStatementCount++;
@@ -746,10 +748,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
         capture.statementRecords.push(record);
         capture.costFolder?.registerStatement(side, index);
       } catch (error) {
-        capture.error ??= captureFailureContext(
-          error,
-          occurrenceFailureContext(side, occurrenceIndex, text ?? ''),
-        );
+        capture.error ??= captureFailureContext(error, occurrenceFailureContext(side, occurrenceIndex, text ?? ''));
       }
     }
     if (state.seeding && !suppressAttribution) state.seeding.statements++;

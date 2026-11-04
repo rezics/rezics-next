@@ -12,13 +12,7 @@ import {
 } from './growth-capture.ts';
 import { quotedRelationIdentity } from './growth-relation-identity.ts';
 import type { Capture } from './growth-cost.ts';
-import {
-  captureWithFoldedCost,
-  checkGrowth,
-  costOf,
-  statementAttributions,
-  statementOccurrences,
-} from './growth.ts';
+import { captureWithFoldedCost, checkGrowth, costOf, statementAttributions, statementOccurrences } from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -342,15 +336,15 @@ test('nested plans from failed and successful same-SQL producers keep their own 
     'WITH folded_rows AS MATERIALIZED (SELECT id FROM growth_capture_test.binding_rows WHERE id <= 2) SELECT count(*)::integer AS count FROM folded_rows';
   const operation = () =>
     withConnection(database.pool, async (client) => {
-        const failed = client.query<{ result: number }>(query, [99]).then(
-          () => null,
-          (error: Error & { code?: string }) => error.code ?? 'unknown',
-        );
-        const successful = client.query<{ result: number }>(query, [2]).then(({ rows }) => rows[0]?.result);
-        const results = await Promise.all([failed, successful]);
-        const cte = await client.query<{ count: number }>(cteQuery);
-        return { results, cteCount: cte.rows[0]?.count };
-      });
+      const failed = client.query<{ result: number }>(query, [99]).then(
+        () => null,
+        (error: Error & { code?: string }) => error.code ?? 'unknown',
+      );
+      const successful = client.query<{ result: number }>(query, [2]).then(({ rows }) => rows[0]?.result);
+      const results = await Promise.all([failed, successful]);
+      const cte = await client.query<{ count: number }>(cteQuery);
+      return { results, cteCount: cte.rows[0]?.count };
+    });
   await database.admin.query('ALTER SEQUENCE growth_capture_test.failure_sequence RESTART WITH 1');
   const result = await capture(database, operation, { includeBackends: true });
   await database.admin.query('ALTER SEQUENCE growth_capture_test.failure_sequence RESTART WITH 1');
@@ -362,9 +356,7 @@ test('nested plans from failed and successful same-SQL producers keep their own 
   expect(result.capture.statementErrors?.slice(0, 2)).toEqual(['40001', null]);
   expect(result.capture.statementBackends).toHaveLength(3);
   expect(result.capture.planBackends).toHaveLength(result.capture.plans.length);
-  const nested = nativePlanEntries(result.capture).filter(({ queryText }) =>
-    queryText?.includes('WHERE id = wanted'),
-  );
+  const nested = nativePlanEntries(result.capture).filter(({ queryText }) => queryText?.includes('WHERE id = wanted'));
   expect(nested.map(({ owner, plan }) => [owner, plan['Actual Rows']])).toEqual([
     [0, 0],
     [1, 1],

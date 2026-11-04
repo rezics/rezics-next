@@ -222,7 +222,12 @@ function classifyFoldedCatalogStatements(capture: CostFoldedCapture): CatalogCla
   if (capture.elapsedMs !== undefined) requireNonNegativeFiniteNumber(capture.elapsedMs, 'Capture duration');
   const freshnessWindows = Math.floor(capture.elapsedMs / reyloFreshnessIntervalMs) + 1;
   const freshnessAllowance = [...nonCatalogTextsByBackend.values()].reduce(
-    (total, texts) => checkedAdd(total, checkedMultiply(texts.size, freshnessWindows, 'Reylo freshness allowance'), 'Allowed catalog statements'),
+    (total, texts) =>
+      checkedAdd(
+        total,
+        checkedMultiply(texts.size, freshnessWindows, 'Reylo freshness allowance'),
+        'Allowed catalog statements',
+      ),
     0,
   );
   const catalogStatements = capture.statements.filter((_, index) => catalogIndexes.has(index)).length;
