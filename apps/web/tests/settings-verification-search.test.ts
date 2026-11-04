@@ -5,6 +5,7 @@ const request = new Request('https://site.example.test/en/settings');
 let release: unknown;
 let releaseReads = 0;
 let subjects: { id: string; type: string; labels: Record<string, string>; summary: null }[] = [];
+let suggestionFailure: unknown;
 const queries: string[] = [];
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => ({
@@ -46,11 +47,13 @@ mock.module('../src/search/suggestions', () => ({
     expect(credential).toBe('Bearer private-viewer');
     expect(signal.aborted).toBe(false);
     queries.push(query.q);
+    if (suggestionFailure !== undefined) throw suggestionFailure;
     return { subjects };
   },
 }));
 const { searchVerificationSubjects } = await import('../src/settings/verification-actions');
 const { m } = await import('../src/paraglide/messages.js');
+const { MediaProblem } = await import('../src/media/kernel');
 const candidate = (type: string) => ({ id: type, type, labels: { en: type }, summary: null });
 const types = {
   'schema:Person': { bases: [] },
@@ -75,16 +78,43 @@ test('required unavailable or malformed eligibility fails privately; real native
     release = unavailable;
     subjects = [candidate('Author')];
     const before = queries.length;
-    await expect(searchVerificationSubjects({ data: { query: 'Avery' } })).rejects.toThrow(
-      m.settings_verification_search_failed(),
-    );
+    const result = await searchVerificationSubjects({ data: { query: 'Avery' } });
+    expect(result).toMatchObject({
+      ok: false,
+      failure: { kind: 'unavailable', status: 0, message: m.settings_verification_search_unavailable() },
+    });
+    expect(JSON.stringify(result)).not.toContain('private release URL and source failure');
     expect(queries.length - before).toBe(1);
   }
   release = new Error('private release unavailable');
   subjects = [];
   const before = releaseReads;
-  expect(await searchVerificationSubjects({ data: { query: 'Unknown' } })).toEqual([]);
+  expect(await searchVerificationSubjects({ data: { query: 'Unknown' } })).toEqual({ ok: true, value: [] });
   expect(releaseReads).toBe(before);
+});
+
+test('native refusal preserves bounded response fields without exposing exception details', async () => {
+  const native = new MediaProblem(
+    { type: 'https://example.test/problems/rate_limited', title: 'private response body', status: 429, code: 'rate_limited' },
+    { 'Retry-After': '60' },
+  );
+  Object.defineProperty(native.problem, 'retryable', { value: true });
+  suggestionFailure = native;
+  const result = await searchVerificationSubjects({ data: { query: 'Avery' } });
+  suggestionFailure = undefined;
+  expect(result).toMatchObject({
+    ok: false,
+    failure: {
+      kind: 'refused',
+      status: 429,
+      code: 'rate_limited',
+      retryable: true,
+      retryAfter: '60',
+      message: m.settings_verification_search_refused(),
+    },
+  });
+  expect(JSON.stringify(result)).not.toContain('private response body');
+  expect(JSON.stringify(result)).not.toContain('https://example.test/problems/rate_limited');
 });
 
 test('retry uses current released roots and preserves Person/Organization filtering without result-detail reads', async () => {
@@ -92,16 +122,19 @@ test('retry uses current released roots and preserves Person/Organization filter
   subjects = [candidate('Author'), candidate('Studio'), candidate('schema:Book'), candidate('schema:Person')];
   const before = queries.length;
   const beforeRelease = releaseReads;
-  expect(await searchVerificationSubjects({ data: { query: 'Avery' } })).toEqual([
-    { id: 'Author', title: 'Author', type: m.settings_verification_person() },
-    { id: 'Studio', title: 'Studio', type: m.settings_verification_organization() },
-    { id: 'schema:Person', title: 'schema:Person', type: m.settings_verification_person() },
-  ]);
+  expect(await searchVerificationSubjects({ data: { query: 'Avery' } })).toEqual({
+    ok: true,
+    value: [
+      { id: 'Author', title: 'Author', type: m.settings_verification_person() },
+      { id: 'Studio', title: 'Studio', type: m.settings_verification_organization() },
+      { id: 'schema:Person', title: 'schema:Person', type: m.settings_verification_person() },
+    ],
+  });
   expect(queries.length - before).toBe(1);
   expect(releaseReads - beforeRelease).toBe(1);
   release = { types: { ...types, Author: { bases: ['schema:Book'] } } };
   subjects = [candidate('Author')];
-  expect(await searchVerificationSubjects({ data: { query: 'Avery' } })).toEqual([]);
+  expect(await searchVerificationSubjects({ data: { query: 'Avery' } })).toEqual({ ok: true, value: [] });
 });
 
 test('the server search validator preserves complete Unicode at the same input boundary', async () => {

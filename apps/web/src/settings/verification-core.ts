@@ -36,6 +36,13 @@ export type VerificationCommandResult =
 /** Explicit private transport envelope: server-function Error serialization drops custom properties. */
 export type VerificationReadResult<T> = { ok: true; value: T } | { ok: false; failure: VerificationFailure };
 
+export type VerificationSearchFailure = Omit<VerificationFailure, 'requestId'> & {
+  kind: 'refused' | 'closed' | 'unavailable';
+};
+export type VerificationSearchResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; failure: VerificationSearchFailure };
+
 export class VerificationReadError extends Error {
   constructor(readonly failure: VerificationFailure) {
     super(failure.message);

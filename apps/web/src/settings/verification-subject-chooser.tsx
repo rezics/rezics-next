@@ -4,16 +4,20 @@ import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } 
 import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
+import { searchRetryAt, useSearchRetryWait } from '../search/search-recovery-retry';
 import { useSession } from '../session/query';
 import { searchVerificationSubjects } from './verification-actions';
 import { withVerificationDeadline } from './verification-request-deadline';
+import type { VerificationSearchFailure, VerificationSearchResult } from './verification-core';
 
 export type VerificationSubject = { id: string; title: string; type: string };
-type Search = (query: string, signal: AbortSignal) => Promise<VerificationSubject[]>;
+type Search = (query: string, signal: AbortSignal) => Promise<VerificationSearchResult<VerificationSubject[]>>;
 type SearchState = {
   query: string;
   phase: 'idle' | 'pending' | 'loading' | 'ready' | 'failed';
   subjects: VerificationSubject[];
+  failure?: VerificationSearchFailure;
+  retryAt?: number;
 };
 const idle: SearchState = { query: '', phase: 'idle', subjects: [] };
 
@@ -24,6 +28,8 @@ export class VerificationSubjectSearch {
   private composing = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private request: AbortController | undefined;
+  private episode = 0;
+  private revision = 0;
   private listeners = new Set<() => void>();
   constructor(private load: Search) {}
   snapshot = () => this.state;
@@ -38,6 +44,7 @@ export class VerificationSubjectSearch {
     this.listeners.forEach((listener) => listener());
   }
   private cancel() {
+    this.revision++;
     clearTimeout(this.timer);
     this.timer = undefined;
     const request = this.request;
@@ -50,45 +57,109 @@ export class VerificationSubjectSearch {
     this.update(idle);
   };
   setEnabled(enabled: boolean) {
+    if (this.enabled === enabled) return;
     this.enabled = enabled;
+    this.episode++;
     if (!enabled) this.clear();
+    else this.update(this.state);
   }
-  edit = (value: string) => {
-    if (!this.enabled) return;
+  currentEpisode = () => this.episode;
+  edit = (value: string, episode = this.episode) => {
+    if (!this.enabled || episode !== this.episode) return;
+    const retryAt = this.state.retryAt;
+    const failure = this.state.failure;
     this.cancel();
     const query = value.slice(0, 100).replace(/[\uD800-\uDBFF]$/u, '');
+    if (retryAt !== undefined) {
+      this.update({ query, phase: 'failed', subjects: [], failure, retryAt });
+      return;
+    }
     this.update({ query, phase: !this.composing && query.trim() ? 'pending' : 'idle', subjects: [] });
-    if (!this.composing && query.trim()) this.timer = setTimeout(() => void this.send(), 250);
+    if (!this.composing && query.trim()) {
+      const revision = this.revision;
+      this.timer = setTimeout(() => {
+        if (revision !== this.revision) return;
+        this.timer = undefined;
+        void this.send(episode, revision, false);
+      }, 250);
+    }
   };
-  isComposing = () => this.composing;
-  startComposition = () => {
-    if (!this.enabled) return;
+  isComposing = (episode = this.episode) => episode !== this.episode || this.composing;
+  startComposition = (episode = this.episode) => {
+    if (!this.enabled || episode !== this.episode) return;
     this.cancel();
     this.composing = true;
-    this.update({ query: this.state.query, phase: 'idle', subjects: [] });
+    if (this.state.retryAt !== undefined) this.update({ ...this.state, subjects: [] });
+    else this.update({ query: this.state.query, phase: 'idle', subjects: [] });
   };
-  endComposition = (value: string) => {
-    if (!this.enabled || !this.composing) return;
+  endComposition = (value: string, episode = this.episode) => {
+    if (!this.enabled || episode !== this.episode || !this.composing) return;
     this.composing = false;
-    this.edit(value);
+    this.edit(value, episode);
   };
-  retry = () => {
-    if (this.enabled && this.state.phase === 'failed') void this.send();
+  retry = (episode = this.episode) => {
+    if (
+      !this.enabled ||
+      episode !== this.episode ||
+      this.state.phase !== 'failed' ||
+      !this.state.query.trim() ||
+      this.state.failure?.retryable === false ||
+      (this.state.retryAt !== undefined && Date.now() < this.state.retryAt)
+    )
+      return;
+    this.cancel();
+    void this.send(episode, this.revision, true);
   };
-  current(subject: VerificationSubject) {
-    return this.enabled && !this.composing && this.state.phase === 'ready' && this.state.subjects.includes(subject);
+  current(subject: VerificationSubject, episode = this.episode) {
+    return (
+      this.enabled &&
+      episode === this.episode &&
+      !this.composing &&
+      this.state.phase === 'ready' &&
+      this.state.subjects.includes(subject)
+    );
   }
-  private async send() {
+  private async send(episode: number, revision: number, deliberate: boolean) {
     const query = this.state.query;
-    if (!this.enabled || this.composing || !query.trim()) return;
+    if (
+      !this.enabled ||
+      episode !== this.episode ||
+      revision !== this.revision ||
+      this.composing ||
+      !query.trim() ||
+      (!deliberate && this.state.retryAt !== undefined)
+    )
+      return;
     const request = new AbortController();
     this.request = request;
     this.update({ query, phase: 'loading', subjects: [] });
     try {
-      const subjects = await withVerificationDeadline((signal) => this.load(query.trim(), signal), request.signal);
-      if (this.request === request && !request.signal.aborted) this.update({ query, phase: 'ready', subjects });
+      const result = await withVerificationDeadline((signal) => this.load(query.trim(), signal), request.signal);
+      if (this.request !== request || request.signal.aborted || episode !== this.episode || revision !== this.revision)
+        return;
+      if (result.ok) this.update({ query, phase: 'ready', subjects: result.value });
+      else {
+        const retryAt = searchRetryAt(result.failure.retryAfter ?? null, Date.now());
+        this.update({
+          query,
+          phase: 'failed',
+          subjects: [],
+          failure: result.failure,
+          ...(retryAt === undefined ? {} : { retryAt }),
+        });
+      }
     } catch {
-      if (this.request === request && !request.signal.aborted) this.update({ query, phase: 'failed', subjects: [] });
+      if (this.request === request && !request.signal.aborted && episode === this.episode && revision === this.revision)
+        this.update({
+          query,
+          phase: 'failed',
+          subjects: [],
+          failure: {
+            kind: 'unavailable',
+            status: 0,
+            message: m.settings_verification_search_unavailable(),
+          },
+        });
     } finally {
       if (this.request === request) this.request = undefined;
     }
@@ -147,6 +218,8 @@ export function VerificationSubjectChooserView({
   const state = useSyncExternalStore(lookup.subscribe, lookup.snapshot, lookup.snapshot);
   const [open, setOpen] = useState(false);
   const locale = getLocale();
+  const episode = lookup.currentEpisode();
+  const retryWaiting = useSearchRetryWait(state.retryAt);
   useEffect(() => {
     lookup.setEnabled(!disabled && !selected);
     if (disabled || selected) setOpen(false);
@@ -207,12 +280,12 @@ export function VerificationSubjectChooserView({
             }}
             onInputValueChange={(value, details) => {
               if (details.reason === 'input-change' || details.reason === 'input-clear') {
-                lookup.edit(value);
+                lookup.edit(value, episode);
                 setOpen(true);
               }
             }}
             onValueChange={(subject) => {
-              if (disabled || !subject || !lookup.current(subject)) return;
+              if (disabled || !subject || !lookup.current(subject, episode)) return;
               lookup.clear();
               setOpen(false);
               focus.current = 'change';
@@ -231,19 +304,19 @@ export function VerificationSubjectChooserView({
               aria-busy={!disabled && busy}
               onBlur={() => setOpen(false)}
               onCompositionStart={() => {
-                lookup.startComposition();
+                lookup.startComposition(episode);
                 setOpen(false);
               }}
               onCompositionEnd={(event) => {
-                lookup.endComposition(event.currentTarget.value);
+                lookup.endComposition(event.currentTarget.value, episode);
                 setOpen(true);
               }}
               onKeyDown={(event) => {
                 // Enter chooses only an explicitly highlighted result; it never submits the parent form.
-                const composing = lookup.isComposing() || event.nativeEvent.isComposing || event.keyCode === 229;
+                const composing = lookup.isComposing(episode) || event.nativeEvent.isComposing || event.keyCode === 229;
                 if (event.key === 'Enter') {
                   event.preventDefault();
-                  if (composing || !open || !highlighted.current || !lookup.current(highlighted.current))
+                  if (composing || !open || !highlighted.current || !lookup.current(highlighted.current, episode))
                     event.preventBaseUIHandler();
                 }
                 if (composing) {
@@ -273,15 +346,19 @@ export function VerificationSubjectChooserView({
                 ? m.settings_verification_search_results({ count: subjects.length })
                 : m.settings_verification_search_empty()
               : null}
-            {!disabled && state.phase === 'failed' ? m.settings_verification_search_failed() : null}
+            {!disabled && state.phase === 'failed' ? state.failure?.message ?? m.settings_verification_search_failed() : null}
+            {!disabled && state.phase === 'failed' && retryWaiting
+              ? ` ${m.settings_verification_search_retry_wait()}`
+              : null}
           </p>
           {!disabled && state.phase === 'failed' ? (
             <Button
               type="button"
               variant="outline"
               className="min-h-11 justify-self-start"
+              disabled={retryWaiting || state.failure?.retryable === false}
               onClick={() => {
-                lookup.retry();
+                lookup.retry(episode);
                 setOpen(true);
                 input.current?.focus();
               }}
