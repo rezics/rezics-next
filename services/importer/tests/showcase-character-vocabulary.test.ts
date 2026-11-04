@@ -35,11 +35,7 @@ async function selectedTables(directory: string, extraParents: string[] = []) {
     await writeFile(join(vndb, 'db', `${table}.header`), `${header}\n`);
     await writeFile(join(vndb, 'db', table), rows);
   };
-  await copy(
-    'chars_traits',
-    'id\ttid\tspoil\tlie',
-    'c1\ti73\t1\tf\nc2\ti80\t0\tt\nc9\ti99\t0\tf\nc4\ti73\t0\tf\n',
-  );
+  await copy('chars_traits', 'id\ttid\tspoil\tlie', 'c1\ti73\t1\tf\nc2\ti80\t0\tt\nc9\ti99\t0\tf\nc4\ti73\t0\tf\n');
   await copy(
     'chars_vns',
     'id\tvid\trid\trole\tspoil',
@@ -59,9 +55,11 @@ async function selectedTables(directory: string, extraParents: string[] = []) {
   await copy(
     'traits_parents',
     'id\tparent\tmain',
-    ['i73\ti10\tt', 'i10\ti7\tt', ...extraParents.map((id, index) => `${index ? extraParents[index - 1] : 'i73'}\t${id}\tt`)].join(
-      '\n',
-    ) + '\n',
+    [
+      'i73\ti10\tt',
+      'i10\ti7\tt',
+      ...extraParents.map((id, index) => `${index ? extraParents[index - 1] : 'i73'}\t${id}\tt`),
+    ].join('\n') + '\n',
   );
   const raw = new CrossMediaDumpFiles('', vndb);
   const sourceRows: Record<string, Record<string, unknown>[]> = {
@@ -134,9 +132,7 @@ function journaledPort(journal: ShowcaseJournal, commands: BatchCommand[]) {
             const statement = structuredClone(command.statement) as { value: { type: string; content: unknown } };
             const property = command.statement.property.id;
             subject.statements[property] =
-              property === 'skos:broader'
-                ? [...(subject.statements[property] ?? []), statement]
-                : [statement];
+              property === 'skos:broader' ? [...(subject.statements[property] ?? []), statement] : [statement];
           }
           return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
         }
@@ -280,7 +276,9 @@ test('default seed publishes selected trait and role vocabulary without a UUID f
     });
     const rerun = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port, journal });
     expect([...rerun.concepts].sort((left, right) => left.code.localeCompare(right.code))).toEqual(before);
-    expect(port.identities.get('vocabulary:vndb.character-trait:i73')).toBe(createIds.get('vocabulary:vndb.character-trait:i73'));
+    expect(port.identities.get('vocabulary:vndb.character-trait:i73')).toBe(
+      createIds.get('vocabulary:vndb.character-trait:i73'),
+    );
     const again = await importVndbCharacterTraits({
       tables,
       path: join(directory, 'state.sqlite'),
@@ -342,7 +340,9 @@ test('lying, release-scoped, retracted and parent-contradictory rows withhold on
     ).toBe(true);
 
     const hairSubject = port.subjects.get(hair.id)!.subject;
-    hairSubject.statements['schema:url'] = [{ value: { content: 'https://rezics.com/schemes/vndb/character-traits/other' } }];
+    hairSubject.statements['schema:url'] = [
+      { value: { content: 'https://rezics.com/schemes/vndb/character-traits/other' } },
+    ];
     const withheldUri = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port, journal });
     expect(withheldUri.concepts.map((concept) => concept.code).sort()).toEqual(['i10', 'i7', 'main']);
     hairSubject.statements['schema:url'] = [{ value: { content: characterTraitConceptUri('i73') } }];
@@ -353,7 +353,9 @@ test('lying, release-scoped, retracted and parent-contradictory rows withhold on
       (await planShowcaseCharacterVocabulary(tables, selected)).requirements,
     );
     expect(withheldScheme.concepts.some((concept) => concept.code === 'i73')).toBe(false);
-    hairSubject.statements['skos:inScheme'] = [{ value: { content: current.schemes.find((scheme) => scheme.taxonomy === 'vndb.character-trait')!.id } }];
+    hairSubject.statements['skos:inScheme'] = [
+      { value: { content: current.schemes.find((scheme) => scheme.taxonomy === 'vndb.character-trait')!.id } },
+    ];
     hairSubject.statements['skos:broader'] = [{ value: { content: role.id } }];
     const withheldParent = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port, journal });
     expect(withheldParent.concepts.map((concept) => concept.code).sort()).toEqual(['i10', 'i7', 'main']);
@@ -379,9 +381,11 @@ test('lying, release-scoped, retracted and parent-contradictory rows withhold on
       ),
     ).toEqual([]);
     expect(port.identities.get('c1')).toBe(createdCharacters.find(([key]) => key === 'c1')?.[1]);
-    expect(JSON.stringify(commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:character'))).not.toContain(
-      '/chars_vns/c2/v1/r9',
-    );
+    expect(
+      JSON.stringify(
+        commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:character'),
+      ),
+    ).not.toContain('/chars_vns/c2/v1/r9');
 
     const overflowParents = Array.from({ length: 14 }, (_, index) => `i${2000 + index}`);
     const overflowTables = await selectedTables(join(directory, 'overflow'), overflowParents);

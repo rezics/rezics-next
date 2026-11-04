@@ -305,7 +305,9 @@ function adoptedValues(read: unknown, property: string): string[] {
   const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
     .subject?.statements?.[property];
   if (!Array.isArray(statements)) return [];
-  return statements.flatMap((statement) => (typeof statement.value?.content === 'string' ? [statement.value.content] : []));
+  return statements.flatMap((statement) =>
+    typeof statement.value?.content === 'string' ? [statement.value.content] : [],
+  );
 }
 
 async function withholdContradictoryTraitParents(
@@ -315,7 +317,9 @@ async function withholdContradictoryTraitParents(
 ): Promise<SourceVocabularyBindings> {
   if (!parents.length) return bindings;
   const byCode = new Map(
-    bindings.concepts.filter((concept) => concept.taxonomy === characterTraitTaxonomy).map((concept) => [concept.code, concept]),
+    bindings.concepts
+      .filter((concept) => concept.taxonomy === characterTraitTaxonomy)
+      .map((concept) => [concept.code, concept]),
   );
   const omitted = new Set<string>();
   for (const edge of parents) {
@@ -534,7 +538,10 @@ function neededSchemes(terms: readonly ShowcaseCharacterTerm[]): CharacterTaxono
   return [...seen].sort();
 }
 
-function identityProfile(requirements: VndbCharacterVocabularyRequirements, journal: ShowcaseJournal): VndbCharacterVocabularyProfile {
+function identityProfile(
+  requirements: VndbCharacterVocabularyRequirements,
+  journal: ShowcaseJournal,
+): VndbCharacterVocabularyProfile {
   const creates = ackedCreates(journal);
   const traitSchemeId = creates.get(showcaseVocabularyExternalId(vocabularyKey(characterTraitTaxonomy)));
   const roleSchemeId = creates.get(showcaseVocabularyExternalId(vocabularyKey(appearanceRoleTaxonomy)));
@@ -626,7 +633,8 @@ export async function prepareShowcaseCharacterVocabulary(input: {
         })
       : [];
   });
-  if (schemeProposals.length) await sendMissing({ port: input.port, journal: input.journal, commands: schemeProposals });
+  if (schemeProposals.length)
+    await sendMissing({ port: input.port, journal: input.journal, commands: schemeProposals });
   const schemeRequirements = schemes.map((taxonomy) =>
     requirementFor(
       ownerKey,
@@ -662,7 +670,8 @@ export async function prepareShowcaseCharacterVocabulary(input: {
       labels: { [sourceNameLanguage(term.label)]: term.label },
     }),
   );
-  if (conceptCommands.length) await sendMissing({ port: input.port, journal: input.journal, commands: conceptCommands });
+  if (conceptCommands.length)
+    await sendMissing({ port: input.port, journal: input.journal, commands: conceptCommands });
   const conceptCreates = ackedCreates(input.journal);
   const parentIds = new Map<string, string[]>();
   for (const edge of vocabulary.requirements.parents) {
