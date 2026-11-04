@@ -259,8 +259,9 @@ function PrivateEntryReview({
     setSourceSavedBody(null);
     setSourceSavedObservation(null);
     setSourceConflictRevision(null);
-    if (!annotationCommand || !entryGuard) generation.current++;
     if (!entryGuard) {
+      generation.current++;
+      annotationBusy.current = false;
       setAnnotationCommand(null);
       setAnnotationNotice(null);
     }
@@ -289,6 +290,30 @@ function PrivateEntryReview({
       }
     });
   }, [sourceOwnerKey]);
+
+  useEffect(() => {
+    if (result?.kind !== 'signed-out') return;
+    retired.current = true;
+    generation.current++;
+    annotationBusy.current = false;
+    sourceBusy.current = false;
+    setDraft(null);
+    setReview(null);
+    setConfirmation(null);
+    setAnnotationCommand(null);
+    setAnnotationNotice(null);
+    setSavedAnnotation(null);
+    setLocalOutcome(null);
+    setDeparture(null);
+    setSourceEditor(null);
+    setSourceBaseObservation(null);
+    setSourceCommand(null);
+    setSourceNotice(null);
+    setSourceSavedBody(null);
+    setSourceSavedObservation(null);
+    setPrivateAuthorityRetired(true);
+    setRetirementKind('account');
+  }, [result?.kind]);
 
   const lastReadExposure = useRef(enabled);
   useEffect(() => {
@@ -422,7 +447,7 @@ function PrivateEntryReview({
     } catch {
       outcome = { kind: 'uncertain' };
     }
-    annotationBusy.current = false;
+    if (episode === generation.current) annotationBusy.current = false;
     if (!currentResult() || episode !== generation.current) return;
     if (outcome.kind === 'saved') {
       acceptEntry(outcome.entry);
@@ -667,7 +692,7 @@ function PrivateEntryReview({
     } catch {
       outcome = { kind: 'uncertain' };
     } finally {
-      sourceBusy.current = false;
+      if (episode === generation.current && sourceCommandIsCurrent(command)) sourceBusy.current = false;
     }
     if (!sourceCommandIsCurrent(command) || episode !== generation.current) return;
     if (outcome.kind === 'saved') {
