@@ -5,6 +5,7 @@ import type { FilterDocument } from '@rezics/filter';
 import { m } from '../src/paraglide/messages.js';
 import { ConditionEditor } from '../src/search/condition-editor';
 import { ConditionSavedFilter, editSavedFilterTree } from '../src/search/condition-saved-filter';
+import { conditionPresetCatalogue } from '../src/search/condition-preset-model';
 import { conditionTreeAdmission, type ConditionMetadata } from '../src/search/condition-editor-model';
 
 const thing: FilterDocument = { type: { in: ['ex:Thing'] } };
@@ -50,13 +51,15 @@ test('unavailable references stay identified and removable; additions without re
       locale: 'en',
     }),
   );
-  expect(retained).toContain(m.condition_saved_filter_label({ id: 'things/missing' }));
+  expect(retained).toContain('things/missing');
+  expect(retained).toContain(m.condition_saved_filter_reference());
   expect(retained).toContain(m.condition_saved_filter_unavailable_reference({ id: 'things/missing' }));
   expect(retained).toContain(m.condition_remove());
 
   const unavailable = renderToStaticMarkup(
     createElement(ConditionSavedFilter, {
-      filters: [],
+      catalogue: conditionPresetCatalogue({ types: {}, properties: {} }, 'en'),
+      owner: {},
       locale: 'en',
       canSelect: () => false,
       onSelect: () => false,

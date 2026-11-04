@@ -1,3 +1,6 @@
+import { useMemo } from 'react';
+import { conditionPresetCatalogue } from '../condition-preset-model';
+import { ConditionPresetName, ConditionPresetInspection } from '../condition-preset';
 import { parseDiscoveryFilter } from '@rezics/filter';
 import { requestLanguages } from '../../kernel/languages';
 import { PredicateDescription, rangeDescription } from './predicate';
@@ -34,6 +37,23 @@ export function SearchCoverage({
   const freshness = resultFreshness(observation.freshness, observation.as_of);
   const scope = state.resourceScope;
   const label = (id: string) => localizedLabel(data.conditionMetadata?.properties[id]?.labels ?? {}, locale).text || id;
+  const presets = useMemo(
+    () => (data.conditionMetadata ? conditionPresetCatalogue(data.conditionMetadata, locale) : undefined),
+    [data.conditionMetadata, locale],
+  );
+  const saved = (id: string) => (
+    <div key={JSON.stringify([id, locale, data.conditionMetadata?.digest, state])}>
+      {m.condition_saved_filter_reference({}, options)}:{' '}
+      {presets ? (
+        <>
+          <ConditionPresetName id={id} catalogue={presets} />
+          <ConditionPresetInspection key={id} id={id} catalogue={presets} locale={locale} />
+        </>
+      ) : (
+        m.condition_saved_filter_unavailable_reference({ id }, options)
+      )}
+    </div>
+  );
   const languages = state.languages ?? requestLanguages(locale);
   const resourcePredicate = (() => {
     try {
@@ -112,8 +132,12 @@ export function SearchCoverage({
               </li>
             ))}
           </ul>
-          {state.condition && <PredicateDescription value={state.condition} locale={locale} label={label} />}
-          {resourcePredicate && <PredicateDescription value={resourcePredicate} locale={locale} label={label} />}
+          {state.condition && (
+            <PredicateDescription value={state.condition} locale={locale} label={label} saved={saved} />
+          )}
+          {resourcePredicate && (
+            <PredicateDescription value={resourcePredicate} locale={locale} label={label} saved={saved} />
+          )}
           {(state.condition || state.filter) && <p>{m.search_context_predicates({}, options)}</p>}
           <p>{m.search_context_limits({}, options)}</p>
           <p>{m.search_context_refresh_help({}, options)}</p>
