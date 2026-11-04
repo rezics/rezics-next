@@ -235,9 +235,21 @@ const tick = (fn: () => unknown = () => {}) =>
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 function hostProps<T>(element: Element): T {
-  const key = Object.getOwnPropertyNames(element).find((name) => name.startsWith('__reactProps$'));
-  if (!key) throw new Error('React props are not attached to the rendered test element');
-  return (element as unknown as Record<string, unknown>)[key] as T;
+  for (let node: object | null = element; node; node = Object.getPrototypeOf(node)) {
+    const keys = Reflect.ownKeys(node);
+    const propsKey = keys.find((key) => typeof key === 'string' && key.startsWith('__reactProps$'));
+    if (typeof propsKey === 'string') return (node as Record<string, unknown>)[propsKey] as T;
+    const fiberKey = keys.find((key) => typeof key === 'string' && key.startsWith('__reactFiber$'));
+    if (typeof fiberKey === 'string') {
+      const fiber = (node as Record<string, unknown>)[fiberKey] as {
+        memoizedProps?: T;
+        pendingProps?: T;
+      };
+      if (fiber.memoizedProps) return fiber.memoizedProps;
+      if (fiber.pendingProps) return fiber.pendingProps;
+    }
+  }
+  throw new Error('React props are not attached to the rendered test element');
 }
 function formCallback(host: HTMLDivElement) {
   const form = host.querySelector('form');
@@ -570,9 +582,9 @@ test('healthy same-viewer rotation and equivalent refresh retain exact uncertain
             await tick(() => {
               const input = h.host.querySelector('[name="total"]')!;
               const props = hostProps<{
-                onChange: (event: { target: { value: string } }) => void;
+                onChange: (event: { currentTarget: { value: string } }) => void;
               }>(input);
-              props.onChange({ target: { value: '0' } });
+              props.onChange({ currentTarget: { value: '0' } });
             });
         }
         const first = await h.start(kind);
