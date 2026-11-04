@@ -71,13 +71,14 @@ observations after asynchronous enrichment. Movement fails the unchanged page wi
 it never refills rows, reranks, changes the raw frontier or creates another cursor. Concealed context has no sibling
 fallback target. Public cards have no private viewer state or commands. Native details and keyboard-operable spoiler
 reveal use the existing Content provenance and catalogue cover components. Reader replacement remains owned by
-Search's mounted request lifetime; the row issues no requests and keys its reveal state by review/opening identity.
+Search's mounted request lifetime; the row issues no requests and keys its reveal state by review/opening/source identity and locale.
 
 ### Cost: selected context
 
 For `R <= 100` selected reviews, `S <= R` distinct targets and `A <= R` public author identities, each composition
 uses two Content `hydrate` rounds (partition-grouped, at most 100 keys each), two selected `discloseThreads` rounds,
-one Semantic summary observation and its final `current` check, and one anonymous Accounts summary batch.
+one Semantic summary observation and its final `current` check, and two anonymous Accounts summary batches
+bracketing final foreign reads. Attribution movement retires the page together with its citation.
 Content hydration retains its exact-anchor probes, dependency/source-version work, native Subject/Board/place/Access
 checks and complete census contract. Each native thread disclosure retains its own ancestry and full-body admission
 (maximum 2 MiB per document); no history walk, vote read or candidate refill is added. Accounts may read their bounded
