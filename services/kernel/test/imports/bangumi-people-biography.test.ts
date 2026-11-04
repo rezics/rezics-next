@@ -187,7 +187,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     const currentRegistration = createSourceRegistration('bangumi', { source: alias });
     const legacyRegistration: SourceRegistration = {
       ...currentRegistration,
-      converter_revision: 'cross-media-entities@2',
+      converter_revision: 'cross-media-entities@3',
       convert(input, context) {
         const record = Object.fromEntries(
           Object.entries(input.record as Record<string, unknown>).filter(([key]) => key !== 'summary'),
@@ -195,7 +195,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
         const converted = convertCrossMediaEntity(
           { ...input, record },
           context,
-          { converterRevision: 'cross-media-entities@2', sourceKind: 'bangumi' },
+          { converterRevision: 'cross-media-entities@3', sourceKind: 'bangumi' },
         );
         return { ...converted, normalized: converted.normalizedRecord, coverAssets: [], mediaImportIntents: [] };
       },
@@ -241,7 +241,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     );
     expect(oldCommand?.source).toMatchObject({
       record_revision: 'unversioned',
-      converter_revision: 'cross-media-entities@2',
+      converter_revision: 'cross-media-entities@3',
     });
     const oldEnvelopeCount = runtime.captures.filter((capture) => capture.body === oldEnvelope).length;
 
@@ -272,7 +272,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       'person:8101',
       'person:8102',
     ]);
-    expect(biographyCommands.every((command) => command.source.converter_revision === 'cross-media-entities@3')).toBe(true);
+    expect(biographyCommands.every((command) => command.source.converter_revision === 'cross-media-entities@4')).toBe(true);
     expect(
       captured.some(
         (command) =>
