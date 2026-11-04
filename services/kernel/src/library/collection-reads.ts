@@ -64,7 +64,7 @@ import { readCollectionSourceMembers } from './owner-index-members.ts';
 import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
 import { createCollectionPreviewPreparation, type PreviewPreparationDependencies } from './collection-preview-work.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
-import type { ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
+import type { ViewerPersonalActionsReader, ViewerPersonalActionsPage } from './viewer-personal-actions.ts';
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
 
@@ -873,108 +873,63 @@ export function createCollectionReads(
   }
 
   /** Capture native source and reader lifetime with every home released before foreign work. */
-  async function observeMemberSource(
-    viewer: Actor,
-    id: string,
-    deadline: number,
-  ) {
+  async function observeMemberSource(viewer: Actor, id: string, deadline: number) {
     const capture = async () => {
-      const logical = await builtins.read(
-        viewer,
-        id,
-        "collection:read",
-        deadline,
-      );
+      const logical = await builtins.read(viewer, id, 'collection:read', deadline);
       const source = logical
-        ? {
-            logical,
-            version: await builtins.sourceVersion(
-              viewer,
-              logical,
-              deadline,
-              true,
-            ),
-          }
+        ? { logical, version: await builtins.sourceVersion(viewer, logical, deadline, true) }
         : await loadCollection(viewer, id, deadline);
       if (!source) throw notFound();
-      const reader =
-        viewer.kind === "account"
-          ? await withConnection(pool, (client) =>
-              readAccount(
-                deadlineClient(client, deadline),
-                routeOf(viewer.accountId)!,
-                viewer.accountId,
-              ),
-            )
-          : null;
+      const reader = viewer.kind === 'account'
+        ? await withConnection(pool, (client) =>
+            readAccount(deadlineClient(client, deadline), routeOf(viewer.accountId)!, viewer.accountId))
+        : null;
       return JSON.stringify({ source, reader, viewer }, (_key, value) =>
-        typeof value === "bigint" ? value.toString() : value,
-      );
+        typeof value === 'bigint' ? value.toString() : value);
     };
     const before = await capture();
     return async () => {
-      if (before !== (await capture())) throw new ProblemError("stale_cursor");
+      if (before !== await capture()) throw new ProblemError('stale_cursor');
     };
   }
 
   /** Attach the retained private projection only to exact native admitted occurrences. */
-  async function withViewerFacts<
-    T extends { members: readonly { subjectId: string; id?: string }[] },
-  >(
+  async function withViewerFacts<T extends { members: readonly { subjectId: string; id?: string }[] }>(
     viewer: Actor,
     result: T,
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
     revalidate?: () => Promise<void>,
   ) {
-    if (viewer.kind !== "account" || result.members.length === 0) return result;
+    if (viewer.kind !== 'account' || result.members.length === 0) return result;
     if (result.members.length > MAX_VIEWER_FACTS_ROWS)
-      throw new RangeError(
-        "Collection personal actions accept at most 100 raw members",
+      throw new RangeError('Collection personal actions accept at most 100 raw members');
+    let facts: ViewerPersonalActionsPage;
+    try {
+      const subjects = await readSubjectSummaryObservation(
+        { ...dependencies, actor: viewer, deadline },
+        [...new Set(result.members.map((member) => member.subjectId))],
       );
-    const subjects = await readSubjectSummaryObservation(
-      { ...dependencies, actor: viewer, deadline },
-      [...new Set(result.members.map((member) => member.subjectId))],
-    );
-    // Missing native type evidence is unavailable, never a fabricated type or canonical sibling operand.
-    const rows = result.members.flatMap((member, index) => {
-      const subject = subjects.summaries.get(member.subjectId);
-      return subject?.id === member.subjectId
-        ? [
-            {
-              rowKey: member.id ?? String(index),
-              subjectId: member.subjectId,
-              resourceType: subject.type,
-            },
-          ]
-        : [];
-    });
-    let facts;
-    if (rows.length !== result.members.length) {
-      facts = {
-        state: "unavailable",
-        reason: "identity",
-        retryable: true,
-      } as const;
-    } else if (!dependencies.viewerPersonalActions) {
-      facts = {
-        state: "unavailable",
-        reason: "currentness",
-        retryable: true,
-      } as const;
-    } else {
-      facts = await dependencies.viewerPersonalActions(
-        viewer,
-        rows,
-        STANDARD_QUESTION_ID,
-        deadline,
-      );
+      // Missing native type evidence is unavailable, never a fabricated type or canonical sibling operand.
+      const rows = result.members.flatMap((member, index) => {
+        const subject = subjects.summaries.get(member.subjectId);
+        return subject?.id === member.subjectId
+          ? [{ rowKey: member.id ?? String(index), subjectId: member.subjectId, resourceType: subject.type }]
+          : [];
+      });
+      if (rows.length !== result.members.length) {
+        facts = { state: 'unavailable', reason: 'identity', retryable: true };
+      } else if (!dependencies.viewerPersonalActions) {
+        facts = { state: 'unavailable', reason: 'currentness', retryable: true };
+      } else {
+        facts = await dependencies.viewerPersonalActions(viewer, rows, STANDARD_QUESTION_ID, deadline);
+      }
+      if (!(await subjects.current()))
+        facts = { state: 'unavailable', reason: 'currentness', retryable: true };
+    } catch (error) {
+      // Operand/size violations are errors, never a truncated or successful private result.
+      if (error instanceof RangeError || error instanceof TypeError) throw error;
+      facts = { state: 'unavailable', reason: 'currentness', retryable: true };
     }
-    if (!(await subjects.current()))
-      facts = {
-        state: "unavailable",
-        reason: "currentness",
-        retryable: true,
-      } as const;
     // This must follow the last foreign action and Semantic finalization, even for unavailable facts.
     await revalidate?.();
     return { ...result, viewerFacts: facts };

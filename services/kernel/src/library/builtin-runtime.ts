@@ -315,17 +315,17 @@ export function createBuiltinRuntime(
   ) {
     return snapshot(async (client) => {
       const owner = await admitted(client, actor);
-      if (!owner) throw new ProblemError("not_found");
-      if (source.builtinKind === "liked")
+      if (!owner) throw new ProblemError('not_found');
+      if (source.builtinKind === 'liked')
         return readLikedOriginalVersion(client, owner.accountId);
       const head = (
         await client.query<{ generation: string }>(
-          "SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2",
+          'SELECT generation::text AS generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2',
           [routeOf(owner.accountId), owner.accountId],
         )
       ).rows[0];
-      if (!head && !allowAbsent) throw new ProblemError("semantic_not_ready");
-      return head?.generation ?? "absent";
+      if (!head && !allowAbsent) throw new ProblemError('semantic_not_ready');
+      return head?.generation ?? 'absent';
     }, deadline);
   }
   async function resolve(actor: Actor, key: Exclude<BuiltinCollectionKey, { kind: 'liked' }>, deadline?: number) {
