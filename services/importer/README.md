@@ -1745,13 +1745,13 @@ continues to enforce the same public HTTPS citation policy; no invalid URL becom
 
 ### Carry exact VNDB credits through the normal selected-family seed
 
-Decision: Read staff-role bindings from current adopted Concept facts; keep the existing coarse VN staff edge only when its precise role binding is unavailable, and always require a bound character for a voice credit.
+Decision: Selected VNDB credit Concepts use exact source role codes as undetermined-language labels; local showcase stages them through the existing journal and withholds credits without current role or endpoint bindings.
 
-The normal cross-media seed now uses the existing staff-credit coordinator for selected `vn_staff` and `vn_seiyuu` rows. Staff aliases resolve to the planner's real staff owner, with credited spelling taken from the row note or that exact alias name. A mapped staff credit replaces its duplicate coarse graph edge with the same property and precise `wdt:P3831` role; voice edges publish only with a bound character and retain `wdt:P453`. Each proposal cites its exact table path, source row digest, VN revision and `vndb-staff-credits@1` converter revision. The importer journals that row provenance only when it matches the finite vocabulary request and the exact cited path and revision. The seed result exposes finite role requirements for the common publisher; it does not create or adopt Concepts. Pass `--vndb-credit-bindings <json>` or provide `.temp/cross-media-seed/vndb-credit-bindings.json` with the exact `schemeId` and selected `{code,id}` pairs. The importer rereads those current public subjects and verifies their types, source URIs and scheme membership. Missing or retracted bindings produce bounded omissions while other selected identities and credits continue.
+The normal cross-media seed uses the existing staff-credit coordinator for selected `vn_staff` and `vn_seiyuu` rows. Staff aliases resolve to the planner's actual staff owner, with credited spelling taken from the row note or that exact alias name. The existing vocabulary mapper emits precise `wdt:P3831` staff roles and qualified voice assertions with `wdt:P453`; every source credit table edge is withheld so an unavailable role or endpoint cannot fall back to an unqualified relation. Each assertion retains its exact table path, source row digest, VN revision and `vndb-staff-credits@1` converter revision. Local showcase review stages only the selected role scheme and Concepts through `ShowcaseJournal` and `publishShowcase`, recovers acknowledged UUIDs on restart, and supplies references only after the publisher's independent public read. The seed then rereads native and public subject type, URI and scheme membership before mapping. Ordinary imports remain proposal-only and may continue to use operator-supplied `--vndb-credit-bindings`; a local showcase run needs no generated UUID file. Missing, changed, refused and unavailable evidence stays distinct, and unrelated current roles continue independently.
 
-- Touches: selected-family `vn_staff`, `vn_seiyuu`, `staff_alias`, `staff` and character rows, exact current credit-type subject reads, the ordinary seed/importer journal and public bulk API. The existing staff-name worker retains preferred-name ownership; no alias becomes a person identity.
-- Bound: entities and works run serially so acknowledged person and character identities reach the shared coordinator before VN conversion. Each VN has at most 64 source-vocabulary rows and contributes to at most 512 distinct role requirements, within the existing candidate (≤300), command (≤100) and 65,536-byte envelope budgets. Overflow is a structured gap. Current binding reads are limited to one configured scheme and selected Concepts; no catalogue or label scan occurs.
-- Growth check: `services/importer/tests/showcase-vndb-credits.test.ts` covers the normal seed and two aliases of one owner. `services/kernel/test/imports/showcase-vndb-credits.test.ts` is the native accept/adopt/current-read journey and remains controller-owned; it is not a pass receipt here. The real-data public VN/person/character walkthrough remains the final M1 proof. No database growth claim is added.
+- Touches: selected-family work rows and at most 8,192 `vn_staff` / `vn_seiyuu` rows, same-owner `staff_alias` joins, selected Person and Character identities, the common native publisher, and current native/public subject reads. The staff-name worker retains preferred-name ownership; no alias becomes a person identity.
+- Bound: at most 64 credit rows per VN, 511 distinct role Concepts plus one scheme, and the existing 512 vocabulary-record, 100-command batch and 65,536-byte per-record limits. Each selected role is read once from the native API and once from the tokenless public API per preparation; no catalogue scan or label lookup occurs. Work remains O(selected credit rows + selected role codes + selected endpoints), with entity identities available before credit mapping.
+- Growth check: `services/importer/tests/showcase-vndb-credits.test.ts` covers journal staging, restart recovery, selected source endpoints, qualified roles and missing-role withholding. Existing importer reconciliation bounds remain; no new database growth claim is added. The native accept/adopt/current-read journey in `services/kernel/test/imports/showcase-vndb-credits.test.ts` and the real-data VN/person/character walkthrough remain controller-owned.
 
 ### Identify an imported VNDB contributor by preferred and additional source names
 
@@ -2155,6 +2155,14 @@ does not search for endpoints, create subjects or resolve labels. Mapping output
 uses the existing source alias, revision, digest, licence attribution and
 ordinary batch-write path. Mapping-specific command-key revisions prevent a
 sealed command from being replayed with changed statement bytes.
+
+The selected-family VNDB staff-credit coordinator supplies genuine `vn_staff`
+and `vn_seiyuu` rows to the same mapper after resolving same-owner alias IDs to
+their actual Person UUIDs and retaining exact Character UUIDs. Local review
+publishes only selected credit-type requirements through the existing showcase
+journal and publisher. Native and public current reads must agree on Concept
+type, URI and scheme membership before a qualified assertion is built; missing
+or unsupported cases remain omissions without an unqualified graph fallback.
 
 Exact unresolved values and descriptor admission failures are returned both as
 `sourceVocabularyGaps` and structured conversion diagnostics, including provider,

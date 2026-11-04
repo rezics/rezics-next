@@ -1,5 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { developmentShowcaseSelection, runDevelopmentSeed } from '../../../scripts/datasets/cross-media-seed.ts';
@@ -44,46 +45,52 @@ test('seed origins allow loopback HTTP and require HTTPS elsewhere', () => {
 
 test('development seed fetches the shared cache once and passes the local persona to the importer', async () => {
   const root = resolve(import.meta.dir, '../../..');
-  const key = join(root, '.temp', 'persona.key');
+  const keyDirectory = await mkdtemp(join(tmpdir(), 'cross-media-persona-key-'));
+  const key = join(keyDirectory, 'persona.key');
+  const jwk = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ format: 'jwk' });
+  await writeFile(key, JSON.stringify({ ...jwk, alg: 'ES256', kid: 'local-test' }), { mode: 0o600 });
   const args: string[] = [];
   let passedOptions: unknown;
   let fetches = 0;
-  await runDevelopmentSeed({
-    root,
-    env: {
-      REZICS_DEV_PERSONA_ACCOUNT_KEY: key,
-      REZICS_DEV_PERSONA_ACCOUNT: 'local-importer',
-      REZICS_DEV_PERSONA_CLIENT: 'local-cli',
-      REZICS_DEV_VNDB_CHARACTER_VOCABULARY: '/shared/vocabulary.json',
-      KERNEL_PORT: '4100',
-      AUTH_ORIGIN: 'http://localhost:4300',
-    },
-    fetchDumps: async () => {
-      fetches++;
-      return {
-        cacheRoot: '/shared/dumps',
-        bangumi: '/shared/dumps/bangumi',
-        vndb: '/shared/dumps/vndb',
-        bangumiArchive: '/shared/dumps/bangumi.zip',
-        vndbArchive: '/shared/dumps/vndb.tar.zst',
-      };
-    },
-    createTokenProvider: async () => async () => 'test-token',
-    seedCatalogue: async () => ({ subjects: {}, facts: [] }),
-    runSeed: async (argv, seedOptions) => {
-      args.push(...argv);
-      passedOptions = seedOptions;
-    },
-  });
-  const option = (name: string) => args[args.indexOf(name) + 1];
-  expect(fetches).toBe(1);
-  expect(option('--bangumi')).toBe('/shared/dumps/bangumi');
-  expect(option('--vndb')).toBe('/shared/dumps/vndb');
-  expect(option('--api')).toBe('http://127.0.0.1:4100');
-  expect(option('--auth')).toBe('http://localhost:4300');
-  expect(option('--account-key')).toBe(key);
-  expect(option('--account')).toBe('local-importer');
-  expect(option('--client')).toBe('local-cli');
-  expect(option('--vndb-character-vocabulary')).toBe('/shared/vocabulary.json');
-  expect(passedOptions).toMatchObject({ selection: developmentShowcaseSelection });
+  try {
+    await runDevelopmentSeed({
+      root,
+      env: {
+        REZICS_DEV_PERSONA_ACCOUNT_KEY: key,
+        REZICS_DEV_PERSONA_ACCOUNT: 'local-importer',
+        REZICS_DEV_PERSONA_CLIENT: 'local-cli',
+        REZICS_DEV_VNDB_CHARACTER_VOCABULARY: '/shared/vocabulary.json',
+        KERNEL_PORT: '4100',
+        AUTH_ORIGIN: 'http://localhost:4300',
+      },
+      fetchDumps: async () => {
+        fetches++;
+        return {
+          cacheRoot: '/shared/dumps',
+          bangumi: '/shared/dumps/bangumi',
+          vndb: '/shared/dumps/vndb',
+          bangumiArchive: '/shared/dumps/bangumi.zip',
+          vndbArchive: '/shared/dumps/vndb.tar.zst',
+        };
+      },
+      seedCatalogue: async () => ({ subjects: {}, facts: [] }),
+      runSeed: async (argv) => {
+        args.push(...argv);
+      },
+    });
+    const option = (name: string) => args[args.indexOf(name) + 1];
+    expect(fetches).toBe(1);
+    expect(option('--bangumi')).toBe('/shared/dumps/bangumi');
+    expect(option('--vndb')).toBe('/shared/dumps/vndb');
+    expect(option('--api')).toBe('http://127.0.0.1:4100');
+    expect(option('--auth')).toBe('http://localhost:4300');
+    expect(option('--account-key')).toBe(key);
+    expect(option('--account')).toBe('local-importer');
+    expect(option('--client')).toBe('local-cli');
+    expect(option('--vndb-character-vocabulary')).toBe('/shared/vocabulary.json');
+    expect(args).not.toContain('--vndb-credit-bindings');
+    expect(passedOptions).toMatchObject({ selection: developmentShowcaseSelection });
+  } finally {
+    await rm(keyDirectory, { recursive: true, force: true });
+  }
 });

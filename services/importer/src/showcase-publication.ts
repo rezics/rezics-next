@@ -157,7 +157,7 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal {
       .query<JournalCommandRow, [string, number]>(
         'SELECT command_key,command_digest,command_json,state,subject_id,candidate_id FROM showcase_command WHERE state=? ORDER BY command_key LIMIT ?',
       )
-      .all(state, showcaseLimits.candidates + showcaseLimits.records)
+      .all(state, showcaseLimits.candidates + showcaseLimits.records + showcaseLimits.vocabulary)
       .map((row) => ({
         command: JSON.parse(row.command_json) as BatchCommand,
         commandDigest: row.command_digest,

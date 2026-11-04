@@ -44,6 +44,10 @@ export type VndbStaffCredit = {
   characterId?: string;
 };
 export type VndbStaffCreditPlan = CrossMediaPlan & { staffCredits: VndbStaffCredit[] };
+export type VndbCreditVocabularyReadFailure = Readonly<
+  | { scope: 'scheme' }
+  | { scope: 'concept'; code: string }
+>;
 
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
@@ -73,7 +77,8 @@ function creditedSpelling(note: unknown, aliasName: string | undefined): { value
 function adoptedContent(read: unknown, property: string): string | undefined {
   const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
     .subject?.statements?.[property];
-  const content = statements?.[0]?.value?.content;
+  if (!statements || statements.length !== 1) return undefined;
+  const content = statements[0]?.value?.content;
   return typeof content === 'string' ? content : undefined;
 }
 function identity(id: string, type: string): NativeIdentity {
@@ -85,28 +90,72 @@ export async function readCreditTypeBindings(
   port: Pick<CrossMediaPort, 'readReviewedSubject'>,
   known: { schemeId: string; concepts: readonly { code: string; id: string }[] },
 ): Promise<SourceVocabularyBindings> {
+  return (await readCreditTypeBindingsDetailed(port, known)).bindings;
+}
+
+/** Keep an unavailable native read distinct from a disclosed but non-current binding. */
+export async function readCreditTypeBindingsDetailed(
+  port: Pick<CrossMediaPort, 'readReviewedSubject'>,
+  known: { schemeId: string; concepts: readonly { code: string; id: string }[] },
+  readPublicSubject?: (id: string) => Promise<unknown>,
+): Promise<{ bindings: SourceVocabularyBindings; unavailable: VndbCreditVocabularyReadFailure[] }> {
   const empty: SourceVocabularyBindings = { releaseDigest: bundledDigest, schemes: [], concepts: [] };
+  const unavailable: VndbCreditVocabularyReadFailure[] = [];
   let schemeRead;
   try {
     schemeRead = await port.readReviewedSubject(known.schemeId);
   } catch {
-    return empty;
+    return { bindings: empty, unavailable: [{ scope: 'scheme' }] };
   }
   const scheme = schemeRead as { subject?: { id?: string; type?: string } };
-  if (scheme.subject?.id !== known.schemeId || scheme.subject.type !== 'skos:ConceptScheme') return empty;
-  if (adoptedContent(schemeRead, 'schema:url') !== creditTypeSchemeUri) return empty;
+  if (scheme.subject?.id !== known.schemeId || scheme.subject.type !== 'skos:ConceptScheme')
+    return { bindings: empty, unavailable };
+  if (adoptedContent(schemeRead, 'schema:url') !== creditTypeSchemeUri) return { bindings: empty, unavailable };
+  if (readPublicSubject) {
+    let publicScheme;
+    try {
+      publicScheme = await readPublicSubject(known.schemeId);
+    } catch {
+      return { bindings: empty, unavailable: [{ scope: 'scheme' }] };
+    }
+    const current = publicScheme as { subject?: { id?: string; type?: string } };
+    if (
+      current.subject?.id !== known.schemeId ||
+      current.subject.type !== 'skos:ConceptScheme' ||
+      adoptedContent(publicScheme, 'schema:url') !== creditTypeSchemeUri
+    )
+      return { bindings: empty, unavailable };
+  }
   const concepts: SourceVocabularyBindings['concepts'][number][] = [];
   for (const item of known.concepts) {
     let conceptRead;
     try {
       conceptRead = await port.readReviewedSubject(item.id);
     } catch {
+      unavailable.push({ scope: 'concept', code: item.code });
       continue;
     }
     const concept = conceptRead as { subject?: { id?: string; type?: string } };
     if (concept.subject?.id !== item.id || concept.subject.type !== 'skos:Concept') continue;
     if (adoptedContent(conceptRead, 'schema:url') !== creditTypeConceptUri(item.code)) continue;
     if (adoptedContent(conceptRead, 'skos:inScheme') !== known.schemeId) continue;
+    if (readPublicSubject) {
+      let publicConcept;
+      try {
+        publicConcept = await readPublicSubject(item.id);
+      } catch {
+        unavailable.push({ scope: 'concept', code: item.code });
+        continue;
+      }
+      const current = publicConcept as { subject?: { id?: string; type?: string } };
+      if (
+        current.subject?.id !== item.id ||
+        current.subject.type !== 'skos:Concept' ||
+        adoptedContent(publicConcept, 'schema:url') !== creditTypeConceptUri(item.code) ||
+        adoptedContent(publicConcept, 'skos:inScheme') !== known.schemeId
+      )
+        continue;
+    }
     concepts.push({
       taxonomy: creditTypeTaxonomy,
       code: item.code,
@@ -117,17 +166,20 @@ export async function readCreditTypeBindings(
     });
   }
   return {
-    releaseDigest: bundledDigest,
-    schemes: [
-      {
-        taxonomy: creditTypeTaxonomy,
-        id: known.schemeId,
-        uri: creditTypeSchemeUri,
-        type: 'skos:ConceptScheme',
-        releaseDigest: bundledDigest,
-      },
-    ],
-    concepts,
+    bindings: {
+      releaseDigest: bundledDigest,
+      schemes: [
+        {
+          taxonomy: creditTypeTaxonomy,
+          id: known.schemeId,
+          uri: creditTypeSchemeUri,
+          type: 'skos:ConceptScheme',
+          releaseDigest: bundledDigest,
+        },
+      ],
+      concepts,
+    },
+    unavailable,
   };
 }
 

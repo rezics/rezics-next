@@ -435,6 +435,7 @@ export async function importShowcaseBooks(input: {
       creditGaps: [],
       vndbCreditDiagnostics: [],
       vndbCreditVocabularyRequirements: [],
+      vndbCreditVocabularyUnavailable: [],
       vndbCharacterProfileRequirements: [],
       vndbCharacterProfileOmissions: [],
       characterDiagnostics: [],

@@ -253,7 +253,6 @@ test('selected-VN credits reach adopted current facts through exact current bind
       ]),
     );
     await acceptAdopt(workId, 'schema:author');
-    await acceptAdopt(workId, 'schema:illustrator');
     await acceptAdopt(workId, 'wdt:P725');
 
     const readCurrent = async () => {
@@ -276,8 +275,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
         expect.objectContaining({ property: { id: 'wdt:P1932' }, value: { content: 'Writer Alias' } }),
       ]),
     );
-    expect(current.subject.statements['schema:illustrator']?.[0]?.value.content).toBe(personId);
-    expect(current.subject.statements['schema:illustrator']?.[0]?.qualifiers).toBeUndefined();
+    expect(current.subject.statements['schema:illustrator']).toBeUndefined();
     expect(current.subject.statements['wdt:P725']?.[0]?.value.content).toBe(personId);
     expect(current.subject.statements['wdt:P725']?.[0]?.qualifiers).toEqual(
       expect.arrayContaining([
@@ -299,7 +297,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
     current = await readCurrent();
     expect(current.subject.statements['schema:author']).toHaveLength(1);
     expect(current.subject.statements['wdt:P725']).toHaveLength(1);
-    expect(current.subject.statements['schema:illustrator']?.[0]?.qualifiers).toBeUndefined();
+    expect(current.subject.statements['schema:illustrator']).toBeUndefined();
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
