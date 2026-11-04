@@ -203,3 +203,60 @@ test('consumer request, response and retained-page work follows selected cohorts
   // Prepared consumer measurements only. No source-side query, pool or physical-growth claim.
   console.info('Board opening consumer samples', JSON.stringify(samples));
 });
+
+test('opening media uses only declared grants and never repairs unavailable media with another request', async () => {
+  const response = boardOpeningExample('current', 1);
+  const card = response.pinnedThreads[0]!;
+  const imageId = '0192f3a0-6c1e-7b2a-9d4e-000000000900';
+  if (card.thread.firstPost.availability !== 'available') throw new Error('Expected opening');
+  card.thread = { ...card.thread, firstPost: { ...card.thread.firstPost, mediaIds: [imageId] } };
+  card.media = {
+    state: 'available',
+    images: [
+      {
+        id: imageId,
+        containerId: card.thread.id,
+        digest: 'a'.repeat(64),
+        width: 640,
+        height: 480,
+        variants: [{ format: 'webp', width: 640, height: 480 }],
+        placeholder: null,
+        focalPoint: null,
+        credit: null,
+      },
+    ],
+  };
+  expect(await render(receiveBoardOpeningPage(response))).toContain('data-slot="document-image"');
+  card.media = { state: 'available', images: [{ ...card.media.images[0]!, id: 'not-declared' }] };
+  expect(await render(receiveBoardOpeningPage(response))).not.toContain('data-slot="document-image"');
+  card.media = { state: 'unavailable', images: [] };
+  const html = await render(receiveBoardOpeningPage(response));
+  expect(html).toContain(m.content_edition_image_unavailable());
+  expect(html).not.toContain(imageId);
+});
+
+test('the pin owner refreshes the installed opening once, preserving native new sort and cursor', async () => {
+  const { readBoardPinBoardRequest } = await import('../src/threads/board-pins/native');
+  const calls: URL[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      calls.push(new URL(new Request(input, init).url));
+      return Response.json(boardOpeningExample());
+    },
+  });
+  const result = await readBoardPinBoardRequest(
+    { boardId: boardOpeningId, sort: 'new', cursor: boardOpeningCursor },
+    new Request('https://site.test/en/boards'),
+    {},
+    client,
+    true,
+  );
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.pathname).toBe(`/v1/boards/${boardOpeningId}/page`);
+  expect(calls[0]!.searchParams.get('sort')).toBe('new');
+  expect(calls[0]!.searchParams.get('cursor')).toBe(boardOpeningCursor);
+  expect(result.state).toBe('ready');
+  if (result.state !== 'ready') throw new Error('Expected current reading');
+  expect(result.opening?.threads.threads).toHaveLength(20);
+  expect(result.management).toBe('denied');
+});

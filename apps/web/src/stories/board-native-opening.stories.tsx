@@ -17,12 +17,15 @@ function Opening({ state }: { state: State }) {
   const client = useMemo(
     () =>
       createKernelClient('https://board-opening.test', {
-        fetch: async () =>
-          state === 'restart'
-            ? Response.json({ code: 'invalid_cursor' }, { status: 400 })
-            : state === 'unavailable'
-              ? Response.json({ code: 'dependency_unavailable' }, { status: 503 })
-              : Response.json(boardOpeningExample(state)),
+        fetch: Object.assign(
+          async () =>
+            state === 'restart'
+              ? Response.json({ code: 'invalid_cursor' }, { status: 400 })
+              : state === 'unavailable'
+                ? Response.json({ code: 'dependency_unavailable' }, { status: 503 })
+                : Response.json(boardOpeningExample(state)),
+          { preconnect() {} },
+        ),
       }),
     [state],
   );
