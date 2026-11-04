@@ -56,7 +56,8 @@ import {
   discoveryGenerations,
 } from './generations.ts';
 import { discoveryIndexName } from './indices.ts';
-import { readFreshness } from './freshness.ts';
+import { createFreshness } from './freshness.ts';
+import { searchObservation } from './search-context.ts';
 import type { PublicDiscoveryConsumerOperations } from './public-filter-consumer-contract.ts';
 import {
   installPublicFilterCoveragePage,
@@ -623,6 +624,7 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
  * Source owns whole-population readiness. Neither a local census nor returned summaries replace it.
  */
 export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfig): DefaultDiscoverySearch {
+  const freshness = new Map<number, ReturnType<typeof createFreshness>>();
   const runtime = createDefaultPublicFilterRuntime(config);
   const source = publicFilterSource(config);
   const subjects = createRatedSubjectSource(config.pool, config.routeKey).source;
@@ -737,7 +739,16 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             });
           disclosureTarget = target;
           await assertDiscoveryCapabilityBinding(config.pool, target, ownerAdapters.metadataProducers);
-          return (await readFreshness(config.pool, discoveryConsumer(config.prefix, generation))).asOf.toISOString();
+          let reader = freshness.get(generation);
+          if (!reader) reader = createFreshness(config.pool, discoveryConsumer(config.prefix, generation));
+          // Keep the live and retained generations coalesced while requests overlap an alias change.
+          freshness.delete(generation);
+          freshness.set(generation, reader);
+          if (freshness.size > 4) {
+            const oldest = freshness.keys().next();
+            if (!oldest.done) freshness.delete(oldest.value);
+          }
+          return searchObservation(await reader.current());
         },
       })(principal, request, {
         ...context,

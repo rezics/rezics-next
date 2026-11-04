@@ -8140,5 +8140,21 @@
   "sources_actions_unavailable": "현재 수정 권한 정보를 불러올 수 없습니다. 공개 근거는 계속 표시됩니다.",
   "sources_correction_denied": "현재 권한으로는 수정을 제안할 수 없습니다.",
   "sources_current_reading": "현재 선택된 내용입니다. 제안만으로 새 근거가 선택되지는 않습니다.",
-  "sources_scope_unavailable": "이 경로는 Realm 편집 범위를 표현할 수 없어 비교할 수 없습니다."
+  "sources_scope_unavailable": "이 경로는 Realm 편집 범위를 표현할 수 없어 비교할 수 없습니다.",
+  "search_context_about": "이 결과 정보",
+  "search_context_refresh_help": "새로고침은 현재 독자로 같은 검색을 첫 페이지부터 실행합니다. 범위와 필터는 유지하고 이전 커서는 버립니다.",
+  "search_context_unavailable": "색인 최신 상태를 확인할 수 없습니다.",
+  "search_context_query": "실행한 검색: {query}",
+  "search_context_current": "네이티브 관측에서 색인 지연이 보고되지 않았습니다.",
+  "search_context_kinds": "결과 종류: {kinds}",
+  "search_context_catching_up": "업데이트를 색인에 반영 중입니다.",
+  "search_context_rating_question": "평가 질문: {id}",
+  "search_context_languages": "결과 언어 환경설정: {languages}",
+  "search_context_default_languages": "기본 언어 환경설정",
+  "search_context_scope": "검색 범위: {scope}",
+  "search_context_filtered_scope": "선택한 리소스 범위",
+  "search_context_predicates": "실행한 고급 조건과 저장된 필터가 적용됩니다. 대기 중인 편집은 이 결과를 변경하지 않습니다.",
+  "search_context_owner": "현재 독자가 선택한 비공개 조건이 적용됩니다.",
+  "search_context_refresh": "이 결과 새로고침",
+  "search_context_limits": "표시된 결과와 개수는 색인 완료를 증명하지 않습니다. 빈 페이지나 마지막 페이지도 완료를 보장하지 않습니다. 현재 공개 여부에 따라 결과가 제거될 수 있으며 색인은 접근 권한을 부여하지 않습니다."
 }

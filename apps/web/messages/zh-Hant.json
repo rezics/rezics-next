@@ -8140,5 +8140,21 @@
   "sources_actions_unavailable": "暫時無法取得更正資格資訊。公開證據仍然顯示。",
   "sources_correction_denied": "你目前的權限不允許提出更正。",
   "sources_current_reading": "這是目前選定的內容。提案不會自動選定新證據。",
-  "sources_scope_unavailable": "此路徑無法表達 Realm 的編輯範圍，因此無法比較。"
+  "sources_scope_unavailable": "此路徑無法表達 Realm 的編輯範圍，因此無法比較。",
+  "search_context_about": "關於這些結果",
+  "search_context_refresh_help": "重新整理會以目前讀者從第一頁重新執行相同搜尋，保留範圍和篩選條件，並捨棄舊游標。",
+  "search_context_unavailable": "無法確認索引的新鮮度。",
+  "search_context_query": "已執行的查詢：{query}",
+  "search_context_current": "原生觀測未回報索引延遲。",
+  "search_context_kinds": "結果類型：{kinds}",
+  "search_context_catching_up": "更新仍在編入索引。",
+  "search_context_rating_question": "評分問題：{id}",
+  "search_context_languages": "結果語言偏好：{languages}",
+  "search_context_default_languages": "預設語言偏好",
+  "search_context_scope": "搜尋範圍：{scope}",
+  "search_context_filtered_scope": "已選資源範圍",
+  "search_context_predicates": "已執行的進階條件和已儲存篩選器適用於這些結果。待套用的編輯不會改變這些結果。",
+  "search_context_owner": "適用目前讀者所選的私有條件。",
+  "search_context_refresh": "重新整理這些結果",
+  "search_context_limits": "可見結果及類型計數不能證明索引完整。空頁或沒有下一頁也不保證完整。目前公開狀態檢查可移除索引命中；索引進度不授予存取權限。"
 }

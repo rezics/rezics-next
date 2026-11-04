@@ -1,3 +1,4 @@
+import { resultFreshness } from './search-context/observation';
 import * as v from 'valibot';
 import {
   collectionCurator,
@@ -126,10 +127,19 @@ const legacyHit = v.object({
   ...catalogueFields,
   labels: textMap,
 });
+const freshness = v.optional(
+  v.fallback(
+    v.strictObject({
+      state: v.picklist(['current', 'catching-up', 'unavailable']),
+    }),
+    { state: 'unavailable' as const },
+  ),
+);
 const legacyPage = v.object({
   subjects: v.pipe(v.array(legacyHit), v.maxLength(100)),
   next: v.nullable(v.string()),
   as_of: v.string(),
+  freshness,
 });
 const route = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(65535));
 const resourceId = v.pipe(v.string(), v.minLength(1));
@@ -311,6 +321,7 @@ const page = v.object({
   kinds,
   next: v.nullable(v.string()),
   as_of: v.string(),
+  freshness,
   viewerFacts: v.exactOptional(viewerFacts),
   collectionFollows: v.exactOptional(collectionFollows),
 });
@@ -359,7 +370,7 @@ export function discoveryKey(hit: DiscoveryHit): string {
 export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
   const parsed = v.safeParse(page, value);
   if (!parsed.success) return;
-  const result = parsed.output;
+  const result = { ...parsed.output, freshness: resultFreshness(parsed.output.freshness, parsed.output.as_of) };
   for (const hit of result.hits) {
     if (hit.key.id !== hit.summary.value.id) return;
     switch (hit.summary.kind) {

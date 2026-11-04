@@ -6,6 +6,7 @@ import {
   WORK_CONTEXT_LIMITS,
 } from './work-context.ts';
 import { CollectionCuratorSchema, CollectionPreviewSchema, FollowDiscoverySchema } from './collection-context-http.ts';
+import { SearchFreshnessSchema } from './search-context.ts';
 import type { Static } from 'typebox';
 import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
@@ -280,6 +281,7 @@ export const DiscoveryPageSchema = t.Object(
     ),
     next: continuation,
     as_of: t.String({ format: 'date-time' }),
+    freshness: t.Optional(SearchFreshnessSchema),
     viewerFacts: t.Optional(viewerFacts),
     collectionFollows: t.Optional(FollowDiscoverySchema),
   },
