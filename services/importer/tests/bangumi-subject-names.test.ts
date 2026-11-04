@@ -54,8 +54,7 @@ async function plan(directory: string, record: object) {
       if (provider === 'bangumi' && table === 'subject') yield* dump.rows(provider, table);
       if (provider === 'vndb' && table === 'vn_titles')
         yield* vnIds.map((id, index) => ({ id, lang: 'ja', official: 't', title: titles[index]!, latin: null }));
-      if (provider === 'vndb' && table === 'vn')
-        yield* vnIds.map((id) => ({ id, olang: 'ja', alias: null }));
+      if (provider === 'vndb' && table === 'vn') yield* vnIds.map((id) => ({ id, olang: 'ja', alias: null }));
       if (provider === 'vndb' && table === 'entry_meta')
         yield* vnIds.map((id) => ({ id, revision: '1', lastmod: '2026-10-25 00:00:00+00' }));
     },
@@ -139,10 +138,13 @@ test('selected-family Bangumi TVAnime imports bounded names through the register
     const first = await run(selected);
     expect(first.runs.bangumi?.status).toBe('committed');
     const firstNames = nameCommands(sent);
-    expect(firstNames.map((command) => ({
-      property: command.op === 'propose' ? command.statement.property.id : '',
-      value: command.op === 'propose' && command.statement.value.type === 'value' ? command.statement.value.content : null,
-    }))).toEqual([
+    expect(
+      firstNames.map((command) => ({
+        property: command.op === 'propose' ? command.statement.property.id : '',
+        value:
+          command.op === 'propose' && command.statement.value.type === 'value' ? command.statement.value.content : null,
+      })),
+    ).toEqual([
       { property: 'schema:alternateName', value: { language: 'und', text: 'Alternate title' } },
       { property: 'schema:alternateName', value: { language: 'und', text: 'CLANNAD After Story' } },
       { property: 'schema:alternateName', value: { language: 'und', text: 'クラナド' } },

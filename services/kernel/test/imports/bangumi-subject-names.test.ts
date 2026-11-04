@@ -15,13 +15,18 @@ const subject = (changed = false) => ({
 |别名=
 * クラナド
 * Alternate title
-${changed ? '* New source alias\n' : ''}}}`, 
+${changed ? '* New source alias\n' : ''}}}`,
 });
 const feed = (record: object) => `${JSON.stringify(record)}\n`;
 const content = (candidate: Candidate) =>
   candidate.statement.value.type === 'value' ? candidate.statement.value.content : undefined;
 
-async function acceptAndAdopt(cli: Awaited<ReturnType<typeof openProviderCli>>, id: string, property: string, candidates: Candidate[]) {
+async function acceptAndAdopt(
+  cli: Awaited<ReturnType<typeof openProviderCli>>,
+  id: string,
+  property: string,
+  candidates: Candidate[],
+) {
   for (const candidate of candidates) {
     const accepted = await cli.editor.http(`/v1/subjects/${id}/candidates/${candidate.id}:accept`, {
       context: GLOBAL_CONTEXT,
@@ -61,7 +66,9 @@ test('ordinary Bangumi CLI proposes, adopts, reopens and facts-fences TVAnime na
       converter_revision: registration.converter_revision,
       state: 'present',
     });
-    const commands = first.writes.flatMap((exchange) => (JSON.parse(exchange.bytes!) as { commands: BatchCommand[] }).commands);
+    const commands = first.writes.flatMap(
+      (exchange) => (JSON.parse(exchange.bytes!) as { commands: BatchCommand[] }).commands,
+    );
     const bootstrap = commands.find((command) => command.op === 'create' && command.source.external_id === externalId)!;
     const acknowledgement = first.writes
       .flatMap((exchange) => (JSON.parse(exchange.responseBytes) as BatchWriteResult).results)
@@ -70,8 +77,12 @@ test('ordinary Bangumi CLI proposes, adopts, reopens and facts-fences TVAnime na
 
     const names = await cli.candidates(id, 'schema:name');
     const aliases = await cli.candidates(id, 'schema:alternateName');
-    const chinese = names.find((candidate) => JSON.stringify(content(candidate)) === JSON.stringify({ language: 'zh', text: '中文题名' }))!;
-    const alternate = aliases.find((candidate) => JSON.stringify(content(candidate)) === JSON.stringify({ language: 'und', text: 'クラナド' }))!;
+    const chinese = names.find(
+      (candidate) => JSON.stringify(content(candidate)) === JSON.stringify({ language: 'zh', text: '中文题名' }),
+    )!;
+    const alternate = aliases.find(
+      (candidate) => JSON.stringify(content(candidate)) === JSON.stringify({ language: 'und', text: 'クラナド' }),
+    )!;
     expect(names).toHaveLength(2);
     expect(aliases).toHaveLength(2);
     for (const candidate of [...names, ...aliases]) {
