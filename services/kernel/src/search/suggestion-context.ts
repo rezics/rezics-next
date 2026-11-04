@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { isCalendarDate } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
 
 export type SuggestionContextLabel = Readonly<{ value: string; language: string }>;
@@ -93,22 +94,17 @@ function validProperty(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && [...value].length <= 128;
 }
 
-function daysInMonth(year: number, month: number): number {
-  if (month === 2) return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
-  return [4, 6, 9, 11].includes(month) ? 30 : 31;
-}
-
 function validDateValue(value: unknown, precision: 'year' | 'month' | 'day'): value is string {
   if (typeof value !== 'string') return false;
-  if (precision === 'year') return /^\d{4}$/.test(value);
+  if (precision === 'year') return /^\d{4}$/.test(value) && isCalendarDate({ year: Number(value) });
   const month = /^(\d{4})-(\d{2})$/.exec(value);
-  if (precision === 'month') return !!month && Number(month[2]) >= 1 && Number(month[2]) <= 12;
+  if (precision === 'month') return !!month && isCalendarDate({ year: Number(month[1]), month: Number(month[2]) });
   const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!day) return false;
   const year = Number(day[1]);
   const monthNumber = Number(day[2]);
   const dayNumber = Number(day[3]);
-  return monthNumber >= 1 && monthNumber <= 12 && dayNumber >= 1 && dayNumber <= daysInMonth(year, monthNumber);
+  return isCalendarDate({ year, month: monthNumber, day: dayNumber });
 }
 
 function validDate(value: unknown): value is SuggestionContextDate {
