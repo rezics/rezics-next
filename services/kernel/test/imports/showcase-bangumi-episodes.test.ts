@@ -27,9 +27,27 @@ const episodes = [
 function tables() {
   return {
     async *rows(provider: 'bangumi' | 'vndb', table: string) {
-      if (provider !== 'bangumi') return;
-      if (table === 'subject') yield { id: 81, type: 2, name: 'STEINS;GATE' };
-      if (table === 'episode') yield* episodes;
+      if (provider === 'bangumi' && table === 'subject') {
+        yield { id: 81, type: 2, name: 'STEINS;GATE' };
+        yield { id: 82, type: 2, name: 'CLANNAD' };
+        yield { id: 83, type: 2, name: 'Fate/stay night' };
+      }
+      if (provider === 'bangumi' && table === 'episode') yield* episodes;
+      if (provider === 'vndb' && table === 'vn_titles') {
+        yield { id: 'v81', lang: 'ja', title: 'STEINS;GATE', latin: 'STEINS;GATE', official: 't' };
+        yield { id: 'v82', lang: 'ja', title: 'CLANNAD', latin: 'CLANNAD', official: 't' };
+        yield { id: 'v83', lang: 'ja', title: 'Fate/stay night', latin: 'Fate/stay night', official: 't' };
+      }
+      if (provider === 'vndb' && table === 'vn') {
+        yield { id: 'v81', olang: 'ja', alias: null };
+        yield { id: 'v82', olang: 'ja', alias: null };
+        yield { id: 'v83', olang: 'ja', alias: null };
+      }
+      if (provider === 'vndb' && table === 'entry_meta') {
+        yield { id: 'v81', revision: '1', lastmod: '2026-11-01' };
+        yield { id: 'v82', revision: '1', lastmod: '2026-11-01' };
+        yield { id: 'v83', revision: '1', lastmod: '2026-11-01' };
+      }
     },
   };
 }
@@ -174,6 +192,13 @@ test('default seed exposes adopted Episode kind and exact parent, then rechecks 
     }
 
     const plan = await planCrossMediaSeed(tables());
+    const deliveryKeys = new Set(['81', ...episodes.map((episode) => `episode:${episode.id}`)]);
+    plan.records.bangumi = plan.records.bangumi.filter((record) => deliveryKeys.has(record.key));
+    plan.entities.bangumi = plan.entities.bangumi.filter((record) => deliveryKeys.has(record.key));
+    plan.records.vndb = [];
+    plan.entities.vndb = [];
+    plan.edges = plan.edges.filter((edge) => edge.holder.startsWith('episode:'));
+    plan.credits = [];
     const state = join(directory, 'state.sqlite');
     const manifest = {
       'bangumi-episode-types-scheme': schemeId,
@@ -186,7 +211,7 @@ test('default seed exposes adopted Episode kind and exact parent, then rechecks 
         state,
         runtime!.importTransport,
         { origin: 'https://kernel.import.test' },
-        { episodeCatalogueSubjects: manifest },
+        { episodeCatalogueSubjects: manifest, providers: ['bangumi'] },
       );
     const first = await seed();
     const firstEpisode = first.readings.find((reading) => reading.externalId === 'episode:900002');
