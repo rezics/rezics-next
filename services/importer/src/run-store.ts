@@ -1874,15 +1874,21 @@ export class RunStore<Projection = BatchStatement[]> {
       }
       const row = JSON.parse(e.row_json) as RecordRow;
       for (const c of commands) {
-        if (
+        const sourceMismatch =
           c.source.source !== run.source ||
           c.source.external_id !== key ||
           ((c.source.digest !== row.digest ||
             c.source.record_revision !== row.recordRevision ||
             c.source.converter_revision !== row.converter_revision) &&
-            !sourceVocabularyOriginMatches(c, row.recordKey, row.recordRevision, input.sourceVocabulary))
-        )
+            !sourceVocabularyOriginMatches(c, row.recordKey, row.recordRevision, input.sourceVocabulary));
+        if (sourceMismatch) {
+          console.error('source vocabulary plan mismatch', {
+            command: c.source,
+            row: { recordKey: row.recordKey, recordRevision: row.recordRevision, converter_revision: row.converter_revision, digest: row.digest },
+            origins: input.sourceVocabulary?.rows.map((sourceRow) => ({ path: sourceRow.path, origin: sourceRow.origin })),
+          });
           fail();
+        }
       }
       if (e.kind && commands.length && e.bytes !== bytes) throw new Error('Prepared command envelope is immutable');
       if (!e.kind) {
