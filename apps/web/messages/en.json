@@ -9236,5 +9236,10 @@
   "subject_short_description": "Short description",
   "subject_synopsis_advice_refused": "Correction advice says this action is refused.",
   "subject_synopsis_advice_unavailable": "Correction advice is unavailable.",
-  "subject_synopsis_return": "Return to this reading"
+  "subject_synopsis_return": "Return to this reading",
+  "profile_contribution_action_denied": "This action is currently not allowed.",
+  "profile_contribution_action_missing": "Current advice for this action is missing.",
+  "profile_contribution_action_withheld": "Advice for this action is withheld.",
+  "profile_contribution_action_not_applicable": "This action does not apply to this contribution.",
+  "profile_contribution_action_failed": "Current action advice could not be loaded. Retry to check again."
 }

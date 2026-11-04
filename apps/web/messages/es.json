@@ -9144,5 +9144,10 @@
   "subject_short_description": "Descripción breve",
   "subject_synopsis_advice_refused": "La recomendación de corrección indica que esta acción no está permitida.",
   "subject_synopsis_advice_unavailable": "La recomendación de corrección no está disponible.",
-  "subject_synopsis_return": "Volver a esta lectura"
+  "subject_synopsis_return": "Volver a esta lectura",
+  "profile_contribution_action_denied": "Esta acción no está permitida actualmente.",
+  "profile_contribution_action_missing": "Falta la información actual de esta acción.",
+  "profile_contribution_action_withheld": "La información de esta acción no se muestra.",
+  "profile_contribution_action_not_applicable": "Esta acción no se aplica a esta contribución.",
+  "profile_contribution_action_failed": "No se pudo cargar la información actual de las acciones. Vuelve a intentarlo."
 }

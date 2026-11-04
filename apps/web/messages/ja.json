@@ -9144,5 +9144,10 @@
   "subject_short_description": "短い説明",
   "subject_synopsis_advice_refused": "訂正に関する案内では、この操作は拒否されています。",
   "subject_synopsis_advice_unavailable": "訂正に関する案内を利用できません。",
-  "subject_synopsis_return": "この読み取り位置に戻る"
+  "subject_synopsis_return": "この読み取り位置に戻る",
+  "profile_contribution_action_denied": "この操作は現在許可されていません。",
+  "profile_contribution_action_missing": "この操作の現在の案内がありません。",
+  "profile_contribution_action_withheld": "この操作の案内は非公開です。",
+  "profile_contribution_action_not_applicable": "この操作はこの投稿には適用されません。",
+  "profile_contribution_action_failed": "現在の操作の案内を読み込めませんでした。再試行してください。"
 }

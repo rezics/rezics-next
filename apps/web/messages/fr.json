@@ -9144,5 +9144,10 @@
   "subject_short_description": "Description courte",
   "subject_synopsis_advice_refused": "L’avis de correction indique que cette action est refusée.",
   "subject_synopsis_advice_unavailable": "L’avis de correction est indisponible.",
-  "subject_synopsis_return": "Revenir à cette lecture"
+  "subject_synopsis_return": "Revenir à cette lecture",
+  "profile_contribution_action_denied": "Cette action n’est pas autorisée actuellement.",
+  "profile_contribution_action_missing": "Les informations actuelles sur cette action sont absentes.",
+  "profile_contribution_action_withheld": "Les informations sur cette action ne sont pas divulguées.",
+  "profile_contribution_action_not_applicable": "Cette action ne s’applique pas à cette contribution.",
+  "profile_contribution_action_failed": "Impossible de charger les informations actuelles sur les actions. Réessayez."
 }

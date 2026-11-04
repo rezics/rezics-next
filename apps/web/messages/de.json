@@ -9144,5 +9144,10 @@
   "subject_short_description": "Kurzbeschreibung",
   "subject_synopsis_advice_refused": "Die Korrekturempfehlung lehnt diese Aktion ab.",
   "subject_synopsis_advice_unavailable": "Die Korrekturempfehlung ist nicht verfügbar.",
-  "subject_synopsis_return": "Zu dieser Lesestelle zurückkehren"
+  "subject_synopsis_return": "Zu dieser Lesestelle zurückkehren",
+  "profile_contribution_action_denied": "Diese Aktion ist derzeit nicht erlaubt.",
+  "profile_contribution_action_missing": "Aktuelle Hinweise zu dieser Aktion fehlen.",
+  "profile_contribution_action_withheld": "Hinweise zu dieser Aktion werden zurückgehalten.",
+  "profile_contribution_action_not_applicable": "Diese Aktion ist für diesen Beitrag nicht anwendbar.",
+  "profile_contribution_action_failed": "Aktuelle Aktionshinweise konnten nicht geladen werden. Versuche es erneut."
 }

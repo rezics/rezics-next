@@ -9144,5 +9144,10 @@
   "subject_short_description": "짧은 설명",
   "subject_synopsis_advice_refused": "정정 안내에서 이 작업은 거부되었습니다.",
   "subject_synopsis_advice_unavailable": "정정 안내를 사용할 수 없습니다.",
-  "subject_synopsis_return": "이 읽기 위치로 돌아가기"
+  "subject_synopsis_return": "이 읽기 위치로 돌아가기",
+  "profile_contribution_action_denied": "현재 이 작업은 허용되지 않습니다.",
+  "profile_contribution_action_missing": "이 작업에 대한 현재 안내가 없습니다.",
+  "profile_contribution_action_withheld": "이 작업에 대한 안내는 공개되지 않습니다.",
+  "profile_contribution_action_not_applicable": "이 작업은 이 기여에 적용되지 않습니다.",
+  "profile_contribution_action_failed": "현재 작업 안내를 불러오지 못했습니다. 다시 시도해 주세요."
 }

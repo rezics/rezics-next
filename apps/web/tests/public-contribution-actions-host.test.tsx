@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToString } from 'react-dom/server';
-import { act, createElement, useState, StrictMode } from 'react';
+import { act, createElement, useState, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { dirname } from 'node:path';
 
@@ -22,8 +22,10 @@ type ContributionActionsEpisode =
 const { sessionQuery } = await import('../src/session/query');
 const { unavailableAuthorContributionActionsWire } =
   await import('../src/accounts/public-profile/contribution-actions/receiver');
-const { rememberContribution, restoreContributionRecovery } =
+const { rememberContribution, restoreContributionRecovery, contributionReturnOccurrence } =
   await import('../src/accounts/public-profile/contributions/navigation');
+const { ContributionAdvicePresentation, ContributionWatch } =
+  await import('../src/accounts/public-profile/contribution-actions/presentation');
 const { originalContributionReference, contributionCommandTarget, contributionOperationAdvice } =
   await import('../src/accounts/public-profile/contribution-actions/advice');
 type NativeAdvice = import('../src/accounts/public-profile/contribution-actions/advice').NativeContributionAdvice;
@@ -249,7 +251,7 @@ test('an admitted posts page mounts one bounded host and never derives a selecti
   client.clear();
 });
 
-test('mounted host shares reader retirement and reacquires only the current original page', async () => {
+async function installDom() {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -260,6 +262,7 @@ test('mounted host shares reader retirement and reacquires only the current orig
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    Element: window.Element,
     Node: window.Node,
     scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
@@ -267,6 +270,21 @@ test('mounted host shares reader retirement and reacquires only the current orig
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   }
+  return {
+    window,
+    async close() {
+      await window.happyDOM.close();
+      for (const [key, descriptor] of originals) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
+    },
+  };
+}
+
+test('mounted host shares reader retirement and reacquires only the current original page', async () => {
+  const dom = await installDom();
+  const { window } = dom;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const session = { state: 'signed-in', subject: 'viewer-a', csrfToken: 'original-credential' };
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null });
@@ -355,6 +373,34 @@ test('mounted host shares reader retirement and reacquires only the current orig
     restoreContributionRecovery(recovery, window);
     expect(recovery.hidden).toBe(true);
     expect(document.activeElement).toBe(destination);
+    const originalAddress = window.location.href;
+    const occurrence = contributionReturnOccurrence({ id: 'removed-row', revisionId: id });
+    contribution.dataset.profileContributionOccurrence = occurrence;
+    for (const href of [
+      '/en/threads/original',
+      '/en/threads/original?post=original',
+      '/en/threads/original?post=parent',
+    ]) {
+      destination.setAttribute('href', href);
+      rememberContribution('removed-row', href, window, occurrence);
+      destination.blur();
+      restoreContributionRecovery(recovery, window);
+      expect(document.activeElement).toBe(destination);
+      expect(window.location.href).toBe(originalAddress);
+    }
+    // An equal row ID and destination URL cannot lend focus to a replacement revision.
+    contribution.dataset.profileContributionOccurrence = contributionReturnOccurrence({
+      id: 'removed-row',
+      revisionId: 'replacement',
+    });
+    restoreContributionRecovery(recovery, window);
+    expect(recovery.hidden).toBe(false);
+    expect(document.activeElement).toBe(recovery);
+    contribution.dataset.profileContributionOccurrence = occurrence;
+    destination.remove();
+    restoreContributionRecovery(recovery, window);
+    expect(recovery.hidden).toBe(false);
+    expect(document.activeElement).toBe(recovery);
     region.remove();
     await router.load();
     await flush(() =>
@@ -429,10 +475,142 @@ test('mounted host shares reader retirement and reacquires only the current orig
     await flush(() => root.unmount());
     client.clear();
     node.remove();
-    await window.happyDOM.close();
-    for (const [key, descriptor] of originals) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
+    await dom.close();
+  }
+});
+
+test('prepared current advice keeps native watch custody through uncertain readback and deliberate retry', async () => {
+  const dom = await installDom();
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: id, csrfToken: 'original-credential' });
+  const node = document.createElement('div');
+  document.body.append(node);
+  const root = createRoot(node);
+  const publicState = { availability: 'available', visibility: 'published' };
+  const firstPost = { ...publicState, threadId: id, revisionId: id };
+  const row = { ...publicState, id, authorId: id, boardId: id, firstPost, kind: 'discussion' };
+  const input = {
+    accountId: id,
+    view: 'discussion' as const,
+    cursor: 'original+/=',
+    proof: 'native-proof',
+    references: [{ type: 'content.thread' as const, id, placeId: id, sourceRevisionId: id }],
+  };
+  const source: NativeAdvice = {
+    viewer: { kind: 'account', id },
+    currentness: { actions: 'current' },
+    actions: {
+      state: 'current',
+      retryable: false,
+      references: [
+        {
+          type: 'content.thread',
+          id,
+          sourceRevisionId: id,
+          state: 'current',
+          operations: [{ action: 'thread:watch', operationId: 'thread.watch', state: 'available' }],
+        },
+      ],
+    },
+  };
+  type Command = import('../src/threads/thread-watch-native').ThreadWatchCommand;
+  const commands: Command[] = [];
+  const native = {
+    async read() {
+      return { kind: 'confirmed' as const, state: { watching: true } };
+    },
+    async set(command: Command) {
+      commands.push(command);
+      return { kind: commands.length === 1 ? ('unknown' as const) : ('confirmed' as const) };
+    },
+  };
+  const scope = {
+    input,
+    row,
+    source,
+    reader: id,
+    locale: 'en' as const,
+    isCurrent: () => true,
+    operation: () => ({
+      reader: id,
+      operation: 'watch' as const,
+      current: () => true,
+      credential: () => 'original-credential',
+    }),
+  };
+  const render = async (children: ReactNode) =>
+    act(async () => {
+      root.render(<QueryClientProvider client={client}>{children}</QueryClientProvider>);
+    });
+  const click = async (label: string) =>
+    act(async () => {
+      const button = [...node.querySelectorAll('button')].find((item) => item.textContent === label);
+      expect(button).toBeDefined();
+      button!.click();
+    });
+  try {
+    await render(
+      <ContributionWatch
+        presentation={scope}
+        watching={false}
+        returnTo="/en/accounts/author/discussion"
+        native={native}
+      />,
+    );
+    await click('Watch');
+    expect(commands[0]).toMatchObject({ threadId: id, viewerId: id, csrfToken: 'original-credential', watching: true });
+    await click('Check watch status');
+    expect(node.textContent).toContain('Retry the same action');
+    expect(commands).toHaveLength(1);
+    await click('Retry the same action');
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(commands[0]);
+    expect(node.textContent).not.toContain('Stop watching');
+    for (const state of [
+      'denied',
+      'missing',
+      'withheld',
+      'sign_in_required',
+      'not_applicable',
+      'unavailable',
+      'retired',
+      'failed',
+    ] as const) {
+      await render(
+        <ContributionAdvicePresentation state={state} label="Watch" locale="en">
+          <button>Native command</button>
+        </ContributionAdvicePresentation>,
+      );
+      expect(node.querySelector('[data-advice-state]')?.getAttribute('data-advice-state')).toBe(state);
+      expect(node.querySelector('button')).toBeNull();
+      expect(node.querySelector(state === 'failed' ? '[role="alert"]' : '[role="status"]')?.textContent).toBeTruthy();
     }
+    const denied: NativeAdvice = {
+      ...source,
+      actions: {
+        ...source.actions,
+        references: [
+          {
+            ...source.actions.references[0]!,
+            operations: [{ action: 'thread:watch', operationId: 'thread.watch', state: 'denied' }],
+          },
+        ],
+      },
+    };
+    await render(
+      <ContributionWatch
+        presentation={{ ...scope, source: denied }}
+        watching={false}
+        returnTo="/en/accounts/author/discussion"
+        native={native}
+      />,
+    );
+    expect(node.textContent).toContain('This action is currently not allowed.');
+    expect(node.querySelector('button')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    node.remove();
+    await dom.close();
   }
 });

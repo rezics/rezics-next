@@ -9144,5 +9144,10 @@
   "subject_short_description": "简短描述",
   "subject_synopsis_advice_refused": "更正建议表明此操作已被拒绝。",
   "subject_synopsis_advice_unavailable": "更正建议暂不可用。",
-  "subject_synopsis_return": "返回此阅读位置"
+  "subject_synopsis_return": "返回此阅读位置",
+  "profile_contribution_action_denied": "当前不允许此操作。",
+  "profile_contribution_action_missing": "缺少此操作的当前提示。",
+  "profile_contribution_action_withheld": "此操作的提示不予公开。",
+  "profile_contribution_action_not_applicable": "此操作不适用于这条贡献。",
+  "profile_contribution_action_failed": "无法加载当前操作提示，请重试。"
 }

@@ -10,6 +10,9 @@ without point reads or inferred viewer actions, and return focus belongs to the 
 Decision: when the original contribution or its exact destination no longer survives on return, show and focus a
 recovery notice in that public contribution region while preserving the current account page and cursor.
 
+Decision: bind return focus to the public occurrence's native author, place, row, opening, thread and immediate-parent
+revision identities in the existing history entry; a repeated row ID and destination URL cannot identify a replacement.
+
 `ContributionRow` uses the shared ContentItem family, bounded public attribution, historical review details,
 immediate-parent presentation and document spoiler renderer. Review citations describe publication history, not
 the author's current rating. Native thread/post IDs and exact revision IDs select destinations independently of
@@ -92,7 +95,17 @@ failure and retirement stay distinct; duplicate references or operations cannot 
 target is its containing thread with the original thread revision. Original-occurrence matching also checks the
 author, public availability, place, containing thread and first-post revision against the admitted selection.
 
-This preparation does not install private controls or connect command owners. The mounted contribution response
-adapter, native reaction/watch/report/reply controls and their command recovery remain to be completed against the
-publisher's official contract. Existing public links and the shared host retirement and recovery notice continue
-to own the production journey meanwhile.
+`contribution-actions/presentation.tsx` prepares separate denied, missing, withheld, sign-in-required, not-applicable,
+unavailable, retired and failed notices. Current allowed advice alone can expose a native control; failed advice
+offers a read retry rather than a command retry. These are native reading-contract presentation inputs, never an
+adapter for the selected receiver's unknown result. Production does not mount these prepared controls yet.
+
+The prepared watch control also requires an exact surviving occurrence and the original host's current operation
+lease. It delegates the command, captured reader/credential, uncertain recovery and deliberate retry to `ThreadWatch`.
+A Post uses its original containing thread and opening revision. A status read cannot settle its uncertain command;
+the native owner retains that command for exact retry. A successful watch needs fresh advice before its inverse can
+appear. No native writer, transport or session observation is copied into this account module.
+
+The mounted contribution response adapter and production controls still require the publisher's official callable
+and DTO. Reaction, report and reply owner composition remains to be completed. Existing public links and the shared
+host retirement and recovery notice continue to own the production journey meanwhile.
