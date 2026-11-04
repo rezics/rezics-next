@@ -84,13 +84,7 @@ export function RouteState({
             aria-atomic="true"
             className={retrying || retryFailed ? 'text-sm text-muted-foreground' : 'sr-only'}
           >
-            {
-              retrying
-                ? m.status_retrying({}, { locale })
-                : retryFailed
-                  ? m.route_retry_failed({}, { locale })
-                  : ''
-            }
+            {retrying ? m.status_retrying({}, { locale }) : retryFailed ? m.route_retry_failed({}, { locale }) : ''}
           </p>
           <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-center">
             {retryHref ? (
@@ -125,7 +119,10 @@ export function RouteState({
             {returnHref ? (
               <a
                 data-slot="button"
-                className={cn(buttonVariants({ size: 'lg', variant: retryHref || onRetry ? 'outline' : 'default' }), routeStateControl)}
+                className={cn(
+                  buttonVariants({ size: 'lg', variant: retryHref || onRetry ? 'outline' : 'default' }),
+                  routeStateControl,
+                )}
                 href={returnHref}
               >
                 {m.dependency_unavailable_return({}, { locale })}
@@ -133,7 +130,10 @@ export function RouteState({
             ) : null}
             <a
               data-slot="button"
-              className={cn(buttonVariants({ size: 'lg', variant: onRetry || retryHref || returnHref ? 'outline' : 'default' }), routeStateControl)}
+              className={cn(
+                buttonVariants({ size: 'lg', variant: onRetry || retryHref || returnHref ? 'outline' : 'default' }),
+                routeStateControl,
+              )}
               href={`/${locale}`}
             >
               <House aria-hidden="true" className="size-4" />

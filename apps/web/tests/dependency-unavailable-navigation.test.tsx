@@ -133,7 +133,12 @@ test('document form failure preserves uncertain command intent without replay; m
 });
 
 test('unsafe return destinations and third-party referrers fall back to localized Home', async () => {
-  for (const returnTo of ['//outside.example/path', '/\\\\outside.example/path', 'https://outside.example/path', '/auth/sign-in']) {
+  for (const returnTo of [
+    '//outside.example/path',
+    '/\\\\outside.example/path',
+    'https://outside.example/path',
+    '/auth/sign-in',
+  ]) {
     const request = new Request(`https://site.example/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, {
       headers: documentHeaders,
     });
@@ -175,9 +180,12 @@ test('typed private dependency errors use the shared route boundary and retain s
   expect(dependencyPage.type).toBe(ClosedErrorPage);
   expect(nestedPage.type).toBe(ClosedErrorPage);
   expect(featurePage.type).toBe(fallback);
-  expect(
-    routeFailure([{ status: 'error', error: new SessionUnavailableError() }]),
-  ).toMatchObject({ status: 503, closed: false, missing: false, unavailable: true });
+  expect(routeFailure([{ status: 'error', error: new SessionUnavailableError() }])).toMatchObject({
+    status: 503,
+    closed: false,
+    missing: false,
+    unavailable: true,
+  });
 });
 
 test('restored sign-in redirects pass through without being turned into an outage document', async () => {

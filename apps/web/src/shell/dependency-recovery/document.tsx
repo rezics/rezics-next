@@ -50,7 +50,10 @@ function formDocumentNavigation(request: Request): boolean {
 
 export function documentFailureIntent(request: Request): DocumentFailureIntent | undefined {
   const { pathname } = new URL(request.url);
-  if ((request.method === 'GET' || request.method === 'HEAD') && (pathname === '/auth/sign-in' || pathname === '/auth/callback')) {
+  if (
+    (request.method === 'GET' || request.method === 'HEAD') &&
+    (pathname === '/auth/sign-in' || pathname === '/auth/callback')
+  ) {
     if (!isDocumentNavigation(request)) return undefined;
     return pathname === '/auth/sign-in' ? 'sign-in' : 'callback';
   }
@@ -227,23 +230,21 @@ export async function adaptUnavailableDocument(
   headers.set('content-language', locale);
   headers.set('cache-control', 'private, no-store');
   headers.set('x-robots-tag', 'noindex');
-  const vary = new Set((headers.get('vary') ?? '').split(',').map((value) => value.trim()).filter(Boolean));
+  const vary = new Set(
+    (headers.get('vary') ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
   vary.add('Cookie');
   vary.add('Accept-Language');
   headers.set('vary', [...vary].join(', '));
   csp.forEach((value, name) => headers.set(name, value));
   headers.set('x-robots-tag', 'noindex');
 
-  const body = request.method === 'HEAD' ? null : documentMarkup(
-    locale,
-    stylesheet,
-    nonce,
-    intent,
-    retryHref,
-    returnHref,
-    retryDelay > 0,
-    retryDelay,
-    recovery,
-  );
+  const body =
+    request.method === 'HEAD'
+      ? null
+      : documentMarkup(locale, stylesheet, nonce, intent, retryHref, returnHref, retryDelay > 0, retryDelay, recovery);
   return new Response(body, { status: response.status, statusText: response.statusText, headers });
 }

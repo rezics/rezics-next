@@ -3,10 +3,7 @@ import { isSessionUnavailableError, SessionUnavailableError } from './unavailabl
 import type { SessionAccess } from './guard';
 
 /** Admit a private page only after the current session observation is signed in. */
-export async function loadPrivatePage<T>(
-  access: SessionAccess,
-  read: () => T | Promise<T>,
-): Promise<T> {
+export async function loadPrivatePage<T>(access: SessionAccess, read: () => T | Promise<T>): Promise<T> {
   if (access.state !== 'signed-in') throw new SessionUnavailableError();
   try {
     return await read();

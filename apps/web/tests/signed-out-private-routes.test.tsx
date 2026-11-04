@@ -23,10 +23,12 @@ test('indeterminate private access uses the shared recovery state without starti
   for (const path of paths) {
     const signInHref = `/auth/sign-in?return_to=${encodeURIComponent(path)}`;
     let reads = 0;
-    await expect(loadPrivatePage({ state: 'unavailable', signInHref }, () => {
-      reads++;
-      return { privateValue: 'must not load' };
-    })).rejects.toBeInstanceOf(SessionUnavailableError);
+    await expect(
+      loadPrivatePage({ state: 'unavailable', signInHref }, () => {
+        reads++;
+        return { privateValue: 'must not load' };
+      }),
+    ).rejects.toBeInstanceOf(SessionUnavailableError);
     expect(reads).toBe(0);
   }
 });

@@ -19,12 +19,7 @@ export function safeRecoveryReturn(value: string | null | undefined, origin: str
     return undefined;
   try {
     const target = new URL(value, origin);
-    if (
-      target.origin !== origin ||
-      target.username ||
-      target.password ||
-      target.pathname.length > LOGIN_RETURN_LIMIT
-    )
+    if (target.origin !== origin || target.username || target.password || target.pathname.length > LOGIN_RETURN_LIMIT)
       return undefined;
     const localPath = target.pathname.replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '') || '/';
     if (/^\/(?:auth|api|media|_serverFn|_native)(?:\/|$)/.test(localPath)) return undefined;

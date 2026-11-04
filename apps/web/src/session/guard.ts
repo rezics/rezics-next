@@ -54,12 +54,7 @@ export async function requirePrivatePageAccess({ context, location }: GuardConte
   // ensureQueryData intentionally returns retained data after a failed fetch. Only the
   // successful current cache observation may authorize a personal route loader.
   const queryState = context.queryClient.getQueryState(sessionQuery.queryKey);
-  if (
-    !queryState ||
-    queryState.status !== 'success' ||
-    queryState.fetchStatus !== 'idle' ||
-    queryState.isInvalidated
-  )
+  if (!queryState || queryState.status !== 'success' || queryState.fetchStatus !== 'idle' || queryState.isInvalidated)
     throw new SessionUnavailableError();
   const session = normalizeSessionObservation(queryState.data);
   if (session.state === 'signed-out') {

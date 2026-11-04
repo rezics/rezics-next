@@ -10,10 +10,7 @@ import { NotFoundPage } from './shell/shell';
 import { PendingPage } from './shell/pending';
 import { routeTree } from './routeTree.gen';
 import { deLocalizeUrl, localizeUrl } from './paraglide/runtime.js';
-import {
-  applyDependencyErrorComponents,
-  type DependencyRouteNode,
-} from './shell/dependency-recovery/route-error';
+import { applyDependencyErrorComponents, type DependencyRouteNode } from './shell/dependency-recovery/route-error';
 
 type RouteNode = {
   options?: { id?: string; path?: string; staticData?: { publicCache?: boolean } };

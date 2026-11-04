@@ -1,5 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { createMemoryHistory, createRootRouteWithContext, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRouteWithContext,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { QueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { expect, userEvent, within, waitFor } from 'storybook/test';
@@ -66,7 +73,9 @@ function PrivateLoaderBoundary({ restored }: { restored: boolean }) {
         }
         return { title: 'Private page restored' };
       },
-      errorComponent: (props) => <div data-original-error="">{props.error instanceof Error ? props.error.message : 'Reader failed'}</div>,
+      errorComponent: (props) => (
+        <div data-original-error="">{props.error instanceof Error ? props.error.message : 'Reader failed'}</div>
+      ),
       component: function PrivatePage() {
         const data = page.useLoaderData() as { title: string };
         return <h1>{data.title}</h1>;
