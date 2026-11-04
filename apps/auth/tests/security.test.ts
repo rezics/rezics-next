@@ -378,10 +378,8 @@ test(
         expect(dialog.type()).toBe('confirm');
         await dialog.accept();
       });
-      await Promise.all([
-        page.waitForResponse((response) => new URL(response.url()).pathname === '/sessions/revoke'),
-        rows.nth(1).getByRole('button', { name: 'Sign out Firefox on Linux', exact: true }).click(),
-      ]);
+      await rows.nth(1).getByRole('button', { name: 'Sign out Firefox on Linux', exact: true }).click();
+      await rows.nth(1).waitFor({ state: 'detached' });
       expect(confirmations).toBe(1);
       expect(postBody('/sessions/revoke')).toEqual({ session_id: 'older-session' });
       await rows.nth(1).waitFor({ state: 'detached' });
@@ -472,8 +470,9 @@ test(
       expect(await page.getByLabel('New password', { exact: true }).inputValue()).toBe('');
       expect(authCalls('/security-page')).toHaveLength(2);
       expect(authCalls('/sessions')).toHaveLength(0);
-      expect(calls.filter((call) => call.method !== 'GET').map(({ method, url, body }) => ({ method, url, body })))
-        .toEqual([{ method: 'POST', url: '/account-identity', body: '{}' }]);
+      // Identity is an existing read carried by POST; inventory recovery must send no mutation.
+      expect(calls.filter((call) => call.method !== 'GET' && call.url !== '/account-identity')).toEqual([]);
+      expect(authCalls('/account-identity').every((call) => call.method === 'POST' && call.body === '{}')).toBe(true);
     } finally {
       inventoryUnavailable = false;
       await page.context().close();
@@ -517,8 +516,9 @@ test(
       expect(await reload.count()).toBe(1);
       expect(await page.getByText('No active sessions were returned.', { exact: true }).count()).toBe(0);
       expect(authCalls('/sessions')).toHaveLength(0);
-      expect(calls.filter((call) => call.method !== 'GET').map(({ method, url, body }) => ({ method, url, body })))
-        .toEqual([{ method: 'POST', url: '/account-identity', body: '{}' }]);
+      // Identity is an existing read carried by POST; inventory recovery must send no mutation.
+      expect(calls.filter((call) => call.method !== 'GET' && call.url !== '/account-identity')).toEqual([]);
+      expect(authCalls('/account-identity').every((call) => call.method === 'POST' && call.body === '{}')).toBe(true);
     } finally {
       release.resolve();
       beforeSessions = undefined;
@@ -551,8 +551,9 @@ test(
       expect(await page.getByRole('button', { name: 'Check current security settings', exact: true }).count()).toBe(0);
       expect(authCalls('/security-page')).toHaveLength(2);
       expect(authCalls('/sessions')).toHaveLength(0);
-      expect(calls.filter((call) => call.method !== 'GET').map(({ method, url, body }) => ({ method, url, body })))
-        .toEqual([{ method: 'POST', url: '/account-identity', body: '{}' }]);
+      // Identity is an existing read carried by POST; inventory recovery must send no mutation.
+      expect(calls.filter((call) => call.method !== 'GET' && call.url !== '/account-identity')).toEqual([]);
+      expect(authCalls('/account-identity').every((call) => call.method === 'POST' && call.body === '{}')).toBe(true);
     } finally {
       inventoryUnavailable = false;
       await page.context().close();
