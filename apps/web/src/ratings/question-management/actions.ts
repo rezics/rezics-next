@@ -4,11 +4,7 @@ import { requestLocale } from '../../kernel/client';
 import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
 import { readQuestionManagementSource } from './native';
-import type {
-  QuestionManagementAddress,
-  QuestionManagementRead,
-  QuestionManagementVisit,
-} from './types';
+import type { QuestionManagementAddress, QuestionManagementRead, QuestionManagementVisit } from './types';
 
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const episodePattern = /^[a-f0-9]{64}$/;
@@ -21,7 +17,8 @@ function addressFrom(value: unknown): AddressInput | null {
   if (
     typeof input.realmId !== 'string' ||
     !idPattern.test(input.realmId) ||
-    (input.selectedQuestionId !== undefined && input.selectedQuestionId !== null &&
+    (input.selectedQuestionId !== undefined &&
+      input.selectedQuestionId !== null &&
       (typeof input.selectedQuestionId !== 'string' || !idPattern.test(input.selectedQuestionId))) ||
     (input.cursor !== undefined &&
       input.cursor !== null &&
@@ -73,7 +70,14 @@ async function currentSession() {
 function visitFor(input: AddressInput, session: Awaited<ReturnType<typeof currentSession>>): QuestionManagementVisit {
   const address = addressView(input);
   if (!session.viewer || !session.authorization || !session.csrf)
-    return { ...address, locale: session.locale, viewer: null, credentialEpisode: null, csrfEpisode: null, state: 'signed-out' };
+    return {
+      ...address,
+      locale: session.locale,
+      viewer: null,
+      credentialEpisode: null,
+      csrfEpisode: null,
+      state: 'signed-out',
+    };
   if (!session.origin || !session.credentialEpisode || !session.csrfEpisode)
     return {
       ...address,
@@ -101,7 +105,8 @@ function validVisit(value: unknown): value is QuestionManagementVisit {
     idPattern.test(visit.realmId) &&
     (visit.selectedQuestionId === null ||
       (typeof visit.selectedQuestionId === 'string' && idPattern.test(visit.selectedQuestionId))) &&
-    (visit.cursor === null || (typeof visit.cursor === 'string' && visit.cursor.length > 0 && visit.cursor.length <= 4096)) &&
+    (visit.cursor === null ||
+      (typeof visit.cursor === 'string' && visit.cursor.length > 0 && visit.cursor.length <= 4096)) &&
     typeof visit.locale === 'string' &&
     typeof visit.viewer === 'string' &&
     idPattern.test(visit.viewer) &&
@@ -162,7 +167,8 @@ export const readQuestionManagementForViewer = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<QuestionManagementRead> => {
     const locale = requestLocale(getRequest()) ?? 'en';
-    if (!data) return { realmId: '', selectedQuestionId: null, cursor: null, locale, viewer: null, state: 'invalid-address' };
+    if (!data)
+      return { realmId: '', selectedQuestionId: null, cursor: null, locale, viewer: null, state: 'invalid-address' };
     const address = addressView(data.address);
     try {
       const session = await currentSession();
@@ -184,8 +190,7 @@ export const readQuestionManagementForViewer = createServerFn({ method: 'GET' })
         locale,
         ...(session.request.signal ? { signal: session.request.signal } : {}),
       });
-      if (result.state !== 'ready')
-        return { ...address, locale, viewer: session.viewer, state: result.state };
+      if (result.state !== 'ready') return { ...address, locale, viewer: session.viewer, state: result.state };
       return {
         ...address,
         locale,

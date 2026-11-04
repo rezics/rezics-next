@@ -262,8 +262,7 @@ export function QuestionManagementPage({
     });
   };
 
-  if (!address || initial.state === 'invalid-address')
-    return <p role="alert">{m.home_questions_invalid()}</p>;
+  if (!address || initial.state === 'invalid-address') return <p role="alert">{m.home_questions_invalid()}</p>;
   if (session.state === 'signed-out' || read?.state === 'signed-out' || initial.state === 'signed-out')
     return <p role="status">{m.own_classifications_signed_out()}</p>;
   if (session.state === 'unknown' || sessionCurrent === null || busy || (initial.state === 'preparing' && !read))
@@ -276,7 +275,11 @@ export function QuestionManagementPage({
     return (
       <section className="space-y-3" aria-live="polite">
         <p role="status">
-          {staleCursor ? m.home_questions_restart() : denied ? m.home_questions_denied() : m.home_questions_unavailable()}
+          {staleCursor
+            ? m.home_questions_restart()
+            : denied
+              ? m.home_questions_denied()
+              : m.home_questions_unavailable()}
         </p>
         <div className="flex flex-wrap gap-3">
           {staleCursor ? (
@@ -284,7 +287,11 @@ export function QuestionManagementPage({
               {m.home_questions_restart_action()}
             </button>
           ) : (
-            <button type="button" className="rounded-md border px-4 py-2" onClick={() => setRetry((value) => value + 1)}>
+            <button
+              type="button"
+              className="rounded-md border px-4 py-2"
+              onClick={() => setRetry((value) => value + 1)}
+            >
               {m.home_questions_retry()}
             </button>
           )}

@@ -70,7 +70,9 @@ export async function readQuestionManagementSource(input: {
       headers: {
         authorization: input.authorization,
         accept: 'application/json',
-        'accept-language': languages.map((language, index) => `${language}${index ? `;q=${1 - index / 10}` : ''}`).join(', '),
+        'accept-language': languages
+          .map((language, index) => `${language}${index ? `;q=${1 - index / 10}` : ''}`)
+          .join(', '),
       },
       ...(input.signal ? { signal: input.signal } : {}),
     });

@@ -16,7 +16,8 @@ function searchAddress(input: Record<string, unknown>): Search {
   const selectedQuestionId = input.selectedQuestionId;
   const cursor = input.cursor;
   if (
-    (selectedQuestionId !== undefined && (typeof selectedQuestionId !== 'string' || !idPattern.test(selectedQuestionId))) ||
+    (selectedQuestionId !== undefined &&
+      (typeof selectedQuestionId !== 'string' || !idPattern.test(selectedQuestionId))) ||
     (cursor !== undefined && (typeof cursor !== 'string' || cursor.length < 1 || cursor.length > 4096))
   )
     return { invalidAddress: true };
@@ -51,7 +52,10 @@ export const Route = createFileRoute('/realms/$id_/questions')({
     });
   },
   head: ({ match }) =>
-    pageHead({ title: m.realm_question_management_link(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
+    pageHead(
+      { title: m.realm_question_management_link(), robots: 'noindex, nofollow' },
+      pageHeadContext(match.pathname),
+    ),
   component: QuestionManagementRoute,
 });
 
@@ -60,15 +64,23 @@ function QuestionManagementRoute() {
   const navigate = Route.useNavigate();
   const search = Route.useSearch();
   const locale = getLocale();
-  const address = 'invalidAddress' in search
-    ? null
-    : {
-        selectedQuestionId: search.selectedQuestionId ?? null,
-        cursor: search.cursor ?? null,
-      };
+  const address =
+    'invalidAddress' in search
+      ? null
+      : {
+          selectedQuestionId: search.selectedQuestionId ?? null,
+          cursor: search.cursor ?? null,
+        };
   return (
     <QuestionManagementPage
-      key={JSON.stringify([initial.realmId, initial.viewer, initial.credentialEpisode, initial.csrfEpisode, locale, address])}
+      key={JSON.stringify([
+        initial.realmId,
+        initial.viewer,
+        initial.credentialEpisode,
+        initial.csrfEpisode,
+        locale,
+        address,
+      ])}
       initial={initial}
       address={address}
       locale={locale}
