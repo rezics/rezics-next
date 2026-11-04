@@ -202,7 +202,7 @@ export const NavigationRecovery: Story = {
   play: async ({ canvasElement }) => {
     const { body } = await chooseJapanese(canvasElement);
     const failure = await body.findByRole('alert');
-    await expect(failure).toContainText('Could not open Japanese');
+    await expect(failure.textContent).toContain('Could not open Japanese');
     await expect(within(failure).getByRole('link', { name: /Continue this page in English/ })).toHaveAttribute(
       'href',
       initialLocation,
