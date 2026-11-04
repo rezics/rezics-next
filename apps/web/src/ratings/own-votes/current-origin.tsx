@@ -52,6 +52,8 @@ export function ownVotesQuery(
     gcTime: 0,
     staleTime: Infinity,
     retry: false,
+    // Equal native responses still start a new private reading visit.
+    structuralSharing: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
