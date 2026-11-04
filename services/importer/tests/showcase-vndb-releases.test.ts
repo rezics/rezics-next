@@ -93,6 +93,7 @@ function localReviewPort(commands: BatchCommand[], created = new Map<string, str
           if (command.op === 'create') {
             const id = created.get(command.key) ?? randomUUID();
             created.set(command.key, id);
+            created.set(`source:${command.source.external_id}`, id);
             subjectsById.set(id, {
               subject: { id, type: command.subject.type, labels: command.subject.labels, statements: {} },
             });
