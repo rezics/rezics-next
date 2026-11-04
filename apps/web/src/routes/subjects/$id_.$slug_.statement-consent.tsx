@@ -87,7 +87,7 @@ function ConsentRoute() {
     );
   return (
     <StatementConsentPage
-      key={`${id}:${candidate}:${property}:${locale}`}
+      key={`${id}:${candidate}:${property}:${target ?? ''}:${sameAs ?? ''}:${key ?? ''}:${locale}`}
       address={address}
       locale={locale}
       transport={{

@@ -37,6 +37,7 @@ function readInput(value: unknown) {
 export const readConsent = createServerFn({ method: 'POST', strict: false })
   .validator(originalReaderInput(readInput))
   .handler(async ({ data }): Promise<ConsentRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
     const authorization = await candidateAuthorization(data.expectedReader);
     return authorization
       ? readStatementConsent(kernelClient(), authorization, data, data.cursor, data.session)
@@ -45,6 +46,7 @@ export const readConsent = createServerFn({ method: 'POST', strict: false })
 export const changeConsent = createServerFn({ method: 'POST', strict: false })
   .validator(originalReaderInput(consentCommand))
   .handler(async ({ data }): Promise<ConsentResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
     const authorization = await candidateAuthorization(data.expectedReader);
     return authorization
       ? changeStatementConsent(kernelClient(), authorization, data)

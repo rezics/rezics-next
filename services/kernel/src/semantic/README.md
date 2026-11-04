@@ -470,13 +470,27 @@ anonymous payloads and `no-cache` caching stay unchanged.
 
 The consent adapter and screen use only this identity and pinned property labels for the private assertion, with
 `pickText` locale fallback. Missing names are explicitly unavailable, with reload before fresh confirmation;
-this is a display guard, not a new native permission. Retraction retains its native owner admission and exact-key
-uncertain retry using the native structured-field idempotency key. The assertion appears before confirmation and again before its checkbox and buttons. Anonymous
-public-result reads cannot fill or replace private identity. Denial/concealment clears prepared private state;
-terminal retraction clears the candidate. The focused default-composition regression is
+the action observation is a separate native permission check. `GET /v1/statements/:id/consent` reads the mounted
+`statement.disclose` and `statement.retract` operations at their fixed Global Context anchor and confirms the exact
+candidate's current target-account association before returning either operation. A readable candidate remains
+available when action observation is refused or unavailable. Retraction retains its native owner admission and
+exact-key uncertain retry using the native structured-field idempotency key. The assertion appears before
+confirmation and again before its checkbox and buttons. Anonymous public-result reads cannot fill or replace private
+identity. Denial/concealment clears prepared private state; terminal retraction clears the candidate. The focused
+default-composition regression is
 `test/semantic/statement-consent-identity.test.ts`; native execution is deferred during minimal verification.
 
 `POST /v1/statements/:id/disclose` uses ordinary proposal admission and checks current target ownership inside the command. It permanently discloses that candidate, bumps the holder's security revision and emits its ordinary link projection. Repeating it is harmless. There is no switch back to private; the target account must retract its statement with `POST /v1/statements/:id/retract`. Retraction is terminal and removes it from current views and projections without making a sourced third-party claim removable by the target. Statements are immutable: adding a reference through editing proposes a sourced replacement in the same target slot, which becomes public through ordinary review. The old private candidate remains private in history.
+
+Decision: Keep native action observation separate from candidate admission and terminal retraction; only the exact target-account association and mounted Global Context operations expose consent controls.
+
+### Current assertion consent
+
+#### Observe, share or terminally retract one exact private assertion
+
+- Touches: the existing candidate page (maximum 20 rows), one addressed candidate, its one target-account association, one Global Context operation projection, its pinned release descriptor and the independent public Subject read.
+- Bound: Resolve the addressed candidate by its exact key and pass only its target to the bounded account-agent reader. Do not scan candidate history, account links, grants or rendered labels. Missing or deleted candidates produce no private payload or action availability.
+- Growth check: Hold the addressed assertion and target fixed while unrelated Subjects, candidate history and Access history grow. Candidate and account-agent reads retain exact-key probes; Access preparation remains one fixed Global Context read, with no permission work per label or public value.
 
 ## Relations
 
