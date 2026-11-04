@@ -320,6 +320,12 @@ function HistoryDisclosure({
     try {
       // Fence the queued transport itself, before it can borrow replacement session credentials.
       await Promise.resolve();
+      if (pendingReturn) {
+        console.log('history-return-fence-debug', {
+          owns: lifetime.owns(request),
+          bindingCurrent: historicalBindingCurrent(source, request.binding),
+        });
+      }
       if (!lifetime.owns(request) || !historicalBindingCurrent(source, request.binding)) return;
       if (!ready()) {
         lifetime.resetDisclosure(connection);
