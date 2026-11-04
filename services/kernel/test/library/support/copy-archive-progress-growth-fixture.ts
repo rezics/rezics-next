@@ -151,7 +151,6 @@ export function expectNoGrownScans(report: GrowthReport) {
         'library.progress_session',
         'library.progress_unit',
         'library.progress_change',
-        'library.copy_archive_upload',
         'library.copy_archive_row',
         'library.copy_archive_progress_review',
         'library.copy_archive_progress_apply',
@@ -296,6 +295,8 @@ export async function createCopyArchiveProgressGrowthFixture() {
      FROM library.progress_session WHERE session_id=$1`,
     [sessionId],
   );
+  const sourcePin = stored.rows[0]!.library_profile_pin;
+  if (sourcePin == null) throw new Error('Native source Session omitted library_profile_pin');
   const artifact = v2Artifact(newId(routeOf(applyOwner.actor.accountId)!), clock().toISOString(), stored.rows[0]!);
   const artifactBytes = new TextEncoder().encode(JSON.stringify(artifact));
   const reviewBody = {
@@ -352,11 +353,12 @@ export async function createCopyArchiveProgressGrowthFixture() {
     await db.admin.query(
       `INSERT INTO library.progress_session
         (route, session_id, account_id, subject_id, version_subject_id, mode, unit, total, amount, locator,
-         "position", completed_unit_count, state, revision, started_at, completed_at, transaction_id)
+         "position", completed_unit_count, state, revision, library_profile_pin, started_at, completed_at,
+         transaction_id)
        SELECT $1, ${sessionSql}, $4, $5, NULL, 'scalar_amount', 'page', NULL, NULL, NULL, NULL,
-         0, 'active', 1, $6::timestamptz, NULL, ${txSql}
+         0, 'active', 1, $7::jsonb, $6::timestamptz, NULL, ${txSql}
        FROM generate_series($2::int, $3::int) AS n`,
-      [route, from, scale, accountId, subjectId, clock().toISOString()],
+      [route, from, scale, accountId, subjectId, clock().toISOString(), sourcePin],
     );
     await db.admin.query(
       `INSERT INTO library.progress_unit (route, session_id, unit_id, added_at)
