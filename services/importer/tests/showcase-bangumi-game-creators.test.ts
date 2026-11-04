@@ -36,7 +36,7 @@ test('selected Game planning preserves type-4 staff occurrences and excludes Gam
       roleCode: 1001,
       creditedAs: 'Lead developer',
       path: '/subject-persons/101/11/position',
-      record: rows[1],
+      record: rows[1]!,
     },
     {
       kind: 'staff',
@@ -46,7 +46,7 @@ test('selected Game planning preserves type-4 staff occurrences and excludes Gam
       roleCode: 1004,
       creditedAs: 'Scenario writer',
       path: '/subject-persons/101/12/position',
-      record: rows[2],
+      record: rows[2]!,
     },
     {
       kind: 'staff',
@@ -56,7 +56,7 @@ test('selected Game planning preserves type-4 staff occurrences and excludes Gam
       roleCode: 1006,
       creditedAs: 'Composer',
       path: '/subject-persons/101/99/position',
-      record: rows[3],
+      record: rows[3]!,
     },
   ]);
   expect(plan.entities.bangumi.some(({ key }) => key === 'character:21' || key === 'character:22')).toBe(false);
