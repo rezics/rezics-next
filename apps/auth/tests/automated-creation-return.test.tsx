@@ -103,6 +103,17 @@ test('native acknowledgement survives synchronous retirement and an unavailable 
   } finally {
     globalThis.fetch = fetch;
   }
+  await flush(() => button(page.host, 'Retry')!.click());
+  expect(page.host.textContent).toContain('The native creation workflow acknowledged completion.');
+  expect(page.host.textContent).not.toContain('The result is uncertain.');
+  expect(page.calls.filter((call) => call.path.startsWith('/account-operations/'))).toHaveLength(2);
+
+  await flush(() => button(page.host, 'Dismiss history')!.click());
+  await flush(leave);
+  await flush(returned);
+  expect(page.host.textContent).toContain('The displayed history was dismissed.');
+  expect(page.host.textContent).not.toContain('The result is uncertain.');
+  expect(page.calls.filter((call) => call.path.startsWith('/account-operations/'))).toHaveLength(2);
 });
 
 test('current matching advice and a later acknowledgement keep an earlier unknown and its exact retry', async () => {

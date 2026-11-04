@@ -149,6 +149,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   const caller = useRef<Session | null>(null);
   const lifetime = useRef<object | null>(null);
   const historyRef = useRef(history);
+  const acknowledgedSeen = useRef(false);
   const uncertaintySeen = useRef(false);
   const unresolvedUnknown = useRef(false);
   const focusAfterRead = useRef(false);
@@ -166,6 +167,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   }
   function noteFact(fact: AutomatedCreationReturnFact) {
     if (fact === 'unknown') unresolvedUnknown.current = true;
+    if (fact === 'acknowledged') acknowledgedSeen.current = true;
     updateHistory(recordAutomatedCreationReturnFact(historyRef.current, fact));
   }
   function noteStoredContinuation(saved: AutomatedAttempt | null | 'invalid' | undefined) {
@@ -337,7 +339,13 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
       setPage(read.page);
       setAttempt(currentSaved);
       setReauth(!!currentSaved && read.page.readiness === 'authentication-needed');
-      setStatus(read.page.readiness === 'authentication-needed' ? 'step-up' : currentSaved?.submitted ? 'unknown' : '');
+      setStatus(
+        read.page.readiness === 'authentication-needed'
+          ? 'step-up'
+          : currentSaved?.submitted && (unresolvedUnknown.current || !acknowledgedSeen.current)
+            ? 'unknown'
+            : '',
+      );
       setReady(true);
     })();
     return () => {
