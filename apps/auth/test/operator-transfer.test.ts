@@ -1,7 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import {
   OPERATOR_MANAGEMENT_PROFILE,
-  OPERATOR_RELATION_PATH,
   parseTransferRequest,
   prepareTransfer,
   reauthenticateTransfer,
@@ -9,6 +8,7 @@ import {
   type TransferAttempt,
   type TransferRequest,
 } from '../src/operator-transfer';
+import { OPERATOR_TRANSFER_PAGE_PATH } from '../src/operator-transfer-page';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -57,19 +57,31 @@ test('Complete native destination acceptance and operator transfer journey prese
       });
     const body = JSON.parse(String(init?.body));
     calls.push({ path, body });
-    if (path === OPERATOR_RELATION_PATH)
-      return Response.json(
-        changed
-          ? {
-              previous: {
-                operatorAccountId: request.operatorAccountId,
-                subjectAccountId: request.previous.subjectAccountId,
-                reservationId: 'new-reservation',
-              },
-              expectedVersion: '13',
-            }
-          : { previous: request.previous, expectedVersion: request.expectedVersion },
-      );
+    if (path === OPERATOR_TRANSFER_PAGE_PATH) {
+      const input = JSON.parse(String(init?.body));
+      if (input.kind === 'destination')
+        return Response.json({
+          viewer: { kind: 'ready' },
+          review: { kind: 'destination', destinationAccountId: request.operatorAccountId, action: 'allowed' },
+        });
+      return Response.json({
+        viewer: { kind: 'ready' },
+        review: {
+          kind: 'source',
+          relation: changed
+            ? {
+                previous: {
+                  operatorAccountId: request.operatorAccountId,
+                  subjectAccountId: request.previous.subjectAccountId,
+                  reservationId: 'new-reservation',
+                },
+                expectedVersion: '13',
+              }
+            : { previous: request.previous, expectedVersion: request.expectedVersion },
+          action: 'allowed',
+        },
+      });
+    }
     if (path === '/account-operations/approve')
       return Response.json({
         reference: person === 'destination-human' ? 'opaque-native-acceptance' : 'source-approval',
@@ -99,7 +111,20 @@ test('Complete native destination acceptance and operator transfer journey prese
   });
   person = 'source-human';
   const transfer = source();
-  expect((await submitTransferAttempt(transfer, () => true)).kind).toBe('current');
+  expect(await submitTransferAttempt(transfer, () => true)).toMatchObject({
+    kind: 'acknowledged',
+    readback: {
+      kind: 'current',
+      relation: {
+        previous: {
+          operatorAccountId: request.operatorAccountId,
+          subjectAccountId: request.previous.subjectAccountId,
+          reservationId: 'new-reservation',
+        },
+        expectedVersion: '13',
+      },
+    },
+  });
   expect(calls.find((call) => call.path.endsWith('/execute'))?.body).toEqual({
     operationKey: request.sourceOperationKey,
     reference: 'source-approval',
@@ -119,6 +144,7 @@ test('Complete native destination acceptance and operator transfer journey prese
 
 test('lost execution response retains the exact key operation and approval; retry never approves again and acknowledgement needs readback', async () => {
   let approves = 0;
+  let transferred = false;
   const executions: unknown[] = [];
   const attempt = source();
   globalThis.fetch = (async (input, init) => {
@@ -129,18 +155,40 @@ test('lost execution response retains the exact key operation and approval; retr
         client_id: OPERATOR_MANAGEMENT_PROFILE.client_id,
         scope: ['account:manage'],
       });
-    if (path === OPERATOR_RELATION_PATH) return Response.json({ previous: request.previous, expectedVersion: '12' });
+    if (path === OPERATOR_TRANSFER_PAGE_PATH)
+      return Response.json({
+        viewer: { kind: 'ready' },
+        review: {
+          kind: 'source',
+          relation: transferred
+            ? {
+                previous: {
+                  ...request.previous,
+                  operatorAccountId: request.operatorAccountId,
+                  reservationId: 'new-reservation',
+                },
+                expectedVersion: '13',
+              }
+            : { previous: request.previous, expectedVersion: request.expectedVersion },
+          action: 'allowed',
+        },
+      });
     if (path.endsWith('/approve')) {
       approves++;
       return Response.json({ reference: 'saved-reference', expiresAt: '2030-01-01T00:00:00Z' });
     }
     executions.push(JSON.parse(String(init?.body)));
     if (executions.length === 1) throw new TypeError('lost response');
+    transferred = true;
     return Response.json({ accountId: request.previous.subjectAccountId });
   }) as typeof fetch;
   expect(await submitTransferAttempt(attempt, () => true)).toMatchObject({ kind: 'failure', reason: 'uncertain' });
   expect(attempt).toMatchObject({ reference: 'saved-reference', phase: 'execute' });
-  expect(await submitTransferAttempt(attempt, () => true)).toEqual({ kind: 'failure', reason: 'uncertain' });
+  expect(await submitTransferAttempt(attempt, () => true)).toMatchObject({
+    kind: 'acknowledged',
+    reference: 'saved-reference',
+    readback: { kind: 'current' },
+  });
   expect(approves).toBe(1);
   expect(executions[1]).toEqual(executions[0]);
 });
@@ -157,7 +205,15 @@ test('stale step-up retains the account tuple key and opaque reference and requi
         client_id: OPERATOR_MANAGEMENT_PROFILE.client_id,
         scope: ['account:manage'],
       });
-    if (path === OPERATOR_RELATION_PATH) return Response.json({ previous: request.previous, expectedVersion: '12' });
+    if (path === OPERATOR_TRANSFER_PAGE_PATH)
+      return Response.json({
+        viewer: { kind: 'ready' },
+        review: {
+          kind: 'source',
+          relation: { previous: request.previous, expectedVersion: request.expectedVersion },
+          action: 'allowed',
+        },
+      });
     if (path === '/signin') {
       expect(JSON.parse(String(init?.body))).toEqual({
         email: 'human@example.test',
@@ -182,7 +238,10 @@ test('stale step-up retains the account tuple key and opaque reference and requi
 
 test('missing version unavailable reader and stale native conflict never create guessed authority', async () => {
   const attempt = source();
-  let response = Response.json({ previous: request.previous });
+  let response = Response.json({
+    viewer: { kind: 'ready' },
+    review: { kind: 'source', relation: { previous: request.previous }, action: 'allowed' },
+  });
   let mutations = 0;
   globalThis.fetch = (async (input) => {
     if (String(input) === '/session')
@@ -191,7 +250,7 @@ test('missing version unavailable reader and stale native conflict never create 
         client_id: OPERATOR_MANAGEMENT_PROFILE.client_id,
         scope: ['account:manage'],
       });
-    if (String(input) === OPERATOR_RELATION_PATH) return response.clone();
+    if (String(input) === OPERATOR_TRANSFER_PAGE_PATH) return response.clone();
     mutations++;
     return Response.json({ error: 'account_operation_denied' }, { status: 409 });
   }) as typeof fetch;
@@ -201,10 +260,16 @@ test('missing version unavailable reader and stale native conflict never create 
   response = new Response(null, { status: 404 });
   expect(await submitTransferAttempt(attempt, () => true)).toMatchObject({ reason: 'unavailable' });
   expect(mutations).toBe(0);
-  response = Response.json({ previous: request.previous, expectedVersion: '13' });
+  response = Response.json({
+    viewer: { kind: 'ready' },
+    review: { kind: 'changed' },
+  });
   expect(await submitTransferAttempt(attempt, () => true)).toEqual({ kind: 'failure', reason: 'conflict' });
   expect(mutations).toBe(0);
-  response = Response.json({ previous: request.previous, expectedVersion: '12' });
+  response = Response.json({
+    viewer: { kind: 'ready' },
+    review: { kind: 'source', relation: { previous: request.previous, expectedVersion: '12' }, action: 'allowed' },
+  });
   expect(await submitTransferAttempt(attempt, () => true)).toEqual({
     kind: 'failure',
     reason: 'conflict',
@@ -292,7 +357,7 @@ test('The default operator-transfer page supports request and acceptance file ha
     const fixtureFetch = globalThis.fetch;
     globalThis.fetch = (async (input, init) => {
       const path = String(input);
-      if (path === OPERATOR_RELATION_PATH) reads++;
+      if (path === OPERATOR_TRANSFER_PAGE_PATH && JSON.parse(String(init?.body)).kind !== 'readiness') reads++;
       if (path.startsWith('/account-operations/')) mutations.push({ path, body: JSON.parse(String(init?.body)) });
       return fixtureFetch(input, init);
     }) as typeof fetch;
@@ -391,6 +456,7 @@ test('The default operator-transfer page supports request and acceptance file ha
 
     await mount(stories.SourceRequest);
     const beforeImport = saved();
+    expect(beforeImport).toMatchObject({ side: 'source', phase: 'approve' });
     const writesBeforeImport = mutations.length;
     await select('acceptance', [new File([reference], 'response.bin')]);
     expect(raw('transfer-acceptance')).toBe(reference);
@@ -406,8 +472,12 @@ test('The default operator-transfer page supports request and acceptance file ha
     expect(saved()).toEqual(beforeImport);
     expect(host.querySelector<HTMLInputElement>('#transfer-confirm')!.checked).toBe(false);
     expect(mutations).toHaveLength(writesBeforeImport);
+    const beforeSourceAdvice = reads;
+    await click(m.auth_transfer_review_same_person());
+    expect(reads).toBe(beforeSourceAdvice + 1);
     await confirm();
     await click(m.auth_transfer_submit());
+    expect(mutations).toHaveLength(writesBeforeImport + 2);
     expect(mutations.at(-1)).toEqual({
       path: '/account-operations/execute',
       body: {
