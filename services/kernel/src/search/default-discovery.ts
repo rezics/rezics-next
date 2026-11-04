@@ -39,7 +39,7 @@ import type {
   DiscoveryReadContext,
   DiscoveryUnionHit,
 } from './discovery.ts';
-import type { DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './generations.ts';
+import type { DiscoveryMetadataKind, DiscoveryMetadataProducer } from './generations.ts';
 import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from './discovery-documents.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
@@ -81,7 +81,7 @@ export type DefaultDiscoverySearch = Readonly<{
 }>;
 
 export type DefaultDiscoveryOwnerAdapters = DiscoveryOwnerAdapterSlots &
-  Readonly<{ metadataProducers: DiscoveryMetadataProducers }>;
+  Readonly<{ metadataProducers: Readonly<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>> }>;
 
 type SemanticDiscoveryHit = Extract<DiscoveryUnionHit, { summary: { kind: 'subject' } }>;
 type EnrichedDiscoveryPage = Readonly<{
@@ -615,7 +615,7 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
       },
     },
   };
-  const metadataProducers: DiscoveryMetadataProducers = Object.freeze({
+  const metadataProducers: Readonly<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>> = Object.freeze({
     collection: createCollectionPopulationProducer(collection),
     review: createReviewPopulationProducer(reviewSource),
     space: createSpacePopulationProducer(space),
