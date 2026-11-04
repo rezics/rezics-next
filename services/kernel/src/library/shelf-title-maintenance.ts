@@ -60,13 +60,20 @@ async function readCandidates(client: Client, owner: ShelfOwner, after: string |
 export function shelfTitleObservations(ids: readonly string[], entries: readonly ShelfTitleLabels[]) {
   const observations = new Map(entries.map((row) => [row.subjectId, row]));
   if (
+    ids.length > 100 ||
+    new Set(ids).size !== ids.length ||
     observations.size !== entries.length ||
     observations.size !== ids.length ||
     ids.some((id) => !observations.has(id))
   )
     throw new ShelfReadUnavailableError('complete disclosed title batch');
   for (const row of entries)
-    if (!row.sourceBasis || row.sourceBasis.length > 256 || routeOf(row.sourceId) === null)
+    if (
+      typeof row.sourceBasis !== 'string' ||
+      !row.sourceBasis ||
+      row.sourceBasis.length > 256 ||
+      routeOf(row.sourceId) === null
+    )
       throw new ShelfReadUnavailableError('current title source reference');
   return observations;
 }
@@ -97,9 +104,10 @@ export function createShelfTitlePreparation(deps: {
         input: { policy },
         async prepare() {
           // Unavailable evidence is deferred until the fresh body, preserving exact receipt replay.
-          if (!deps.titleSource) return null;
           try {
             const basis = await currentShelfTitleBasis(deps.titleSource, owner, languages, actor);
+            // currentShelfTitleBasis reports the missing producer before any native candidate work.
+            if (!deps.titleSource) throw new ShelfReadUnavailableError('Content shelfTitleInputs.observe installation');
             const head = await withConnection(deps.pool, (client) => readHead(client, owner));
             const candidates =
               head?.phase === 'build' && head.policy === policy && head.source_basis === basis
@@ -115,7 +123,8 @@ export function createShelfTitlePreparation(deps: {
                   actor,
                 )
               : { status: 'current' as const, entries: [] };
-            if (labels.status !== 'current') return null;
+            if (labels.status !== 'current')
+              throw new ShelfReadUnavailableError('Content exact disclosed title batch under the captured source basis');
             const observations = shelfTitleObservations(
               selected.map((row) => row.subject_id),
               labels.entries,
@@ -132,7 +141,8 @@ export function createShelfTitlePreparation(deps: {
               };
             });
             // The whole source basis, including disclosure/ownership, is checked after the batched reads.
-            if (basis !== (await currentShelfTitleBasis(deps.titleSource, owner, languages, actor))) return null;
+            if (basis !== (await currentShelfTitleBasis(deps.titleSource, owner, languages, actor)))
+              throw new ShelfReadUnavailableError('Content unchanged whole-source basis after the exact title batch');
             return { basis, head, rows, more: candidates.length > 100 };
           } catch (error) {
             return { error };
