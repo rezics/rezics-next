@@ -140,10 +140,10 @@ async function mount(initialUrl: string) {
     queryClient: InstanceType<typeof QueryClient>;
     credentialMode: 'anonymous' | 'session';
   }>()({ component: Outlet });
-  const localeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$locale', component: Outlet });
+  const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
   let router: ReturnType<typeof createRouter>;
   const threadRoute = createRoute({
-    getParentRoute: () => localeRoute,
+    getParentRoute: () => rootRoute,
     path: 'threads/$id_/$slug',
     component: function ThreadHistory() {
       const location = useLocation();
@@ -152,7 +152,10 @@ async function mount(initialUrl: string) {
         <PostHistory
           postId={selected.id}
           threadId={selected.threadId}
-          returnOrigin={{ pathname: location.pathname, search: new URL(location.publicHref, 'https://site.test').search }}
+        returnOrigin={{
+          pathname: new URL(location.publicHref, 'https://site.test').pathname,
+          search: new URL(location.publicHref, 'https://site.test').search,
+        }}
           navigateToExactRevision={(identity, historyReturn) => {
             void navigate.navigate(exactRevisionRoute(identity, historyReturn));
           }}
@@ -164,12 +167,17 @@ async function mount(initialUrl: string) {
   ExactRoute.update({
     id: '/posts/$id/revisions/$revisionId',
     path: 'posts/$id/revisions/$revisionId',
-    getParentRoute: () => localeRoute,
+    getParentRoute: () => rootRoute,
   } as never);
+  window.history.replaceState(null, '', initialUrl);
   router = createRouter({
-    routeTree: rootRoute.addChildren([localeRoute.addChildren([threadRoute, ExactRoute])]),
+    routeTree: rootRoute.addChildren([threadRoute, ExactRoute]),
     context: { queryClient: client, credentialMode: 'anonymous' },
     history: createMemoryHistory({ initialEntries: [initialUrl] }),
+    rewrite: {
+      input: ({ url }) => deLocalizeUrl(url).href,
+      output: ({ url }) => localizeUrl(url).href,
+    },
   });
   await router.load();
   const host = window.document.createElement('main') as unknown as HTMLElement;
