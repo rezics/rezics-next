@@ -524,15 +524,24 @@ test('add-on creation uses current parent eligibility and keeps a suggested work
     const picker = canvas().getByRole('combobox', { name: m.addon_base() });
     await act(async () => user.click(picker));
     await act(async () => user.type(picker, 'Harbor'));
-    await waitFor(() => expect(window.document.querySelector('[role="listbox"]')).not.toBeNull());
-    const listed = within(window.document.body as unknown as HTMLElement).getByRole('listbox');
-    const harbor = within(listed)
+    await waitFor(() => {
+      const listed = window.document.querySelector('[role="listbox"]');
+      expect(listed).not.toBeNull();
+      expect(
+        within(listed as HTMLElement)
+          .queryAllByRole('option')
+          .some((option) => {
+            const text = option.textContent ?? '';
+            return text.includes('Harbor') && !text.includes('Studio') && !text.includes('Northern');
+          }),
+      ).toBe(true);
+    });
+    const harbor = within(window.document.querySelector('[role="listbox"]') as HTMLElement)
       .getAllByRole('option')
       .find((option) => {
         const text = option.textContent ?? '';
         return text.includes('Harbor') && !text.includes('Studio') && !text.includes('Northern');
       });
-    expect(harbor).toBeDefined();
     await act(async () => user.click(harbor!));
     await waitFor(() => expect(host.textContent).toContain(m.addon_base_draft_note()));
     await act(async () => user.click(submit()));
