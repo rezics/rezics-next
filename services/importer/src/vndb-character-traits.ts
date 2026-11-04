@@ -1,6 +1,11 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { SourceRecord } from '@rezics/conversion';
-import type { NativeIdentity, SourceVocabularyBindings, SourceVocabularyRequest } from '@rezics/conversion';
+import type {
+  NativeIdentity,
+  SourceVocabularyBindings,
+  SourceVocabularyRequest,
+  SourceVocabularyRow,
+} from '@rezics/conversion';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { vndbAppearanceRoleSchemeUri } from '@rezics/conversion/vndb-vocabulary';
 import type { Owner } from './record-bindings.ts';
@@ -320,7 +325,7 @@ export async function planVndbCharacterTraits(input: CrossMediaTables): Promise<
 function traitRows(owner: Owner, subject: string, plan: VndbCharacterTraitPlan): SourceVocabularyRequest['rows'] {
   if (!characterId.test(owner.external_id)) return [];
   const character: NativeIdentity = { id: subject, type: 'wd:Q95074', releaseDigest: bundledDigest };
-  const rows: SourceVocabularyRequest['rows'] = [];
+  const rows: SourceVocabularyRow[] = [];
   for (const record of plan.traits) {
     if (record.id !== owner.external_id) continue;
     const spoiler = copyInteger(record.spoil);
@@ -346,7 +351,7 @@ function appearanceRows(
 ): SourceVocabularyRequest['rows'] {
   if (!workId.test(owner.external_id)) return [];
   const work: NativeIdentity = { id: subject, type: 'wd:Q689445', releaseDigest: bundledDigest };
-  const rows: SourceVocabularyRequest['rows'] = [];
+  const rows: SourceVocabularyRow[] = [];
   for (const record of plan.appearances) {
     if (record.vid !== owner.external_id) continue;
     const spoiler = copyInteger(record.spoil);
