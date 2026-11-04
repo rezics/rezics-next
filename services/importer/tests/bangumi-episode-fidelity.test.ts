@@ -63,7 +63,7 @@ const subjects: Record<string, object> = {
     subject: {
       id: schemeId,
       type: 'skos:ConceptScheme',
-      statements: { 'schema:url': [{ value: { content: episodeTypeSchemeUri } }] },
+      statements: { 'schema:url': [{ value: { type: 'value', content: episodeTypeSchemeUri } }] },
     },
   },
   [specialId]: {
@@ -71,8 +71,8 @@ const subjects: Record<string, object> = {
       id: specialId,
       type: 'skos:Concept',
       statements: {
-        'schema:url': [{ value: { content: episodeTypeConceptUri('1') } }],
-        'skos:inScheme': [{ value: { content: schemeId } }],
+        'schema:url': [{ value: { type: 'value', content: episodeTypeConceptUri('1') } }],
+        'skos:inScheme': [{ value: { type: 'value', content: schemeId } }],
       },
     },
   },
