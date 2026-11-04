@@ -248,7 +248,7 @@ async function mount() {
       button(label).click();
     });
   const refresh = async () => {
-    const query = client.getQueryCache().find({ queryKey: ['creator-offers-current'] });
+    const query = client.getQueryCache().findAll({ queryKey: ['creator-offers-current'] })[0];
     if (!query) throw new Error('Expected the mounted seller read');
     await act(async () => {
       void query.fetch();
