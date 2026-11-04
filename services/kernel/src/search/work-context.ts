@@ -20,7 +20,7 @@ const nonValue = [
   t.Object({ state: t.Literal('somevalue') }, closed),
   t.Object({ state: t.Literal('novalue') }, closed),
   t.Object({ state: t.Literal('unsupported') }, closed),
-];
+] as const;
 const value = t.Union([
   ...nonValue,
   t.Object({ state: t.Literal('value'), kind: t.Literal('item'), id, type: term, labels }, closed),
@@ -50,7 +50,7 @@ const states = [
   t.Object({ state: t.Literal('withheld') }, closed),
   t.Object({ state: t.Literal('unsupported') }, closed),
   unavailable,
-];
+] as const;
 const qualifier = t.Object({ property: term, value }, closed);
 const qualifiers = t.Union([
   ...states,
