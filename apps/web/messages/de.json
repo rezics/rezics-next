@@ -8245,5 +8245,11 @@
   "thread_review_cursor_expired": "Diese Seite ist abgelaufen. Beginne erneut auf der ersten Seite.",
   "thread_review_restart": "Neu beginnen",
   "thread_review_select_board": "Dieses Board auswählen",
-  "thread_review_destination_changed": "Das Subject oder Board wurde geändert. Aktualisiere die Ziele, bevor du fortfährst."
+  "thread_review_destination_changed": "Das Subject oder Board wurde geändert. Aktualisiere die Ziele, bevor du fortfährst.",
+  "search_match_title": "Passender Titel",
+  "search_match_alias": "Passender Alternativtitel",
+  "search_match_description": "Passende Beschreibung",
+  "search_match_explanation": "Weitere Treffergründe",
+  "search_match_unavailable": "Treffergründe sind nicht verfügbar.",
+  "search_match_unsupported": "Treffergründe werden für dieses Ergebnis nicht unterstützt."
 }

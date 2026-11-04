@@ -8337,5 +8337,11 @@
   "thread_review_cursor_expired": "This page expired. Restart from the first page.",
   "thread_review_restart": "Start over",
   "thread_review_select_board": "Select this Board",
-  "thread_review_destination_changed": "The Subject or Board changed. Refresh destinations before continuing."
+  "thread_review_destination_changed": "The Subject or Board changed. Refresh destinations before continuing.",
+  "search_match_title": "Matched title",
+  "search_match_alias": "Matched alternate title",
+  "search_match_description": "Matched description",
+  "search_match_explanation": "More match details",
+  "search_match_unavailable": "Match details are unavailable.",
+  "search_match_unsupported": "Match details are not supported for this result."
 }

@@ -110,6 +110,7 @@ import { ownSubjectRequest } from './service-request.ts';
 import { readRealmRatingOrder, type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
 import { routeOf } from '../route/route.ts';
 import { executeScopedSuggestions } from './scoped-suggestion.ts';
+import { boundMatchEvidencePage, compileMatchEvidence, projectMatchEvidence } from './match-evidence.ts';
 
 export type SearchRequest = {
   text?: string;
@@ -1006,7 +1007,12 @@ export function createSearchService({
             ...(readContext?.realmAuthority ? { authority: readContext.realmAuthority } : {}),
           },
         });
-        const results = ordered.subjects.map((subject) => projectHit(subject, hitOptions));
+        const results = ordered.subjects.map((subject) =>
+          projectHit(subject, {
+            ...hitOptions,
+            matchEvidence: text ? { state: 'unavailable' } : { state: 'absent' },
+          }),
+        );
         if (hitOptions.properties) {
           const facts = await sourceRequest(() =>
             projectFacts(source, ordered.subjects, hitOptions.properties!, hitOptions.languages),
@@ -1093,7 +1099,12 @@ export function createSearchService({
           if (page.status !== 'ready' || !isDeepStrictEqual(page.basis, searchBasis)) throw indexNotReady();
           const shown = [...page.subjects];
           if (shown.length !== page.hits.length) throw new ProblemError('search_restart_required');
-          const results = shown.map((subject) => projectHit(subject, hitOptions));
+          const results = shown.map((subject) =>
+            projectHit(subject, {
+              ...hitOptions,
+              matchEvidence: text ? { state: 'unavailable' } : { state: 'absent' },
+            }),
+          );
           if (hitOptions.properties) {
             const facts = await sourceRequest(() =>
               projectFacts(source, shown, hitOptions.properties!, hitOptions.languages),
@@ -1236,6 +1247,7 @@ export function createSearchService({
           : null;
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
+      const matchEvidencePlan = compiledText ? compileMatchEvidence(compiledText) : undefined;
       const compiledFilter =
         admitted && !preparedScope
           ? compileFilter(admitted as FilterDocument, {
@@ -1277,6 +1289,7 @@ export function createSearchService({
       // Observe every checked snapshot, including rejected candidates: current overflow can
       // precede its indexed marker, so an exact candidate total would also be unsafe there.
       const sourcePositions = new Map<number, bigint>();
+      const evidenceById = new Map<string, NativeSearchHit['engineEvidence']>();
       const disclosureSource: SubjectSource =
         overflowProperties.length || rating
           ? {
@@ -1355,8 +1368,10 @@ export function createSearchService({
             subject &&
             (!scopedMatches || scopedMatches.has(subject.id)) &&
             (!ratingAccepted || ratingAccepted.has(hit))
-          )
+          ) {
             checked.set(hit, subject);
+            evidenceById.set(subject.id, hit.engineEvidence);
+          }
         }
         return checked;
       };
@@ -1455,7 +1470,12 @@ export function createSearchService({
         const checked = await checkCandidates(nativeHits);
         if (checked.size !== nativeHits.length) throw new ProblemError('search_restart_required');
         const shown = nativeHits.map((hit) => checked.get(hit)!);
-        const results = shown.map((subject) => projectHit(subject, hitOptions));
+        const results = shown.map((subject) =>
+          projectHit(subject, {
+            ...hitOptions,
+            matchEvidence: text ? { state: 'unavailable' } : { state: 'absent' },
+          }),
+        );
         const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
         const observed = await observation(generation!);
         const witnesses = new Map<string, number>();
@@ -1553,6 +1573,7 @@ export function createSearchService({
               const page = await indexRequest(() =>
                 searchSubjectHits(client, prefix, {
                   ...plan,
+                  ...(matchEvidencePlan ? { query: matchEvidencePlan.query, matchEvidence: matchEvidencePlan } : {}),
                   generation,
                   size,
                   ...(after === undefined ? {} : { after }),
@@ -1572,7 +1593,12 @@ export function createSearchService({
         const after = useful.frontier.after;
         ratingPhase = useful.frontier.ratingPhase;
         const shown = [...useful.values];
-        const results: SearchHit[] = shown.map((subject) => projectHit(subject, hitOptions));
+        const results: SearchHit[] = boundMatchEvidencePage(
+          shown.map((subject) => ({
+            ...projectHit(subject, hitOptions),
+            matchEvidence: projectMatchEvidence(subject, evidenceById.get(subject.id), matchEvidencePlan),
+          })),
+        );
         for (const subject of shown) {
           if (request.cursor === undefined && request.kindCursor === undefined && witnessCount < 2) {
             witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);

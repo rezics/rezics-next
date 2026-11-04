@@ -3,9 +3,12 @@ import type { Facet } from './facets.ts';
 import { type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import type { RatingPhase } from './rating-cursor.ts';
 import type { PublicRatingEpoch } from './rating-source.ts';
+import { type EngineMatchEvidence, type MatchEvidenceQuery } from './match-evidence.ts';
 export declare const HIT_TEMPLATE = "subjects-hits-v1";
 export declare const SCOPE_HIT_TEMPLATE = "subjects-scope-hits-v1";
 export declare const SEARCH_TEMPLATE = "subjects-search-v2";
+export declare const EVIDENCE_HIT_TEMPLATE = "subjects-hits-v2";
+export declare const EVIDENCE_SEARCH_TEMPLATE = "subjects-search-v3";
 export declare const SUGGEST_TEMPLATE = "subjects-suggest-v1";
 export declare const FACET_TEMPLATE = "subjects-facets-v1";
 export declare const TOTAL_LIMIT = 10000;
@@ -25,6 +28,7 @@ export type SearchPlan = {
     overflowProperties?: readonly string[];
     /** Internal native request allowance; never a public query or sort. */
     work?: SearchRequestWork;
+    matchEvidence?: MatchEvidenceQuery;
 };
 export type SubjectHit = {
     id: string;
@@ -35,6 +39,7 @@ export type SubjectHit = {
 export type SearchHit = SubjectHit & {
     ratingPhase?: RatingPhase;
     matched: string[];
+    engineEvidence?: EngineMatchEvidence;
     sort: SortValue[];
 };
 export type SearchResult = {

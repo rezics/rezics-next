@@ -8245,5 +8245,11 @@
   "thread_review_cursor_expired": "Cette page a expiré. Recommencez à partir de la première page.",
   "thread_review_restart": "Recommencer",
   "thread_review_select_board": "Sélectionner ce Board",
-  "thread_review_destination_changed": "Le Subject ou le Board a changé. Actualisez les destinations avant de continuer."
+  "thread_review_destination_changed": "Le Subject ou le Board a changé. Actualisez les destinations avant de continuer.",
+  "search_match_title": "Correspondance dans le titre",
+  "search_match_alias": "Correspondance dans le titre secondaire",
+  "search_match_description": "Correspondance dans la description",
+  "search_match_explanation": "Autres détails de correspondance",
+  "search_match_unavailable": "Les détails de correspondance ne sont pas disponibles.",
+  "search_match_unsupported": "Les détails de correspondance ne sont pas pris en charge pour ce résultat."
 }

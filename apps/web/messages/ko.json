@@ -8245,5 +8245,11 @@
   "thread_review_cursor_expired": "페이지가 만료되었습니다. 첫 페이지부터 다시 시작하세요.",
   "thread_review_restart": "처음부터 다시 시작",
   "thread_review_select_board": "이 Board 선택",
-  "thread_review_destination_changed": "Subject 또는 Board가 변경되었습니다. 계속하기 전에 대상을 새로 고치세요."
+  "thread_review_destination_changed": "Subject 또는 Board가 변경되었습니다. 계속하기 전에 대상을 새로 고치세요.",
+  "search_match_title": "제목 일치",
+  "search_match_alias": "대체 제목 일치",
+  "search_match_description": "설명 일치",
+  "search_match_explanation": "일치 세부 정보 더 보기",
+  "search_match_unavailable": "일치 정보를 사용할 수 없습니다.",
+  "search_match_unsupported": "이 검색 결과는 일치 정보를 지원하지 않습니다."
 }

@@ -8245,5 +8245,11 @@
   "thread_review_cursor_expired": "Esta página ha caducado. Reinicia desde la primera página.",
   "thread_review_restart": "Empezar de nuevo",
   "thread_review_select_board": "Seleccionar este Board",
-  "thread_review_destination_changed": "El Subject o el Board ha cambiado. Actualiza los destinos antes de continuar."
+  "thread_review_destination_changed": "El Subject o el Board ha cambiado. Actualiza los destinos antes de continuar.",
+  "search_match_title": "Coincidencia en el título",
+  "search_match_alias": "Coincidencia en el título alternativo",
+  "search_match_description": "Coincidencia en la descripción",
+  "search_match_explanation": "Más detalles de la coincidencia",
+  "search_match_unavailable": "Los detalles de la coincidencia no están disponibles.",
+  "search_match_unsupported": "Este resultado no admite detalles de coincidencia."
 }

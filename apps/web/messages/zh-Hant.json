@@ -8245,5 +8245,11 @@
   "thread_review_cursor_expired": "此頁面已過期。請從第一頁重新開始。",
   "thread_review_restart": "從頭開始",
   "thread_review_select_board": "選擇此 Board",
-  "thread_review_destination_changed": "Subject 或 Board 已變更。請重新整理評論目標後再繼續。"
+  "thread_review_destination_changed": "Subject 或 Board 已變更。請重新整理評論目標後再繼續。",
+  "search_match_title": "符合的標題",
+  "search_match_alias": "符合的別名",
+  "search_match_description": "符合的描述",
+  "search_match_explanation": "更多符合詳細資料",
+  "search_match_unavailable": "符合詳細資料目前無法使用。",
+  "search_match_unsupported": "此結果不支援符合詳細資料。"
 }
