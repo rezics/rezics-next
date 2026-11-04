@@ -78,7 +78,7 @@ export interface DraftPreviewClient {
 export async function loadDraftPreview(
   client: DraftPreviewClient,
   input: DraftPreviewInput,
-  admission: { reader: string | null; authorization: string | null | undefined },
+  admission: { reader: string | null | undefined; authorization: string | null | undefined },
 ): Promise<DraftPreviewResult> {
   if (!admission.authorization || admission.reader !== input.expectedReader) return { ok: false, reason: 'denied' };
   const digest = profileDigest(input.profile);
