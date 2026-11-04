@@ -2,7 +2,7 @@ import type { PageRead } from '@rezics/composition';
 import type { SubjectRead } from '@rezics/client';
 import type { SubjectSummary } from '../../../media/summary';
 import type { OverviewValue, Section } from '../../pages/overview';
-import { isRecord, type Snak, type Stmt } from '../../pages/shared';
+import type { Snak, Stmt } from '../../pages/shared';
 import { candidateContext } from '../../../subject/candidates';
 export { creditWindowHref } from './navigation';
 import {
@@ -12,6 +12,10 @@ import {
   type RelationRead,
   type RelationSlot,
 } from '../../../subject/relation-candidates';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 export type CreditAssertion = {
   holder: string;

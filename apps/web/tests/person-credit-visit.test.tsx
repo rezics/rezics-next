@@ -138,32 +138,18 @@ test('current Person credit returns from work, Character and Sources with exact 
       button.click();
     });
   try {
-    await import('../src/features/catalogue/credit-inspection/session');
     await render();
     await click(m.credit_inspect());
     await act(async () => {
       await import('../src/features/catalogue/credit-inspection/session');
     });
     const dialog = window.document.querySelector('[role="dialog"]');
-    if (!dialog) {
-      const card = host.querySelector('button[data-credit-statement]')!;
-      let fiber = Reflect.get(card, Object.keys(card).find((key) => key.startsWith('__reactFiber'))!);
-      while (fiber && fiber.type?.name !== 'CoverList') fiber = fiber.return;
-      const state = fiber?.memoizedState?.next?.next?.memoizedState;
-      const seen: unknown[] = [];
-      function trace(part: any) {
-        if (!part) return;
-        if (['ItemCard', 'CreditInspectionAction', 'CreditInspection', 'CreditInspectionSession', 'CandidateSession', 'DialogContent'].includes(part.type?.name)) seen.push([part.type.name, !!part.memoizedProps?.inspection, !!part.memoizedProps?.children, part.memoizedProps?.open]);
-        trace(part.child); trace(part.sibling);
-      }
-      trace(fiber); trace(fiber.alternate);
-      throw new Error(`Credit inspection did not open: ${JSON.stringify(seen)}`);
-    }
-    expect(dialog.textContent).toContain(labels['wdt:P1932']);
-    expect(dialog.textContent).toContain('Original credit');
-    expect(dialog.textContent).toContain('The traveler');
-    expect(dialog.textContent).not.toContain('The narrator');
-    const targets = [...dialog.querySelectorAll('a')].filter((a) => a.pathname.includes('/subjects/'));
+    expect(dialog).not.toBeNull();
+    expect(dialog!.textContent).toContain(labels['wdt:P1932']);
+    expect(dialog!.textContent).toContain('Original credit');
+    expect(dialog!.textContent).toContain('The traveler');
+    expect(dialog!.textContent).not.toContain('The narrator');
+    const targets = [...dialog!.querySelectorAll('a')].filter((a) => a.pathname.includes('/subjects/'));
     expect(targets.length).toBeGreaterThanOrEqual(4);
     const source = targets.find((a) => a.pathname.endsWith('/sources'))!;
     const origin = new URL(source.href).searchParams.get('via')!;
