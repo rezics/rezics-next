@@ -288,8 +288,7 @@ test('captured Realm preview cannot return the prior Context disclosure after re
       observed.then(() => ({ kind: 'observed' as const })),
       pending.then((answer) => ({ kind: 'finished' as const, answer })),
     ]);
-    if (first.kind === 'finished')
-      expect(first.answer.response.status, JSON.stringify(first.answer.body)).toBe(200);
+    if (first.kind === 'finished') expect(first.answer.response.status, JSON.stringify(first.answer.body)).toBe(200);
     else expect(pausedLinks.used).toBe(true);
     const moved = await call(
       `/v1/realms/${realm.realmId}`,

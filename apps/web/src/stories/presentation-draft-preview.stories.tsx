@@ -69,7 +69,13 @@ function answer(input: DraftPreviewInput, state: State): DraftPreviewResult {
     },
   };
 }
-function Connected({ state = 'success', admissionReplacement = false }: { state?: State; admissionReplacement?: boolean }) {
+function Connected({
+  state = 'success',
+  admissionReplacement = false,
+}: {
+  state?: State;
+  admissionReplacement?: boolean;
+}) {
   const locale = getLocale();
   const [signedOut, setSignedOut] = useState(false);
   const client = useMemo(() => {
