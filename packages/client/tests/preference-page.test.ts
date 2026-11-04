@@ -27,7 +27,7 @@ test('malformed choice data is unavailable rather than a guessed enum', () => {
     { ...envelope, reading: { ...envelope.reading, supported: { spoilerLevels: [0, 1, 3], suitability: ['blur', 'show'] } } },
     { ...envelope, reading: { ...envelope.reading, supported: { spoilerLevels: [0, 1, 2], suitability: ['hide'] } } },
     { ...envelope, reading: { ...envelope.reading, supported: { spoilerLevels: [1, 1], suitability: ['blur'] } } },
-    { ...envelope, reading: { ...envelope.reading, effective: { spoilerLevel: 2, suitability: 'blur' } } },
+    { ...envelope, reading: { ...envelope.reading, effective: { spoilerLevel: 3, suitability: 'blur' } } },
     { ...envelope, viewerState: 'signed_in' },
     { ...envelope, allowedActions: { read: { allowed: true }, update: { allowed: true, reason: 'not_authorized' } } },
     { ...envelope, reading: { ...envelope.reading, defaults: { spoilerLevel: 1, suitability: 'blur' } } },
@@ -36,6 +36,12 @@ test('malformed choice data is unavailable rather than a guessed enum', () => {
   expect(decodePreferenceValues({ spoilerLevel: 3, suitability: 'blur', version: 1 })).toBeUndefined();
   expect(decodePreferenceValues(values)).toMatchObject(values);
   expect(decodePreferencePage({ ...envelope, spoilerLevel: 2 })).toBeUndefined();
+  expect(
+    decodePreferencePage({
+      ...envelope,
+      reading: { ...envelope.reading, effective: { spoilerLevel: 2, suitability: 'blur' } },
+    }),
+  ).toBeUndefined();
 });
 
 test('a readable owner whose edit is disallowed remains a current viewer', () => {
