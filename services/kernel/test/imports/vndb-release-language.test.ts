@@ -27,9 +27,12 @@ async function authoredCopy(
     entry_meta: ['id\trevision\tlastmod', 'v1\t1\t2026-10-25 00:00:00+00'],
     releases: [
       'id\treleased\tolang',
-      [`r1\t20200229\t${olang('r1')}`, `r2\t20200300\t${olang('r2')}`, `r3\t20200400\t${olang('r3')}`, `r4\t20200500\t${olang('r4')}`].join(
-        '\n',
-      ),
+      [
+        `r1\t20200229\t${olang('r1')}`,
+        `r2\t20200300\t${olang('r2')}`,
+        `r3\t20200400\t${olang('r3')}`,
+        `r4\t20200500\t${olang('r4')}`,
+      ].join('\n'),
     ],
     releases_titles: [
       'id\tlang\tmtl\ttitle\tlatin',
@@ -113,7 +116,9 @@ test('production operator imports authored VNDB release original languages throu
         const latest = await editor.http(
           `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
         );
-        const current = (latest.body as { candidates: Candidate[] }).candidates.find((item) => item.id === candidate.id)!;
+        const current = (latest.body as { candidates: Candidate[] }).candidates.find(
+          (item) => item.id === candidate.id,
+        )!;
         const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${candidate.id}:accept`, {
           context: globalContext,
           expected_head: current.head,
@@ -141,7 +146,11 @@ test('production operator imports authored VNDB release original languages throu
       const response = await editor.http(`/v1/subjects/${id}?context=${globalContext}`);
       expect(response.status).toBe(200);
       return response.body as {
-        subject: { id: string; type: string; statements: Record<string, { value: { content: unknown }; references?: unknown[] }[]> };
+        subject: {
+          id: string;
+          type: string;
+          statements: Record<string, { value: { content: unknown }; references?: unknown[] }[]>;
+        };
       };
     };
     const japanese = await read(japaneseId!);
@@ -175,9 +184,9 @@ test('production operator imports authored VNDB release original languages throu
     expect(
       (languages.body as { candidates: Candidate[] }).candidates.some((item) => item.statement.value.content === 'en'),
     ).toBe(true);
-    expect((await read(japaneseId!)).subject.statements['schema:inLanguage']?.map((item) => item.value.content)).toEqual([
-      'ja',
-    ]);
+    expect(
+      (await read(japaneseId!)).subject.statements['schema:inLanguage']?.map((item) => item.value.content),
+    ).toEqual(['ja']);
     const fence = await editor.http('/v1/sourceFences:takedown', {
       source: crossMediaAliases.vndb,
       externalId: 'r1',
@@ -196,11 +205,13 @@ test('production operator imports authored VNDB release original languages throu
       `/v1/subjects/${japaneseId}/candidates?${new URLSearchParams({ property: 'schema:inLanguage', context: globalContext, limit: '100' })}`,
     );
     expect(
-      (fenced.body as { candidates: Candidate[] }).candidates.some((item) => item.statement.value.content === 'zh-Hans'),
+      (fenced.body as { candidates: Candidate[] }).candidates.some(
+        (item) => item.statement.value.content === 'zh-Hans',
+      ),
     ).toBe(false);
-    expect((await read(japaneseId!)).subject.statements['schema:inLanguage']?.map((item) => item.value.content)).toEqual([
-      'ja',
-    ]);
+    expect(
+      (await read(japaneseId!)).subject.statements['schema:inLanguage']?.map((item) => item.value.content),
+    ).toEqual(['ja']);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

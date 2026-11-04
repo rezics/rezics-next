@@ -3,7 +3,10 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import { convertCrossMediaEntity, converter_revision } from '../../../../packages/conversion/src/cross-media-entities.ts';
+import {
+  convertCrossMediaEntity,
+  converter_revision,
+} from '../../../../packages/conversion/src/cross-media-entities.ts';
 import type { SourceRecord } from '../../../../packages/conversion/src/index.ts';
 import type { Json, Statement } from '../../../../specs/semantic-driver.ts';
 import type { Proposal } from '../../../../specs/imports-api-driver.ts';

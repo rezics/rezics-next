@@ -25,9 +25,12 @@ async function authoredCopy(
     entry_meta: ['id\trevision\tlastmod', 'v1\t1\t2026-10-25 00:00:00+00'],
     releases: [
       'id\treleased\tolang',
-      [`r1\t20200229\t${olang('r1')}`, `r2\t20200300\t${olang('r2')}`, `r3\t20200400\t${olang('r3')}`, `r4\t20200500\t${olang('r4')}`].join(
-        '\n',
-      ),
+      [
+        `r1\t20200229\t${olang('r1')}`,
+        `r2\t20200300\t${olang('r2')}`,
+        `r3\t20200400\t${olang('r3')}`,
+        `r4\t20200500\t${olang('r4')}`,
+      ].join('\n'),
     ],
     releases_titles: [
       'id\tlang\tmtl\ttitle\tlatin',
