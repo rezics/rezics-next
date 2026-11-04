@@ -134,6 +134,7 @@ function AgentViewRoute() {
   return (
     <PublicProfilePage
       page={data.page}
+      cursor={data.cursor ?? null}
       locale={locale}
       messages={subjectPageMessages()}
       reader={reader}

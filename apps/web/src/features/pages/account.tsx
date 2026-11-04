@@ -14,6 +14,10 @@ import { sessionQuery, useSession } from '../../session/query';
 import { Failed, Preview, sectionClass, useOverview, viewHref, type OverviewValue } from './overview';
 import { isRecord, linkClass, linkColor, webUrl } from './shared';
 import { ContributionRow } from '../../accounts/public-profile/contributions/row';
+import {
+  ContributionActionsHost,
+  useContributionActionsPageScope,
+} from '../../accounts/public-profile/contribution-actions/host';
 import { subjectHref } from '../../subject/subject-href';
 import { AccountFollow } from '../../accounts/public-profile/follow';
 
@@ -256,6 +260,7 @@ type ListSpec = {
 function AccountList({ props, spec }: { props: Record<string, unknown>; spec: ListSpec }) {
   const collectionPagesAdmitted = useOperation('account.collections');
   const state = useOverview(props.id);
+  const actionPage = useContributionActionsPageScope();
   if (!state?.section || !state.value.account) return null;
   const { value, section } = state;
   if (!viewIsPublic(value.profile, spec.view)) return null;
@@ -301,6 +306,34 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
       {items.map((item, index) => spec.row(item, value, index))}
     </ul>
   );
+  const actionView = spec.view === 'posts' || spec.view === 'reviews' || spec.view === 'discussion' ? spec.view : undefined;
+  const actionProfile = value.profile;
+  const actionList =
+    paged &&
+    actionView &&
+    actionProfile &&
+    actionPage?.view === actionView &&
+    actionPage.page.account?.id === actionProfile.id &&
+    value.account.id === actionProfile.id ? (
+      <ContributionActionsHost
+        accountId={actionProfile.id}
+        view={actionView}
+        cursor={actionPage.cursor}
+        locale={value.locale}
+        page={actionPage.page}
+        read={section.read}
+        source={section.body}
+        selection={section.body.actionSelection}
+        publication={actionProfile}
+        postsPublished={actionProfile.publicViews.posts}
+        reviewsPublished={actionProfile.publicViews.reviews}
+        rows={items}
+      >
+        {list}
+      </ContributionActionsHost>
+    ) : (
+      list
+    );
   if (paged) {
     if (items.length === 0 && !next)
       return (
@@ -321,7 +354,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
         <h2 id={`${id}-title`} className="sr-only">
           {title}
         </h2>
-        {list}
+        {actionList}
         {next && (spec.kind !== 'accountCollections' || collectionPagesAdmitted) && (
           <a
             data-slot="continuation"
