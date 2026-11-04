@@ -11,7 +11,6 @@ paths:
   - apps/web/src/features/pages/account.tsx
   - apps/web/src/report/content-actions.tsx
   - apps/web/tests/public-contribution-actions-host.test.tsx
-  - apps/web/tests/report-entry-lifetime.test.tsx
   - apps/web/messages/*.json
 riskAreas:
   - authorization
@@ -31,7 +30,7 @@ waiting: []
 criticalPath: false
 estimate:
   lines: 1200
-  files: 10
+  files: 9
 acceptance:
   tests:
     - "After the admitted publisher installs complete official callable-derived types on the public @rezics/client entry, replace the local request/reference ABI and close response adaptation without importing internal producer declarations or parsing unknown receiver values."
