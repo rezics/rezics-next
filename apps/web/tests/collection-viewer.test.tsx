@@ -7,6 +7,8 @@ import { loadEditableCollectionPage } from '../src/library/collection-load';
 import {
   collectionMemberReturnAddress,
   collectionViewerActionHref,
+  collectionViewerActionsState,
+  collectionViewerHasPersonalAction,
   collectionViewerFactForMember,
   collectionViewerProjection,
   collectionViewerVoteCurrent,
@@ -240,4 +242,54 @@ test('a failed private projection does not fail or empty the admitted public Col
   expect(page.memberState).toBe('ready');
   expect(page.members.map(({ id }) => id)).toEqual(memberIds);
   expect(page.viewerFacts).toBeUndefined();
+});
+
+test('personal navigation consumes only the matched occurrence grant, including truthful empty and unavailable states', () => {
+  const row = facts.rows[0]!;
+  const admitted = {
+    ...row,
+    actions: { state: 'current', allowed: [{ action: 'library_entry:update', operations: ['library_entry.put'] }] },
+  };
+  expect(collectionViewerActionsState(row)).toBe('unavailable');
+  expect(collectionViewerHasPersonalAction(row, facts.question)).toBe(false);
+  expect(collectionViewerHasPersonalAction(admitted, facts.question)).toBe(true);
+  const empty = { ...row, actions: { state: 'current', allowed: [] } };
+  expect(collectionViewerActionsState(empty)).toBe('current');
+  expect(collectionViewerHasPersonalAction(empty, facts.question)).toBe(false);
+  expect(collectionViewerHasPersonalAction({ ...row, actions: { state: 'unavailable' } }, facts.question)).toBe(false);
+  expect(
+    collectionViewerHasPersonalAction({ ...row, actions: { state: 'current', allowed: [null] } }, facts.question),
+  ).toBe(false);
+  const projection = { state: 'current' as const, question: facts.question, rows: [admitted, facts.rows[1]!] };
+  expect(
+    collectionViewerHasPersonalAction(collectionViewerFactForMember(projection, members[1]!), facts.question),
+  ).toBe(false);
+});
+
+test('manual vote admission requires the exact standard meaning and never grants from another action name', () => {
+  const row = {
+    ...facts.rows[0]!,
+    actions: { state: 'current', allowed: [{ action: 'rating:vote', operations: ['rating.vote_put'] }] },
+  };
+  expect(collectionViewerHasPersonalAction(row, facts.question)).toBe(true);
+  expect(collectionViewerHasPersonalAction(row, { ...facts.question!, revision: 2 })).toBe(false);
+  expect(
+    collectionViewerHasPersonalAction(row, { ...facts.question!, scale: { min: 0, max: 10, displayStep: 1 } }),
+  ).toBe(false);
+  expect(
+    collectionViewerHasPersonalAction(
+      {
+        ...row,
+        actions: { state: 'current', allowed: [{ action: 'collection:update', operations: ['rating.vote_put'] }] },
+      },
+      facts.question,
+    ),
+  ).toBe(false);
+});
+
+test('filtered rows without native occurrence IDs return to their bounded page without a fabricated anchor', () => {
+  const source = `/en/collections/${collectionId}?cursor=page-two&layout=grid&f.schema%3Agenre=fiction`;
+  const address = collectionMemberReturnAddress(source);
+  expect(address).toBe(source);
+  expect(subjectVisitReturn(address, 'en')).toBe(source);
 });

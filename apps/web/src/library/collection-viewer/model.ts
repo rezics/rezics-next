@@ -48,7 +48,10 @@ export function collectionViewerVoteCurrent(row: CollectionViewerFact, question:
   return (
     question !== null &&
     question.id === QUESTION &&
-    question.revision > 0 &&
+    question.revision === 1 &&
+    question.scale.min === 0 &&
+    question.scale.max === 20 &&
+    question.scale.displayStep === 1 &&
     question.meaning.trim().length > 0 &&
     row.vote.state !== 'unavailable' &&
     row.vote.questionId === question.id &&
@@ -56,16 +59,87 @@ export function collectionViewerVoteCurrent(row: CollectionViewerFact, question:
   );
 }
 
+/** Named receiving seam until Commerce's closed member schema is published by Content.
+ * Inspect only supplied grants; omission and malformed projections never grant an operation.
+ */
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function suppliedActions(row: CollectionViewerFact | undefined): unknown[] | undefined {
+  if (!row || !('actions' in row) || !record(row.actions)) return undefined;
+  const actions = row.actions;
+  if (actions.state !== 'current' || !Array.isArray(actions.allowed)) return undefined;
+  if (
+    !actions.allowed.every(
+      (grant: unknown) =>
+        record(grant) &&
+        typeof grant.action === 'string' &&
+        grant.action.length > 0 &&
+        Array.isArray(grant.operations) &&
+        grant.operations.every((operation: unknown) => typeof operation === 'string'),
+    )
+  )
+    return undefined;
+  return actions.allowed;
+}
+
+export function collectionViewerActionsState(row: CollectionViewerFact | undefined): 'current' | 'unavailable' {
+  return suppliedActions(row) === undefined ? 'unavailable' : 'current';
+}
+
+/** Navigation reaches the existing Subject writers, which independently readmit every command. */
+export function collectionViewerHasPersonalAction<Row extends CollectionViewerFact>(
+  row: Row | undefined,
+  question: CollectionViewerQuestion,
+): boolean {
+  const actions = suppliedActions(row);
+  if (!actions || !row) return false;
+  return actions.some((grant) => {
+    if (!record(grant) || !Array.isArray(grant.operations)) return false;
+    return grant.operations.some((operation: unknown) => {
+      switch (grant.action) {
+        case 'library_entry:update':
+          return row.entry.state !== 'unavailable' && operation === 'library_entry.put';
+        case 'library_entry:delete':
+          return row.entry.state === 'present' && operation === 'library_entry.delete';
+        case 'progress_session:create':
+          return row.entry.state === 'present' && operation === 'progress_session.create';
+        case 'progress_session:update':
+          return (
+            row.entry.state === 'present' &&
+            [
+              'progress_session.record',
+              'progress_session.record_episodes',
+              'progress_session.complete',
+              'progress_session.abandon',
+              'progress_session.reopen',
+              'progress_session.retire',
+              'progress_session_journal.update',
+            ].includes(String(operation))
+          );
+        case 'rating:vote':
+          return (
+            collectionViewerVoteCurrent(row, question) &&
+            (operation === 'rating.vote_put' || operation === 'rating.vote_delete')
+          );
+        default:
+          return false;
+      }
+    });
+  });
+}
+
 const localOrigin = 'https://rezics.invalid';
 const locales = '(?:en|zh-Hant|zh-Hans|ja|ko|fr|de|es)';
 const collectionPath = new RegExp(`^/${locales}/collections/[0-9a-f-]{36}$`, 'i');
 
 /** Build the safe Collection visit return with the source address and exact occurrence fragment intact. */
-export function collectionMemberReturnAddress(currentHref: string, memberId: string): string | undefined {
+export function collectionMemberReturnAddress(currentHref: string, memberId?: string): string | undefined {
   if (
     !currentHref.startsWith('/') ||
     currentHref.startsWith('//') ||
-    !/^[0-9a-f-]{36}$/i.test(memberId) ||
+    (memberId !== undefined && !/^[0-9a-f-]{36}$/i.test(memberId)) ||
     currentHref.length > 16_384
   )
     return undefined;
@@ -89,7 +163,7 @@ export function collectionMemberReturnAddress(currentHref: string, memberId: str
       }
     }
     current.search = params.toString();
-    current.hash = `collection-member-${memberId}`;
+    current.hash = memberId ? `collection-member-${memberId}` : '';
     return `${current.pathname}${current.search}${current.hash}`;
   } catch {
     return undefined;

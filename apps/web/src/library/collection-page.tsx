@@ -87,10 +87,11 @@ import {
 import { FollowTargetControl } from './follow-target-control';
 import { collectionPublicItemList } from './collection-public-document';
 import { CollectionExport } from './collection-export';
-import { useOperation } from '../kernel/exposure';
 import {
   collectionMemberReturnAddress,
   collectionViewerActionHref,
+  collectionViewerFactForMember,
+  collectionViewerHasPersonalAction,
   collectionViewerProjection,
   type CollectionViewerProjection,
 } from './collection-viewer/model';
@@ -395,21 +396,12 @@ function CollectionPageLifetime({
   const queryClient = useQueryClient();
   const session = useSession();
   const currentHref = useLocation({ select: (location) => location.publicHref });
-  const personalEntryReadAdmitted = useOperation('library_entry.get');
-  const personalEntryWriteAdmitted = useOperation('library_entry.put');
-  const personalEntryDeleteAdmitted = useOperation('library_entry.delete');
   const viewerId = session.state === 'signed-in' ? (session.subject ?? null) : null;
   const viewerProjection = collectionViewerProjection(
     page.viewerFacts,
     page.provenance,
     viewerId,
     Boolean(viewerId && session.csrfToken && current() && (sourceCurrent?.() ?? true)),
-  );
-  const personalActionAllowed = Boolean(
-    viewerId &&
-    session.csrfToken &&
-    personalEntryReadAdmitted &&
-    (personalEntryWriteAdmitted || personalEntryDeleteAdmitted),
   );
   const updateAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection.update');
   // The editor also needs the loaded private metadata, independently of native action admission.
@@ -2213,18 +2205,19 @@ function CollectionPageLifetime({
               currentHref={currentHref}
               onReferenceNavigate={() => setSelectedIds(new Set())}
               viewerProjection={viewerProjection}
-              {...(personalActionAllowed
-                ? {
-                    viewerActionHref: (member: ReadMember) => {
-                      if (!member.subject) return undefined;
-                      const memberId = member.id ?? member.viewerRowKey;
-                      if (!memberId) return undefined;
-                      const title = pageText(libraryTitleValue(member.subject.label), getLocale()).text;
-                      const subject = subjectHref({ id: member.subject.id, label: title }, getLocale()).href;
-                      return collectionViewerActionHref(subject, collectionMemberReturnAddress(currentHref, memberId));
-                    },
-                  }
-                : {})}
+              viewerActionHref={(member: ReadMember) => {
+                const row = collectionViewerFactForMember(viewerProjection, member);
+                if (
+                  viewerProjection.state !== 'current' ||
+                  !member.subject ||
+                  !member.subjectId ||
+                  !collectionViewerHasPersonalAction(row, viewerProjection.question)
+                )
+                  return undefined;
+                const title = pageText(libraryTitleValue(member.subject.label), getLocale()).text;
+                const subject = subjectHref({ id: member.subjectId, label: title }, getLocale()).href;
+                return collectionViewerActionHref(subject, collectionMemberReturnAddress(currentHref, member.id));
+              }}
               presentationKind={page.presentationKind}
               typeRatios={page.typeRatios}
               listPresentations={page.listPresentations}
@@ -2463,7 +2456,7 @@ export function CollectionReadMembers<Member extends ReadMember>({
     const actionHref = viewerActionHref?.(member);
     const rowDetails = (
       <div
-        id={member.id || member.viewerRowKey ? `collection-member-${member.id ?? member.viewerRowKey}` : undefined}
+        id={member.id ? `collection-member-${member.id}` : undefined}
         tabIndex={-1}
         data-collection-member-id={member.id}
         className="space-y-1"

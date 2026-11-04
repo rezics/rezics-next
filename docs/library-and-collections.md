@@ -72,6 +72,7 @@ caller binding, bounded continuation lifecycle, concurrent edits, terminal fence
 Decision: Account member reads add each viewer's own entry state and standard-question score beside each disclosed subject in a private, no-store response.
 Decision: Viewer entry lookup follows the installed Library read: exact subject entry first, then the current Content terminal only when the exact entry is absent.
 Decision: A public Collection session page may request one bounded authenticated FULL member page from the existing producer; Web joins only exact occurrence keys and source subject IDs, then opens the native Subject Library slot with the current filtered page and occurrence anchor as its return address. Collection and personal action gates remain independent.
+Decision: Collection personal navigation requires an exact occurrence's supplied personal grant; missing action delivery stays unavailable, and filtered rows without native occurrence IDs return to their bounded page without a fragment.
 Decision: Home and Collection use the callable `readViewerPersonalActionsPage` seam with the caller's admitted occurrence key, original Subject ID and disclosed resource type; a current empty allowed-action list remains distinct from unavailable admission.
 
 The installed `library/viewer-facts.ts` producer exports `prepareViewerFacts`, `readViewerFacts` and

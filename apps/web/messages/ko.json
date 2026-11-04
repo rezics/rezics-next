@@ -908,6 +908,8 @@
   "collection_viewer_unavailable": "비공개 라이브러리 정보를 사용할 수 없습니다.",
   "collection_viewer_entry_unavailable": "내 항목 상태를 사용할 수 없습니다.",
   "collection_viewer_score_unavailable": "내 평점을 사용할 수 없습니다.",
+  "collection_viewer_actions_unavailable": "개인 관리 기능을 사용할 수 없습니다.",
+  "collection_viewer_no_actions": "현재 사용할 수 있는 개인 작업이 없습니다.",
   "collection_viewer_action": "라이브러리 관리 열기",
   "library_entry_copies": "복본",
   "library_entry_progress": "읽기 진행",
