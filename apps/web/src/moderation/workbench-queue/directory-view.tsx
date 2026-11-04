@@ -39,11 +39,8 @@ export function ModerationDirectory({
       if (current.current === page) current.current = undefined;
     };
   }, [page]);
-  const live = () =>
-    current.current === page &&
-    (!isCurrent || isCurrent()) &&
-    page?.state === 'ready' &&
-    Date.now() < Date.parse(page.validUntil);
+  const visitCurrent = () => current.current === page && (!isCurrent || isCurrent());
+  const live = () => visitCurrent() && page?.state === 'ready' && Date.now() < Date.parse(page.validUntil);
   if (observation.state !== 'ready') {
     const message =
       observation.state === 'preparing'
@@ -60,7 +57,13 @@ export function ModerationDirectory({
         <h2 className="text-xl font-semibold">{m.moderation_directory_heading()}</h2>
         <p role={observation.state === 'unavailable' ? 'alert' : 'status'}>{message}</p>
         {onRetry && observation.state !== 'denied' && observation.state !== 'stale' ? (
-          <Button data-workbench-retry className={control} onClick={onRetry}>
+          <Button
+            data-workbench-retry
+            className={control}
+            onClick={(event) => {
+              if (visitCurrent()) onRetry(event);
+            }}
+          >
             {m.moderation_queue_retry()}
           </Button>
         ) : null}
@@ -68,7 +71,7 @@ export function ModerationDirectory({
           <Button
             className={control}
             onClick={() => {
-              if (!isCurrent || isCurrent()) onSearch(workbenchDirectorySearch(search, true));
+              if (visitCurrent()) onSearch(workbenchDirectorySearch(search, true));
             }}
           >
             {m.moderation_directory_restart()}
