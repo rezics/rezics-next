@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
-import { readInboxPage, type InboxPage } from '../inbox/inbox-read';
+import { readInboxPage, readyInboxPage, type InboxPage, type InboxPageQuery } from '../inbox/inbox-read';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
 import { AppShell } from '../shell/shell';
@@ -55,6 +55,24 @@ export const Unavailable: Story = {
   name: 'Unavailable item',
   render: () => <InboxStory fixture="unavailable" />,
   play: rowsReady,
+};
+export const SparseUnreadPhone: Story = {
+  name: 'Sparse unread page',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <InboxStory fixture="sparse-unread" />,
+  play: async ({ canvasElement }) => {
+    const main = within(await inboxMain(canvasElement));
+    await main.findByText(m.inbox_selection_sparse());
+    const unread = main.getByRole('button', { name: m.inbox_triage_filter_unread() });
+    unread.focus();
+    await expect(unread).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await main.findByText(m.inbox_triage_no_unread_loaded());
+    const next = await main.findByRole('button', { name: m.inbox_next_page() });
+    next.focus();
+    await userEvent.keyboard('{Enter}');
+    await main.findByRole('list', { name: m.inbox_heading() });
+  },
 };
 export const Preparing: Story = {
   name: 'Service unavailable (503)',
@@ -199,22 +217,23 @@ function RejectedContinuationExample({ failedReset = false }: { failedReset?: bo
   const loadPage = useMemo(() => {
     restartRequests = [];
     let firstPages = 0;
-    return async (cursor?: string): Promise<InboxPage> => {
-      restartRequests.push(cursor);
-      if (cursor !== undefined)
+    return async (query: InboxPageQuery): Promise<InboxPage> => {
+      restartRequests.push(query.cursor);
+      if (query.cursor !== undefined)
         return { signedIn: true, state: 'unavailable', failure: { status: 409, retryAfter: '1' } };
       firstPages++;
       if (failedReset && firstPages === 2)
         return { signedIn: true, state: 'unavailable', failure: { status: 503, retryAfter: '1' } };
       // Illustrative IO sequence over existing fixture rows; no native cursor rejection is claimed.
-      const page = await readInboxPage({ data: {} });
+      const page = await readInboxPage({ data: { selection: query.selection } });
       if (!page.signedIn || page.state !== 'ready') return page;
       const index = firstPages === 1 ? 0 : 1;
-      return {
-        ...page,
-        items: page.items.slice(index, index + 1).map((item) => ({ ...item, unread: false })),
-        next: firstPages === 1 ? rejectedCursor : null,
-      };
+      return readyInboxPage(
+        page.items.slice(index, index + 1).map((item) => ({ ...item, unread: false })),
+        firstPages === 1 ? rejectedCursor : null,
+        page.viewer.accountId,
+        query.selection,
+      );
     };
   }, [failedReset]);
   return (

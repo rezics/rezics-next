@@ -10,7 +10,8 @@ import { threadLocation } from '../src/threads/thread-href';
 import { getLocale, locales, overwriteGetLocale, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { decodeInboxPage, loadInboxPage, resolveInboxItems } = await import('../src/inbox/inbox-read');
+const { decodeInboxPage, loadInboxPage, nativeInboxEnvelope, resolveInboxItems } =
+  await import('../src/inbox/inbox-read');
 const { InboxRows, InboxPreferencesLink } = await import('../src/inbox/inbox-page');
 type InboxNotice = import('../src/inbox/inbox-read').InboxNotice;
 type ResolvedNotice = import('../src/inbox/inbox-read').ResolvedInboxPage['items'][number];
@@ -114,7 +115,7 @@ test('the composed Inbox page includes installed watch kinds and does not hydrat
       expect(request.headers.get('authorization')).toBe('Bearer current');
       if (url.pathname.endsWith('/notifications')) {
         expect(url.searchParams.get('cursor')).toBe('opaque-input/+==');
-        return Response.json(raw);
+        return Response.json(nativeInboxEnvelope(raw.items, raw.next, 'viewer'));
       }
       throw new Error(`Unexpected request ${url.pathname}`);
     }) as typeof fetch,
@@ -146,7 +147,7 @@ test('malformed and unknown native kinds fail the whole page', () => {
     { ...valid, actorId: '../private' },
     { ...valid, actions: { ...valid.actions!, open: { kind: 'external', url: 'https://evil.test' } } },
   ])
-    expect(() => decodeInboxPage({ items: [valid, bad], next: null }, 'viewer')).toThrow();
+    expect(() => decodeInboxPage(nativeInboxEnvelope([valid, bad], null, 'viewer'), 'viewer')).toThrow();
 });
 
 test('withheld actors and report targets conceal private context while the admitted report link remains usable', async () => {
@@ -164,10 +165,9 @@ test('withheld actors and report targets conceal private context while the admit
       markSeen: { method: 'POST', path: '/v1/accounts/viewer/notifications/hidden-report:markSeen' },
     },
   });
-  const page = await resolveInboxItems({
-    items: decodeInboxPage({ items: [hiddenNotice], next: null }, 'viewer').items,
-    next: null,
-  });
+  const page = await resolveInboxItems(
+    nativeInboxEnvelope(decodeInboxPage(nativeInboxEnvelope([hiddenNotice], null, 'viewer'), 'viewer').items, null, 'viewer'),
+  );
   expect(page.items[0]).toMatchObject({
     unavailable: true,
     actorId: null,

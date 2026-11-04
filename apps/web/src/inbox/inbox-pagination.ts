@@ -1,7 +1,13 @@
-import type { InboxPage, ResolvedInboxPage } from './inbox-read';
+import {
+  DEFAULT_INBOX_SELECTION,
+  type InboxPage,
+  type InboxSelection,
+  type ResolvedInboxPage,
+} from './inbox-read';
 
-/** Local to the mounted viewer owner; cursors are native opaque values. */
+/** Local to the mounted viewer owner; cursors are native opaque values bound to one selection. */
 export type InboxPagination = {
+  selection: InboxSelection;
   cursor: string | undefined;
   earlier: ResolvedInboxPage | null;
   current: ResolvedInboxPage | null;
@@ -9,11 +15,30 @@ export type InboxPagination = {
 };
 
 export const emptyInboxPagination: InboxPagination = {
+  selection: DEFAULT_INBOX_SELECTION,
   cursor: undefined,
   earlier: null,
   current: null,
   result: undefined,
 };
+
+export function inboxPaginationFor(selection: InboxSelection): InboxPagination {
+  return selection === DEFAULT_INBOX_SELECTION ? emptyInboxPagination : { ...emptyInboxPagination, selection };
+}
+
+/** Native order, one row per notice id; a later duplicate replaces earlier details in that first slot. */
+export function distinctInboxNotices<T extends { id: string }>(items: readonly T[]): T[] {
+  const latest = new Map<string, T>();
+  for (const item of items) latest.set(item.id, item);
+  const order: T[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    order.push(latest.get(item.id)!);
+  }
+  return order;
+}
 
 /** A confirmed item action changes only that notice in the retained page window. */
 export function confirmInboxNoticeSeen(state: InboxPagination, noticeId: string): InboxPagination {
@@ -53,8 +78,17 @@ export function receiveInboxPage(
   const result = transportFailed && (!data || (data.signedIn && data.state === 'ready')) ? inboxTransportFailure : data;
   if (state.result === result) return state;
   if (result?.signedIn && result.state === 'ready') {
+    if (result.selection !== state.selection) return state;
+    const items = distinctInboxNotices(result.items);
+    const current = {
+      items,
+      next: result.next,
+      viewer: result.viewer,
+      selection: result.selection,
+      actions: result.actions,
+    };
     // The last successful page replaces the prior window so retained rows stay bounded by 20.
-    return { ...state, earlier: null, current: { items: result.items, next: result.next }, result };
+    return { ...state, earlier: null, current, result: { ...result, items } };
   }
   if (result && !transient(result)) return { ...state, earlier: null, current: null, result };
   return { ...state, result };
@@ -87,11 +121,16 @@ export function nextInboxPage(state: InboxPagination): InboxPagination {
   if (!state.result?.signedIn || state.result.state !== 'ready') return state;
   const page = readableInboxPage(state);
   if (!page?.next || page.next === state.cursor) return state;
-  return { cursor: page.next, earlier: page, current: null, result: undefined };
+  return { ...state, cursor: page.next, earlier: page, current: null, result: undefined };
 }
 
 /** A continuation can be retired by a deliberate first-page refresh after success or failure. */
 export function restartInboxPage(state: InboxPagination): InboxPagination {
   if (state.cursor === undefined || !state.result?.signedIn) return state;
-  return emptyInboxPagination;
+  return inboxPaginationFor(state.selection);
+}
+
+/** Changing All/Unread always restarts without a cursor. */
+export function selectInboxPage(state: InboxPagination, selection: InboxSelection): InboxPagination {
+  return state.selection === selection ? state : inboxPaginationFor(selection);
 }

@@ -1,15 +1,18 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import { personalRead, readQueryKey } from '../kernel/query';
 import {
+  DEFAULT_INBOX_SELECTION,
   InboxSeenError,
   markInboxItemSeen,
   markInboxSeen,
   readInboxPage,
   readUnreadCount,
-  type InboxPage,
   type InboxNoticeSeenAttempt,
+  type InboxPage,
+  type InboxPageQuery,
   type InboxSeenAttempt,
   type InboxSeenResult,
+  type InboxSelection,
 } from './inbox-read';
 import { forInboxViewer, type InboxViewer } from './inbox-viewer';
 
@@ -19,16 +22,22 @@ export function inboxViewerQueryKey(viewer: InboxViewer) {
   return [...inboxKey, viewer.subject, viewer.epoch] as const;
 }
 
-export type InboxPageLoader = (cursor?: string, signal?: AbortSignal) => Promise<InboxPage>;
+export type InboxPageLoader = (query: InboxPageQuery, signal?: AbortSignal) => Promise<InboxPage>;
 
-const loadNativeInboxPage: InboxPageLoader = (cursor, signal) =>
-  readInboxPage({ data: cursor ? { cursor } : {}, ...(signal ? { signal } : {}) });
+const loadNativeInboxPage: InboxPageLoader = (query, signal) =>
+  readInboxPage({ data: query, ...(signal ? { signal } : {}) });
 
-export function inboxPageQuery(viewer: InboxViewer, cursor?: string, loadPage: InboxPageLoader = loadNativeInboxPage) {
+export function inboxPageQuery(
+  viewer: InboxViewer,
+  cursor?: string,
+  loadPage: InboxPageLoader = loadNativeInboxPage,
+  selection: InboxSelection = DEFAULT_INBOX_SELECTION,
+) {
+  const query: InboxPageQuery = { selection, ...(cursor ? { cursor } : {}) };
   return queryOptions({
     ...personalRead,
-    queryKey: [...inboxViewerQueryKey(viewer), cursor ?? null],
-    queryFn: ({ signal }) => forInboxViewer(viewer, () => loadPage(cursor, signal), signal),
+    queryKey: [...inboxViewerQueryKey(viewer), selection, cursor ?? null],
+    queryFn: ({ signal }) => forInboxViewer(viewer, () => loadPage(query, signal), signal),
     retry: false,
     gcTime: 0,
     enabled: personalRead.enabled && viewer.isCurrent(),

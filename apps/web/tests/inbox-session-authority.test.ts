@@ -4,11 +4,13 @@ import { act, createElement, Fragment, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
 import type {
   InboxPage,
+  InboxPageQuery,
   InboxSeenAttempt,
   InboxSeenResult,
   ResolvedInboxPage,
   UnreadCount,
 } from '../src/inbox/inbox-read';
+import { readyInboxPage } from '../src/inbox/inbox-read';
 
 // UNRUN: production callers, real QueryClient/session observers and shared UI, with held IO only.
 // Native admission, browser journeys and original acceptance are deferred by the launch contract.
@@ -138,12 +140,12 @@ const notice = (id: string, unread = true): ResolvedInboxPage['items'][number] =
   text: `Private reply ${id}`,
   unavailable: false,
 });
-const ready = (ids = ['newest'], next: string | null = continuation): InboxPage => ({
-  signedIn: true,
-  state: 'ready',
-  items: ids.map((id) => notice(id)),
-  next,
-});
+const ready = (ids = ['newest'], next: string | null = continuation): InboxPage =>
+  readyInboxPage(
+    ids.map((id) => notice(id)),
+    next,
+    'alice',
+  );
 const count = (value: number): UnreadCount => ({
   signedIn: true,
   state: 'ready',
@@ -171,7 +173,7 @@ async function screen(strict = false) {
   sessionToken = 'original-token';
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, session());
-  const pageCalls: { cursor?: string; work?: ReturnType<typeof deferred<InboxPage>> }[] = [];
+  const pageCalls: { cursor?: string; selection?: InboxPageQuery['selection']; work?: ReturnType<typeof deferred<InboxPage>> }[] = [];
   const countCalls: ReturnType<typeof deferred<UnreadCount>>[] = [];
   const commands: {
     data: InboxSeenAttempt;
@@ -180,10 +182,14 @@ async function screen(strict = false) {
   }[] = [];
   let holdPages = false;
   let pageResult = (cursor?: string): InboxPage => (cursor ? ready(['older', 'oldest'], null) : ready());
-  const loadPage = async (cursor?: string) => {
-    const call = { ...(cursor ? { cursor } : {}), ...(holdPages ? { work: deferred<InboxPage>() } : {}) };
+  const loadPage = async (query: InboxPageQuery) => {
+    const call = {
+      selection: query.selection,
+      ...(query.cursor ? { cursor: query.cursor } : {}),
+      ...(holdPages ? { work: deferred<InboxPage>() } : {}),
+    };
     pageCalls.push(call);
-    return call.work ? call.work.promise : pageResult(cursor);
+    return call.work ? call.work.promise : pageResult(query.cursor);
   };
   countRead = () => {
     const work = deferred<UnreadCount>();

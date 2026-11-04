@@ -2,7 +2,13 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
-import { resolveInboxItems, type InboxNotice, type InboxPage } from '../inbox/inbox-read';
+import {
+  nativeInboxEnvelope,
+  resolveInboxItems,
+  type InboxNotice,
+  type InboxPage,
+  type InboxPageQuery,
+} from '../inbox/inbox-read';
 import type { InboxNoticeSeenAttempt } from '../inbox/inbox-read';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -87,8 +93,12 @@ const mixedNotices = [
   nativeNotice('report-outcome', 'moderation_decision'),
 ];
 
-async function readyPage(notices: InboxNotice[], next: string | null): Promise<InboxPage> {
-  const resolved = await resolveInboxItems({ items: notices, next });
+async function readyPage(
+  notices: InboxNotice[],
+  next: string | null,
+  selection: InboxPageQuery['selection'] = 'all',
+): Promise<InboxPage> {
+  const resolved = await resolveInboxItems(nativeInboxEnvelope(notices, next, 'alice', selection));
   return { signedIn: true, state: 'ready', ...resolved };
 }
 
@@ -103,14 +113,16 @@ function Preview({
 }) {
   const loadPage = useMemo(
     () =>
-      async (cursor?: string): Promise<InboxPage> => {
-        cursors.push(cursor ?? null);
+      async (query: InboxPageQuery): Promise<InboxPage> => {
+        cursors.push(query.cursor ?? null);
         if (view === 'unavailable')
           return { signedIn: true, state: 'unavailable', failure: { status: 503, code: 'dependency_unavailable' } };
-        if (view === 'sparse') return readyPage([], cursor === undefined ? 'opaque/+continuation==' : null);
-        if (view === 'report') return readyPage([nativeNotice('report-outcome', 'moderation_decision')], null);
-        if (view === 'uncertain') return readyPage([nativeNotice('reply-1', 'reply')], null);
-        return readyPage(mixedNotices, null);
+        if (view === 'sparse')
+          return readyPage([], query.cursor === undefined ? 'opaque/+continuation==' : null, query.selection);
+        if (view === 'report')
+          return readyPage([nativeNotice('report-outcome', 'moderation_decision')], null, query.selection);
+        if (view === 'uncertain') return readyPage([nativeNotice('reply-1', 'reply')], null, query.selection);
+        return readyPage(mixedNotices, null, query.selection);
       },
     [cursors, view],
   );
@@ -145,8 +157,11 @@ function journey(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light
         await expect(rows[1]).toHaveAttribute('data-unread', 'true');
         await expect(attempts[0]).toMatchObject({ accountId: 'alice', noticeId: 'reply-1' });
       } else if (view === 'sparse') {
+        await canvas.findByText(m.inbox_selection_sparse());
         const next = await canvas.findByRole('button', { name: m.inbox_next_page() });
-        await userEvent.click(next);
+        next.focus();
+        await expect(next).toHaveFocus();
+        await userEvent.keyboard('{Enter}');
         await expect(cursors).toEqual([null, 'opaque/+continuation==']);
         await canvas.findByText(m.inbox_triage_no_loaded());
       } else if (view === 'report') {

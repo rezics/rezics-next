@@ -11,6 +11,7 @@ import {
   acknowledgeNotice,
   assertCurrentInboxViewer,
   countUnreadNotices,
+  DEFAULT_INBOX_SELECTION,
   InboxViewerUnavailableError,
   InvalidInboxCursorError,
   listNoticeInbox,
@@ -143,12 +144,37 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           {
             limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1 })),
             cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+            selection: t.Optional(t.Union([t.Literal('all'), t.Literal('unread')])),
           },
           { additionalProperties: false },
         ),
         response: {
           200: withHeaders(
-            t.Object({ items: t.Array(item), next: t.Union([t.String(), t.Null()]) }, { additionalProperties: false }),
+            t.Object(
+              {
+                items: t.Array(item),
+                next: t.Union([t.String(), t.Null()]),
+                viewer: t.Object({ accountId: t.String() }, { additionalProperties: false }),
+                selection: t.Union([t.Literal('all'), t.Literal('unread')]),
+                actions: t.Object(
+                  {
+                    markSeen: t.Union([
+                      t.Object(
+                        {
+                          method: t.Literal('POST'),
+                          path: t.String(),
+                          through: t.String(),
+                        },
+                        { additionalProperties: false },
+                      ),
+                      t.Null(),
+                    ]),
+                  },
+                  { additionalProperties: false },
+                ),
+              },
+              { additionalProperties: false },
+            ),
             sessionHeader,
           ),
           ...listFailures,
@@ -175,7 +201,11 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
               },
               accountId,
-              { limit: query.limit ?? 20, ...(query.cursor === undefined ? {} : { cursor: query.cursor }) },
+              {
+                limit: query.limit ?? 20,
+                selection: query.selection ?? DEFAULT_INBOX_SELECTION,
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              },
             ),
           );
         } catch (error) {

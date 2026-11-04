@@ -873,15 +873,20 @@ Delivery decisions share the existing 180-day retention and recipient-erasure pa
 1000 total records per page). Events older than that horizon cannot reopen an expired decision. Notice cleanup
 remains separate from account lifecycle authority; a late redrive cannot recreate erased recipient state.
 
-`GET /v1/accounts/{accountId}/notifications?limit=&cursor=` lists the authenticated account's inbox;
+`GET /v1/accounts/{accountId}/notifications?limit=&cursor=&selection=` lists the authenticated account's inbox;
 `GET /v1/accounts/{accountId}/notifications/count` returns its bounded current-visible unread summary,
 `POST /v1/accounts/{accountId}/notifications:markSeen` advances its seen marker with `{ through: <notice id> }` and an
 `Idempotency-Key`. `POST /v1/accounts/{accountId}/notifications/{noticeId}:markSeen` acknowledges exactly one
 owned item; it never advances the bulk marker. The inbox is private to its account. Naming another account returns 404
 for list, count and either seen action. The GET list returns newest first, using an immutable notice ordering to break
-time ties. `limit` is 1–50, default 20. Its opaque shared list cursor (`src/tokens/list-cursor.ts`) binds the account,
-limit, current client and authentication epoch. It contains the last raw candidate examined, so retrying an unavailable
-source repeats the same page. An account replacement cannot reuse its old cursor.
+time ties. `limit` is 1–50, default 20. `selection` is `all` or `unread`, default `all`. Unread seeks the recipient home
+index for unacknowledged notices newer than the seen frontier and stops after the same candidate budget; it does not
+walk already-read pages in the consumer. Its opaque shared list cursor (`src/tokens/list-cursor.ts`) binds the account,
+selection, limit, current client and authentication epoch. It contains the last raw candidate examined, so retrying an unavailable
+source repeats the same page. Changing selection starts without a cursor. An account replacement cannot reuse its old cursor.
+The page returns the current viewer, the applied selection and owner-admitted page actions. Bulk `markSeen.through` is a
+displayed notice identity on this page, never a guessed timestamp; unread continuation omits that action so later unseen
+notices cannot be marked from the loaded array.
 
 Each item contains its installed kind, a current actor projection, current board/thread labels where disclosed, an
 exact target action, a one-item seen action and `unread`. Current actor names and avatars come from Accounts on this
@@ -893,8 +898,8 @@ author ownership; moderator inspection does not grant an Inbox notice. Report ou
 reporter-owned record and never include its reason or evidence. A reporter's retained record can remain visible while
 its target context is withheld. Unreadable ordinary targets are omitted without exposing their notice or target ids.
 
-The page examines at most four times its limit (maximum 200) raw notice candidates. Sparse pages advance across the
-last candidate examined. A dependency failure returns an error without a cursor, so retry does not skip candidates.
+The page examines at most four times its limit (maximum 200) raw notice candidates from the selected population. Sparse pages advance across the
+last candidate examined and are neither an empty Inbox nor an exhausted unread range. A dependency failure returns an error without a cursor, so retry does not skip candidates.
 `GET .../count` rejects acknowledged rows before retaining at most 200 plus one unacknowledged candidate to detect
 truncation. The ordered index scan can examine more than 201 recipient rows when it passes an acknowledged prefix.
 It returns `{ count, capped, basis, witness }`; `count` is at most 100, `basis` is
@@ -904,6 +909,8 @@ cap was exceeded. The current-disclosure witness records the summary time. A fai
 an invented zero.
 
 Decision: scan at most 200 unread candidates through current disclosure and return at most 100 visible; the summary is exact only for a complete range with up to 100 visible, otherwise `capped` marks a lower bound.
+
+Decision: Unread list selection seeks the recipient home index for unacknowledged notices newer than the seen frontier, with the existing `min(4×limit, 200)` candidate budget. Bulk mark-through is the displayed newest notice identity on this page and is omitted on unread continuation so later unseen notices cannot be marked from the loaded array.
 
 Bulk mark seen takes an owned notice id and advances the marker only forward in the same immutable inbox order.
 Items at or before the marker are read; marking an older item cannot make newer seen items unread again.
