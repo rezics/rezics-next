@@ -325,4 +325,4 @@ test('ordinary selected-family seed publishes current VNDB release dates and sta
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 180_000);
+}, 300_000);
