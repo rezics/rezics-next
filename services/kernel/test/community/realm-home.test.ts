@@ -32,7 +32,13 @@ beforeAll(async () => {
 });
 afterAll(closeCommunityDrivers);
 
-async function command<T>(path: string, body: unknown, method = 'POST', head?: string, actor = people.owner) {
+async function command<T>(
+  path: string,
+  body: unknown,
+  method: 'POST' | 'PUT' | 'PATCH' = 'POST',
+  head?: string,
+  actor = people.owner,
+) {
   const response = await driver.request({
     actor,
     path,
@@ -44,6 +50,10 @@ async function command<T>(path: string, body: unknown, method = 'POST', head?: s
   const json = await response.json();
   expect(response.status, JSON.stringify(json)).toBe(method === 'POST' ? 201 : 200);
   return json as T;
+}
+function leave(actions: Home['actions']) {
+  if (!('leave' in actions)) throw new Error('Signed-out Home has no leave advice');
+  return actions.leave;
 }
 async function grantOwner(realmId: string, account: Account, actor: Account, revoke = false) {
   const response = await driver.request({
@@ -374,7 +384,7 @@ test('home retires a replaced explicit owner source even when leave advice stays
   await driver.settle();
   await grantOwner(target.realmId, people.member, people.owner);
   const before = await home(target.realmId, people.owner);
-  expect(before.actions.leave).toMatchObject({ state: 'available', method: 'DELETE' });
+  expect(leave(before.actions)).toMatchObject({ state: 'available', method: 'DELETE' });
 
   const observer = observeSql(runtime.system.database.pool);
   const barrier = observer.hold({ statement: summaries.sql }, 'after');
@@ -392,7 +402,7 @@ test('home retires a replaced explicit owner source even when leave advice stays
     await pending;
     await observer.close();
   }
-  expect((await home(target.realmId, people.owner)).actions.leave).toMatchObject({
+  expect(leave((await home(target.realmId, people.owner)).actions)).toMatchObject({
     state: 'available',
     method: 'DELETE',
   });

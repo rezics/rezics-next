@@ -44,14 +44,17 @@ async function grantOwner(realmId: string, accountId: string) {
 async function inventory(actor: Account) {
   // Exercise the installed generated response against the production handler.
   const client = createKernelClient('https://community.test', {
-    fetch: async (input) => {
-      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-      return driver.request({
-        actor,
-        method: 'GET',
-        path: url.pathname + url.search,
-      });
-    },
+    fetch: Object.assign(
+      async (input: URL | RequestInfo) => {
+        const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+        return driver.request({
+          actor,
+          method: 'GET',
+          path: url.pathname + url.search,
+        });
+      },
+      { preconnect: async () => {} },
+    ),
   });
   const result = await client.me.realms.get();
   expect(result.status).toBe(200);
@@ -219,7 +222,7 @@ test('current native identity and presentation follow membership completion and 
       })
     ).status,
   ).toBe(200);
-  expect(owned.current.actions.leave).toEqual({
+  expect(JSON.parse(JSON.stringify(owned.current.actions.leave))).toEqual({
     state: 'unavailable',
     reason: 'last_explicit_holder',
   });
