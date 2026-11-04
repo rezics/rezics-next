@@ -5,6 +5,7 @@ import { copiesSubjectId } from '../../library/copies-query';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const subjectDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+(?:/([^/?#]+))?$`);
+const musicContextDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+/music-context$`);
 const realmDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/realms/${uuid}$`);
 const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/library/copies$`);
 const returnAddressCap = 32768;
@@ -91,13 +92,41 @@ function collectionReturn(url: URL, locale?: string): string | undefined {
 /** A public return address may restore one admitted Subject or Collection view window. */
 export function subjectVisitReturn(value: unknown, locale?: string): string | undefined {
   if (typeof value !== 'string' || value.length > returnAddressCap) return;
+  if (/[\\\u0000-\u001f\u007f]/u.test(value)) return;
   const catalogueReturn = realmCatalogueReturnHref(value, locale);
   if (catalogueReturn) return catalogueReturn;
   if (!value.startsWith('/') || value.startsWith('//')) return;
+  const rawPath = value.split(/[?#]/u, 1)[0] ?? '';
+  if (/%(?:2f|5c)/iu.test(rawPath)) return;
   try {
+    const decodedPath = decodeURIComponent(rawPath);
+    if (
+      decodedPath.includes('\\') ||
+      /[\u0000-\u001f\u007f]/u.test(decodedPath) ||
+      decodedPath.split('/').some((segment) => segment === '.' || segment === '..') ||
+      /%(?:25|2e|2f|5c|0[0-9a-f]|1[0-9a-f]|7f)/iu.test(decodedPath)
+    )
+      return;
     const url = new URL(value, 'https://rezics.invalid');
     const collection = collectionReturn(url, locale);
     if (collection) return collection;
+    const musicContext = musicContextDestination.exec(url.pathname);
+    if (musicContext) {
+      const keys = [...url.searchParams.keys()];
+      const stream = url.searchParams.get('stream');
+      const cursor = url.searchParams.get('cursor');
+      if (
+        url.origin !== 'https://rezics.invalid' ||
+        (locale !== undefined && musicContext[1] !== locale) ||
+        url.hash ||
+        new Set(keys).size !== keys.length ||
+        keys.some((key) => key !== 'stream' && key !== 'cursor') ||
+        (stream !== null && !/^[A-Za-z][A-Za-z0-9+.-]*:[^\s\u0000-\u001f\u007f]{1,128}$/u.test(stream)) ||
+        (cursor !== null && (!stream || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor)))
+      )
+        return;
+      return `${url.pathname}${url.search}`;
+    }
     const subject = subjectDestination.exec(url.pathname);
     const realmPath = realmDestination.exec(url.pathname);
     const copiesPath = copiesDestination.exec(url.pathname);

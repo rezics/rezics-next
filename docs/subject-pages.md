@@ -1925,6 +1925,9 @@ Selecting a node issues at most two explicit native reads (the selected subject,
 companion page). Correction uses the existing facts, relation and authored-document editors and returns to the same
 bounded exploration address.
 
+Decision: Music-context relation and correction returns preserve only the selected public stream and its bounded
+native cursor; the reader keeps at most eight page addresses and returns without rows or session tokens.
+
 Decision: unreleased `schema:Quotation` and place/event/area/instrument types stay named unavailable until Semantic
 admits them; unknown source roles stay retained evidence.
 

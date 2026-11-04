@@ -2,6 +2,7 @@ import { expectedCandidateReader } from '../../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { isExploreId } from '../../pages/graph-browser';
 import { exploreContext } from '../../pages/graph-browser/actions';
+import { isMusicContextCursor, isMusicContextStream } from './navigation';
 import { readMusicContext, type MusicContextRead } from './index';
 
 export const readSubjectMusicContext = createServerFn({ method: 'POST', strict: false })
@@ -12,15 +13,17 @@ export const readSubjectMusicContext = createServerFn({ method: 'POST', strict: 
       typeof input.id !== 'string' ||
       !isExploreId(input.id) ||
       typeof input.locale !== 'string' ||
-      input.locale.length > 35
+      input.locale.length > 35 ||
+      (input.stream !== undefined && !isMusicContextStream(input.stream)) ||
+      (input.cursor !== undefined && (!isMusicContextCursor(input.cursor) || !input.stream))
     )
       throw new Error('Invalid music context address');
     return {
       expectedReader: input.expectedReader === null ? null : expectedCandidateReader(input),
       id: input.id,
       locale: input.locale,
-      stream: typeof input.stream === 'string' && input.stream.length <= 128 ? input.stream : undefined,
-      cursor: typeof input.cursor === 'string' && input.cursor.length <= 8192 ? input.cursor : undefined,
+      stream: typeof input.stream === 'string' ? input.stream : undefined,
+      cursor: typeof input.cursor === 'string' ? input.cursor : undefined,
       session: typeof input.session === 'string' && input.session.length <= 16384 ? input.session : undefined,
     };
   })
