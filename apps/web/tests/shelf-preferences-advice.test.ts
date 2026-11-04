@@ -190,3 +190,54 @@ test('structured refusals retain the original intent and one absolute retry dead
     Date.now = realNow;
   }
 });
+
+test('a fresh Shelf read can run during the original command wait without changing it', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    const initial = withShelfAdvice({
+      spoilerLevel: 0,
+      suitability: 'blur',
+      version: 1,
+      shelf: { layouts: { all: 'list' } },
+    });
+    const current = withShelfAdvice({ ...initial, version: 2, shelf: { gridSize: 'small' } });
+    const commands: Readonly<PreferenceChange>[] = [];
+    let reads = 0;
+    const draft = new ShelfPreferenceDraftRecovery(
+      initial,
+      {
+        save: async (input) => {
+          commands.push(input);
+          return {
+            ok: false,
+            reason: 'unavailable',
+            failure: { status: 503, code: 'dependency_unavailable', requestId: 'write-wait', retryAfter: '30' },
+          };
+        },
+        read: async () => {
+          reads++;
+          return { signedIn: true, preferences: current, securityHref: null };
+        },
+      },
+      owner,
+    );
+    draft.edit({ layout: 'table' }, 'layout');
+    await draft.submit();
+    const original = draft.snapshot().pending?.input;
+    const deadline = now + 30_000;
+    expect(draft.snapshot().retryAt).toBe(deadline);
+
+    await draft.reload();
+
+    expect(reads).toBe(1);
+    expect(draft.snapshot().retryAt).toBe(deadline);
+    expect(draft.snapshot().pending?.input).toBe(original);
+    expect(draft.snapshot().known.version).toBe(current.version);
+    expect(commands).toHaveLength(1);
+  } finally {
+    Date.now = realNow;
+  }
+});
