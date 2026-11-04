@@ -1,22 +1,9 @@
-import type { Pool, PoolClient } from 'pg';
-import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
+import type { Pool } from 'pg';
+import { readPublicIdentityObservations, type PublicIdentityObservation } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { readAvatarSummaries, type AvatarSummary } from './avatar.ts';
-
-/** Internal dependency seam matching Accounts' bounded observation contract, never a public DTO. */
-export type NoticeActorObservation =
-  | Extract<PublicIdentity, { state: 'deleted' }>
-  | (Extract<PublicIdentity, { state: 'active' }> & {
-      avatarMediaId: string | null;
-      nativeState: 'active' | 'suspended';
-      authnFenced: boolean;
-    });
-export type NoticeActorObservationReader = (
-  client: Pick<PoolClient, 'query'>,
-  ids: readonly string[],
-) => Promise<readonly NoticeActorObservation[]>;
 
 export type NoticeActor =
   | Readonly<{
@@ -42,7 +29,7 @@ export function unavailableNoticeActor(): NoticeActor {
   return { state: 'withheld', displayName: 'Former or unavailable account', handle: null, avatar: null, avatarUrl: null };
 }
 
-function unchanged(before: PublicIdentity | NoticeActorObservation | undefined, after: PublicIdentity | NoticeActorObservation) {
+function unchanged(before: PublicIdentityObservation | undefined, after: PublicIdentityObservation) {
   if (!before || before.id !== after.id || before.kind !== after.kind || before.state !== after.state) return false;
   if (before.state !== 'active' || after.state !== 'active') return false;
   if (
@@ -51,10 +38,8 @@ function unchanged(before: PublicIdentity | NoticeActorObservation | undefined, 
     before.automated !== after.automated ||
     before.operatorId !== after.operatorId
   ) return false;
-  if ('avatarMediaId' in before && 'avatarMediaId' in after)
-    return before.avatarMediaId === after.avatarMediaId &&
-      before.nativeState === after.nativeState && before.authnFenced === after.authnFenced;
-  return !('avatarMediaId' in before) && !('avatarMediaId' in after);
+  return before.avatarMediaId === after.avatarMediaId &&
+    before.nativeState === after.nativeState && before.authnFenced === after.authnFenced;
 }
 
 /** Two identical bounded Account observations surround Content's admitted Media read. */
@@ -62,21 +47,16 @@ export async function readNoticeActors(
   pool: Pool,
   ids: readonly string[],
   deadline: number,
-  observe?: NoticeActorObservationReader,
 ): Promise<ReadonlyMap<string, NoticeActor>> {
   if (ids.length > 50) throw new RangeError('At most 50 notice identities');
   const unique = [...new Set(ids.filter((id) => routeOf(id) !== null))];
   if (!unique.length) return new Map();
-  const routes = unique.map((id) => routeOf(id)!);
   return within(deadline, () => withConnection(pool, async (connection) => {
     const client = deadlineClient(connection, deadline);
-    // Until the native dependency is installed, the thin public reader admits identity only.
-    // It supplies no reference or lifecycle facts from which avatar admission can be inferred.
-    const read = (): Promise<readonly (PublicIdentity | NoticeActorObservation)[]> =>
-      observe ? observe(client, unique) : readPublicIdentities(client, routes, unique);
+    const read = () => readPublicIdentityObservations(client, unique);
     const before = new Map((await read()).map((row) => [row.id, row]));
     const mediaIds = [...new Set([...before.values()].flatMap((row) =>
-      row.state === 'active' && row.kind === 'actor' && 'avatarMediaId' in row &&
+      row.state === 'active' && row.kind === 'actor' &&
       row.nativeState === 'active' && !row.authnFenced && row.avatarMediaId
         ? [row.avatarMediaId] : [],
     ))];
@@ -86,7 +66,7 @@ export async function readNoticeActors(
     for (const id of unique) {
       const current = after.get(id);
       if (!current || current.state !== 'active' || current.kind !== 'actor' || !unchanged(before.get(id), current)) continue;
-      const avatar = 'avatarMediaId' in current && current.nativeState === 'active' &&
+      const avatar = current.nativeState === 'active' &&
         !current.authnFenced && current.avatarMediaId ? avatars.get(current.avatarMediaId) ?? null : null;
       result.set(id, {
         state: 'available', accountId: id,

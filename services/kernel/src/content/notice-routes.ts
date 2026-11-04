@@ -19,7 +19,6 @@ import {
   readNoticeInboxItem,
 } from './notice-inbox.ts';
 import { AvatarSummarySchema, strictContentSchema } from './schemas.ts';
-import type { NoticeActorObservationReader } from './notice-actor-context.ts';
 
 type Dependencies = {
   pool: import('pg').Pool;
@@ -27,7 +26,6 @@ type Dependencies = {
   tokens: KeyRing;
   routeKey: Uint8Array;
   clock?: () => Date;
-  noticeActorObservations?: NoticeActorObservationReader;
 };
 const params = t.Object({ accountId: t.String() }, { additionalProperties: false });
 const noticeParams = t.Object({ accountId: t.String(), noticeId: t.String() }, { additionalProperties: false });
@@ -208,7 +206,6 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 tokens: dependencies.tokens,
                 access: dependencies.access,
                 routeKey: dependencies.routeKey,
-                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
                 ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
@@ -250,7 +247,6 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 tokens: dependencies.tokens,
                 access: dependencies.access,
                 routeKey: dependencies.routeKey,
-                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
                 ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
@@ -288,7 +284,6 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 tokens: dependencies.tokens,
                 access: dependencies.access,
                 routeKey: dependencies.routeKey,
-                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
                 ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
@@ -333,7 +328,6 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 access: dependencies.access,
                 tokens: dependencies.tokens,
                 routeKey: dependencies.routeKey,
-                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
               },
@@ -379,7 +373,6 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 access: dependencies.access,
                 tokens: dependencies.tokens,
                 routeKey: dependencies.routeKey,
-                noticeActorObservations: dependencies.noticeActorObservations,
                 actor,
                 deadline: job.deadline,
               },

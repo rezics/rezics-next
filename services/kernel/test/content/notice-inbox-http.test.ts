@@ -135,6 +135,54 @@ test('the Inbox and unread summary omit notices without a current disclosed sour
   });
 });
 
+test('mounted list and exact notice independently admit native actor avatars and the original target', async () => {
+  await seed(0);
+  const target = await fixture.target();
+  for (const [id, action] of [[target.board, 'board:read'], [target.thread, 'thread:read'], [target.post, 'post:read']])
+    await fixture.grant(id!, [action!]);
+  const actor = fixture.managerId;
+  const actorRoute = routeOf(actor)!;
+  const media = newId(actorRoute);
+  await db.admin.query(
+    `INSERT INTO content.media
+      (route,media_id,container_id,uploader_id,reservation_request_id,purpose,media_type,
+       byte_count,actual_byte_count,sha256,state,key,transaction_id,width,height,thumbhash,average_color)
+     VALUES ($1,$2,$3,$3,$2::text,'avatar','image/png',256,256,repeat('a',64),'available',
+             'unused-original-key',$2,64,64,decode('010203','hex'),'#123456')`, [actorRoute, media, actor],
+  );
+  await db.admin.query('UPDATE access.account SET avatar=$3 WHERE route=$1 AND account_id=$2', [actorRoute, actor, media]);
+  const base = `/v1/accounts/${fixture.accountId}/notifications`;
+  const ids = Array.from({ length: 4 }, () => newId(routeOf(fixture.accountId)!));
+  await db.admin.query(
+    `INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,actor_id,thread_id,post_id,created_at)
+     SELECT $1,$2,id,kind,$4,$5,$6,$4,now()+ordinality*interval '1 second'
+     FROM unnest($3::uuid[],ARRAY['reply','mention','thread_watch','board_activity']) WITH ORDINALITY AS n(id,kind,ordinality)`,
+    [routeOf(fixture.accountId), fixture.accountId, ids, target.post, actor, target.thread],
+  );
+  try {
+    const page = await call(`${base}?limit=4`);
+    expect(page.response.status).toBe(200);
+    expect(page.value.items.map((item: { id: string }) => item.id)).toEqual([...ids].reverse());
+    const expected = {
+      actor: { state: 'available', accountId: actor, avatar: { media, width: 64, height: 64 }, avatarUrl: null },
+      target: { state: 'available', threadId: target.thread, postId: target.post, boardId: target.board },
+      actions: { open: { kind: 'thread_post', threadId: target.thread, postId: target.post } }, unread: true,
+    };
+    for (const item of page.value.items) expect(item).toMatchObject(expected);
+    const exact = await call(`${base}/${ids[0]}`);
+    expect(exact.response.status).toBe(200);
+    expect(exact.value).toMatchObject({ viewer: { state: 'current' }, notice: expected });
+    await db.admin.query('UPDATE content.media SET taken_down=true WHERE route=$1 AND media_id=$2', [actorRoute, media]);
+    expect((await call(`${base}/${ids[0]}`)).value.notice).toMatchObject({ ...expected, actor: { state: 'available', avatar: null } });
+    await db.admin.query("UPDATE access.account SET state='pending' WHERE route=$1 AND account_id=$2", [actorRoute, actor]);
+    expect((await call(`${base}/${ids[0]}`)).value.notice).toMatchObject({
+      ...expected, actorId: null, actor: { state: 'withheld', displayName: 'Former or unavailable account', avatar: null },
+    });
+  } finally {
+    await db.admin.query("UPDATE access.account SET state='active',avatar=NULL WHERE route=$1 AND account_id=$2", [actorRoute, actor]);
+  }
+});
+
 test('the unread count stops at 100 and the seen marker never moves backward', async () => {
   const ids = await seed(102);
   const base = `/v1/accounts/${fixture.accountId}/notifications`;
