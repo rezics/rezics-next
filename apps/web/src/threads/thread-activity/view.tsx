@@ -19,7 +19,7 @@ export function ThreadActivity({
   current: boolean;
   onRetry: () => Promise<unknown>;
   isCurrent: () => boolean;
-  queryKey?: QueryKey;
+  queryKey?: QueryKey | undefined;
   publication?: object;
 }) {
   const [pending, setPending] = useState(false);
