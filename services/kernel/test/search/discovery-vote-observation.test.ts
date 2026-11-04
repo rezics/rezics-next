@@ -36,7 +36,7 @@ test('explicit native score observation refuses question or resolved identity ch
   for (const changed of [
     { ...question, revision: 2 },
     { ...question, maximumUnits: 100 },
-    { ...question, grain: 'edition' },
+    { ...question, grain: 'release' as const },
     { ...question, meaning: 'different' },
   ])
     expect(() => assertVoteObservation(captured, changed, subjectId)).toThrow('question_changed');
