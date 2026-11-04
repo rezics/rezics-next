@@ -87,11 +87,13 @@ export function emptyRecoveryActionLinks(
     if (action.kind === 'remove-range' && state.ranges?.[action.property]) {
       const ranges = { ...state.ranges };
       delete ranges[action.property];
+      const { ranges: _ranges, ...withoutRanges } = firstPage;
+      const nextPage = Object.keys(ranges).length ? { ...withoutRanges, ranges } : withoutRanges;
       result.push({
         key: JSON.stringify(action),
         label: m.search_empty_remove_range({ property: propertyLabel(action.property) }, options),
         href: focused(
-          discoverySearchHref(locale, { ...firstPage, ranges: Object.keys(ranges).length ? ranges : undefined }),
+          discoverySearchHref(locale, nextPage),
           'search-filter-entry',
         ),
       });

@@ -156,7 +156,7 @@ export function searchPageForRecovery(data: SearchPageData, recovery = data.reco
   return {
     ...retained,
     recovery,
-    ...(recovery.problem ? { problem: recovery.problem } : {}),
+    ...('problem' in recovery && recovery.problem ? { problem: recovery.problem } : {}),
     hitTypes: {},
     typeChoices: [],
     groups: [],

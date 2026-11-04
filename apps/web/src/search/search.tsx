@@ -389,7 +389,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       : ['session', 'closed', 'denied'].includes(outcome.recovery.status)
         ? outcome.recovery
         : (facetSearchInvalidation(facetResult) ?? outcome.recovery);
-    const problem = recovery && recovery.status !== 'ready' ? recovery.problem : undefined;
+    const problem = recovery && 'problem' in recovery ? recovery.problem : undefined;
     const typeChoices = discovery?.status === 'ready' ? discovery.page.kinds.values : [];
     const hitTypes: Record<string, Record<string, string>> = {};
     if (release)
@@ -1334,7 +1334,7 @@ function renderResults(
                 state={data.queryState}
                 locale={locale}
                 labels={{
-                  typeLabels: data.typeLabels,
+                  typeLabels: data.typeLabels ?? {},
                   typeChoices: data.typeChoices,
                   selectedFacetLabels: data.selectedFacetLabels,
                   groups: data.groups,

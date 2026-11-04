@@ -62,7 +62,7 @@ export function SearchRecovery({
   retryRef?: Ref<HTMLButtonElement | null> | undefined;
   onRetryFocus?: ((source: HTMLButtonElement) => void) | undefined;
 }) {
-  const retryAt = state.status !== 'ready' ? state.retryAt : undefined;
+  const retryAt = 'retryAt' in state ? state.retryAt : undefined;
   const waiting = useSearchRetryWait(retryAt);
   if (state.status === 'ready') return null;
   const options = locale === undefined ? undefined : messageOptions(locale);
