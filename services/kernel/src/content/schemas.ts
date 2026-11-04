@@ -1148,6 +1148,8 @@ export const AuthorThreadsResponseSchema = t.Object(
       firstPost: PostEntrySchema,
       reviewContext: t.Optional(FeedReviewContextSchema),
       conversationActivity: t.Optional(AuthorConversationActivitySchema),
+      ...viewerReaction,
+      ...reactions,
     }, closed)), { maxItems: 20 }),
     next: t.Union([t.String(), t.Null()]),
   },

@@ -48,7 +48,8 @@ test('author replies carry only their immediate public parent and retire changed
       throw new Error('Expected disclosed parent');
     expect(result.parentContext.parent.excerpt!.length).toBeLessThanOrEqual(160);
     const parent = (await readPost(dependencies, threadId, parentId, context)).value!;
-    expect(result.parentContext.parent.revisionId).toBe('revisionId' in parent ? parent.revisionId : null);
+    if (parent.availability !== 'available') throw new Error('Expected available exact parent');
+    expect(result.parentContext.parent.revisionId).toBe(parent.revisionId);
     expect(JSON.stringify(result)).not.toContain('Opening');
     expect(JSON.stringify(result)).not.toContain('Invisible annotation');
     const changing = await prepareAuthorItemContext(dependencies, [reference], context);
@@ -85,7 +86,7 @@ test('author page refuses publication revoked after selection without returning 
       { actor: { kind: 'anonymous' }, deadline: Date.now() + 120_000 },
     );
     // Attach rejection before releasing the real asynchronous boundary.
-    const outcome = expect(pending).rejects.toThrow();
+    const outcome = expect(pending).rejects.toMatchObject({ code: 'dependency_unavailable' });
     try {
       await gate.entered;
       await f.admin.query('UPDATE access.account SET public_views=$3::jsonb WHERE route=$1 AND account_id=$2',
