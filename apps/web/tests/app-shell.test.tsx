@@ -137,6 +137,8 @@ test('main and phone navigation mark the current page, and followed communities 
     );
     expect(phone).toContain('aria-label="Phone navigation"');
     expect(phone).toContain('href="/en/library" aria-current="page"');
+    expect(phone).toMatch(/<a[^>]*href="\/en\/settings"[^>]*>You<\/a>/);
+    expect(phone).not.toMatch(/contents">[^<]*href="\/en\/settings"/);
   } finally {
     hydration.mockRestore();
     operation.mockRestore();

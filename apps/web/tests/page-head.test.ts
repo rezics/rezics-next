@@ -69,6 +69,10 @@ test('public origin must be an absolute HTTP origin', () => {
     expect(() => validatePublicOrigin(value)).toThrow(/PUBLIC_ORIGIN/);
   }
   expect(validatePublicOrigin(origin)).toBe(origin);
+  expect(validatePublicOrigin('http://127.0.0.1:3000')).toBe('http://127.0.0.1:3000');
+  expect(validatePublicOrigin('http://127.0.0.1:3000/')).toBe('http://127.0.0.1:3000');
+  expect(validatePublicOrigin(undefined, 'http://127.0.0.1:3000/en')).toBe('http://127.0.0.1:3000');
+  expect(() => validatePublicOrigin(undefined, 'https://example.com/en')).toThrow(/PUBLIC_ORIGIN/);
 });
 
 test('shared route errors preserve native failures, conceal missing targets and exclude successful locale paths', () => {

@@ -1,6 +1,7 @@
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { createIsomorphicFn } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { SearchPage } from '../search/search.tsx';
@@ -24,7 +25,7 @@ function messageOptions(locale: string) {
 }
 
 const publicOrigin = createIsomorphicFn()
-  .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN))
+  .server(() => validatePublicOrigin((env as { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN, getRequest().url))
   .client(() =>
     validatePublicOrigin(new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href).origin),
   );

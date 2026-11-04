@@ -450,7 +450,8 @@ Configure these variables in the environment of `bun run dev`:
 - `SITE_ORIGINS`: comma-separated exact origins (scheme, host and optional port, with no trailing slash). Production
   requires this variable. Development uses the dev server's own origin when it is unset.
 - `PUBLIC_ORIGIN`: the absolute HTTP origin used for canonical URLs and cards, without a path or trailing slash.
-  Set it to the public site origin and include that origin in `SITE_ORIGINS` in production.
+  Set it to the public site origin and include that origin in `SITE_ORIGINS` in production. A trailing slash is
+  accepted. When this variable is unset or invalid, a loopback HTTP request origin is used.
 - `WEBSITE_CLIENT_KEY`: a private P-256 JWK with a `kid`, used for ES256 client assertions. In production this is a
   Worker secret; supply it through Cloudflare's secret management, never through a config file or build output.
   `AUTH_ISSUER`, `SITE_ORIGINS`, `API_RESOURCE`, `WEBSITE_SCOPES` and `WEBSITE_CLIENT_ID` are production Worker text

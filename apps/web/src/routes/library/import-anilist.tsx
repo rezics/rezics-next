@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../../kernel/client';
+import { createServerFn } from '@tanstack/react-start';
+import { hasKernelOrigin, kernelClient, preparePrivatePage } from '../../kernel/client';
 import { prepareExposure } from '../../kernel/exposure';
 import { PersonalAniListImportPage } from '../../library/personal-anilist-import';
 import { nativeAniListImport } from '../../library/personal-anilist-import/native';
@@ -11,17 +10,17 @@ import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 
+const loadAvailability = createServerFn({ method: 'GET' }).handler(() => {
+  preparePrivatePage();
+  return { available: hasKernelOrigin() && !!nativeAniListImport(kernelClient()) };
+});
+
 export const Route = createFileRoute('/library/import-anilist')({
   beforeLoad: async (context) => {
     await requireSignedIn(context);
     await prepareExposure(context.context.queryClient);
   },
-  loader: () => {
-    setResponseHeader('cache-control', 'private, no-store');
-    void getRequest();
-    const origin = Boolean((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN);
-    return { available: origin && !!nativeAniListImport(kernelClient()) };
-  },
+  loader: () => loadAvailability(),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>

@@ -1,21 +1,43 @@
 import { createKernelClient } from '@rezics/client';
-import { getRequest } from '@tanstack/react-start/server';
+import { createIsomorphicFn } from '@tanstack/react-start';
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { locales } from '../paraglide/runtime.js';
 import { requestLanguages } from './languages.ts';
 import { withPlatformClosedRecognition } from './platform-closed.ts';
 import { recordPageReadCacheControl } from '../security/page-cache.ts';
 
+const kernelOrigin = createIsomorphicFn()
+  .server(() => (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN)
+  .client(() => undefined as string | undefined);
+
+const currentRequest = createIsomorphicFn()
+  .server((given?: Request) => {
+    try {
+      return given ?? getRequest();
+    } catch {
+      return given;
+    }
+  })
+  .client((given?: Request) => given);
+
+/** Mark the response private and require an SSR request. */
+export const preparePrivatePage = createIsomorphicFn()
+  .server(() => {
+    setResponseHeader('cache-control', 'private, no-store');
+    void getRequest();
+  })
+  .client(() => undefined);
+
+export function hasKernelOrigin(): boolean {
+  return Boolean(kernelOrigin());
+}
+
 /** Carry the owner's restrictive cache policy through SSR, including nested server functions. */
 function pageFetch(fetcher: typeof fetch): typeof fetch {
   return (async (input, init) => {
     const response = await fetcher(input, init);
-    let request: Request | undefined;
-    try {
-      request = getRequest();
-    } catch {
-      /* A standalone caller has no SSR response. */
-    }
+    const request = currentRequest();
     if (request) recordPageReadCacheControl(request, response.headers.get('cache-control'));
     return response;
   }) as typeof fetch;
@@ -37,12 +59,7 @@ function uiLocale(value: string | undefined): string | undefined {
  * page that called a server function.
  */
 export function requestLocale(given?: Request): string | undefined {
-  let request: Request | undefined;
-  try {
-    request = given ?? getRequest();
-  } catch {
-    request = undefined;
-  }
+  const request = currentRequest(given);
   if (!request) return undefined;
   const page = request;
   const fromPath = (value: string | null) => {
@@ -66,7 +83,7 @@ export function kernelClient(
     ...(language === undefined ? {} : { 'accept-language': acceptLanguage(language) }),
     ...(authorization === undefined ? {} : { authorization }),
   };
-  const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
+  const origin = kernelOrigin();
   if (origin)
     return withPlatformClosedRecognition(
       createKernelClient(origin, { headers, fetch: pageFetch(decorateFetch(globalThis.fetch)) }),

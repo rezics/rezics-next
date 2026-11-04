@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../../kernel/client';
+import { createServerFn } from '@tanstack/react-start';
+import { hasKernelOrigin, kernelClient, preparePrivatePage } from '../../kernel/client';
 import { prepareExposure } from '../../kernel/exposure';
 import { PersonalMalImportPage } from '../../library/personal-mal-import';
 import { nativeMalImport } from '../../library/personal-mal-import/native';
@@ -10,17 +9,17 @@ import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 
+const loadAvailability = createServerFn({ method: 'GET' }).handler(() => {
+  preparePrivatePage();
+  return { available: hasKernelOrigin() && !!nativeMalImport(kernelClient()) };
+});
+
 export const Route = createFileRoute('/library/import-mal')({
   beforeLoad: async (context) => {
     await requireSignedIn(context);
     await prepareExposure(context.context.queryClient);
   },
-  loader: () => {
-    setResponseHeader('cache-control', 'private, no-store');
-    void getRequest();
-    const origin = Boolean((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN);
-    return { available: origin && !!nativeMalImport(kernelClient()) };
-  },
+  loader: () => loadAvailability(),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>

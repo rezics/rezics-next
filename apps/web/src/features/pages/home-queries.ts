@@ -52,7 +52,10 @@ const readHomePage = createServerFn({ method: 'GET' })
       loadPublicHomeFeed(client),
       loadRoutePage(client, '/', locale).catch(() => ({ kind: 'missing' as const })),
     ]);
-    const origin = validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN);
+    const origin = validatePublicOrigin(
+      (env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN,
+      getRequest().url,
+    );
     const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
     const verification = config.TURNSTILE_SITE_KEY
       ? {
