@@ -1931,3 +1931,43 @@ filter admission retains the grammar's 32 leaves, depth 4, OR 16, in 64 and four
 at most 16 KiB UTF-8; preview adds at most 128 labels of 256 bytes each. Parameters reserve 128 bytes within an 8192-byte
 percent-encoded URL envelope; Web also measures the final same-origin URL including origin and locale. Overflow is
 nonshareable and retains the editor. A preparation refusal never retries as anonymous or removes a condition.
+
+## Qualified work context in discovery-v1
+
+Decision: the optional `workContext` on a Semantic discovery hit is the current native list projection; Web owns its
+row interface and navigation. Generic `facts`, Character/Person `contexts`, public figures and private viewer facts
+keep their independent contracts. No Subject page is hydrated. The mounted aggregate Search API exposes this field,
+with `WorkContextSchema` as its wire authority. Client and OpenAPI publication use the normal kernel publisher;
+receivers must keep the capability unavailable until those generated artifacts are published.
+
+An absent field means this producer did not request it or the current native Type is not a CreativeWork. A current
+context has `subjectId`, `type: {id, labels}`, `kind: work | release | recording`, and `creators`, `relations`, `dates`.
+Each section is exactly one of `{state: empty}`, `{state: withheld}`, `{state: unsupported}`,
+`{state: unavailable, reason: native | limit | response_limit}`, or `{state: current, items, overflow}`.
+The whole capability can instead be unavailable. Empty means an admitted native range had no selected entries;
+unsupported means the Type admits no property of that category. Withheld carries no identities, items or counts.
+A denied target, including a qualifier or the lookahead, withholds its entire category.
+
+Every item retains `statementId`, `sourceId`, `direction: outgoing`, `property: {id, labels}`, `revision`, `release`,
+`rank`, `value`, and `qualifiers`. Qualifiers remain an ordered list of `{property: {id, labels}, value}` on their own
+statement, with independent empty/unsupported/unavailable states. Values distinguish `somevalue`, `novalue`,
+`unsupported`, and `value`. Actual values are `item` (asserted `originalId`, current terminal `id`, Type identity and labels), `text`, exact
+signed-decimal `quantity` (string `amount` and `unit`), or Gregorian `time` (`year`, optional `month`, optional `day`).
+Missing calendar components are precision; unsupported calendars are explicitly unsupported. No credited name or
+role is borrowed from another credit. The property's identity is the role: contributor stays contributor.
+Associations are only the stored forward statement, with the actual target Type; inverse links are never inferred.
+
+Decision: overflow reports only a currently disclosed fourth entry; it is not completion. No more-context destination
+is published because this native list owner supplies no admitted destination. Clients must not guess one. Each
+category emits at most three statements; at most four qualifiers are retained per statement. Oversized qualifier
+sets make their category unavailable without exposing a qualifier count or unexamined target identity. Labels select at most one requested language and retain at most 256 UTF-8 bytes;
+no shortened identity text is fabricated. Oversized context is unavailable at 16,384 serialized bytes per hit and
+262,144 bytes across a page, including unavailable envelopes. The wire rejects false precision, duplicate statement
+identity, mismatched source/Type, concealed entries, malformed overflow and extra fields.
+
+Semantic's [current list presentation](../semantic/README.md#qualified-list-work-context) owns meaning, native reads
+and Cost. On this retained release MusicAlbum is a work; MusicRelease and MusicRecording Types are absent. Their
+future released identities are recognized by this reader, but no album is promoted and no release, recording or
+association is synthesized. Current Edition, VideoGameRelease and AnimeRelease producers supply real release
+identity today. The separate Web homonym journey must consume the generated field; its mounted receiving and
+navigation acceptance remains an integration check, not evidence supplied by source review or native tests.
