@@ -1260,6 +1260,7 @@ personal ownership, Context, or account-setting relation.
 
 Decision: music-context creation starts with no data language selected; contributors choose each term language independently of the route locale.
 Decision: music-context creation observes current Global Context `subject.create` eligibility through the shared private BFF; it does not add identity suggestion search or rewrite the ordinary subject reader to a music-context companion.
+Decision: the current bundled vocabulary emits no Place, Event, AdministrativeArea or MusicInstrument Type, so this visit shows absence until live admission includes one; tests may clone the existing Place classifier grain onto that release without seeding the vocabulary.
 
 ### Prepare a music-context identity
 
