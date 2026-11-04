@@ -166,6 +166,7 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
   const root = createRoot(host as unknown as HTMLElement);
   try {
     for (const width of [390, 1280]) {
+      const reader = `0192f3a0-6c1e-7b2a-9d4e-${String(width).padStart(12, '0')}`;
       window.happyDOM.setWindowSize({ width, height: 900 });
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
       client.setQueryData(['session'], { state: 'signed-in', subject: reader, csrfToken: 'first' });
@@ -257,6 +258,9 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
       await click(canvas.getByRole('button', { name: m.curation_publish() }));
       expect(publications).toBe(1);
       expect(panel().querySelector('form')?.getAttribute('aria-busy')).toBe('true');
+      await click(canvas.getByRole('button', { name: m.curation_retry_original() }));
+      expect(publications).toBe(2);
+      expect(panel().querySelector('form')?.getAttribute('aria-busy')).toBe('true');
       const focused = controls().getByRole('textbox', { name: m.draft_preview_address() });
       focused.focus();
       await act(async () =>
@@ -298,8 +302,8 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
         client.setQueryData(['session'], { state: 'signed-in', subject: reader, csrfToken: 'third' }),
       );
       await settle(6, success(6));
-      expect(host.textContent).not.toContain('Draft companion sibling');
-      expect(publications).toBe(1);
+      expect(controls().queryByRole('heading', { name: 'Draft companion sibling' })).toBeNull();
+      expect(publications).toBe(2);
       await act(async () => root.render(null));
       detach();
       client.clear();
