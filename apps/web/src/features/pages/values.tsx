@@ -42,10 +42,12 @@ export function LanguageTag({ lang, locale }: { lang: string | null | undefined;
 export function SpoilerGate({
   label,
   hideLabel,
+  unmountOnHide = false,
   children,
 }: {
   label: string;
   hideLabel?: string | undefined;
+  unmountOnHide?: boolean | undefined;
   children: ReactNode;
 }) {
   const disclosure = useContext(ReadingDisclosureScope);
@@ -64,7 +66,7 @@ export function SpoilerGate({
         <Eye aria-hidden="true" className="size-4" />
         {open ? (hideLabel ?? m.subject_spoiler_hide()) : label}
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2">{children}</CollapsibleContent>
+      <CollapsibleContent className="space-y-2">{!unmountOnHide || open ? children : null}</CollapsibleContent>
     </Collapsible>
   );
 }

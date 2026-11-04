@@ -23,3 +23,5 @@ one volatile return receipt. Native reader, response, document and session bound
 
 Decision: use ordinal and language choices within the retained reading, with assertion identity available through
 inspection; unavailable language bodies remain selectable without substituting another language.
+
+Quotation gates opt into immediate content removal on Hide, so closing animations retain no assertion evidence or links.
