@@ -153,7 +153,9 @@ export function ShelfSummaryFirstUseLinks({ locale }: { locale: string }) {
               {firstUseImports.map((destination) => (
                 <li key={destination.id}>
                   <a className={target} href={`/${locale}${destination.href}`}>
-                    {destination.label({ locale })}
+                    {typeof destination.label === 'string'
+                      ? destination.label
+                      : destination.label({ locale, pathname: destination.href })}
                   </a>
                 </li>
               ))}
