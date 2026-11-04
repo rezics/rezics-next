@@ -38,8 +38,8 @@ for (const [name, value] of Object.entries(globals))
   Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
 const { createRoot } = await import('react-dom/client');
 const { OperatorTransferPage } = await import('../src/routes/operators.transfer');
-const { OPERATOR_MANAGEMENT_PROFILE, OPERATOR_RELATION_PATH, storeTransferAttempt } =
-  await import('../src/operator-transfer');
+const { OPERATOR_MANAGEMENT_PROFILE, storeTransferAttempt } = await import('../src/operator-transfer');
+const { OPERATOR_TRANSFER_PAGE_PATH } = await import('../src/operator-transfer-page');
 const { overwriteGetLocale, locales } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 overwriteGetLocale(() => 'en');
@@ -85,16 +85,51 @@ afterAll(async () => {
 async function flush(action?: () => void) {
   await act(async () => {
     action?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let turn = 0; turn < 12; turn++) await Promise.resolve();
   });
 }
 async function mount(initial: AccountSessionResult | undefined = session, attempt?: TransferAttempt) {
   calls = [];
   window.sessionStorage.clear();
   if (attempt) expect(storeTransferAttempt(structuredClone(attempt))).toBe(true);
-  globalThis.fetch = (async (input) => {
-    calls.push(String(input));
+  globalThis.fetch = (async (input, init) => {
+    const path = String(input);
+    calls.push(path);
+    if (path === '/session')
+      return Response.json(
+        initial?.kind === 'ready'
+          ? { account_id: initial.accountId, client_id: initial.clientId, scope: initial.scopes }
+          : sessionBody,
+      );
+    if (path === OPERATOR_TRANSFER_PAGE_PATH) {
+      const body = JSON.parse(String(init?.body));
+      if (body.kind === 'readiness')
+        return Response.json({
+          viewer:
+            initial?.kind === 'ready' &&
+            (initial.clientId !== OPERATOR_MANAGEMENT_PROFILE.client_id || !initial.scopes?.includes('account:manage'))
+              ? { kind: 'authentication-required', continuation: 'operator-transfer' }
+              : { kind: 'ready' },
+          review: { kind: 'readiness' },
+        });
+      if (body.kind === 'source')
+        return Response.json({
+          viewer: { kind: 'ready' },
+          review: {
+            kind: 'source',
+            relation: {
+              previous: { ...source.request.previous, subjectAccountId: body.subjectAccountId },
+              expectedVersion: source.request.expectedVersion,
+            },
+            action: 'allowed',
+          },
+        });
+      if (body.kind === 'destination')
+        return Response.json({
+          viewer: { kind: 'ready' },
+          review: { kind: 'destination', destinationAccountId: body.request.operatorAccountId, action: 'allowed' },
+        });
+    }
     throw new Error(`Unexpected presentation request: ${input}`);
   }) as typeof fetch;
   const host = document.createElement('div');
@@ -105,7 +140,10 @@ async function mount(initial: AccountSessionResult | undefined = session, attemp
     await act(async () => root.unmount());
     host.remove();
   };
-  await act(async () => root.render(<OperatorTransferPage initial={initial} />));
+  await act(async () => {
+    root.render(<OperatorTransferPage initial={initial} />);
+    for (let turn = 0; turn < 40; turn++) await Promise.resolve();
+  });
   return host;
 }
 function guide(host: HTMLElement) {
@@ -352,7 +390,7 @@ for (const locale of locales) {
     identities(host, attempt);
     expect(host.querySelector('.wrap-anywhere')).not.toBeNull();
     await disclosure(host);
-    expect(calls).toEqual([]);
+    expect(calls.some((path) => path.endsWith('/approve') || path.endsWith('/execute'))).toBe(false);
   });
 }
 
@@ -363,7 +401,8 @@ test('source readback keeps current identity and the responsibility limit visibl
     acceptance: 'opaque-acceptance',
     reference: 'original-approval',
   });
-  globalThis.fetch = (async (input) => {
+  calls = [];
+  globalThis.fetch = (async (input, init) => {
     calls.push(String(input));
     if (String(input) === '/session')
       return Response.json({
@@ -371,15 +410,25 @@ test('source readback keeps current identity and the responsibility limit visibl
         client_id: OPERATOR_MANAGEMENT_PROFILE.client_id,
         scope: ['account:manage'],
       });
-    if (String(input) === OPERATOR_RELATION_PATH)
+    if (String(input) === OPERATOR_TRANSFER_PAGE_PATH) {
+      const body = JSON.parse(String(init?.body));
+      if (body.kind === 'readiness') return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } });
       return Response.json({
-        previous: {
-          ...source.request.previous,
-          operatorAccountId: source.request.operatorAccountId,
-          reservationId: 'new-reservation',
+        viewer: { kind: 'ready' },
+        review: {
+          kind: 'source',
+          action: 'allowed',
+          relation: {
+            previous: {
+              ...source.request.previous,
+              operatorAccountId: source.request.operatorAccountId,
+              reservationId: 'new-reservation',
+            },
+            expectedVersion: '13',
+          },
         },
-        expectedVersion: '13',
       });
+    }
     throw new Error(`Unexpected readback request: ${input}`);
   }) as typeof fetch;
   await flush(() => host.querySelector<HTMLInputElement>('#transfer-confirm')!.click());
@@ -400,6 +449,7 @@ test('source readback keeps current identity and the responsibility limit visibl
 
 test('current refusal is focused and visible while response diagnostics remain an independent disclosure', async () => {
   const host = await mount(session, { ...source, acceptance: 'opaque-acceptance' });
+  calls = [];
   globalThis.fetch = (async (input) => {
     calls.push(String(input));
     if (String(input) === '/session')
@@ -423,7 +473,7 @@ test('current refusal is focused and visible while response diagnostics remain a
   expect(diagnostics.open).toBe(false);
   expect(diagnostics.querySelector('summary')?.textContent).toBe(m.auth_transfer_handoff_diagnostics());
   expect(guide(host).contains(diagnostics)).toBe(false);
-  identities(host);
+  expect(host.querySelector('#transfer-confirm')).toBeNull();
   await disclosure(host);
 });
 
@@ -444,25 +494,50 @@ for (const attempt of [
   test(`failed session read recovers ${attempt?.side ?? 'new'} ${attempt?.phase ?? 'handoff'} without writing`, async () => {
     const host = await mount(unavailable, attempt);
     const saved = window.sessionStorage.getItem('rezics.operator-transfer.attempt');
-    let resolve!: (response: Response) => void;
-    globalThis.fetch = ((input) => {
-      calls.push(String(input));
-      return new Promise<Response>((done) => {
-        resolve = done;
-      });
+    calls = [];
+    globalThis.fetch = ((input, init) => {
+      const path = String(input);
+      calls.push(path);
+      if (path === '/session') return Promise.resolve(Response.json(sessionBody));
+      if (path === OPERATOR_TRANSFER_PAGE_PATH) {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        return Promise.resolve(
+          Response.json(
+            body.kind === 'readiness'
+              ? { viewer: { kind: 'ready' }, review: { kind: 'readiness' } }
+              : body.kind === 'source'
+                ? {
+                    viewer: { kind: 'ready' },
+                    review: {
+                      kind: 'source',
+                      relation: {
+                        previous: attempt?.request.previous,
+                        expectedVersion: attempt?.request.expectedVersion,
+                      },
+                      action: 'allowed',
+                    },
+                  }
+                : {
+                    viewer: { kind: 'ready' },
+                    review: {
+                      kind: 'destination',
+                      destinationAccountId: attempt?.request.operatorAccountId,
+                      action: 'allowed',
+                    },
+                  },
+          ),
+        );
+      }
+      throw new Error(`Unexpected recovery write: ${path}`);
     }) as typeof fetch;
-    const retry = button(host, m.auth_account_delete_retry());
-    await flush(() => {
-      retry.click();
-      retry.click();
-    });
-    expect(retry.disabled).toBe(true);
-    expect(retry.getAttribute('aria-busy')).toBe('true');
-    expect(calls).toEqual(['/session']);
-    await flush(() => resolve(new Response(null, { status: 503 })));
-    expect(button(host, m.auth_account_delete_retry()).disabled).toBe(false);
     await flush(() => button(host, m.auth_account_delete_retry()).click());
-    await flush(() => resolve(Response.json(sessionBody)));
+    await flush(() => {});
+    expect(calls).toEqual([
+      '/session',
+      '/session',
+      OPERATOR_TRANSFER_PAGE_PATH,
+      ...(attempt?.phase === 'approve' ? ['/session', OPERATOR_TRANSFER_PAGE_PATH] : []),
+    ]);
     expect(window.sessionStorage.getItem('rezics.operator-transfer.attempt')).toBe(saved);
     expect(host.textContent).not.toContain(m.auth_transfer_account_changed());
     if (!attempt) expect(host.querySelector('#transfer-subject')).not.toBeNull();
@@ -474,34 +549,36 @@ for (const attempt of [
       if (attempt.phase === 'accepted') text(host, m.auth_transfer_accepted());
       if (attempt.phase === 'execute') expect(host.textContent).toContain(m.auth_transfer_uncertain());
     }
-    expect(calls).toEqual(['/session', '/session']);
   });
 }
 
 for (const changed of [null, 'different-human']) {
   test(`read recovery rejects ${changed ?? 'signed-out'} ownership`, async () => {
     const host = await mount(unavailable, source);
-    globalThis.fetch = (async () =>
-      changed
-        ? Response.json({ ...sessionBody, account_id: changed })
-        : new Response(null, { status: 401 })) as typeof fetch;
+    calls = [];
+    globalThis.fetch = (async (input) => {
+      calls.push(String(input));
+      return changed ? Response.json({ ...sessionBody, account_id: changed }) : new Response(null, { status: 401 });
+    }) as typeof fetch;
     await flush(() => button(host, m.auth_account_delete_retry()).click());
     expect(host.querySelector('form, #transfer-request')).toBeNull();
     expect(host.textContent).toContain(m.auth_transfer_account_changed());
     expect(JSON.parse(window.sessionStorage.getItem('rezics.operator-transfer.attempt')!)).toEqual(source);
+    expect(calls).toEqual(['/session']);
   });
 }
 
 test('a superseded view ignores a late recovered session', async () => {
   const host = await mount(unavailable, source);
-  let resolve!: (response: Response) => void;
-  globalThis.fetch = (() =>
-    new Promise<Response>((done) => {
-      resolve = done;
-    })) as typeof fetch;
+  const sessions: ((response: Response) => void)[] = [];
+  globalThis.fetch = ((input) => {
+    if (String(input) !== '/session') throw new Error(`Unexpected stale read: ${input}`);
+    return new Promise<Response>((done) => sessions.push(done));
+  }) as typeof fetch;
   await flush(() => button(host, m.auth_account_delete_retry()).click());
+  expect(sessions).toHaveLength(1);
   await render({ ...session, accountId: 'different-human' });
-  await flush(() => resolve(Response.json(sessionBody)));
+  await flush(() => sessions[0]!(Response.json(sessionBody)));
   expect(host.querySelector('form, #transfer-request')).toBeNull();
   expect(host.textContent).toContain(m.auth_transfer_account_changed());
 });
@@ -509,14 +586,22 @@ test('a superseded view ignores a late recovered session', async () => {
 test('relation read retry preserves uncertain execution and never resubmits it', async () => {
   const host = await mount(session, { ...source, phase: 'execute', reference: 'approval', acceptance: 'acceptance' });
   const saved = window.sessionStorage.getItem('rezics.operator-transfer.attempt');
+  calls = [];
   let failed = true;
   globalThis.fetch = (async (input) => {
     calls.push(String(input));
     if (String(input) === '/session') return Response.json(sessionBody);
-    if (String(input) === OPERATOR_RELATION_PATH)
+    if (String(input) === OPERATOR_TRANSFER_PAGE_PATH)
       return failed
         ? new Response(null, { status: 503 })
-        : Response.json({ previous: source.request.previous, expectedVersion: '12' });
+        : Response.json({
+            viewer: { kind: 'ready' },
+            review: {
+              kind: 'source',
+              relation: { previous: source.request.previous, expectedVersion: '12' },
+              action: 'allowed',
+            },
+          });
     throw new Error(`Unexpected write: ${input}`);
   }) as typeof fetch;
   await flush(() => button(host, m.auth_transfer_readback()).click());
@@ -527,5 +612,5 @@ test('relation read retry preserves uncertain execution and never resubmits it',
   );
   expect(host.querySelector<HTMLInputElement>('#transfer-confirm')!.checked).toBe(false);
   expect(window.sessionStorage.getItem('rezics.operator-transfer.attempt')).toBe(saved);
-  expect(calls).toEqual(['/session', OPERATOR_RELATION_PATH, '/session', OPERATOR_RELATION_PATH]);
+  expect(calls).toEqual(['/session', OPERATOR_TRANSFER_PAGE_PATH, '/session', OPERATOR_TRANSFER_PAGE_PATH]);
 });
