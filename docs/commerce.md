@@ -67,6 +67,10 @@ per-offer entitlement read. Session, Subject, locale and viewer-exposure changes
 Decision: a viewer-exposure cache update restarts discovery at the first page with a fresh read, including when an
 account changes away and back before rendering.
 
+Decision: public inspection reuses the owned captured-term/reference reader, limits comparison to two deliberate
+operands from one received page, clears selection on every replacement, and uses page-local Edition/version numbers
+only as reading labels, never catalogue names or selection keys.
+
 ## VNDB score admission handoff
 
 The installed Content writer, `createVoteCommands.putVoteOutcome(actor, input, idempotencyKey)`, has no conditional

@@ -1,6 +1,5 @@
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
-import { ContentItem } from '@rezics/ui/content-item';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
@@ -8,8 +7,7 @@ import type { SubjectPurchaseContext } from '../features/pages/subject-slots';
 import { m } from '../paraglide/messages.js';
 import { localizeHref, locales } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
-import { capturedBenefit } from './benefit';
-import { formatMinorAmount } from './money';
+import { SubjectOfferChoice } from './subject-offer-review';
 import { readSubjectOffers, type SubjectOffersData, type SubjectOffersInput } from './subject-offers';
 
 export function purchaseHref(path: string, locale: string): string | null {
@@ -95,12 +93,16 @@ export function SubjectOffersView({
   onNext,
   onRestart,
   onRetry,
+  pageVersion,
+  current,
 }: {
   page: SubjectOffersData | { kind: 'pending' };
   locale: string;
   onNext?: (cursor: string) => void;
   onRestart?: () => void;
   onRetry?: () => void;
+  pageVersion?: number;
+  current?: () => boolean;
 }) {
   const language = locales.find((candidate) => candidate === locale);
   if (!language) return null;
@@ -141,64 +143,7 @@ export function SubjectOffersView({
         </Empty>
       ) : null}
       {page.kind === 'ready' && page.offers.length > 0 ? (
-        <ul className="flex min-w-0 flex-col gap-3">
-          {page.offers.map((offer) => {
-            const benefit = capturedBenefit(offer.contentEdition, offer.targetSubjectId);
-            const price = formatMinorAmount(locale, offer.currency, offer.unitAmountMinor, offer.moneyUnit);
-            const href = purchaseHref(`/offers/${encodeURIComponent(offer.id)}`, locale);
-            return (
-              <ContentItem
-                key={offer.id}
-                title={offer.title}
-                headingLevel={3}
-                {...(href ? { href } : {})}
-                primaryLinkLabel={m.subject_purchase_review_offer({ title: offer.title }, { locale: language })}
-                className="p-3 [&_h3]:break-words [&_h3]:[overflow-wrap:anywhere]"
-                metadata={
-                  <div className="min-w-0 space-y-2">
-                    <p className="text-sm tabular-nums">
-                      {price ?? m.subject_purchase_price_unknown({}, { locale: language })}
-                      {price && offer.taxBehavior === 'exclusive'
-                        ? ` · ${m.commerce_before_tax({}, { locale: language })}`
-                        : ''}
-                    </p>
-                    {benefit.kind === 'mapped' ? (
-                      <>
-                        <p className="text-sm text-muted-foreground">
-                          {m.benefit_fixed_version({}, { locale: language })}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {m.benefit_acquisition({}, { locale: language })}
-                        </p>
-                        <p className="break-words text-sm [overflow-wrap:anywhere]">
-                          {m.benefit_licence({}, { locale: language })}: {benefit.terms.source.licence}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {m.benefit_terms_unavailable({}, { locale: language })}
-                      </p>
-                    )}
-                  </div>
-                }
-                preview={
-                  <span className="text-sm underline underline-offset-4">
-                    {m.subject_purchase_review({}, { locale: language })}
-                  </span>
-                }
-                state={<p className="text-sm font-medium">{m.creator_offers_active({}, { locale: language })}</p>}
-                actions={
-                  <details className="min-w-0 max-w-sm">
-                    <summary className="min-h-11 cursor-pointer content-center text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                      {m.commerce_full_title({}, { locale: language })}
-                    </summary>
-                    <p className="break-words py-2 text-sm [overflow-wrap:anywhere]">{offer.title}</p>
-                  </details>
-                }
-              />
-            );
-          })}
-        </ul>
+        <SubjectOfferChoice page={page} locale={language} version={pageVersion} current={current} />
       ) : null}
       <div className="flex flex-wrap gap-2">
         {page.kind === 'ready' && page.next && onNext ? (
@@ -246,6 +191,23 @@ function PreparedSubjectOffersRegion({
     [context.subjectId, context.locale, credentialMode, viewer, cursor],
   );
   const query = useQuery(options);
+  // React Query may structurally share an equal successful response. Its success count still retires selection.
+  const pageSnapshot = useCallback(
+    () => client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0,
+    [client, options.queryKey],
+  );
+  const subscribePage = useCallback(
+    (changed: () => void) =>
+      client.getQueryCache().subscribe((event) => {
+        if (event.query === client.getQueryCache().find({ queryKey: options.queryKey, exact: true })) changed();
+      }),
+    [client, options.queryKey],
+  );
+  const pageVersion = useSyncExternalStore(subscribePage, pageSnapshot, () => 0);
+  const pageCurrent = useCallback(
+    () => (!viewer.current || viewer.current()) && pageSnapshot() === pageVersion,
+    [viewer, pageSnapshot, pageVersion],
+  );
   useEffect(
     () => () => {
       void client.cancelQueries({ queryKey: options.queryKey, exact: true });
@@ -263,6 +225,8 @@ function PreparedSubjectOffersRegion({
             : (query.data ?? { kind: 'pending' })
       }
       locale={context.locale}
+      pageVersion={pageVersion}
+      current={pageCurrent}
       onNext={(next) => {
         if (viewer.current?.()) setCursor(next);
       }}
