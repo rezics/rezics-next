@@ -52,11 +52,13 @@ test('assessment receiving distinguishes absent, explicit null, zero and histori
     state: 'available',
     scope: 'retained_nonretired_sessions',
     coverage: { initializedSessions: '2', retainedSessions: '2', includedSessions: '2' },
-    revisions: [{
-      meaningRevision: 1,
-      counts: { absent: '2', explicitNull: '0', value: '0', historicalUnknown: '0' },
-      values: [],
-    }],
+    revisions: [
+      {
+        meaningRevision: 1,
+        counts: { absent: '2', explicitNull: '0', value: '0', historicalUnknown: '0' },
+        values: [],
+      },
+    ],
   });
 
   const clearRequest = { revision: 0, assessment: null };
@@ -71,11 +73,13 @@ test('assessment receiving distinguishes absent, explicit null, zero and histori
     assessment: { units: 0 },
   });
   expect(await read(owner)).toMatchObject({
-    revisions: [{
-      meaningRevision: 1,
-      counts: { absent: '0', explicitNull: '1', value: '1', historicalUnknown: '0' },
-      values: [{ units: 0, occurrences: '1' }],
-    }],
+    revisions: [
+      {
+        meaningRevision: 1,
+        counts: { absent: '0', explicitNull: '1', value: '1', historicalUnknown: '0' },
+        values: [{ units: 0, occurrences: '1' }],
+      },
+    ],
   });
 
   await native.pool.query(
@@ -83,11 +87,13 @@ test('assessment receiving distinguishes absent, explicit null, zero and histori
     [routeOf(owner.actor.accountId), cleared],
   );
   expect(await read(owner)).toMatchObject({
-    revisions: [{
-      meaningRevision: 1,
-      counts: { absent: '0', explicitNull: '0', value: '1', historicalUnknown: '1' },
-      values: [{ units: 0, occurrences: '1' }],
-    }],
+    revisions: [
+      {
+        meaningRevision: 1,
+        counts: { absent: '0', explicitNull: '0', value: '1', historicalUnknown: '1' },
+        values: [{ units: 0, occurrences: '1' }],
+      },
+    ],
   });
 
   await native.pool.query(
@@ -98,10 +104,10 @@ test('assessment receiving distinguishes absent, explicit null, zero and histori
     coverage: { initializedSessions: '2', retainedSessions: '2', includedSessions: '1' },
     revisions: [{ counts: { historicalUnknown: '0' } }],
   });
-  await native.pool.query(
-    "UPDATE library.progress_session SET state='active' WHERE route=$1 AND session_id=$2",
-    [routeOf(owner.actor.accountId), cleared],
-  );
+  await native.pool.query("UPDATE library.progress_session SET state='active' WHERE route=$1 AND session_id=$2", [
+    routeOf(owner.actor.accountId),
+    cleared,
+  ]);
   expect(await read(owner)).toMatchObject({
     coverage: { initializedSessions: '2', retainedSessions: '2', includedSessions: '2' },
     revisions: [{ counts: { historicalUnknown: '1' } }],

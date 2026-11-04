@@ -3,7 +3,10 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
-import { createReadingInsightsAssessmentReads, type ReadingInsightsAssessments } from './reading-insights-assessments.ts';
+import {
+  createReadingInsightsAssessmentReads,
+  type ReadingInsightsAssessments,
+} from './reading-insights-assessments.ts';
 import { createReadingInsightsProfileReads, type ReadingInsightsProfiles } from './reading-insights-profiles.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -89,10 +92,9 @@ export const readingInsightsAssessmentsSchema = t.Unsafe<ReadingInsightsAssessme
             {
               meaningRevision: t.Integer({ minimum: 1, maximum: 16 }),
               counts: t.Object(assessmentCounts, closed),
-              values: t.Array(
-                t.Object({ units: t.Integer({ minimum: 0, maximum: 20 }), occurrences: count }, closed),
-                { maxItems: 21 },
-              ),
+              values: t.Array(t.Object({ units: t.Integer({ minimum: 0, maximum: 20 }), occurrences: count }, closed), {
+                maxItems: 21,
+              }),
             },
             closed,
           ),
@@ -117,86 +119,88 @@ export const readingInsightsAssessmentsSchema = t.Unsafe<ReadingInsightsAssessme
 export function readingInsightsRoutes(app: ReturnType<typeof definitionRoutes>, deps: { pool: Pool }) {
   const reads = createReadingInsightsProfileReads(deps);
   const assessmentReads = createReadingInsightsAssessmentReads(deps);
-  return app.get(
-    '/v1/libraryReadingInsightsProfiles',
-    {
-      query: t.Object({ year: t.Numeric({ minimum: 1, maximum: 9999, multipleOf: 1 }) }, closed),
-      transform: ({ request, set }) => {
-        set.headers['cache-control'] = 'private, no-store';
-        const query = new URL(request.url).searchParams;
-        if (
-          [...query.keys()].some((key) => key !== 'year') ||
-          query.getAll('year').length !== 1 ||
-          !/^[1-9][0-9]{0,3}$/.test(query.get('year') ?? '')
-        )
-          throw new ProblemError('invalid_request');
+  return app
+    .get(
+      '/v1/libraryReadingInsightsProfiles',
+      {
+        query: t.Object({ year: t.Numeric({ minimum: 1, maximum: 9999, multipleOf: 1 }) }, closed),
+        transform: ({ request, set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+          const query = new URL(request.url).searchParams;
+          if (
+            [...query.keys()].some((key) => key !== 'year') ||
+            query.getAll('year').length !== 1 ||
+            !/^[1-9][0-9]{0,3}$/.test(query.get('year') ?? '')
+          )
+            throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: readingInsightsProfilesSchema,
+          400: problemSchema('invalid_request'),
+          401: problemSchema('authentication_required', 'invalid_credentials'),
+          403: problemSchema('forbidden', 'platform_closed'),
+          503: problemSchema(
+            'dependency_unavailable',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'library_reading_insights.profiles',
+          'x-exposure': 'gate:reading_progress',
+          'x-action': 'progress_session:list',
+          security: [{ bearerAuth: [] }],
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': Object.keys(bundledRelease.types),
+        },
       },
-      response: {
-        200: readingInsightsProfilesSchema,
-        400: problemSchema('invalid_request'),
-        401: problemSchema('authentication_required', 'invalid_credentials'),
-        403: problemSchema('forbidden', 'platform_closed'),
-        503: problemSchema(
-          'dependency_unavailable',
-          'overloaded',
-          'partition_unavailable',
-          'transaction_retry_exhausted',
-          'deadline_exceeded',
+      async ({ actor, admission, job, query, request }) =>
+        admission.run('normal', job, () =>
+          reads.profiles(
+            actor,
+            query.year,
+            job.deadline,
+            request.signal,
+            (_value, encoded) =>
+              new Response(encoded, {
+                headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
+              }),
+          ),
         ),
+    )
+    .get(
+      '/v1/libraryReadingInsightsAssessments',
+      {
+        query: t.Object({}, closed),
+        transform: ({ request, set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+          if ([...new URL(request.url).searchParams.keys()].length > 0) throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: readingInsightsAssessmentsSchema,
+          400: problemSchema('invalid_request'),
+          401: problemSchema('authentication_required', 'invalid_credentials'),
+          403: problemSchema('forbidden', 'platform_closed'),
+          503: problemSchema(
+            'dependency_unavailable',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'library_reading_insights.assessments',
+          'x-exposure': 'gate:reading_progress',
+          'x-action': 'progress_session:list',
+          security: [{ bearerAuth: [] }],
+          'x-authority-anchor': 'own-account',
+          'x-authority-resource-types': Object.keys(bundledRelease.types),
+        },
       },
-      detail: {
-        operationId: 'library_reading_insights.profiles',
-        'x-exposure': 'gate:reading_progress',
-        'x-action': 'progress_session:list',
-        security: [{ bearerAuth: [] }],
-        'x-authority-anchor': 'own-account',
-        'x-authority-resource-types': Object.keys(bundledRelease.types),
-      },
-    },
-    async ({ actor, admission, job, query, request }) =>
-      admission.run('normal', job, () =>
-        reads.profiles(
-          actor,
-          query.year,
-          job.deadline,
-          request.signal,
-          (_value, encoded) =>
-            new Response(encoded, {
-              headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
-            }),
-        ),
-      ),
-  ).get(
-    '/v1/libraryReadingInsightsAssessments',
-    {
-      query: t.Object({}, closed),
-      transform: ({ request, set }) => {
-        set.headers['cache-control'] = 'private, no-store';
-        if ([...new URL(request.url).searchParams.keys()].length > 0) throw new ProblemError('invalid_request');
-      },
-      response: {
-        200: readingInsightsAssessmentsSchema,
-        400: problemSchema('invalid_request'),
-        401: problemSchema('authentication_required', 'invalid_credentials'),
-        403: problemSchema('forbidden', 'platform_closed'),
-        503: problemSchema(
-          'dependency_unavailable',
-          'overloaded',
-          'partition_unavailable',
-          'transaction_retry_exhausted',
-          'deadline_exceeded',
-        ),
-      },
-      detail: {
-        operationId: 'library_reading_insights.assessments',
-        'x-exposure': 'gate:reading_progress',
-        'x-action': 'progress_session:list',
-        security: [{ bearerAuth: [] }],
-        'x-authority-anchor': 'own-account',
-        'x-authority-resource-types': Object.keys(bundledRelease.types),
-      },
-    },
-    async ({ actor, admission, job, request }) =>
-      admission.run('normal', job, () => assessmentReads.assessments(actor, job.deadline, request.signal)),
-  );
+      async ({ actor, admission, job, request }) =>
+        admission.run('normal', job, () => assessmentReads.assessments(actor, job.deadline, request.signal)),
+    );
 }

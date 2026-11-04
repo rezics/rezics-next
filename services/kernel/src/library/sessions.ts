@@ -550,14 +550,22 @@ export function createSessionCommands(config: Dependencies) {
         if (unchanged) return noEffect({ sessionId, revision: current.revision, changed: false });
         if (current.revision >= 2_147_483_646) throw new ProgressConflictError();
 
-        const updated = await store.updateSessionJournal(tx, route, owner.accountId, sessionId, current.revision, {
+        const updated = await store.updateSessionJournal(
+          tx,
+          route,
+          owner.accountId,
           sessionId,
-          revision: current.revision,
-          startDate,
-          finishDate,
-          reflection,
-          assessment,
-        }, requestedAssessmentPresence);
+          current.revision,
+          {
+            sessionId,
+            revision: current.revision,
+            startDate,
+            finishDate,
+            reflection,
+            assessment,
+          },
+          requestedAssessmentPresence,
+        );
         if (!updated) throw new ProgressConflictError();
         return {
           value: { sessionId, revision: updated.revision, changed: true },

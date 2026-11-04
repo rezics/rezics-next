@@ -142,7 +142,11 @@ function present(snapshot: Snapshot | undefined): ReadingInsightsAssessments {
 
 /** Bounded, owner-only receiver view; journal writes and the completion summary remain independent. */
 export function createReadingInsightsAssessmentReads(deps: { pool: Pool }) {
-  async function assessments(actor: Actor, deadline: number, signal?: AbortSignal): Promise<ReadingInsightsAssessments> {
+  async function assessments(
+    actor: Actor,
+    deadline: number,
+    signal?: AbortSignal,
+  ): Promise<ReadingInsightsAssessments> {
     if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
     const route = routeOf(actor.accountId);
     if (route === null || !actor.scopes.includes('progress_session:list')) throw new ProblemError('forbidden');
