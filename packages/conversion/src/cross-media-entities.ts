@@ -13,6 +13,7 @@ import {
   canonicalLanguageTag,
   commandKey,
   latinLanguageTag,
+  projectVndbReleaseMinimumAge,
   sourceDigest,
   sourceEnvelope,
   textDocument,
@@ -20,7 +21,7 @@ import {
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
 
-export const converter_revision = 'cross-media-entities@4';
+export const converter_revision = 'cross-media-entities@5';
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxNames: vndbLimits.maxTitleCandidates,
@@ -379,6 +380,7 @@ type Projected = {
   names?: { language: string; text: string }[];
   alternateNames?: { language: string; text: string }[];
   identifier: string;
+  minimumAge?: { amount: string; unit: 'http://www.wikidata.org/entity/Q577' };
   ignored?: ConversionDiagnostic;
   diagnostics?: ConversionDiagnostic[];
 };
@@ -542,6 +544,10 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const normalized: Normalized = { id: nativeId, releases_titles: projectedTitles.titles };
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
+    const hasMinimumAge = Object.hasOwn(raw, 'minage');
+    const rawMinimumAge = hasMinimumAge ? own(raw, 'minage', '/minage') : undefined;
+    const minimumAge = projectVndbReleaseMinimumAge(rawMinimumAge, hasMinimumAge);
+    if (rawMinimumAge === null || minimumAge.sourceValue !== undefined) normalized.minage = minimumAge.sourceValue;
     if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > vndbReleaseNameLimits.recordBytes)
       fail('', 'invalid_record_byte_limit');
     const aliases = Object.keys(projectedTitles.aliases).length ? projectedTitles.aliases : undefined;
@@ -553,7 +559,11 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       names: projectedTitles.names,
       alternateNames: projectedTitles.alternateNames,
       identifier: expected,
-      diagnostics: projectedTitles.diagnostics,
+      ...(minimumAge.quantity ? { minimumAge: minimumAge.quantity } : {}),
+      diagnostics: [
+        ...projectedTitles.diagnostics,
+        ...(minimumAge.diagnostic ? [{ pointer: '/minage', code: minimumAge.diagnostic }] : []),
+      ],
     };
   }
   const name = own(raw, 'name', '/name');
@@ -564,6 +574,8 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   const labels: Record<string, string> = { und: label };
   if (typeof chinese === 'string' && chinese.trim()) labels.zh = text(chinese, '/name_cn', 500, true);
   const normalized: Normalized = { id: nativeId, name: label };
+  let minimumAge: Projected['minimumAge'];
+  const diagnostics: ConversionDiagnostic[] = [];
   if (chinese !== undefined) normalized.name_cn = labels.zh ?? '';
   if (kind === 'bangumi-character') {
     const characterKind = own(raw, 'type', '/type');
@@ -606,6 +618,12 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   if (kind === 'vndb-release') {
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
+    const hasMinimumAge = Object.hasOwn(raw, 'minage');
+    const rawMinimumAge = hasMinimumAge ? own(raw, 'minage', '/minage') : undefined;
+    const projection = projectVndbReleaseMinimumAge(rawMinimumAge, hasMinimumAge);
+    if (rawMinimumAge === null || projection.sourceValue !== undefined) normalized.minage = projection.sourceValue;
+    minimumAge = projection.quantity;
+    if (projection.diagnostic) diagnostics.push({ pointer: '/minage', code: projection.diagnostic });
   }
   if (kind === 'bangumi-episode') {
     const sort = own(raw, 'sort', '/sort');
@@ -622,7 +640,14 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     if (description !== undefined) normalized.description = description;
   }
   if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > 65_536) fail('', 'invalid_record_byte_limit');
-  return { normalized, type, labels, identifier: expected };
+  return {
+    normalized,
+    type,
+    labels,
+    identifier: expected,
+    ...(minimumAge ? { minimumAge } : {}),
+    ...(diagnostics.length ? { diagnostics } : {}),
+  };
 }
 
 export function convertCrossMediaEntity(
@@ -704,6 +729,7 @@ function convert(
     fact(profile.identifier, identifierContent),
     ...names.map((name) => fact('schema:name', name)),
     ...(projected.alternateNames ?? []).map((name) => fact('schema:alternateName', name)),
+    ...(kind === 'vndb-release' && projected.minimumAge ? [fact('wdt:P2899', projected.minimumAge)] : []),
   ];
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
   let descriptionText: string | undefined;

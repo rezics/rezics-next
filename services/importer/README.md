@@ -1594,6 +1594,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: at most 64 title rows and 64 KiB per release, 64 names and 64 Romanized alternate names, within the existing per-record candidate and journal budgets. Nonselected owners, missing selected titles, overflow and duplicate associations are review gaps or converter refusals. Machine-translation flags are not a ranking rule.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Import authored VNDB release minimum ages
+
+- Touches: the selected `releases.minage` COPY cell or supported Kana integer on the existing release payload, the shared entity converter and ordinary public batch/fence/candidate paths. The value is proposed only on that Release with the VNDB citation.
+- Bound: at most 64 selected releases and 32 characters for a retained malformed scalar, within the existing 64 KiB source projection, 300-candidate and journal budgets. Missing, null, malformed, nonintegral and out-of-range values withhold only this fact; no extra reads, authorization calls, release scans or work proposals are added.
+- Growth check: the focused importer case checks canonical COPY integers, all-ages zero, unknown/invalid values, same-byte refresh, changed age and stable release identity. The focused kernel case checks public acceptance/adoption, citation, facts fencing and idempotent reopen. No PostgreSQL growth series is added.
+
 ### Import authored VNDB public tag associations
 
 - Touches: bounded `tags` (512) and `tags_vn` (256) COPY projections, matching VN title/revision rows, current native scheme/concept point reads, and ordinary public batch/fence/candidate commands through the existing seed/importer caller. User ids, notes and vote values stay unprojected.
@@ -2003,7 +2009,7 @@ facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to T
 and 00/99 omitted components to year or month precision.
 
 The same production callers now attach admitted `releases_titles` rows to each
-selected release payload and convert them through `cross-media-entities@4`.
+selected release payload and convert them through `cross-media-entities@5`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently

@@ -271,7 +271,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       'person:8101',
       'person:8102',
     ]);
-    expect(biographyCommands.every((command) => command.source.converter_revision === 'cross-media-entities@4')).toBe(
+    expect(biographyCommands.every((command) => command.source.converter_revision === 'cross-media-entities@5')).toBe(
       true,
     );
     expect(

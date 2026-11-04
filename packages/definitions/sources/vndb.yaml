@@ -1956,8 +1956,11 @@ tables:
         term: wdt:P2899
         'on': wd:Q20631656
         mapping: wdt:P2899
-        meaning: Minimum age associated with the release's age rating, in years.
-        citations: ['https://www.wikidata.org/wiki/Property:P2899', 'https://api.vndb.org/kana#filters']
+        meaning: >-
+          Minimum age associated with the release's age rating, in years. Explicit values 0 through 18 are
+          years; 0 means all ages, and null or absent means unknown. Only canonical dump integers and API
+          integers are admitted; malformed, nonintegral and out-of-range values are withheld.
+        citations: ['https://www.wikidata.org/wiki/Property:P2899', 'https://api.vndb.org/kana#filters', 'https://api.vndb.org/nyan']
       - name: ani_story
         status: omitted
         reason: Source animation quantity code is release-technical metadata.
