@@ -402,8 +402,15 @@ test('Album recovery retires every current surface and retains private drafts an
     await showCreation();
     await settle();
     const form = host.querySelector('form')!;
-    const text = (name: string, scope = host) =>
-      within(scope).getAllByRole('textbox', { name })[0] as HTMLInputElement;
+    const text = (name: string, scope = host) => {
+      const match = [...scope.querySelectorAll('input,textarea')].find((el) => {
+        if (!el.id) return false;
+        const label = scope.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+        return (label?.textContent ?? '').trim() === name;
+      });
+      if (!match) throw new Error(`Expected textbox ${name}`);
+      return match as HTMLInputElement;
+    };
     const type = (control: HTMLElement, value: string) => act(async () => user.type(control, value));
     await type(text(m.catalogue_create_label()), 'Private Album');
     await type(text(m.catalogue_create_description()), 'Private description');
@@ -506,7 +513,11 @@ test('Album recovery retires every current surface and retains private drafts an
     await settle();
     expect(host.textContent).toContain('Fresh Album authority');
     expect(host.textContent).toContain('https://private.test/citation');
-    await type(text(m.catalogue_create_label(), secondTerms), 'Album français');
+    await act(async () => {
+      const control = text(m.catalogue_create_label(), secondTerms);
+      await user.clear(control);
+      await user.type(control, 'Album français');
+    });
     expect(text(m.catalogue_create_label()).value).toBe('Private Album');
     await click(m.album_create_review()); // Fresh validation rejects the retained retired fact.
     expect(submitted).toHaveLength(1);
