@@ -2299,4 +2299,3 @@ The result carries provider and native type bindings, source keys, source and co
 - Touches: at most 768 selected source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 candidates per current page, and 256 result omissions.
 - Bound: work is limited to the selected source family, source acknowledgements and required current subject/property reads. There is no catalogue-wide candidate scan or generic accept-all mode.
 - Growth check: `services/importer/tests/showcase-publication.test.ts` covers a compact dump plan, exact candidate selection and journal restart after a refusal. `services/kernel/test/imports/showcase-publication.test.ts` covers the native API publication path and anonymous read; its execution remains controller-owned and is not recorded as a local pass.
-
