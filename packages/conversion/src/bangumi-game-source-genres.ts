@@ -30,9 +30,10 @@ export type BangumiGameSourceGenreMapping = Readonly<{
   diagnostics: readonly ConversionDiagnostic[];
 }>;
 
-export type BangumiGameSourceGenreConversion = BangumiGameSourceGenreMapping & Readonly<{
-  proposals: readonly Extract<BatchCommand, { op: 'propose' }>[];
-}>;
+export type BangumiGameSourceGenreConversion = BangumiGameSourceGenreMapping &
+  Readonly<{
+    proposals: readonly Extract<BatchCommand, { op: 'propose' }>[];
+  }>;
 
 function pointer(occurrence: number): string {
   return `/infobox/${bangumiGameSourceGenreKey}/${occurrence}`;
@@ -52,16 +53,16 @@ function structured(field: BangumiGameInfoboxField): boolean {
 }
 
 /** Extract complete scalar occurrences from only the pinned type-4 Game template. */
-export function bangumiGameSourceGenres(record: {
-  readonly type: number;
-  readonly infobox?: string;
-}, scan?: BangumiGameInfoboxScan): BangumiGameSourceGenreMapping {
+export function bangumiGameSourceGenres(
+  record: {
+    readonly type: number;
+    readonly infobox?: string;
+  },
+  scan?: BangumiGameInfoboxScan,
+): BangumiGameSourceGenreMapping {
   if (record.type !== 4 || record.infobox === undefined)
     return { handledInfobox: false, requirements: [], diagnostics: [] };
-  if (
-    record.infobox.length > infoboxCharacterLimit ||
-    Buffer.byteLength(record.infobox, 'utf8') > infoboxByteLimit
-  )
+  if (record.infobox.length > infoboxCharacterLimit || Buffer.byteLength(record.infobox, 'utf8') > infoboxByteLimit)
     return {
       handledInfobox: true,
       requirements: [],
@@ -126,12 +127,10 @@ function resolvedConcept(
     throw new ConversionError('invalid_reference_context', '');
   const descriptor = Object.getOwnPropertyDescriptor(references, reference);
   if (!descriptor) return undefined;
-  if (!descriptor.enumerable || !('value' in descriptor))
-    throw new ConversionError('invalid_reference_context', '');
+  if (!descriptor.enumerable || !('value' in descriptor)) throw new ConversionError('invalid_reference_context', '');
   const value: unknown = descriptor.value;
   if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !uuid.test(value))
-    throw new ConversionError('invalid_reference_context', '');
+  if (typeof value !== 'string' || !uuid.test(value)) throw new ConversionError('invalid_reference_context', '');
   return value;
 }
 
@@ -144,8 +143,7 @@ export function convertBangumiGameSourceGenres(
   scan?: BangumiGameInfoboxScan,
 ): BangumiGameSourceGenreConversion {
   const mapping = bangumiGameSourceGenres(record, scan);
-  if (!mapping.handledInfobox || context.subjectId === undefined)
-    return { ...mapping, proposals: [] };
+  if (!mapping.handledInfobox || context.subjectId === undefined) return { ...mapping, proposals: [] };
 
   const source = sourceEnvelope(metadata, 'facts');
   const references: BatchReference[] = [

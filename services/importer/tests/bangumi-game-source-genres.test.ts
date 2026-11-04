@@ -20,7 +20,11 @@ const sourceUri = 'https://example.test/bangumi/genre/adventure';
 const literal = '视觉小说,冒险/探索';
 const infobox = `{{Infobox Game\n|游戏类型=${literal}\n|游戏类型={{Nested|value}}\n|游戏类型=动作\n  continued value\n|游玩人数=1-4人\n}}`;
 const record = { id: 91044, type: 4, name: 'Authored Game', name_cn: '测试游戏', infobox };
-function subject(id: string, type: string, statements: Record<string, { value: { type: 'value'; content: string } }[]>) {
+function subject(
+  id: string,
+  type: string,
+  statements: Record<string, { value: { type: 'value'; content: string } }[]>,
+) {
   return {
     subject: { id, type, context: globalContext, statements },
   } as unknown as ReviewedSubjectRead;
@@ -69,7 +73,11 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
           });
     },
   });
-  const resolved = await current.lookup.resolve({ owner, conversion: contextFree, signal: new AbortController().signal });
+  const resolved = await current.lookup.resolve({
+    owner,
+    conversion: contextFree,
+    signal: new AbortController().signal,
+  });
   if ('status' in resolved) throw new Error('Current fixture bindings were unexpectedly unavailable');
   expect(resolved).toEqual({ [bangumiGameSourceGenreReference(literal)]: conceptId });
   const converted = registration.convert(input, { ...context, resolvedReferences: resolved });
@@ -84,7 +92,9 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
       value: { type: 'value', content: conceptId },
       references: [
         {
-          parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://bgm.tv/subject/91044' } }],
+          parts: [
+            { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://bgm.tv/subject/91044' } },
+          ],
         },
       ],
     },
@@ -112,7 +122,11 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
           });
     },
   });
-  const withheld = await wrongScheme.lookup.resolve({ owner, conversion: contextFree, signal: new AbortController().signal });
+  const withheld = await wrongScheme.lookup.resolve({
+    owner,
+    conversion: contextFree,
+    signal: new AbortController().signal,
+  });
   if ('status' in withheld) throw new Error('Wrong-scheme fixture unexpectedly reported a read outage');
   expect(withheld).toEqual({});
   expect(wrongScheme.diagnostics()).toContainEqual({
@@ -135,7 +149,11 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
       });
     },
   });
-  const failure = await unavailable.lookup.resolve({ owner, conversion: contextFree, signal: new AbortController().signal });
+  const failure = await unavailable.lookup.resolve({
+    owner,
+    conversion: contextFree,
+    signal: new AbortController().signal,
+  });
   expect(failure).toEqual({ status: 'unavailable', preserveProperties: ['schema:genre'] });
   expect(
     registration

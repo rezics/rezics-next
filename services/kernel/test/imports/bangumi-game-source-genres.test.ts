@@ -4,9 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { converter_revision as entityRevision } from '../../../../packages/conversion/src/cross-media-entities.ts';
-import {
-  bangumiGameSourceGenreScheme,
-} from '../../../../packages/conversion/src/bangumi-game-source-genres.ts';
+import { bangumiGameSourceGenreScheme } from '../../../../packages/conversion/src/bangumi-game-source-genres.ts';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
@@ -341,8 +339,11 @@ test('selected Game genre binding is reviewed and adopted separately, read publi
     );
     expect(adopted.adoption.selection?.map((row) => row.candidate)).toContain(genreCandidate.id);
     const current = await publicClient.readSubject(recovered.id);
-    const publicGenre = (current as { subject?: { statements?: Record<string, { value?: { content?: unknown }; references?: unknown }[]> } })
-      .subject?.statements?.['schema:genre']?.find((row) => row.value?.content === conceptId);
+    const publicGenre = (
+      current as {
+        subject?: { statements?: Record<string, { value?: { content?: unknown }; references?: unknown }[]> };
+      }
+    ).subject?.statements?.['schema:genre']?.find((row) => row.value?.content === conceptId);
     expect(publicGenre).toBeDefined();
     expect(publicGenre?.references).toContainEqual(genreCandidate.statement.references![0]);
 

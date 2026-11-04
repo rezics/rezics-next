@@ -237,11 +237,7 @@ export function createShowcaseBangumiGameGenreLookup(
     return pending;
   };
 
-  async function missingAssociation(
-    id: string,
-    property: string,
-    value: string,
-  ): Promise<BindingFailure['state']> {
+  async function missingAssociation(id: string, property: string, value: string): Promise<BindingFailure['state']> {
     const key = `${id}\0${property}\0${value}`;
     let pending = associationReads.get(key);
     if (!pending) {
@@ -283,8 +279,7 @@ export function createShowcaseBangumiGameGenreLookup(
     const conceptRead = await read(binding.id);
     if ('error' in conceptRead) return { state: failure(conceptRead.error) };
     const concept = conceptRead.subject;
-    if (!concept)
-      return { state: await missingAssociation(binding.id, 'schema:url', binding.sourceUri) };
+    if (!concept) return { state: await missingAssociation(binding.id, 'schema:url', binding.sourceUri) };
     if (concept.type !== 'skos:Concept') return { state: 'wrong-scheme' };
     if (!hasCurrentValue(concept, 'skos:inScheme', profile.schemeId)) {
       if ((concept.statements['skos:inScheme'] ?? []).length) return { state: 'wrong-scheme' };
@@ -435,7 +430,10 @@ export async function prepareShowcaseBangumiGameGenres(input: {
             proposal.statement.value.type === 'value' &&
             input.adapter.bindingFor(item.literal)?.id === proposal.statement.value.content,
         )?.pointer;
-        diagnostics.set(`${row.key}\0${path ?? '/candidate'}`, diagnostic(row.key, path ?? '/candidate', 'candidate-not-current'));
+        diagnostics.set(
+          `${row.key}\0${path ?? '/candidate'}`,
+          diagnostic(row.key, path ?? '/candidate', 'candidate-not-current'),
+        );
         continue;
       }
       const owned = exact.find((entry) => entry.candidate.candidate === live[0]!.id)!;
@@ -446,7 +444,10 @@ export async function prepareShowcaseBangumiGameGenres(input: {
         commandDigest: showcaseDigest(owned.command),
       });
       for (const requirement of mapping.requirements)
-        if (proposal.statement.value.type === 'value' && proposal.statement.value.content === input.adapter.bindingFor(requirement.literal)?.id)
+        if (
+          proposal.statement.value.type === 'value' &&
+          proposal.statement.value.content === input.adapter.bindingFor(requirement.literal)?.id
+        )
           diagnostics.delete(`${row.key}\0${requirement.pointer}`);
     }
   }

@@ -14,10 +14,7 @@ import { extractBangumiGameNames } from './bangumi-game-names.ts';
 import { bangumiDiagnosticLimit, extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
 import { bangumiGamePublication } from './bangumi-game-publication.ts';
 import { bangumiGamePlayerCount, scanBangumiGameInfobox } from './bangumi-game-player-count.ts';
-import {
-  bangumiGameSourceGenreKey,
-  convertBangumiGameSourceGenres,
-} from './bangumi-game-source-genres.ts';
+import { bangumiGameSourceGenreKey, convertBangumiGameSourceGenres } from './bangumi-game-source-genres.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
 import { bangumiGameEnvironment } from './bangumi-game-environment.ts';
 import {

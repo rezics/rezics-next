@@ -422,7 +422,8 @@ async function readBangumiGameGenreBindings(path: string): Promise<BangumiGameGe
   const handle = await open(path, 'r');
   try {
     const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > GAME_GENRE_BINDING_FILE_BYTES) throw new TypeError('Invalid binding profile file');
+    if (!stat.isFile() || stat.size > GAME_GENRE_BINDING_FILE_BYTES)
+      throw new TypeError('Invalid binding profile file');
     const chunks: Buffer[] = [];
     let size = 0;
     for (;;) {

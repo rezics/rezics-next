@@ -2175,8 +2175,7 @@ export class Importer {
     let resolvedReferences = ownReferences?.resolvedReferences;
     if (lookup) {
       const resolution = await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal });
-      if (isUnavailableIdentifierResolution(resolution))
-        resolvedReferences = resolution.resolvedReferences;
+      if (isUnavailableIdentifierResolution(resolution)) resolvedReferences = resolution.resolvedReferences;
       else resolvedReferences = resolution as Readonly<Record<string, string>>;
     }
     const context = {
