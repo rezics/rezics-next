@@ -42,7 +42,7 @@ export type {
   ProgressMeasureDraft,
   ProgressInputRules,
 } from '@rezics/progress';
-import type { ProgressScalarMeasure, ProgressInputRules } from '@rezics/progress';
+import type { ProgressScalarMeasure, ProgressInputRules, ProgressMeasureDraft } from '@rezics/progress';
 export type ProgressMeasurePresentation = { unit: ProgressUnit; presentation: ProgressPresentation };
 
 export type ProgressSessionDraft = {
