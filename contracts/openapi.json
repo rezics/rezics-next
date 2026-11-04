@@ -56728,241 +56728,271 @@
                       ]
                     },
                     "viewerFacts": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "question": {
+                      "anyOf": [
+                        {
                           "additionalProperties": false,
                           "properties": {
-                            "grain": {
-                              "type": "string"
-                            },
-                            "id": {
-                              "format": "uuid",
-                              "type": "string"
-                            },
-                            "meaning": {
-                              "type": "string"
-                            },
-                            "revision": {
-                              "minimum": 1,
-                              "type": "integer"
-                            },
-                            "scale": {
+                            "question": {
                               "additionalProperties": false,
                               "properties": {
-                                "displayStep": {
+                                "grain": {
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "meaning": {
+                                  "type": "string"
+                                },
+                                "revision": {
                                   "minimum": 1,
                                   "type": "integer"
                                 },
-                                "max": {
-                                  "type": "integer"
-                                },
-                                "min": {
-                                  "type": "integer"
+                                "scale": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "displayStep": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "max": {
+                                      "type": "integer"
+                                    },
+                                    "min": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "min",
+                                    "max",
+                                    "displayStep"
+                                  ],
+                                  "type": "object"
                                 }
                               },
                               "required": [
-                                "min",
-                                "max",
-                                "displayStep"
+                                "id",
+                                "revision",
+                                "grain",
+                                "scale",
+                                "meaning"
                               ],
-                              "type": "object"
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "rows": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "entry": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "entryState": {
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "incarnationId": {
+                                            "format": "uuid",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "revision": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "state": {
+                                            "const": "present",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "incarnationId",
+                                          "entryState",
+                                          "revision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "reason": {
+                                            "const": "scope",
+                                            "type": "string"
+                                          },
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "reason"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "rowKey": {
+                                    "type": "string"
+                                  },
+                                  "subjectId": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "vote": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "questionId": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "questionRevision": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "revision": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "state": {
+                                            "const": "present",
+                                            "type": "string"
+                                          },
+                                          "units": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "questionId",
+                                          "questionRevision",
+                                          "units",
+                                          "revision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "questionId": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "questionRevision": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "questionId",
+                                          "questionRevision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "reason": {
+                                            "enum": [
+                                              "scope",
+                                              "question"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "reason"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "rowKey",
+                                  "subjectId",
+                                  "entry",
+                                  "vote"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 100,
+                              "type": "array"
+                            },
+                            "state": {
+                              "const": "current",
+                              "type": "string"
                             }
                           },
                           "required": [
-                            "id",
-                            "revision",
-                            "grain",
-                            "scale",
-                            "meaning"
+                            "state",
+                            "question",
+                            "rows"
                           ],
-                          "type": [
-                            "object",
-                            "null"
-                          ]
+                          "type": "object"
                         },
-                        "rows": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "entry": {
-                                "anyOf": [
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "entryState": {
-                                        "type": [
-                                          "string",
-                                          "null"
-                                        ]
-                                      },
-                                      "incarnationId": {
-                                        "format": "uuid",
-                                        "type": [
-                                          "string",
-                                          "null"
-                                        ]
-                                      },
-                                      "revision": {
-                                        "minimum": 0,
-                                        "type": "integer"
-                                      },
-                                      "state": {
-                                        "const": "present",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "incarnationId",
-                                      "entryState",
-                                      "revision"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "state": {
-                                        "const": "absent",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "reason": {
-                                        "const": "scope",
-                                        "type": "string"
-                                      },
-                                      "state": {
-                                        "const": "unavailable",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "reason"
-                                    ],
-                                    "type": "object"
-                                  }
-                                ]
-                              },
-                              "rowKey": {
-                                "type": "string"
-                              },
-                              "subjectId": {
-                                "format": "uuid",
-                                "type": "string"
-                              },
-                              "vote": {
-                                "anyOf": [
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "questionId": {
-                                        "format": "uuid",
-                                        "type": "string"
-                                      },
-                                      "questionRevision": {
-                                        "minimum": 1,
-                                        "type": "integer"
-                                      },
-                                      "revision": {
-                                        "minimum": 1,
-                                        "type": "integer"
-                                      },
-                                      "state": {
-                                        "const": "present",
-                                        "type": "string"
-                                      },
-                                      "units": {
-                                        "type": "integer"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "questionId",
-                                      "questionRevision",
-                                      "units",
-                                      "revision"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "questionId": {
-                                        "format": "uuid",
-                                        "type": "string"
-                                      },
-                                      "questionRevision": {
-                                        "minimum": 1,
-                                        "type": "integer"
-                                      },
-                                      "state": {
-                                        "const": "absent",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "questionId",
-                                      "questionRevision"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "reason": {
-                                        "enum": [
-                                          "scope",
-                                          "question"
-                                        ],
-                                        "type": "string"
-                                      },
-                                      "state": {
-                                        "const": "unavailable",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "reason"
-                                    ],
-                                    "type": "object"
-                                  }
-                                ]
-                              }
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "reason": {
+                              "enum": [
+                                "identity",
+                                "currentness",
+                                "response_limit"
+                              ],
+                              "type": "string"
                             },
-                            "required": [
-                              "rowKey",
-                              "subjectId",
-                              "entry",
-                              "vote"
-                            ],
-                            "type": "object"
+                            "retryable": {
+                              "type": "boolean"
+                            },
+                            "state": {
+                              "const": "unavailable",
+                              "type": "string"
+                            }
                           },
-                          "maxItems": 100,
-                          "type": "array"
-                        },
-                        "state": {
-                          "const": "current",
-                          "type": "string"
+                          "required": [
+                            "state",
+                            "reason",
+                            "retryable"
+                          ],
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "state",
-                        "question",
-                        "rows"
-                      ],
-                      "type": "object"
+                      ]
                     }
                   },
                   "required": [
@@ -98700,6 +98730,168 @@
                                       "null"
                                     ]
                                   },
+                                  "subjectReactions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "action": {
+                                        "enum": [
+                                          "sign_in",
+                                          "allowed",
+                                          "denied",
+                                          "unavailable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "counts": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "asOf": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "epoch": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "position": {
+                                                    "pattern": "^[1-9][0-9]*$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "epoch",
+                                                  "position"
+                                                ],
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "state": {
+                                                "const": "available",
+                                                "type": "string"
+                                              },
+                                              "values": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "insightful": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "laugh": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "like": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "love": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "sad": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [],
+                                                "type": "object"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "values",
+                                              "asOf"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      "target": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "targetId": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "targetKind": {
+                                            "const": "subject",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "targetKind",
+                                          "targetId"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "viewer": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "kind": {
+                                                "enum": [
+                                                  "like",
+                                                  "love",
+                                                  "laugh",
+                                                  "insightful",
+                                                  "sad"
+                                                ],
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "state": {
+                                                "const": "available",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "kind"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "target",
+                                      "counts",
+                                      "action"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "type": {
                                     "type": "string"
                                   },
@@ -99182,6 +99374,71 @@
                                       "handle"
                                     ],
                                     "type": "object"
+                                  },
+                                  "conversationActivity": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "cohort": {
+                                            "const": "public",
+                                            "type": "string"
+                                          },
+                                          "count": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "kind": {
+                                                "enum": [
+                                                  "exact",
+                                                  "lower-bound"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "value"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "lastActivityAt": {
+                                            "format": "date-time",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "cohort",
+                                          "count",
+                                          "lastActivityAt"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "withheld",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "excerpt": {
                                     "maxLength": 640,
@@ -100332,6 +100589,168 @@
                                       "null"
                                     ]
                                   },
+                                  "subjectReactions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "action": {
+                                        "enum": [
+                                          "sign_in",
+                                          "allowed",
+                                          "denied",
+                                          "unavailable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "counts": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "asOf": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "epoch": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "position": {
+                                                    "pattern": "^[1-9][0-9]*$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "epoch",
+                                                  "position"
+                                                ],
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "state": {
+                                                "const": "available",
+                                                "type": "string"
+                                              },
+                                              "values": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "insightful": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "laugh": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "like": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "love": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "sad": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [],
+                                                "type": "object"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "values",
+                                              "asOf"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      "target": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "targetId": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "targetKind": {
+                                            "const": "subject",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "targetKind",
+                                          "targetId"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "viewer": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "kind": {
+                                                "enum": [
+                                                  "like",
+                                                  "love",
+                                                  "laugh",
+                                                  "insightful",
+                                                  "sad"
+                                                ],
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "state": {
+                                                "const": "available",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "kind"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "target",
+                                      "counts",
+                                      "action"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "type": {
                                     "type": "string"
                                   },
@@ -100594,6 +101013,168 @@
                                       "null"
                                     ]
                                   },
+                                  "subjectReactions": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "action": {
+                                        "enum": [
+                                          "sign_in",
+                                          "allowed",
+                                          "denied",
+                                          "unavailable"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "counts": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "asOf": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "epoch": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "position": {
+                                                    "pattern": "^[1-9][0-9]*$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "epoch",
+                                                  "position"
+                                                ],
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "state": {
+                                                "const": "available",
+                                                "type": "string"
+                                              },
+                                              "values": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "insightful": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "laugh": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "like": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "love": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "sad": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [],
+                                                "type": "object"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "values",
+                                              "asOf"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      "target": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "targetId": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "targetKind": {
+                                            "const": "subject",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "targetKind",
+                                          "targetId"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "viewer": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "kind": {
+                                                "enum": [
+                                                  "like",
+                                                  "love",
+                                                  "laugh",
+                                                  "insightful",
+                                                  "sad"
+                                                ],
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "state": {
+                                                "const": "available",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "kind"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "target",
+                                      "counts",
+                                      "action"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "type": {
                                     "type": "string"
                                   },
@@ -100813,6 +101394,71 @@
                                       "avatar"
                                     ],
                                     "type": "object"
+                                  },
+                                  "conversationActivity": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "cohort": {
+                                            "const": "public",
+                                            "type": "string"
+                                          },
+                                          "count": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "kind": {
+                                                "enum": [
+                                                  "exact",
+                                                  "lower-bound"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "value"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "lastActivityAt": {
+                                            "format": "date-time",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "cohort",
+                                          "count",
+                                          "lastActivityAt"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "withheld",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "createdAt": {
                                     "type": "string"
@@ -101311,6 +101957,71 @@
                                       "avatar"
                                     ],
                                     "type": "object"
+                                  },
+                                  "conversationActivity": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "cohort": {
+                                            "const": "public",
+                                            "type": "string"
+                                          },
+                                          "count": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "kind": {
+                                                "enum": [
+                                                  "exact",
+                                                  "lower-bound"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "value"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "lastActivityAt": {
+                                            "format": "date-time",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "cohort",
+                                          "count",
+                                          "lastActivityAt"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "withheld",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "createdAt": {
                                     "type": "string"
@@ -140853,78 +141564,95 @@
                             "type": "string"
                           },
                           "reportedDates": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "availability": {
-                                "const": "available",
-                                "type": "string"
-                              },
-                              "finishDate": {
+                            "anyOf": [
+                              {
                                 "additionalProperties": false,
                                 "properties": {
-                                  "day": {
-                                    "maximum": 31,
-                                    "minimum": 1,
+                                  "availability": {
+                                    "const": "available",
+                                    "type": "string"
+                                  },
+                                  "finishDate": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "day": {
+                                        "maximum": 31,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "month": {
+                                        "maximum": 12,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "year": {
+                                        "maximum": 9999,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "year"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "revision": {
+                                    "minimum": 0,
                                     "type": "integer"
                                   },
-                                  "month": {
-                                    "maximum": 12,
-                                    "minimum": 1,
-                                    "type": "integer"
-                                  },
-                                  "year": {
-                                    "maximum": 9999,
-                                    "minimum": 1,
-                                    "type": "integer"
+                                  "startDate": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "day": {
+                                        "maximum": 31,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "month": {
+                                        "maximum": 12,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "year": {
+                                        "maximum": 9999,
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "year"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
                                   }
                                 },
                                 "required": [
-                                  "year"
+                                  "availability",
+                                  "revision",
+                                  "startDate",
+                                  "finishDate"
                                 ],
-                                "type": [
-                                  "object",
-                                  "null"
-                                ]
+                                "type": "object"
                               },
-                              "revision": {
-                                "minimum": 0,
-                                "type": "integer"
-                              },
-                              "startDate": {
+                              {
                                 "additionalProperties": false,
                                 "properties": {
-                                  "day": {
-                                    "maximum": 31,
-                                    "minimum": 1,
-                                    "type": "integer"
-                                  },
-                                  "month": {
-                                    "maximum": 12,
-                                    "minimum": 1,
-                                    "type": "integer"
-                                  },
-                                  "year": {
-                                    "maximum": 9999,
-                                    "minimum": 1,
-                                    "type": "integer"
+                                  "availability": {
+                                    "const": "unavailable",
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "year"
+                                  "availability"
                                 ],
-                                "type": [
-                                  "object",
-                                  "null"
-                                ]
+                                "type": "object"
                               }
-                            },
-                            "required": [
-                              "availability",
-                              "revision",
-                              "startDate",
-                              "finishDate"
-                            ],
-                            "type": "object"
+                            ]
                           },
                           "revision": {
                             "minimum": 1,
@@ -141019,7 +141747,6 @@
                           "recordedStartedAt",
                           "recordedCompletedAt",
                           "reportedDates",
-                          "assessment",
                           "subject",
                           "versionSubject"
                         ],
@@ -142311,6 +143038,112 @@
                               "createdAt": {
                                 "type": "string"
                               },
+                              "facts": {
+                                "maxProperties": 4,
+                                "patternProperties": {
+                                  "^.*$": {
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "id": {
+                                              "format": "uuid",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "item",
+                                              "type": "string"
+                                            },
+                                            "labels": {
+                                              "patternProperties": {
+                                                "^.*$": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "type": "object"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "id",
+                                            "labels"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "day": {
+                                              "maximum": 31,
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "kind": {
+                                              "const": "time",
+                                              "type": "string"
+                                            },
+                                            "month": {
+                                              "maximum": 12,
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "year": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "year"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "amount": {
+                                              "type": "number"
+                                            },
+                                            "kind": {
+                                              "const": "quantity",
+                                              "type": "string"
+                                            },
+                                            "unit": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "amount",
+                                            "unit"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "kind": {
+                                              "const": "code",
+                                              "type": "string"
+                                            },
+                                            "value": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "value"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "maxItems": 3,
+                                    "type": "array"
+                                  }
+                                },
+                                "type": "object"
+                              },
                               "finishedAt": {
                                 "type": [
                                   "string",
@@ -142572,6 +143405,112 @@
                             "properties": {
                               "createdAt": {
                                 "type": "string"
+                              },
+                              "facts": {
+                                "maxProperties": 4,
+                                "patternProperties": {
+                                  "^.*$": {
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "id": {
+                                              "format": "uuid",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "item",
+                                              "type": "string"
+                                            },
+                                            "labels": {
+                                              "patternProperties": {
+                                                "^.*$": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "type": "object"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "id",
+                                            "labels"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "day": {
+                                              "maximum": 31,
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "kind": {
+                                              "const": "time",
+                                              "type": "string"
+                                            },
+                                            "month": {
+                                              "maximum": 12,
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "year": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "year"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "amount": {
+                                              "type": "number"
+                                            },
+                                            "kind": {
+                                              "const": "quantity",
+                                              "type": "string"
+                                            },
+                                            "unit": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "amount",
+                                            "unit"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "kind": {
+                                              "const": "code",
+                                              "type": "string"
+                                            },
+                                            "value": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "value"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "maxItems": 3,
+                                    "type": "array"
+                                  }
+                                },
+                                "type": "object"
                               },
                               "incarnationId": {
                                 "format": "uuid",
@@ -142871,241 +143810,271 @@
                       "type": "object"
                     },
                     "viewerFacts": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "question": {
+                      "anyOf": [
+                        {
                           "additionalProperties": false,
                           "properties": {
-                            "grain": {
-                              "type": "string"
-                            },
-                            "id": {
-                              "format": "uuid",
-                              "type": "string"
-                            },
-                            "meaning": {
-                              "type": "string"
-                            },
-                            "revision": {
-                              "minimum": 1,
-                              "type": "integer"
-                            },
-                            "scale": {
+                            "question": {
                               "additionalProperties": false,
                               "properties": {
-                                "displayStep": {
+                                "grain": {
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "meaning": {
+                                  "type": "string"
+                                },
+                                "revision": {
                                   "minimum": 1,
                                   "type": "integer"
                                 },
-                                "max": {
-                                  "type": "integer"
-                                },
-                                "min": {
-                                  "type": "integer"
+                                "scale": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "displayStep": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "max": {
+                                      "type": "integer"
+                                    },
+                                    "min": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "min",
+                                    "max",
+                                    "displayStep"
+                                  ],
+                                  "type": "object"
                                 }
                               },
                               "required": [
-                                "min",
-                                "max",
-                                "displayStep"
+                                "id",
+                                "revision",
+                                "grain",
+                                "scale",
+                                "meaning"
                               ],
-                              "type": "object"
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "rows": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "entry": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "entryState": {
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "incarnationId": {
+                                            "format": "uuid",
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "revision": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          },
+                                          "state": {
+                                            "const": "present",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "incarnationId",
+                                          "entryState",
+                                          "revision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "reason": {
+                                            "const": "scope",
+                                            "type": "string"
+                                          },
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "reason"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "rowKey": {
+                                    "type": "string"
+                                  },
+                                  "subjectId": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "vote": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "questionId": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "questionRevision": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "revision": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "state": {
+                                            "const": "present",
+                                            "type": "string"
+                                          },
+                                          "units": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "questionId",
+                                          "questionRevision",
+                                          "units",
+                                          "revision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "questionId": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "questionRevision": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "questionId",
+                                          "questionRevision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "reason": {
+                                            "enum": [
+                                              "scope",
+                                              "question"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "reason"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "rowKey",
+                                  "subjectId",
+                                  "entry",
+                                  "vote"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 100,
+                              "type": "array"
+                            },
+                            "state": {
+                              "const": "current",
+                              "type": "string"
                             }
                           },
                           "required": [
-                            "id",
-                            "revision",
-                            "grain",
-                            "scale",
-                            "meaning"
+                            "state",
+                            "question",
+                            "rows"
                           ],
-                          "type": [
-                            "object",
-                            "null"
-                          ]
+                          "type": "object"
                         },
-                        "rows": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "entry": {
-                                "anyOf": [
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "entryState": {
-                                        "type": [
-                                          "string",
-                                          "null"
-                                        ]
-                                      },
-                                      "incarnationId": {
-                                        "format": "uuid",
-                                        "type": [
-                                          "string",
-                                          "null"
-                                        ]
-                                      },
-                                      "revision": {
-                                        "minimum": 0,
-                                        "type": "integer"
-                                      },
-                                      "state": {
-                                        "const": "present",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "incarnationId",
-                                      "entryState",
-                                      "revision"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "state": {
-                                        "const": "absent",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "reason": {
-                                        "const": "scope",
-                                        "type": "string"
-                                      },
-                                      "state": {
-                                        "const": "unavailable",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "reason"
-                                    ],
-                                    "type": "object"
-                                  }
-                                ]
-                              },
-                              "rowKey": {
-                                "type": "string"
-                              },
-                              "subjectId": {
-                                "format": "uuid",
-                                "type": "string"
-                              },
-                              "vote": {
-                                "anyOf": [
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "questionId": {
-                                        "format": "uuid",
-                                        "type": "string"
-                                      },
-                                      "questionRevision": {
-                                        "minimum": 1,
-                                        "type": "integer"
-                                      },
-                                      "revision": {
-                                        "minimum": 1,
-                                        "type": "integer"
-                                      },
-                                      "state": {
-                                        "const": "present",
-                                        "type": "string"
-                                      },
-                                      "units": {
-                                        "type": "integer"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "questionId",
-                                      "questionRevision",
-                                      "units",
-                                      "revision"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "questionId": {
-                                        "format": "uuid",
-                                        "type": "string"
-                                      },
-                                      "questionRevision": {
-                                        "minimum": 1,
-                                        "type": "integer"
-                                      },
-                                      "state": {
-                                        "const": "absent",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "questionId",
-                                      "questionRevision"
-                                    ],
-                                    "type": "object"
-                                  },
-                                  {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "reason": {
-                                        "enum": [
-                                          "scope",
-                                          "question"
-                                        ],
-                                        "type": "string"
-                                      },
-                                      "state": {
-                                        "const": "unavailable",
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "state",
-                                      "reason"
-                                    ],
-                                    "type": "object"
-                                  }
-                                ]
-                              }
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "reason": {
+                              "enum": [
+                                "identity",
+                                "currentness",
+                                "response_limit"
+                              ],
+                              "type": "string"
                             },
-                            "required": [
-                              "rowKey",
-                              "subjectId",
-                              "entry",
-                              "vote"
-                            ],
-                            "type": "object"
+                            "retryable": {
+                              "type": "boolean"
+                            },
+                            "state": {
+                              "const": "unavailable",
+                              "type": "string"
+                            }
                           },
-                          "maxItems": 100,
-                          "type": "array"
-                        },
-                        "state": {
-                          "const": "current",
-                          "type": "string"
+                          "required": [
+                            "state",
+                            "reason",
+                            "retryable"
+                          ],
+                          "type": "object"
                         }
-                      },
-                      "required": [
-                        "state",
-                        "question",
-                        "rows"
-                      ],
-                      "type": "object"
+                      ]
                     }
                   },
                   "required": [
@@ -233604,7 +234573,7 @@
             "bearerAuth": []
           }
         ],
-        "x-action": "classification_ballot:read-own",
+        "x-action": "classification_ballot:read_own",
         "x-exposure": "gate:personal_library",
         "x-resource-types": [
           "semantic.subject"
@@ -376657,7 +377626,7 @@
           },
           {}
         ],
-        "x-action": "classification_ballot:read-aggregate",
+        "x-action": "classification_ballot:read_aggregate",
         "x-exposure": "public",
         "x-resource-types": [
           "semantic.subject"
@@ -378091,7 +379060,7 @@
             "bearerAuth": []
           }
         ],
-        "x-action": "classification_ballot:read-own",
+        "x-action": "classification_ballot:read_own",
         "x-exposure": "public",
         "x-resource-types": [
           "semantic.subject"
@@ -384887,6 +385856,15 @@
               "minLength": 3,
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-rating-observation",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -386281,6 +387259,15 @@
             "schema": {
               "maxLength": 1024,
               "minLength": 3,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-rating-observation",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
               "type": "string"
             }
           }
@@ -393335,7 +394322,7 @@
                         "type": "string"
                       },
                       "release": {
-                        "pattern": "^[0-9a-f]{64}$",
+                        "pattern": "^sha256:[0-9a-f]{64}$",
                         "type": "string"
                       },
                       "revision": {
@@ -394156,7 +395143,7 @@
                         "type": "string"
                       },
                       "release": {
-                        "pattern": "^[0-9a-f]{64}$",
+                        "pattern": "^sha256:[0-9a-f]{64}$",
                         "type": "string"
                       },
                       "revision": {
@@ -394341,7 +395328,7 @@
                               "type": "string"
                             },
                             "release": {
-                              "pattern": "^[0-9a-f]{64}$",
+                              "pattern": "^sha256:[0-9a-f]{64}$",
                               "type": "string"
                             },
                             "revision": {
@@ -395290,7 +396277,7 @@
                           "type": "string"
                         },
                         "release": {
-                          "pattern": "^[0-9a-f]{64}$",
+                          "pattern": "^sha256:[0-9a-f]{64}$",
                           "type": "string"
                         },
                         "revision": {
@@ -395390,7 +396377,7 @@
                                         "type": "string"
                                       },
                                       "release": {
-                                        "pattern": "^[0-9a-f]{64}$",
+                                        "pattern": "^sha256:[0-9a-f]{64}$",
                                         "type": "string"
                                       },
                                       "revision": {
@@ -410309,6 +411296,146 @@
                                 },
                                 "type": "object"
                               },
+                              "matchEvidence": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unsupported",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "query": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      },
+                                      "reasons": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "field": {
+                                              "enum": [
+                                                "title",
+                                                "alias",
+                                                "description"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "language": {
+                                              "maxLength": 35,
+                                              "minLength": 2,
+                                              "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                              "type": "string"
+                                            },
+                                            "spans": {
+                                              "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "end": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "start": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "start",
+                                                  "end"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "maxItems": 8,
+                                              "minItems": 1,
+                                              "type": "array"
+                                            },
+                                            "text": {
+                                              "maxLength": 256,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "field",
+                                            "language",
+                                            "text",
+                                            "spans"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 3,
+                                        "minItems": 1,
+                                        "type": "array"
+                                      },
+                                      "source": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "revision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "state": {
+                                        "const": "current",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "source",
+                                      "query",
+                                      "reasons"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
                               "summary": {
                                 "additionalProperties": false,
                                 "properties": {
@@ -410501,6 +411628,7 @@
                               "base",
                               "labels",
                               "summary",
+                              "matchEvidence",
                               "figure"
                             ],
                             "type": "object"
@@ -410892,6 +412020,146 @@
                                     ],
                                     "type": "object"
                                   },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
                                   "summary": {
                                     "additionalProperties": false,
                                     "properties": {
@@ -411087,7 +412355,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               },
@@ -411122,6 +412391,146 @@
                                       "id"
                                     ],
                                     "type": "object"
+                                  },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "summary": {
                                     "additionalProperties": false,
@@ -411305,7 +412714,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               },
@@ -411340,6 +412750,146 @@
                                       "id"
                                     ],
                                     "type": "object"
+                                  },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "summary": {
                                     "additionalProperties": false,
@@ -411837,7 +413387,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               },
@@ -411872,6 +413423,146 @@
                                       "id"
                                     ],
                                     "type": "object"
+                                  },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "summary": {
                                     "additionalProperties": false,
@@ -411964,7 +413655,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               },
@@ -411999,6 +413691,146 @@
                                       "id"
                                     ],
                                     "type": "object"
+                                  },
+                                  "matchEvidence": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "absent",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unsupported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "query": {
+                                            "pattern": "^[0-9a-f]{64}$",
+                                            "type": "string"
+                                          },
+                                          "reasons": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "field": {
+                                                  "enum": [
+                                                    "title",
+                                                    "alias",
+                                                    "description"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "language": {
+                                                  "maxLength": 35,
+                                                  "minLength": 2,
+                                                  "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "spans": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "end": {
+                                                        "minimum": 1,
+                                                        "type": "integer"
+                                                      },
+                                                      "start": {
+                                                        "minimum": 0,
+                                                        "type": "integer"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "start",
+                                                      "end"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 8,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "text": {
+                                                  "maxLength": 256,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "field",
+                                                "language",
+                                                "text",
+                                                "spans"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 3,
+                                            "minItems": 1,
+                                            "type": "array"
+                                          },
+                                          "source": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "source",
+                                          "query",
+                                          "reasons"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
                                   },
                                   "summary": {
                                     "additionalProperties": false,
@@ -412067,7 +413899,8 @@
                                 },
                                 "required": [
                                   "key",
-                                  "summary"
+                                  "summary",
+                                  "matchEvidence"
                                 ],
                                 "type": "object"
                               }
@@ -412326,6 +414159,10 @@
                                             "type": "object"
                                           }
                                         ]
+                                      },
+                                      "resolvedSubjectId": {
+                                        "format": "uuid",
+                                        "type": "string"
                                       },
                                       "rowKey": {
                                         "type": "string"
@@ -412873,6 +414710,146 @@
                                           },
                                           "type": "object"
                                         },
+                                        "matchEvidence": {
+                                          "anyOf": [
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "state": {
+                                                  "const": "absent",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "state": {
+                                                  "const": "unsupported",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "state": {
+                                                  "const": "unavailable",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "query": {
+                                                  "pattern": "^[0-9a-f]{64}$",
+                                                  "type": "string"
+                                                },
+                                                "reasons": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "field": {
+                                                        "enum": [
+                                                          "title",
+                                                          "alias",
+                                                          "description"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "language": {
+                                                        "maxLength": 35,
+                                                        "minLength": 2,
+                                                        "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                        "type": "string"
+                                                      },
+                                                      "spans": {
+                                                        "items": {
+                                                          "additionalProperties": false,
+                                                          "properties": {
+                                                            "end": {
+                                                              "minimum": 1,
+                                                              "type": "integer"
+                                                            },
+                                                            "start": {
+                                                              "minimum": 0,
+                                                              "type": "integer"
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "start",
+                                                            "end"
+                                                          ],
+                                                          "type": "object"
+                                                        },
+                                                        "maxItems": 8,
+                                                        "minItems": 1,
+                                                        "type": "array"
+                                                      },
+                                                      "text": {
+                                                        "maxLength": 256,
+                                                        "minLength": 1,
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "field",
+                                                      "language",
+                                                      "text",
+                                                      "spans"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 3,
+                                                  "minItems": 1,
+                                                  "type": "array"
+                                                },
+                                                "source": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "id": {
+                                                      "format": "uuid",
+                                                      "type": "string"
+                                                    },
+                                                    "revision": {
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "id",
+                                                    "revision"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "state": {
+                                                  "const": "current",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state",
+                                                "source",
+                                                "query",
+                                                "reasons"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
                                         "summary": {
                                           "additionalProperties": false,
                                           "properties": {
@@ -413065,6 +415042,7 @@
                                         "base",
                                         "labels",
                                         "summary",
+                                        "matchEvidence",
                                         "figure"
                                       ],
                                       "type": "object"
@@ -413443,6 +415421,146 @@
                                         },
                                         "type": "object"
                                       },
+                                      "matchEvidence": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "absent",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unsupported",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "query": {
+                                                "pattern": "^[0-9a-f]{64}$",
+                                                "type": "string"
+                                              },
+                                              "reasons": {
+                                                "items": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "field": {
+                                                      "enum": [
+                                                        "title",
+                                                        "alias",
+                                                        "description"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "language": {
+                                                      "maxLength": 35,
+                                                      "minLength": 2,
+                                                      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                      "type": "string"
+                                                    },
+                                                    "spans": {
+                                                      "items": {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "end": {
+                                                            "minimum": 1,
+                                                            "type": "integer"
+                                                          },
+                                                          "start": {
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "start",
+                                                          "end"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      "maxItems": 8,
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    },
+                                                    "text": {
+                                                      "maxLength": 256,
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "field",
+                                                    "language",
+                                                    "text",
+                                                    "spans"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "maxItems": 3,
+                                                "minItems": 1,
+                                                "type": "array"
+                                              },
+                                              "source": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "id": {
+                                                    "format": "uuid",
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "revision"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "state": {
+                                                "const": "current",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "source",
+                                              "query",
+                                              "reasons"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
                                       "summary": {
                                         "additionalProperties": false,
                                         "properties": {
@@ -413635,6 +415753,7 @@
                                       "base",
                                       "labels",
                                       "summary",
+                                      "matchEvidence",
                                       "figure"
                                     ],
                                     "type": "object"
@@ -414030,6 +416149,146 @@
                                         },
                                         "type": "object"
                                       },
+                                      "matchEvidence": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "absent",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unsupported",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "query": {
+                                                "pattern": "^[0-9a-f]{64}$",
+                                                "type": "string"
+                                              },
+                                              "reasons": {
+                                                "items": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "field": {
+                                                      "enum": [
+                                                        "title",
+                                                        "alias",
+                                                        "description"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "language": {
+                                                      "maxLength": 35,
+                                                      "minLength": 2,
+                                                      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                                      "type": "string"
+                                                    },
+                                                    "spans": {
+                                                      "items": {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "end": {
+                                                            "minimum": 1,
+                                                            "type": "integer"
+                                                          },
+                                                          "start": {
+                                                            "minimum": 0,
+                                                            "type": "integer"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "start",
+                                                          "end"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      "maxItems": 8,
+                                                      "minItems": 1,
+                                                      "type": "array"
+                                                    },
+                                                    "text": {
+                                                      "maxLength": 256,
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "field",
+                                                    "language",
+                                                    "text",
+                                                    "spans"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "maxItems": 3,
+                                                "minItems": 1,
+                                                "type": "array"
+                                              },
+                                              "source": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "id": {
+                                                    "format": "uuid",
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "revision"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "state": {
+                                                "const": "current",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "source",
+                                              "query",
+                                              "reasons"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
                                       "summary": {
                                         "additionalProperties": false,
                                         "properties": {
@@ -414222,6 +416481,7 @@
                                       "base",
                                       "labels",
                                       "summary",
+                                      "matchEvidence",
                                       "figure"
                                     ],
                                     "type": "object"
@@ -414650,6 +416910,146 @@
                                 },
                                 "type": "object"
                               },
+                              "matchEvidence": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unsupported",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "query": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      },
+                                      "reasons": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "field": {
+                                              "enum": [
+                                                "title",
+                                                "alias",
+                                                "description"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "language": {
+                                              "maxLength": 35,
+                                              "minLength": 2,
+                                              "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$",
+                                              "type": "string"
+                                            },
+                                            "spans": {
+                                              "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "end": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "start": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "start",
+                                                  "end"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "maxItems": 8,
+                                              "minItems": 1,
+                                              "type": "array"
+                                            },
+                                            "text": {
+                                              "maxLength": 256,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "field",
+                                            "language",
+                                            "text",
+                                            "spans"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 3,
+                                        "minItems": 1,
+                                        "type": "array"
+                                      },
+                                      "source": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "format": "uuid",
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "revision"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "state": {
+                                        "const": "current",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "source",
+                                      "query",
+                                      "reasons"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
                               "summary": {
                                 "additionalProperties": false,
                                 "properties": {
@@ -414842,6 +417242,7 @@
                               "base",
                               "labels",
                               "summary",
+                              "matchEvidence",
                               "figure"
                             ],
                             "type": "object"
