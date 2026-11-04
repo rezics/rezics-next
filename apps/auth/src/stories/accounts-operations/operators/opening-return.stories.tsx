@@ -47,11 +47,7 @@ function ReturnStory({
               }}
             />
             {source ? (
-              <OpeningCurrentSessionView
-                session={currentSession}
-                source={source}
-                continueHref="/"
-              />
+              <OpeningCurrentSessionView session={currentSession} source={source} continueHref="/" />
             ) : (
               <p className="text-sm text-muted-foreground">{m.auth_opening_unknown()}</p>
             )}
@@ -83,7 +79,5 @@ export const PreflightThenUnknown = {
 
 export const ReplacementViewerAndLaterAcknowledgement = {
   globals: { locale: 'zh-Hant' },
-  render: () => (
-    <ReturnStory entries={['unconfirmed', 'acknowledged']} source="session-readback" tone="dark" />
-  ),
+  render: () => <ReturnStory entries={['unconfirmed', 'acknowledged']} source="session-readback" tone="dark" />,
 };

@@ -640,11 +640,7 @@ function OpeningReview({
           </>
         ) : null}
         {outcome?.kind === 'opened' && outcomeSource ? (
-          <OpeningCurrentSessionView
-            session={outcome.session}
-            source={outcomeSource}
-            continueHref={websiteHref('/')}
-          />
+          <OpeningCurrentSessionView session={outcome.session} source={outcomeSource} continueHref={websiteHref('/')} />
         ) : null}
       </div>
     </>
