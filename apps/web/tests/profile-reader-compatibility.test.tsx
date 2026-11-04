@@ -299,6 +299,13 @@ test('the connected Profile and Public activity journey shares safe reads and pe
         element.click();
         await Promise.resolve();
       });
+    const pressSpace = async (element: HTMLElement) =>
+      act(async () => {
+        element.focus();
+        element.dispatchEvent(new window.KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+        element.dispatchEvent(new window.KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+        await Promise.resolve();
+      });
 
     await render();
     await until(() => readRequests.length >= 1, 'the first same-account profile read');
@@ -430,7 +437,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     const reviewSwitch = publicSwitch(m.settings_public_reviews());
     expect(reviewSwitch.getAttribute('aria-disabled')).toBeNull();
     const viewSaveCount = saveRequests.length;
-    await click(reviewSwitch);
+    await pressSpace(reviewSwitch);
     await until(() => saveRequests.length === viewSaveCount + 1, 'the public activity command');
     const viewCommand = saveRequests[viewSaveCount]!;
     expect(viewCommand.attempt.scope).toBe('views');
@@ -446,7 +453,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     const speakerSwitch = publicSwitch(m.settings_public_speakers());
     expect(speakerSwitch.getAttribute('aria-checked')).toBe('false');
     const speakerSaveCount = saveRequests.length;
-    await click(speakerSwitch);
+    await pressSpace(speakerSwitch);
     await until(() => saveRequests.length === speakerSaveCount + 1, 'organization speaker listing command');
     const speakerCommand = saveRequests[speakerSaveCount]!;
     expect(speakerCommand.attempt.patch).toEqual({ speakersListed: true });
