@@ -2,7 +2,8 @@ import pg from 'pg';
 import type { KernelClock } from './clock.ts';
 import { ConfigError } from './commerce/config.ts';
 import { createWorkClient } from './work/client.ts';
-import { KERNEL_WORK_MODULES } from './work/modules.ts';
+import { createKernelWorkModules } from './work/modules.ts';
+import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
@@ -59,7 +60,7 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
 
 export async function startWorker(
   config: WorkerConfig,
-  modules: readonly WorkModule[] = KERNEL_WORK_MODULES,
+  modules: readonly WorkModule[] = createKernelWorkModules(createDiscoveryProducerEntry),
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);

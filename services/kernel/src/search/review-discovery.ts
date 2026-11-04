@@ -5,7 +5,7 @@ import {
   REVIEW_DISCOVERY_READ_LIMIT as CONTENT_REVIEW_READ_LIMIT,
   type ReviewDiscoveryCount as NativeReviewDiscoveryCount,
   type ReviewDiscoverySource as NativeReviewDiscoverySource,
-} from '../content/review-discovery.ts';
+} from '../content/index.ts';
 import type { ReadContext } from '../content/model.ts';
 import { FEED_EXCERPT_LIMIT } from '../content/feed-summary.ts';
 import type { DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';

@@ -1,7 +1,7 @@
 # Collection discovery adapter
 
-`createNativeCollectionDiscoveryAdapter(dependencies, metadata)` installs Commerce's
-`publicCollectionDiscoverySource({pool})` and
+The composition root supplies Commerce's `publicCollectionDiscoverySource({pool})` to
+`createNativeCollectionDiscoveryAdapter(dependencies, metadata)`, which binds it to
 `readPublicCollectionDiscoverySummaries(dependencies, ids, context)`. Dependencies are the installed
 `PublicCollectionDiscoveryDependencies` (pool, Access, optional route key and clock); metadata is the Collection
 registry metadata (`id: 'collection'`, localized labels and icon). There is no optional ready producer.

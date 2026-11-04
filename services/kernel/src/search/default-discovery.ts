@@ -1,4 +1,4 @@
-import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
+import { readAccountDiscoverySummaries } from '../access/index.ts';
 import { prepareSearchReviewContexts } from './review-context.ts';
 import { boundWorkContexts } from './work-context.ts';
 import { readFollowDiscovery } from '../library/follow-discovery.ts';
@@ -10,11 +10,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { activeRelease } from '../semantic/definitions.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
-import {
-  createReviewDiscoverySource,
-  REVIEW_DISCOVERY_PAGE_LIMIT,
-  type ReviewDiscoverySource,
-} from '../content/review-discovery.ts';
+import { REVIEW_DISCOVERY_PAGE_LIMIT, type IndexedReview, type ReviewDiscoverySource } from '../content/index.ts';
+import type { CollectionDiscoverySource, CollectionDiscoveryItem } from '../library/index.ts';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -34,8 +31,10 @@ import { SearchUnavailableError } from './opensearch.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapter } from './collection-discovery.ts';
 import { createReviewDiscoveryAdapter } from './review-discovery.ts';
-import { nativeSpaceDiscoveryAdapter } from './space-discovery.ts';
-import type { SpaceDiscoverySummary } from '../community/space-discovery.ts';
+import type { SpaceDiscoveryAdapter } from './space-discovery.ts';
+import type { SpaceDiscoverySummary } from '../community/index.ts';
+import type { Access } from '../request/access.ts';
+import type { KernelClock } from '../clock.ts';
 import type {
   DiscoveryOwnerAdapterSlots,
   DiscoveryOwnerMetadataSummary,
@@ -43,10 +42,9 @@ import type {
   DiscoveryReadContext,
   DiscoveryUnionHit,
 } from './discovery.ts';
-import type { DiscoveryMetadataKind, DiscoveryMetadataProducer } from './generations.ts';
+import type { DiscoveryMetadataKind, DiscoveryMetadataProducer } from './discovery-api.ts';
 import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from './discovery-documents.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
-import { createRatedSubjectSource } from './rated-source.ts';
 import {
   createRetainedDiscoverySearch,
   type DiscoverySearch,
@@ -283,7 +281,7 @@ function requestedKeys(
 }
 
 function collectionRecords(
-  items: readonly import('../library/collection-discovery-source.ts').CollectionDiscoveryItem[],
+  items: readonly CollectionDiscoveryItem[],
 ) {
   const records: SecondScopeDiscoveryRecord[] = [];
   for (const item of items) {
@@ -304,7 +302,7 @@ function collectionRecords(
 function reviewRecords(
   partition: number,
   position: bigint,
-  reviews: readonly import('../content/review-discovery.ts').IndexedReview[],
+  reviews: readonly IndexedReview[],
 ) {
   const records: SecondScopeDiscoveryRecord[] = [];
   for (const review of reviews) {
@@ -437,7 +435,7 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
 }
 
 function createSpacePopulationProducer(
-  adapter: ReturnType<typeof nativeSpaceDiscoveryAdapter>,
+  adapter: SpaceDiscoveryAdapter,
 ): DiscoveryMetadataProducer {
   return {
     kind: 'space',
@@ -468,14 +466,17 @@ function createSpacePopulationProducer(
 }
 
 /** Bind the delivered Commerce and Content leaves to the canonical current-reader slots. */
-export function createDefaultDiscoveryOwnerAdapters(config: {
+export type DiscoveryOwnerCompositionInput = Readonly<{
   pool: Pool;
   routeKey: Uint8Array;
-  access: DefaultPublicFilterRuntimeConfig['access'];
-  clock?: DefaultPublicFilterRuntimeConfig['clock'];
-  keys?: KeyRing;
-  reviewSource?: ReviewDiscoverySource;
-}): DefaultDiscoveryOwnerAdapters {
+  access: Access;
+  clock?: KernelClock;
+  collectionSource: CollectionDiscoverySource;
+  reviewSource: ReviewDiscoverySource;
+  space: SpaceDiscoveryAdapter;
+}>;
+
+export function createDiscoveryOwnerAdapters(config: DiscoveryOwnerCompositionInput): DefaultDiscoveryOwnerAdapters {
   const metadata = {
     collection: {
       id: 'collection',
@@ -522,19 +523,11 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
   } as const;
   const clock = config.clock ? { clock: config.clock } : {};
   const collection = createNativeCollectionDiscoveryAdapter(
-    { pool: config.pool, access: config.access, routeKey: config.routeKey, ...clock },
+    { pool: config.pool, access: config.access, routeKey: config.routeKey, source: config.collectionSource, ...clock },
     metadata.collection,
   );
-  const reviewSource =
-    config.reviewSource ??
-    (config.keys
-      ? createReviewDiscoverySource(
-          { pool: config.pool, access: config.access, tokens: config.keys, ...clock },
-          () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
-        )
-      : undefined);
-  const review = reviewSource ? createReviewDiscoveryAdapter(reviewSource) : undefined;
-  const space = nativeSpaceDiscoveryAdapter({ pool: config.pool, access: config.access, ...clock });
+  const review = createReviewDiscoveryAdapter(config.reviewSource);
+  const space = config.space;
   const ownerContext = (context: DiscoveryReadContext) => ({ deadline: context.deadline });
   const reviewSlot = review
     ? {
@@ -621,7 +614,7 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
   };
   const metadataProducers: Readonly<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>> = Object.freeze({
     collection: createCollectionPopulationProducer(collection),
-    review: createReviewPopulationProducer(reviewSource),
+    review: createReviewPopulationProducer(config.reviewSource),
     space: createSpacePopulationProducer(space),
   });
   return Object.freeze({
@@ -635,12 +628,14 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
 /** Default public catalogue/Account candidates, also consumed by the home feed with its current Actor.
  * Source owns whole-population readiness. Neither a local census nor returned summaries replace it.
  */
-export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfig): DefaultDiscoverySearch {
+export function createDefaultDiscoverySearch(
+  config: DefaultDiscoverySearchConfig,
+  producers: import('./discovery-api.ts').DiscoveryProducerEntry,
+): DefaultDiscoverySearch {
   const freshness = new Map<number, ReturnType<typeof createFreshness>>();
   const runtime = createDefaultPublicFilterRuntime(config);
   const source = publicFilterSource(config);
-  const subjects = createRatedSubjectSource(config.pool, config.routeKey).source;
-  const ownerAdapters = createDefaultDiscoveryOwnerAdapters(config);
+  const { subjects, accounts, ownerAdapters } = producers;
   let work: ReturnType<typeof createWorkClient> | undefined;
   const pending = new Set<Promise<unknown>>();
   const retained = new Set<RetainedDiscoveryRead>();
@@ -666,6 +661,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
         release: current.release,
         languages,
         ownerAdapters,
+        accounts,
       });
       const bound = () => {
         if (!operations) throw new Error('Discovery capture or retained resume must precede consumer work');
@@ -706,7 +702,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             if (!page) throw new Error('Native page was not opened');
             await (await page).finish();
             if (disclosureTarget)
-              await assertDiscoveryCapabilityBinding(config.pool, disclosureTarget, ownerAdapters.metadataProducers);
+              await assertDiscoveryCapabilityBinding(config.pool, disclosureTarget, producers.metadataProducers);
           },
           async dispose() {
             if (page) await (await page).dispose();
@@ -750,7 +746,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
               duplicateKinds: [],
             });
           disclosureTarget = target;
-          await assertDiscoveryCapabilityBinding(config.pool, target, ownerAdapters.metadataProducers);
+          await assertDiscoveryCapabilityBinding(config.pool, target, producers.metadataProducers);
           let reader = freshness.get(generation);
           if (!reader) reader = createFreshness(config.pool, discoveryConsumer(config.prefix, generation));
           // Keep the live and retained generations coalesced while requests overlap an alias change.

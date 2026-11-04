@@ -1,6 +1,5 @@
 import { createReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
-import type { ReviewDiscoverySource } from '../content/review-discovery.ts';
-import type { DefaultPublicFilterRuntimeConfig } from './public-runtime.ts';
+import type { ReviewDiscoverySource } from '../content/index.ts';
 import { withConnection } from '../database/pool.ts';
 import { readErasureStatus, resolveLateErasureItem } from '../access/erasure.ts';
 import {
@@ -18,7 +17,6 @@ import {
   type DiscoveryGeneration,
 } from './generations.ts';
 import { createDiscoveryIndexer } from './indexer.ts';
-import { createDefaultDiscoveryOwnerAdapters } from './default-discovery.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
@@ -40,6 +38,7 @@ import {
 import { createSubjectIndexer } from './indexer.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
+import type { DiscoveryProducerEntry } from './index.ts';
 
 import { subjectConsumer } from './consumer-name.ts';
 export { subjectConsumer } from './consumer-name.ts';
@@ -57,9 +56,7 @@ export async function startSearchIndexing(options: {
   discovery?: {
     routeKey: Uint8Array;
     requiredKinds?: readonly string[];
-    reviewSource?: ReviewDiscoverySource;
-    access?: DefaultPublicFilterRuntimeConfig['access'];
-    clock?: DefaultPublicFilterRuntimeConfig['clock'];
+    producers: DiscoveryProducerEntry;
   };
   publicPreparation?: PublicPreparation;
 }): Promise<{ pause(): Promise<void>; resume(): void; stop(): Promise<void>; refresh(): Promise<void> }> {
@@ -72,9 +69,8 @@ export async function startSearchIndexing(options: {
     ? startDiscoveryIndexing({
         ...options,
         routeKey: options.discovery.routeKey,
-        ...(options.discovery.reviewSource ? { reviewSource: options.discovery.reviewSource } : {}),
-        ...(options.discovery.access ? { access: options.discovery.access } : {}),
-        ...(options.discovery.clock ? { clock: options.discovery.clock } : {}),
+        source: options.discovery.producers.subjects,
+        producers: options.discovery.producers,
         requiredKinds: options.discovery.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS,
       })
     : undefined;
@@ -325,9 +321,8 @@ export function startDiscoveryIndexing(options: {
   intervalMs?: number;
   concurrency?: number;
   requiredKinds?: readonly string[];
+  producers?: DiscoveryProducerEntry;
   reviewSource?: ReviewDiscoverySource;
-  access?: DefaultPublicFilterRuntimeConfig['access'];
-  clock?: DefaultPublicFilterRuntimeConfig['clock'];
 }) {
   const receivers = new Map<number, ReturnType<typeof createReviewDiscoveryReceiving>>();
   const incarnations = new Map<number, string>();
@@ -346,22 +341,20 @@ export function startDiscoveryIndexing(options: {
   };
   const step = async () => {
     if (stopped || paused) return;
-    const ownerAdapters = options.access
-      ? createDefaultDiscoveryOwnerAdapters({
-          pool: options.pool,
-          routeKey: options.routeKey,
-          access: options.access,
-          ...(options.clock ? { clock: options.clock } : {}),
-          ...(options.reviewSource ? { reviewSource: options.reviewSource } : {}),
-        })
-      : undefined;
+    const producers = options.producers;
+    const ownerAdapters = producers?.ownerAdapters;
     const registry = await nativeDiscoveryRegistry(
       options.pool,
       options.routeKey,
       options.source,
-      ownerAdapters ? { ownerAdapters } : undefined,
+      producers
+        ? { ownerAdapters, accounts: producers.accounts }
+        : ownerAdapters
+          ? { ownerAdapters }
+          : undefined,
     );
-    const metadataProducers = ownerAdapters?.metadataProducers;
+    const metadataProducers = producers?.metadataProducers;
+    const reviewSource = producers?.reviewSource ?? options.reviewSource;
     let readiness: Error | undefined;
     try {
       await advanceDiscovery({
@@ -397,7 +390,7 @@ export function startDiscoveryIndexing(options: {
           ...(metadataProducers ? { metadataProducers } : {}),
         });
         if (
-          options.reviewSource &&
+          reviewSource &&
           registry.ownerAdapters?.review?.readiness === 'ready' &&
           (await projection.hasMetadataPopulation?.('review'))
         )
@@ -406,7 +399,7 @@ export function startDiscoveryIndexing(options: {
             createReviewDiscoveryReceiving({
               ...options,
               projection,
-              source: options.reviewSource,
+              source: reviewSource,
             }),
           );
         relays.set(

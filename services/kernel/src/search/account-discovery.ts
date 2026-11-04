@@ -11,6 +11,7 @@ import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryOwnerAdapterSlots, Di
 import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';
+import { accountDiscoverySource } from '../access/index.ts';
 import {
   discoveryDocumentActions,
   discoveryDocumentId,
@@ -258,7 +259,12 @@ export async function nativeDiscoveryRegistry(
   pool: Pool,
   routeKey: Uint8Array,
   subjects: SubjectSource,
-  options?: { release?: Release; languages?: readonly string[]; ownerAdapters?: DiscoveryOwnerAdapterSlots },
+  options?: {
+    release?: Release;
+    languages?: readonly string[];
+    ownerAdapters?: DiscoveryOwnerAdapterSlots;
+    accounts?: AccountDiscoverySource;
+  },
 ) {
   const release = options?.release ?? (await activeRelease(pool))?.release;
   if (!release) throw new Error('Discovery requires an active definition release');
@@ -272,6 +278,7 @@ export async function nativeDiscoveryRegistry(
       icons: Object.fromEntries(Object.keys(release.types).map((kind) => [kind, 'file-text'])),
     },
     accounts: {
+      source: options?.accounts ?? accountDiscoverySource(pool),
       labels: { en: 'Accounts' },
       icon: 'user-round',
     },

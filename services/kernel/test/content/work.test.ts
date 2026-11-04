@@ -30,7 +30,7 @@ import { decideDownload } from '../../src/content/media.ts';
 import { runCommand, type CommandOutcome } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import type { WorkModule } from '../../src/work/registry.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { startWorker } from '../../src/worker.ts';

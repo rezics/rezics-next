@@ -16,7 +16,7 @@ const { createMembershipInverseCommands } = await import('../../src/access/membe
 const { WORK_QUEUES } = await import('../../src/work/queues.ts');
 const { createMembershipWorkPorts, enqueueMembership } = await import('../../src/access/membership-work.ts');
 const { newId, routeOf } = await import('../../src/route/route.ts');
-const { KERNEL_WORK_MODULES } = await import('../../src/work/modules.ts');
+const { KERNEL_WORK_MODULES } = await import('../support/default-work-modules.ts');
 
 const pool = createPool(process.env.DATABASE_URL!);
 const client = await createWorkClient(process.env.DATABASE_URL!);

@@ -23,6 +23,7 @@ import type {
   DiscoveryConsumerQuery,
   DiscoveryKey,
 } from './discovery.ts';
+import type { DiscoverySearch } from './discovery-api.ts';
 import type {
   PublicFilterConsumerJob,
   PublicDiscoveryConsumerOperations,
@@ -37,11 +38,7 @@ const invalid = (pointer: string) =>
   new ProblemError('invalid_request', { errors: [{ pointer, code: 'invalid_format' }] });
 type DiscoveryContextWithSpace = DiscoveryReadContext & { spacePopulation?: SpaceSubjectPopulation };
 type Principal = 'anonymous' | `account:${string}`;
-export type DiscoverySearch = (
-  principal: Principal,
-  request: MixedDiscoveryRequest,
-  context: DiscoveryReadContext,
-) => Promise<DiscoveryPage>;
+export type { DiscoverySearch } from './discovery-api.ts';
 
 export type RetainedDiscoveryRead = Readonly<{
   search(): Promise<DiscoveryPage>;

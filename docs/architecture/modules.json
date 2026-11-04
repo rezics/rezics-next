@@ -213,7 +213,7 @@
       "owner": "content",
       "paths": ["services/kernel/src/content/**", "services/kernel/db/content/**"],
       "excludes": ["services/kernel/src/content/community-projection/**"],
-      "publicEntries": ["services/kernel/src/content/realm-board-home.ts"],
+      "publicEntries": ["services/kernel/src/content/realm-board-home.ts", "services/kernel/src/content/index.ts"],
       "allowedDependencies": [
         "definitions",
         "document",
@@ -245,7 +245,7 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
-      "publicEntries": [],
+      "publicEntries": ["services/kernel/src/community/index.ts"],
       "allowedDependencies": [
         "auth-contract",
         "document",
@@ -265,7 +265,7 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/rating/**", "services/kernel/db/rating/**"],
-      "publicEntries": [],
+      "publicEntries": ["services/kernel/src/rating/index.ts"],
       "allowedDependencies": [
         "kernel-access",
         "kernel-community",
@@ -284,7 +284,7 @@
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/library/**", "services/kernel/db/library/**"],
-      "publicEntries": [],
+      "publicEntries": ["services/kernel/src/library/index.ts"],
       "allowedDependencies": [
         "auth-contract",
         "definitions",
@@ -311,7 +311,11 @@
         "services/kernel/db/search/**",
         "services/kernel/db/presentation/**"
       ],
-      "publicEntries": [],
+      "publicEntries": [
+        "services/kernel/src/search/index.ts",
+        "services/kernel/src/search/work.ts",
+        "services/kernel/src/search/discovery-filter.ts"
+      ],
       "allowedDependencies": [
         "composition",
         "definitions",
@@ -437,6 +441,8 @@
         "kernel-access",
         "kernel-commerce",
         "kernel-content",
+        "kernel-community",
+        "kernel-library",
         "kernel-platform",
         "kernel-search",
         "kernel-semantic"

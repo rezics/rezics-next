@@ -1,14 +1,12 @@
-import { readSpaceDiscoverySummaries, spaceDiscoverySource } from '../community/space-discovery.ts';
 import type {
   IndexedSpace,
-  SpaceDiscoveryDependencies,
   SpaceDiscoveryKey as NativeSpaceDiscoveryKey,
   SpaceDiscoverySource as NativeSpaceDiscoverySource,
   SpaceDiscoverySummary,
   SpaceDiscoveryTupleWitness,
   SpaceDiscoveryTupleWitnessInput,
-} from '../community/space-discovery.ts';
-import type { SpaceDiscoveryDependencyReadiness } from '../community/space-discovery-dependencies.ts';
+} from '../community/index.ts';
+import type { SpaceDiscoveryDependencyReadiness } from '../community/index.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { MIXED_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
 
@@ -407,12 +405,3 @@ export function createSpaceDiscoveryAdapter(
   });
 }
 
-/** Production assembly uses the Content producer's native source and anonymous current-summary reader. */
-export function nativeSpaceDiscoveryAdapter(
-  deps: SpaceDiscoveryDependencies,
-  context?: Readonly<{ deadline: number }>,
-): SpaceDiscoveryAdapter {
-  return createSpaceDiscoveryAdapter(spaceDiscoverySource(deps, context), (ids, readContext) =>
-    readSpaceDiscoverySummaries(deps, ids, readContext),
-  );
-}

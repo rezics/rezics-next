@@ -15,6 +15,7 @@ import {
   type DiscoverySnapshot,
   type IndexedDiscoveryDocument,
 } from './discovery.ts';
+import type { DiscoveryMetadataRecord, DiscoveryOwnerKey } from './discovery-api.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import definition from '../../db/search/indices/discovery.json';
 import mixedDefinition from '../../db/search/indices/discovery-mixed-v1.json';
@@ -80,18 +81,9 @@ const SECOND_SCOPE_FIELDS = [...COMMON_FIELDS, 'revision', 'source_version', 'na
 const SECOND_SCOPE_BATCH_SIZE = 256;
 
 /** Local codec seam until the closed DiscoveryKey/snapshot union owns these kinds. */
-export type SecondScopeDiscoveryKey =
-  | { owner: 'commerce'; kind: 'collection'; route: number; id: string }
-  | { owner: 'content'; kind: 'review' | 'space'; route: number; id: string };
+export type SecondScopeDiscoveryKey = DiscoveryOwnerKey;
 export type DiscoveryDocumentKey = DiscoveryKey | SecondScopeDiscoveryKey;
-export type SecondScopeDiscoveryRecord = {
-  key: SecondScopeDiscoveryKey;
-  revision: bigint;
-  sourceVersion: string | null;
-  names: readonly string[];
-  descriptions: readonly string[];
-  nameSort: string | null;
-};
+export type SecondScopeDiscoveryRecord = DiscoveryMetadataRecord;
 export type SecondScopeDiscoveryObservation = {
   owner: 'commerce' | 'content';
   snapshot: {

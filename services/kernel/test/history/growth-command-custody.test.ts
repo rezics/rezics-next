@@ -6,7 +6,7 @@ import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
 import { advancePreferenceHistory } from '../../src/history/receipt.ts';
 import { CommandResultErasedError } from '../../src/command/command.ts';
 import { deletePersona } from '../support/account-deletion.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { projectBatch } from '../../src/events/log.ts';

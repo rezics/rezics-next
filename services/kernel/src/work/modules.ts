@@ -10,7 +10,7 @@ import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
 import { semanticWorkModule } from '../semantic/work-module.ts';
-import { searchWorkModule } from '../search/work.ts';
+import { createSearchWorkModule } from '../search/work.ts';
 import { ratingWorkModule } from '../rating/work-module.ts';
 import { workflowRetentionWorkModule } from './retention.ts';
 import { importsWorkModule } from '../imports/erasure.ts';
@@ -41,17 +41,22 @@ const accountsWorkModule: WorkModule = {
 };
 
 /** Add each module's registration here, in dependency order, once. */
-export const KERNEL_WORK_MODULES: readonly WorkModule[] = [
-  accountsWorkModule,
-  erasureWorkModule,
-  sharedHistoryWorkModule,
-  ratingWorkModule,
-  commerceWorkModule,
-  libraryWorkModule,
-  communityWorkModule,
-  semanticWorkModule,
-  searchWorkModule,
-  importsWorkModule,
-  registerContent,
-  workflowRetentionWorkModule,
-];
+export function createKernelWorkModules(
+  composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
+): readonly WorkModule[] {
+  const searchWorkModule = createSearchWorkModule(composeDiscovery);
+  return [
+    accountsWorkModule,
+    erasureWorkModule,
+    sharedHistoryWorkModule,
+    ratingWorkModule,
+    commerceWorkModule,
+    libraryWorkModule,
+    communityWorkModule,
+    semanticWorkModule,
+    searchWorkModule,
+    importsWorkModule,
+    registerContent,
+    workflowRetentionWorkModule,
+  ];
+}

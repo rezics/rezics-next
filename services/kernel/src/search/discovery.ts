@@ -1,21 +1,62 @@
-import type { DiscoveryFilterDocument } from '@rezics/filter';
 import type { SearchPlan } from './query.ts';
-import type { PublicFilterConsumerCaptureInput, PublicFilterConsumerQuery } from './public-filter-consumer-contract.ts';
+import type { PublicFilterConsumerQuery } from './public-filter-consumer-contract.ts';
 export type { DiscoveryFilterDocument } from '@rezics/filter';
-export { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import type { Release } from '@rezics/definitions';
-import type { AvatarSummary } from '../content/avatar.ts';
-import type { SubjectSummary, SummaryReaderDependencies } from '../semantic/summaries.ts';
-import type { PublicCollectionDiscoverySummary as CollectionDiscoveryCard } from '../library/collection-discovery-summaries.ts';
-import type { ViewerFactsPage } from '../library/viewer-facts.ts';
-import type { PublicFigureView } from '../rating/public-figure-http.ts';
-import type { KeyRing } from '../tokens/seal.ts';
-import type { Fact } from './hits.ts';
-import type { EngineMatchEvidence, MatchEvidence, MatchEvidenceQuery } from './match-evidence.ts';
+import type { SubjectSummary } from '../semantic/summaries.ts';
+import type { EngineMatchEvidence } from './match-evidence.ts';
 import type { SubjectDocument } from './document.ts';
-import type { SearchRequest } from './service.ts';
 import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import type {
+  AccountDiscoverySource,
+  AccountSnapshot,
+  DiscoveryKey,
+  DiscoveryKindMetadata,
+  DiscoveryOwnerAdapterSlots,
+  DiscoveryOwnerKind,
+  DiscoveryOwnerKey,
+  DiscoveryOwnerMetadataSummary,
+  DiscoveryOwnerRegistration,
+  DiscoveryReadContext,
+  DiscoveryUnionKey,
+} from './discovery-api.ts';
+export type {
+  AccountDiscoverySource,
+  AccountDiscoverySummary,
+  AccountFrontier,
+  AccountPage,
+  AccountPageKey,
+  AccountSnapshot,
+  CharacterPersonDiscoveryContexts,
+  DiscoveryAdapterSlot,
+  DiscoveryConsumerCaptureInput,
+  DiscoveryContextList,
+  DiscoveryContextSubject,
+  DiscoveryHit,
+  DiscoveryKey,
+  DiscoveryKindMetadata,
+  DiscoveryOwnerAdapter,
+  DiscoveryOwnerAdapterSlots,
+  DiscoveryOwnerHit,
+  DiscoveryOwnerKey,
+  DiscoveryOwnerKind,
+  DiscoveryOwnerMetadataSummary,
+  DiscoveryOwnerRegistration,
+  DiscoveryOwnerSummary,
+  DiscoveryPage,
+  DiscoveryPublicOwnerKey,
+  DiscoveryReadContext,
+  DiscoveryRequest,
+  DiscoverySummary,
+  DiscoveryUnionHit,
+  DiscoveryUnionKey,
+  DiscoveryUnionSummary,
+  IndexedAccount,
+  KindCountEvidence,
+  PublicCollectionDiscoverySummary,
+  PublicReviewDiscoverySummary,
+  PublicSpaceDiscoverySummary,
+} from './discovery-api.ts';
 
 /** This format is opt-in; legacy Subject IDs and generation receipts retain their meaning. */
 export const DISCOVERY_DOCUMENT_FORMAT = 1;
@@ -25,34 +66,6 @@ export const MIXED_DISCOVERY_DOCUMENT_FORMAT = 2;
 export const MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT = 3;
 export const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
 export const MAX_ACCOUNT_DISCOVERY_BATCH = ACCOUNT_DISCOVERY_BATCH_SIZE;
-
-export type DiscoveryKey =
-  | { owner: 'semantic'; kind: string; route: number; id: string }
-  | { owner: 'accounts'; kind: 'account'; route: number; id: string };
-export type DiscoveryOwnerKey =
-  | { owner: 'commerce'; kind: 'collection'; route: number; id: string }
-  | { owner: 'content'; kind: 'review' | 'space'; route: number; id: string };
-export type DiscoveryUnionKey = DiscoveryKey | DiscoveryOwnerKey;
-export type DiscoveryOwnerKind = 'collection' | 'review' | 'space';
-/** Owner names used by the closed page DTO; native source owners remain on execution keys. */
-export type DiscoveryPublicOwnerKey =
-  | { owner: 'library'; kind: 'collection'; route: number; id: string }
-  | { owner: 'content'; kind: 'review'; route: number; id: string }
-  | { owner: 'community'; kind: 'space'; route: number; id: string };
-
-/** Already eligible native projection. Only the producer can establish eligibility and exact claims at T. */
-export type IndexedAccount = {
-  id: string;
-  accountKind: 'actor' | 'organization';
-  /** Null when the current exact active claim is absent or invalid; displayName remains eligible. */
-  handle: string | null;
-  displayName: string | null;
-  revision: bigint;
-};
-export type AccountSnapshot = { partition: number; position: bigint; accounts: IndexedAccount[] };
-export type AccountPageKey = { route: number; id: string };
-export type AccountFrontier = AccountPageKey;
-export type AccountPage = AccountSnapshot & { next: AccountPageKey | null };
 
 export function discoveryPartition(id: string): number {
   const route = routeOf(id);
@@ -65,205 +78,11 @@ export function discoveryIdentity(owner: DiscoveryKey['owner'], id: string): str
   discoveryPartition(id);
   return `${owner === 'accounts' ? 'account' : 'subject'}:${id}`;
 }
-export interface AccountDiscoverySource {
-  /** Deduplicate at most 100 full keys in one partition; omit unknown/ineligible rows. */
-  read(partition: number, ids: readonly string[]): Promise<AccountSnapshot>;
-  /** Native generation census only, never query/kind count evidence. */
-  count(partition: number): Promise<{ partition: number; position: bigint; count: number }>;
-  /** Native partition keyset, limit 1..100; next proves remaining eligible input. */
-  page(
-    partition: number,
-    after: AccountPageKey | null,
-    limit: number,
-  ): Promise<AccountSnapshot & { next: AccountPageKey | null }>;
-}
 export type DiscoveryDocument =
   | { owner: 'semantic'; kind: string; value: IndexedSubject }
   | { owner: 'accounts'; kind: 'account'; value: IndexedAccount };
-export type AccountDiscoverySummary = {
-  context?: import('./account-context.ts').AccountContext;
-  id: string;
-  accountKind: 'actor' | 'organization';
-  handle: string | null;
-  displayName: string | null;
-  automated: boolean;
-  operatorId: string | null;
-  avatar: AvatarSummary | null;
-  verifiedAgent: { id: string; label: string; type: string } | null;
-};
-export type DiscoverySummary =
-  | { kind: 'subject'; value: SubjectSummary }
-  | { kind: 'account'; value: AccountDiscoverySummary };
-export type DiscoveryContextSubject = {
-  id: string;
-  labels: Record<string, string>;
-  aliases?: Record<string, string[]>;
-};
-export type DiscoveryContextList = { items: DiscoveryContextSubject[]; next: boolean };
-export type CharacterPersonDiscoveryContexts = {
-  credits: DiscoveryContextList;
-  appearances: DiscoveryContextList;
-};
-export type DiscoveryHit = {
-  workContext?: import('./work-context.ts').WorkContext;
-  key: DiscoveryKey;
-  summary: DiscoverySummary;
-  labels?: Record<string, string>;
-  aliases?: Record<string, string[]>;
-  descriptions?: Record<string, string>;
-  facts?: Record<string, Fact[]>;
-  figure?: PublicFigureView;
-  listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: string[] };
-  contexts?: CharacterPersonDiscoveryContexts;
-  matchEvidence?: MatchEvidence;
-};
-export type PublicCollectionDiscoverySummary = Readonly<{
-  id: string;
-  title: string;
-  description: string | null;
-  card: CollectionDiscoveryCard;
-}>;
-export type PublicReviewDiscoverySummary = Readonly<{
-  id: string;
-  kind: 'review';
-  title: string | null;
-  author?: Readonly<{ displayName: string | null; handle: string | null }>;
-  excerpt?: string;
-  subject?: Readonly<{ id: string; title: string | null }> | null;
-  source?: import('./review-context.ts').ReviewContextSource;
-  searchContext?: import('./review-context.ts').SearchReviewContext;
-}>;
-export type PublicSpaceDiscoverySummary = Readonly<{
-  id: string;
-  title: string;
-  address: string;
-  summary?: string;
-  realm?: Readonly<{ id: string; title: string | null }> | null;
-  presentation?: import('../community/space-discovery-entry-contract.ts').SpaceEntryPresentation;
-}>;
-export type DiscoveryOwnerSummary =
-  | { kind: 'collection'; value: PublicCollectionDiscoverySummary }
-  | { kind: 'review'; value: PublicReviewDiscoverySummary }
-  | { kind: 'space'; value: PublicSpaceDiscoverySummary };
-type DiscoveryOwnerHitOf<K extends DiscoveryOwnerKind> = {
-  key: Extract<DiscoveryPublicOwnerKey, { kind: K }>;
-  summary: Extract<DiscoveryOwnerSummary, { kind: K }>;
-  matchEvidence?: MatchEvidence;
-};
-export type DiscoveryOwnerHit =
-  | DiscoveryOwnerHitOf<'collection'>
-  | DiscoveryOwnerHitOf<'review'>
-  | DiscoveryOwnerHitOf<'space'>;
-export type DiscoveryUnionSummary = DiscoverySummary | DiscoveryOwnerSummary;
-type DiscoveryHitOf<K extends DiscoverySummary['kind']> = Omit<DiscoveryHit, 'summary'> & {
-  summary: Extract<DiscoverySummary, { kind: K }>;
-};
-export type DiscoveryUnionHit = DiscoveryHitOf<'subject'> | DiscoveryHitOf<'account'> | DiscoveryOwnerHit;
-export type KindCountEvidence =
-  | { kind: string; value: number; exact: true }
-  | { kind: string; value: number; exact: false } // strictly positive
-  | { kind: string; unavailable: true };
-export type DiscoveryKindMetadata = {
-  id: string;
-  labels: Record<string, string>;
-  icon: string;
-  count?: KindCountEvidence;
-};
-export type DiscoveryPage = {
-  accountFollows?: import('../library/follow-discovery.ts').FollowDiscovery;
-  collectionFollows?: import('../library/follow-discovery.ts').FollowDiscovery;
-  spaceEntries?: import('../community/space-discovery-entry-contract.ts').SpaceEntryPage;
-  hits: DiscoveryUnionHit[];
-  kinds: { values: DiscoveryKindMetadata[]; next: string | null };
-  next: string | null;
-  as_of: string;
-  freshness?: import('./search-context.ts').SearchFreshness;
-  /** One current private envelope, present on the installed HTTP response and never cached publicly. */
-  viewerFacts?:
-    | Exclude<ViewerFactsPage, { state: 'current' }>
-    | (Omit<Extract<ViewerFactsPage, { state: 'current' }>, 'rows'> & {
-        rows: readonly (Extract<ViewerFactsPage, { state: 'current' }>['rows'][number] & {
-          resolvedSubjectId?: string;
-        })[];
-      })
-    | null;
-};
-/** Opt-in wire; omitted representation retains the Subject response. */
-export type DiscoveryRequest = SearchRequest & {
-  representation: 'discovery-v1';
-  kindCursor?: string;
-  /** Exact native Home selection; callers must also supply its opened population. */
-  spaceId?: string;
-};
-/** Reuse native reader authorization/deadline and token custody, never a caller-supplied permission flag. */
-export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'> & {
-  languages?: readonly string[];
-  descriptions?: boolean;
-  spoilerThreshold?: 0 | 1 | 2;
-  observeRelationRelease?: () => Promise<{
-    digest: string;
-    head: number;
-    release: import('@rezics/filter').FilterRelease;
-    definitions?: import('@rezics/definitions').Release;
-  } | null>;
-  matchEvidencePlan?: MatchEvidenceQuery;
-};
-export type DiscoveryCursorKeys = KeyRing;
 export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';
 export type DiscoveryTruth = boolean | 'not_applicable' | 'not_proven';
-/** The closed public metadata envelope returned by owner-native current reads. */
-export type DiscoveryOwnerMetadataSummary<K extends DiscoveryOwnerKind = DiscoveryOwnerKind> = K extends 'collection'
-  ? Readonly<{
-      id: string;
-      title: string;
-      summary: string | null;
-      revision: string;
-      sourcePosition: string;
-      card: import('../library/collection-discovery-summaries.ts').PublicCollectionDiscoverySummary;
-    }>
-  : K extends 'review'
-    ? Readonly<{
-        id: string;
-        title: string | null;
-        summary: string | null;
-        sourceVersion: string;
-        sourcePosition: string;
-        authorId: string;
-        subjectId: string;
-        source?: import('./review-context.ts').ReviewContextSource;
-      }>
-    : Readonly<{
-        id: string;
-        title: string;
-        summary: string | null;
-        revision: string;
-        sourcePosition: string;
-        address: string | null;
-        realmId: string | null;
-        realmTitle: string | null;
-      }>;
-export type DiscoveryOwnerAdapter<K extends DiscoveryOwnerKind, O extends 'commerce' | 'content'> = Readonly<{
-  owner: O;
-  kind: K;
-  metadata: Readonly<Omit<DiscoveryKindMetadata, 'count'>>;
-  /** The owner validates current eligibility and returns only the public metadata summary at this read. */
-  readCurrent: (
-    ids: readonly string[],
-    context: DiscoveryReadContext,
-  ) => Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary<K>>>;
-}>;
-export type DiscoveryAdapterSlot<T> =
-  | Readonly<{ readiness: 'unavailable' }>
-  | Readonly<{ readiness: 'ready'; adapter: T }>;
-export type DiscoveryOwnerAdapterSlots = Readonly<{
-  collection: DiscoveryAdapterSlot<DiscoveryOwnerAdapter<'collection', 'commerce'>>;
-  review: DiscoveryAdapterSlot<DiscoveryOwnerAdapter<'review', 'content'>>;
-  space: DiscoveryAdapterSlot<DiscoveryOwnerAdapter<'space', 'content'>>;
-}>;
-export type DiscoveryOwnerRegistration =
-  | (DiscoveryOwnerAdapter<'collection', 'commerce'> & { domains: readonly ['text', 'kind'] })
-  | (DiscoveryOwnerAdapter<'review', 'content'> & { domains: readonly ['text', 'kind'] })
-  | (DiscoveryOwnerAdapter<'space', 'content'> & { domains: readonly ['text', 'kind'] });
 export type DiscoveryCondition =
   | { and: readonly DiscoveryCondition[] }
   | { or: readonly DiscoveryCondition[] }
@@ -378,12 +197,6 @@ export type DiscoveryIndexDefinition = {
 };
 
 /** Closed mixed admission on the same native consumer, never a Subject AST cast. */
-export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInput, 'filterDocument'> &
-  Readonly<{
-    representation: 'discovery-v1';
-    filterDocument: DiscoveryFilterDocument | undefined;
-    comparator: 'mixed-public-v1';
-  }>;
 export type DiscoveryEngineHit = Readonly<{
   key: DiscoveryUnionKey;
   index: string;

@@ -30,6 +30,7 @@ import type { AuthenticationConfig } from './access/authenticate.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } from './search/public-runtime.ts';
 import { createPublicPreparationStore } from './search/public-preparation-store.ts';
 import { createDefaultDiscoverySearch, type DefaultDiscoverySearch } from './search/default-discovery.ts';
+import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import type { AccessFactory } from './request/access.ts';
 import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
 
@@ -259,6 +260,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       access: defaults.access,
       onAccessReady(access, viewerActions) {
         if (openSearch && searchConfig) {
+          if (!rated) throw new Error('Discovery Subject source composition is incomplete');
           publicFilters = createDefaultPublicFilterRuntime({
             pool,
             routeKey: config.routeKey,
@@ -267,16 +269,27 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             prefix: searchConfig.prefix,
             clock: defaults.clock,
           });
-          discovery = createDefaultDiscoverySearch({
-            spaceEntryActions: viewerActions,
+          const producers = createDiscoveryProducerEntry({
             pool,
             routeKey: config.routeKey,
             access,
-            search: openSearch,
-            prefix: searchConfig.prefix,
-            keys: config.tokens,
+            tokens: config.tokens,
             clock: defaults.clock,
+            subjects: rated.source,
           });
+          discovery = createDefaultDiscoverySearch(
+            {
+              spaceEntryActions: viewerActions,
+              pool,
+              routeKey: config.routeKey,
+              access,
+              search: openSearch,
+              prefix: searchConfig.prefix,
+              keys: config.tokens,
+              clock: defaults.clock,
+            },
+            producers,
+          );
         }
       },
       content: { ...config.content, workflows: operationWorkflows },

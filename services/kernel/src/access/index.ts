@@ -1,4 +1,5 @@
 export { createAccountPublicEligibility } from './account-authority.ts';
+export { accountDiscoverySource, readAccountDiscoverySummaries } from './account-discovery-source.ts';
 export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
 export type * from './kind-audience.ts';
 import type { PermissionAccount } from './account-authority.ts';

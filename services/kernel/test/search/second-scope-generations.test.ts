@@ -14,7 +14,7 @@ import {
 } from '../../src/search/generations.ts';
 import type { DiscoveryRegistry } from '../../src/search/discovery.ts';
 import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
-import { createDefaultDiscoveryOwnerAdapters } from '../../src/search/default-discovery.ts';
+import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createDiscoverySearch } from '../../src/search/discovery-service.ts';
 import { CollectionDiscoveryReadinessError } from '../../src/search/collection-discovery.ts';
 import type { OpenSearch } from '../../src/search/opensearch.ts';
@@ -72,16 +72,16 @@ test('default native owner readers register through the canonical slots without 
     },
   } as unknown as Pool;
   const routeKey = new Uint8Array(32);
-  const ownerAdapters = createDefaultDiscoveryOwnerAdapters({
+  const producers = createDiscoveryProducerEntry({
     pool,
     routeKey,
     access: {} as never,
-    keys: {} as never,
     reviewSource: {} as never,
   });
-  const registry = await nativeDiscoveryRegistry(pool, routeKey, {} as never, {
+  const registry = await nativeDiscoveryRegistry(pool, routeKey, producers.subjects, {
     release: { types: {} } as never,
-    ownerAdapters,
+    ownerAdapters: producers.ownerAdapters,
+    accounts: producers.accounts,
   });
 
   expect(registry.getOwnerAdapter('collection').owner).toBe('commerce');
@@ -94,7 +94,7 @@ test('default native owner readers register through the canonical slots without 
 });
 
 test('default review population stays unready when the source has only the legacy key page', async () => {
-  const ownerAdapters = createDefaultDiscoveryOwnerAdapters({
+  const producers = createDiscoveryProducerEntry({
     pool: {
       connect: async () => {
         throw new Error('readiness must not open a connection');
@@ -105,7 +105,7 @@ test('default review population stays unready when the source has only the legac
     reviewSource: {} as never,
   });
 
-  expect(await ownerAdapters.metadataProducers.review?.readiness()).toBe('unavailable');
+  expect(await producers.metadataProducers.review?.readiness()).toBe('unavailable');
 });
 
 test('the installed Space capability survives JSON and cannot bind another physical target or producer epoch', async () => {
@@ -131,8 +131,13 @@ test('the installed Space capability survives JSON and cannot bind another physi
       release() {},
     }),
   } as unknown as Pool;
-  const adapters = createDefaultDiscoveryOwnerAdapters({ pool, routeKey: new Uint8Array(32), access: {} as never });
-  const producers = { space: adapters.metadataProducers.space! };
+  const entry = createDiscoveryProducerEntry({
+    pool,
+    routeKey: new Uint8Array(32),
+    access: {} as never,
+    reviewSource: {} as never,
+  });
+  const producers = { space: entry.metadataProducers.space! };
   const witnesses = await discoveryCapabilityWitnesses(producers);
   expect(witnesses.space).toMatchObject({ state: 'ready', capabilities: { 'source-fence': 'connected' } });
   const target = { prefix: 'search', generation: 1, uuid: 'physical-A', incarnation: 'allocation-A' };
@@ -157,7 +162,7 @@ test('the installed Space capability survives JSON and cannot bind another physi
 });
 
 test('a retired signed Review cut requests fresh population instead of retrying the opaque continuation', async () => {
-  const adapters = createDefaultDiscoveryOwnerAdapters({
+  const producers = createDiscoveryProducerEntry({
     pool: {} as Pool,
     routeKey: new Uint8Array(32),
     access: {} as never,
@@ -172,7 +177,7 @@ test('a retired signed Review cut requests fresh population instead of retrying 
       }),
     } as never,
   });
-  await expect(adapters.metadataProducers.review!.page(0, null, null, 100)).rejects.toBeInstanceOf(
+  await expect(producers.metadataProducers.review!.page(0, null, null, 100)).rejects.toBeInstanceOf(
     DiscoveryPopulationCutChangedError,
   );
 });

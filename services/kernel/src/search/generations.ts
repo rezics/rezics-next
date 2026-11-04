@@ -38,6 +38,11 @@ import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
 import { validateObservation } from './indexer.ts';
 import type { Pool } from 'pg';
 import type { SpaceDiscoveryDependencyReadiness } from '../community/space-discovery-dependencies.ts';
+import type {
+  DiscoveryMetadataKind,
+  DiscoveryMetadataProducer,
+  DiscoveryMetadataProducers,
+} from './discovery-api.ts';
 import { discardConnection } from '../database/pool.ts';
 import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 import {
@@ -64,8 +69,6 @@ export { observedWrite };
 import type { SubjectSource } from './source.ts';
 import type {
   DiscoveryDocumentValue,
-  SecondScopeDiscoveryKey,
-  SecondScopeDiscoveryRecord,
 } from './discovery-documents.ts';
 import { discoveryConsumer, subjectConsumer } from './consumer-name.ts';
 export { discoveryConsumer } from './consumer-name.ts';
@@ -417,41 +420,6 @@ export type DiscoveryGeneration = DiscoveryTarget & {
 
 /** Required public metadata kinds for a complete second-scope discovery generation. */
 export const SECOND_SCOPE_PUBLIC_METADATA_KINDS = Object.freeze(['collection', 'review', 'space'] as const);
-
-export type DiscoveryMetadataKind = (typeof SECOND_SCOPE_PUBLIC_METADATA_KINDS)[number];
-export type DiscoveryMetadataProducer = Readonly<{
-  kind: DiscoveryMetadataKind;
-  owner: 'commerce' | 'content';
-  readiness(): Promise<'ready' | 'preparing' | 'unavailable' | SpaceDiscoveryDependencyReadiness>;
-  page(
-    partition: number,
-    after: Readonly<{ route: number; id: string }> | null,
-    continuation: string | null,
-    limit: number,
-  ): Promise<
-    Readonly<{
-      position: bigint;
-      epoch?: number;
-      next: Readonly<{ route: number; id: string }> | null;
-      continuation: string | null;
-      keys: readonly SecondScopeDiscoveryKey[];
-      records: readonly SecondScopeDiscoveryRecord[];
-    }>
-  >;
-  read(
-    partition: number,
-    ids: readonly string[],
-  ): Promise<
-    Readonly<{
-      position: bigint;
-      epoch?: number;
-      keys: readonly SecondScopeDiscoveryKey[];
-      records: readonly SecondScopeDiscoveryRecord[];
-    }>
-  >;
-  position(partition: number): Promise<bigint>;
-}>;
-export type DiscoveryMetadataProducers = Readonly<Partial<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>>>;
 
 /** Preserve the native witness verbatim; neither a position nor adapter installation is an epoch. */
 export async function discoveryCapabilityWitnesses(producers: DiscoveryMetadataProducers) {

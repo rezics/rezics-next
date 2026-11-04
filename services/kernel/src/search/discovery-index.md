@@ -20,12 +20,10 @@ Registry ownership follows the current scope table: `collection` uses Commerce, 
 
 Decision: keep the shared discovery source contract in the declared `kernel-search` service entry; a separate package would require its own conformance vectors and two production consumers.
 
-The default query registry binds Commerce with `createNativeCollectionDiscoveryAdapter`, reviews with
-Content's `createReviewDiscoverySource` and `createReviewDiscoveryAdapter` (or the worker's supplied
-`ReviewDiscoverySource`), and Spaces with `nativeSpaceDiscoveryAdapter`. The actual query caller is
-`createDefaultDiscoverySearch`; the worker caller is `searchWorkModule.register` → `startSearchIndexing` →
-`startDiscoveryIndexing`. These adapters supply current owner reads; their registration alone is not generation
-population evidence.
+The composition root `createDiscoveryProducerEntry` constructs the owner-native Account, Collection, review and
+Space sources alongside the existing rated Subject source. It returns the public `DiscoveryProducerEntry` from
+`search/index.ts`; the HTTP query service and default worker both consume that same entry shape. Search adapts those
+sources for current reads and generation population. Registration alone is not generation population evidence.
 
 Decision: use the English labels “Collections”, “Reviews” and “Spaces” with the `library`, `message-square` and
 `users` icons until the owner adapters supply localized kind metadata.
@@ -74,15 +72,16 @@ deletes the exact physical index incarnation, then reclaims bounded copy locator
 Account erasure retains its late-item acknowledgement protocol through retirement. Generation observations establish
 index readiness only; current owner authorization and disclosure checks remain authoritative.
 
-The actual default worker path is `searchWorkModule.register` → `startSearchIndexing` →
-`startDiscoveryIndexing` → `advanceDiscovery`. It wires the Commerce Collection source, Content review source and
-native Space source into the five independent population, relay and reconciliation frontiers. Publication requires
+The actual default worker path is `worker.ts` → `createKernelWorkModules` → `searchWorkModule.register` →
+`startSearchIndexing` → `startDiscoveryIndexing` → `advanceDiscovery`. The worker root injects
+`createDiscoveryProducerEntry`; its returned producers feed the five independent population, relay and
+reconciliation frontiers. Publication requires
 complete populations, caught-up replay, current keyed reconciliation, the strict expanded registry, the captured
 physical UUID and durable native frontiers to agree. Current owner hydration alone does not make an incomplete
 generation ready.
 
-Content's native `spaceDiscoverySource` returns the complete `SpaceDiscoveryDependencyReadiness` through
-`nativeSpaceDiscoveryAdapter.source.dependencies`. Search retains the entire ready result, including opaque
+Content's native `spaceDiscoverySource` returns the complete `SpaceDiscoveryDependencyReadiness` through the
+Search Space adapter's `source.dependencies`. Search retains the entire ready result, including opaque
 `generation`, `cut` and capability fields, in `discovery_generation.capability` with the observed physical UUID and
 allocation incarnation. Population, relay, reconciliation, activation and final disclosure recheck that binding.
 Collection pages also retain their native partition epoch; Review caps each request at Content's native `REVIEW_DISCOVERY_PAGE_LIMIT`, retains the signed `pageWithCut` continuation and

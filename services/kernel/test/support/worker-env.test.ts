@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { WorkModule } from '../../src/work/registry.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from './default-work-modules.ts';
 import { readWorkerConfig, startWorker } from '../../src/worker.ts';
 import { workerTestEnv } from './worker-env.ts';
 
