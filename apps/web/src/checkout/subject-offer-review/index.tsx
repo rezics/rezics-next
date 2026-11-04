@@ -128,13 +128,15 @@ export function SubjectOfferChoice({
   locale,
   version = 0,
   current,
+  origin,
 }: {
   page: SubjectOffersPage;
   locale: Locale;
   version?: number | undefined;
   current?: (() => boolean) | undefined;
+  origin?: object | undefined;
 }) {
-  const reading = useSubjectOfferReading({ page, locale, version, current });
+  const reading = useSubjectOfferReading({ page, locale, version, current, origin });
   const labels = useMemo(() => capturedPageLabels(page.offers), [page]);
   const destination = (offer: SubjectOffersPage['offers'][number]) =>
     localizeHref(`/offers/${encodeURIComponent(offer.id)}`, { locale });

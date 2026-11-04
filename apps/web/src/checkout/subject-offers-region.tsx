@@ -20,6 +20,7 @@ export type SubjectOffersViewer = {
   readScope?: string;
   readEpoch?: number;
   current?: () => boolean;
+  origin?: object;
 };
 
 /** Cache events retire a read even when React batches an account change away and back. */
@@ -95,6 +96,7 @@ export function SubjectOffersView({
   onRetry,
   pageVersion,
   current,
+  origin,
 }: {
   page: SubjectOffersData | { kind: 'pending' };
   locale: string;
@@ -143,7 +145,7 @@ export function SubjectOffersView({
         </Empty>
       ) : null}
       {page.kind === 'ready' && page.offers.length > 0 ? (
-        <SubjectOfferChoice page={page} locale={language} version={pageVersion} current={current} />
+        <SubjectOfferChoice page={page} locale={language} version={pageVersion} current={current} origin={origin} />
       ) : null}
       <div className="flex flex-wrap gap-2">
         {page.kind === 'ready' && page.next && onNext ? (
@@ -204,10 +206,17 @@ function PreparedSubjectOffersRegion({
     [client, options.queryKey],
   );
   const pageVersion = useSyncExternalStore(subscribePage, pageSnapshot, () => 0);
-  const pageCurrent = useCallback(
-    () => (!viewer.current || viewer.current()) && pageSnapshot() === pageVersion,
-    [viewer, pageSnapshot, pageVersion],
-  );
+  // A different client or query origin may reuse an equal page and success count.
+  const origin = useMemo(() => ({}), [client, options.queryKey]);
+  const pageCurrent = useCallback(() => {
+    const source = client.getQueryState(options.queryKey);
+    return (
+      (!viewer.current || viewer.current()) &&
+      source?.status === 'success' &&
+      source.fetchStatus === 'idle' &&
+      source.dataUpdateCount === pageVersion
+    );
+  }, [viewer, client, options.queryKey, pageVersion]);
   useEffect(
     () => () => {
       void client.cancelQueries({ queryKey: options.queryKey, exact: true });
@@ -227,6 +236,7 @@ function PreparedSubjectOffersRegion({
       locale={context.locale}
       pageVersion={pageVersion}
       current={pageCurrent}
+      origin={origin}
       onNext={(next) => {
         if (viewer.current?.()) setCursor(next);
       }}
