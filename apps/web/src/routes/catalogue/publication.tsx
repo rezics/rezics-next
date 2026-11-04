@@ -4,7 +4,10 @@ import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { createFileRoute } from '@tanstack/react-router';
 import { PublicationEditor } from '../../features/catalogue/publication-editor-form';
 import { createWorkPublication, loadPublicationEditor } from '../../features/catalogue/publication-editor-actions';
-import { readCreatedCatalogueSubject } from '../../features/catalogue/create-subject-actions';
+import {
+  readCatalogueCreateEligibility,
+  readCreatedCatalogueSubject,
+} from '../../features/catalogue/create-subject-actions';
 import { relationTargetSearch } from '../../features/catalogue/relation-editor-search';
 import { publicationUuid } from '../../features/catalogue/publication-editor';
 import { useSession } from '../../session/query';
@@ -37,6 +40,7 @@ function PublicationRoute() {
       search={(text, signal) => relationTargetSearch(text, signal, locale)}
       transport={{
         load: () => loadPublicationEditor({ data: work }),
+        eligibility: () => readCatalogueCreateEligibility(),
         submit: (command) =>
           createWorkPublication({
             data: editorRequest(command, editorWork),
