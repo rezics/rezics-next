@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchStatement } from '@rezics/definitions/bulk';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { crossMediaBangumiRevision } from '../../../importer/src/source-registry.ts';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
@@ -133,7 +133,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
       source: crossMediaAliases.bangumi,
       external_id: gameExternalId,
       record_revision: 'unversioned',
-      converter_revision: entityRevision,
+      converter_revision: crossMediaBangumiRevision,
     });
     const malformedPage = await runtime.importTransport.reviewedCandidates(subjectId, {
       property: 'wdt:P973',
@@ -167,7 +167,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
       source: crossMediaAliases.bangumi,
       external_id: gameExternalId,
       record_revision: 'unversioned',
-      converter_revision: entityRevision,
+      converter_revision: crossMediaBangumiRevision,
     });
 
     await publish(corrected);
