@@ -269,6 +269,9 @@
         "labels": {
           "$ref": "#/$defs/libraryLabels"
         },
+        "condition": {
+          "const": "physical-v1"
+        },
         "statuses": {
           "type": "array",
           "items": {

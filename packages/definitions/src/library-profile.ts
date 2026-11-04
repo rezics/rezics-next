@@ -30,7 +30,14 @@ export type LibraryProfile = {
     }[];
   };
   progress?: { allowed: { mode: LibraryProgressMode; units: LibraryProgressUnit[] }[] };
-  copies?: { kinds: { id: string; labels: LibraryLabels; statuses: { id: string; labels: LibraryLabels }[] }[] };
+  copies?: {
+    kinds: {
+      id: string;
+      labels: LibraryLabels;
+      condition?: 'physical-v1';
+      statuses: { id: string; labels: LibraryLabels }[];
+    }[];
+  };
   importSources?: { id: string; mappingVersion: string; recordKinds: string[] }[];
 };
 export type LibraryProfileReference = { profileId: string };

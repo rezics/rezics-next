@@ -66,10 +66,17 @@ type LibraryProfile = {
       }[];
     }[];
   };
-  copies?: { kinds: { id: Id; labels: Labels; statuses: { id: Id; labels: Labels }[] }[] };
+  copies?: {
+    kinds: { id: Id; labels: Labels; condition?: 'physical-v1'; statuses: { id: Id; labels: Labels }[] }[];
+  };
   importSources?: { id: Id; mappingVersion: Id; recordKinds: Id[] }[];
 };
 ```
+
+Copy condition admission requires explicit `condition: 'physical-v1'` on the accepting released kind;
+omission grants no capability, and unknown values or null are invalid. Compilation preserves authored admission
+without inferring it from kind IDs or labels. Historical descriptors remain valid without this optional field.
+Library owns the [condition vocabulary and field semantics](../../../docs/library-and-collections.md#physical-copy-condition).
 
 Use bounded ASCII data identifiers for profile/state-set/state/unit/dimension/copy-kind/status/source/mapping-version
 and record-kind IDs: 1–64 characters, first `[a-z]`, remaining `[a-z0-9_.-]`. Match the entire string, including rejecting

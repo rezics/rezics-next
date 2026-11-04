@@ -4,7 +4,40 @@ import schema from '../schema/release.json';
 import { CatalogueError, compileCatalogue } from '../src/compile.ts';
 import { validateRelease } from '../src/index.ts';
 import type { LibraryCountForms, LibraryLabels } from '../src/index.ts';
+import { validateLibraryProfileSource } from '../src/library-profile.ts';
 import { compiledProfile, fixture, libraryProfile, releaseWith, unitData } from './support/library-profiles.ts';
+
+test('only explicit Copy condition admission survives compilation and release round-trip', async () => {
+  const source = libraryProfile();
+  source.copies.kinds[0].condition = 'physical-v1';
+  expect(validateLibraryProfileSource(source, () => {})).toBe(true);
+  const release = await compileCatalogue(fixture(source));
+  const roundTrip = JSON.parse(JSON.stringify(release));
+  expect(validateRelease(roundTrip)).toEqual([]);
+  expect(roundTrip).toEqual(release);
+  const kinds = release.libraryProfiles!['fixture.reading']!.copies!.kinds;
+  expect(kinds[0]!.condition).toBe('physical-v1');
+  expect(kinds[1]).not.toHaveProperty('condition');
+  const historical = await compileCatalogue(fixture());
+  expect(validateRelease(historical)).toEqual([]);
+  expect(historical.libraryProfiles!['fixture.reading']).toEqual(compiledProfile(libraryProfile()));
+  for (const profile of Object.values(historical.libraryProfiles!))
+    for (const kind of profile.copies?.kinds ?? []) expect(kind).not.toHaveProperty('condition');
+});
+
+test('unknown and null Copy condition descriptors fail source, compiler and release validation', async () => {
+  for (const condition of ['physical-v2', null]) {
+    const source = libraryProfile();
+    source.copies.kinds[0].condition = condition;
+    const pointers: string[] = [];
+    expect(validateLibraryProfileSource(source, (pointer) => pointers.push(pointer))).toBe(false);
+    expect(pointers).toContain('/copies/kinds/0/condition');
+    await expect(compileCatalogue(fixture(source))).rejects.toBeInstanceOf(CatalogueError);
+    expect(validateRelease(releaseWith(compiledProfile(source)))).toContainEqual({
+      pointer: '/libraryProfiles/fixture.reading/copies/kinds/0/condition', code: 'invalid',
+    });
+  }
+});
 
 test('an optional empty library registry accepts no capabilities and never resolves a missing reference', () => {
   const release = releaseWith();
