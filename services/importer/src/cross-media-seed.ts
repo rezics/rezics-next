@@ -1530,14 +1530,15 @@ export async function seedCrossMedia(
       runs[provider] = run;
     }
     const hasBangumiInput = plan.records.bangumi.length > 0 || plan.entities.bangumi.length > 0;
+    const appearances = plan.characterAppearances ?? [];
     const fidelity =
-      providers.includes('bangumi') && hasBangumiInput
+      providers.includes('bangumi') && hasBangumiInput && appearances.length
         ? await runBangumiCharacterFidelity({
             importer,
             port,
             sourceAlias: crossMediaAliases.bangumi,
             records: [...plan.records.bangumi, ...plan.entities.bangumi],
-            appearances: plan.characterAppearances ?? [],
+            appearances,
             ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
           })
         : undefined;
