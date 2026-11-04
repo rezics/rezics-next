@@ -30,6 +30,9 @@ requesting a new inventory. Browser-local writing remains independent after repl
 Native authorization, mounted producer recordings and physical 256/1024/4096 growth acceptance remain Content-owned
 and deferred until executed; generated declarations and Web fixtures do not establish them.
 
+When a resumed editor is open, Return to drafts uses the same departure decision as the editor. Staying keeps the
+chosen server or browser body and its retry state; deliberate departure returns focus to the inventory opener.
+
 ## Cost
 
 ### Own-draft inventory and inspection

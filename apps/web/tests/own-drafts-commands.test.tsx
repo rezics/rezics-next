@@ -165,6 +165,13 @@ test('publish sends the selected revision and separates acknowledgement from pub
     });
     expect(writes[1]?.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/i);
     expect(fixture.host.textContent).toContain('Retry publish');
+    const { m } = await import('../src/paraglide/messages.js');
+    await fixture.click('Return to drafts');
+    expect(fixture.host.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      m.thread_authoring_leave_pending(),
+    );
+    await fixture.click(m.thread_authoring_stay());
+    expect(fixture.host.textContent).toContain('Retry publish');
     await fixture.click('Retry publish');
     expect(writes).toHaveLength(3);
     expect(writes[2]).toEqual(writes[1]);

@@ -4,6 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../authoring-departure';
 import type { SavedWriting } from '../local-writing-draft';
 import { threadHref } from '../thread-href';
 import { OwnDraftEditor } from './editor';
@@ -152,15 +153,17 @@ export function OwnDraftsPage({
     binding.current.active !== active
   )
     binding.current = { reader, localWritingReader, commands, active, generation: binding.current.generation + 1 };
+  const boundaryKey = JSON.stringify([ownDraftIdentityKey(identity), binding.current.generation]);
   return (
-    <BoundOwnDraftsPage
-      key={JSON.stringify([ownDraftIdentityKey(identity), binding.current.generation])}
-      identity={identity}
-      active={active}
-      reader={reader}
-      {...(localWritingReader ? { localWritingReader } : {})}
-      {...(commands ? { commands } : {})}
-    />
+    <AuthoringDepartureBoundary key={boundaryKey}>
+      <BoundOwnDraftsPage
+        identity={identity}
+        active={active}
+        reader={reader}
+        {...(localWritingReader ? { localWritingReader } : {})}
+        {...(commands ? { commands } : {})}
+      />
+    </AuthoringDepartureBoundary>
   );
 }
 
@@ -188,6 +191,7 @@ function BoundOwnDraftsPage({
   const eraseController = useRef<AbortController | null>(null);
   const selectionGeneration = useRef(0);
   const controlId = useId();
+  const departure = useAuthoringDeparture(false, false, JSON.stringify(['own-drafts-return', identityKey]));
   const selectionHeading = useRef<HTMLHeadingElement>(null);
   const inventoryHeading = useRef<HTMLHeadingElement>(null);
   const recoveryFocus = useRef<string | null>(null);
@@ -692,7 +696,12 @@ function BoundOwnDraftsPage({
         : m.own_drafts_title({}, { locale });
     return (
       <main className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6" aria-busy={selection.state === 'loading'}>
-        <Button type="button" variant="outline" className={control} onClick={closeSelection}>
+        <Button
+          type="button"
+          variant="outline"
+          className={control}
+          onClick={() => departure.requestNavigation(closeSelection)}
+        >
           {m.own_drafts_return({}, { locale })}
         </Button>
         <h1 ref={selectionHeading} tabIndex={-1} className="text-2xl font-semibold">

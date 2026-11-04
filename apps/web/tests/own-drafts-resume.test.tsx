@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { fromPlainText } from '@rezics/document';
@@ -269,6 +270,91 @@ test('browser writing stays separate until the person names it as the editor sou
     expect(fixture.host.textContent).toContain('Independent browser body');
     expect(fixture.host.textContent).not.toContain('Server-saved body');
     expect(writes).toHaveLength(0);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('Return to drafts keeps edited server and browser writing on Stay and discards only on deliberate departure', async () => {
+  const entry = row();
+  const browser = {
+    slot: 0,
+    actor: accountId,
+    scope: { kind: 'thread' as const, boardId: entry.board.id, subjects: [] },
+    revision: 'browser-local-revision',
+    updated: 1_798_000_000_000,
+    bytes: 0,
+    state: 'unsent' as const,
+    payload: {
+      title: 'Browser-only title',
+      body: fromPlainText('Independent browser body', 'blocks'),
+      text: 'Independent browser body',
+      attachmentRepair: false,
+    },
+  };
+  const reader: OwnDraftReader = {
+    list: async () => ({ state: 'ready', viewer: { accountId, authnEpoch: 2 }, drafts: [entry], next: null }),
+    resume: async () => selected(entry, 'Server-saved body'),
+  };
+  const fixture = await mountOwnDrafts();
+  const { m } = await import('../src/paraglide/messages.js');
+  const storybookRequire = createRequire(createRequire(import.meta.url).resolve('storybook/test'));
+  const { default: userEvent } = await import(storybookRequire.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: fixture.window.document });
+  const sourceLabel = (source: 'server' | 'browser') =>
+    source === 'server' ? m.own_drafts_server_source() : m.own_drafts_browser_source();
+  const editor = () =>
+    [...fixture.host.querySelectorAll<HTMLElement>('[role="textbox"]')].find((node) =>
+      node.classList.contains('ProseMirror'),
+    );
+  try {
+    await fixture.render({
+      identity,
+      active: true,
+      reader,
+      localWritingReader: { load: async () => browser },
+      commands: {
+        async write() {
+          return { ok: false, reason: 'unavailable' };
+        },
+        async erase() {
+          return { ok: true };
+        },
+        async readback() {
+          return 'unavailable';
+        },
+      },
+    });
+    for (const source of ['server', 'browser'] as const) {
+      await fixture.click('Inspect draft privately');
+      await fixture.click(source === 'server' ? 'Use server-saved body in editor' : 'Use browser-saved body in editor');
+      const currentEditor = editor();
+      expect(currentEditor).toBeDefined();
+      await act(async () => {
+        await user.click(currentEditor!);
+        await user.keyboard(' resumed changes');
+        await user.tab();
+      });
+      const exactMarkup = editor()?.innerHTML;
+      const returnButton = [...fixture.host.querySelectorAll('button')].find(
+        (node) => node.textContent === m.own_drafts_return({}, { locale: 'en' }),
+      )!;
+      await act(async () => user.click(returnButton));
+      expect(fixture.host.querySelector('[role="alertdialog"]')?.textContent).toContain(
+        m.thread_authoring_leave_unsaved(),
+      );
+      await fixture.click(m.thread_authoring_stay());
+      expect(fixture.window.document.activeElement).toBe(returnButton);
+      expect(editor()?.innerHTML).toBe(exactMarkup);
+      expect(fixture.host.textContent).toContain(sourceLabel(source));
+      expect(editor()?.textContent).toContain('resumed changes');
+
+      await act(async () => user.click(returnButton));
+      await fixture.click(m.thread_authoring_leave());
+      expect(editor()).toBeUndefined();
+      expect(fixture.host.textContent).not.toContain('resumed changes');
+      expect(fixture.window.document.activeElement?.textContent).toBe('Inspect draft privately');
+    }
   } finally {
     await fixture.close();
   }
