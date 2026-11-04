@@ -2,15 +2,13 @@ import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
-import { SubjectSourcesPage } from '../src/features/catalogue/subject-sources-page';
-import {
-  explainSubjectSources,
-  readSubjectSources,
-  type SourcesResult,
-} from '../src/features/catalogue/subject-sources';
-import { catalogueSourcesFixture, citationUrl, sourceDefinitions } from '../src/kernel/fake/catalogue-sources';
+import type { SourcesResult } from '../src/features/catalogue/subject-sources';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { SubjectSourcesPage } = await import('../src/features/catalogue/subject-sources-page');
+const { explainSubjectSources, readSubjectSources } = await import('../src/features/catalogue/subject-sources');
+const { catalogueSourcesFixture, citationUrl, sourceDefinitions } =
+  await import('../src/kernel/fake/catalogue-sources');
 
 const render = (result: SourcesResult) => renderToString(createElement(SubjectSourcesPage, { result, locale: 'en' }));
 
@@ -22,9 +20,10 @@ test('Explain the currently selected subject facts and their sources through the
       actions: [{ action: 'statement:propose', operations: ['subject.propose'] }],
     },
   });
-  const result = await readSubjectSources(fixture.client, fixture.id, 'en', sourceDefinitions);
+  const result = await readSubjectSources(fixture.client, fixture.id, 'en', sourceDefinitions, true);
   expect(result.kind).toBe('ready');
   if (result.kind !== 'ready') throw new Error('Expected selected public facts');
+  expect(result.page.viewer?.state).toBe('signed-in');
   const html = render(result);
   expect(html).toContain('Publication date');
   expect(html).toContain('1943');
