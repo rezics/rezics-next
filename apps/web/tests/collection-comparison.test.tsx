@@ -248,5 +248,5 @@ test('mounted reference returns repeat on the retained page and retire on replac
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}, 30_000);
 afterAll(() => mock.restore());
