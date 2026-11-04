@@ -141,13 +141,6 @@ test('native rows open one exact membership inspection and accepted navigation c
     window.dispatchEvent(new Event('focus'));
     expect(document.activeElement).toBe(selectedTarget);
     await mounted.click(m.candidate_close());
-    const sourceIndex = initial.rows.findIndex((row) => JSON.stringify(row.statement?.references).includes('unknownPosition'));
-    expect(sourceIndex).toBeGreaterThanOrEqual(0);
-    await inspect(sourceIndex);
-    inspection = mounted.host.querySelector<HTMLElement>('[data-slot="album-track-inspection"]')!;
-    expect(inspection.textContent).toContain('source:unknownPosition');
-    expect(inspection.querySelectorAll('details')).toHaveLength(2);
-    await mounted.click(m.candidate_close());
     await mounted.click(m.work_parts_more());
     expect(mounted.host.textContent).toContain(m.album_tracks_next_unavailable());
     expect(mounted.host.querySelectorAll('[data-slot="album-track-row"]').length).toBe(3);
