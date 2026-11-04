@@ -47,11 +47,68 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
   let locale = 'en';
   let href = '/en/subjects/one/reviews?cursor=same&node=reviews';
   let origin!: ReturnType<typeof useSubjectCommunityReading>;
-  let region = composedCommunityRegion(
-    { status: 200, body: communityThreadPage('review', communitySubject, [communityThread('review')], 'next') },
-    { kind: 'subjectThreads', id: communitySubject.id, threadKind: 'review', place: GLOBAL, limit: 20 },
-    true,
-  );
+  const realm = '01a1a000-0000-7000-8000-000000000096';
+  const nativeThread = (place = GLOBAL) => {
+    const thread = communityThread('review');
+    return {
+      ...thread,
+      card: {
+      state: 'current',
+      authors: { thread: { state: 'withheld' }, openingPost: { state: 'withheld' } },
+      presentation: { state: 'current', language: 'en', spoiler: false },
+      parentContext: { kind: 'opening' },
+      media: { state: 'none', images: [] },
+      comments: {
+        state: 'current',
+        cohort: 'public',
+        count: { kind: 'exact', value: 7 },
+        lastActivityAt: '2026-11-01T00:00:00.000Z',
+        source: { epoch: 1, position: '7' },
+      },
+      actions: {
+        state: 'current',
+        retryable: false,
+        references: [
+          {
+            type: 'content.thread',
+            id: thread.id,
+            sourceRevisionId: thread.firstPost.revisionId,
+            state: 'current',
+            operations: [
+              { action: 'post:create', operationId: 'post.create', state: 'available' },
+              { action: 'reaction:set', operationId: 'thread.set_reaction', state: 'available' },
+              { action: 'reaction:set', operationId: 'thread.clear_reaction', state: 'available' },
+              { action: 'thread:watch', operationId: 'thread.watch', state: 'available' },
+            ],
+          },
+        ],
+      },
+      reply: { state: 'available' },
+      watch: { state: 'current', watching: false },
+      currentness: {
+        source: 'current',
+        place: 'current',
+        authors: 'unavailable',
+        reactions: 'current',
+        actions: 'current',
+        watch: 'current',
+        media: 'current',
+        comments: 'current',
+      },
+    },
+      place,
+    };
+  };
+  const regionFor = (place: string) =>
+    composedCommunityRegion(
+      {
+        status: 200,
+        body: communityThreadPage('review', communitySubject, [nativeThread(place)], 'next', place),
+      },
+      { kind: 'subjectThreads', id: communitySubject.id, threadKind: 'review', place, limit: 20 },
+      true,
+    );
+  let region = regionFor(GLOBAL);
   function Probe() {
     origin = useSubjectCommunityReading({ source: String(source), descriptor: href, reader: 'reader' });
     return null;
@@ -86,12 +143,21 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
         </QueryClientProvider>,
       ),
     );
-  const populated = () => expect(host.querySelector('section')?.getAttribute('data-state')).toBe('populated');
+  const populated = () => {
+    expect(host.querySelector('section')?.getAttribute('data-state')).toBe('populated');
+    expect(host.querySelector('[data-slot="community-activity"]')?.textContent).toContain('7');
+    expect(host.querySelector('[data-slot="community-activity"] time')?.getAttribute('datetime')).toBe(
+      '2026-11-01T00:00:00.000Z',
+    );
+    expect(host.querySelector('[data-content-item-slot="actions"] a')).not.toBeNull();
+  };
   const retired = () => {
     expect(host.querySelector('[data-slot="community-current-context"]')).toBeNull();
     expect(
       host.querySelector('h3, [data-slot="review-citation"], [data-slot="community-reaction-summary"]'),
     ).toBeNull();
+    expect(host.querySelector('[data-slot="community-activity"]')).toBeNull();
+    expect(host.querySelector('[data-content-item-slot="actions"]')).toBeNull();
     expect(host.querySelector('[data-slot="retry"]')?.getAttribute('href')).toBe(href);
   };
   try {
@@ -129,7 +195,11 @@ test('mounted cards retire browser epochs and descriptors until a fresh native o
         locale = 'fr';
       },
       () => {
-        href += '&place=realm';
+        href += `&place=${realm}`;
+        region = regionFor(realm);
+      },
+      () => {
+        href = href.replace('cursor=same', 'cursor=opaque-next');
       },
     ]) {
       replace();
