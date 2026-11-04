@@ -8,9 +8,10 @@ import {
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
+import { viewerActionReadTime } from '../access/index.ts';
 import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCheck, prepareReadDecisions, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalReadEligibility, relatedReadEligibility } from '../semantic/eligibility.ts';
@@ -78,44 +79,50 @@ export async function readQuotationPageAuthority(deps: {
   deadline: number;
 }): Promise<{ viewer: PageViewer; actions: PageAction[] }> {
   const viewer: PageViewer = { kind: deps.actor.kind === 'account' ? 'account' : 'anonymous' };
+  const unavailable = quotationCorrectionActions.map((entry) => ({
+    action: entry.action,
+    operationId: entry.operationId,
+    state: 'unavailable' as const,
+  }));
   const context = { pool: deps.pool, deadline: deps.deadline };
-  const resource = { route: 0, id: GLOBAL_CONTEXT };
-  const prepared = await Promise.all(
-    quotationCorrectionActions.map(async (entry) => {
-      try {
-        return { ...entry, check: await accessCheck(deps.access, deps.actor, entry.action, resource, context) };
-      } catch (error) {
-        if (classifyUnavailability(error)) return { ...entry, state: 'unavailable' as const, check: null };
-        throw error;
-      }
-    }),
-  );
-  const actions = await withReadTransaction(
-    deps.pool,
-    async (client) => {
-      const result: PageAction[] = [];
-      for (const entry of prepared) {
-        if (!entry.check) {
-          result.push({ action: entry.action, operationId: entry.operationId, state: 'unavailable' });
-          continue;
+  try {
+    const decisions = await prepareReadDecisions(deps.access, {
+      actor: deps.actor,
+      actions: new Set(quotationCorrectionActions.map((entry) => entry.action)),
+      context,
+    });
+    const time = viewerActionReadTime(deps.access, context);
+    const actions = await withReadTransaction(
+      deps.pool,
+      async (client) => {
+        const result: PageAction[] = [];
+        for (const entry of quotationCorrectionActions) {
+          try {
+            const answers = await decisions.decide(
+              client,
+              { action: entry.action, resourceType: 'semantic.context', ids: [GLOBAL_CONTEXT] },
+              time,
+            );
+            result.push({
+              action: entry.action,
+              operationId: entry.operationId,
+              state: answers[GLOBAL_CONTEXT]?.allowed ? 'allowed' : 'denied',
+            });
+          } catch (error) {
+            if (classifyUnavailability(error))
+              result.push({ action: entry.action, operationId: entry.operationId, state: 'unavailable' });
+            else throw error;
+          }
         }
-        try {
-          result.push({
-            action: entry.action,
-            operationId: entry.operationId,
-            state: (await entry.check(client)) ? 'allowed' : 'denied',
-          });
-        } catch (error) {
-          if (classifyUnavailability(error))
-            result.push({ action: entry.action, operationId: entry.operationId, state: 'unavailable' });
-          else throw error;
-        }
-      }
-      return result;
-    },
-    deps.deadline,
-  );
-  return { viewer, actions };
+        return result;
+      },
+      deps.deadline,
+    );
+    return { viewer, actions };
+  } catch (error) {
+    if (classifyUnavailability(error)) return { viewer, actions: unavailable };
+    throw error;
+  }
 }
 
 /** The ordinary native page's template order and offered views, shared with pages.read. */

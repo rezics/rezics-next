@@ -127,6 +127,7 @@ test('a sourced quotation keeps exact text, work, speaker and Access-derived cor
   const adopted = await call('acceptor', 'POST', `/v1/subjects/${quotation.id}:adopt`, {
     context: GLOBAL_CONTEXT,
     property: 'schema:creator',
+    target: credited.id,
     mode: 'replace',
     selection: [{ candidate: proposed.body.candidate, rank: 'normal' }],
     expected_head: null,
@@ -174,8 +175,15 @@ test('a sourced quotation keeps exact text, work, speaker and Access-derived cor
   const hidden = await call('moderator', 'POST', `/v1/subjects/${speaker.id}:hide`, { reason: 'spoiler' });
   expect(hidden.status).toBe(200);
   const concealed = await readPage('editor', quotation.id);
-  expect(pageSubject(concealed.body).related).not.toHaveProperty(speaker.id);
-  expect(pageSubject(concealed.body).subject.statements['schema:spokenByCharacter'][0].value.content).toBe(speaker.id);
+  const concealedFacts = pageSubject(concealed.body);
+  expect(concealedFacts.related).not.toHaveProperty(speaker.id);
+  expect(concealedFacts.related[speaker.id]?.labels).toBeUndefined();
+  expect(
+    concealedFacts.subject.statements['schema:spokenByCharacter']?.some(
+      (statement: { value: { type: string; content?: string } }) =>
+        statement.value.type === 'value' && statement.value.content === speaker.id,
+    ) ?? false,
+  ).toBe(false);
 
   const historical = structuredClone(bundledRelease);
   delete historical.types['schema:Quotation'];
