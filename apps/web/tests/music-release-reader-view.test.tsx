@@ -8,7 +8,6 @@ import {
   musicAddress,
   releaseId,
   albumId,
-  mediumId,
   recordingId,
 } from '../src/features/catalogue/music-release-reader/examples';
 import type {
@@ -65,7 +64,14 @@ async function ui() {
     });
   };
   const select = async (index: number, detail = 0) => {
-    const button = host.querySelectorAll<HTMLButtonElement>('[data-slot="music-release-row"] button')[index];
+    const row = host.querySelectorAll<HTMLElement>('[data-slot="music-release-row"]')[index];
+    const details = row?.querySelector('details');
+    if (details && !details.open) {
+      await act(async () => {
+        details.querySelector('summary')?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+      });
+    }
+    const button = row?.querySelector<HTMLButtonElement>('button');
     if (!button) throw new Error(`Missing occurrence: ${index}`);
     button.focus();
     await act(async () => {
@@ -113,7 +119,10 @@ test('select one repeated occurrence, inspect its evidence and return, retry Nex
     const props = {
       ...musicAddress,
       locale: 'en',
-      source: {},
+      source: {
+        actions: { status: 'ready', viewerActions: [{ action: 'subject:read', operations: ['subject.read'] }] },
+        viewer: { context: musicAddress.context, actions: { statementPropose: 'allowed' } },
+      },
       reader: null,
       initial,
       transport: async (address: MusicReleaseAddress) => {
@@ -133,7 +142,7 @@ test('select one repeated occurrence, inspect its evidence and return, retry Nex
     );
     expect(mounted.host.querySelectorAll('[data-selected="true"]').length).toBe(1);
     expect(document.activeElement).toBe(inspection().querySelector('h3'));
-    expect(inspection().textContent).toContain('source:unknown');
+    expect(inspection().textContent).not.toContain('source:unknown');
     expect(inspection().textContent).toContain('provider-side-02?');
     expect(inspection().textContent).toContain(m.release_fidelity_historical());
     expect(inspection().textContent).toContain(original.rezics.release);
@@ -144,7 +153,13 @@ test('select one repeated occurrence, inspect its evidence and return, retry Nex
     const correction = Array.from(inspection().querySelectorAll('a')).find(
       (node) => node.textContent === m.album_tracks_correction(),
     )!;
-    expect(target.href).toBe(`https://site.example/en/subjects/${recordingId}/harbour`);
+    const targetUrl = new URL(target.href);
+    expect(targetUrl.pathname).toBe(`/en/subjects/${recordingId}/harbour`);
+    expect(targetUrl.searchParams.get('context')).toBe(musicAddress.context);
+    const targetReturn = new URL(targetUrl.searchParams.get('via')!, 'https://site.example');
+    expect(targetReturn.searchParams.get('musicReturnStream')).toBe('forward:schema:track');
+    expect(targetReturn.searchParams.get('musicReturnHolder')).toBe(releaseId);
+    expect(targetReturn.searchParams.get('musicReturnStatement')).toBe(original.id);
     expect(correction.href).toContain(`/en/subjects/${releaseId}/`);
     expect(correction.href).toEndWith('/relation-edit');
     for (const anchor of [target, correction]) {
@@ -164,11 +179,11 @@ test('select one repeated occurrence, inspect its evidence and return, retry Nex
     correction.focus();
     window.dispatchEvent(new Event('focus'));
     expect(document.activeElement).toBe(correction);
-    await mounted.select(2);
+    await mounted.select(0);
     expect(inspection().textContent).not.toContain('independent group');
     expect(inspection().querySelector('[data-occurrence]')?.getAttribute('data-occurrence')).not.toContain(original.id);
     await mounted.click(m.candidate_close());
-    expect(document.activeElement).toBe(mounted.host.querySelectorAll('[data-slot="music-release-row"] button')[2]);
+    expect(document.activeElement).toBe(mounted.host.querySelectorAll('[data-slot="music-release-row"] button')[0]);
     await mounted.select(1);
     await mounted.click(m.work_parts_more());
     expect(mounted.host.textContent).toContain(m.music_release_window_unavailable());
@@ -187,7 +202,7 @@ test('select one repeated occurrence, inspect its evidence and return, retry Nex
     await mounted.click(m.album_tracks_retry());
     expect(addresses.at(-1)).toEqual(addresses.at(-2));
     expect(addresses.at(-1)).toEqual({ ...musicAddress, stream: initial.ok ? initial.stream!.key : '' });
-    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(3);
+    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(2);
     expect(mounted.host.querySelector('[data-slot="music-release-inspection"]')).toBeNull();
     expect(mounted.host.querySelectorAll('button')[0]?.disabled).toBe(false);
     await mounted.select(1);
@@ -217,7 +232,7 @@ test('select one repeated occurrence, inspect its evidence and return, retry Nex
   }
 });
 
-test('inverse stream starts without another frontier, corrects its exact holder, and withheld targets have no destination', async () => {
+test('inverse stream starts without another frontier, and withheld targets expose no association details', async () => {
   const mounted = await ui();
   try {
     const fixture = musicReleaseExample();
@@ -236,26 +251,19 @@ test('inverse stream starts without another frontier, corrects its exact holder,
     });
     await mounted.select(1);
     await mounted.click(m.work_parts_more());
-    const inverseButton = Array.from(mounted.host.querySelectorAll('button')).find((node) =>
-      node.textContent?.startsWith('Recordings on this edition'),
+    const inverseButton = Array.from(mounted.host.querySelectorAll('button')).find(
+      (node) => node.getAttribute('aria-pressed') === 'false',
     )!;
     inverseButton.focus();
     await act(async () => {
       inverseButton.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
     });
     expect(addresses.at(-1)).toEqual({ ...musicAddress, stream: 'inverse:wdt:P361' });
-    await mounted.select(0);
-    const inspection = mounted.host.querySelector('[data-slot="music-release-inspection"]')!;
-    expect(inspection.textContent).toContain(m.music_release_target_withheld());
-    expect(
-      Array.from(inspection.querySelectorAll('a')).some((node) => node.textContent === m.album_tracks_open()),
-    ).toBe(false);
-    const correction = Array.from(inspection.querySelectorAll('a')).find(
-      (node) => node.textContent === m.album_tracks_correction(),
-    )!;
-    expect(correction.href).toContain(`/en/subjects/${recordingId}/`);
-    expect(correction.href).toEndWith('/relation-edit');
-    expect(inspection.querySelector('[data-occurrence]')?.getAttribute('data-occurrence')).toStartWith(recordingId);
+    const withheld = mounted.host.querySelector('[data-slot="music-release-row"]')!;
+    expect(withheld.textContent).toContain(m.music_release_withheld());
+    expect(withheld.querySelector('details, a, button')).toBeNull();
+    expect(withheld.hasAttribute('data-holder')).toBe(false);
+    expect(withheld.hasAttribute('data-statement-id')).toBe(false);
     await mounted.click(m.work_parts_restart());
     expect(addresses.at(-1)).toEqual({ ...musicAddress, stream: 'inverse:wdt:P361' });
     expect(mounted.host.querySelector('[data-slot="music-release-inspection"]')).toBeNull();
@@ -286,7 +294,7 @@ test('retirement discards delayed controls across session/provider/source A/B/A 
     await mounted.select(1);
     await mounted.click(m.work_parts_more());
     await act(async () => {
-      mounted.client.setQueryData(['session'], { state: 'signed-in', subject: mediumId, csrfToken: 'changed' });
+      mounted.client.setQueryData(['session'], { state: 'signed-in', subject: recordingId, csrfToken: 'changed' });
       mounted.client.setQueryData(['session'], { state: 'signed-out' });
     });
     expect(mounted.host.querySelectorAll('a').length).toBe(0);
@@ -336,7 +344,7 @@ test('production entry explicitly reloads the current Subject before reading a f
     response = await fixture.read();
     await mounted.click(m.music_release_recover());
     expect(addresses).toEqual([musicAddress, musicAddress]);
-    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(3);
+    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(2);
     await mounted.select(1);
     await mounted.renderOverview({ ...props, source: {} });
     expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(0);
@@ -434,7 +442,7 @@ test('a replacement during failed or retired recovery cannot silently admit the 
     // Recovery must load fresh transport data, even though the old initial example is still passed.
     await mounted.click(m.music_release_recover());
     expect(addresses).toEqual([musicAddress]);
-    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(3);
+    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(2);
   } finally {
     replacement.clear();
     await mounted.close();

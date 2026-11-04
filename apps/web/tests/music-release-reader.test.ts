@@ -4,7 +4,6 @@ import {
   musicReleaseExample,
   musicAddress,
   albumId,
-  mediumId,
   recordingId,
   releaseId,
 } from '../src/features/catalogue/music-release-reader/examples';
@@ -27,7 +26,7 @@ import { isReleaseType } from '../src/features/catalogue/release-fidelity/model'
 import recordedRelease from '../src/kernel/recorded/definitions-release.json';
 import recordedActive from '../src/kernel/recorded/definitions-active.json';
 
-test('a concrete music edition retains album, medium and recording identities, directed slots and sources without hydration', async () => {
+test('a concrete music edition keeps album and recording identities distinct and reports the unpublished medium grain', async () => {
   const fixture = musicReleaseExample();
   const page = await fixture.read();
   if (!page.ok) throw new Error('Expected music release');
@@ -37,10 +36,11 @@ test('a concrete music edition retains album, medium and recording identities, d
   expect(page.facts.find((fact) => fact.property === 'wdt:P437')?.statements[0]?.value.content).toBe(
     '00000000-0000-4000-8000-00000000b306',
   );
-  expect(page.rows.map((row) => row.summary?.id)).toEqual([mediumId, recordingId, recordingId]);
-  expect(page.rows.map((row) => row.statement?.qualifiers[0]?.value.content)).toEqual(['2', '1', '3']);
+  expect(page.unreleasedGrains).toEqual(['rezics:MusicMedium']);
+  expect(page.rows.map((row) => row.summary?.id)).toEqual([recordingId, recordingId]);
+  expect(page.rows.map((row) => row.statement?.qualifiers[0]?.value.content)).toEqual(['1', '3']);
   expect(page.rows.map((row) => row.statement)).toEqual(fixture.first.relations.map((row) => row.statement));
-  expect(new Set(page.rows.map((row) => row.statementId)).size).toBe(3);
+  expect(new Set(page.rows.map((row) => row.statementId)).size).toBe(2);
   expect(page.public.subject.sourceRecords).toEqual(fixture.publicRead.subject.sourceRecords);
   expect(fixture.calls.map((url) => url.pathname)).toEqual([
     `/v1/subjects/${releaseId}`,
@@ -116,7 +116,7 @@ test('TBA, partial month/year, absent, explicit none and unknown precision remai
   const absent = await fixture.read();
   expect(absent.ok && absent.facts.find((fact) => fact.kind === 'date')?.statements).toEqual([]);
   fixture.respond({ ...fixture.first, next: 'same' });
-  expect(await fixture.read({ ...musicAddress, stream: 'forward:bf:hasPart', cursor: 'same' })).toEqual({
+  expect(await fixture.read({ ...musicAddress, stream: 'forward:schema:track', cursor: 'same' })).toEqual({
     ok: false,
     reason: 'unavailable',
   });
@@ -140,24 +140,16 @@ test('recorded native music release binds album, format, ordered duplicate track
   expect(recorded.types['schema:MusicAlbum']?.library).toBeUndefined();
   expect(recorded.types['schema:MusicRelease']?.library).toBeUndefined();
   expect(recorded.properties['schema:track']?.relation?.slotKey).toBe('wdt:P642');
-  fixture.publicRead.subject.statements['schema:releaseOf'] =
-    fixture.publicRead.subject.statements['schema:exampleOfWork']!;
-  delete fixture.publicRead.subject.statements['schema:exampleOfWork'];
-  for (const row of fixture.first.relations) {
-    row.statement.property.id = 'schema:track';
-    row.statement.qualifiers = row.statement.qualifiers.filter((qualifier) => qualifier.property.id !== 'wdt:P518');
-  }
   const occurrenceA = '00000000-0000-4000-8000-00000000b307';
   const occurrenceB = '00000000-0000-4000-8000-00000000b308';
-  fixture.first.relations[1]!.statement.qualifiers.push({
+  fixture.first.relations[0]!.statement.qualifiers.push({
     property: { id: 'wdt:P642', data_type: 'wikibase-item' },
     value: { type: 'value', content: occurrenceA },
   });
-  fixture.first.relations[2]!.statement.qualifiers.push({
+  fixture.first.relations[1]!.statement.qualifiers.push({
     property: { id: 'wdt:P642', data_type: 'wikibase-item' },
     value: { type: 'value', content: occurrenceB },
   });
-  fixture.first.relations = fixture.first.relations.filter((row) => row.target === recordingId);
   const page = await readMusicRelease(
     fixture.client,
     recorded,
@@ -172,8 +164,10 @@ test('recorded native music release binds album, format, ordered duplicate track
   expect(page.facts.find((fact) => fact.kind === 'album')?.property).toBe('schema:releaseOf');
   expect(page.facts.find((fact) => fact.property === 'wdt:P437')).toBeDefined();
   expect(page.unsupported).toContain('schema:contentLocation');
+  expect(page.unreleasedGrains).toContain('rezics:MusicMedium');
   expect(page.rows.map((row) => row.summary?.id)).toEqual([recordingId, recordingId]);
   expect(new Set(page.rows.map((row) => row.statementId)).size).toBe(2);
+  expect(page.rows.map((row) => row.statement?.qualifiers.at(-1)?.value.content)).toEqual([occurrenceA, occurrenceB]);
   fixture.fail(403);
   expect(
     await readMusicRelease(fixture.client, recorded, { ...musicAddress, stream: 'forward:schema:track' }, 'en'),

@@ -162,11 +162,17 @@ advice; no facts are silently cut to meet a budget.
 
 The ordinary Subject overview offers the [music release reader](../apps/web/src/features/catalogue/music-release-reader/README.md)
 for a native `schema:MusicRelease` identity or descendant, independently of album contents and Recording readers.
+`MusicReleaseOverview` uses the current Subject page's id, Context, Realm, locale, reader observation and native actions.
 It names this edition's admitted album relationship, catalogue number, format, label, date, duration and ordered
-recording associations. Region and medium-level disc or side identity stay unsupported in this slice. TBA, partial/absent
-dates and unsupported configuration stay distinct. Existing generic facts and correction remain available.
+recording associations. Recording targets retain Context, Realm, selected stream/cursor and row focus through the
+existing Subject visit return. Track association evidence is behind one disclosure gate; withheld target summaries
+render no target labels, links or assertion identifiers. Region and medium-level disc or side identity stay unavailable
+because the current Definition does not publish the required medium grain. TBA, partial/absent dates and unsupported
+configuration stay distinct. Existing generic facts and correction remain available under current native advice.
 
-Decision: music release admission requires the exact released `schema:MusicRelease` identity or a released descendant.
+Decision: until the current Definition publishes `rezics:MusicMedium` with its release-membership relation, keep
+medium/disc membership explicitly unavailable and read only released ordered `schema:track` recordings.
+Music release admission requires the exact released `schema:MusicRelease` identity or a released descendant.
 `schema:MusicRecording` is published as its own Type; `rezics:MusicMedium` stays unpublished, and listing-occurrence
 Concepts on `schema:track` distinguish repeated recordings without inventing a medium. Generic release labels and
 provider codes do not admit them. Duration and distribution format reuse the existing `schema:duration` and `wdt:P437`

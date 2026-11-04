@@ -7,7 +7,9 @@ boundaries. Album contents and Recording destination readers remain separate own
 ordinary Subject composition, without adding a View or changing the existing release-fidelity release types.
 
 Decision: this reader requires the exact released `schema:MusicRelease` identity (or a released descendant).
-`schema:MusicRecording` is a published Type; `rezics:MusicMedium` remains an explicit unpublished association seam.
+`schema:MusicRecording` is a published Type. Until the current Definition publishes `rezics:MusicMedium` with its
+release-membership relation, keep medium/disc membership explicitly unavailable and read released ordered
+`schema:track` recordings.
 Labels, generic release ancestry, mappings and provider codes never admit music.
 The ordinary frame uses its native summary ancestry to discover descendants; the reader independently checks the
 current immutable Release before exposing edition facts. A missing admission offers generic facts and correction.
@@ -58,6 +60,10 @@ new-tab contract. Keyboard return restores only a connected current origin, fall
 that origin was removed and focus was lost. Intervening user focus wins. Mouse visits discard keyboard return origins
 and do not steal focus. Keyboard inspection focuses its heading; closing returns to the exact occurrence control.
 Wrapping components, inherited themes and 44px controls serve 390/1440 layouts and all eight locales.
+
+Disclosed Subject destinations and correction links carry the exact Context, Realm and a bounded `via` return with
+the current stream, opaque cursor, Definition digest/revision and selected holder/assertion locator. Returning performs
+a fresh native read under current advice; changed pins retire the old occurrence and require a current restart.
 
 ## Cost
 

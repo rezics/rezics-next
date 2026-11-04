@@ -624,6 +624,12 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       'property',
       'screenCursor',
       'screenSelection',
+      'musicReturnStream',
+      'musicReturnCursor',
+      'musicReturnRevision',
+      'musicReturnDigest',
+      'musicReturnHolder',
+      'musicReturnStatement',
     ]);
     const keys = [...url.searchParams.keys()];
     const nestedVia = url.searchParams.getAll('via');
@@ -641,12 +647,35 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const property = url.searchParams.get('property');
     const screenCursor = url.searchParams.get('screenCursor');
     const screenSelection = url.searchParams.get('screenSelection');
+    const musicStream = url.searchParams.get('musicReturnStream');
+    const musicCursor = url.searchParams.get('musicReturnCursor');
+    const musicRevision = url.searchParams.get('musicReturnRevision');
+    const musicDigest = url.searchParams.get('musicReturnDigest');
+    const musicHolder = url.searchParams.get('musicReturnHolder');
+    const musicStatement = url.searchParams.get('musicReturnStatement');
+    const musicReturn = [musicStream, musicCursor, musicRevision, musicDigest, musicHolder, musicStatement].some(
+      (part) => part !== null,
+    );
     const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
     const recordingStatement = new RegExp(`^#recording-statement-${uuid}$`, 'i').test(url.hash);
     const screenReturn = screenCursor !== null || screenSelection !== null || screenEntry !== null;
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
       (selectedContext !== null && (!subject || !new RegExp(`^${uuid}$`, 'i').test(selectedContext))) ||
+      (musicReturn &&
+        (!subject ||
+          (musicStream !== null && (!musicStream || musicStream.length > 256)) ||
+          (musicStream !== null && /[\u0000-\u001f\u007f]/u.test(musicStream)) ||
+          (musicCursor !== null &&
+            (!musicStream || !musicCursor || musicCursor.length > 4096 || /[\u0000-\u001f\u007f]/u.test(musicCursor))) ||
+          !musicRevision ||
+          !/^\d{1,16}$/u.test(musicRevision) ||
+          !Number.isSafeInteger(Number(musicRevision)) ||
+          !musicDigest ||
+          !boundedToken(musicDigest, 128) ||
+          ((musicHolder === null) !== (musicStatement === null)) ||
+          (musicHolder !== null && !new RegExp(`^${uuid}$`, 'i').test(musicHolder)) ||
+          (musicStatement !== null && !new RegExp(`^${uuid}$`, 'i').test(musicStatement)))) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
       (cursor !== null &&
         (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
