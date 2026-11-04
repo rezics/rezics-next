@@ -94,6 +94,7 @@ test('a concrete edition shows work identity, language edition and historical me
     id: '00000000-0000-4000-8000-00000000a115',
     label: { text: 'Complete' },
   });
+  expect(page.public.subject.statements['schema:exampleOfWork']?.[0]?.qualifiers[0]?.property.id).toBe('wdt:P31');
   expect(page.regionProperty).toBeUndefined();
 });
 
