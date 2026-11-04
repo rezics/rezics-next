@@ -1,10 +1,26 @@
-import { expect, mock, test } from 'bun:test';
-import { renderToStaticMarkup as render } from 'react-dom/server';
+import { afterAll, expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
 import { fromPlainText } from '@rezics/document';
 import type { StatementInput } from '../src/features/catalogue/statement-editor';
 import { m } from '../src/paraglide/messages.js';
 
+// Initialize browser-aware primitives before loading the actual review composition, as the editor test does.
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window();
+const globals = { window, document: window.document, navigator: window.navigator };
+const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, value });
+afterAll(() => {
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { renderToStaticMarkup: render } = await import('react-dom/server');
 const { RecipeCreateReview, RecipeCorrectionReview } = await import('../src/features/catalogue/recipe-editor-review');
 const { recipeEvidence } = await import('../src/features/catalogue/recipe-editor');
 const { recipeFixture, recipeExample } = await import('../src/kernel/fake/recipe-editor');
