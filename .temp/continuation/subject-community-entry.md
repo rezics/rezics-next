@@ -31,8 +31,8 @@ estimate:
 criticalPath: false
 acceptance:
   tests:
-    - "Existing subject-community-summary-family.test.tsx: retain production family adapters, native citation and supplied reaction/reply context, duplicate occurrences, exact source and unknown versus zero across work/character/person."
-    - "Existing subject-community-participation.test.tsx: bind installed admitted Board/creation advice to exact Subject/place, composer, sign-in intent and return through Web production placement; retain regional recovery and affected current-actions/current-retirement/current-visit controller acceptance."
+    - 'Existing subject-community-summary-family.test.tsx: retain production family adapters, native citation and supplied reaction/reply context, duplicate occurrences, exact source and unknown versus zero across work/character/person.'
+    - 'Existing subject-community-participation.test.tsx: bind installed admitted Board/creation advice to exact Subject/place, composer, sign-in intent and return through Web production placement; retain regional recovery and affected current-actions/current-retirement/current-visit controller acceptance.'
   failing: true
 ---
 
