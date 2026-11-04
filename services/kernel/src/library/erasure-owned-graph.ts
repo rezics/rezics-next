@@ -463,7 +463,8 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
       } else {
         if (!(kind in ownedQueries)) throw new TypeError('Invalid graph namespace');
         // All fixed owner statements have exactly the same typed integer/uuid input.
-        removed = (await ownedQueries[kind as keyof typeof ownedQueries].run(tx, args)).length;
+        const purged = await ownedQueries[kind as keyof typeof ownedQueries].run(tx, args);
+        removed = purged === null ? 0 : Array.isArray(purged) ? purged.length : 1;
         if (kind === 'bulk_target' && removed < 100) {
           // Keep the installed Accounts phase and its 100-row budget, disposing empty roots too.
           const roots = await tx.query(
