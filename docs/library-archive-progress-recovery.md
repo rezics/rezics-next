@@ -112,7 +112,8 @@ native command, and one cancellation gate before each later command: at most twe
 separate Session reads during Apply, down from the prior path's up to twenty-one archive operations and nine Session
 reads.
 Each native command still includes its own authorization, target/currentness checks, preparation, locks, receipt,
-source fences, triggers, History/events, serialization, transaction and rollback. A lost acknowledgement before a
+source fences, triggers, History/events, serialization, transaction and rollback. The statement update trigger uses
+`previous_row`/`next_row` aliases because PL/pgSQL `OLD`/`NEW` conflict with transition-table aliases `old`/`new`. A lost acknowledgement before a
 checkpoint adds one bounded archive reload and a retry through the same native receipt; for L such replay attempts,
 the archive transaction count is at most 20+L and no native effect is duplicated. Each command serialization is
 bounded by 8 KiB; a ten-step application writes at most 80 KiB of command JSON, while each replay reloads at most
