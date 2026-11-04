@@ -39,7 +39,7 @@ function Page({ mode }: { mode: Mode }) {
         </AuthShell>
       ),
     });
-    const login = createRoute({ getParentRoute: () => parent, path: '/login', component: Route.options.component });
+    const login = createRoute({ getParentRoute: () => parent, path: '/login', component: Route.options.component! });
     return createRouter({
       history: createMemoryHistory({ initialEntries: ['/login?return_to=%2Fsecurity'] }),
       routeTree: parent.addChildren([login]),
