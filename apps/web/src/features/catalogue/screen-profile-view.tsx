@@ -18,6 +18,7 @@ import { ViewHeading, ViewHeadingActions } from '../pages/view-heading';
 import { CandidateValue } from '../pages/data';
 import { CreateSubjectForm } from './create-subject-form';
 import type { CreateFailure, CreateResult, CreatedReader } from './create-subject';
+import type { CreateAuthority } from './identity-intake';
 import { applyReuse, captureReuse, cloneReferenceGroup } from './reference-reuse';
 import {
   captureScreenReuse,
@@ -67,6 +68,8 @@ export type ScreenTransport = {
   load: () => Promise<ScreenRead>;
   create: (command: ScreenCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<CreatedReader>;
+  /** Current parent subject.create observation. Fresh create only; independent of series context. */
+  eligibility?: () => Promise<CreateAuthority>;
   facts?: FactsTransport;
   review?: (property: string, session?: string) => CandidateTransport;
   relations?: RelationTransport;
@@ -411,6 +414,7 @@ function ScreenProfileLive({
             );
           }}
           transport={{
+            ...(transport.eligibility ? { eligibility: transport.eligibility } : {}),
             definitions: async (refresh) => {
               const result = refresh ? await query.refetch({ cancelRefetch: false }) : query;
               if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };

@@ -1093,6 +1093,18 @@ draft, and key conflicts require explicit review before a new confirmation.
 The native API validates the submitted command. An uncertain retry reaches that same native idempotency path
 without replacing its payload or key after a metadata change. Complete-item review visits admitted holders and their
 structured parts; one confirmation uses one create command and its exact-ID current read.
+Creation eligibility is the current Global Context `subject.create` observation on that existing parent. A readable
+series, later relation transport, or the future UUID cannot confer creation, membership proposal, or selection. Guest
+is session-derived. Admitted Screen types, public targets and series context stay readable when creation is
+unavailable. Commands reauthorize at execution.
+Decision: Screen identity creation uses the shared current parent `subject.create` observation, independent of series
+context and later relation commands.
+
+### Create a Screen identity
+
+- Touches: one current Global Context `subject.create` observation, admitted Movie, Series, Season or Episode descriptors, optional series context, one sealed create command, and one exact returned-identity read.
+- Bound: reuse the existing parent action observation, independently bounded definitions, and existing target/suggestion readers; no permission request per field or suggested identity, history scan, or polling. Retain existing field, statement, qualifier, serialized-command, and held-retry caps.
+- Growth check: hold one Screen type, one optional series context, and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing Screen create fixture.
 
 Initial Screen metadata retry replaces the failure with a pending status, keeps one read in flight, and preserves the Retry action on another failure; successful keyboard recovery orients to the creation heading only while focus intent survives movement, pointer use and caller retirement.
 

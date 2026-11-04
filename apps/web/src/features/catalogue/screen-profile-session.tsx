@@ -8,7 +8,7 @@ import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-
 import { readCorrection } from './statement-editor-actions';
 import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from './relation-editor-actions';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import { relationTargetSearch } from './relation-editor-search';
 import { createCatalogueScreen, loadScreenProfile } from './screen-profile-actions';
 import { ScreenProfile } from './screen-profile-view';
@@ -43,6 +43,7 @@ function ScreenProfileSessionLive({
       handoffReaderLive={editorWork.live}
       transport={{
         load: () => loadScreenProfile({ data: { ...(id ? { id } : {}), ...(series ? { series } : {}) } }),
+        ...(id ? {} : { eligibility: () => readCatalogueCreateEligibility() }),
         create: (data) => createCatalogueScreen({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
         createdRelations: (createdId) => ({
