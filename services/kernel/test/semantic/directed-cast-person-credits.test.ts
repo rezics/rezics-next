@@ -7,7 +7,6 @@ import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { cataloguePageMetadata } from '../../src/presentation/semantic-page.ts';
 import { disclosedRelationStatement, linkProjection } from '../../src/semantic/links.ts';
 import { createReleasedRelationDirectionResolver } from '../../src/semantic/released-relation-direction.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
