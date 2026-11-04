@@ -454,5 +454,11 @@
   "auth_security_passkeys_browser_unavailable": "此瀏覽器無法建立通行金鑰。你仍可查看及移除已儲存的通行金鑰。",
   "auth_security_inventory_truncated": "目前僅顯示第一批項目，可能還有其他項目。變更後請重新整理。",
   "auth_security_step_up_advice": "請再次驗證身分以繼續。",
-  "auth_security_passkey_capacity": "通行金鑰已達 32 組上限。請先移除一組再新增。"
+  "auth_security_passkey_capacity": "通行金鑰已達 32 組上限。請先移除一組再新增。",
+  "auth_account_delete_authentication_required": "請先驗證身分，再檢視此帳戶及其目前的刪除權限。返回本頁不會刪除帳戶。",
+  "auth_account_delete_authenticate": "驗證身分並返回檢視",
+  "auth_account_delete_advice_available": "目前的權限允許提出刪除要求。送出時會再次檢查必要條件和權限。",
+  "auth_account_delete_review_changed": "帳戶或工作階段已變更。請重新載入檢視，並再次明確確認。",
+  "auth_account_delete_submit_requirements": "送出時也會檢查暫時保留及待處理的內部工作。本頁不代表這些條件已滿足。",
+  "auth_account_delete_retention_limits": "必須保留的紀錄依已採納的保留例外處理。備份到期及外部副本另行處理；本頁無法確認它們已清除。"
 }

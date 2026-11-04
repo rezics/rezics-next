@@ -454,5 +454,11 @@
   "auth_security_passkeys_browser_unavailable": "このブラウザーではパスキーを作成できません。保存済みのパスキーの確認と削除はできます。",
   "auth_security_inventory_truncated": "最初の一覧のみ表示しています。他にも項目がある可能性があります。変更後は再読み込みしてください。",
   "auth_security_step_up_advice": "続行するには、もう一度本人確認をしてください。",
-  "auth_security_passkey_capacity": "パスキーは上限の32件に達しています。追加する前に1件削除してください。"
+  "auth_security_passkey_capacity": "パスキーは上限の32件に達しています。追加する前に1件削除してください。",
+  "auth_account_delete_authentication_required": "このアカウントと現在の削除権限を確認するには認証してください。この画面に戻るだけでアカウントが削除されることはありません。",
+  "auth_account_delete_authenticate": "認証して確認画面に戻る",
+  "auth_account_delete_advice_available": "現在の権限で削除を申請できます。送信時に前提条件と権限を再確認します。",
+  "auth_account_delete_review_changed": "アカウントまたはセッションが変更されました。確認画面を再読み込みし、もう一度明示的に確認してください。",
+  "auth_account_delete_submit_requirements": "送信時には一時的な保留や未完了の内部処理も確認します。この画面は、それらが解消済みであることを保証しません。",
+  "auth_account_delete_retention_limits": "保持が必要な記録には採用済みの保持例外が適用されます。バックアップの期限と外部コピーは別に扱われ、この画面ではその消去を確認できません。"
 }

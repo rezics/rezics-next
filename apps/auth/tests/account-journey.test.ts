@@ -427,7 +427,7 @@ test('Default Security and deletion flows show a genuine recognizable current si
     port: 0,
     async fetch(request) {
       const url = new URL(request.url);
-      if (url.pathname !== '/account-identity')
+      if (!['/account-identity', '/account-management/deletion-page'].includes(url.pathname))
         return originalFetch(new Request(new URL(url.pathname + url.search, fake.url), request));
       expect(request.method).toBe('POST');
       expect(await request.json()).toEqual({});
@@ -448,6 +448,19 @@ test('Default Security and deletion flows show a genuine recognizable current si
             status: mode === 'denied' ? 403 : 503,
             headers: { 'cache-control': 'private, no-store' },
           },
+        );
+      if (url.pathname === '/account-management/deletion-page')
+        return Response.json(
+          mode === 'mismatch'
+            ? { kind: 'changed' }
+            : {
+                kind: 'review',
+                accountId,
+                email: accountId === 'first-native-account' ? firstEmail : secondEmail,
+                action: 'available',
+                policy: 'personal-deletion',
+              },
+          { headers: { 'cache-control': 'private, no-store' } },
         );
       return Response.json(
         {

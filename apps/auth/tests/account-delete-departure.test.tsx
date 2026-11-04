@@ -1,3 +1,4 @@
+import type { AccountDeletionPage } from '../src/account-deletion-page';
 import { expect, spyOn, test } from 'bun:test';
 import {
   createMemoryHistory,
@@ -7,17 +8,22 @@ import {
   RouterContextProvider,
 } from '@tanstack/react-router';
 import { creationFixture, approval, button, dom, fill, flush, open, send, session } from './creation-page-fixture';
-import type { AccountIdentitySource } from '../src/account-identity';
+
 import { DeleteAccountContent } from '../src/routes/account.delete';
 import { emptyInventory } from '../src/stories/accounts-operations/story';
 import { readPendingAccountOperationStepUp } from '../src/account-operation-step-up';
 creationFixture();
-const initial = session('delete');
-const body = { account_id: initial.accountId, client_id: initial.clientId, scope: initial.scopes };
+const initial: Extract<AccountDeletionPage, { kind: 'review' }> = {
+  kind: 'review',
+  accountId: 'story-account',
+  email: null,
+  action: 'available',
+  policy: 'personal-deletion',
+};
+const body = initial;
 const props = {
   privacyContact: 'mailto:privacy@example.test',
   inventorySource: emptyInventory,
-  identitySource: async () => ({ kind: 'unavailable' as const }),
 };
 async function setup() {
   const root = createRootRoute();
@@ -25,9 +31,9 @@ async function setup() {
     ['/account/delete', '/security'].map((path) => createRoute({ getParentRoute: () => root, path })),
   );
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/account/delete'] }) });
-  const view = (value = initial, source: AccountIdentitySource = props.identitySource) => (
+  const view = (value: AccountDeletionPage = initial) => (
     <RouterContextProvider router={router}>
-      <DeleteAccountContent {...props} initial={value} identitySource={source} />
+      <DeleteAccountContent {...props} initial={value} />
     </RouterContextProvider>
   );
   const page = await open(view(), body);
@@ -139,7 +145,7 @@ test.each(['replacement', 'permission'] as const)(
     await flush(() => send(page.host));
     await page.navigate();
     if (kind === 'replacement') await page.render(page.view({ kind: 'signed-out' }));
-    else await page.render(page.view(initial, async () => ({ kind: 'denied' })));
+    else await page.render(page.view({ kind: 'refused' }));
     expect(page.unload()).toBe(false);
     expect(page.router.history.location.pathname).toBe('/security');
     await flush(() => page.calls[0]!.resolve(approval()));

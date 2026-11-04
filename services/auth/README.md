@@ -2953,6 +2953,43 @@ retirement; original release, activation, reservation and provisioning identitie
 and deadlines remain authoritative. Phase-inventory upgrades and terminal-proof
 minimization are separate owner integrations.
 
+## Personal account deletion review
+
+`POST /account-management/deletion-page` accepts exactly `{}` on the issuer origin, with an issuer cookie,
+JSON content type, no query or bearer header, and private/no-store responses. It derives the only target from
+the live human session. Ordinary sessions receive only `authentication-required` and their session account id;
+they cause neither a private identity read nor deletion preparation. The existing deletion step-up continuation
+returns to a new review and requires a new typed confirmation. It never executes deletion on return.
+Decision: authentication before review saves an unsent continuation; only dispatch marks it submitted, and older
+continuations retain their conservative submitted interpretation. This local departure hint grants no authority.
+
+The exact deletion management profile admits the narrow native `readAccountDeletionAdvice` producer installed
+by `createNativeAccountBindings`. It uses `managedAuthWorkflowDescriptor('delete', human.account_id)` and the
+installed `account:delete` preparation/formula, independently of the managed-account action directory. Live human,
+account lifecycle/fence/floor, actor/client/scopes, source session, home and deadline are checked around released
+preparation. The native source holds no connection during preparation, uses read transactions and never calls
+workflow approval, resolution, execution or command guards. A current refusal stays refused. Changed authority
+retires display and controls; dependency failure permits a fresh review. Only admitted exact-profile reviews read
+Auth's existing exact-self email projection, with current proof checks surrounding it; no token or proof is returned.
+
+The finite full-call ceiling is one `withFreshHuman` admission, five `accessTokenForProof` calls (three transport,
+two native), one native `authenticate`, one read-time query, two exact account/home snapshots (four point reads),
+one installed Access preparation, one installed Access formula check, and one Auth user primary-key identity read.
+These fixed invocations compose their existing finite producer bounds, including the native permission operand
+caps; no invocation depends on account inventory size and none dispatches runtime prices. Failures short-circuit.
+The shared three-second deadline covers native I/O and the post-read disclosure decision. The browser has one
+five-second private-read deadline and no automatic page retry. Security retains its existing bounded inventory
+interface and link; this source adds no inventory or ownership scan.
+
+Advice is a current read, not approval. Operated accounts, last ownership, transfers, temporary holds and pending
+native work remain explicit requirements rechecked by the durable command. Retry retains the exact operation key
+and uncertain submitted operation. Commit means the tombstone was committed; active cleanup, named adopted
+retention exceptions, backups and external copies remain separate. The page preserves cleanup-pending wording.
+
+Presentation references: `legacy-final:apps/accounts/features/account/delete-account.tsx` (consequences,
+preparation, authentication and acknowledgment) and `../rezics/apps/web/features/settings/pages/security-settings-page.tsx`
+(current session context and distinct pending/error outcomes). Retired export and guardian policy are not ported.
+
 ## Organization deletion review
 
 `POST /account-management/organizations/deletion-review` accepts exactly `{ organizationId }`, with the issuer

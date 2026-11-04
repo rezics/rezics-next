@@ -1,3 +1,4 @@
+import type { AccountDeletionPage } from '../src/account-deletion-page';
 import { expect, spyOn, test } from 'bun:test';
 import * as fixture from './creation-page-fixture';
 import { DeleteAccountContent } from '../src/routes/account.delete';
@@ -8,12 +9,17 @@ import {
 import { emptyInventory } from '../src/stories/accounts-operations/story';
 const { approval, button, dom, fill, flush, leave, open, send } = fixture;
 fixture.creationFixture();
-const initial = fixture.session('delete');
-const body = { account_id: initial.accountId, client_id: initial.clientId, scope: initial.scopes };
+const initial: Extract<AccountDeletionPage, { kind: 'review' }> = {
+  kind: 'review',
+  accountId: 'story-account',
+  email: null,
+  action: 'available',
+  policy: 'personal-deletion',
+};
+const body = initial;
 const props = {
   privacyContact: 'mailto:privacy@example.test',
   inventorySource: emptyInventory,
-  identitySource: async () => ({ kind: 'unavailable' as const }),
 };
 const confirm = (host: HTMLElement) => fill(host.querySelector('input')!, 'delete my account');
 const submit = (host: HTMLElement) =>
@@ -24,10 +30,7 @@ const submit = (host: HTMLElement) =>
 const restore = () =>
   window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event);
 test('read recovery is single-flight, preserves the human and needs a new confirmation without deletion', async () => {
-  const page = await open(
-    <DeleteAccountContent {...props} initial={{ kind: 'failure', message: 'Unavailable' }} />,
-    body,
-  );
+  const page = await open(<DeleteAccountContent {...props} initial={{ kind: 'unavailable' }} />, body);
   const read = Promise.withResolvers<Response>();
   let reads = 0;
   globalThis.fetch = (() => {
@@ -45,7 +48,7 @@ test('read recovery is single-flight, preserves the human and needs a new confir
   await flush(() => confirm(page.host));
   await flush(leave);
   expect(page.host.querySelector('input')).toBeNull();
-  globalThis.fetch = (async () => Response.json({ ...body, account_id: 'another-human' })) as typeof fetch;
+  globalThis.fetch = (async () => Response.json({ ...body, accountId: 'another-human' })) as typeof fetch;
   await flush(restore);
   expect(page.host.querySelector('input')).toBeNull();
   globalThis.fetch = (async () => Response.json(body)) as typeof fetch;

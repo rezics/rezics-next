@@ -288,7 +288,7 @@ test(
       expect(postBodies('/account-operations/approve')).toEqual([
         { operationKey: expect.any(String), operation: { kind: 'delete', accountId } },
       ]);
-      expect(authCalls('/session')).toHaveLength(1);
+      expect(authCalls('/account-management/deletion-page')).toHaveLength(1);
     } finally {
       await page.context().close();
     }

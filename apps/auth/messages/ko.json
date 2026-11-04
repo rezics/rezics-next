@@ -454,5 +454,11 @@
   "auth_security_passkeys_browser_unavailable": "이 브라우저에서는 패스키를 만들 수 없습니다. 저장된 패스키를 확인하고 삭제할 수는 있습니다.",
   "auth_security_inventory_truncated": "목록의 첫 부분만 표시됩니다. 다른 항목이 있을 수 있으니 변경 후 새로고침하세요.",
   "auth_security_step_up_advice": "계속하려면 본인 인증을 다시 해 주세요.",
-  "auth_security_passkey_capacity": "패스키가 최대 개수인 32개에 도달했습니다. 새로 추가하려면 하나를 삭제하세요."
+  "auth_security_passkey_capacity": "패스키가 최대 개수인 32개에 도달했습니다. 새로 추가하려면 하나를 삭제하세요.",
+  "auth_account_delete_authentication_required": "이 계정과 현재 삭제 권한을 검토하려면 인증하세요. 이 화면으로 돌아오는 것만으로 계정이 삭제되지는 않습니다.",
+  "auth_account_delete_authenticate": "인증 후 검토로 돌아가기",
+  "auth_account_delete_advice_available": "현재 권한으로 삭제를 요청할 수 있습니다. 제출할 때 사전 조건과 권한을 다시 확인합니다.",
+  "auth_account_delete_review_changed": "계정 또는 세션이 변경되었습니다. 검토 화면을 새로 불러오고 다시 확인하세요.",
+  "auth_account_delete_submit_requirements": "제출 시 임시 보류와 대기 중인 내부 작업도 확인합니다. 이 화면은 해당 조건이 해소되었음을 보장하지 않습니다.",
+  "auth_account_delete_retention_limits": "보존이 필요한 기록에는 채택된 보존 예외가 적용됩니다. 백업 만료와 외부 사본은 별개이며 이 화면에서는 삭제 여부를 확인할 수 없습니다."
 }

@@ -178,7 +178,7 @@ test(
         expect.objectContaining({ name: 'auth_session', value: session }),
       );
 
-      expect(authCalls('/session')).toHaveLength(1);
+      expect(authCalls('/account-management/deletion-page')).toHaveLength(1);
       expect(postBodies('/account-operations/approve')).toEqual([
         { operationKey: expect.any(String), operation: { kind: 'delete', accountId } },
       ]);

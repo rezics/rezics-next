@@ -14,29 +14,24 @@ import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useCallback, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
-import { useAccountIdentity, type AccountIdentitySource } from '../account-identity';
+import {
+  loadAccountDeletionPage,
+  type AccountDeletionPage,
+  type AccountDeletionPageSource,
+} from '../account-deletion-page';
 import { AccountIdentitySummary } from '../account-identity-view';
 import { ErrorAlert } from '../alert';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { SecurityInventory, type InventorySource } from '../security-inventory-view';
 import { readPrivacyContact } from '../privacy-contact';
 import {
-  accountOperationSessionMatches,
   accountOperationStepUpUrl,
   clearPendingAccountOperationStepUp,
   pendingAccountOperationMatches,
   pendingAccountOperationStepUpState,
   storePendingAccountOperationStepUp,
 } from '../account-operation-step-up';
-import {
-  forgetOperationKey,
-  loadAccountSession,
-  operationKeyFor,
-  runAccountOperation,
-  type AccountOperation,
-  type AccountSessionResult,
-} from '../account-operations';
-import { accountOperationProfile } from '../account-operation-step-up';
+import { forgetOperationKey, operationKeyFor, runAccountOperation, type AccountOperation } from '../account-operations';
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 
@@ -109,19 +104,19 @@ export function DeleteAccountContent({
   privacyContact,
   initial,
   inventorySource,
-  identitySource,
+  source = loadAccountDeletionPage,
 }: {
   privacyContact: string | null;
-  initial?: AccountSessionResult;
+  initial?: AccountDeletionPage;
   inventorySource?: InventorySource;
-  identitySource?: AccountIdentitySource;
+  source?: AccountDeletionPageSource;
 }) {
   const [privacyBefore, privacyAfter] = privacyContact
     ? m.auth_account_delete_privacy_contact({ contact: privacyContact }).split(privacyContact)
     : [];
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
-  const [needsProfile, setNeedsProfile] = useState(false);
+  const [advice, setAdvice] = useState<AccountDeletionPage | null>(null);
   const [returned, setReturned] = useState(false);
   const [loadMessage, setLoadMessage] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -146,12 +141,13 @@ export function DeleteAccountContent({
   const accepted = useRef(false);
   const [reload, setReload] = useState(0);
   const renderedGeneration = authorityGeneration.current;
-  const identity = useAccountIdentity(
-    identityVisible ? accountId : '',
-    authorityGeneration.current,
-    clearAuthority,
-    identitySource,
-  );
+  const identity = {
+    state:
+      advice?.kind === 'review' && identityVisible
+        ? { kind: 'ready' as const, accountId: advice.accountId, email: advice.email }
+        : { kind: 'unavailable' as const },
+    retry: () => setReload((value) => value + 1),
+  };
 
   const shouldWarn = useCallback(
     () =>
@@ -227,7 +223,7 @@ export function DeleteAccountContent({
     setMessage('');
     setShowRetry(false);
     setReturned(false);
-    setNeedsProfile(false);
+    setAdvice(null);
     setIdentityVisible(true);
     setLoadMessage(m.auth_account_operation_failure());
     setLoadState(kind === 'signed-out' ? 'signed-out' : 'failure');
@@ -239,8 +235,10 @@ export function DeleteAccountContent({
     setDeleted(accepted.current);
     setLoadState(accepted.current ? 'ready' : 'loading');
     const generation = authorityGeneration.current;
+    const controller = new AbortController();
     const retire = () => {
       active = false;
+      controller.abort();
       clearAuthority('denied');
       if (accepted.current) setLoadState('ready');
     };
@@ -253,50 +251,54 @@ export function DeleteAccountContent({
     window.addEventListener('pagehide', retire);
     window.addEventListener('pageshow', restore);
     if (!accepted.current)
-      void (initial && reload === 0 ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
-        if (!active || authorityGeneration.current !== generation) return;
-        if (result.kind === 'ready') {
-          const pendingState = pendingAccountOperationStepUpState();
-          const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
-          if (
-            (intendedAccount.current && intendedAccount.current !== result.accountId) ||
-            pendingState.kind === 'invalid' ||
-            (pendingOperation &&
-              (pendingOperation.kind !== 'delete' ||
-                pendingOperation.returnTo !== '/account/delete' ||
-                !accountOperationSessionMatches(result, pendingOperation)))
-          ) {
-            setLoadMessage(m.auth_account_operation_failure());
+      void (initial && reload === 0 ? Promise.resolve(initial) : source(controller.signal))
+        .catch((): AccountDeletionPage => ({ kind: 'unavailable' }))
+        .then((result) => {
+          if (!active || authorityGeneration.current !== generation) return;
+          if (result.kind === 'review' || result.kind === 'authentication-required') {
+            const pendingState = pendingAccountOperationStepUpState();
+            const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
+            if (
+              (intendedAccount.current && intendedAccount.current !== result.accountId) ||
+              pendingState.kind === 'invalid' ||
+              (pendingOperation &&
+                (pendingOperation.kind !== 'delete' ||
+                  pendingOperation.returnTo !== '/account/delete' ||
+                  pendingOperation.accountId !== result.accountId))
+            ) {
+              setLoadMessage(m.auth_account_operation_failure());
+              setLoadState('failure');
+              return;
+            }
+            intendedAccount.current = result.accountId;
+            activeAccount.current = result.accountId;
+            setAccountId(result.accountId);
+            unresolved.current = Boolean(pendingOperation && pendingOperation.submitted !== false);
+            setReturned(Boolean(pendingOperation));
+            setAdvice(result);
+            setLoadState('ready');
+          } else if (result.kind === 'signed-out') {
+            setLoadState('signed-out');
+          } else {
+            setLoadMessage(
+              result.kind === 'refused'
+                ? m.auth_account_delete_denied()
+                : result.kind === 'changed'
+                  ? m.auth_account_delete_review_changed()
+                  : m.auth_account_operation_unavailable(),
+            );
             setLoadState('failure');
-            return;
           }
-          intendedAccount.current = result.accountId;
-          activeAccount.current = result.accountId;
-          setAccountId(result.accountId);
-          unresolved.current = Boolean(pendingOperation);
-          setReturned(Boolean(pendingOperation));
-          const expected = accountOperationProfile('delete');
-          setNeedsProfile(
-            result.clientId !== expected.client_id ||
-              result.scopes?.length !== 1 ||
-              result.scopes[0] !== expected.scope[0],
-          );
-          setLoadState('ready');
-        } else if (result.kind === 'signed-out') {
-          setLoadState('signed-out');
-        } else {
-          setLoadMessage(result.message);
-          setLoadState('failure');
-        }
-      });
+        });
     return () => {
       active = false;
+      controller.abort();
       authorityGeneration.current++;
       activeAccount.current = '';
       window.removeEventListener('pagehide', retire);
       window.removeEventListener('pageshow', restore);
     };
-  }, [initial, reload]);
+  }, [initial, reload, source]);
 
   useLayoutEffect(() => {
     if (confirmationError) confirmationInput.current?.focus();
@@ -310,6 +312,8 @@ export function DeleteAccountContent({
       submitting.current ||
       pending ||
       loadState !== 'ready' ||
+      advice?.kind !== 'review' ||
+      advice.action !== 'available' ||
       activeAccount.current !== accountId
     )
       return;
@@ -351,9 +355,8 @@ export function DeleteAccountContent({
     }
     unresolved.current = true;
     continuation = JSON.stringify(pendingAccountOperationStepUpState());
-    let result = await runAccountOperation(operationKey, operation, { isCurrent, retryUncertain: true });
+    const result = await runAccountOperation(operationKey, operation, { isCurrent, retryUncertain: true });
     if (!isCurrent()) return;
-    if (!result.ok && result.reason === 'denied' && needsProfile) result = { ok: false, reason: 'step-up' };
     if (result.ok) {
       accepted.current = true;
       forgetOperationKey(operation, accountId);
@@ -385,6 +388,7 @@ export function DeleteAccountContent({
       // Keep the original operation key and the existing prerequisite explanation.
       unresolved.current = false;
       setIdentityVisible(false);
+      setAdvice({ kind: 'refused' });
       setMessage(m.auth_account_delete_denied());
     } else if (result.reason === 'platform-closed') {
       setMessage(m.auth_organization_not_open());
@@ -398,6 +402,35 @@ export function DeleteAccountContent({
       setMessage(m.auth_account_operation_failure());
       setShowRetry(true);
     }
+  }
+
+  function authenticate() {
+    if (pending || !accountId || activeAccount.current !== accountId) return;
+    const operation: AccountOperation = { kind: 'delete', accountId };
+    const state = pendingAccountOperationStepUpState();
+    if (
+      state.kind === 'invalid' ||
+      (state.kind === 'pending' &&
+        !pendingAccountOperationMatches(state.value, accountId, state.value.operationKey, operation))
+    ) {
+      clearAuthority('denied');
+      return;
+    }
+    const operationKey = state.kind === 'pending' ? state.value.operationKey : operationKeyFor(operation, accountId);
+    if (
+      !storePendingAccountOperationStepUp({
+        kind: 'delete',
+        accountId,
+        operationKey,
+        operation,
+        submitted: state.kind === 'pending' ? (state.value.submitted ?? true) : false,
+      })
+    ) {
+      setMessage(m.auth_account_operation_failure());
+      return;
+    }
+    clearAuthority('signed-out');
+    window.location.assign(accountOperationStepUpUrl('delete'));
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -459,15 +492,17 @@ export function DeleteAccountContent({
       returnToSecurity
       heading={m.auth_account_delete_heading()}
       identity={
-        <AccountIdentitySummary
-          accountId={accountId}
-          state={identityVisible ? identity.state : { kind: 'unavailable' }}
-          action="delete"
-          retry={() => {
-            setIdentityVisible(true);
-            identity.retry();
-          }}
-        />
+        advice?.kind === 'review' ? (
+          <AccountIdentitySummary
+            accountId={accountId}
+            state={identityVisible ? identity.state : { kind: 'unavailable' }}
+            action="delete"
+            retry={() => {
+              setIdentityVisible(true);
+              identity.retry();
+            }}
+          />
+        ) : undefined
       }
     >
       <div className="auth-account-operation-copy">
@@ -493,6 +528,7 @@ export function DeleteAccountContent({
             <li>{m.auth_account_delete_retained_posts()}</li>
           </ul>
           <p>{m.auth_account_delete_retained_attribution()}</p>
+          <p>{m.auth_account_delete_retention_limits()}</p>
         </section>
         <p>{m.auth_account_delete_prepare()}</p>
         {privacyContact ? (
@@ -515,6 +551,7 @@ export function DeleteAccountContent({
             {m.auth_account_delete_prerequisites_heading()}
           </h2>
           <p>{m.auth_account_delete_prerequisites_description()}</p>
+          <p>{m.auth_account_delete_submit_requirements()}</p>
           <ul className="auth-account-operation-requirements">
             <li>
               <p>{m.auth_account_delete_no_automated_accounts()}</p>
@@ -532,13 +569,19 @@ export function DeleteAccountContent({
           </ul>
         </section>
       </div>
-      <div className="mt-8">
-        <SecurityInventory
-          preflight
-          {...(inventorySource ? { source: inventorySource } : {})}
-          onSessionEnded={() => clearAuthority('signed-out')}
-        />
-      </div>
+      {advice?.kind === 'review' ? (
+        <div className="mt-8">
+          <SecurityInventory
+            preflight
+            {...(inventorySource ? { source: inventorySource } : {})}
+            onSessionEnded={() => clearAuthority('signed-out')}
+          />
+        </div>
+      ) : (
+        <p>
+          <a href="/security">{m.auth_account_operation_return()}</a>
+        </p>
+      )}
       <form
         ref={review}
         tabIndex={-1}
@@ -554,32 +597,50 @@ export function DeleteAccountContent({
           </Alert>
         ) : null}
         <p>{m.auth_account_delete_finality()}</p>
-        <Field id="account-delete-confirmation" data-invalid={confirmationError}>
-          <FieldLabel htmlFor="account-delete-input">
-            {m.auth_account_delete_confirmation_prompt({ phrase: confirmationPhrase })}
-          </FieldLabel>
-          <Input
-            ref={confirmationInput}
-            id="account-delete-input"
-            type="text"
-            autoComplete="off"
-            spellCheck={false}
-            disabled={pending}
-            aria-invalid={confirmationError || undefined}
-            aria-describedby={confirmationError ? 'account-delete-confirmation-error' : undefined}
-            value={confirmation}
-            onChange={(event) => {
-              const value = event.target.value;
-              confirmationValue.current = value;
-              setConfirmation(value);
-              if (normalizeConfirmation(value) === normalizeConfirmation(confirmationPhrase))
-                setConfirmationError(false);
-            }}
-          />
-          {confirmationError ? (
-            <FieldError id="account-delete-confirmation-error">{m.auth_account_delete_confirmation_error()}</FieldError>
-          ) : null}
-        </Field>
+        {advice?.kind === 'authentication-required' ? (
+          <Alert role="status">
+            <AlertDescription>
+              <p>{m.auth_account_delete_authentication_required()}</p>
+              <Button type="button" onClick={authenticate}>
+                {m.auth_account_delete_authenticate()}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : advice?.kind === 'review' && advice.action === 'available' ? (
+          <p>{m.auth_account_delete_advice_available()}</p>
+        ) : !message ? (
+          <ErrorAlert>{m.auth_account_delete_denied()}</ErrorAlert>
+        ) : null}
+        {advice?.kind === 'review' && advice.action === 'available' ? (
+          <Field id="account-delete-confirmation" data-invalid={confirmationError}>
+            <FieldLabel htmlFor="account-delete-input">
+              {m.auth_account_delete_confirmation_prompt({ phrase: confirmationPhrase })}
+            </FieldLabel>
+            <Input
+              ref={confirmationInput}
+              id="account-delete-input"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              disabled={pending}
+              aria-invalid={confirmationError || undefined}
+              aria-describedby={confirmationError ? 'account-delete-confirmation-error' : undefined}
+              value={confirmation}
+              onChange={(event) => {
+                const value = event.target.value;
+                confirmationValue.current = value;
+                setConfirmation(value);
+                if (normalizeConfirmation(value) === normalizeConfirmation(confirmationPhrase))
+                  setConfirmationError(false);
+              }}
+            />
+            {confirmationError ? (
+              <FieldError id="account-delete-confirmation-error">
+                {m.auth_account_delete_confirmation_error()}
+              </FieldError>
+            ) : null}
+          </Field>
+        ) : null}
         {message ? (
           <ErrorAlert tabIndex={-1} ref={alert}>
             <p>{message}</p>
@@ -601,7 +662,9 @@ export function DeleteAccountContent({
         <Button
           type="submit"
           variant="destructive"
-          disabled={!privacyContact || pending || !confirmed}
+          disabled={
+            !privacyContact || pending || !confirmed || advice?.kind !== 'review' || advice.action !== 'available'
+          }
           aria-busy={pending}
           className="w-full"
         >
