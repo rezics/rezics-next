@@ -1,5 +1,6 @@
+import { accountProfileEditing } from '@rezics/client';
 import type { FakeRoute } from '../fake-modules.ts';
-import type { ProfileLink, ProfileValues } from '../../settings/profile-data';
+import { observeProfile, type ProfileLink, type ProfileValues } from '../../settings/profile-data';
 import type { EditableProfile } from '../../settings/editable-profile-source';
 import { rebaseProfile, type ProfileEditorIO } from '../../settings/profile-write';
 import { storyViewerId } from './identities';
@@ -16,7 +17,7 @@ export type ProfileScenario =
   | 'readback';
 
 export function profileStoryValues(kind: 'actor' | 'organization' = 'actor'): ProfileValues {
-  return {
+  return observeProfile({
     accountId: kind === 'actor' ? 'story-viewer' : 'org-story-viewer',
     kind,
     displayName: kind === 'actor' ? 'Avery Reader' : 'Reading Club',
@@ -25,7 +26,7 @@ export function profileStoryValues(kind: 'actor' | 'organization' = 'actor'): Pr
     links: [{ label: 'Website', url: 'https://example.test' }],
     publicViews: { posts: true, reviews: true, collections: true, realms: false },
     ...(kind === 'organization' ? { speakersListed: false } : {}),
-  };
+  });
 }
 
 /** Interface-only IO. The same editor and cards consume this in Patterns and the real BFF in Pages. */
@@ -197,7 +198,11 @@ const readEditable: NonNullable<FakeRoute['story']> = ({ request, match }) => {
     publicViews: current.publicViews,
     ...(typeof current.speakersListed === 'boolean' ? { speakersListed: current.speakersListed } : {}),
   };
-  return { status: 200, profile };
+  return {
+    status: 200,
+    profile,
+    editing: accountProfileEditing(id, { id, kind: profile.kind }),
+  };
 };
 
 export const routes: FakeRoute[] = [

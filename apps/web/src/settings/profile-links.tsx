@@ -13,6 +13,9 @@ export function ProfileLinks({
   ids,
   errors,
   fieldError,
+  maxItems,
+  labelMaxLength,
+  urlMaxLength,
 }: {
   links: ProfileLink[];
   disabled: boolean;
@@ -20,6 +23,9 @@ export function ProfileLinks({
   ids: string;
   errors: ReturnType<typeof profileFieldErrors>;
   fieldError: (field: string) => ReactNode;
+  maxItems: number;
+  labelMaxLength: number;
+  urlMaxLength: number;
 }) {
   // Presentation keys never enter the profile. Only explicit row edits move existing keys.
   const [identity, setIdentity] = useState(() => ({ keys: links.map((_, index) => index), next: links.length }));
@@ -65,6 +71,7 @@ export function ProfileLinks({
                   value={link.label}
                   required
                   pattern={String.raw`.*\S.*`}
+                  maxLength={labelMaxLength}
                   disabled={disabled}
                   aria-invalid={!!errors[`label-${index}`]}
                   aria-describedby={errors[`label-${index}`] ? `${ids}-label-${index}-error` : undefined}
@@ -82,6 +89,7 @@ export function ProfileLinks({
                   type="url"
                   value={link.url}
                   required
+                  maxLength={urlMaxLength}
                   disabled={disabled}
                   aria-invalid={!!errors[`url-${index}`]}
                   aria-describedby={errors[`url-${index}`] ? `${ids}-url-${index}-error` : undefined}
@@ -116,9 +124,9 @@ export function ProfileLinks({
         type="button"
         variant="outline"
         className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-        disabled={disabled || links.length >= 5}
+        disabled={disabled || links.length >= maxItems}
         onClick={() => {
-          if (disabled || links.length >= 5) return;
+          if (disabled || links.length >= maxItems) return;
           focus.current = identity.next;
           setIdentity({ keys: [...identity.keys, identity.next], next: identity.next + 1 });
           onChange([...links, { label: '', url: '' }]);

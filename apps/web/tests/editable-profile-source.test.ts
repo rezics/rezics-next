@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
+import { accountProfileEditing, createKernelClient } from '@rezics/client';
 import { EditableProfileReadError, type EditableProfile } from '../src/settings/editable-profile-source';
 import {
   loadProfileRecord,
+  observeProfile,
   profileReadResult,
   profileReadValue,
   type ProfileValues,
@@ -20,12 +21,34 @@ const profile: EditableProfile = {
   avatar: null,
   publicViews: { posts: false, reviews: true, collections: false, realms: true },
 };
+const organization: EditableProfile = {
+  ...profile,
+  id: '019a0000-0000-7000-8000-000000000002',
+  kind: 'organization',
+  speakersListed: false,
+};
+const envelope = (value: EditableProfile, viewerId = value.id) => ({
+  profile: value,
+  editing: accountProfileEditing(viewerId, { id: value.id, kind: value.kind }),
+});
 
 test('the editable source rejects incomplete, foreign and non-closed native bodies without a draft or write', async () => {
   const { bio, ...incomplete } = profile;
   for (const body of [
     { profile: incomplete },
-    { profile: { ...profile, id: 'another-account' } },
+    { profile },
+    envelope(profile, '019a0000-0000-7000-8000-000000000099'),
+    envelope({ ...profile, id: 'another-account' }),
+    { ...envelope(profile), editing: { ...envelope(profile).editing, target: { accountId: profile.id, kind: 'organization' } } },
+    {
+      ...envelope(profile),
+      editing: {
+        ...envelope(profile).editing,
+        fields: { ...envelope(profile).editing.fields, displayName: { applicable: true, maxLength: 32 } },
+      },
+    },
+    { profile: { ...profile, kind: 'organization', speakersListed: false }, editing: envelope(profile).editing },
+    { ...envelope(organization), profile: { ...organization, kind: 'actor' } },
     { profile: { ...profile, state: 'deleted' } },
     { profile: { ...profile, publicViews: { posts: false } } },
     { profile: { ...profile, avatar: { media: 'incomplete-avatar' } } },
@@ -63,7 +86,7 @@ test('the editable source rejects incomplete, foreign and non-closed native bodi
 
 test('native denial status survives the server boundary while transport failures retain the same-actor draft', async () => {
   const { id: accountId, handle, bio: biography, ...fields } = profile;
-  const initial: ProfileValues = { accountId, biography, ...fields };
+  const initial: ProfileValues = observeProfile({ accountId, biography, ...fields });
   for (const status of [401, 403, 404, 503]) {
     const client = createKernelClient('https://kernel.example.test', {
       fetch: (async () =>
@@ -84,8 +107,8 @@ test('native denial status survives the server boundary while transport failures
     editor.edit({ biography: 'Local words' });
     const draft = editor.snapshot().draft;
     await editor.reload();
-    expect(editor.snapshot().known).toBe(initial);
-    expect(editor.snapshot().draft).toBe(draft);
+    expect(editor.snapshot().known).toBe(status === 503 ? initial : null);
+    expect(editor.snapshot().draft).toBe(status === 503 ? draft : null);
     expect(editor.snapshot().readAuthority).toBe(status === 503 ? 'allowed' : 'denied');
     expect(editor.snapshot().phase).toBe('unavailable');
     editor.review();
@@ -154,4 +177,24 @@ test('private profile recovery preserves actual native problem metadata and dela
     });
     expect(wrapped).toEqual(result);
   }
+});
+
+test('an admitted actor and organization carry native editing advice through the typed private read', async () => {
+  for (const native of [profile, organization]) {
+    const client = createKernelClient('https://kernel.example.test', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        expect(request.method).toBe('GET');
+        expect(new URL(request.url).pathname).toBe(`/v1/accounts/${native.id}/profile`);
+        return Response.json(envelope(native), { headers: { 'cache-control': 'private, no-store' } });
+      }) as typeof fetch,
+    });
+    const loaded = await loadProfileRecord(client, 'Bearer unchanged', native.id);
+    expect(loaded.accountId).toBe(native.id);
+    expect(loaded.kind).toBe(native.kind);
+    expect(loaded.editing).toEqual(accountProfileEditing(native.id, { id: native.id, kind: native.kind }));
+    expect('speakersListed' in loaded.editing.fields).toBe(native.kind === 'organization');
+    expect(loaded).not.toHaveProperty(native.kind === 'actor' ? 'speakersListed' : 'handle');
+  }
+});
 });

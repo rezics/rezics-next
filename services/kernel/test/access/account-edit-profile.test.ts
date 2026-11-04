@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { decodeJwt, importJWK, SignJWT } from 'jose';
 import { createPool } from '../../src/database/pool.ts';
-import { readEditableAccountProfile } from '../../src/access/account-edit-profile.ts';
+import { accountProfileEditing, readEditableAccountProfile } from '../../src/access/account-edit-profile.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
@@ -103,6 +103,7 @@ test('a handleless owner reads and reloads editable source fields without consum
       avatar: null,
       publicViews: { posts: false, reviews: true, collections: false, realms: false },
     },
+    editing: accountProfileEditing(owner.accountId, { id: owner.accountId, kind: 'actor' }),
   });
   expect((await call(owner.accountId, owner.bearer, { biography: null })).status).toBe(200);
   expect((await call(owner.accountId, owner.bearer)).body.profile).toEqual({ ...read.body.profile, bio: null });
@@ -112,6 +113,7 @@ test('a handleless owner reads and reloads editable source fields without consum
   const actor = await kernel.testAccess.authenticate(owner.bearer, context);
   expect(await readEditableAccountProfile(kernel.testAccess, { ...context, actor }, owner.accountId)).toEqual({
     profile: { ...read.body.profile, bio: null },
+    editing: accountProfileEditing(owner.accountId, { id: owner.accountId, kind: 'actor' }),
   });
   expect((await pool.query('SELECT count(*)::int AS count FROM core.receipt')).rows).toEqual(afterPatch.rows);
   // Missing media resolves through Content to null, never to the stored URL.
@@ -137,6 +139,7 @@ test('the current operator reads a managed target with management scope and an e
   const read = await call(bot.accountId, other.bearer);
   expect(read.status).toBe(200);
   expect(read.body.profile).toMatchObject({ id: bot.accountId, displayName: 'Managed', publicViews: { posts: false } });
+  expect(read.body.editing).toEqual(accountProfileEditing(other.accountId, { id: bot.accountId, kind: 'actor' }));
   expect((await call(bot.accountId, await signed(other.bearer, { scope: 'account:update' }))).status).toBe(403);
   expect((await call(bot.accountId, owner.bearer)).status).toBe(403);
   // Old operator authority cannot authorize the new operator's subject.

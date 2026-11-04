@@ -96,7 +96,7 @@ export async function readAccountRenameContextResult(
 ): Promise<AccountRenameReadResult> {
   const [profileRead, actionsRead] = await Promise.allSettled([
     withManagedReadDeadline(
-      (signal) => createEditableProfileSource(client).read(authorization, accountId, signal),
+      (signal) => createEditableProfileSource(client).read(authorization, accountId, accountId, signal),
       signal,
     ),
     withManagedReadDeadline(
@@ -109,7 +109,7 @@ export async function readAccountRenameContextResult(
     ),
   ]);
   const failures: AccountRenameFailure[] = [];
-  const profile = profileRead.status === 'fulfilled' ? profileRead.value : null;
+  const profile = profileRead.status === 'fulfilled' ? profileRead.value.profile : null;
   if (profileRead.status === 'rejected') failures.push(accountRenameException(profileRead.reason));
   const result = actionsRead.status === 'fulfilled' ? actionsRead.value : null;
   if (actionsRead.status === 'rejected') failures.push(accountRenameException(actionsRead.reason));

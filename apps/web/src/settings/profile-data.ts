@@ -1,5 +1,5 @@
+import { accountProfileEditing, type AccountProfileEditing, type KernelClient } from '@rezics/client';
 import { withProfileDeadline } from './profile-request-deadline';
-import type { KernelClient } from '@rezics/client';
 import { settingsCommandKeyHeader } from './command-headers';
 import {
   createEditableProfileSource,
@@ -22,6 +22,7 @@ export type ProfileValues = {
   links: ProfileLink[];
   publicViews: { posts: boolean; reviews: boolean; collections: boolean; realms: boolean };
   speakersListed?: boolean;
+  editing: AccountProfileEditing;
 };
 export type ProfilePatch = {
   displayName?: string | null;
@@ -60,7 +61,21 @@ export function profileReadDenied(error: unknown): boolean {
   return !!failure && [401, 403, 404].includes(failure.status);
 }
 
-function accountProfile(value: EditableProfile): ProfileValues {
+export function observeProfile(
+  values: Omit<ProfileValues, 'editing'>,
+  viewerId = values.accountId,
+): ProfileValues {
+  return {
+    ...values,
+    editing: accountProfileEditing(viewerId, { id: values.accountId, kind: values.kind }),
+  };
+}
+
+export function profileSpeakersApplicable(profile: ProfileValues): boolean {
+  return 'speakersListed' in profile.editing.fields && profile.editing.fields.speakersListed.applicable;
+}
+
+function accountProfile(value: EditableProfile, editing: AccountProfileEditing): ProfileValues {
   return {
     accountId: value.id,
     kind: value.kind,
@@ -72,6 +87,7 @@ function accountProfile(value: EditableProfile): ProfileValues {
     ...(value.kind === 'organization' && value.speakersListed !== undefined
       ? { speakersListed: value.speakersListed }
       : {}),
+    editing,
   };
 }
 
@@ -81,10 +97,11 @@ export async function loadProfileRecord(
   accountId: string,
   source: EditableProfileSource = createEditableProfileSource(client),
   signal?: AbortSignal,
+  viewerId: string = accountId,
 ): Promise<ProfileValues> {
-  const profile = await source.read(authorization, accountId, signal);
+  const { profile, editing } = await source.read(authorization, accountId, viewerId, signal);
   if (profile.id !== accountId) throw new Error('Profile unavailable');
-  return accountProfile(profile);
+  return accountProfile(profile, editing);
 }
 
 function avatarReference(avatar: object | null): string | null {
@@ -108,11 +125,16 @@ export function profileChanges(before: ProfileValues, after: ProfileValues): Pro
   if (
     before.kind === 'organization' &&
     after.kind === 'organization' &&
+    profileSpeakersApplicable(after) &&
     typeof after.speakersListed === 'boolean' &&
     before.speakersListed !== after.speakersListed
   )
     body.speakersListed = after.speakersListed;
   return body;
+}
+
+export function profileAdviceChanged(before: ProfileValues | null, after: ProfileValues): boolean {
+  return !!before && JSON.stringify(before.editing) !== JSON.stringify(after.editing);
 }
 
 export async function saveProfileRecord(
@@ -124,7 +146,8 @@ export async function saveProfileRecord(
   idempotencyKey: string,
   signal?: AbortSignal,
 ): Promise<ProfileSaveResult> {
-  if (after.links.length > 5) throw new Error('At most five links are allowed');
+  const maxItems = after.editing.fields.links.maxItems;
+  if (after.links.length > maxItems) throw new Error('At most five links are allowed');
   const body = profileChanges(before, after);
   if (!Object.keys(body).length) return { ok: true, profile: before };
   const headers = { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) };

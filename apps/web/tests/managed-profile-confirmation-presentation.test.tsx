@@ -1,18 +1,21 @@
 import { expect, test } from 'bun:test';
 import { AccountProfileEditor } from '../src/accounts/profile-editor/editor';
 import type { ProfileAttempt } from '../src/settings/profile-write';
-import type { ProfileValues, ProfileSaveResult } from '../src/settings/profile-data';
+import { observeProfile, type ProfileValues, type ProfileSaveResult } from '../src/settings/profile-data';
 
-const profile: ProfileValues = {
-  accountId: '00000000-0000-7000-8000-000000000002',
-  kind: 'organization',
-  displayName: 'Managed organization',
-  biography: 'Original biography',
-  avatar: null,
-  links: [],
-  publicViews: { posts: false, reviews: true, collections: false, realms: false },
-  speakersListed: false,
-};
+const profile: ProfileValues = observeProfile(
+  {
+    accountId: '00000000-0000-7000-8000-000000000002',
+    kind: 'organization',
+    displayName: 'Managed organization',
+    biography: 'Original biography',
+    avatar: null,
+    links: [],
+    publicViews: { posts: false, reviews: true, collections: false, realms: false },
+    speakersListed: false,
+  },
+  '00000000-0000-7000-8000-000000000001',
+);
 
 test('review captures the exact draft, recoverable refusal keeps it, and unknown submission reconciles before a new command', async () => {
   let current = profile;

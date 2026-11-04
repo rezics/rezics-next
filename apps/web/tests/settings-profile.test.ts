@@ -1,9 +1,9 @@
 import { expect, mock, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
+import { accountProfileEditing, createKernelClient } from '@rezics/client';
 import { idempotencyKeyOf } from '../../../services/kernel/src/http/request.ts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
+import { loadProfileRecord, observeProfile, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
 import type { EditableProfile } from '../src/settings/editable-profile-source';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { EditableProfileReadError } from '../src/settings/editable-profile-source';
@@ -92,7 +92,13 @@ test('profile reads editable values once by immutable id through the authenticat
     expect(request.headers.get('authorization')).toBe('Bearer page-token');
     expect(request.headers.get('cache-control')).toBe('no-store');
     expect(request.cache).toBe('no-store');
-    return Response.json({ profile: nativeProfile }, { headers: { 'cache-control': 'private, no-store' } });
+    return Response.json(
+      {
+        profile: nativeProfile,
+        editing: accountProfileEditing(nativeProfile.id, { id: nativeProfile.id, kind: nativeProfile.kind }),
+      },
+      { headers: { 'cache-control': 'private, no-store' } },
+    );
   });
   const profile = await loadProfileRecord(client, 'Bearer page-token', nativeProfile.id);
   expect(profile).toMatchObject({
@@ -118,7 +124,15 @@ test('profile reads editable values once by immutable id through the authenticat
 
 test('profile save sends only changed fields and an idempotency key, then returns the confirmed values', async () => {
   const { client, calls } = clientFor(() => Response.json({ ...account, displayName: 'Alice A.' }));
-  const before = account as unknown as ProfileValues;
+  const before = observeProfile({
+    accountId: account.id,
+    kind: 'actor',
+    displayName: account.displayName,
+    biography: account.bio,
+    avatar: { media: account.avatar.id },
+    links: account.links,
+    publicViews: account.publicViews,
+  });
   const result = await saveProfileRecord(
     client,
     'Bearer page-token',
@@ -170,12 +184,21 @@ test('public activity patches only the switched key and links reject a sixth row
   const { client, calls } = clientFor(() =>
     Response.json({ ...account, publicViews: { ...account.publicViews, posts: false } }),
   );
+  const activity = observeProfile({
+    accountId: account.id,
+    kind: 'actor',
+    displayName: account.displayName,
+    biography: account.bio,
+    avatar: { media: account.avatar.id },
+    links: account.links,
+    publicViews: account.publicViews,
+  });
   await saveProfileRecord(
     client,
     'Bearer page-token',
     'alice',
-    account as unknown as ProfileValues,
-    { ...account, publicViews: { ...account.publicViews, posts: false } } as unknown as ProfileValues,
+    activity,
+    { ...activity, publicViews: { ...activity.publicViews, posts: false } },
     '123e4567-e89b-42d3-a456-426614174000',
   );
   expect(calls[0]?.body).toEqual({ publicViews: { posts: false } });
@@ -184,14 +207,14 @@ test('public activity patches only the switched key and links reject a sixth row
       client,
       'Bearer page-token',
       'alice',
-      account as unknown as ProfileValues,
+      activity,
       {
-        ...account,
+        ...activity,
         links: Array.from({ length: 6 }, (_, index) => ({
           label: `Link ${index}`,
           url: `https://example.test/${index}`,
         })),
-      } as unknown as ProfileValues,
+      },
       '123e4567-e89b-42d3-a456-426614174001',
     ),
   ).rejects.toThrow();
@@ -200,7 +223,15 @@ test('public activity patches only the switched key and links reject a sixth row
 
 test('removing an avatar sends null and link edits are sent as the complete labelled list', async () => {
   const { client, calls } = clientFor(() => Response.json({ ...account, avatar: null }));
-  const before = account as unknown as ProfileValues;
+  const before = observeProfile({
+    accountId: account.id,
+    kind: 'actor',
+    displayName: account.displayName,
+    biography: account.bio,
+    avatar: { media: account.avatar.id },
+    links: account.links,
+    publicViews: account.publicViews,
+  });
   await saveProfileRecord(
     client,
     'Bearer page-token',
@@ -230,14 +261,23 @@ test('removing an avatar sends null and link edits are sent as the complete labe
 });
 
 test('an organization exposes speakersListed; API refusals retain their status for the form message', async () => {
-  const organization = { ...account, id: 'org', kind: 'organization', speakersListed: false };
+  const organization = observeProfile({
+    accountId: 'org',
+    kind: 'organization',
+    displayName: account.displayName,
+    biography: account.bio,
+    avatar: { media: account.avatar.id },
+    links: account.links,
+    publicViews: account.publicViews,
+    speakersListed: false,
+  });
   const { client, calls } = clientFor(() => Response.json({ ...organization, speakersListed: true }));
   const saved = await saveProfileRecord(
     client,
     'Bearer page-token',
     'org',
-    organization as unknown as ProfileValues,
-    { ...organization, speakersListed: true } as unknown as ProfileValues,
+    organization,
+    { ...organization, speakersListed: true },
     '123e4567-e89b-42d3-a456-426614174000',
   );
   expect(saved).toMatchObject({ ok: true, profile: { speakersListed: true } });
@@ -251,15 +291,15 @@ test('an organization exposes speakersListed; API refusals retain their status f
       refused.client,
       'Bearer page-token',
       'alice',
-      account as unknown as ProfileValues,
-      { ...account, displayName: 'Draft remains' } as unknown as ProfileValues,
+      organization,
+      { ...organization, displayName: 'Draft remains' },
       '123e4567-e89b-42d3-a456-426614174000',
     );
     expect(answer).toMatchObject({ ok: false, status });
   }
 });
 
-const recoveryProfile: ProfileValues = {
+const recoveryProfile: ProfileValues = observeProfile({
   accountId: '019a0000-0000-7000-8000-000000000001',
   kind: 'actor',
   displayName: 'Private name',
@@ -267,7 +307,7 @@ const recoveryProfile: ProfileValues = {
   avatar: null,
   links: [],
   publicViews: { posts: true, reviews: true, collections: true, realms: false },
-};
+});
 const recoveryProblem = {
   type: 'https://rezics.com/problems/dependency_unavailable',
   title: 'Dependency Unavailable',
@@ -397,7 +437,8 @@ test('a thrown native save remains unknown and replays the immutable original wh
   expect(editor.snapshot().readAuthority).toBe('denied');
   expect(editor.snapshot().attempt).toBe(original);
   editor.receive({ ...recoveryProfile, biography: 'Stale cached value' });
-  expect(editor.snapshot().draft?.biography).toBe('Later words');
+  expect(editor.snapshot().draft).toBeNull();
+  expect(editor.snapshot().known).toBeNull();
   editor.unavailable(new Error('Retry-After: 100'));
   expect(editor.snapshot().failure).toBeUndefined();
   editor.retire();

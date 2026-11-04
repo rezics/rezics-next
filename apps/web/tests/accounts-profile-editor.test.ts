@@ -5,7 +5,7 @@ import { newCsrfToken } from '../src/session/csrf';
 import { boundViewer } from '../src/accounts/profile-editor/request';
 import { AccountProfileEditor } from '../src/accounts/profile-editor/editor';
 import { parseSubmission, readTarget, writeTarget } from '../src/accounts/profile-editor/data';
-import type { ProfilePatch, ProfileValues } from '../src/settings/profile-data';
+import { observeProfile, type ProfilePatch, type ProfileValues } from '../src/settings/profile-data';
 
 const accountId = '00000000-0000-7000-8000-000000000002';
 const viewerId = '00000000-0000-7000-8000-000000000001';
@@ -13,24 +13,27 @@ const otherId = '00000000-0000-7000-8000-000000000003';
 const mediaId = '00000000-0000-7000-8000-000000000004';
 const target = { accountId, viewerId };
 function profile(): ProfileValues {
-  return {
-    accountId,
-    kind: 'organization',
-    displayName: 'Managed organization',
-    biography: 'Native biography',
-    avatar: {
-      media: mediaId,
-      width: 96,
-      height: 80,
-      placeholder: { thumbhash: 'native', color: '#123456' },
-      variants: [{ format: 'avif', width: 96 }],
-      focalPoint: null,
-      credit: null,
+  return observeProfile(
+    {
+      accountId,
+      kind: 'organization',
+      displayName: 'Managed organization',
+      biography: 'Native biography',
+      avatar: {
+        media: mediaId,
+        width: 96,
+        height: 80,
+        placeholder: { thumbhash: 'native', color: '#123456' },
+        variants: [{ format: 'avif', width: 96 }],
+        focalPoint: null,
+        credit: null,
+      },
+      links: [{ label: 'Home', url: 'https://example.test/' }],
+      publicViews: { posts: false, reviews: true, collections: false, realms: false },
+      speakersListed: false,
     },
-    links: [{ label: 'Home', url: 'https://example.test/' }],
-    publicViews: { posts: false, reviews: true, collections: false, realms: false },
-    speakersListed: false,
-  };
+    viewerId,
+  );
 }
 // Exercise the real client transport and product controller. These responses are consumer fixtures,
 // not proof of the native permission formula, which remains covered by the existing native oracles.
@@ -52,8 +55,8 @@ function boundary() {
       if (request.method === 'GET') {
         expect(path).toBe(`/v1/accounts/${accountId}/profile`);
         if (readStatus !== 200) return Response.json({ code: 'forbidden' }, { status: readStatus });
-        const { accountId: id, biography: bio, ...fields } = current;
-        return Response.json(readOverride ?? { profile: { id, handle: null, bio, ...fields } });
+        const { accountId: id, biography: bio, editing, ...fields } = current;
+        return Response.json(readOverride ?? { profile: { id, handle: null, bio, ...fields }, editing });
       }
       expect(request.method).toBe('PATCH');
       expect(path).toBe(`/v1/accounts/${accountId}`);

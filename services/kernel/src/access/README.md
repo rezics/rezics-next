@@ -195,6 +195,9 @@ completed projection bytes are measured directly. Witness work is zero: Access d
 - `account-viewer-actions.sql`: N full keys, N unique account candidates plus N generated input rows, at most
   N output rows, N point seeks plus the statement point. UUIDs are at most 36 ASCII bytes, positive PostgreSQL
   bigint text at most 19, and kind/state are schema-closed enums. Missing rows retain the entire 2N plan charge.
+- `account-edit-profile-read.sql` (`account-profile`): one full-key active unfenced account, one seek plus the
+  statement point, at most one output row. Closed private fields, never stored avatar URLs. Missing rows retain
+  the candidate charge.
 - `gates/opening-read.sql`: one scalar time row and one exact group/time nonoverlapping opening candidate;
   two plan rows and one key seek plus the statement point. Opening output is a boolean and timestamp.
 - `gates/opening-partition-read.sql`: one partition primary-key candidate, one seek plus the statement point;
@@ -2209,16 +2212,33 @@ work and no additional relation or growth check. Existing claim storage bounds r
 ### Public identity read
 
 `GET /v1/accounts/{accountId}/profile` (`account.read_editable_profile`) returns the private editable
-`{ profile }` source by full account key, including handleless accounts. It requires `updateAccount`'s native
+`{ profile, editing }` source by full account key, including handleless accounts. It requires `updateAccount`'s native
 authority: `account:update` on an ordinary account, or `account:manage` on an operated actor's current operator.
 Preparation releases foreign evidence before checkout; the operator check is separately released and the subject
 snapshot confirms the exact binding. Current viewer, scope, principal, state and fences still apply. Unknown,
 inactive, fenced and denied subjects return no profile (403); authentication failures retain 401. Normal platform
 admission precedes the handler. This GET has no write-rate declaration or command receipt. Responses use
-`private, no-store`. The closed DTO contains `id`, `kind`, nullable current `handle`, `displayName`, `bio`, `links`,
+`private, no-store`. The closed `profile` contains `id`, `kind`, nullable current `handle`, `displayName`, `bio`, `links`,
 Content's current `AvatarSummary` (or null), four `publicViews` flags and organization-only `speakersListed`.
 Missing/malformed visibility values fail closed to false; no proof or stored avatar URL is returned. Former handles
 are never read keys. Public identity and discovery projections are independent.
+
+`editing` is a closed observation for this mounted viewer and target: `viewer.accountId`, `target.{accountId,kind}`
+and field advice for `displayName`, `biography`, avatar reference, `links`, `publicViews` and organization-only
+`speakersListed`. Limits are the command's UTF-16 text budget (4096), five links, 64-code-point labels and 2048-code-point
+HTTPS URLs. The handle is omitted because it is immutable here. A successful GET still requires `account:update`;
+advice is not a readable-but-noneditable grant, a second authorization engine or a durable capability.
+Command-time checks remain mandatory. Avatar advice admits changing the stored reference; media upload stays with Content.
+
+Fixed owned work, excluding reused Access preparation/formula: one pool checkout, begin/commit and reserved rollback
+controls, one `account-profile` full-key statement, at most one Content avatar-summary owner envelope, and closed
+serialization of `{profile,editing}`. Failure rolls back and burns the reserved envelope. Unrelated account
+populations do not change this bound.
+
+- `account-profile.sql` (`account-edit-profile-read.sql`): one `account_pkey(route, account_id)` candidate, one
+  seek plus the statement point. Output is UUIDs, kind, nullable handle (64), display name and biography (4096),
+  five closed links, avatar UUID, four view flags, organization speakers flag and operator UUID. Missing rows
+  retain the candidate charge. No stored avatar URL is projected.
 
 `PATCH /v1/accounts/{accountId}` (`account.update`, action `account:update`) updates the public profile through
 `updateAccount`. It accepts a nonempty partial patch of `displayName`, `biography`, `avatar`, `links`, `publicViews`

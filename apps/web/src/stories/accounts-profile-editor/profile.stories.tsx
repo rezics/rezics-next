@@ -3,18 +3,21 @@ import { useState } from 'react';
 import { AccountProfileEditor } from '../../accounts/profile-editor/editor';
 import { AccountProfileView } from '../../accounts/profile-editor/page';
 import type { Failure, ProfilePage } from '../../accounts/profile-editor/data';
-import type { ProfileValues } from '../../settings/profile-data';
+import { observeProfile, type ProfileValues } from '../../settings/profile-data';
 
-const profile: ProfileValues = {
-  accountId: '00000000-0000-7000-8000-000000000002',
-  kind: 'organization',
-  displayName: 'Managed organization',
-  biography: 'Organization profile',
-  avatar: null,
-  links: [],
-  publicViews: { posts: false, reviews: true, collections: false, realms: false },
-  speakersListed: false,
-};
+const profile: ProfileValues = observeProfile(
+  {
+    accountId: '00000000-0000-7000-8000-000000000002',
+    kind: 'organization',
+    displayName: 'Managed organization',
+    biography: 'Organization profile',
+    avatar: null,
+    links: [],
+    publicViews: { posts: false, reviews: true, collections: false, realms: false },
+    speakersListed: false,
+  },
+  '00000000-0000-7000-8000-000000000001',
+);
 function Example({ failure, confirmation = false }: { failure?: Failure; confirmation?: boolean }) {
   const [editor] = useState(() => {
     const editor = new AccountProfileEditor(

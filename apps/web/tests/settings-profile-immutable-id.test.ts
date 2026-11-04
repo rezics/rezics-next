@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   loadProfileRecord,
+  observeProfile,
   saveProfileRecord,
   type ProfilePatch,
   type ProfileValues,
@@ -14,7 +15,7 @@ import { EditableProfileReadError } from '../src/settings/editable-profile-sourc
 const accountId = '019a0000-0000-7000-8000-000000000001';
 const mediaId = '019a0000-0000-7000-8000-000000000002';
 function source(kind: ProfileValues['kind'] = 'actor'): ProfileValues {
-  return {
+  return observeProfile({
     accountId,
     kind,
     displayName: null,
@@ -34,7 +35,7 @@ function source(kind: ProfileValues['kind'] = 'actor'): ProfileValues {
     links: [{ label: 'Notes', url: 'https://example.test/notes' }],
     publicViews: { posts: false, reviews: true, collections: false, realms: true },
     ...(kind === 'organization' ? { speakersListed: false } : {}),
-  };
+  });
 }
 
 // Transport responses exercise the consumer boundary; native authority remains the Accounts API's responsibility.
@@ -54,8 +55,8 @@ function boundary(authorization: string, initial = source()) {
       expect(url.search).toBe('');
       if (request.method === 'GET') {
         expect(url.pathname).toBe(`/v1/accounts/${accountId}/profile`);
-        const { accountId: id, biography: bio, ...fields } = current;
-        return Response.json(readBody ?? { profile: { id, handle: null, bio, ...fields } }, {
+        const { accountId: id, biography: bio, editing, ...fields } = current;
+        return Response.json(readBody ?? { profile: { id, handle: null, bio, ...fields }, editing }, {
           status: readStatus,
           headers: { 'cache-control': 'private, no-store' },
         });

@@ -1,15 +1,29 @@
-import { withProfileDeadline } from './profile-request-deadline';
-import type { KernelClient } from '@rezics/client';
+import {
+  PROFILE_LINK_LABEL_MAX_LENGTH,
+  PROFILE_LINK_MAX_ITEMS,
+  PROFILE_LINK_URL_MAX_LENGTH,
+  PROFILE_PUBLIC_VIEW_FLAGS,
+  PROFILE_TEXT_MAX_LENGTH,
+  type AccountProfileEditing,
+  type KernelClient,
+} from '@rezics/client';
 import * as v from 'valibot';
 import { MediaProblem } from '../media/kernel';
+import { withProfileDeadline } from './profile-request-deadline';
 import type { NativePreferenceFailure } from './preferences';
 
 type ProfileRead = ReturnType<KernelClient['accounts']>['profile']['get'];
 export type EditableProfile = NonNullable<Awaited<ReturnType<ProfileRead>>['data']>['profile'];
+export type EditableProfileEnvelope = { profile: EditableProfile; editing: AccountProfileEditing };
 
 /** The private source uses the same server-held credential and account key as the existing PATCH. */
 export type EditableProfileSource = {
-  read: (authorization: string, accountId: string, signal?: AbortSignal) => Promise<EditableProfile>;
+  read: (
+    authorization: string,
+    accountId: string,
+    viewerId: string,
+    signal?: AbortSignal,
+  ) => Promise<EditableProfileEnvelope>;
 };
 
 export type EditableProfileFailure = NativePreferenceFailure & { status: number };
@@ -63,7 +77,7 @@ const fields = {
   handle: v.nullable(v.string()),
   displayName: v.nullable(v.string()),
   bio: v.nullable(v.string()),
-  links: v.pipe(v.array(v.strictObject({ label: v.string(), url: v.string() })), v.maxLength(5)),
+  links: v.pipe(v.array(v.strictObject({ label: v.string(), url: v.string() })), v.maxLength(PROFILE_LINK_MAX_ITEMS)),
   avatar: v.nullable(
     v.strictObject({
       media: v.string(),
@@ -82,17 +96,61 @@ const fields = {
     realms: v.boolean(),
   }),
 };
-// Mirror the integrated route's closed actor/organization bodies, including Content's actual avatar summary.
-const response = v.strictObject({
-  profile: v.variant('kind', [
-    v.strictObject({ ...fields, kind: v.literal('actor') }),
-    v.strictObject({ ...fields, kind: v.literal('organization'), speakersListed: v.boolean() }),
+const applicable = v.literal(true);
+const textAdvice = v.strictObject({ applicable, maxLength: v.literal(PROFILE_TEXT_MAX_LENGTH) });
+const avatarAdvice = v.strictObject({ applicable });
+const linksAdvice = v.strictObject({
+  applicable,
+  maxItems: v.literal(PROFILE_LINK_MAX_ITEMS),
+  labelMaxLength: v.literal(PROFILE_LINK_LABEL_MAX_LENGTH),
+  urlMaxLength: v.literal(PROFILE_LINK_URL_MAX_LENGTH),
+});
+const publicViewsAdvice = v.strictObject({
+  applicable,
+  flags: v.tuple([
+    v.literal(PROFILE_PUBLIC_VIEW_FLAGS[0]),
+    v.literal(PROFILE_PUBLIC_VIEW_FLAGS[1]),
+    v.literal(PROFILE_PUBLIC_VIEW_FLAGS[2]),
+    v.literal(PROFILE_PUBLIC_VIEW_FLAGS[3]),
   ]),
 });
+const identityAdvice = {
+  displayName: textAdvice,
+  biography: textAdvice,
+  avatar: avatarAdvice,
+  links: linksAdvice,
+  publicViews: publicViewsAdvice,
+};
+const actorProfile = v.strictObject({ ...fields, kind: v.literal('actor') });
+const organizationProfile = v.strictObject({ ...fields, kind: v.literal('organization'), speakersListed: v.boolean() });
+const actorEditing = v.strictObject({
+  viewer: v.strictObject({ accountId: v.string() }),
+  target: v.strictObject({ accountId: v.string(), kind: v.literal('actor') }),
+  fields: v.strictObject(identityAdvice),
+});
+const organizationEditing = v.strictObject({
+  viewer: v.strictObject({ accountId: v.string() }),
+  target: v.strictObject({ accountId: v.string(), kind: v.literal('organization') }),
+  fields: v.strictObject({ ...identityAdvice, speakersListed: v.strictObject({ applicable }) }),
+});
+// Mirror the integrated route's closed actor/organization bodies, including Content's actual avatar summary.
+const response = v.strictObject({
+  profile: v.variant('kind', [actorProfile, organizationProfile]),
+  editing: v.union([actorEditing, organizationEditing]),
+});
+
+function sameAdvice(profile: EditableProfile, editing: AccountProfileEditing, viewerId: string, accountId: string) {
+  return (
+    profile.id === accountId &&
+    editing.viewer.accountId === viewerId &&
+    editing.target.accountId === profile.id &&
+    editing.target.kind === profile.kind
+  );
+}
 
 export function createEditableProfileSource(client: KernelClient): EditableProfileSource {
   return {
-    async read(authorization, accountId, signal) {
+    async read(authorization, accountId, viewerId, signal) {
       const result = await withProfileDeadline(
         (bounded) =>
           client.accounts({ accountId }).profile.get({
@@ -105,9 +163,9 @@ export function createEditableProfileSource(client: KernelClient): EditableProfi
         const failure = nativeProfileFailure(result.status, result.error?.value, result.headers);
         throw new EditableProfileReadError(result.status, Object.keys(failure).length > 1 ? failure : undefined);
       }
-      const { profile } = v.parse(response, result.data);
-      if (profile.id !== accountId) throw new Error('Profile unavailable');
-      return profile;
+      const envelope = v.parse(response, result.data);
+      if (!sameAdvice(envelope.profile, envelope.editing, viewerId, accountId)) throw new Error('Profile unavailable');
+      return envelope;
     },
   };
 }

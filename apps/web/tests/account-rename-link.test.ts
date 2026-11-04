@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
+import { accountProfileEditing, createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { authManagementPageHref } from '../src/session/auth-page-routes';
@@ -62,6 +62,7 @@ function transport(handle: string | null, resource?: object, profileId = account
           avatar: null,
           publicViews: { posts: true, reviews: true, collections: true, realms: true },
         },
+        editing: accountProfileEditing(accountId, { id: profileId, kind: 'actor' }),
       });
     }) as typeof fetch,
   });
@@ -193,6 +194,7 @@ test('native profile and capability failures retain bounded status/problem/delay
                   avatar: null,
                   publicViews: { posts: true, reviews: true, collections: true, realms: true },
                 },
+                editing: accountProfileEditing(accountId, { id: accountId, kind: 'actor' }),
               });
         }) as typeof fetch,
       });

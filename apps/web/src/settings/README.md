@@ -2,6 +2,14 @@
 
 Embedded inventory, detail, action-entry and rename-entry reads use a ten-second deadline including response bodies, composed with caller cancellation; timeout releases pending state into the existing localized retry views, and only deliberate recovery rechecks the current account. Independent feeds retain valid cursors and usable pages on transient failure; session retirement discards late replies. Cancellation never proves that a dispatched command had no effect and never replays a mutation.
 
+## Private profile editor
+
+Settings reads the current private profile through `GET /v1/accounts/{accountId}/profile` and keeps that closed `{ profile, editing }` envelope through the decoder, server function and shared editor. `editing` is an observation for one mounted viewer and target: admitted field applicability and the command's UTF-16 text, link and public-activity limits. A successful GET still requires `account:update`; advice is not a grant. The handle stays on the existing rename destination. Avatar media stays with Content; this page only changes the stored reference.
+
+Wrong-viewer, wrong-target, missing or malformed advice is rejected. Denial, unknown session and retirement clear private values and advice together. A 503 on the same actor keeps the draft. Advice that changes after a refresh leaves any retained draft in review. A PATCH acknowledgement is not a confirmed snapshot: the editor always follows with a fresh GET and keeps the original patch and key while the outcome is uncertain.
+
+**Decision:** Private Settings editing consumes the native GET's closed `{profile, editing}` observation for the mounted viewer and target; command-time checks remain mandatory.
+
 Applicant verification requests use the same ten-second account budget, including headers and bodies, with caller cancellation and explicit recovery only. Review and command readback never await optional subject titles: a separate cancellable title read enhances the existing generic label. Subject suggestions require a fresh caller-bound eligibility release; unavailable reads remain retryable failures, never empty or definitive ineligibility. Uncertain commands retain their exact original input and key, and cancellation grants no replay or completion authority. Reviewer transport remains separate.
 
 ## Watches

@@ -2,11 +2,11 @@ import { expect, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { AccountProfileEditor } from '../../src/accounts/profile-editor/editor';
 import { writeTarget } from '../../src/accounts/profile-editor/data';
-import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../../src/settings/profile-data';
+import { loadProfileRecord, observeProfile, saveProfileRecord, type ProfileValues } from '../../src/settings/profile-data';
 import { withProfileDeadline } from '../../src/settings/profile-request-deadline';
 
 const accountId = '019a0000-0000-7000-8000-000000000001';
-const profile: ProfileValues = {
+const profile: ProfileValues = observeProfile({
   accountId,
   kind: 'actor',
   displayName: 'Before',
@@ -14,7 +14,7 @@ const profile: ProfileValues = {
   avatar: null,
   links: [],
   publicViews: { posts: false, reviews: false, collections: false, realms: false },
-};
+});
 const after = { ...profile, displayName: 'After' };
 const never = <T>(): Promise<T> => new Promise(() => {});
 async function fast(run: () => Promise<void>) {
@@ -40,13 +40,16 @@ test('native profile GET and both PATCH adapters bound stalled headers and bodie
           if (!reading && request.method === 'GET')
             return Response.json({
               profile: {
-                ...profile,
                 id: accountId,
-                accountId: undefined,
+                kind: profile.kind,
                 handle: null,
+                displayName: profile.displayName,
                 bio: null,
-                biography: undefined,
+                links: profile.links,
+                avatar: profile.avatar,
+                publicViews: profile.publicViews,
               },
+              editing: profile.editing,
             });
           return phase === 'headers'
             ? never<Response>()

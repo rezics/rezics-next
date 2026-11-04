@@ -48,6 +48,15 @@ export type {
   RealmClaimReviewQuery,
 } from './kernel/community/claim-review-page';
 export type { PublicationCommand, RealmPublicationPreparation } from './kernel/community/publication-preparation.ts';
+export {
+  accountProfileEditing,
+  PROFILE_LINK_LABEL_MAX_LENGTH,
+  PROFILE_LINK_MAX_ITEMS,
+  PROFILE_LINK_URL_MAX_LENGTH,
+  PROFILE_PUBLIC_VIEW_FLAGS,
+  PROFILE_TEXT_MAX_LENGTH,
+  type AccountProfileEditing,
+} from './kernel/access/account-edit-profile-contract.ts';
 
 type Routes = KernelType['~Routes']['v1'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];

@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
-import type { ProfileValues } from '../src/settings/profile-data';
+import { observeProfile, type ProfileValues } from '../src/settings/profile-data';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -27,7 +27,7 @@ test('explicit activity save recovers refusal and uncertainty without losing lat
   const { createRoot } = await import('react-dom/client');
   const { ProfileCard } = await import('../src/settings/profile');
   const { PublicViewsCard } = await import('../src/settings/public-views');
-  let current: ProfileValues = {
+  let current: ProfileValues = observeProfile({
     accountId: '019a0000-0000-7000-8000-000000000001',
     kind: 'organization',
     displayName: 'Original',
@@ -36,7 +36,7 @@ test('explicit activity save recovers refusal and uncertainty without losing lat
     links: [],
     speakersListed: true,
     publicViews: { posts: true, reviews: true, collections: true, realms: true },
-  };
+  });
   const sent: ProfileAttempt[] = [];
   const editor = new ProfileEditor(
     {

@@ -2,7 +2,12 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode, useLayoutEffect, useState } from 'react';
 import * as start from '../.storybook/react-start';
-import type { ProfileReadResult, ProfileSaveResult, ProfileValues } from '../src/settings/profile-data';
+import {
+  observeProfile,
+  type ProfileReadResult,
+  type ProfileSaveResult,
+  type ProfileValues,
+} from '../src/settings/profile-data';
 import type { ProfileAttempt, ProfileEditor } from '../src/settings/profile-write';
 
 function deferred<T>() {
@@ -60,16 +65,17 @@ const session = (subject = accountId, csrfToken: string | null = token) => ({
   subject,
   csrfToken,
 });
-const profile = (subject = accountId): ProfileValues => ({
-  accountId: subject,
-  kind: 'organization',
-  displayName: 'Current profile',
-  biography: 'Current biography',
-  avatar: null,
-  links: [],
-  publicViews: { posts: true, reviews: false, collections: true, realms: false },
-  speakersListed: false,
-});
+const profile = (subject = accountId): ProfileValues =>
+  observeProfile({
+    accountId: subject,
+    kind: 'organization',
+    displayName: 'Current profile',
+    biography: 'Current biography',
+    avatar: null,
+    links: [],
+    publicViews: { posts: true, reviews: false, collections: true, realms: false },
+    speakersListed: false,
+  });
 
 // Real installed QueryClient events and mounted production callers; only BFF/platform transports are replaced.
 // This campaign and its growth assertions are authored UNRUN. createRoot is not hydration or native authority proof.

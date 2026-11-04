@@ -5,7 +5,7 @@ import { Field, FieldContent, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { ProfileFeedback } from './profile';
-import { profileChanges } from './profile-data';
+import { profileChanges, profileSpeakersApplicable } from './profile-data';
 import type { ProfileEditor } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import { usePreferenceRetry } from './preference-failure-retry';
@@ -38,7 +38,7 @@ export function PublicViewsCard({
       profileChanges(state.known, {
         ...state.known,
         publicViews: profile.publicViews,
-        ...(profile.kind === 'organization' ? { speakersListed: profile.speakersListed } : {}),
+        ...(profileSpeakersApplicable(profile) ? { speakersListed: profile.speakersListed } : {}),
       }),
     ).length > 0;
   return (
@@ -61,7 +61,10 @@ export function PublicViewsCard({
         </div>
         {profile ? (
           <>
-            {(['posts', 'reviews', 'collections', 'realms'] as const).map((view) => (
+            {(profile.editing.fields.publicViews.applicable
+              ? profile.editing.fields.publicViews.flags
+              : ([] as const)
+            ).map((view) => (
               <label key={view} htmlFor={`${ids}-${view}`} className="block min-h-11 w-full py-3">
                 <Field orientation="horizontal">
                   <FieldContent className="min-w-0">
@@ -78,7 +81,7 @@ export function PublicViewsCard({
                 </Field>
               </label>
             ))}
-            {profile.kind === 'organization' ? (
+            {profileSpeakersApplicable(profile) ? (
               <label htmlFor={`${ids}-speakers`} className="block min-h-11 w-full py-3">
                 <Field orientation="horizontal">
                   <FieldContent className="min-w-0">

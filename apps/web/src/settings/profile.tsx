@@ -187,6 +187,7 @@ export function ProfileCard({
   const controls = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLDivElement | null>>({});
   const pendingFocus = useRef<string | undefined>(undefined);
   const submittedDraft = useRef<typeof profile>(null);
+  const advice = profile?.editing.fields;
   const validationErrors = profile ? profileFieldErrors(profile) : {};
   const errors = profile && validationAttempt > 0 ? validationErrors : {};
   useEffect(() => {
@@ -251,8 +252,8 @@ export function ProfileCard({
             ? m.settings_profile_unsaved()
             : null}
         </div>
-        {profile ? (
-          <form
+        {profile && advice ? (
+          <form>
             className="space-y-5"
             noValidate
             aria-busy={busy || uploading}
@@ -310,8 +311,8 @@ export function ProfileCard({
                   controls.current.displayName = control;
                 }}
                 value={profile.displayName ?? ''}
-                maxLength={4096}
-                disabled={closed}
+                maxLength={advice.displayName.maxLength}
+                disabled={closed || !advice.displayName.applicable}
                 aria-invalid={!!errors.displayName}
                 aria-describedby={errors.displayName ? `${ids}-displayName-error` : undefined}
                 onChange={(event) => editor.edit({ displayName: event.target.value || null })}
@@ -327,20 +328,22 @@ export function ProfileCard({
                 }}
                 value={profile.biography ?? ''}
                 rows={6}
-                maxLength={4096}
-                disabled={closed}
+                maxLength={advice.biography.maxLength}
+                disabled={closed || !advice.biography.applicable}
                 aria-invalid={!!errors.biography}
                 aria-describedby={errors.biography ? `${ids}-biography-error` : undefined}
                 onChange={(event) => editor.edit({ biography: event.target.value || null })}
               />
               {fieldError('biography')}
             </label>
-            <ProfileAvatar
-              avatar={profile.avatar}
-              known={state.known?.avatar ?? null}
-              upload={avatar}
-              disabled={closed || busy || !!state.attempt}
-            />
+            {advice.avatar.applicable ? (
+              <ProfileAvatar
+                avatar={profile.avatar}
+                known={state.known?.avatar ?? null}
+                upload={avatar}
+                disabled={closed || busy || !!state.attempt}
+              />
+            ) : null}
             <div
               id={`${ids}-links`}
               ref={(control) => {
@@ -359,11 +362,14 @@ export function ProfileCard({
               {fieldError('links')}
               <ProfileLinks
                 links={profile.links}
-                disabled={closed}
+                disabled={closed || !advice.links.applicable}
                 onChange={(links) => editor.edit({ links })}
                 ids={ids}
                 errors={errors}
                 fieldError={fieldError}
+                maxItems={advice.links.maxItems}
+                labelMaxLength={advice.links.labelMaxLength}
+                urlMaxLength={advice.links.urlMaxLength}
               />
             </div>
             {previewActive && profile && !closed ? (
@@ -373,7 +379,7 @@ export function ProfileCard({
                 avatar={profile.avatar}
                 localAvatarUrl={avatar.state.url}
                 hasUnsavedChanges={changed || !!avatar.state.url}
-                links={profile.links.slice(0, 5).map((link, index) => ({
+                links={profile.links.slice(0, advice.links.maxItems).map((link, index) => ({
                   label: link.label,
                   url: link.url,
                   valid: !validationErrors[`label-${index}`] && !validationErrors[`url-${index}`],

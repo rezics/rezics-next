@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
+import { loadProfileRecord, observeProfile, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
 import {
   ProfileEditor,
   profileFieldErrors,
@@ -11,7 +11,7 @@ import { parseProfileWrite } from '../src/settings/profile-write-input';
 import { profileNeedsNavigationDecision } from '../src/settings/profile-navigation';
 
 function initial(): ProfileValues {
-  return {
+  return observeProfile({
     accountId: '019a0000-0000-7000-8000-000000000001',
     kind: 'actor',
     displayName: 'Avery',
@@ -27,7 +27,7 @@ function initial(): ProfileValues {
     },
     links: [{ label: 'Home', url: 'https://example.test' }],
     publicViews: { posts: true, reviews: true, collections: true, realms: false },
-  };
+  });
 }
 function api(options: { handleless?: boolean; unavailable?: boolean; compactHandle?: boolean } = {}) {
   let current = initial();
@@ -77,6 +77,7 @@ function api(options: { handleless?: boolean; unavailable?: boolean; compactHand
                 links: current.links,
                 publicViews: current.publicViews,
               },
+              editing: current.editing,
             },
         { headers: { 'cache-control': 'private, no-store' } },
       );

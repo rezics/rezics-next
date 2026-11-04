@@ -2,7 +2,7 @@ import { withProfileDeadline } from '../../settings/profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import { EditableProfileReadError } from '../../settings/editable-profile-source';
-import { loadProfileRecord, type ProfilePatch, type ProfileValues } from '../../settings/profile-data';
+import { loadProfileRecord, observeProfile, type ProfilePatch, type ProfileValues } from '../../settings/profile-data';
 import { profileFieldErrors } from '../../settings/profile-write';
 
 const id = v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
@@ -41,15 +41,17 @@ export function parseSubmission(input: unknown): Submission {
   if (
     parsed.patch.links &&
     Object.keys(
-      profileFieldErrors({
-        accountId: parsed.accountId,
-        kind: 'actor',
-        displayName: null,
-        biography: null,
-        avatar: null,
-        links: parsed.patch.links,
-        publicViews: { posts: false, reviews: false, collections: false, realms: false },
-      }),
+      profileFieldErrors(
+        observeProfile({
+          accountId: parsed.accountId,
+          kind: 'actor',
+          displayName: null,
+          biography: null,
+          avatar: null,
+          links: parsed.patch.links,
+          publicViews: { posts: false, reviews: false, collections: false, realms: false },
+        }),
+      ),
     ).length
   )
     throw new Error('Invalid profile links');
@@ -68,7 +70,7 @@ export async function readTarget(
   signal?: AbortSignal,
 ): Promise<ProfilePage> {
   try {
-    const profile = await loadProfileRecord(client, authorization, target.accountId, undefined, signal);
+    const profile = await loadProfileRecord(client, authorization, target.accountId, undefined, signal, target.viewerId);
     return { state: 'ready', viewerId: target.viewerId, profile };
   } catch (error) {
     return { state: error instanceof EditableProfileReadError ? profileFailure(error.status) : 'unavailable' };

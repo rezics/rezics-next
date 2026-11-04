@@ -3,11 +3,11 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ProfileLinks } from '../src/settings/profile-links';
 import { ProfileEditor, profileFieldErrors, type ProfileAttempt } from '../src/settings/profile-write';
-import type { ProfileValues } from '../src/settings/profile-data';
+import { observeProfile, type ProfileValues } from '../src/settings/profile-data';
 import { m } from '../src/paraglide/messages.js';
 
 const duplicate = { label: 'Notes', url: 'https://example.test/notes' };
-const initial: ProfileValues = {
+const initial: ProfileValues = observeProfile({
   accountId: '019a0000-0000-7000-8000-000000000001',
   kind: 'actor',
   displayName: 'Avery',
@@ -15,7 +15,7 @@ const initial: ProfileValues = {
   avatar: null,
   links: Array.from({ length: 5 }, () => ({ ...duplicate })),
   publicViews: { posts: true, reviews: true, collections: true, realms: false },
-};
+});
 
 test('five duplicate links remain separate named rows with visible labels and addressable validation fields', () => {
   const links = initial.links.map((link, index) => (index === 2 ? { ...link, url: 'http://example.test' } : link));
@@ -30,6 +30,9 @@ test('five duplicate links remain separate named rows with visible labels and ad
       ids: 'profile',
       errors,
       fieldError: (field) => (errors[field] ? createElement('p', { id: `profile-${field}-error` }, 'Use HTTPS') : null),
+      maxItems: initial.editing.fields.links.maxItems,
+      labelMaxLength: initial.editing.fields.links.labelMaxLength,
+      urlMaxLength: initial.editing.fields.links.urlMaxLength,
     }),
   );
   expect(html.match(/<fieldset\b/g)).toHaveLength(5);

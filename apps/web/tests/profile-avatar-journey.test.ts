@@ -3,7 +3,7 @@ import { spyOn } from 'bun:test';
 import { UploadRefusal, type UploadRefusalReason } from '../src/threads/upload';
 import type { AvatarResume } from '../src/settings/profile-avatar-upload';
 import { ProfileAvatarUpload, type AvatarUpload } from '../src/settings/profile-avatar-upload';
-import type { ProfileValues } from '../src/settings/profile-data';
+import { observeProfile, type ProfileValues } from '../src/settings/profile-data';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
 
 function deferred<T>() {
@@ -27,7 +27,7 @@ function summary(media: string) {
   };
 }
 function profile(accountId = 'account-one'): ProfileValues {
-  return {
+  return observeProfile({
     accountId,
     kind: 'actor',
     displayName: 'Avery',
@@ -35,7 +35,7 @@ function profile(accountId = 'account-one'): ProfileValues {
     avatar: summary('saved-avatar'),
     links: [{ label: 'Home', url: 'https://example.test' }],
     publicViews: { posts: true, reviews: true, collections: true, realms: false },
-  };
+  });
 }
 const file = () => new File(['local bytes'], 'private-file-name.png', { type: 'image/png' });
 function uploads(editor: ProfileEditor) {

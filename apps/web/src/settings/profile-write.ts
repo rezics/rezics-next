@@ -1,7 +1,9 @@
 import { withProfileDeadline } from './profile-request-deadline';
 import {
+  profileAdviceChanged,
   profileChanges,
   profileReadDenied,
+  profileSpeakersApplicable,
   type ProfilePatch,
   type ProfileSaveResult,
   type ProfileValues,
@@ -60,17 +62,19 @@ export function rebaseProfile(base: ProfileValues, draft: ProfileValues, current
     ...(patch.links !== undefined ? { links: draft.links } : {}),
     publicViews: { ...current.publicViews, ...patch.publicViews },
     ...(patch.speakersListed !== undefined ? { speakersListed: patch.speakersListed } : {}),
+    editing: current.editing,
   };
 }
 
 export function profileFieldErrors(profile: ProfileValues): Record<string, 'text' | 'label' | 'url' | 'links'> {
   const errors: ReturnType<typeof profileFieldErrors> = {};
-  if ((profile.displayName?.length ?? 0) > 4096) errors.displayName = 'text';
-  if ((profile.biography?.length ?? 0) > 4096) errors.biography = 'text';
-  if (profile.links.length > 5) errors.links = 'links';
+  const { displayName, biography, links } = profile.editing.fields;
+  if ((profile.displayName?.length ?? 0) > displayName.maxLength) errors.displayName = 'text';
+  if ((profile.biography?.length ?? 0) > biography.maxLength) errors.biography = 'text';
+  if (profile.links.length > links.maxItems) errors.links = 'links';
   profile.links.forEach((link, index) => {
     // A label must name the link; keep its exact text in the draft when validation fails.
-    if (!link.label.trim() || Array.from(link.label).length > 64) errors[`label-${index}`] = 'label';
+    if (!link.label.trim() || Array.from(link.label).length > links.labelMaxLength) errors[`label-${index}`] = 'label';
     try {
       const url = new URL(link.url);
       if (
@@ -78,7 +82,7 @@ export function profileFieldErrors(profile: ProfileValues): Record<string, 'text
         !url.hostname ||
         url.username ||
         url.password ||
-        Array.from(link.url).length > 2048 ||
+        Array.from(link.url).length > links.urlMaxLength ||
         /[\u0000-\u0020\u007f]/.test(link.url) ||
         !/^https:\/\/[^/@\s]+(?:[/?#]|$)/i.test(link.url)
       )
@@ -182,7 +186,9 @@ export class ProfileEditor {
       phase: this.state.attempt ? 'uncertain' : 'unavailable',
       readStatus: 'failed',
       failure: failure ? { ...failure, message: '' } : undefined,
-      ...(denied ? { readAuthority: 'denied' as const } : {}),
+      ...(denied
+        ? { readAuthority: 'denied' as const, known: null, draft: null }
+        : {}),
     });
   }
   edit(patch: Partial<ProfileValues>) {
@@ -192,6 +198,7 @@ export class ProfileEditor {
       ...patch,
       accountId: this.state.draft.accountId,
       kind: this.state.draft.kind,
+      editing: this.state.draft.editing,
     };
     if (this.pending || this.state.attempt) {
       const changes = profileChanges(this.state.draft, draft);
@@ -234,11 +241,13 @@ export class ProfileEditor {
             biography: draft.biography,
             avatar: draft.avatar,
             links: draft.links,
+            editing: known.editing,
           }
         : {
             ...known,
             publicViews: draft.publicViews,
-            ...(known.kind === 'organization' ? { speakersListed: draft.speakersListed } : {}),
+            ...(profileSpeakersApplicable(known) ? { speakersListed: draft.speakersListed } : {}),
+            editing: known.editing,
           };
     if (scope === 'profile' && Object.keys(profileFieldErrors(after)).length) {
       this.update({ phase: 'review', scope });
@@ -324,13 +333,14 @@ export class ProfileEditor {
         draft,
       );
       const resolved = acknowledged || confirmed;
+      const dirty = Object.keys(profileChanges(current, nextDraft)).length > 0;
       this.update({
         known: current,
         draft: nextDraft,
         attempt: resolved ? null : attempt,
         phase: !resolved
           ? 'uncertain'
-          : confirmed && !Object.keys(profileChanges(current, nextDraft)).length
+          : confirmed && !dirty && !profileAdviceChanged(known, current)
             ? 'saved'
             : 'review',
         failure: undefined,
@@ -339,10 +349,11 @@ export class ProfileEditor {
       });
     } else {
       const nextDraft = this.preserveLaterEdits(known ? rebaseProfile(known, draft, current) : current, draft);
+      const dirty = Object.keys(profileChanges(current, nextDraft)).length > 0;
       this.update({
         known: current,
         draft: nextDraft,
-        phase: Object.keys(profileChanges(current, nextDraft)).length ? 'review' : 'idle',
+        phase: dirty || profileAdviceChanged(known, current) ? 'review' : 'idle',
         failure: undefined,
         readAuthority: 'allowed',
         readStatus: undefined,

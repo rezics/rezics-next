@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
+import { accountProfileEditing, createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SessionEnv } from '../src/session/client';
@@ -37,6 +37,7 @@ test('ordinary settings and recovery stay GET-only while the isolated rename rea
             avatar: null,
             publicViews: { posts: true, reviews: true, collections: true, realms: true },
           },
+          editing: accountProfileEditing(accountId, { id: accountId, kind: 'actor' }),
         });
       expect(path).toBe('/v1/viewerActions');
       expect(request.method).toBe('POST');

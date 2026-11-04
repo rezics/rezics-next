@@ -2,7 +2,12 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, createElement, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
-import type { ProfileReadResult, ProfileSaveResult, ProfileValues } from '../src/settings/profile-data';
+import {
+  observeProfile,
+  type ProfileReadResult,
+  type ProfileSaveResult,
+  type ProfileValues,
+} from '../src/settings/profile-data';
 import type { ProfileAttempt, ProfileEditor } from '../src/settings/profile-write';
 
 type Deferred<T> = {
@@ -73,7 +78,7 @@ mock.module('../src/threads/upload', () => ({
 }));
 
 function profile(accountId = accountA): ProfileValues {
-  return {
+  return observeProfile({
     accountId,
     kind: 'organization',
     displayName: 'Current organization',
@@ -93,7 +98,7 @@ function profile(accountId = accountA): ProfileValues {
     links: [{ label: 'Website', url: 'https://organization.example.test' }],
     publicViews: { posts: true, reviews: true, collections: false, realms: true },
     speakersListed: false,
-  };
+  });
 }
 
 function successRead(value: ProfileValues): ProfileReadResult {

@@ -30,7 +30,15 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError, type Access, type AccessRealmRoleReader } from '../request/access.ts';
 import { HANDLE_LOOKUP_PATTERN } from './handle-policy.ts';
-import { readEditableAccountProfile, type EditableAccountProfile } from './account-edit-profile.ts';
+import {
+  PROFILE_LINK_LABEL_MAX_LENGTH,
+  PROFILE_LINK_MAX_ITEMS,
+  PROFILE_LINK_URL_MAX_LENGTH,
+  PROFILE_TEXT_MAX_LENGTH,
+  readEditableAccountProfile,
+  type AccountProfileEditing,
+  type EditableAccountProfile,
+} from './account-edit-profile.ts';
 import { createLifecycleCommands, LifecycleDeniedError, normalizeLookupHandle } from './lifecycle.ts';
 import {
   readAgentPages,
@@ -237,6 +245,54 @@ const editableProfile = t.Unsafe<EditableAccountProfile>(
   t.Union([
     t.Object({ ...editableProfileFields, kind: t.Literal('actor') }, closed),
     t.Object({ ...editableProfileFields, kind: t.Literal('organization'), speakersListed: t.Boolean() }, closed),
+  ]),
+);
+const textAdvice = t.Object({ applicable: t.Literal(true), maxLength: t.Literal(PROFILE_TEXT_MAX_LENGTH) }, closed);
+const avatarAdvice = t.Object({ applicable: t.Literal(true) }, closed);
+const linksAdvice = t.Object(
+  {
+    applicable: t.Literal(true),
+    maxItems: t.Literal(PROFILE_LINK_MAX_ITEMS),
+    labelMaxLength: t.Literal(PROFILE_LINK_LABEL_MAX_LENGTH),
+    urlMaxLength: t.Literal(PROFILE_LINK_URL_MAX_LENGTH),
+  },
+  closed,
+);
+const publicViewsAdvice = t.Object(
+  {
+    applicable: t.Literal(true),
+    flags: t.Tuple([t.Literal('posts'), t.Literal('reviews'), t.Literal('collections'), t.Literal('realms')]),
+  },
+  closed,
+);
+const identityAdviceFields = {
+  displayName: textAdvice,
+  biography: textAdvice,
+  avatar: avatarAdvice,
+  links: linksAdvice,
+  publicViews: publicViewsAdvice,
+};
+const profileEditing = t.Unsafe<AccountProfileEditing>(
+  t.Union([
+    t.Object(
+      {
+        viewer: t.Object({ accountId: id }, closed),
+        target: t.Object({ accountId: id, kind: t.Literal('actor') }, closed),
+        fields: t.Object(identityAdviceFields, closed),
+      },
+      closed,
+    ),
+    t.Object(
+      {
+        viewer: t.Object({ accountId: id }, closed),
+        target: t.Object({ accountId: id, kind: t.Literal('organization') }, closed),
+        fields: t.Object(
+          { ...identityAdviceFields, speakersListed: t.Object({ applicable: t.Literal(true) }, closed) },
+          closed,
+        ),
+      },
+      closed,
+    ),
   ]),
 );
 const profilePatch = t.Object(
@@ -582,7 +638,7 @@ export function accessRoutes(
       {
         params: strict(t.Object({ accountId: id }, closed)),
         response: {
-          200: t.Object({ profile: editableProfile }, closed),
+          200: t.Object({ profile: editableProfile, editing: profileEditing }, closed),
           400: problemSchema('invalid_request'),
           401: problemSchema('authentication_required', 'invalid_credentials'),
           403: problemSchema('forbidden', 'platform_closed'),
