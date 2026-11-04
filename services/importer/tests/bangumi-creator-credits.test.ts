@@ -32,7 +32,12 @@ const concept = (code: string, schemeId: string, n: number): ResolvedConcept => 
   releaseDigest: bundledDigest,
 });
 
-function authoredWork(id: number, type: 1 | 2 | 3 | 4 | 6, name: string, extra: Record<string, unknown> = {}): SourceRecord {
+function authoredWork(
+  id: number,
+  type: 1 | 2 | 3 | 4 | 6,
+  name: string,
+  extra: Record<string, unknown> = {},
+): SourceRecord {
   return {
     source: 'bangumi',
     key: String(id),

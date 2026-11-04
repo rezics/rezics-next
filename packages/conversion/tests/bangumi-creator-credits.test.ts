@@ -183,9 +183,8 @@ test('absent endpoints, unknown roles and a changed role withhold or replace the
     { reason: 'unknown_code', code: '9999', property: 'staff.2' },
   ]);
   const original = mapBangumiVocabulary(input([director], bindings.concepts, bindings.schemes)).proposals[0];
-  const changed = mapBangumiVocabulary(
-    input([{ ...director, roleCode: 1 }], bindings.concepts, bindings.schemes),
-  ).proposals[0];
+  const changed = mapBangumiVocabulary(input([{ ...director, roleCode: 1 }], bindings.concepts, bindings.schemes))
+    .proposals[0];
   expect(original?.key).toBeDefined();
   expect(changed?.key).toBeDefined();
   expect(changed?.key).not.toBe(original?.key);

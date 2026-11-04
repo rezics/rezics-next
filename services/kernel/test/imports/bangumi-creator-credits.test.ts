@@ -106,7 +106,12 @@ test('operator seed publishes detailed creator and voice credits for an independ
       destination: { origin },
       work: { source: 'bangumi', key: '12', revision: null, payload: { id: 12, type: 2, name: 'Authored series' } },
       people: [
-        { source: 'bangumi', key: 'person:101', revision: null, payload: { id: 101, name: 'Authored director', type: 1 } },
+        {
+          source: 'bangumi',
+          key: 'person:101',
+          revision: null,
+          payload: { id: 101, name: 'Authored director', type: 1 },
+        },
         { source: 'bangumi', key: 'person:102', revision: null, payload: { id: 102, name: 'Authored voice', type: 1 } },
       ],
       characters: [
@@ -173,7 +178,12 @@ test('operator seed publishes detailed creator and voice credits for an independ
       destination: { origin },
       work: { source: 'bangumi', key: '12', revision: null, payload: { id: 12, type: 2, name: 'Authored series' } },
       people: [
-        { source: 'bangumi', key: 'person:101', revision: null, payload: { id: 101, name: 'Authored director', type: 1 } },
+        {
+          source: 'bangumi',
+          key: 'person:101',
+          revision: null,
+          payload: { id: 101, name: 'Authored director', type: 1 },
+        },
         { source: 'bangumi', key: 'person:102', revision: null, payload: { id: 102, name: 'Authored voice', type: 1 } },
       ],
       characters: [
@@ -192,15 +202,20 @@ test('operator seed publishes detailed creator and voice credits for an independ
       destination: { origin },
       work: { source: 'bangumi', key: '12', revision: null, payload: { id: 12, type: 2, name: 'Authored series' } },
       people: [
-        { source: 'bangumi', key: 'person:101', revision: null, payload: { id: 101, name: 'Authored director', type: 1 } },
+        {
+          source: 'bangumi',
+          key: 'person:101',
+          revision: null,
+          payload: { id: 101, name: 'Authored director', type: 1 },
+        },
       ],
       staff: [{ subject_id: 12, person_id: 101, position: 1 }],
       bindings,
     });
     expect(changed.keys.some((key) => first.keys.includes(key))).toBe(false);
-    expect(changed.proposals.some((item) => item.op === 'propose' && item.statement.property.id === 'schema:author')).toBe(
-      true,
-    );
+    expect(
+      changed.proposals.some((item) => item.op === 'propose' && item.statement.property.id === 'schema:author'),
+    ).toBe(true);
 
     const music = await importBangumiCreatorCredits({
       path: join(root, 'music.sqlite'),
@@ -208,7 +223,12 @@ test('operator seed publishes detailed creator and voice credits for an independ
       destination: { origin },
       work: { source: 'bangumi', key: '30', revision: null, payload: { id: 30, type: 3, name: 'Authored album' } },
       people: [
-        { source: 'bangumi', key: 'person:301', revision: null, payload: { id: 301, name: 'Authored musician', type: 1 } },
+        {
+          source: 'bangumi',
+          key: 'person:301',
+          revision: null,
+          payload: { id: 301, name: 'Authored musician', type: 1 },
+        },
       ],
       staff: [{ subject_id: 30, person_id: 301, position: 3001 }],
       bindings,
@@ -229,7 +249,12 @@ test('operator seed publishes detailed creator and voice credits for an independ
       destination: { origin },
       work: { source: 'bangumi', key: '12', revision: null, payload: { id: 12, type: 2, name: 'Authored series' } },
       people: [
-        { source: 'bangumi', key: 'person:101', revision: null, payload: { id: 101, name: 'Authored director', type: 1 } },
+        {
+          source: 'bangumi',
+          key: 'person:101',
+          revision: null,
+          payload: { id: 101, name: 'Authored director', type: 1 },
+        },
       ],
       staff: [{ subject_id: 12, person_id: 101, position: 2 }],
       bindings,

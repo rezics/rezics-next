@@ -2,10 +2,7 @@ import { BATCH_LIMIT, checkBatchWrite, type BatchCommand, type BatchWriteResult 
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { SourceRecord } from '@rezics/conversion';
 import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
-import {
-  bangumiRecordUrl,
-  converter_revision as entityRevision,
-} from '@rezics/conversion/cross-media-entities';
+import { bangumiRecordUrl, converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import {
   sourceVocabularyLimits,
   type BangumiVocabularyRow,
@@ -59,13 +56,15 @@ export type BangumiCreatorCreditDraft = {
   record: Record<string, unknown>;
 };
 
-export type BangumiCreatorCreditGap = SourceVocabularyGap | {
-  provider: 'bangumi';
-  path: string;
-  code?: string;
-  reason: typeof musicLiveActionStaffReason;
-  property: 'staff.3' | 'staff.6';
-};
+export type BangumiCreatorCreditGap =
+  | SourceVocabularyGap
+  | {
+      provider: 'bangumi';
+      path: string;
+      code?: string;
+      reason: typeof musicLiveActionStaffReason;
+      property: 'staff.3' | 'staff.6';
+    };
 
 export type BangumiCreatorCreditResult = {
   proposals: BatchCommand[];
