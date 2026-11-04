@@ -518,9 +518,9 @@ export function DeleteAccountContent({
           <ul className="auth-account-operation-requirements">
             <li>{m.auth_account_delete_retained_collections()}</li>
             <li>{m.auth_account_delete_retained_posts()}</li>
-            <li>{m.auth_account_delete_retention_limits()}</li>
           </ul>
           <p>{m.auth_account_delete_retained_attribution()}</p>
+          <p>{m.auth_account_delete_retention_limits()}</p>
         </section>
         <p>{m.auth_account_delete_prepare()}</p>
         {privacyContact ? (
@@ -599,10 +599,10 @@ export function DeleteAccountContent({
             </AlertDescription>
           </Alert>
         ) : advice?.kind === 'review' && advice.action === 'available' ? (
-          <p role="status">{m.auth_account_delete_advice_available()}</p>
-        ) : (
+          <p>{m.auth_account_delete_advice_available()}</p>
+        ) : !message ? (
           <ErrorAlert>{m.auth_account_delete_denied()}</ErrorAlert>
-        )}
+        ) : null}
         {advice?.kind === 'review' && advice.action === 'available' ? (
           <Field id="account-delete-confirmation" data-invalid={confirmationError}>
             <FieldLabel htmlFor="account-delete-input">
