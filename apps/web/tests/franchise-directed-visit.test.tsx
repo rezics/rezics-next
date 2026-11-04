@@ -18,7 +18,7 @@ const { subjectBody } = await import('../src/features/pages/subject');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const { SubjectConnections } = await import('../src/features/pages/subject-connections-view');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const property = 'wdt:P144';
+const property = 'wdt:P155';
 const release = { ...definitions, digest: 'a'.repeat(64) } as unknown as GuideRelease;
 const original = (n = 10, target = id(2), rank = 'normal') => ({
   id: id(n), property: { id: property, data_type: 'wikibase-item' },
@@ -31,8 +31,11 @@ const summary = (target = id(2), type = 'schema:Book') => ({ id: target, type, t
 const forward = (n = 10, target = id(2)) => ({ target, statement: original(n, target), summary: summary(target), label: '海の物語與跨媒體作品', related: {} });
 function pageFor(subject = id(1), type = 'wd:Q689445') {
   const page = qualifiedRelationsPage();
+  const reading = subjectBody(page)!;
   page.subject = subject;
-  Object.assign(subjectBody(page)!.subject, { id: subject, type, labels: { en: 'Source work' } });
+  Object.assign(reading.subject, { id: subject, type, labels: { en: 'Source work' } });
+  for (const entry of Object.values(page.reads)) if (entry.status === 200 && entry.body && typeof entry.body === 'object' && 'subject' in entry.body)
+    entry.body = reading;
   return page;
 }
 const stream = (direction: 'in' | 'out' = 'out') => connectionStreams(release, 'schema:Book', id(1), 'en').find((s) => s.property === property && s.direction === direction)!;
@@ -40,7 +43,7 @@ const stream = (direction: 'in' | 'out' = 'out') => connectionStreams(release, '
 test('unselected previews use best rank; native slot-selected previews preserve separate originals', () => {
   const source = { id: id(1), statements: { [property]: [original(10, id(2), 'deprecated'), original(11), original(12, id(3), 'preferred')] } } as unknown as Subject;
   const related = { [id(2)]: { labels: { en: 'Book' }, type: 'schema:Book' }, [id(3)]: { labels: { en: 'Anime' }, type: 'schema:TVSeries' } };
-  const relation = { [property]: { label: 'Has adaptation', forwardLabel: 'Based on', symmetric: false, group: 'derivation' as const } };
+  const relation = { [property]: { label: 'Followed by', forwardLabel: 'Follows', symmetric: false, group: 'order' as const } };
   expect(workDestinations(source, related, relation).map((row) => row.statement.id)).toEqual([id(12)]);
   source.relationCounts = { [property]: 2 };
   expect(workDestinations(source, related, relation).map((row) => row.statement.id)).toEqual([id(11), id(12)]);
@@ -110,14 +113,15 @@ test('mounted VN to anime to book uses one immediate window opener, inverse mean
   const read = async (address: { id: string }): Promise<ConnectionVisit> => {
     const direction = address.id === id(2) ? 'in' : 'out';
     const selected = stream(direction);
-    const row = direction === 'in' ? { subject: id(3), property, statement: id(10), assertion: original(10, id(2)), summary: summary(id(3)), related: {} } : forward();
+    const row = direction === 'in' ? { subject: id(3), property, statement: id(10), assertion: original(10, id(2)), summary: summary(id(3)), related: {} }
+      : { ...forward(), summary: summary(id(2), 'schema:TVSeries') };
     return { ok: true, id: address.id, release: release.digest, streams: [selected], sections: { relations: {
       stream: selected, reading: 'b'.repeat(64), section: { ok: true, read: { kind: direction === 'in' ? 'links' : 'relations', id: address.id, property, limit: 12, cursor: 'selected-window' }, body: { [direction === 'in' ? 'links' : 'relations']: [row], next: null } },
     } } };
   };
   async function mount(subject: string, returnTo?: string) {
     const value = { subject, subjectLabel: 'Source work', locale: 'en', link: (props: any) => createElement('a', props), reader: { spoilerLevel: 0, suitability: 'show' }, labels: { cover: {}, spoilerHide: 'Hide' }, unlabelled: 'Unlabelled', spoilerShow: 'Reveal', relations: {}, sections: {} } as OverviewValue;
-    await act(async () => root.render(createElement(OverviewContext.Provider, { value }, createElement(SubjectConnections, { page: pageFor(subject), viewer: { state: 'signed-out', csrfToken: null }, read, returnTo }))));
+    await act(async () => root.render(createElement(OverviewContext.Provider, { value }, createElement(SubjectConnections, { page: pageFor(subject, subject === id(1) ? 'wd:Q689445' : subject === id(2) ? 'schema:TVSeries' : 'schema:Book'), viewer: { state: 'signed-out', csrfToken: null }, read, returnTo }))));
   }
   try {
     await mount(id(1));
