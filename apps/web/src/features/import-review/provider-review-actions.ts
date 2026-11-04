@@ -78,6 +78,7 @@ export function providerSelectionInScope(selection: { scope: string; ids: string
 export function providerRowIsSelectable(row: ProviderDecisionRow, scope: ProviderScope): boolean {
   const source = row.candidate.source;
   return (
+    row.reading?.ok === true &&
     !providerRowIsConcealed(row) &&
     row.candidate.retracted === null &&
     !!source &&
