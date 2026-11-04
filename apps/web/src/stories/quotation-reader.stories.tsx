@@ -17,6 +17,7 @@ const textStatementId = '00000000-0000-4000-8000-000000000922';
 const speakerId = '00000000-0000-4000-8000-000000000923';
 const creditedId = '00000000-0000-4000-8000-000000000924';
 const workId = '00000000-0000-4000-8000-000000000925';
+const laterQuoteId = '00000000-0000-4000-8000-000000000926';
 const sourceHash = 'sha256:recorded-quotation-reference';
 const sourceUrl = 'https://archive.example.test/records/steins-gate/quotation-42';
 
@@ -122,10 +123,17 @@ function Example({ state = 'sourced' }: { state?: State }) {
         <QueryClientProvider client={client}>
           <main className="mx-auto w-full max-w-4xl p-4 sm:p-6">
             <QuotationView
-              id={initial.public.subject.id}
+              id={workId}
               locale={locale}
               returnTo={returnTo}
-              transport={{ read: async () => quotationFixture('sourced') }}
+              transport={{ read: async (input) => {
+                const result = quotationFixture('sourced');
+                if (state === 'later' && input.cursor && result.selected) {
+                  result.selected.id = laterQuoteId;
+                  result.selected.observation = 'later native quotation observation';
+                }
+                return result;
+              } }}
               initial={initial}
             />
           </main>
@@ -180,7 +188,7 @@ export const LaterPageSelection: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.quotation_more() }));
     await userEvent.click(canvas.getByRole('button', { name: m.quotation_open({ number: 1 }) }));
-    await expect(canvas.getByText('I will return. The source and the speaker remain distinct.')).toBeTruthy();
+    await expect(canvasElement.querySelector('[data-quotation-id]')?.getAttribute('data-quotation-id')).toBe(laterQuoteId);
   },
 };
 export const ExplicitFailureRecovery: Story = {
