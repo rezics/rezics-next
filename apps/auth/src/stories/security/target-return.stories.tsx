@@ -45,7 +45,7 @@ function replacementAccount() {
     data.page.viewer.session_id = 'replacement-session';
     data.page.sessions = {
       kind: 'ready',
-      rows: data.sessions.map((row) => ({ ...row, client_display_name: 'New viewer device' })),
+      rows: data.sessions.map((row) => ({ ...row, client_display_name: 'New viewer device', revoke: 'allowed' })),
       limit: 64,
       truncated: false,
     };

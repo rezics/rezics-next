@@ -1,6 +1,6 @@
 export type SecurityTargetReturnOutcome = 'unknown' | 'acknowledged' | 'refused';
 
-export type SecurityTargetReturnAttempt = { kind: string; outcome?: SecurityTargetReturnOutcome };
+export type SecurityTargetReturnAttempt = { kind: string; outcome?: SecurityTargetReturnOutcome | null };
 
 export function securityTargetReturnFromAttempt(
   attempt: SecurityTargetReturnAttempt | null,
