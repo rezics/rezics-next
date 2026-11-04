@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { ProgressIndexPage } from '../library/progress-page';
 import type { ProgressIndex } from '../library/progress-reads';
+import { subjectOf } from '../library/reads';
 import recorded from '../kernel/recorded/library-progress-sessions.json';
 import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
@@ -28,9 +29,30 @@ const actions = {
   complete: { allowed: true, reason: null },
   abandon: { allowed: true, reason: null },
 } as const;
+function mode(value: string): Session['mode'] {
+  if (value === 'scalar_amount' || value === 'cursor_position' || value === 'completed_units') return value;
+  throw new Error('Recorded progress story has an unsupported mode');
+}
+function state(value: string): Session['state'] {
+  if (value === 'active' || value === 'completed' || value === 'abandoned') return value;
+  throw new Error('Recorded progress story has an unsupported state');
+}
 const sessions: Session[] = recorded.progressSessions.map((row) => ({
-  ...row,
-  subject: row.subject ? { ...row.subject, types: row.subject.types ?? [row.subject.type], cover: row.subject.cover ?? null } : null,
+  id: row.id,
+  subjectId: row.subjectId,
+  versionSubjectId: row.versionSubjectId,
+  mode: mode(row.mode),
+  unit: row.unit,
+  total: row.total,
+  amount: row.amount,
+  locator: row.locator,
+  position: row.position,
+  completedUnitCount: row.completedUnitCount,
+  state: state(row.state),
+  revision: row.revision,
+  startedAt: row.startedAt,
+  completedAt: row.completedAt,
+  subject: subjectOf(row.subject),
   versionSubject: null,
   meaning: 'known',
   recordingState: 'unavailable',
@@ -64,7 +86,7 @@ function Discovery({ value, cursor }: { value: ProgressIndex; cursor?: string })
   return (
     <PatternStory visitor={value.signedIn ? 'Signed In' : 'Signed Out'} path="/library/progress">
       <main className="w-full max-w-4xl p-4">
-        <ProgressIndexPage page={value} cursor={cursor} />
+        <ProgressIndexPage page={value} {...(cursor === undefined ? {} : { cursor })} />
       </main>
     </PatternStory>
   );
@@ -90,7 +112,6 @@ export const ExactSubject: Story = {
         subjectId: first.subjectId,
         selectedSubject: first.subject,
         sessions: [first, repeat],
-        emptyKind: undefined,
       })}
     />,
 };

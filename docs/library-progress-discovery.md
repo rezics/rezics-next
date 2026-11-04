@@ -77,12 +77,17 @@ not a measured growth result.
 
 ## Page
 
-`/library/progress` opens with the signed-in owner's full readable session list. The page provides exact Subject search,
-one typed filter, filter removal, an explicit reset to owner-wide discovery, bounded continuation, separate empty
-states, retry, stale-continuation recovery, and signed-out/account-retired/dependency-unavailable states. Address and
-query identity include the full predicate, cursor, viewer, locale, and origin generation. Late responses cannot seed a
-new predicate. Controls are labeled, wrap long names, announce loading, preserve keyboard focus, and retain the
+`/library/progress` is designed to open with the signed-in owner's full readable session list. It provides exact Subject
+search, one typed filter, filter removal, an explicit reset to owner-wide discovery, bounded continuation, separate
+empty states, retry, stale-continuation recovery, and signed-out/account-retired/dependency-unavailable states. Address
+and query identity include the full predicate, cursor, viewer, locale, and origin generation. Late responses cannot seed
+a new predicate. Controls are labeled, wrap long names, announce loading, preserve keyboard focus, and retain the
 existing minimum phone target size in all locales.
+
+The Kernel route is mounted, but the installed `@rezics/client` does not yet expose its generated
+`progressSessionDiscovery` method. Content owns that publication. Until it lands, Web keeps the established
+subject-only reader and returns an explicit unavailable state for owner-wide or typed-filter reads; it does not make a
+raw HTTP request or invent a client declaration. The continuation brief tracks that integration.
 
 The page renders the API's retained session meaning, quantities, state, and action availability. It links each row to
 its exact native editor route and uses existing creation admission for new sessions. It does not group repeats, fetch

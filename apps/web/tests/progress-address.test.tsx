@@ -66,20 +66,13 @@ test('route and server address admission retain invalid operands and share nativ
   });
 });
 
-test('owner discovery keeps no-match, unavailable and invalid-cursor results distinct', async () => {
+test('owner discovery stays unavailable until its generated client route is installed', async () => {
   const calls: Request[] = [];
-  let status = 200;
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const call = new Request(input, init);
       calls.push(call);
-      const body =
-        status !== 200
-          ? { code: status === 404 ? 'not_found' : 'invalid_cursor', status }
-          : call.url.includes('/subjects/')
-            ? { subject: { id, type: 'schema:Book' }, summary: { id, type: 'schema:Book', label: 'Book' } }
-            : { viewerState: 'signed_in', progressSessions: [], next: null };
-      return Response.json(body, { status });
+      return Response.json({ code: 'unexpected_request' }, { status: 500 });
     },
   });
   for (const input of [
@@ -96,29 +89,17 @@ test('owner discovery keeps no-match, unavailable and invalid-cursor results dis
     await expect(loadProgressSession(client, request(), env, input)).rejects.toBeInstanceOf(ProgressAddressError);
   expect(calls).toHaveLength(0);
   const ownerEmpty = await loadProgressIndex(client, request(), env, {});
-  expect(ownerEmpty).toMatchObject({ signedIn: true, viewerState: 'signed_in', sessions: [], emptyKind: 'owner-empty' });
-  const ownerQuery = new URL(calls[0]!.url);
-  expect(ownerQuery.pathname).toBe('/v1/progressSessionDiscovery');
-  expect(ownerQuery.searchParams.has('subjectId')).toBe(false);
+  expect(ownerEmpty).toMatchObject({ signedIn: true, viewerState: 'unavailable', sessions: [], next: null });
   const empty = await loadProgressIndex(client, request(), env, { subjectId: id, mode: 'cursor_position' });
   expect(empty).toMatchObject({
     signedIn: true,
+    viewerState: 'unavailable',
     sessions: [],
-    selectedSubject: { id },
     mode: 'cursor_position',
-    emptyKind: 'filtered-empty',
+    next: null,
   });
   expect(empty.addressIssue).toBeUndefined();
-  const filteredQuery = new URL(calls[1]!.url);
-  expect(filteredQuery.searchParams.get('subjectId')).toBe(id);
-  expect(filteredQuery.searchParams.get('mode')).toBe('cursor_position');
-  expect(calls[0]!.headers.has('x-csrf-token')).toBe(false);
-  status = 404;
-  expect((await loadProgressIndex(client, request(), env, {})).viewerState).toBe('unavailable');
-  status = 400;
-  expect((await loadProgressIndex(client, request(), env, { subjectId: id, cursor: opaque })).addressIssue).toBe(
-    'cursor',
-  );
+  expect(calls).toHaveLength(0);
 });
 
 test('native stale history recovery resets only its own position', async () => {
