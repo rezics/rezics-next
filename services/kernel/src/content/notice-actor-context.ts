@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { Static } from 'elysia';
+import type { Static } from 'typebox';
 import { readPublicIdentityObservations, type PublicIdentityObservation } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
