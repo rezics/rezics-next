@@ -10,13 +10,15 @@ const resolutionConcurrency = 4;
 
 export type ConditionEntityContext = Readonly<{
   locale: string;
+  languages?: readonly string[];
+  workContext?: boolean;
   reader?: string;
   release?: string;
   resourceScope?: SearchResourceScope;
   available: boolean;
 }>;
 
-export type ConditionEntityFailure = 'unavailable' | 'restart' | 'credentials' | 'invalid' | 'metadata';
+export type ConditionEntityFailure = 'unavailable' | 'restart' | 'credentials' | 'invalid' | 'metadata' | 'preparing';
 
 export class ConditionEntityLookupError extends Error {
   constructor(readonly failure: ConditionEntityFailure) {
@@ -76,6 +78,8 @@ export function conditionEntityRequestIdentity(
     property,
     targets,
     context.locale,
+    context.languages,
+    context.workContext,
     context.reader ?? 'anonymous',
     context.release ?? '',
     context.resourceScope?.kind ?? '',
@@ -93,6 +97,7 @@ function suggestionUrl(query: string, propertyTargets: readonly string[], contex
     locale: context.locale,
     filter: conditionEntityFilter(propertyTargets, context.resourceScope),
   });
+  for (const language of context.languages ?? []) params.append('language', language);
   if (context.release) params.set('release', context.release);
   return `/api/search/suggestions?${params.toString()}`;
 }
@@ -104,6 +109,7 @@ function entityUrl(id: string, propertyTargets: readonly string[], context: Cond
     locale: context.locale,
     filter: conditionEntityFilter(propertyTargets, context.resourceScope),
   });
+  for (const language of context.languages ?? []) params.append('language', language);
   if (context.release) params.set('release', context.release);
   return `/api/search/suggestions?${params.toString()}`;
 }
@@ -128,6 +134,19 @@ async function readConditionEntityPage(
   }
   signal.throwIfAborted();
   if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { code?: unknown } | undefined;
+    signal.throwIfAborted();
+    if (
+      [
+        'search_index_not_ready',
+        'search_source_not_ready',
+        'search_preparing',
+        'index_not_ready',
+        'source_not_ready',
+        'semantic_not_ready',
+      ].includes(String(body?.code))
+    )
+      throw new ConditionEntityLookupError('preparing');
     const failure =
       response.status === 409
         ? 'restart'
@@ -139,11 +158,21 @@ async function readConditionEntityPage(
     throw new ConditionEntityLookupError(failure);
   }
   try {
-    return parseSuggestionPage(await response.json());
+    const page = parseSuggestionPage(await response.json());
+    signal.throwIfAborted();
+    return page;
   } catch {
     if (signal.aborted) throw signal.reason;
     throw new ConditionEntityLookupError('unavailable');
   }
+}
+
+function operandLabel(labels: Record<string, string>, context: ConditionEntityContext): string {
+  for (const language of context.languages ?? []) {
+    const label = labels[language];
+    if (label?.trim()) return label;
+  }
+  return localizedLabel(labels, context.locale).text;
 }
 
 /** Return distinct native identities with the current locale's imported label and released type context. */
@@ -156,7 +185,7 @@ export async function searchConditionEntities(
   const page = await readConditionEntityPage(query, targets, context, signal);
   const labels = new Map<string, number>();
   const labelled = page.subjects.flatMap((subject) => {
-    const title = localizedLabel(subject.labels, context.locale).text;
+    const title = operandLabel(subject.labels, context);
     return title ? [{ subject, title }] : [];
   });
   for (const { title } of labelled) {
@@ -164,10 +193,21 @@ export async function searchConditionEntities(
   }
   return labelled.map(({ subject, title }) => {
     const types = [...new Set([subject.type, ...(subject.summary?.types ?? [])])];
-    const typeLabel = localizedLabel(page.types[subject.type] ?? {}, context.locale).text || subject.type;
+    const typeLabel = operandLabel(page.types[subject.type] ?? {}, context) || subject.type;
+    const work = context.workContext && subject.workContext?.status === 'available' ? subject.workContext : undefined;
+    const contextLabel = work
+      ? [
+          `${work.creator.role.value}: ${work.creator.label.value}`,
+          work.relation?.label.value,
+          work.relation?.date?.state === 'value' ? work.relation.date.value : undefined,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : '';
+    const titleWithContext = contextLabel ? `${title} · ${contextLabel}` : title;
     return {
       id: subject.id,
-      title: labels.get(title)! > 1 ? `${title} (${typeLabel}; ${subject.id})` : title,
+      title: labels.get(title)! > 1 ? `${titleWithContext} (${typeLabel}; ${subject.id})` : titleWithContext,
       types,
       typeLabel,
       year: hitYear(subject.facts) ?? null,
@@ -196,6 +236,19 @@ async function readConditionEntityLabel(
   }
   signal.throwIfAborted();
   if (!response.ok) {
+    const body = (await response.json().catch(() => undefined)) as { code?: unknown } | undefined;
+    signal.throwIfAborted();
+    if (
+      [
+        'search_index_not_ready',
+        'search_source_not_ready',
+        'search_preparing',
+        'index_not_ready',
+        'source_not_ready',
+        'semantic_not_ready',
+      ].includes(String(body?.code))
+    )
+      throw new ConditionEntityLookupError('preparing');
     const failure =
       response.status === 409
         ? 'restart'
@@ -241,11 +294,11 @@ async function readConditionEntityLabel(
       (entry): entry is [string, string] => typeof entry[1] === 'string',
     ),
   );
-  const label = localizedLabel(labels, context.locale).text;
+  const label = operandLabel(labels, context);
   if (!label) return null;
   return {
     label,
-    type: localizedLabel(typeLabels, context.locale).text || result.type,
+    type: operandLabel(typeLabels, context) || result.type,
   };
 }
 
