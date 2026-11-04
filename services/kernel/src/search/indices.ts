@@ -7,6 +7,7 @@ import {
   type MixedDiscoveryDocumentCodec,
 } from './discovery-documents.ts';
 import { calendarIndexDefinition, hasCalendarIndexFormat } from './release-search-calendar.ts';
+import { creditSearchIndexDefinition } from './credit-search-mapping.ts';
 import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
@@ -84,11 +85,12 @@ export async function createSubjectIndex(
   generation: number,
   calendarFormat?: 1,
 ): Promise<void> {
+  const calendar = calendarFormat === 1 ? calendarIndexDefinition(subjectIndexDefinition()) : subjectIndexDefinition();
   return createIndex(
     search,
     prefix,
     generation,
-    calendarFormat === 1 ? calendarIndexDefinition(subjectIndexDefinition()) : subjectIndexDefinition(),
+    creditSearchIndexDefinition(calendar),
   );
 }
 
