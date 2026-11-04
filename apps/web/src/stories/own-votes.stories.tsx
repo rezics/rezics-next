@@ -10,6 +10,7 @@ import {
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import type { OwnVoteEntry, OwnVotesPage } from '../ratings/own-votes/types';
+import type { OwnVotesReturnOutcome } from '../ratings/own-votes/return';
 import { locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { OwnVotesWorkspace } from '../ratings/own-votes/page';
@@ -27,7 +28,11 @@ type Mode =
   | 'long'
   | 'read-only'
   | 'advice-replaced'
-  | 'dependency';
+  | 'dependency'
+  | 'return-refreshing'
+  | 'return-failed'
+  | 'return-found'
+  | 'return-missing';
 type Fixture = { mode: Mode; locale: (typeof locales)[number] };
 const FixtureContext = createContext<Fixture>({ mode: 'ready', locale: 'en' });
 const Root = createRootRoute({ component: Outlet });
@@ -116,7 +121,7 @@ function fixture(mode: Mode): OwnVotesPage {
 function StoryScreen() {
   const { mode, locale } = useContext(FixtureContext);
   const [page, setPage] = useState(() => fixture(mode));
-  const [failed, setFailed] = useState(mode === 'dependency');
+  const [failed, setFailed] = useState(mode === 'dependency' || mode === 'return-failed');
   const headingRef = useRef<HTMLHeadingElement>(null);
   const execute = async ({ data }: { data: OwnVoteIntent }) => {
     if (mode === 'uncertain') return { kind: 'uncertain' as const };
@@ -152,11 +157,27 @@ function StoryScreen() {
         </button>
       ) : null}
       <OwnVotesWorkspace
-        state={mode === 'denied' ? 'denied' : failed ? 'unavailable' : 'ready'}
-        page={mode === 'denied' || failed ? null : page}
+        state={
+          mode === 'denied'
+            ? 'denied'
+            : failed
+              ? 'unavailable'
+              : mode === 'return-refreshing'
+                ? 'preparing'
+                : 'ready'
+        }
+        page={mode === 'denied' || failed || mode === 'return-refreshing' ? null : page}
         cursor={null}
         locale={locale}
         isCurrent={() => true}
+        returnPending={mode === 'return-refreshing'}
+        returnOutcome={
+          mode === 'return-found'
+            ? { kind: 'found', pair: { targetId: targetA, questionId: questionA } }
+            : mode === 'return-missing'
+              ? { kind: 'missing', pair: { targetId: targetA, questionId: questionA } }
+              : null
+        }
         onRefresh={async () => {
           setFailed(false);
           setPage(fixture('sparse'));
@@ -251,5 +272,26 @@ export const DependencyRecovery: StoryType = {
     await userEvent.click(canvas.getByRole('button', { name: m.library_my_ratings_retry_page() }));
     await expect(canvas.getByText(m.library_my_ratings_sparse())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.library_my_ratings_continue() })).toBeVisible();
+  },
+};
+export const ReturnRefreshing: StoryType = { render: () => <Story mode="return-refreshing" /> };
+export const ReturnRefreshFailed: StoryType = { render: () => <Story mode="return-failed" /> };
+export const ReturnPairFound: StoryType = {
+  render: () => <Story mode="return-found" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.library_my_ratings_return_found())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_my_ratings_edit() })).toBeNull();
+    await userEvent.click((await canvas.findAllByRole('button', { name: m.library_my_ratings_inspect() }))[0]!);
+    await expect(canvas.getByRole('button', { name: m.library_my_ratings_edit() })).toBeEnabled();
+  },
+};
+export const ReturnPairMissing: StoryType = {
+  render: () => <Story mode="return-missing" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.library_my_ratings_return_missing())).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: m.library_my_ratings_edit() })).toBeNull();
+    await expect(canvas.getAllByRole('button', { name: m.library_my_ratings_inspect() })).toHaveLength(2);
   },
 };

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useRouterState } from '@tanstack/react-router';
 import { readOwnVotesForViewer } from '../../ratings/own-votes/actions';
 import { CurrentViewerOwnVotesPage } from '../../ratings/own-votes/page';
 import { ownVotesCursor } from '../../ratings/own-votes/inventory';
@@ -24,9 +24,17 @@ export const Route = createFileRoute('/library/ratings')({
 function OwnRatingsRoute() {
   const initial = Route.useLoaderData();
   const search = Route.useSearch();
+  const responseVersion = useRouterState({
+    select: ({ matches }) => matches.find((match) => match.routeId === Route.id)?.fetchCount ?? 0,
+  });
   const address = ownVotesCursor(search.cursor);
   const invalid = search.invalidCursor === true || !address.valid;
   return (
-    <CurrentViewerOwnVotesPage initial={initial} cursor={invalid ? null : address.cursor} invalidAddress={invalid} />
+    <CurrentViewerOwnVotesPage
+      initial={initial}
+      cursor={invalid ? null : address.cursor}
+      invalidAddress={invalid}
+      responseVersion={responseVersion}
+    />
   );
 }
