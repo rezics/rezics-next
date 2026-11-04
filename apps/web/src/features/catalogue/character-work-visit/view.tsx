@@ -7,7 +7,7 @@ import type { ConnectionSection } from '../../pages/subject-connections';
 import { connectionReturnHref, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 import { valueExplanationHref } from '../value-explanation';
 import { type Snak } from '../../pages/shared';
-import { subjectHref } from '../../../subject/subject-href';
+import { relationTargetHref } from '../../pages/edition-work';
 import { characterWorkRows, type CharacterWorkKind, type CharacterWorkRow } from './model';
 
 const action =
@@ -75,6 +75,11 @@ function CharacterWorkAppearance({
     <Link {...props} href={withSubjectVisitReturn(props.href, returnHref, value.locale)} />
   );
   const title = row.item.label.text || value.unlabelled;
+  const sources = new URL(
+    relationTargetHref({ id: row.holder, label: title }, value.locale, value.context),
+    'https://rezics.invalid',
+  );
+  sources.pathname += '/sources';
   const notes = row.item.qualified ?? [];
   const role = notes.some((note) => note.property === 'wdt:P3831');
   const performer = row.performer;
@@ -128,10 +133,7 @@ function CharacterWorkAppearance({
         ) : (
           <p role="status">{m.character_work_unavailable({}, o)}</p>
         )}
-        <WorkLink
-          className={action}
-          href={`${subjectHref({ id: row.holder, label: title }, value.locale).href}/sources`}
-        >
+        <WorkLink className={action} href={`${sources.pathname}${sources.search}`}>
           {m.subject_sources({}, o)}
         </WorkLink>
       </nav>
