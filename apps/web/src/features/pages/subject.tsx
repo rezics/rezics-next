@@ -562,10 +562,13 @@ export function SubjectPage({
   verification,
   fileSource,
   refreshCommunityAdvice,
+  recoverCatalogueFileReader,
 }: {
   page: SubjectPageData;
   verification?: VerificationConfig;
   refreshCommunityAdvice?: () => Promise<void>;
+  /** Re-enter the current Subject route loader for catalogue-file recovery. */
+  recoverCatalogueFileReader?: () => Promise<void>;
   /** Mounted native connection readers share this visit’s labels, disclosure and selected Context. */
   connections?: ReactNode;
   /** The current frame's label for list-only documents that do not repeat the subject read. */
@@ -952,6 +955,8 @@ export function SubjectPage({
                 locale={locale}
                 link={ContextLink}
                 returning={returnSource === read.subject.id}
+                currentHref={currentHref}
+                recoverCurrentPage={recoverCatalogueFileReader}
               />
             ) : null}
             {!overview && bar}

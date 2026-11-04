@@ -473,6 +473,7 @@ export function SubjectOverview({
                 page={page}
                 currentHref={currentHref}
                 refreshCommunityAdvice={() => router.invalidate()}
+                recoverCatalogueFileReader={() => router.invalidate()}
                 returnTo={search.via}
                 fileSource={search.fileSource}
                 verification={verification}

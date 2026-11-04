@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { planReads, platformRegistry } from '@rezics/composition';
-import { createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
+import { createRequire } from 'node:module';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as start from '../.storybook/react-start';
 import type { SubjectRead } from '@rezics/client';
@@ -10,6 +11,8 @@ import {
   catalogueFile,
   catalogueEpisode,
 } from '../src/kernel/fake/catalogue-file-profile';
+import { catalogueFileReaderVisit } from '../src/features/catalogue/catalogue-file-reader/model';
+import { timePresentation } from '../src/subject/time-presentation';
 import type { SubjectPageData } from '../src/features/pages/subject';
 import { subjectPageMessages } from '../src/features/pages/route-support';
 import {
@@ -20,6 +23,50 @@ import {
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { SubjectPage } = await import('../src/features/pages/subject');
+const { CatalogueFileReader } = await import('../src/features/catalogue/catalogue-file-reader/reader');
+
+async function mounted(
+  run: (context: { host: HTMLElement; window: Window; render: (element: ReactNode) => Promise<void> }) => Promise<void>,
+) {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.test/en/subjects/catalogue-file' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await run({
+      host,
+      window: window as unknown as Window,
+      render: async (element) => act(async () => root.render(element)),
+    });
+  } finally {
+    await act(async () => root.unmount());
+    window.happyDOM.abort();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}
 
 function ordinaryPage(publicRead: SubjectRead): SubjectPageData {
   const document: SubjectPageData['document'] = {
@@ -102,6 +149,11 @@ test('ordinary Subject separates file facts from its directed episode relation a
   expect(html).toContain(`href="${destination}"`);
   expect(catalogueFileSourceReturnHref(catalogueFile, 'en')).toContain('#catalogue-file-reader');
   expect(html).toContain('not proof of possession');
+  expect(html).toContain('data-slot="catalogue-file-reader-correction"');
+  const correction = html.match(/<nav[^>]*data-slot="catalogue-file-reader-correction"[^>]*>[\s\S]*?href="([^"]+)"/);
+  expect(correction?.[1]).toContain('?fileSource=' + catalogueFile);
+  const correction = html.match(/<nav[^>]*data-slot="catalogue-file-reader-correction"[^>]*>[\s\S]*?href="([^"]+)"/);
+  expect(correction?.[1]).toContain('?fileSource=' + catalogueFile);
   expect(html).not.toContain('data-slot="catalogue-file-reader-ownership"');
 });
 
@@ -147,6 +199,7 @@ test('retired associations cannot add a destination return, and unsupported file
     'Current definitions do not admit this subject as a catalogue file or release group.',
   );
   expect(unsupportedHtml).toContain('Generic file title');
+  expect(unsupportedHtml).not.toContain('data-slot="catalogue-file-reader-recovery"');
   expect(unsupportedHtml).not.toMatch(/href="\/en\/subjects\/[^\"]+\/file(?:\?|\")/);
 });
 
@@ -183,4 +236,124 @@ test('return destinations stay in the same locale and accept only a subject path
     catalogueFileDestinationHref(`/ja/subjects/${catalogueEpisode}/episode-1`, catalogueFile, 'en'),
   ).toBeUndefined();
   expect(catalogueFileDestinationHref('https://example.test/en/subjects/episode', catalogueFile, 'en')).toBeUndefined();
+});
+
+test('one exact inspection keeps value provenance and grouped evidence while concealed and historical targets stay closed', async () => {
+  const result = await catalogueFileProfileFixture('ready').read('forward:schema:encodesCreativeWork');
+  if (!result.ok) throw new Error('Expected the admitted current catalogue read');
+  const publicRead = structuredClone(result.public);
+  const hash = publicRead.subject.statements['wdt:P4092']?.[0];
+  if (!hash) throw new Error('Expected the admitted hash assertion');
+  const timeValue = {
+    time: '-0044-03-15T00:00:00Z',
+    precision: 11,
+    calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
+    timezone: 0,
+    before: 1,
+    after: 2,
+  };
+  hash.rezics = { release: 'sha256:accepted-statement', revision: 9 };
+  hash.qualifiers.push(
+    { property: { id: 'schema:startDate', data_type: 'time' }, value: { type: 'value', content: timeValue } },
+    { property: { id: 'schema:description', data_type: 'string' }, value: { type: 'somevalue' } },
+    { property: { id: 'schema:description', data_type: 'string' }, value: { type: 'novalue' } },
+  );
+  hash.references = [
+    {
+      parts: [
+        { property: { id: 'schema:datePublished', data_type: 'time' }, value: { type: 'value', content: timeValue } },
+      ],
+    },
+    {
+      parts: [{ property: { id: 'schema:description', data_type: 'string' }, value: { type: 'novalue' } }],
+    },
+  ];
+  const visit = catalogueFileReaderVisit({
+    locale: 'en',
+    public: publicRead,
+    release: result.release,
+    digest: result.digest,
+  });
+  await mounted(async ({ host, window, render }) => {
+    await render(createElement(CatalogueFileReader, { visit }));
+    const assertion = host.querySelector<HTMLButtonElement>('[data-property="wdt:P4092"] [data-inspection-trigger]');
+    if (!assertion) throw new Error('Expected an exact assertion inspection control');
+    expect(host.querySelector('[data-slot="catalogue-file-inspection"]')).toBeNull();
+    expect(host.textContent).not.toContain('sha256');
+    await act(async () => assertion.click());
+    const panel = host.querySelector<HTMLElement>('[data-slot="catalogue-file-inspection"]');
+    expect(panel?.textContent).toContain('Evidence inspection');
+    expect(panel?.textContent).toContain('abc123def456');
+    expect(panel?.textContent).toContain('sha256');
+    expect(panel?.textContent).toContain('Unknown value');
+    expect(panel?.textContent).toContain('No value');
+    expect(panel?.textContent).toContain(timePresentation(timeValue, 'en').text);
+    expect(panel?.textContent).toContain('sha256:accepted-statement');
+    expect(panel?.textContent).toContain(String(hash.rezics.revision));
+    expect(panel?.querySelectorAll('[data-slot="catalogue-file-inspection-references"] ol > li')).toHaveLength(2);
+    expect(panel?.querySelector('[data-qualifier-property="schema:description"] ol')?.children).toHaveLength(2);
+    expect(window.document.activeElement).toBe(panel?.querySelector('#catalogue-file-inspection-heading'));
+
+    const association = host.querySelector<HTMLButtonElement>('[data-inspection-kind="association"]');
+    if (!association) throw new Error('Expected an admitted episode association');
+    await act(async () => association.click());
+    expect(host.querySelectorAll('[data-slot="catalogue-file-inspection"]')).toHaveLength(1);
+    expect(host.querySelector('[data-slot="catalogue-file-inspection"]')?.textContent).toContain('Episode 1');
+    expect(association.getAttribute('aria-expanded')).toBe('true');
+    const close = host.querySelector<HTMLButtonElement>('[data-slot="catalogue-file-inspection"] button');
+    if (!close) throw new Error('Expected the inspection close control');
+    await act(async () => {
+      close.click();
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    });
+    expect(window.document.activeElement).toBe(association);
+  });
+
+  const concealedResult = await catalogueFileProfileFixture('concealed-episode').read(
+    'forward:schema:encodesCreativeWork',
+  );
+  if (!concealedResult.ok) throw new Error('Expected the admitted concealed-episode read');
+  const concealed = catalogueFileReaderVisit({
+    locale: 'en',
+    public: concealedResult.public,
+    release: concealedResult.release,
+    digest: concealedResult.digest,
+  });
+  const concealedMarkup = renderToStaticMarkup(createElement(CatalogueFileReader, { visit: concealed }));
+  expect(concealedMarkup).toContain('currently concealed');
+  expect(concealedMarkup).not.toContain(catalogueEpisode);
+
+  const historicalRead = structuredClone(result.public);
+  historicalRead.subject.statements['schema:encodesCreativeWork']![0]!.rezics.release = 'sha256:historical';
+  const historical = catalogueFileReaderVisit({
+    locale: 'en',
+    public: historicalRead,
+    release: result.release,
+    digest: result.digest,
+  });
+  const historicalAssociation = historical.associations.find((item) => item.target.id === catalogueEpisode);
+  expect(historicalAssociation?.historical).toBe(true);
+  const historicalMarkup = renderToStaticMarkup(createElement(CatalogueFileReader, { visit: historical }));
+  expect(historicalMarkup).toContain('Historical');
+  expect(historicalMarkup).not.toContain(`fileSource=${catalogueFile}#catalogue-file-reader`);
+
+  historical.associations.forEach((item) => {
+    item.readability = 'unreadable';
+  });
+  const unreadableMarkup = renderToStaticMarkup(createElement(CatalogueFileReader, { visit: historical }));
+  expect(unreadableMarkup).toContain('unreadable');
+  const emptyRead = structuredClone(result.public);
+  emptyRead.subject.statements = {};
+  emptyRead.subject.sourceRecords = [];
+  const empty = catalogueFileReaderVisit({
+    locale: 'en',
+    public: emptyRead,
+    release: result.release,
+    digest: result.digest,
+  });
+  expect(empty.state).toBe('empty');
+  const emptyMarkup = renderToStaticMarkup(createElement(CatalogueFileReader, { visit: empty }));
+  expect(emptyMarkup).toContain('data-slot="catalogue-file-reader-empty"');
+  expect(emptyMarkup).toContain('Nothing was returned on this page.');
+  expect(unreadableMarkup).not.toContain(`fileSource=${catalogueFile}#catalogue-file-reader`);
 });
