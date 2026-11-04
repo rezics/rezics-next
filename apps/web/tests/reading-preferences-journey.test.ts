@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readingFixture } from '../src/kernel/fake/settings-preferences-reading';
+import recording from '../src/kernel/recorded/settings-preferences.json';
 import { readingMutation, readReading, sendReading, type ReadingValues } from '../src/settings/reading-preferences';
 import { DisplayPreferences } from '../src/settings/display-preferences';
 import { AppearanceControls } from '../src/shell/appearance-controls';
@@ -9,6 +10,7 @@ import { locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 
 const latest = () => 0;
+const concurrentNotifications = { ...recording.notifications, reply: false, mention: true };
 
 test('Reading changes preserve the exact in-flight key and payload across response loss and reload actual current preference version', async () => {
   const fixture = readingFixture('lost');
@@ -40,7 +42,7 @@ test('Reading changes preserve the exact in-flight key and payload across respon
     spoilerLevel: 1,
     suitability: 'show',
     version: 3,
-    notifications: { reply: false, mention: true },
+    notifications: concurrentNotifications,
   });
 });
 
@@ -53,7 +55,7 @@ test('A concurrent preference update produces reviewable conflict rather than ov
     spoilerLevel: 2,
     suitability: 'show',
     version: 1,
-    notifications: { reply: false, mention: true },
+    notifications: concurrentNotifications,
   });
   expect(fixture.calls).toHaveLength(1);
   const current = await readReading(fixture.io, 0);
@@ -66,7 +68,7 @@ test('A concurrent preference update produces reviewable conflict rather than ov
   expect(reviewed).not.toHaveProperty('notifications');
   expect(reviewed.idempotencyKey).not.toBe(pending.idempotencyKey);
   expect(await sendReading(fixture.io, reviewed, false, () => 1)).toMatchObject({ kind: 'confirmed' });
-  expect(fixture.current().notifications).toEqual({ reply: false, mention: true });
+  expect(fixture.current().notifications).toEqual(concurrentNotifications);
 });
 
 test('an unavailable or closed readback never turns an original retry into success or supplies defaults', async () => {
@@ -158,7 +160,7 @@ test('a notification update arriving during recovery GET cannot confirm an older
     receipt: { version: 1 },
   });
   expect(fixture.calls).toEqual([original, original, original]);
-  expect(fixture.current().notifications).toEqual({ reply: false, mention: true });
+  expect(fixture.current().notifications).toEqual(concurrentNotifications);
 });
 
 test('a definite conflict resolves an original attempt whose request was lost before applying', async () => {
@@ -180,7 +182,7 @@ test('a definite conflict resolves an original attempt whose request was lost be
     spoilerLevel: 2,
     suitability: 'blur',
     version: 1,
-    notifications: { reply: false, mention: true },
+    notifications: concurrentNotifications,
   });
   expect(fixture.reads()).toBe(0);
 });
