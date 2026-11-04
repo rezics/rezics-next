@@ -160,9 +160,46 @@ test('a reader follows a Character identity and work appearance ages through nat
   expect(ages[spring]).toEqual({ amount: '+16', unit: year });
   expect(ages[autumn]).toEqual({ amount: '+18', unit: year });
   const identityPage = await waitLinks(alice, identityProperty, 'relations');
-  expect((identityPage.body.relations as { statement: { property: { id: string } } }[])[0]?.statement.property.id).toBe(
-    identityProperty,
+  type IdentityRow = {
+    statement: {
+      property: { id: string };
+      value: { content: unknown };
+      qualifiers: { property: { id: string }; value: { content: unknown } }[];
+    };
+    summary: { id: string } | null;
+  };
+  const identityRows = identityPage.body.relations as IdentityRow[];
+  expect(identityRows[0]?.statement.property.id).toBe(identityProperty);
+  expect(identityRows[0]?.statement.value.content).toBe(twin);
+  expect(identityRows[0]?.summary?.id).toBe(twin);
+  expect(
+    identityRows[0]?.statement.qualifiers.some(
+      (part) =>
+        part.property.id === 'rezics:spoilerLevel' &&
+        JSON.stringify(part.value.content) === JSON.stringify({ amount: '+1', unit: '1' }),
+    ),
+  ).toBe(true);
+  await driver.grant('steward', ['moderation:hide'], twin);
+  status(
+    await driver.request(
+      'steward',
+      'POST',
+      `/v1/subjects/${twin}:hide`,
+      { reason: 'Native identity target concealment' },
+      key(),
+    ),
+    200,
+    'hide identity target',
   );
+  const hiddenIdentity = await driver.request(
+    'anonymous',
+    'GET',
+    `/v1/subjects/${alice}/relations?property=${encodeURIComponent(identityProperty)}&limit=20`,
+  );
+  status(hiddenIdentity, 200, 'hidden identity relations');
+  const hiddenRows = hiddenIdentity.body.relations as IdentityRow[];
+  expect(hiddenRows.every((row) => row.summary?.id !== twin)).toBe(true);
+  expect(JSON.stringify(hiddenIdentity.body)).not.toContain('Twin');
 
   const pageOf = (persona: 'anonymous' | 'editor' | 'acceptor') =>
     driver.request(persona, 'POST', '/v1/pages:read', { target: { subject: alice }, languages: ['en'] });

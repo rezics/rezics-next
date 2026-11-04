@@ -1388,7 +1388,8 @@ admits appearance age (`wdt:P3629` in years) on that statement, the Character id
 (`rezics:relatedCharacterIdentity`, VNDB `chars.main`) and spouse, sibling, father, mother, partner and rival
 relations targeting Character. The appearance role code `main` remains a protagonist role. Older releases still name
 age-at-appearance, main-character linkage or character-to-character properties unavailable when they omit them.
-Unknown Bangumi relation codes stay unsupported provenance.
+Unknown Bangumi relation codes stay unsupported provenance. Viewer-bearing `POST /v1/pages:read` stays private,
+no-store; public facts remain independently comparable after omitting viewer.
 
 ## Scores on pages
 
