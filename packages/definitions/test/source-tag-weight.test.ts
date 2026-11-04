@@ -45,11 +45,11 @@ test('the native value remains exact, bounded to (0,3], and does not admit anoth
   expect(checkStatementInput(statement('+2.59999990463257'), bundledRelease).violations).toEqual([]);
   expect(checkStatementInput(statement('+3.000'), bundledRelease).violations).toEqual([]);
   expect(checkStatementInput(statement('+0'), bundledRelease).violations).toContainEqual({
-    pointer: '/statement/value/content/amount',
+    pointer: '/statement/qualifiers/0/value/content/amount',
     code: 'out_of_range',
   });
   expect(checkStatementInput(statement('+3.0001'), bundledRelease).violations).toContainEqual({
-    pointer: '/statement/value/content/amount',
+    pointer: '/statement/qualifiers/0/value/content/amount',
     code: 'out_of_range',
   });
   expect(checkStatementInput(statement('+2.4', 'rawIndividualVote'), bundledRelease).violations).toContainEqual({
