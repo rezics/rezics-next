@@ -39,7 +39,7 @@ export function presentationTypeChoice(
     state: presentationChoiceState(saved, draft),
     availability: draft === null ? 'automatic' : option ? 'released' : 'unavailable',
     label: option?.label || null,
-    presentation: draft === null ? null : parseListPresentation(presentations?.[draft]),
+    presentation: draft === null ? null : (parseListPresentation(presentations?.[draft]) ?? null),
   };
 }
 

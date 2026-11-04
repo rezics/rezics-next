@@ -84,28 +84,24 @@ export function LoadedOccurrencePreview({
               const title = pageText(libraryTitleValue(subject.label), locale);
               const presentation = listPresentations?.[subject.type];
               return (
-                <li
+                <MemberListRow
                   key={member.id}
-                  className="min-w-0"
-                  data-preview-occurrence={member.id}
-                  data-preview-availability="supplied"
+                  href={subjectHref({ id: subject.id, label: title.text }, locale).href}
+                  subject={{ id: subject.id, title: title.text, types: subject.types }}
+                  title={title.text}
+                  {...(title.lang ? { titleLang: title.lang } : {})}
+                  cover={subject.cover}
+                  src={coverSrc}
+                  ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
+                  {...(presentation ? { listPresentation: presentation } : {})}
+                  labels={{
+                    withheld: m.thread_cover_withheld(),
+                    reveal: m.thread_cover_reveal(),
+                    credit: m.thread_cover_credit(),
+                    via: m.thread_cover_via(),
+                  }}
                 >
-                  <MemberListRow
-                    href={subjectHref({ id: subject.id, label: title.text }, locale).href}
-                    subject={{ id: subject.id, title: title.text, types: subject.types }}
-                    title={title.text}
-                    {...(title.lang ? { titleLang: title.lang } : {})}
-                    cover={subject.cover}
-                    src={coverSrc}
-                    ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
-                    {...(presentation ? { listPresentation: presentation } : {})}
-                    labels={{
-                      withheld: m.thread_cover_withheld(),
-                      reveal: m.thread_cover_reveal(),
-                      credit: m.thread_cover_credit(),
-                      via: m.thread_cover_via(),
-                    }}
-                  >
+                  <div data-preview-occurrence={member.id} data-preview-availability="supplied" className="space-y-1">
                     <CollectionMemberDetails
                       member={member}
                       listPresentations={listPresentations}
@@ -116,8 +112,8 @@ export function LoadedOccurrencePreview({
                         {m.collection_choice_member_configuration_missing()}
                       </p>
                     ) : null}
-                  </MemberListRow>
-                </li>
+                  </div>
+                </MemberListRow>
               );
             })}
           </ol>
