@@ -14,8 +14,41 @@ const realmDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/realm
 const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/library/copies$`);
 const importDestination = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/library\/import-vndb$/;
 const returnAddressCap = 32768;
+const literaryHistoryLimit = 8;
 const collectionDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/collections/${uuid}$`);
 const subjectCommunityFragment = /^#subject-community-[A-Za-z0-9_-]{1,64}$/u;
+
+function validLiteraryHistory(value: string): boolean {
+  if (value.length > returnAddressCap) return false;
+  try {
+    const history: unknown = JSON.parse(value);
+    return (
+      Array.isArray(history) &&
+      history.length <= literaryHistoryLimit &&
+      history.every((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+        const item = entry as Record<string, unknown>;
+        return (
+          Object.keys(item).every((key) => ['view', 'node', 'cursor', 'focus'].includes(key)) &&
+          (item.view === 'overview' || item.view === 'contents' || item.view === 'editions') &&
+          (item.node === undefined ||
+            (typeof item.node === 'string' && /^[A-Za-z0-9_-]{1,64}$/u.test(item.node))) &&
+          (item.cursor === undefined ||
+            (item.node !== undefined &&
+              typeof item.cursor === 'string' &&
+              item.cursor.length > 0 &&
+              item.cursor.length <= 8192 &&
+              !/[\u0000-\u001f\u007f]/u.test(item.cursor))) &&
+          (item.view !== 'overview' || (item.node === undefined && item.cursor === undefined)) &&
+          (item.focus === undefined ||
+            (typeof item.focus === 'string' && /^[A-Za-z0-9:._~-]{1,256}$/u.test(item.focus)))
+        );
+      })
+    );
+  } catch {
+    return false;
+  }
+}
 
 export type WorkTagReturn = {
   statement: string;
@@ -454,7 +487,17 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
         return;
       return `${url.pathname}${url.search}`;
     }
-    const allowed = new Set(['realm', 'node', 'cursor', 'property', 'screenCursor', 'screenSelection']);
+    const allowed = new Set([
+      'realm',
+      'context',
+      'node',
+      'cursor',
+      'history',
+      'focus',
+      'property',
+      'screenCursor',
+      'screenSelection',
+    ]);
     const keys = [...url.searchParams.keys()];
     const nestedVia = url.searchParams.getAll('via');
     if (nestedVia.length) {
@@ -463,8 +506,11 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     }
     if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return;
     const selectedRealm = url.searchParams.get('realm');
+    const selectedContext = url.searchParams.get('context');
     const node = url.searchParams.get('node');
     const cursor = url.searchParams.get('cursor');
+    const history = url.searchParams.get('history');
+    const focus = url.searchParams.get('focus');
     const property = url.searchParams.get('property');
     const screenCursor = url.searchParams.get('screenCursor');
     const screenSelection = url.searchParams.get('screenSelection');
@@ -473,11 +519,15 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const screenReturn = screenCursor !== null || screenSelection !== null || screenEntry !== null;
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
+      (selectedContext !== null && (!subject || !new RegExp(`^${uuid}$`, 'i').test(selectedContext))) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
       (cursor !== null &&
         (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
       (property !== null &&
         (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f\u007f]/u.test(property))) ||
+      (history !== null && (url.hash !== '#literary-reader' || !validLiteraryHistory(history))) ||
+      (focus !== null &&
+        (url.hash !== '#literary-reader' || !/^[A-Za-z0-9:._~-]{1,256}$/u.test(focus))) ||
       (screenReturn &&
         (subject?.[2] !== undefined ||
           (screenCursor !== null &&

@@ -627,6 +627,7 @@ export function SubjectPage({
         locale,
         view,
         realm: subjectPageRealm(page),
+        context: page.context,
         continuation: page.continuation,
       })
     : undefined;

@@ -22,4 +22,14 @@ response byte limit, so fixture byte measurements are not represented as a nativ
 
 One browser observation and a weak source-incarnation set retire old public results on source, release, reader,
 credential, Context, locale or focus-window replacement, including A-to-B-to-A. Destinations open separately with a
-validated native return address. Read retirement never changes private draft or uncertain-command ownership.
+validated native return address. The address carries the exact Context, current view/node/cursor and selected row
+focus. Previous retains up to eight accepted addresses and reloads each through the current page reader; only address
+metadata survives. If the selected row is gone on return, the reader explains currentness and leaves Restart and
+available continuation links in place. Read retirement never changes private draft or uncertain-command ownership.
+
+Each Previous, Next or target return performs one current Subject-page read through its existing route. The reader
+retains no prior authorized payload. Address length is capped at 32,768 characters; oversized history evicts the
+oldest address, and each retained entry contains only a view, node, optional opaque cursor of at most 8,192 characters
+and optional focus key. At most eight entries survive. Two relation windows are selected; each keeps its native row
+limit, source order, summaries and exact qualifiers/references. The existing 65,536-byte composition bound covers
+their supplied labels, statements and source parts. The reader adds no document read or per-row target hydration.

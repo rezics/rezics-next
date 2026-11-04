@@ -151,6 +151,7 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
     related,
     source: {},
     locale: 'en',
+    context: { id: subject.context, population: { kind: 'global' } },
     definitions: literaryDefinitions,
     descriptorState: 'released' as const,
     digest: literaryDigest,

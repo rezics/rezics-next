@@ -129,12 +129,23 @@ reader or credential replacement retires the preceding reading, including A-to-B
 private drafts or cancels a command. Canonical work links use only the currently admitted native disclosure; no
 parent resolver or per-target read is added.
 
+Decision: Previous retains at most eight prior addresses, evicting the oldest; it reloads current native facts and restores focus only when the exact assertion remains disclosed. A removed row leaves a currentness message and the available Restart or Next actions.
+
+`subject.tsx` mounts the public `LiteraryReaderEntry` on Overview, Contents and Editions. Its module exports that entry
+plus `literaryWorkIdentity`, `literaryAuthorityKey` and `literaryReaderRetired`. The local `/sources` link continues to
+the existing Subject Sources page; the reader does not create correction actions.
+
 ### Literary work reader Cost
 
 The adapter starts zero requests and decodes zero additional network bytes. It shares the already decoded Subject,
 related summaries and native descriptor, and retains at most two currently mounted relation windows. Native
 `profileRelationWindows` exposes each planned `PageRead.limit` and freshness; `SubjectList` in `platformRegistry`
 admits at most 24 rows (12 for paged previews), while other relation nodes retain their own native planned limit.
+Each explicit Previous, Next or target return performs one current page read through the existing Subject route. The
+browser retains at most eight prior view/node/cursor/focus addresses (each existing cursor remains capped at 8,192
+characters), with no prior native payload; the serialized literary address is capped at 32,768 characters and evicts
+the oldest history entry as needed. The two selected windows retain only their native planned rows, related summaries,
+qualifiers and references within the existing composition payload; no document reads are added by this reader.
 The shared plan retains `MAX_PAGE_READS = 16`, `MAX_PAGE_COST = 128`, `MAX_COMPOSITION_NODES = 256` and
 `MAX_COMPOSITION_BYTES = 65,536`. The descriptor uses the existing bounded definition-release vocabulary; extending
 its literary admission adds no engine query. No SQL selection, scan, count or statement-history path is added.

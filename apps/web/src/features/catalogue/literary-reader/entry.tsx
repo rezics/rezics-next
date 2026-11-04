@@ -1,4 +1,4 @@
-import { useMemo, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { PageContinuation, SelectedContext } from '@rezics/composition';
 import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
@@ -7,10 +7,12 @@ import type { Subject, Related } from '../../../subject/types';
 import type { Reader } from '../../../subject/reader';
 import { defaultReader } from '../../../subject/reader';
 import { m } from '../../../paraglide/messages.js';
-import { useOverview, viewHref } from '../../pages/overview';
 import { pageText, type PageLink } from '../../pages/shared';
 import type { ProfileRelationWindow } from '../../pages/views';
+import { useOverview } from '../../pages/overview';
 import { literaryAddress, literaryDestination } from './navigation';
+import { appendLiteraryPrevious, literaryFocusId } from '../literary-visit/navigation';
+import { useLiteraryVisitLocation } from '../literary-visit/location';
 import {
   literaryGrain,
   literarySelected,
@@ -92,6 +94,10 @@ export function LiteraryReaderEntry({
     continuation,
     viewer,
   ]);
+  const visit = useLiteraryVisitLocation();
+  const contextMismatch = visit.hasContext && (visit.invalid || visit.context !== (context?.id ?? undefined));
+  const currentPrevious = visit.invalid || contextMismatch ? [] : visit.previous;
+  const currentFocus = visit.invalid || contextMismatch ? undefined : visit.focus;
   const captured = useRef<{
     source: object;
     identity: string;
@@ -121,14 +127,37 @@ export function LiteraryReaderEntry({
       captured.current.retired = true;
   }
   const retired = captured.current.retired;
+  const readingRetired = retired || contextMismatch;
   const returnTo = literaryAddress({
     id: work.id,
     label: pageText(work.labels, locale).text,
     locale,
     view,
     realm,
+    context,
     continuation,
+    focus: currentFocus,
+    previous: currentPrevious,
   });
+  const freshAddress = literaryAddress({ id: work.id, label: '', locale, view: 'overview', realm, context });
+  const returnAddressFor = (
+    focus: string,
+    addressView = view,
+    addressContinuation = continuation,
+    node?: string,
+  ) =>
+    literaryAddress({
+      id: work.id,
+      label: pageText(work.labels, locale).text,
+      locale,
+      view: addressView,
+      realm,
+      context,
+      ...(addressView === 'overview' ? {} : { continuation: addressContinuation }),
+      ...(addressView === 'overview' ? {} : { node }),
+      focus,
+      previous: currentPrevious,
+    });
   const selected = useMemo(
     () => (definitions ? literaryWindows(windows, definitions, continuation?.node) : []),
     [windows, definitions, continuation?.node],
@@ -137,23 +166,49 @@ export function LiteraryReaderEntry({
   const grain = literaryGrain(work.type, definitions);
   const type = pageText(definitions?.types[work.type]?.labels, locale);
   const matching = value?.subject === work.id && (value.context?.id ?? null) === (context?.id ?? null);
-  const factsHref =
-    matching && value
-      ? viewHref(value, 'details')
-      : literaryAddress({ id: work.id, label: '', locale, view: 'details', realm });
-  const editionHref = matching && value?.sections.has('editions') ? viewHref(value, 'editions') : undefined;
-  const Link: PageLink = ({ href, ...props }) => {
+  const factsHref = literaryAddress({ id: work.id, label: '', locale, view: 'details', realm, context })
+    .replace(/#literary-reader$/, '');
+  const editionHref = matching && value?.sections.has('editions')
+    ? literaryAddress({ id: work.id, label: '', locale, view: 'editions', realm, context })
+        .replace(/#literary-reader$/, '')
+    : undefined;
+  const sourcesHref = literaryAddress({ id: work.id, label: '', locale, view: 'sources', realm, context })
+    .replace(/#literary-reader$/, '');
+  const linkFor = (returnAddress: string): PageLink => ({ href, ...props }) => {
     const destination = new URL(href, 'https://rezics.invalid');
     const match = /^\/[^/]+\/subjects\/([^/]+)\/([^/]+)/.exec(destination.pathname);
-    return (
+    return match ? (
       <a
         {...props}
-        href={match ? literaryDestination(match[1]!, decodeURIComponent(match[2]!), locale, returnTo, realm) : href}
+        href={literaryDestination(
+          match[1]!,
+          decodeURIComponent(match[2]!),
+          locale,
+          returnAddress,
+          realm,
+          context,
+        )}
         target="_blank"
         rel="noopener noreferrer"
       />
+    ) : (
+      <a {...props} href={href} />
     );
   };
+  const [focusMissing, setFocusMissing] = useState(false);
+  useEffect(() => {
+    if (!currentFocus || readingRetired || typeof document === 'undefined') {
+      setFocusMissing(false);
+      return;
+    }
+    const target = document.getElementById(literaryFocusId(currentFocus));
+    if (target && document.activeElement === document.body) {
+      (target as HTMLElement).focus();
+      setFocusMissing(false);
+    } else {
+      setFocusMissing(!target);
+    }
+  }, [currentFocus, readingRetired, source, selected]);
   return (
     <LiteraryReader
       key={captured.current.generation}
@@ -161,8 +216,9 @@ export function LiteraryReaderEntry({
       locale={locale}
       editionHref={editionHref ?? undefined}
       factsHref={factsHref ?? undefined}
-      retired={retired}
-      recoveryHref={returnTo}
+      retired={readingRetired}
+      recoveryHref={contextMismatch ? freshAddress : returnTo}
+      sourcesHref={sourcesHref}
       scopeText={m.literary_grain_scope({}, o)}
       grainLabel={
         type.text ? (
@@ -190,6 +246,7 @@ export function LiteraryReaderEntry({
               );
               const relationUnavailable = relation && (admitted?.state !== 'admitted' || admitted.release !== digest);
               const withheld = !statements.length && (work.relationCounts?.[property] ?? 0) > 0;
+              const propertyLabel = label.text || m.subject_value_unlabelled({}, o);
               return [
                 <div key={property} className="min-w-0 space-y-1" data-property={property}>
                   <dt lang={label.lang} className="text-sm font-medium">
@@ -203,14 +260,33 @@ export function LiteraryReaderEntry({
                       />
                     ) : (
                       statements.map((statement) => (
-                        <LiteraryAssertionView
-                          key={statement.id}
-                          assertion={{ statement, related }}
-                          definitions={definitions}
-                          locale={locale}
-                          link={Link}
-                          membership={membership}
-                        />
+                        (() => {
+                          const target = statement.value.type === 'value' && typeof statement.value.content === 'string'
+                            ? related[statement.value.content]
+                            : undefined;
+                          const candidateText = target ? pageText(target.labels, locale) : undefined;
+                          const focus = `direct:${property}:${statement.id}`;
+                          const assertionReturn = returnAddressFor(focus);
+                          return (
+                            <LiteraryAssertionView
+                              key={statement.id}
+                              assertion={{ statement, related }}
+                              definitions={definitions}
+                              locale={locale}
+                              link={linkFor(assertionReturn)}
+                              membership={membership}
+                              focusId={focus}
+                              {...(membership || canonical
+                                ? {
+                                    inspection: {
+                                      holder: literaryWorkIdentity(work, locale).title.text,
+                                      candidate: candidateText?.text || m.literary_grain_withheld({}, o),
+                                    },
+                                  }
+                                : {})}
+                            />
+                          );
+                        })()
                       ))
                     )}
                     {!relationUnavailable &&
@@ -225,6 +301,11 @@ export function LiteraryReaderEntry({
               ];
             })}
           </dl>
+          {focusMissing && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.literary_visit_currentness({}, o)}
+            </p>
+          )}
           {selected.length ? (
             selected.map((native) => {
               const direction = directions?.find(
@@ -245,31 +326,71 @@ export function LiteraryReaderEntry({
                 native.property === 'rezics:representativeEdition'
                   ? 'editions'
                   : 'contents';
-              // Overview and full-view nodes need not have the same identity. Continue only the node actually mounted here.
-              const currentView = view === 'overview' ? 'overview' : streamView;
+              const currentPage: import('../literary-visit/navigation').LiteraryPreviousAddress = {
+                view: view === 'overview' ? 'overview' : view === 'editions' ? 'editions' : 'contents',
+                ...(continuation
+                  ? { node: continuation.node, cursor: continuation.cursor }
+                  : view !== 'overview' && streamView === view
+                    ? { node: native.node }
+                    : {}),
+                ...(currentFocus ? { focus: currentFocus } : {}),
+              };
+              const nextHistory = appendLiteraryPrevious(currentPrevious, currentPage);
+              const rowContinuation = continuation?.node === native.node ? continuation : undefined;
+              const rowReturnTo = (focus: string) =>
+                returnAddressFor(
+                  focus,
+                  streamView,
+                  rowContinuation,
+                  native.node,
+                );
+              const previous = currentPrevious.at(-1);
+              const previousHref = previous && view !== 'overview' &&
+                (native.node === continuation?.node || (!continuation && streamView === view))
+                ? literaryAddress({
+                    id: work.id,
+                    label: '',
+                    locale,
+                    view: previous.view,
+                    realm,
+                    context,
+                    ...(previous.node ? { node: previous.node } : {}),
+                    ...(previous.node && previous.cursor
+                      ? { continuation: { node: previous.node, cursor: previous.cursor } }
+                      : {}),
+                    focus: previous.focus,
+                    previous: currentPrevious.slice(0, -1),
+                  })
+                : undefined;
               return (
                 <LiteraryNativeWindow
                   key={native.node}
                   window={projected}
                   definitions={definitions}
                   locale={locale}
-                  returnTo={returnTo}
+                  returnToFor={rowReturnTo}
                   realm={realm}
+                  context={context}
+                  rootLabel={literaryWorkIdentity(work, locale).title.text}
                   nextHref={
                     native.next && view !== 'overview'
                       ? literaryAddress({
                           id: work.id,
                           label: '',
                           locale,
-                          view: currentView,
+                          view: streamView,
                           realm,
+                          context,
                           continuation: { node: native.node, cursor: native.next },
+                          previous: nextHistory,
                         })
-                      : native.next && value
-                        ? (viewHref(value, streamView) ?? undefined)
+                      : native.next
+                        ? literaryAddress({ id: work.id, label: '', locale, view: streamView, realm, context,
+                            previous: nextHistory })
                         : undefined
                   }
-                  restartHref={literaryAddress({ id: work.id, label: '', locale, view: currentView, realm })}
+                  restartHref={literaryAddress({ id: work.id, label: '', locale, view: streamView, realm, context })}
+                  previousHref={previousHref}
                 />
               );
             })

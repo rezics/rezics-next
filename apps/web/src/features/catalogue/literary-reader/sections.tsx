@@ -1,4 +1,6 @@
 import { m } from '../../../paraglide/messages.js';
+import type { ReactNode } from 'react';
+import type { SelectedContext } from '@rezics/composition';
 import type { Related } from '../../../subject/types';
 import { CandidateValue } from '../../pages/data';
 import { ExactEditionLink } from '../../pages/cover-list';
@@ -7,6 +9,8 @@ import { LanguageTag } from '../../pages/values';
 import type { LiteraryAssertion, LiteraryDefinitions, LiteraryState, LiteraryWindow } from './model';
 import { literaryDestination } from './navigation';
 import { withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
+import { LiteraryAssertionInspection } from '../literary-visit/inspection';
+import { literaryFocusId } from '../literary-visit/navigation';
 
 const action =
   'inline-flex min-h-11 min-w-11 max-w-full items-center py-2 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -57,6 +61,8 @@ export function LiteraryAssertionView({
   link,
   membership = false,
   showValue = true,
+  inspection,
+  focusId,
 }: {
   assertion: LiteraryAssertion;
   definitions: LiteraryDefinitions;
@@ -64,6 +70,8 @@ export function LiteraryAssertionView({
   link: PageLink;
   membership?: boolean;
   showValue?: boolean;
+  inspection?: { holder: ReactNode; candidate: ReactNode } | undefined;
+  focusId?: string | undefined;
 }) {
   const { statement, related } = assertion;
   const o = { locale: locale as never };
@@ -78,7 +86,8 @@ export function LiteraryAssertionView({
     );
   };
   return (
-    <div data-statement-id={statement.id} className="min-w-0 space-y-2">
+    <div id={focusId ? literaryFocusId(focusId) : undefined} tabIndex={focusId ? -1 : undefined}
+      data-statement-id={statement.id} className="min-w-0 space-y-2">
       {showValue && <DisclosedValue snak={statement} related={related} locale={locale} link={link} />}
       {statement.qualifiers.length > 0 && (
         <ul className="space-y-1 border-l border-border pl-3 text-sm">{statement.qualifiers.map(part)}</ul>
@@ -99,6 +108,15 @@ export function LiteraryAssertionView({
           </ol>
         </details>
       )}
+      {inspection && (
+        <LiteraryAssertionInspection
+          locale={locale}
+          holder={inspection.holder}
+          candidate={inspection.candidate}
+          property={propertyLabel(statement).text || m.subject_value_unlabelled({}, o)}
+          statement={statement.id}
+        />
+      )}
     </div>
   );
 }
@@ -107,18 +125,24 @@ export function LiteraryNativeWindow({
   window,
   definitions,
   locale,
-  returnTo,
+  returnToFor,
   realm,
+  context,
+  rootLabel,
   nextHref,
   restartHref,
+  previousHref,
 }: {
   window: LiteraryWindow;
   definitions: LiteraryDefinitions;
   locale: string;
-  returnTo: string;
+  returnToFor: (focus: string) => string;
   realm?: string | undefined;
+  context?: SelectedContext | null | undefined;
+  rootLabel: string;
   nextHref?: string | undefined;
   restartHref?: string | undefined;
+  previousHref?: string | undefined;
 }) {
   const { native, state } = window;
   const property = definitions.properties[native.property];
@@ -140,13 +164,19 @@ export function LiteraryNativeWindow({
         <ul className="divide-y divide-border">
           {window.rows.map((row) => {
             const type = pageText(definitions.types[row.type]?.labels, locale);
+            const rowFocus = `${native.node}:${row.statement.id}`;
+            const rowReturn = returnToFor(rowFocus);
             const RowLink: PageLink = ({ href, ...props }) => (
-              <Link href={withSubjectVisitReturn(href, returnTo, locale)} {...props} />
+              <Link href={withSubjectVisitReturn(href, rowReturn, locale)} {...props} />
             );
+            const holder = native.direction === 'inverse' ? row.label.text : rootLabel;
+            const candidate = native.direction === 'inverse' ? rootLabel : row.label.text;
             return (
               <li key={row.key} data-statement-id={row.statement.id} className="min-w-0 space-y-1 py-3">
                 <ExactEditionLink
-                  href={literaryDestination(row.id, row.label.text, locale, returnTo, realm)}
+                  id={literaryFocusId(rowFocus)}
+                  href={literaryDestination(row.id, row.label.text, locale, rowReturn, realm,
+                    context)}
                   lang={row.label.lang}
                   className={action}
                 >
@@ -165,6 +195,7 @@ export function LiteraryNativeWindow({
                   locale={locale}
                   link={RowLink}
                   membership={property?.relation?.group === 'membership'}
+                  inspection={{ holder, candidate }}
                 />
               </li>
             );
@@ -173,6 +204,11 @@ export function LiteraryNativeWindow({
       )}
       {state === 'ready' && window.withheld && <LiteraryStatus state="withheld" locale={locale} />}
       <nav className="flex flex-wrap gap-x-4">
+        {previousHref && (
+          <a href={previousHref} className={action}>
+            {m.literary_visit_previous({}, o)}
+          </a>
+        )}
         {nextHref &&
           native.status === 200 &&
           (state === 'ready' || state === 'sparse' || state === 'withheld' || state === 'preparing') && (

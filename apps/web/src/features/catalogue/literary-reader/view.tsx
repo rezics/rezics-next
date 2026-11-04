@@ -10,6 +10,7 @@ export function LiteraryReader({
   locale,
   editionHref,
   factsHref,
+  sourcesHref,
   retired: sourceRetired = false,
   grainLabel,
   scopeText,
@@ -20,6 +21,7 @@ export function LiteraryReader({
   locale: string;
   editionHref?: string | undefined;
   factsHref?: string | undefined;
+  sourcesHref?: string | undefined;
   retired?: boolean;
   grainLabel?: ReactNode;
   scopeText?: string;
@@ -144,6 +146,11 @@ export function LiteraryReader({
               {factsHref ? (
                 <a className={linkClass} href={factsHref}>
                   {m.literary_reader_facts({}, options)}
+                </a>
+              ) : null}
+              {sourcesHref ? (
+                <a className={linkClass} href={sourcesHref}>
+                  {m.subject_sources({}, options)}
                 </a>
               ) : null}
             </nav>
