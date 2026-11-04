@@ -1,6 +1,7 @@
 import type { DocumentSnapshot } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { m } from '../../paraglide/messages.js';
 import * as catalog from '../../paraglide/messages.js';
 import { getLocale, localizeUrl } from '../../paraglide/runtime.js';
 import { DocumentBody } from '../../document-body';
@@ -386,7 +387,7 @@ export function RealmRulesAuthoringPanel({
             titleRequired
             localDraft={false}
             canSubmit={Boolean(canCreate && boardId && licence === nativeRuleLicence && attribution && lifetime?.current())}
-            boardId={boardId || undefined}
+            boardId={boardId}
             submissionContext={{ boardId, licence: nativeRuleLicence }}
             onSubmit={async ({ title, body, idempotencyKey, mediaIds, submissionContext }) => {
               if (!lifetime?.current() || !lifetime.csrfToken || !submissionContext || !canCreate)

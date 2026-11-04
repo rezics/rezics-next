@@ -885,7 +885,7 @@ export function RealmAppearanceSettings({
                       : m.realm_appearance_rules_unavailable()}
                 </p>
               </details>
-              <Button variant="outline" onClick={control.reviewConflict}>
+              <Button variant="outline" onClick={() => control.reviewConflict()}>
                 {m.realm_appearance_review()}
               </Button>
             </>

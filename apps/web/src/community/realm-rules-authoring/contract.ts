@@ -52,7 +52,8 @@ export type RulesAuthoringResponse = Omit<v.InferOutput<typeof rulesAuthoringRes
 };
 export type RulesAuthoringRead =
   | { kind: 'ready'; value: RulesAuthoringResponse }
-  | { kind: 'denied' | 'unavailable' };
+  | { kind: 'denied' }
+  | { kind: 'unavailable' };
 
 export function parseRulesAuthoringResponse(value: unknown): RulesAuthoringResponse {
   const result = v.parse(rulesAuthoringResponseSchema, value);
