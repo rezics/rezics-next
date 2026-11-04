@@ -260,7 +260,8 @@ export function albumEditionsAdmitted(release: Pick<Release, 'types' | 'properti
     relation.relation.inverse !== 'none' &&
     !!relation.targets?.some((target) => isA(release, albumType, target)) &&
     Object.keys(release.types).some(
-      (type) => isA(release, type, 'schema:MusicRelease') && release.types[type]?.properties.includes(albumEditionProperty),
+      (type) =>
+        isA(release, type, 'schema:MusicRelease') && release.types[type]?.properties.includes(albumEditionProperty),
     )
   );
 }

@@ -90,11 +90,7 @@ const nativeIdentities: Record<string, NativeIdentity> = {
     [],
   ],
   'schema:MusicAlbum': ['http://schema.org/MusicAlbum', ['schema:CreativeWork', 'schema:Thing'], ['wd:Q482994']],
-  'schema:MusicRelease': [
-    'http://schema.org/MusicRelease',
-    ['schema:CreativeWork', 'schema:Thing'],
-    ['wd:Q108041547'],
-  ],
+  'schema:MusicRelease': ['http://schema.org/MusicRelease', ['schema:CreativeWork', 'schema:Thing'], ['wd:Q108041547']],
   'schema:MusicRecording': [
     'http://schema.org/MusicRecording',
     ['schema:CreativeWork', 'schema:Thing'],

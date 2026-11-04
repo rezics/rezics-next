@@ -371,33 +371,33 @@ The following Chinese and Japanese labels are pinned by `test/type-labels.test.t
 ordinary names in the other locales remain unchanged. The technical SKOS labels
 identify classification resources rather than works.
 
-| Type                       | zh-Hans  | zh-Hant  | ja                 |
-| -------------------------- | -------- | -------- | ------------------ |
-| `schema:Episode`           | 集       | 集       | エピソード         |
-| `schema:Movie`             | 电影     | 電影     | 映画               |
-| `schema:TVSeason`          | 季       | 季       | シーズン           |
-| `schema:TVSeries`          | TV 动画  | TV 動畫  | TVアニメ           |
-| `bf:Instance`              | 版本     | 版本     | 版                 |
-| `schema:Book`              | 书籍     | 書籍     | 書籍               |
-| `wd:Q95074`                | 角色     | 角色     | キャラクター       |
-| `skos:Concept`             | 概念     | 概念     | 概念               |
-| `skos:ConceptScheme`       | 概念体系 | 概念體系 | 概念体系           |
-| `schema:Organization`      | 组织     | 組織     | 組織               |
-| `schema:Person`            | 人物     | 人物     | 人物               |
-| `schema:VideoGame`         | 电子游戏 | 電子遊戲 | コンピュータゲーム |
-| `wd:Q209163`               | 追加内容 | 追加內容 | 追加コンテンツ     |
-| `wd:Q20631656`             | 版本     | 版本     | リリース           |
-| `schema:PublicationVolume` | 卷       | 卷       | 巻                 |
-| `schema:ComicSeries`       | 漫画     | 漫畫     | 漫画               |
-| `schema:Recipe`            | 食谱     | 食譜     | レシピ             |
-| `schema:BookSeries`        | 丛书     | 叢書     | 叢書               |
-| `wd:Q7725310`              | 系列     | 系列     | シリーズ           |
-| `wd:Q689445`               | 视觉小说 | 視覺小說 | ビジュアルノベル   |
-| `schema:MusicAlbum`        | 音乐专辑 | 音樂專輯 | アルバム           |
-| `schema:MusicRelease`      | 音乐发行 | 音樂發行 | リリース           |
-| `schema:MusicRecording`    | 录音     | 錄音     | 録音               |
+| Type                       | zh-Hans  | zh-Hant  | ja                   |
+| -------------------------- | -------- | -------- | -------------------- |
+| `schema:Episode`           | 集       | 集       | エピソード           |
+| `schema:Movie`             | 电影     | 電影     | 映画                 |
+| `schema:TVSeason`          | 季       | 季       | シーズン             |
+| `schema:TVSeries`          | TV 动画  | TV 動畫  | TVアニメ             |
+| `bf:Instance`              | 版本     | 版本     | 版                   |
+| `schema:Book`              | 书籍     | 書籍     | 書籍                 |
+| `wd:Q95074`                | 角色     | 角色     | キャラクター         |
+| `skos:Concept`             | 概念     | 概念     | 概念                 |
+| `skos:ConceptScheme`       | 概念体系 | 概念體系 | 概念体系             |
+| `schema:Organization`      | 组织     | 組織     | 組織                 |
+| `schema:Person`            | 人物     | 人物     | 人物                 |
+| `schema:VideoGame`         | 电子游戏 | 電子遊戲 | コンピュータゲーム   |
+| `wd:Q209163`               | 追加内容 | 追加內容 | 追加コンテンツ       |
+| `wd:Q20631656`             | 版本     | 版本     | リリース             |
+| `schema:PublicationVolume` | 卷       | 卷       | 巻                   |
+| `schema:ComicSeries`       | 漫画     | 漫畫     | 漫画                 |
+| `schema:Recipe`            | 食谱     | 食譜     | レシピ               |
+| `schema:BookSeries`        | 丛书     | 叢書     | 叢書                 |
+| `wd:Q7725310`              | 系列     | 系列     | シリーズ             |
+| `wd:Q689445`               | 视觉小说 | 視覺小說 | ビジュアルノベル     |
+| `schema:MusicAlbum`        | 音乐专辑 | 音樂專輯 | アルバム             |
+| `schema:MusicRelease`      | 音乐发行 | 音樂發行 | リリース             |
+| `schema:MusicRecording`    | 录音     | 錄音     | 録音                 |
 | `schema:MediaObject`       | 媒体对象 | 媒體物件 | メディアオブジェクト |
-| `rezics:ReleaseGroup`      | 发布组   | 發佈組   | リリースグループ   |
+| `rezics:ReleaseGroup`      | 发布组   | 發佈組   | リリースグループ     |
 
 Each changed label below was written by hand. References establish the usage of
 the word in its language; choosing it for a catalogue type is an editorial decision

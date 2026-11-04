@@ -14,10 +14,7 @@ import {
   musicReleaseEntry,
   readMusicRelease,
 } from '../src/features/catalogue/music-release-reader/model';
-import {
-  albumEditionProperty,
-  readAlbumEditions,
-} from '../src/features/catalogue/music-reader';
+import { albumEditionProperty, readAlbumEditions } from '../src/features/catalogue/music-reader';
 import { isReleaseType } from '../src/features/catalogue/release-fidelity/model';
 import recordedRelease from '../src/kernel/recorded/definitions-release.json';
 import recordedActive from '../src/kernel/recorded/definitions-active.json';
@@ -135,7 +132,8 @@ test('recorded native music release binds album, format, ordered duplicate track
   expect(recorded.types['schema:MusicAlbum']?.library).toBeUndefined();
   expect(recorded.types['schema:MusicRelease']?.library).toBeUndefined();
   expect(recorded.properties['schema:track']?.relation?.slotKey).toBe('wdt:P642');
-  fixture.publicRead.subject.statements['schema:releaseOf'] = fixture.publicRead.subject.statements['schema:exampleOfWork']!;
+  fixture.publicRead.subject.statements['schema:releaseOf'] =
+    fixture.publicRead.subject.statements['schema:exampleOfWork']!;
   delete fixture.publicRead.subject.statements['schema:exampleOfWork'];
   for (const row of fixture.first.relations) {
     row.statement.property.id = 'schema:track';
@@ -152,7 +150,12 @@ test('recorded native music release binds album, format, ordered duplicate track
     value: { type: 'value', content: occurrenceB },
   });
   fixture.first.relations = fixture.first.relations.filter((row) => row.target === recordingId);
-  const page = await readMusicRelease(fixture.client, recorded, { ...musicAddress, stream: 'forward:schema:track' }, 'en');
+  const page = await readMusicRelease(
+    fixture.client,
+    recorded,
+    { ...musicAddress, stream: 'forward:schema:track' },
+    'en',
+  );
   if (!page.ok) throw new Error('Expected recorded music release');
   expect(page.admitted).toBe(true);
   expect(page.stream?.key).toBe('forward:schema:track');
@@ -164,12 +167,16 @@ test('recorded native music release binds album, format, ordered duplicate track
   expect(page.rows.map((row) => row.summary?.id)).toEqual([recordingId, recordingId]);
   expect(new Set(page.rows.map((row) => row.statementId)).size).toBe(2);
   fixture.fail(403);
-  expect(await readMusicRelease(fixture.client, recorded, { ...musicAddress, stream: 'forward:schema:track' }, 'en')).toEqual({
+  expect(
+    await readMusicRelease(fixture.client, recorded, { ...musicAddress, stream: 'forward:schema:track' }, 'en'),
+  ).toEqual({
     ok: false,
     reason: 'withheld',
   });
   fixture.fail(503);
-  expect(await readMusicRelease(fixture.client, recorded, { ...musicAddress, stream: 'forward:schema:track' }, 'en')).toEqual({
+  expect(
+    await readMusicRelease(fixture.client, recorded, { ...musicAddress, stream: 'forward:schema:track' }, 'en'),
+  ).toEqual({
     ok: false,
     reason: 'unavailable',
   });
