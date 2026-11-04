@@ -251,7 +251,7 @@ async function writeCommands(input: {
     const byKey = new Map(result.results.map((entry) => [entry.key, entry]));
     for (const command of page) {
       const ack = byKey.get(command.key);
-      if (!ack || (ack.status !== 200 && ack.status !== 201))
+      if (!ack || !('value' in ack))
         throw new TypeError(`Bangumi staff vocabulary write failed: ${ack?.status ?? 'missing-ack'}`);
       if (command.op === 'create') {
         if (!('id' in ack.value) || !uuid.test(ack.value.id)) throw new TypeError('Bangumi staff vocabulary ACK has no UUID');

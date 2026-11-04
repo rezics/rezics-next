@@ -265,7 +265,7 @@ export function bangumiStaffRoleDefinition(
     typeof concept?.id !== 'string' ||
     typeof concept.scheme !== 'string' ||
     typeof concept.label !== 'string' ||
-    typeof role.source !== 'string'
+    typeof role?.source !== 'string'
   )
     return undefined;
   return {
