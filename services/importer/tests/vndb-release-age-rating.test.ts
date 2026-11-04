@@ -23,6 +23,7 @@ async function authoredCopy(directory: string, age = '15') {
     releases: ['id\treleased\tminage', `r1\t\\N\t${age}\nr2\t\\N\t0\nr3\t\\N\t\\N\nr4\t\\N\t-1\nr5\t\\N\t15.5\nr6\t\\N\t19`],
     releases_titles: ['id\tlang\tmtl\ttitle\tlatin', ['r1', 'r2', 'r3', 'r4', 'r5', 'r6'].map((id) => `${id}\tja\tt\tAuthored ${id}\t\\N`).join('\n')],
     releases_vn: ['id\tvid\trtype', 'r1\tv1\tcomplete\nr1\tv2\tpartial\nr2\tv1\tcomplete\nr3\tv1\tcomplete\nr4\tv1\tcomplete\nr5\tv1\tcomplete\nr6\tv1\tcomplete'],
+    releases_supersedes: ['id\trid', ''],
   };
   for (const [name, [header, body]] of Object.entries(files)) {
     await writeFile(join(db, `${name}.header`), `${header}\n`);
