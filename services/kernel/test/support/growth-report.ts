@@ -1,4 +1,5 @@
 import { costOfPlan, type Capture } from './growth-cost.ts';
+import { isCostFoldedCapture, type CostFoldedCapture } from './growth-cost-fold.ts';
 import type { ByteMetric, GrowthMetric } from './growth-bound.ts';
 import type { ReportSample, StatementAttribution } from './growth.ts';
 import { indexStatementRepetitions } from './growth-report-index.ts';
@@ -237,7 +238,39 @@ function addPlanCost(
     current.relationIdentities.set(relationIdentityKey(identity), identity);
 }
 
-export function statementAttributions(capture: Capture): StatementAttribution[] {
+export function statementAttributions(capture: Capture | CostFoldedCapture): StatementAttribution[] {
+  if (isCostFoldedCapture(capture)) {
+    const statements = new Map<
+      string,
+      { rows: number; blocks: number; count: number; node?: string; relationIdentities: Map<string, RelationIdentity> }
+    >();
+    for (const statement of capture.statements) {
+      const key = normalizeStatement(statement);
+      const current = statements.get(key) ?? { rows: 0, blocks: 0, count: 0, relationIdentities: new Map() };
+      current.count++;
+      statements.set(key, current);
+    }
+    for (const occurrence of capture.foregroundOccurrences) {
+      const text = capture.statements[occurrence.index];
+      if (text === undefined) continue;
+      const key = normalizeStatement(text);
+      const current = statements.get(key);
+      if (current === undefined) continue;
+      current.rows = checkedAdd(current.rows, occurrence.attributionRows, 'Statement examined rows');
+      current.blocks = checkedAdd(current.blocks, occurrence.blocks, 'Statement shared blocks');
+      if (occurrence.node) current.node = occurrence.node;
+      for (const identity of occurrence.relationIdentities)
+        current.relationIdentities.set(relationIdentityKey(identity), identity);
+    }
+    return [...statements].map(([statement, cost]) => ({
+      statement,
+      rows: cost.rows,
+      blocks: cost.blocks,
+      count: cost.count,
+      ...(cost.node === undefined ? {} : { node: cost.node }),
+      ...(cost.relationIdentities.size === 0 ? {} : { relationIdentities: [...cost.relationIdentities.values()] }),
+    }));
+  }
   validateCaptureEvidence(capture);
   const session = createPlanWalkSession();
   const statements = new Map<
@@ -285,10 +318,13 @@ export type StatementOccurrence = {
   readonly error: { readonly code: string; readonly message: string } | null;
   readonly plans: readonly number[];
   /** Native documents linked to this occurrence, retained after the capture is released. */
-  readonly planDocuments: readonly unknown[];
+  readonly planDocuments?: readonly unknown[];
+  /** Folded captures identify plan notice custody but do not retain raw documents. */
+  readonly planDocumentAvailability?: 'cost-folded';
   readonly rows: number;
   readonly blocks: number;
   readonly relationIdentities?: readonly RelationIdentity[];
+  readonly limitations?: readonly string[];
 };
 
 export type StatementOccurrences = {
@@ -297,7 +333,50 @@ export type StatementOccurrences = {
 };
 
 /** Costs each statement occurrence only from plans linked to it at capture time. */
-export function statementOccurrences(capture: Capture): StatementOccurrences {
+export function statementOccurrences(capture: Capture | CostFoldedCapture): StatementOccurrences {
+  if (isCostFoldedCapture(capture)) {
+    const occurrences = (
+      statements: readonly string[],
+      errors: readonly (string | null)[],
+      messages: readonly (string | null)[],
+      backends: readonly (number | undefined)[] | undefined,
+      summaries: readonly import('./growth-cost-fold.ts').FoldedOccurrenceSummary[],
+    ): StatementOccurrence[] => {
+      const byIndex = new Map(summaries.map((summary) => [summary.index, summary]));
+      return statements.map((statement, index) => {
+        const summary = byIndex.get(index);
+        const code = errors[index] ?? null;
+        return {
+          index,
+          statement: normalizeStatement(statement),
+          backend: backends?.[index],
+          error: code === null ? null : { code, message: messages[index] ?? '' },
+          plans: summary?.plans ?? [],
+          planDocumentAvailability: 'cost-folded',
+          rows: summary?.rows ?? 0,
+          blocks: summary?.blocks ?? 0,
+          ...(summary && summary.relationIdentities.length > 0 ? { relationIdentities: summary.relationIdentities } : {}),
+          ...(summary && summary.limitations.length > 0 ? { limitations: summary.limitations } : {}),
+        };
+      });
+    };
+    return {
+      statements: occurrences(
+        capture.statements,
+        capture.statementErrors,
+        capture.statementErrorMessages,
+        capture.statementBackends,
+        capture.foregroundOccurrences,
+      ),
+      backgroundStatements: occurrences(
+        capture.backgroundStatements,
+        capture.backgroundStatementErrors,
+        capture.backgroundStatementErrorMessages,
+        capture.backgroundStatementBackends,
+        capture.backgroundOccurrences,
+      ),
+    };
+  }
   validateCaptureEvidence(capture);
   const session = createPlanWalkSession();
   const occurrences = (

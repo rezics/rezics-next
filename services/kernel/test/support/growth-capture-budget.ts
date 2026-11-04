@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 
 export const MAX_GROWTH_CAPTURE_ENTRIES = 20_000;
-export const MAX_GROWTH_CAPTURE_BYTES = 128 * 1024 * 1024;
+export const MAX_GROWTH_CAPTURE_BYTES = 32 * 1024 * 1024;
 export const MAX_GROWTH_NATIVE_NOTICE_BYTES = 1024 * 1024;
 export const GROWTH_NATIVE_NOTICE_RETAINED_BYTE_MULTIPLIER = 8;
 
@@ -12,6 +12,11 @@ export type GrowthCaptureBudgetLimits = {
   readonly bytes: number;
   readonly nativeNoticeBytes: number;
 };
+
+export type GrowthNativeNoticeReservation = Readonly<{
+  readonly chargedBytes: number;
+  release(): void;
+}>;
 
 const defaultLimits: GrowthCaptureBudgetLimits = {
   entries: MAX_GROWTH_CAPTURE_ENTRIES,
@@ -57,12 +62,37 @@ export class GrowthCaptureBudget {
     this.reserve(`${side} statement error`, 1, bytes);
   }
 
-  retainNativeNotice(bytes: number, side: GrowthCaptureEvidenceSide): void {
+  retainNativeNotice(bytes: number, side: GrowthCaptureEvidenceSide): GrowthNativeNoticeReservation {
     if (bytes > this.limits.nativeNoticeBytes)
       throw new GrowthCaptureBudgetExceededError(
-        `${this.#label} exceeded native notice byte capacity (${this.limits.nativeNoticeBytes} bytes); ${side} notice has ${bytes} UTF-8 bytes.`,
+        `${this.#label} exceeded native notice byte capacity (${this.limits.nativeNoticeBytes} bytes); current 0, requested ${bytes}, total ${bytes} UTF-8 bytes for ${side} notice; capture has ${this.#bytes} charged bytes and ${this.#entries} evidence entries.`,
       );
-    this.reserve(`${side} native plan notice`, 1, bytes * GROWTH_NATIVE_NOTICE_RETAINED_BYTE_MULTIPLIER);
+    const chargedBytes = bytes * GROWTH_NATIVE_NOTICE_RETAINED_BYTE_MULTIPLIER;
+    this.reserve(`${side} native plan notice`, 1, chargedBytes);
+    let retained = true;
+    return {
+      chargedBytes,
+      release: () => {
+        if (!retained) return;
+        retained = false;
+        if (chargedBytes > this.#bytes) throw new Error('Growth capture notice reservation was already released');
+        this.#bytes -= chargedBytes;
+      },
+    };
+  }
+
+  retainFoldedSummary(side: GrowthCaptureEvidenceSide, evidence: string, entries: number, bytes: number): void {
+    if (!Number.isSafeInteger(entries) || entries < 0) throw new RangeError('Folded evidence entries must be non-negative');
+    if (!Number.isSafeInteger(bytes) || bytes < 0) throw new RangeError('Folded evidence bytes must be non-negative');
+    this.reserve(`${side} folded ${evidence}`, entries, bytes);
+  }
+
+  get entriesUsed(): number {
+    return this.#entries;
+  }
+
+  get chargedBytes(): number {
+    return this.#bytes;
   }
 
   retainNativePlanNode(side: GrowthCaptureEvidenceSide): void {
@@ -73,12 +103,12 @@ export class GrowthCaptureBudget {
     const nextEntries = this.#entries + entries;
     if (nextEntries > this.limits.entries)
       throw new GrowthCaptureBudgetExceededError(
-        `${this.#label} exceeded telemetry entry capacity (${this.limits.entries} entries); ${evidence} would retain ${nextEntries} entries.`,
+        `${this.#label} exceeded telemetry entry capacity (${this.limits.entries} entries); current ${this.#entries}, requested ${entries}, total ${nextEntries} entries for ${evidence}; charged bytes current ${this.#bytes}, requested ${bytes}, total ${this.#bytes + bytes}.`,
       );
     const nextBytes = this.#bytes + bytes;
     if (nextBytes > this.limits.bytes)
       throw new GrowthCaptureBudgetExceededError(
-        `${this.#label} exceeded telemetry byte capacity (${this.limits.bytes} charged bytes); ${evidence} would retain ${nextBytes} charged bytes.`,
+        `${this.#label} exceeded telemetry byte capacity (${this.limits.bytes} charged bytes); current ${this.#bytes}, requested ${bytes}, total ${nextBytes} charged bytes for ${evidence}; evidence entries current ${this.#entries}, requested ${entries}, total ${nextEntries}.`,
       );
     this.#entries = nextEntries;
     this.#bytes = nextBytes;

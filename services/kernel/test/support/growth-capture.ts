@@ -3,9 +3,16 @@ import { Buffer } from 'node:buffer';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg, { type Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
 import { createPool, withConnection } from '../../src/database/pool.ts';
-import { GrowthCaptureBudget, parseNativePlanNotice, type GrowthCaptureBudgetLimits } from './growth-capture-budget.ts';
+import {
+  GrowthCaptureBudget,
+  parseNativePlanNotice,
+  type GrowthCaptureBudgetLimits,
+  type GrowthCaptureEvidenceSide,
+  type GrowthNativeNoticeReservation,
+} from './growth-capture-budget.ts';
 import { walkPlanTree } from './growth-plan-walk.ts';
 import type { Capture } from './growth-cost.ts';
+import { GrowthCostFolder, type CostFoldedCapture, type FoldedStatementInput } from './growth-cost-fold.ts';
 import { drainCaptureWork } from './growth-capture-drain.ts';
 import { collectModifyTargets } from './growth-plan-walk.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
@@ -87,6 +94,7 @@ export type SeedingCount = { statements: number; rowsWritten: number };
 type ActiveCapture = {
   readonly id: number;
   readonly budget: GrowthCaptureBudget;
+  readonly costFolder: GrowthCostFolder | undefined;
   readonly mode: 'measured' | 'warmup';
   readonly database: GrowthDatabase;
   readonly run: RunCapture | undefined;
@@ -332,6 +340,38 @@ const setupStatements = [
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+function captureFailureContext(error: unknown, detail: string): Error {
+  const cause = asError(error);
+  return new Error(`${cause.message}; ${detail}`, { cause });
+}
+
+function occurrenceFailureContext(
+  side: GrowthCaptureEvidenceSide,
+  index: number | undefined,
+  text: string | undefined,
+  noticeBytes?: number,
+): string {
+  const statement =
+    text === undefined
+      ? 'SQL unavailable'
+      : `SQL ${JSON.stringify(text.slice(0, 180))} (${Buffer.byteLength(text, 'utf8')} UTF-8 bytes)`;
+  const notice = noticeBytes === undefined ? '' : `, native notice ${noticeBytes} UTF-8 bytes`;
+  return `${side} statement occurrence ${index ?? 'unowned'} ${statement}${notice}`;
+}
+
+function retainCapturePlanWrites(capture: ActiveCapture, plan: unknown, database: string, location: string): void {
+  const run = capture.run;
+  if (!run) return;
+  const physical = database || databaseName(capture.database);
+  const target = databaseForName(capture.database, physical);
+  run.databases.add(target);
+  const relations = run.get(target) ?? new Map<string, RelationIdentity>();
+  const discovered = new Map<string, RelationIdentity>();
+  collectModifyTargets(plan, discovered, location);
+  for (const identity of discovered.values()) addRelationIdentity(relations, { ...identity, database: physical });
+  if (relations.size > 0) run.set(target, relations);
 }
 
 function statementText(query: unknown): string | undefined {
@@ -688,6 +728,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     ) {
       const capture = attribution.capture;
       const side = attribution.background ? 'background' : 'foreground';
+      const occurrenceIndex = attribution.background ? capture.backgroundStatementCount : capture.foregroundStatementCount;
       try {
         capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
         const index = attribution.background ? capture.backgroundStatementCount++ : capture.foregroundStatementCount++;
@@ -703,8 +744,12 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
           requiresNativePlan: false,
         };
         capture.statementRecords.push(record);
+        capture.costFolder?.registerStatement(side, index);
       } catch (error) {
-        capture.error ??= asError(error);
+        capture.error ??= captureFailureContext(
+          error,
+          occurrenceFailureContext(side, occurrenceIndex, text ?? ''),
+        );
       }
     }
     if (state.seeding && !suppressAttribution) state.seeding.statements++;
@@ -746,9 +791,13 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
                 record.background ? 'background' : 'foreground',
                 Buffer.byteLength(errorMessage, 'utf8'),
               );
+              attribution.capture.costFolder?.retainStatementError(record.background ? 'background' : 'foreground');
               record.errorMessage = errorMessage;
             } catch (budgetError) {
-              attribution.capture.error ??= asError(budgetError);
+              attribution.capture.error ??= captureFailureContext(
+                budgetError,
+                occurrenceFailureContext(record.background ? 'background' : 'foreground', record.index, record.text),
+              );
             }
           }
         }
@@ -863,24 +912,55 @@ function instrument(client: PoolClient, state: CaptureState): void {
     // their top-level executor before CommandComplete, so they must not leave a pending cleanup owner.
     if (!notice.where && wireStatement) wireStatement.topLevelPlanSeen = true;
 
+    const capture = attribution.capture;
+    const side = attribution.background ? 'background' : 'foreground';
+    const noticeBytes = Buffer.byteLength(message, 'utf8');
+    const owner = wireStatement?.record?.index;
+    let plan: unknown;
+    let reservation: GrowthNativeNoticeReservation | undefined;
     try {
-      const capture = attribution.capture;
-      const side = attribution.background ? 'background' : 'foreground';
-      const plan = parseNativePlanNotice(capture.budget, message, side, () =>
-        JSON.parse(message.slice(message.indexOf(marker) + marker.length)),
-      ) as unknown;
+      if (capture.costFolder) {
+        reservation = capture.budget.retainNativeNotice(noticeBytes, side);
+        plan = JSON.parse(message.slice(message.indexOf(marker) + marker.length));
+      } else {
+        plan = parseNativePlanNotice(capture.budget, message, side, () =>
+          JSON.parse(message.slice(message.indexOf(marker) + marker.length)),
+        );
+      }
       retainNativePlanNodes(plan, capture, side);
-      (attribution.background ? capture.backgroundPlans : capture.plans).push(plan);
-      (attribution.background ? capture.backgroundPlanDatabases : capture.planDatabases).push(
-        connectedDatabase(client) ?? '',
-      );
-      (attribution.background ? capture.backgroundPlanStatements : capture.planStatements).push(
-        wireStatement?.record?.index,
-      );
-      if (capture.includeBackends)
-        (attribution.background ? capture.backgroundPlanBackends : capture.planBackends).push(backendPid(client));
+      if (capture.costFolder) {
+        const database = connectedDatabase(client) ?? '';
+        const planIndex = capture.costFolder.addNotice(plan, {
+          side,
+          owner,
+          backend: capture.includeBackends ? backendPid(client) : undefined,
+          database,
+        });
+        retainCapturePlanWrites(
+          capture,
+          plan,
+          database,
+          `${side === 'background' ? 'backgroundPlans' : 'plans'}[${planIndex}]`,
+        );
+      } else {
+        (attribution.background ? capture.backgroundPlans : capture.plans).push(plan);
+        (attribution.background ? capture.backgroundPlanDatabases : capture.planDatabases).push(
+          connectedDatabase(client) ?? '',
+        );
+        (attribution.background ? capture.backgroundPlanStatements : capture.planStatements).push(owner);
+        if (capture.includeBackends)
+          (attribution.background ? capture.backgroundPlanBackends : capture.planBackends).push(backendPid(client));
+      }
     } catch (error) {
-      attribution.capture.error ??= asError(error);
+      capture.error ??= captureFailureContext(
+        error,
+        occurrenceFailureContext(side, owner, wireStatement?.record?.text, noticeBytes),
+      );
+    } finally {
+      if (capture.costFolder) {
+        plan = undefined;
+        reservation?.release();
+      }
     }
   });
 
@@ -982,7 +1062,7 @@ export async function capture<T>(
   operation: () => Promise<T>,
   options: GrowthCaptureOptions = {},
 ): Promise<{ value: T; capture: Capture }> {
-  return captureInternal(database, operation, options, false);
+  return captureInternal(database, operation, options, false, 'raw');
 }
 
 export type GrowthCaptureOptions = {
@@ -991,12 +1071,38 @@ export type GrowthCaptureOptions = {
   readonly telemetryLimits?: Partial<GrowthCaptureBudgetLimits>;
 };
 
+/** Internal entry point used by the public cost-folded capture facade. */
+export function captureCostFoldedInternal<T>(
+  database: GrowthDatabase,
+  operation: () => Promise<T>,
+  options: GrowthCaptureOptions = {},
+  explicitWarmup = false,
+): Promise<{ value: T; capture: CostFoldedCapture }> {
+  return captureInternal(database, operation, options, explicitWarmup, 'cost-folded');
+}
+
+function captureInternal<T>(
+  database: GrowthDatabase,
+  operation: () => Promise<T>,
+  options: GrowthCaptureOptions,
+  explicitWarmup: boolean,
+  retentionMode: 'raw',
+): Promise<{ value: T; capture: Capture }>;
+function captureInternal<T>(
+  database: GrowthDatabase,
+  operation: () => Promise<T>,
+  options: GrowthCaptureOptions,
+  explicitWarmup: boolean,
+  retentionMode: 'cost-folded',
+): Promise<{ value: T; capture: CostFoldedCapture }>;
+
 async function captureInternal<T>(
   database: GrowthDatabase,
   operation: () => Promise<T>,
   options: GrowthCaptureOptions,
   explicitWarmup: boolean,
-): Promise<{ value: T; capture: Capture }> {
+  retentionMode: 'raw' | 'cost-folded',
+): Promise<{ value: T; capture: Capture | CostFoldedCapture }> {
   const state = states.get(database);
   if (!state) throw new Error('Growth database was not opened by openGrowthDatabase');
   state.lifecycle.assertOpen();
@@ -1008,9 +1114,11 @@ async function captureInternal<T>(
 
   const mode = explicitWarmup || (parentActive?.mode === 'warmup' && ownsParent) ? 'warmup' : 'measured';
   const id = nextCaptureId++;
+  const budget = new GrowthCaptureBudget(id, options.telemetryLimits);
   const active: ActiveCapture = {
     id,
-    budget: new GrowthCaptureBudget(id, options.telemetryLimits),
+    budget,
+    costFolder: retentionMode === 'cost-folded' ? new GrowthCostFolder(budget) : undefined,
     mode,
     database,
     run: measuredRun.getStore(),
@@ -1063,14 +1171,15 @@ async function captureInternal<T>(
       throw new AggregateError(failures, 'Growth capture failed while pending work was settling', {
         cause: failures[0],
       });
-    const foregroundPlanOwners = new Set(active.planStatements);
-    const backgroundPlanOwners = new Set(active.backgroundPlanStatements);
     for (const record of active.statementRecords) {
       if (!record.requiresNativePlan || record.errorCode !== null) continue;
-      const owners = record.background ? backgroundPlanOwners : foregroundPlanOwners;
-      if (!owners.has(record.index))
+      const side = record.background ? 'background' : 'foreground';
+      const hasPlan = active.costFolder
+        ? active.costFolder.hasNativePlan(side, record.index)
+        : (record.background ? active.backgroundPlanStatements : active.planStatements).includes(record.index);
+      if (!hasPlan)
         throw new Error(
-          `Successful ${record.background ? 'background ' : ''}${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan: ${record.text.slice(0, 600)}; plan owners: ${JSON.stringify([...owners].slice(0, 16))}; preceding occurrences: ${JSON.stringify(
+          `Successful ${record.background ? 'background ' : ''}${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan: ${record.text.slice(0, 600)}; preceding occurrences: ${JSON.stringify(
             active.statementRecords
               .filter((statement) => statement.background === record.background && statement.index <= record.index)
               .slice(-8)
@@ -1079,7 +1188,7 @@ async function captureInternal<T>(
         );
     }
     const run = measuredRun.getStore();
-    if (run) {
+    if (run && !active.costFolder) {
       for (const [plans, databaseNames, collection] of [
         [active.plans, active.planDatabases, 'plans'],
         [active.backgroundPlans, active.backgroundPlanDatabases, 'backgroundPlans'],
@@ -1109,6 +1218,31 @@ async function captureInternal<T>(
         for (const [backend, token] of transactions) runTransactions.set(backend, token);
         run.backends.transactions.set(target, runTransactions);
       }
+    if (active.costFolder) {
+      const foldedInput = {
+        elapsedMs,
+        statements: foreground.map<FoldedStatementInput>((record) => ({
+          text: record.text,
+          index: record.index,
+          backend: record.backend,
+          requestBytes: record.requestBytes,
+          responseBytes: record.responseBytes,
+          errorCode: record.errorCode,
+          errorMessage: record.errorMessage,
+        })),
+        backgroundStatements: background.map<FoldedStatementInput>((record) => ({
+          text: record.text,
+          index: record.index,
+          backend: record.backend,
+          requestBytes: record.requestBytes,
+          responseBytes: record.responseBytes,
+          errorCode: record.errorCode,
+          errorMessage: record.errorMessage,
+        })),
+        includeBackends: active.includeBackends,
+      };
+      return { value, capture: active.costFolder.finish(foldedInput) };
+    }
     return {
       value,
       capture: {
@@ -1149,7 +1283,7 @@ async function captureInternal<T>(
 
 /** Runs an explicitly owned unmeasured capture; nested captures inherit that custody. Used for warm-up and prepare. */
 export function captureWarmup<T>(database: GrowthDatabase, operation: () => Promise<T>) {
-  return captureInternal(database, operation, { includeBackends: true }, true);
+  return captureInternal(database, operation, { includeBackends: true }, true, 'raw');
 }
 
 function databaseName(database: GrowthDatabase): string {

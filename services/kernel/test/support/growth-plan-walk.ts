@@ -127,6 +127,11 @@ export class PlanWalkSession {
     this.#compiled.set(location, { root, preorder, postorder });
     yield* order === 'preorder' ? preorder : postorder;
   }
+
+  /** Drops one compiled tree after a streaming consumer has folded it, keeping the cumulative node count. */
+  forget(location: string, root: unknown): void {
+    if (this.#compiled.get(location)?.root === root) this.#compiled.delete(location);
+  }
 }
 
 export function createPlanWalkSession(limit = MAX_CAPTURE_PLAN_NODES): PlanWalkSession {

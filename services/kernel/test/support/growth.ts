@@ -24,6 +24,7 @@ import {
   withGrowthCheck,
   type GrowthDatabase,
 } from './growth-capture.ts';
+import { captureFoldedWarmup, captureWithFoldedCost } from './growth-composed-capture.ts';
 import {
   catalogStatementBound,
   costOf,
@@ -34,6 +35,7 @@ import {
   type Cost,
   type RelationCost,
 } from './growth-cost.ts';
+import { isCostFoldedCapture, type CostFoldedCapture } from './growth-cost-fold.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
 import { admitAggregatedCaptures } from './growth-capture-evidence.ts';
 import {
@@ -87,8 +89,12 @@ export {
   settleAdmin,
   GrowthSettleInfrastructureError,
   type GrowthDatabase,
+  type GrowthCaptureOptions,
   type MaintenanceTarget,
 } from './growth-capture.ts';
+export { captureWithFoldedCost } from './growth-composed-capture.ts';
+export type { CostFoldedCapture } from './growth-cost-fold.ts';
+export { statementAttributions, statementOccurrences } from './growth-report.ts';
 export * from './growth-seed.ts';
 export * from './growth-uncertainty.ts';
 export * from './growth-profile-output.ts';
@@ -112,6 +118,8 @@ export type GrowthCheck = {
   /** Counts returned by the operation. `includeBackends` makes the harness-provided `connections` count available. */
   readonly counted?: CountedCheck;
   readonly includeBackends?: boolean;
+  /** Selects bounded cost and occurrence summaries instead of retaining raw native plan documents. */
+  readonly captureMode?: 'raw' | 'cost-folded';
   /** Add captures from other participating databases to this invocation before costs and summaries are computed. */
   readonly aggregateCaptures?: (
     primary: Capture,
@@ -193,7 +201,10 @@ export type AttemptSample = {
   }[];
 };
 
-function attemptRecords(capture: Capture, occurrences: StatementOccurrences): AttemptRecord[] {
+function attemptRecords(
+  capture: Capture | CostFoldedCapture,
+  occurrences: StatementOccurrences,
+): AttemptRecord[] {
   const backends = capture.statementBackends;
   if (!backends || backends.length !== capture.statements.length)
     throw new TypeError('attempts require captures with backend attribution');
@@ -235,7 +246,7 @@ function attemptRecords(capture: Capture, occurrences: StatementOccurrences): At
 }
 
 /** Build the foreground transaction attempt ledger from a captured run. */
-export function readAttemptLedger(capture: Capture): AttemptRecord[] {
+export function readAttemptLedger(capture: Capture | CostFoldedCapture): AttemptRecord[] {
   return attemptRecords(capture, statementOccurrences(capture));
 }
 
@@ -773,7 +784,7 @@ function appendProfile(
 function assertCatalogBound(
   name: string,
   scale: number | undefined,
-  captureResult: Capture,
+  captureResult: Capture | CostFoldedCapture,
   samples: readonly { readonly scale: number; readonly cost: Cost }[],
 ): CatalogClassification {
   const classification = catalogStatementBound(captureResult);
@@ -1021,6 +1032,10 @@ async function assertRunTransactionsClosed(run: Awaited<ReturnType<typeof captur
 }
 
 export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
+  if (check.captureMode !== undefined && check.captureMode !== 'raw' && check.captureMode !== 'cost-folded')
+    throw new TypeError(`${check.name}: captureMode must be 'raw' or 'cost-folded'`);
+  if (check.captureMode === 'cost-folded' && check.aggregateCaptures !== undefined)
+    throw new TypeError(`${check.name}: aggregateCaptures is unavailable with cost-folded capture`);
   const admitted = admitGrowthCheck(check);
   check = { ...check, ...admitted };
   return withGrowthCheck(db, () => runGrowthCheck(db, check, admitted));
@@ -1108,10 +1123,15 @@ async function runGrowthCheck(
     };
     for (let warmup = 0; warmup < warmups; warmup++) {
       const warmupRun = await captureMeasuredRun(() =>
-        captureWarmup(db, async () => {
-          if (check.warmup) await check.warmup(db, scale, repetition);
-          else await check.operation(db, scale, repetition);
-        }),
+        check.captureMode === 'cost-folded'
+          ? captureFoldedWarmup(db, async () => {
+              if (check.warmup) await check.warmup(db, scale, repetition);
+              else await check.operation(db, scale, repetition);
+            })
+          : captureWarmup(db, async () => {
+              if (check.warmup) await check.warmup(db, scale, repetition);
+              else await check.operation(db, scale, repetition);
+            }),
       );
       absorbUnmeasured(warmupRun);
       await assertRunTransactionsClosed(warmupRun);
@@ -1132,25 +1152,40 @@ async function runGrowthCheck(
         await settlePending();
         if (check.prepare) {
           const prepare = check.prepare;
-          absorbUnmeasured(await captureMeasuredRun(() => captureWarmup(db, () => prepare(db, scale, repetition))));
+          absorbUnmeasured(
+            await captureMeasuredRun(() =>
+              check.captureMode === 'cost-folded'
+                ? captureFoldedWarmup(db, () => prepare(db, scale, repetition))
+                : captureWarmup(db, () => prepare(db, scale, repetition)),
+            ),
+          );
           await settlePending();
         }
         const captured = await captureMeasuredRun(() =>
-          capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
+          check.captureMode === 'cost-folded'
+            ? captureWithFoldedCost(db, () => check.operation(db, scale, repetition), { includeBackends: true })
+            : capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
         );
         for (const target of captured.databases) measuredDatabases.add(target);
         await assertRunTransactionsClosed(captured);
         pendingBackends = operationBackends(captured.backends, captured.transactions);
         const writes = captured.writes;
         const measured = captured.value;
-        const aggregate = check.aggregateCaptures?.(measured.capture, measured.value);
-        const catalogCaptures = aggregate?.databases ?? [{ name: 'application', capture: measured.capture }];
-        const measuredCapture = admitAggregatedCaptures(
-          check.name,
-          aggregate?.capture ?? measured.capture,
-          catalogCaptures,
-          measured.capture,
-        );
+        let measuredCapture: Capture | CostFoldedCapture = measured.capture;
+        let catalogCaptures: readonly { readonly name: string; readonly capture: Capture | CostFoldedCapture }[];
+        if (isCostFoldedCapture(measured.capture)) {
+          catalogCaptures = [{ name: 'application', capture: measured.capture }];
+        } else {
+          const aggregate = check.aggregateCaptures?.(measured.capture, measured.value);
+          const rawCatalogCaptures = aggregate?.databases ?? [{ name: 'application', capture: measured.capture }];
+          catalogCaptures = rawCatalogCaptures;
+          measuredCapture = admitAggregatedCaptures(
+            check.name,
+            aggregate?.capture ?? measured.capture,
+            rawCatalogCaptures,
+            measured.capture,
+          );
+        }
         const runBackends = [
           ...new Set(
             (measuredCapture.statementBackends ?? []).filter((backend): backend is number => backend !== undefined),
