@@ -154,7 +154,8 @@ test('sparse release windows continue, cursor refusal restarts, and withheld rea
     await mounted.click(m.game_reader_refresh());
     expect(mounted.host.textContent).toContain(m.game_reader_withheld());
     expect(mounted.host.textContent).not.toContain('+2024-05');
-    expect(mounted.host.querySelector('a')).toBeNull();
+    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
+    expect(mounted.host.querySelector('a[href*="/details"]')).not.toBeNull();
   } finally {
     await mounted.close();
   }
@@ -202,17 +203,21 @@ test('authority, source and locale replacement retire pending data, cursors, des
       mounted.client.setQueryData(['exposure', 'viewer'], { spoilerLevel: 2 });
     });
     expect(mounted.host.textContent).not.toContain('Harbour trial');
-    expect(mounted.host.querySelector('a')).toBeNull();
+    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
+    expect(mounted.host.querySelector('a[href*="/details"]')).not.toBeNull();
     await mounted.render({ ...props, source: fixture, transport: fixture.read });
-    expect(mounted.host.querySelector('a')).toBeNull();
+    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
+    expect(mounted.host.querySelector('a[href*="/details"]')).not.toBeNull();
     const fresh = {};
     await mounted.render({ ...props, source: fresh, transport: fixture.read });
     expect(mounted.host.textContent).toContain('Harbour trial');
     const calls = fixture.calls.length;
     await mounted.render({ ...props, source: fresh, locale: 'ja', transport: fixture.read });
-    expect(mounted.host.querySelector('a')).toBeNull();
+    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
+    expect(mounted.host.querySelector('a[href*="/details"]')).not.toBeNull();
     await mounted.render({ ...props, source: fresh, locale: 'en', transport: fixture.read });
-    expect(mounted.host.querySelector('a')).toBeNull();
+    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
+    expect(mounted.host.querySelector('a[href*="/details"]')).not.toBeNull();
     expect(fixture.calls.length).toBe(calls);
     await mounted.render({ ...props, source: {}, transport });
     const retired = deliver;
@@ -241,6 +246,99 @@ test('unsupported fields keep generic reading/correction and spoiler-qualified e
     expect(mounted.host.textContent).not.toContain('Trial 0.8');
     await mounted.click(m.thread_reveal_spoiler());
     expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).not.toBeNull();
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('inspection keeps each native association and its rank, qualifier and reference separate from equal release labels', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = gameExample();
+    const first = fixture.first.links[0]!;
+    first.assertion!.rank = 'preferred';
+    first.assertion!.rezics.release = `sha256:${'2'.repeat(64)}`;
+    first.assertion!.references.push({
+      hash: 'edition-reference',
+      parts: [
+        {
+          property: { id: 'schema:url', data_type: 'url' },
+          value: { type: 'value', content: 'https://example.test/edition-source' },
+        },
+      ],
+    });
+    const second = structuredClone(first);
+    second.statement = second.assertion!.id = '00000000-0000-4000-8000-000000000006';
+    second.assertion!.rank = 'normal';
+    second.assertion!.qualifiers = [];
+    second.assertion!.references = [];
+    fixture.first.links.push(second);
+    await mounted.render({
+      ...fixture.address,
+      locale: 'en',
+      realm: 'games',
+      source: fixture,
+      reader: null,
+      transport: fixture.read,
+    });
+    await mounted.click(m.game_reader_inspect());
+    const panel = mounted.host.querySelector('[data-slot="game-edition-inspection"]')!;
+    for (const value of [
+      first.subject,
+      first.statement,
+      fixture.address.id,
+      first.property,
+      first.summary!.type,
+      'preferred',
+      'Trial 0.8',
+    ])
+      expect(panel.textContent).toContain(value);
+    expect(panel.textContent).toContain(m.release_fidelity_historical());
+    expect(panel.querySelector('[data-reference="edition-reference"] a')?.getAttribute('href')).toBe(
+      'https://example.test/edition-source',
+    );
+    await mounted.click(m.game_reader_close_inspection());
+    expect(document.activeElement?.textContent).toBe(m.game_reader_inspect());
+    const controls = mounted.host.querySelectorAll<HTMLButtonElement>('button');
+    const other = Array.from(controls).filter((node) => node.textContent === m.game_reader_inspect())[1]!;
+    await act(async () => {
+      other.focus();
+      other.click();
+    });
+    const next = mounted.host.querySelector('[data-slot="game-edition-inspection"]')!;
+    expect(next.textContent).toContain(second.statement);
+    expect(next.textContent).toContain(m.game_reader_no_qualifiers());
+    expect(next.textContent).toContain(m.game_reader_no_references());
+    expect(next.textContent).not.toContain('Trial 0.8');
+    expect(next.textContent).not.toContain(first.statement);
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('a missing assertion is unavailable and a missing summary remains withheld, while partial dates and TBA keep distinct meanings', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = gameExample();
+    const row = fixture.first.links[0]!;
+    row.summary = null;
+    row.assertion = null;
+    await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport: fixture.read });
+    expect(mounted.host.querySelector('[data-date-kind="partial"]')?.textContent).toContain('+2024-05');
+    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
+    await mounted.click(m.game_reader_inspect());
+    const panel = mounted.host.querySelector('[data-slot="game-edition-inspection"]')!;
+    expect(panel.textContent).toContain(m.game_reader_assertion_unavailable());
+    expect(panel.textContent).not.toContain(m.game_reader_no_qualifiers());
+    expect(panel.textContent).not.toContain(m.game_reader_no_references());
+    const tba = gameExample('tba');
+    await mounted.render({ ...tba.address, locale: 'en', source: tba, reader: null, transport: tba.read });
+    expect(mounted.host.querySelector('[data-date-kind="tba"]')?.textContent).toBe(m.release_fidelity_date_tba());
+    expect(mounted.host.textContent).not.toContain(m.release_fidelity_date_absent());
+    const missing = gameExample('unconfigured');
+    await mounted.render({ ...missing.address, locale: 'en', source: missing, reader: null, transport: missing.read });
+    expect(mounted.host.textContent).toContain(m.game_reader_unsupported());
+    expect(mounted.host.textContent).not.toContain(m.game_reader_editions_empty());
   } finally {
     await mounted.close();
   }
