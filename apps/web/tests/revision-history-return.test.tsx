@@ -48,6 +48,7 @@ type HistoryRequestData = {
 type ExactRequestData = HistoryRequestData & { revisionId: string };
 const historyReads: HistoryRequestData[] = [];
 const exactReads: ExactRequestData[] = [];
+const historyReadWaiters = new Map<number, () => void>();
 let pages = new Map<string, HistoryPage>();
 let failNextHistoryCursor: string | undefined;
 const anonymousReader: HistoricalActualReader = { credentialMode: 'anonymous', subject: null, complete: true };
@@ -57,6 +58,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/threads/reads', () => ({
   readPostHistory: async ({ data }: { data: HistoryRequestData }): Promise<HistoricalReadEnvelope<unknown>> => {
     historyReads.push(data);
+    historyReadWaiters.get(historyReads.length)?.();
     if (failNextHistoryCursor !== undefined && data.cursor === failNextHistoryCursor) {
       failNextHistoryCursor = undefined;
       throw new Error('Constructed history read failure');
@@ -140,19 +142,15 @@ function nextResolved(router: ReturnType<typeof createRouter>) {
     });
   });
 }
-function waitForText(host: HTMLElement, text: string) {
+function waitForHistoryRead(count: number) {
+  if (historyReads.length >= count) return Promise.resolve();
   return new Promise<void>((resolve, reject) => {
-    const observer = new MutationObserver(() => {
-      if (!host.textContent?.includes(text)) return;
+    const timeout = setTimeout(() => reject(new Error(`Timed out waiting for history read ${count}`)), 2_000);
+    historyReadWaiters.set(count, () => {
       clearTimeout(timeout);
-      observer.disconnect();
+      historyReadWaiters.delete(count);
       resolve();
     });
-    const timeout = setTimeout(() => {
-      observer.disconnect();
-      reject(new Error(`Timed out waiting for ${text}`));
-    }, 5_000);
-    observer.observe(host, { childList: true, characterData: true, subtree: true });
   });
 }
 async function openExactFromLaterSlice(view: Awaited<ReturnType<typeof mount>>) {
@@ -167,6 +165,7 @@ async function openExactFromLaterSlice(view: Awaited<ReturnType<typeof mount>>) 
 async function mount(initialUrl: string) {
   historyReads.length = 0;
   exactReads.length = 0;
+  historyReadWaiters.clear();
   failNextHistoryCursor = undefined;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
@@ -276,13 +275,15 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
     expect(view.router.state.location.href).not.toContain(cursor);
 
     const historyResolved = nextResolved(view.router);
-    const restored = waitForText(view.host, m.revision_return_restored());
+    const historyRead = waitForHistoryRead(3);
     await click(
       [...view.host.querySelectorAll<HTMLAnchorElement>('a')].find(
         (link) => link.textContent?.trim() === m.revision_return_to_history(),
       )!,
     );
-    await act(async () => Promise.all([historyResolved, restored]));
+    await act(async () => historyResolved);
+    await historyRead;
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor, cursor]);
     expect(view.host.textContent).toContain(m.revision_return_restored());
     const focusedHeading = view.host.querySelector<HTMLElement>('[data-history-focus-boundary][tabindex="-1"]');
@@ -304,13 +305,15 @@ test('a failed return retries the same admitted cursor and does not re-arm focus
     await openExactFromLaterSlice(view);
     failNextHistoryCursor = cursor;
     const historyResolved = nextResolved(view.router);
-    const failed = waitForText(view.host, m.revision_return_failed());
+    const historyRead = waitForHistoryRead(3);
     await click(
       [...view.host.querySelectorAll<HTMLAnchorElement>('a')].find(
         (link) => link.textContent?.trim() === m.revision_return_to_history(),
       )!,
     );
-    await act(async () => Promise.all([historyResolved, failed]));
+    await act(async () => historyResolved);
+    await historyRead;
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(view.host.textContent).toContain(m.revision_return_failed());
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor, cursor]);
     button(view.host, m.thread_history_hide()).focus();
