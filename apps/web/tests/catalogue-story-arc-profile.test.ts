@@ -2,6 +2,8 @@ import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { CreateResult, CreatedReader, CreateSubjectCommand } from '../src/features/catalogue/create-subject';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
 import { releaseDigest } from '@rezics/definitions';
 import {
   storyArcProfileFixture,
