@@ -65,10 +65,14 @@ test('member currentness preserves occurrence identity and refuses changed or un
     next: 'opaque-first-cursor',
   };
   expect(() =>
-    assertMemberPageCurrent(observed, {
-      ...observed,
-      members: observed.members.map((member) => ({ ...member, subject: { id: member.subjectId }, facts: {} })),
-    }, { listFactsAttached: true }),
+    assertMemberPageCurrent(
+      observed,
+      {
+        ...observed,
+        members: observed.members.map((member) => ({ ...member, subject: { id: member.subjectId }, facts: {} })),
+      },
+      { listFactsAttached: true },
+    ),
   ).not.toThrow();
   expect(() =>
     assertMemberPageCurrent(observed, {
@@ -91,9 +95,7 @@ test('Collection route withholds duplicate occurrence facts when one admitted ro
   expect(initialPage.members.map((member) => member.subjectId)).toEqual([book, book]);
   expect(initialPage.members[0]!.id).not.toBe(initialPage.members[1]!.id);
   if (initialPage.viewerFacts?.state === 'current')
-    expect(initialPage.viewerFacts.rows?.map(({ rowKey }) => rowKey)).toEqual(
-      initialPage.members.map(({ id }) => id),
-    );
+    expect(initialPage.viewerFacts.rows?.map(({ rowKey }) => rowKey)).toEqual(initialPage.members.map(({ id }) => id));
 
   const removed = initialPage.members[1]!;
   const interleave = interleaveViewerEntries(() =>
