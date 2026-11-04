@@ -21,7 +21,9 @@ test('the disabled prelanding typecheck skips first, retried, and batched dev la
     expect(readFileSync(h.outcomes.at(-1)!.logPath, 'utf8')).toContain('Prelanding typecheck skipped');
 
     Bun.spawnSync(['git', 'branch', 'stabilize', h.head('dev')], { cwd: h.root });
-    h.settings.integrationChecks = [{ paths: ['docs/**'], command: ['bun', 'scripts/typecheck.ts'] }];
+    Object.assign(h.settings, {
+      integrationChecks: [{ paths: ['docs/**'], command: ['bun', 'scripts/typecheck.ts'] }],
+    });
     h.settings.integration.devPrelandingTypecheck = true;
     const retried = h.dispatch('docs/retry.md', [], ['true'], 'fixture', 'stabilize');
     await h.start(retried);
