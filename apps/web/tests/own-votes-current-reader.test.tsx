@@ -18,6 +18,7 @@ let activeSubject = '11111111-1111-4111-8111-111111111111';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
+mock.module('../src/kernel/client', () => ({ configured: () => false }));
 mock.module('../src/ratings/own-votes/actions', () => ({
   readOwnVotesForViewer: ({ data }: { data: { cursor?: string } }) => {
     const call = { ...deferred<OwnVotesRead>(), subject: activeSubject, cursor: data.cursor ?? null };
