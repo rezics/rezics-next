@@ -66,7 +66,7 @@ function UnavailableExactRoute() {
       <ExactRevisionView
         identity={{ postId, revisionId }}
         page={{ state: 'unavailable', status: 404 }}
-        historyReturn={returnTarget}
+        {...(returnTarget ? { historyReturn: returnTarget } : {})}
       />
     </main>
   );
@@ -124,7 +124,6 @@ function ReturnJourney({ lostReceipt = false }: { lostReceipt?: boolean }) {
     globalThis.fetch = transport;
     return () => {
       if (globalThis.fetch === transport) globalThis.fetch = previous;
-      router.dispose();
       client.clear();
     };
   }, [client, router]);

@@ -65,7 +65,7 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
   const [selected, setSelected] = useState<number | null>(null);
   const [destination, setDestination] = useState('');
   const focusIntent = useRef<FocusIntent | null>(null);
-  const handledReturn = useRef<string>();
+  const handledReturn = useRef<string | undefined>(undefined);
   const live = useRef(false);
   const current = useRef({ active, isCurrent, length: entries.length, selected });
   current.current = { active, isCurrent, length: entries.length, selected };
