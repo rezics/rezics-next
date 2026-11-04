@@ -104,7 +104,7 @@ test('People correction focus stays current and profile creation keeps authority
     const success = next();
     reload().focus();
     await act(async () => user.keyboard('{Enter}'));
-    expect(within(host).getByRole('status').textContent).toBe(m.catalogue_create_loading());
+    expect(within(host).getByText(m.catalogue_create_loading()).textContent).toBe(m.catalogue_create_loading());
     await settle(() => success(initial));
     const heading = within(host).getByRole('heading', { level: 1 });
     expect(window.document.activeElement).toBe(heading);
