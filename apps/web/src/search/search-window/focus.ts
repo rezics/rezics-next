@@ -40,7 +40,7 @@ export function searchWindowFocus() {
       const active = document.activeElement;
       const owns = !pending.moved && (active === pending.source || active === document.body || active === document.documentElement);
       const action = navigation?.querySelector<HTMLElement>(`[data-window-action="${pending.action}"]:not([aria-disabled="true"])`);
-      const recovery = region?.querySelector<HTMLElement>('button:not(:disabled), a[href]:not([aria-disabled="true"])');
+      const recovery = region?.querySelector<HTMLElement>('[data-search-recovery] button:not(:disabled), [data-search-recovery] a[href]:not([aria-disabled="true"])');
       retire();
       if (owns) (action ?? recovery ?? region)?.focus();
     },
