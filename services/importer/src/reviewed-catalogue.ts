@@ -167,10 +167,14 @@ function preflight(input: unknown): Seed[] {
 }
 async function openFence(port: ReviewedCataloguePort, seed: Seed, signal?: AbortSignal) {
   const o = owner(seed);
-  ensure(
-    !(await port.fence({ source: o.source, externalId: o.external_id, fieldGroup: 'facts' }, signal)).fenced,
-    'Reviewed catalogue source facts are fenced',
-  );
+  if ((await port.fence({ source: o.source, externalId: o.external_id, fieldGroup: 'facts' }, signal)).fenced)
+    throw new ReviewedBindingFencedError();
+}
+class ReviewedBindingFencedError extends Error {
+  constructor() {
+    super('Reviewed catalogue source facts are fenced');
+    this.name = 'ReviewedBindingFencedError';
+  }
 }
 function slot(property: string, content: string) {
   return { property, ...(property === 'schema:sameAs' ? {} : { target: content }), context: globalContext, limit: 100 };
@@ -516,7 +520,12 @@ export async function inspectReviewedBangumiBinding(
   } catch (error) {
     signal?.throwIfAborted();
     // No partial mapping or anonymous retry on undisclosed, moved, fenced or unavailable originals.
-    if (error instanceof ImportTransportError || error instanceof TypeError) return { state: 'unavailable' };
+    if (error instanceof ReviewedBindingFencedError) return { state: 'withdrawn' };
+    if (error instanceof ImportTransportError)
+      return error.retryable || error.status === undefined || error.status >= 500
+        ? { state: 'unavailable' }
+        : { state: 'withdrawn' };
+    if (error instanceof TypeError) return { state: 'unavailable' };
     throw error;
   }
 }
