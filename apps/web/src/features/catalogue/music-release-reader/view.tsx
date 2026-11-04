@@ -35,7 +35,7 @@ type Props = {
   transport: MusicReleaseTransport;
   source: object | string;
   reader: string | null;
-  initial?: MusicReleaseRead;
+  initial?: MusicReleaseRead | undefined;
   /** Re-enter the ordinary Subject loader. Success must supply a replacement source observation. */
   recoverCurrentPage?: (() => Promise<void>) | undefined;
 };
