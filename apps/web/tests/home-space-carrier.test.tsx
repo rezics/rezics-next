@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { HomeFeed } from '../src/features/pages/home-feed';
+import { HomePublicOwnerActions, HomePublicOwnerContext } from '../src/features/feed/home-public-owner/view';
 import { homeFeedDestination, homeFeedRealmDestination } from '../src/features/pages/home-feed-destination';
-import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
+import type { FeedItem } from '../src/features/pages/home-feed-read';
 
 type Carrier = { id: string; title: string | null } | null;
 const spaceItem = (id: string, address: string, realm?: Carrier): FeedItem => ({
@@ -38,13 +38,16 @@ test('Home keeps exact Space and disclosed carrier destinations while preserving
       title: '',
     }),
   ];
-  const page: FeedPage = {
-    feedItems: items,
-    next: null,
-    asOf: '2026-11-04T00:00:00Z',
-    sources: { discovery: 'ready', following: 'not_requested', continue: 'not_requested' },
-  };
-  const html = renderToStaticMarkup(<HomeFeed result={{ state: 'ready', page }} locale="en" />);
+  const html = items
+    .map((item) =>
+      renderToStaticMarkup(
+        <>
+          <HomePublicOwnerContext item={item} locale="en" />
+          <HomePublicOwnerActions item={item} locale="en" signedIn={false} />
+        </>,
+      ),
+    )
+    .join('');
 
   expect(homeFeedDestination(current, 'en')).toBe('/en/spaces/reading-room');
   expect(homeFeedRealmDestination(current, 'en')).toBe(`/en/realms/${currentRealm}`);

@@ -3,8 +3,6 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { HomeFeed, HomeFeedConsumer } from '../src/features/pages/home-feed';
-import { homeFeedDestination } from '../src/features/pages/home-feed-destination';
 import {
   HOME_FEED_HISTORY_KEY,
   type FeedInput,
@@ -14,6 +12,10 @@ import {
 } from '../src/features/pages/home-feed-read';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { HomeFeed, HomeFeedConsumer } = await import('../src/features/pages/home-feed');
+const { homeFeedDestination } = await import('../src/features/pages/home-feed-destination');
 
 const id = '00000000-0000-7000-8000-000000000001';
 const spaceId = '00000000-0000-7000-8000-000000000002';
