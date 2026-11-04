@@ -2,7 +2,7 @@ import * as v from 'valibot';
 
 const id = v.pipe(v.string(), v.uuid());
 const text = (max: number) => v.pipe(v.string(), v.maxLength(max));
-export const reviewContextSource = v.strictObject({
+export const searchContextSource = v.strictObject({
   openingRevisionId: id,
   sourceVersion: v.pipe(text(128), v.minLength(1)),
 });
@@ -60,11 +60,11 @@ export const searchReviewContext = v.variant('state', [
 ]);
 export type SearchReviewContext = v.InferOutput<typeof searchReviewContext>;
 export function validReviewContextBinding(value: {
-  source?: v.InferOutput<typeof reviewContextSource>;
-  reviewContext?: SearchReviewContext;
+  source?: v.InferOutput<typeof searchContextSource>;
+  searchContext?: SearchReviewContext;
   subject?: { id: string; title?: string | null } | null;
 }) {
-  const context = value.reviewContext;
+  const context = value.searchContext;
   if (!context) return true;
   if (!value.source || new TextEncoder().encode(JSON.stringify(context)).byteLength > 8192) return false;
   if (context.state !== 'available') return !value.subject;

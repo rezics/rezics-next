@@ -91,14 +91,14 @@ function ReviewRow({
   subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
   targetTypes?: Record<string, Record<string, string>> | undefined;
 }) {
-  const reviewContext = summary.reviewContext;
+  const searchContext = summary.searchContext;
   const target =
-    reviewContext?.state === "available" &&
-    reviewContext.target.state === "available"
-      ? reviewContext.target.subject
+    searchContext?.state === "available" &&
+    searchContext.target.state === "available"
+      ? searchContext.target.subject
       : null;
   // An enriched withheld state never falls back to the earlier title-only slot.
-  const reviewedSubject = reviewContext
+  const reviewedSubject = searchContext
     ? target && { id: target.id, title: target.label?.value ?? null }
     : summary.subject;
   const reviewedTitle =
@@ -124,7 +124,7 @@ function ReviewRow({
           >
             {reviewedTitle}
           </a>
-        ) : reviewContext ? (
+        ) : searchContext ? (
           <span>
             {m.discussion_provenance_details_subject_unavailable(
               {},
@@ -192,8 +192,8 @@ function ReviewRow({
       preview={
         <div className="min-w-0 space-y-3">
           {summary.excerpt &&
-          (!reviewContext || reviewContext.state === "available") ? (
-            reviewContext?.state === "available" && reviewContext.spoiler ? (
+          (!searchContext || searchContext.state === "available") ? (
+            searchContext?.state === "available" && searchContext.spoiler ? (
               <details
                 key={`${id}:${summary.source?.openingRevisionId}:${summary.source?.sourceVersion}:${locale}`}
               >
@@ -201,7 +201,7 @@ function ReviewRow({
                   {m.subject_spoiler_show({}, options(locale))}
                 </summary>
                 <p
-                  lang={reviewContext.language ?? undefined}
+                  lang={searchContext.language ?? undefined}
                   className="line-clamp-3 break-words"
                 >
                   {summary.excerpt}
@@ -210,8 +210,8 @@ function ReviewRow({
             ) : (
               <p
                 lang={
-                  reviewContext?.state === "available"
-                    ? (reviewContext.language ?? undefined)
+                  searchContext?.state === "available"
+                    ? (searchContext.language ?? undefined)
                     : undefined
                 }
                 className="line-clamp-3 break-words"
@@ -220,8 +220,8 @@ function ReviewRow({
               </p>
             )
           ) : null}
-          {reviewContext ? (
-            <ReviewContextDetails context={reviewContext} locale={locale} />
+          {searchContext ? (
+            <ReviewContextDetails context={searchContext} locale={locale} />
           ) : null}
         </div>
       }

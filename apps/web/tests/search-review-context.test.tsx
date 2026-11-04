@@ -22,7 +22,7 @@ function page(): DiscoveryPage {
           excerpt: 'A spoiler observation.',
           author: { displayName: 'Reader', handle: null },
           source: { openingRevisionId: id, sourceVersion: 'native-version' },
-          reviewContext: {
+          searchContext: {
             state: 'available',
             openingPostId: id,
             language: 'en',
@@ -85,7 +85,7 @@ test('missing, erased and withheld citations stay distinct and never display a g
     const hit = wire.hits[0]!;
     if (hit.summary.kind !== 'review') throw new Error('Expected review');
     delete hit.summary.value.author;
-    hit.summary.value.reviewContext = {
+    hit.summary.value.searchContext = {
       state: 'available',
       openingPostId: ids[0]!,
       language: null,
@@ -111,16 +111,16 @@ test('closed receiving refuses stale target siblings, current-label substitution
   const original = page();
   for (const mutate of [
     (value: any) => {
-      value.reviewContext.target = { state: 'withheld' };
+      value.searchContext.target = { state: 'withheld' };
     },
     (value: any) => {
-      value.reviewContext.citation.historicalQuestion = { state: 'available', label: 'Today’s question', revision: 99 };
+      value.searchContext.citation.historicalQuestion = { state: 'available', label: 'Today’s question', revision: 99 };
     },
     (value: any) => {
-      value.reviewContext.currentVote = { units: 19 };
+      value.searchContext.currentVote = { units: 19 };
     },
     (value: any) => {
-      value.reviewContext.target.subject.label.value = 'x'.repeat(1025);
+      value.searchContext.target.subject.label.value = 'x'.repeat(1025);
     },
     (value: any) => {
       delete value.source;
@@ -144,7 +144,7 @@ test('unavailable current context suppresses an earlier opening excerpt', () => 
   const wire = page();
   const hit = wire.hits[0]!;
   if (hit.summary.kind !== 'review') throw new Error('Expected review');
-  hit.summary.value.reviewContext = { state: 'unavailable' };
+  hit.summary.value.searchContext = { state: 'unavailable' };
   wire.hits = [hit];
   const admitted = parseDiscoveryPage(wire);
   expect(admitted).toBeDefined();

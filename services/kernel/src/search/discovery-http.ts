@@ -1,7 +1,7 @@
 import {
   ReviewContextSourceSchema,
   SearchReviewContextSchema,
-  reviewContextBytes,
+  searchContextBytes,
   validReviewContextBinding,
 } from './review-context-schemas.ts';
 import { REVIEW_CONTEXT_LIMITS } from './review-context.ts';
@@ -120,7 +120,7 @@ const reviewSummary = t.Object(
     excerpt: t.Optional(t.String({ maxLength: 640 })),
     subject: t.Optional(t.Union([reviewSubject, t.Null()])),
     source: t.Optional(ReviewContextSourceSchema),
-    reviewContext: t.Optional(SearchReviewContextSchema),
+    searchContext: t.Optional(SearchReviewContextSchema),
   },
   closed,
 );
@@ -354,8 +354,8 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
   let reviewBytes = 0;
   for (const hit of page.hits) {
     admitDiscoveryHit(hit);
-    if (hit.summary.kind === 'review' && hit.summary.value.reviewContext) {
-      reviewBytes += reviewContextBytes(hit.summary.value.reviewContext);
+    if (hit.summary.kind === 'review' && hit.summary.value.searchContext) {
+      reviewBytes += searchContextBytes(hit.summary.value.searchContext);
       if (reviewBytes > REVIEW_CONTEXT_LIMITS.pageBytes) unavailable();
     }
     if ('workContext' in hit && hit.workContext) contextBytes += workContextBytes(hit.workContext);

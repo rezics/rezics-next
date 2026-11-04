@@ -66,19 +66,19 @@ export const SearchReviewContextSchema = t.Unsafe<SearchReviewContext>(
   ]),
 );
 
-export function reviewContextBytes(value: SearchReviewContext): number {
+export function searchContextBytes(value: SearchReviewContext): number {
   return Buffer.byteLength(JSON.stringify(value));
 }
 
 /** Withheld context cannot carry any fallback identity through a sibling slot. */
 export function validReviewContextBinding(value: {
   source?: { openingRevisionId: string; sourceVersion: string };
-  reviewContext?: SearchReviewContext;
+  searchContext?: SearchReviewContext;
   subject?: { id: string; title?: string | null } | null;
 }): boolean {
-  const context = value.reviewContext;
+  const context = value.searchContext;
   if (!context) return true;
-  if (!value.source || reviewContextBytes(context) > REVIEW_CONTEXT_LIMITS.rowBytes) return false;
+  if (!value.source || searchContextBytes(context) > REVIEW_CONTEXT_LIMITS.rowBytes) return false;
   if (context.state !== 'available') return !value.subject;
   if (context.target.state !== 'available') return !value.subject && context.citation.state !== 'available';
   return !value.subject || value.subject.id === context.target.subject.id;

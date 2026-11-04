@@ -245,7 +245,7 @@ export async function prepareSearchReviewContexts(
                   ? { state: 'available', recorded: { ...recorded }, historicalQuestion: { state: 'unavailable' } }
                   : { state: 'absent' };
         const display = presentation(thread);
-        const reviewContext: SearchReviewContext = {
+        const searchContext: SearchReviewContext = {
           state: 'available',
           openingPostId: post.id,
           target: target ? { state: 'available', subject: target } : { state: subject ? 'unavailable' : 'withheld' },
@@ -256,15 +256,15 @@ export async function prepareSearchReviewContexts(
         const { subject: _oldTarget, author: _oldAuthor, excerpt: _oldExcerpt, ...base } = hit.summary.value;
         const value: PublicReviewDiscoverySummary = {
           ...base,
-          reviewContext,
+          searchContext,
           ...(author ? { author: { displayName: author.displayName, handle: author.handle } } : {}),
           ...(display && row.excerpt ? { excerpt: row.excerpt } : {}),
         };
         // Native variable fields have been admitted before these serialization copies.
-        const size = Buffer.byteLength(JSON.stringify(reviewContext));
+        const size = Buffer.byteLength(JSON.stringify(searchContext));
         if (size > REVIEW_CONTEXT_LIMITS.rowBytes || (bytes += size) > REVIEW_CONTEXT_LIMITS.pageBytes) {
           const { excerpt: _excerpt, ...bounded } = value;
-          values.set(id, { ...bounded, reviewContext: { state: 'unavailable' } });
+          values.set(id, { ...bounded, searchContext: { state: 'unavailable' } });
           continue;
         }
         values.set(id, value);

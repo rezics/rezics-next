@@ -19,7 +19,7 @@ function page(withheld = false): DiscoveryPage {
           author: { displayName: 'A reader', handle: null },
           excerpt: 'An observation from the published opening, with spoilers behind its reveal control.',
           source: { openingRevisionId: id, sourceVersion: 'native-example' },
-          reviewContext: {
+          searchContext: {
             state: 'available',
             openingPostId: id,
             language: 'en',

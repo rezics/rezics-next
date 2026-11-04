@@ -128,7 +128,7 @@ export type PublicReviewDiscoverySummary = Readonly<{
   excerpt?: string;
   subject?: Readonly<{ id: string; title: string | null }> | null;
   source?: import('./review-context.ts').ReviewContextSource;
-  reviewContext?: import('./review-context.ts').SearchReviewContext;
+  searchContext?: import('./review-context.ts').SearchReviewContext;
 }>;
 export type PublicSpaceDiscoverySummary = Readonly<{
   id: string;
