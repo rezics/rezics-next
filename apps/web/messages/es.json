@@ -8405,5 +8405,8 @@
   "library_copy_filters_active": "Filtros de copias activos",
   "library_copy_matching_empty": "No hay copias que coincidan con estos filtros.",
   "library_copies_address_filter_invalid": "Este filtro de tipo o estado no es válido. No se cargaron copias. Corrígelo o reinicia esta vista.",
-  "library_copies_address_filter_label": "Filtro de tipo o estado"
+  "library_copies_address_filter_label": "Filtro de tipo o estado",
+  "showcase_people_names": "Nombres y alias",
+  "showcase_people_character": "Perfil del personaje",
+  "showcase_people_credits": "Participaciones por obra"
 }

@@ -1,6 +1,6 @@
 import type { SubjectRead } from '@rezics/client';
 import { pageDocumentReferences, pickText } from '@rezics/composition';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { defaultReader, type Reader } from '../../../subject/reader';
@@ -10,7 +10,8 @@ import { LanguageTag, SpoilerGate } from '../../pages/values';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { catalogueEntries } from '../catalogue-entry';
 import { loadPersonDefinitions } from './actions';
-import { personEvidenceFits, personGroups, type PersonDefinitions, type PersonStatement } from './model';
+import { personEvidenceFits, personGroups, profileFields, type PersonDefinitions, type PersonStatement } from './model';
+import { SuppliedNames } from '../../pages/showcase-people/names';
 
 export const personReaderAnchor = 'person-biography';
 const control =
@@ -23,7 +24,7 @@ const title = (kind: 'biography' | 'occupations' | 'languages', locale: string) 
       ? m.people_occupations_title({}, options(locale))
       : m.people_languages_title({}, options(locale));
 
-type Reading = {
+export type ProfileReading = {
   public: SubjectRead;
   documents?: unknown;
   locale: string;
@@ -31,6 +32,7 @@ type Reading = {
   link?: PageLink;
   reader?: Reader;
 };
+type Reading = ProfileReading;
 
 /** Every item, including a qualifier or citation, needs its own disclosed summary. */
 function Value({ part, reading }: { part: PersonStatement | PersonStatement['qualifiers'][number]; reading: Reading }) {
@@ -119,7 +121,7 @@ function Evidence({ statement, reading }: { statement: PersonStatement; reading:
   );
 }
 
-function Fact({ statement, reading }: { statement: PersonStatement; reading: Reading }) {
+export function ProfileFact({ statement, reading }: { statement: PersonStatement; reading: Reading }) {
   const o = options(reading.locale);
   const content = statement.value.type === 'value' ? statement.value.content : undefined;
   const language =
@@ -146,6 +148,39 @@ function Fact({ statement, reading }: { statement: PersonStatement; reading: Rea
   );
 }
 
+/** Character traits and Person facts share the existing document, qualifier and citation presentation. */
+export function ProfileFields({ fields, reading }: { fields: ReturnType<typeof profileFields>; reading: Reading }) {
+  const o = options(reading.locale);
+  const label = pickText(reading.public.subject.labels, reading.locale).text;
+  const href = subjectHref({ id: reading.public.subject.id, label }, reading.locale).href;
+  const Link = reading.link ?? PlainLink;
+  return (
+    <dl className="min-w-0 space-y-5">
+      {fields.map((field) => (
+        <div key={field.id} className="min-w-0 space-y-2">
+          <dt lang={field.label.lang ?? undefined} className="font-medium">
+            {field.label.text || m.subject_value_unlabelled({}, o)}
+          </dt>
+          <dd>
+            <ul className="space-y-3">
+              {field.facts.map((statement) => (
+                <li key={statement.id}>
+                  <ProfileFact statement={statement} reading={reading} />
+                </li>
+              ))}
+            </ul>
+            {field.more && (
+              <Link className={control} href={`${href}/details`}>
+                {m.person_reader_more({}, o)}
+              </Link>
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 /** Presentation of one current composition read; no Subject, target or document fetches. */
 export function PersonReader(reading: Reading) {
   const { public: read, release, locale } = reading;
@@ -153,9 +188,20 @@ export function PersonReader(reading: Reading) {
   const groups = personGroups(release, read, locale);
   const label = pickText(read.subject.labels, locale).text;
   const href = subjectHref({ id: read.subject.id, label }, locale).href;
+  const Link = reading.link ?? PlainLink;
   if (!groups.length) return null;
   return (
     <div className="min-w-0 space-y-6 [overflow-wrap:anywhere]" data-slot="person-reader-facts">
+      <SuppliedNames reading={reading} />
+      <ProfileFields
+        reading={reading}
+        fields={profileFields(release, read, ['schema:alternateName', 'wdt:P1559'], locale).filter(
+          (field) => field.facts.length > 0,
+        )}
+      />
+      <Link className={control} href="#connections">
+        {m.showcase_people_credits({}, o)}
+      </Link>
       {groups.map((group) => (
         <section key={group.kind} className="min-w-0 space-y-3" data-slot={`person-reader-${group.kind}`}>
           <h3 className="text-xl font-semibold">{title(group.kind, locale)}</h3>
@@ -176,27 +222,27 @@ export function PersonReader(reading: Reading) {
                 {field.presentable &&
                   field.facts.map((statement) => (
                     <li key={statement.id} className="min-w-0">
-                      <Fact statement={statement} reading={reading} />
+                      <ProfileFact statement={statement} reading={reading} />
                     </li>
                   ))}
               </ul>
               {field.more && (
-                <a className={control} href={`${href}/details`}>
+                <Link className={control} href={`${href}/details`}>
                   {m.person_reader_more({}, o)}
-                </a>
+                </Link>
               )}
             </section>
           ))}
           {group.more && (
-            <a className={control} href={`${href}/details`}>
+            <Link className={control} href={`${href}/details`}>
               {m.person_reader_more({}, o)}
-            </a>
+            </Link>
           )}
         </section>
       ))}
-      <a className={control} href={catalogueEntries.people({ id: read.subject.id, label, locale }).href}>
+      <Link className={control} href={catalogueEntries.people({ id: read.subject.id, label, locale }).href}>
         {m.person_reader_correct({}, o)}
-      </a>
+      </Link>
     </div>
   );
 }
@@ -204,30 +250,59 @@ export function PersonReader(reading: Reading) {
 export type PersonDefinitionsLoader = (locale: string) => Promise<PersonDefinitions | null>;
 const loadDefinitions: PersonDefinitionsLoader = (locale) => loadPersonDefinitions({ data: locale });
 
-function CurrentPerson({ load, ...reading }: Omit<Reading, 'release'> & { load: PersonDefinitionsLoader }) {
+/** Definitions recovery never retains another source's fields or starts per-row reads. */
+export function ProfileDefinitions({
+  load = loadDefinitions,
+  locale,
+  release,
+  children,
+}: {
+  load?: PersonDefinitionsLoader;
+  locale: string;
+  release?: PersonDefinitions | undefined;
+  children: (release: PersonDefinitions) => ReactNode;
+}) {
   const [result, setResult] = useState<{ release: PersonDefinitions | null }>();
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (release) return;
     let current = true;
-    void load(reading.locale).then(
-      (release) => {
-        if (current) setResult({ release });
-      },
-      () => {
-        if (current) setResult({ release: null });
-      },
-    );
+    setResult(undefined);
+    void Promise.resolve()
+      .then(() => load(locale))
+      .then(
+        (release) => {
+          if (current) setResult({ release });
+        },
+        () => {
+          if (current) setResult({ release: null });
+        },
+      );
     return () => {
       current = false;
     };
-  }, [load, reading.locale]);
-  return result?.release ? (
-    <PersonReader {...reading} release={result.release} />
+  }, [load, locale, release, attempt]);
+  return release || result?.release ? (
+    children((release ?? result!.release)!)
   ) : (
-    <p role="status">
-      {result
-        ? m.candidate_value_unavailable({}, options(reading.locale))
-        : m.candidate_loading({}, options(reading.locale))}
-    </p>
+    <div className="space-y-3">
+      <p role="status">
+        {result ? m.candidate_value_unavailable({}, options(locale)) : m.candidate_loading({}, options(locale))}
+      </p>
+      <button
+        type="button"
+        className={control}
+        aria-disabled={!result}
+        onClick={() => {
+          if (result) {
+            setResult(undefined);
+            setAttempt((value) => value + 1);
+          }
+        }}
+      >
+        {m.correction_retry({}, options(locale))}
+      </button>
+    </div>
   );
 }
 
@@ -236,11 +311,13 @@ export function PersonOverview({
   source,
   viewer,
   load = loadDefinitions,
+  release,
   ...reading
 }: Omit<Reading, 'release'> & {
   source: object;
   viewer: string | null;
   load?: PersonDefinitionsLoader;
+  release?: PersonDefinitions | undefined;
 }) {
   const lifetime = useSubjectCommunityReading({
     source,
@@ -271,7 +348,9 @@ export function PersonOverview({
         {m.person_reader_title({}, options(reading.locale))}
       </h2>
       {lifetime.available ? (
-        <CurrentPerson key={lifetime.key} {...reading} load={load} />
+        <ProfileDefinitions key={lifetime.key} locale={reading.locale} load={load} release={release}>
+          {(definitions) => <PersonReader {...reading} release={definitions} />}
+        </ProfileDefinitions>
       ) : (
         <p role="status">{m.candidate_value_unavailable({}, options(reading.locale))}</p>
       )}

@@ -57,7 +57,7 @@ export type CharacterTransport = {
 };
 
 /** Presentation groups intersect the effective native profile; they never add vocabulary. */
-export function characterGroups(release: Release) {
+export function characterGroups(release: Pick<Release, 'types' | 'properties'>) {
   const admitted = release.types[characterType]?.properties ?? [];
   const groups = {
     identity: ['schema:abstract', 'schema:alternateName'],

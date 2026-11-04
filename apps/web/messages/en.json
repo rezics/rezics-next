@@ -8517,5 +8517,8 @@
   "library_copy_filters_active": "Active copy filters",
   "library_copy_matching_empty": "No copies match these filters.",
   "library_copies_address_filter_invalid": "This kind or status filter is invalid. No copies were loaded. Correct it or restart this view.",
-  "library_copies_address_filter_label": "Kind or status filter"
+  "library_copies_address_filter_label": "Kind or status filter",
+  "showcase_people_names": "Names and aliases",
+  "showcase_people_character": "Character profile",
+  "showcase_people_credits": "Credits across works"
 }

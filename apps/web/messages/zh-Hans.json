@@ -8405,5 +8405,8 @@
   "library_copy_filters_active": "当前的复本筛选条件",
   "library_copy_matching_empty": "没有符合这些筛选条件的复本。",
   "library_copies_address_filter_invalid": "复本类型或状态筛选条件无效。尚未加载任何复本。请修正条件或重新打开此视图。",
-  "library_copies_address_filter_label": "类型或状态筛选条件"
+  "library_copies_address_filter_label": "类型或状态筛选条件",
+  "showcase_people_names": "名称与别名",
+  "showcase_people_character": "角色介绍",
+  "showcase_people_credits": "跨作品演职记录"
 }

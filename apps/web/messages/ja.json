@@ -8405,5 +8405,8 @@
   "library_copy_filters_active": "適用中のコピーのフィルター",
   "library_copy_matching_empty": "条件に一致するコピーはありません。",
   "library_copies_address_filter_invalid": "種類または状態のフィルターが無効です。コピーは読み込まれていません。修正するか、この表示を最初から開いてください。",
-  "library_copies_address_filter_label": "種類または状態のフィルター"
+  "library_copies_address_filter_label": "種類または状態のフィルター",
+  "showcase_people_names": "名前と別名",
+  "showcase_people_character": "キャラクター紹介",
+  "showcase_people_credits": "作品ごとのクレジット"
 }
