@@ -48,9 +48,9 @@ test('mounted Content reaction advice distinguishes allowed, denied, sign-in and
         new Map([['post.set_reaction', 'unknown']]),
       ),
     ).toEqual({ target: post, state: 'unavailable' });
-    expect(feedReactionAdviceFromOperations(actor, post, 'content.post', new Set(['post.set_reaction']), security)).toEqual(
-      { target: post, state: 'unavailable' },
-    );
+    expect(
+      feedReactionAdviceFromOperations(actor, post, 'content.post', new Set(['post.set_reaction']), security),
+    ).toEqual({ target: post, state: 'unavailable' });
   } finally {
     await world.system.close();
   }
