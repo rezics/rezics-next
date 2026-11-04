@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
@@ -9,6 +9,8 @@ import {
   type SourcesResult,
 } from '../src/features/catalogue/subject-sources';
 import { catalogueSourcesFixture, citationUrl, sourceDefinitions } from '../src/kernel/fake/catalogue-sources';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const render = (result: SourcesResult) => renderToString(createElement(SubjectSourcesPage, { result, locale: 'en' }));
 
