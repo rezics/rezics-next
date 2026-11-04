@@ -8,7 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { CreatorOfferDraftNavigation, CreatorOfferDraftState } from './creator-offer-draft-navigation';
 import { creatorPreviewGuard, useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
-import { parseCreatorPrice } from './creator-price';
+import { validateCreatorPrice, type CreatorPriceIssue } from './creator-price';
 import { formatMinorAmount } from './money';
 import type { ConfiguredSaleCurrencyRule } from './money-schema';
 import {
@@ -20,7 +20,9 @@ import {
   type CreatorOfferResult,
 } from './creator-offers';
 
-export function creatorNotice(kind: CreatorFailure['kind'] | 'retry' | 'saved' | 'conflict'): string {
+export function creatorNotice(
+  kind: CreatorFailure['kind'] | 'price-unavailable' | 'retry' | 'saved' | 'conflict',
+): string {
   switch (kind) {
     case 'conflict':
       return m.container_lifecycle_conflict();
@@ -30,6 +32,8 @@ export function creatorNotice(kind: CreatorFailure['kind'] | 'retry' | 'saved' |
       return m.creator_closed();
     case 'unavailable':
       return m.creator_unavailable();
+    case 'price-unavailable':
+      return m.creator_price_unavailable();
     case 'rejected':
       return m.creator_rejected();
     case 'retry':
@@ -40,10 +44,28 @@ export function creatorNotice(kind: CreatorFailure['kind'] | 'retry' | 'saved' |
 }
 
 export function parsedPrice(text: string, rule?: ConfiguredSaleCurrencyRule): number | null {
-  try {
-    return rule ? parseCreatorPrice(text, rule) : null;
-  } catch {
-    return null;
+  const result = rule ? validateCreatorPrice(text, rule) : null;
+  return result?.kind === 'valid' ? result.amountMinor : null;
+}
+
+function priceIssueText(issue: CreatorPriceIssue, locale: string, rule?: ConfiguredSaleCurrencyRule): string {
+  const format = (minor: number) =>
+    rule ? formatMinorAmount(locale, rule.currency, minor, rule.unit) ?? String(minor) : String(minor);
+  switch (issue) {
+    case 'malformed-decimal':
+      return m.creator_price_malformed_decimal();
+    case 'unsupported-currency':
+      return m.creator_price_unsupported_currency();
+    case 'policy-unavailable':
+      return m.creator_price_unavailable();
+    case 'minimum':
+      return m.creator_price_minimum({ min: format(rule?.minAmountMinor ?? 0) });
+    case 'maximum':
+      return m.creator_price_maximum({ max: format(rule?.maxAmountMinor ?? 0) });
+    case 'increment':
+      return m.creator_price_increment({ increment: format(rule?.chargeMultiple ?? 1) });
+    case 'unsafe-integer':
+      return m.creator_price_unsafe_integer();
   }
 }
 
@@ -54,16 +76,24 @@ export function CreatorPriceField({
   onChange,
   locale,
   disabled = false,
+  policyUnavailable = false,
 }: {
   rule?: ConfiguredSaleCurrencyRule | undefined;
   text: string;
   onChange(text: string): void;
   locale: string;
   disabled?: boolean;
+  policyUnavailable?: boolean;
 }) {
   const id = useId();
-  const raw = parsedPrice(text, rule);
+  const validation = rule ? validateCreatorPrice(text, rule) : null;
+  const raw = validation?.kind === 'valid' ? validation.amountMinor : null;
   const preview = rule && raw !== null ? formatMinorAmount(locale, rule.currency, raw, rule.unit) : null;
+  const issue = policyUnavailable
+    ? 'policy-unavailable'
+    : text
+      ? (validation?.kind === 'invalid' ? validation.issue : rule ? null : 'unsupported-currency')
+      : null;
   return (
     <Field>
       <FieldLabel htmlFor={id}>{m.creator_amount()}</FieldLabel>
@@ -76,9 +106,9 @@ export function CreatorPriceField({
         maxLength={32}
         value={text}
         onChange={(event) => onChange(event.target.value)}
-        disabled={disabled || !rule}
+        disabled={disabled || policyUnavailable || !rule}
         required
-        aria-invalid={!!text && raw === null}
+        aria-invalid={!!issue}
         aria-describedby={`${id}-help ${id}-preview`}
         className="min-h-11 tabular-nums"
       />
@@ -86,15 +116,26 @@ export function CreatorPriceField({
         {m.creator_price_convention()}
       </p>
       {rule && (
-        <p className="text-sm text-muted-foreground">
-          {m.creator_price_range({
-            min: formatMinorAmount(locale, rule.currency, rule.minAmountMinor, rule.unit) ?? '',
-            max: formatMinorAmount(locale, rule.currency, rule.maxAmountMinor, rule.unit) ?? '',
-          })}
-        </p>
+        <>
+          <p className="text-sm text-muted-foreground">
+            {m.creator_price_range({
+              min: formatMinorAmount(locale, rule.currency, rule.minAmountMinor, rule.unit) ?? '',
+              max: formatMinorAmount(locale, rule.currency, rule.maxAmountMinor, rule.unit) ?? '',
+            })}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {m.creator_price_meaning({
+              currency: rule.currency.toUpperCase(),
+              exponent: String(rule.unit.exponent),
+              tax: m.commerce_before_tax(),
+            })}
+          </p>
+        </>
       )}
       <p id={`${id}-preview`} className="min-h-6 break-words font-medium tabular-nums" aria-live="polite">
-        {preview && rule
+        {issue
+          ? priceIssueText(issue, locale, rule)
+          : preview && rule
           ? `${preview} · ${rule.currency.toUpperCase()} · ${m.commerce_before_tax()}`
           : text
             ? m.creator_invalid_price()
@@ -251,7 +292,13 @@ function CreatorOfferForm({
   // The selected edition and its price facts are the observed create operand, including on retry.
   const [draftEditor, setDraftEditor] = useState(resume?.editor);
   const editor = draftEditor ?? data.editor;
-  if (!draftEditor) key.current = createKey;
+  if (!draftEditor && !pending.current && !result) key.current = createKey;
+  const currentEditor = useRef(data.editor);
+  currentEditor.current = data.editor;
+  const currentRules = useRef<readonly ConfiguredSaleCurrencyRule[]>(
+    data.editor.kind === 'ready' ? data.editor.schema.configuredSaleCurrencies : [],
+  );
+  currentRules.current = data.editor.kind === 'ready' ? data.editor.schema.configuredSaleCurrencies : [];
   const rules = submittedRules.current ?? (editor.kind === 'ready' ? editor.schema.configuredSaleCurrencies : []);
   const rule = rules.find((row) => row.currency === currency);
   const amount = parsedPrice(text, rule);
@@ -322,14 +369,18 @@ function CreatorOfferForm({
       if (!current.active || !guard.isCurrent()) return;
       saved = next.kind === 'saved';
       setResult(next);
-      if (next.kind !== 'saved' && next.kind !== 'retry') {
+      const definitive = next.kind !== 'saved' && next.kind !== 'retry';
+      if (definitive) {
         pending.current = null;
         submittedRules.current = null;
         key.current = crypto.randomUUID();
+        setDraftEditor(undefined);
       }
+      const currentEditorForCorrection = definitive ? currentEditor.current : editor;
+      const currentRulesForCorrection = definitive ? currentRules.current : rules;
       memory.value = {
-        editor,
-        rules,
+        editor: currentEditorForCorrection,
+        rules: currentRulesForCorrection,
         intent,
         title,
         taxCode,
@@ -356,15 +407,30 @@ function CreatorOfferForm({
       >
         {m.creator_offers_heading()}
       </a>
-      {editor.kind !== 'ready' ? (
+      {editor.kind === 'price-unavailable' ? (
+        <section className="space-y-4 rounded-xl border bg-card p-5 text-card-foreground" role="status">
+          <p>{m.creator_price_unavailable()}</p>
+          {currency && <p className="text-sm text-muted-foreground">{currency.toUpperCase()}</p>}
+          <CreatorPriceField
+            text={text}
+            onChange={() => {}}
+            locale={locale}
+            disabled
+            policyUnavailable
+          />
+          {result && <p role="alert">{creatorNotice(result.kind)}</p>}
+        </section>
+      ) : editor.kind !== 'ready' ? (
         <div className="space-y-3 rounded-xl border bg-card p-5 text-card-foreground" role="status">
           <p>{editor.kind === 'choose-edition' ? m.creator_choose_edition() : creatorNotice(editor.kind)}</p>
-          <a
-            href={`/${locale}/editions/new`}
-            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-          >
-            {m.creator_publish_edition()}
-          </a>
+          {editor.kind !== 'price-unavailable' && (
+            <a
+              href={`/${locale}/editions/new`}
+              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+            >
+              {m.creator_publish_edition()}
+            </a>
+          )}
         </div>
       ) : (
         <>
@@ -426,6 +492,11 @@ function CreatorOfferForm({
               locale={locale}
               disabled={frozen}
             />
+            {rules.length === 0 && (
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.creator_price_unavailable()}
+              </p>
+            )}
             <Field>
               <FieldLabel htmlFor={`${fieldId}-tax`}>{m.creator_tax_code()}</FieldLabel>
               <Input

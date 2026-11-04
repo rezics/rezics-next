@@ -27,6 +27,7 @@
     "@rezics/definitions": "workspace:*",
     "@rezics/document": "workspace:*",
     "@rezics/filter": "workspace:*",
+    "@rezics/money": "workspace:*",
     "aws4fetch": "1.0.20",
     "canonicalize": "5.1.0",
     "elysia": "2.0.0-rc.1",

@@ -10,7 +10,7 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import { contentEditionTermsView, decodeCapturedContentEdition } from './benefit.ts';
-import type { StripeMoneyUnit } from './money.ts';
+import { recordedMoneyUnit, type StripeMoneyUnit } from './money.ts';
 import pageRead from './creator-offers.sql';
 
 /** Captured seller terms, independent of current target disclosure or sale eligibility. */
@@ -92,7 +92,7 @@ export async function listCreatorOffers(
         if (!Number.isSafeInteger(amount)) throw new ProblemError('dependency_unavailable');
         return {
           ...row,
-          moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
+          moneyUnit: row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
           taxBehavior: row.taxBehavior as 'exclusive' | null,
           unitAmountMinor: amount,
           contentEdition: contentEditionTermsView(decodeCapturedContentEdition(row.contentEdition)),

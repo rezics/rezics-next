@@ -1,7 +1,11 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { createNativeMoneySchemaApi } from '../src/checkout/money-schema';
-import { configuredPriceExample, creatorOfferFixture } from '../src/kernel/fake/creator-offers';
+import {
+  createNativeMoneySchemaApi,
+  isMoneyUnit,
+  recordedMoneyUnit,
+} from '../src/checkout/money-schema';
+import { configuredPriceExample, creatorOfferFixture, recordedStripeUnit } from '../src/kernel/fake/creator-offers';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start/server', () => ({
@@ -50,4 +54,12 @@ test('absent, rejected and malformed money facts stay unavailable rather than fa
     const client = createKernelClient('https://kernel.test', { fetch: (async () => response()) as typeof fetch });
     expect(await createNativeMoneySchemaApi(client).read('Bearer seller')).toEqual({ kind: 'unavailable' });
   }
+});
+
+test('Web reads the response envelope while native-style values stay bare, exact and unknown when unsupported', () => {
+  expect(isMoneyUnit(recordedStripeUnit)).toBe(true);
+  expect(isMoneyUnit({ ...recordedStripeUnit, extra: true })).toBe(false);
+  expect(recordedMoneyUnit({ moneyUnit: recordedStripeUnit })).toEqual(recordedStripeUnit);
+  expect(recordedMoneyUnit(recordedStripeUnit)).toBeNull();
+  expect(recordedMoneyUnit({ moneyUnit: { ...recordedStripeUnit, factsVersion: 'future-version' } })).toBeNull();
 });

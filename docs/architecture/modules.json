@@ -140,6 +140,11 @@
       "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
     },
     {
+      "path": "packages/money/src",
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".json"],
+      "exclude": ["**/*.test.*", "**/*.spec.*", "**/test/**", "**/tests/**", "**/fixtures/**"]
+    },
+    {
       "path": "packages/ui/src",
       "extensions": [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".css", ".json", ".svg"],
       "exclude": [
@@ -193,7 +198,7 @@
       "owner": "commerce",
       "paths": ["services/kernel/src/commerce/**", "services/kernel/db/commerce/**"],
       "publicEntries": [],
-      "allowedDependencies": ["kernel-access", "kernel-content", "kernel-platform", "kernel-semantic"],
+      "allowedDependencies": ["kernel-access", "kernel-content", "kernel-platform", "kernel-semantic", "money"],
       "capabilities": ["commerce"],
       "postgresPaths": ["services/kernel/src/commerce/**"]
     },
@@ -516,7 +521,7 @@
       "owner": "commerce",
       "paths": ["apps/web/src/checkout/**"],
       "publicEntries": [],
-      "allowedDependencies": ["client", "ui", "web-app", "web-content", "web-search"],
+      "allowedDependencies": ["client", "money", "ui", "web-app", "web-content", "web-search"],
       "capabilities": ["checkout-pages"]
     },
     {
@@ -743,6 +748,15 @@
       "publicEntries": ["@rezics/filter"],
       "allowedDependencies": [],
       "capabilities": ["filtering"]
+    },
+    {
+      "id": "money",
+      "kind": "core",
+      "owner": "commerce",
+      "paths": ["packages/money/src/**"],
+      "publicEntries": ["@rezics/money"],
+      "allowedDependencies": [],
+      "capabilities": ["recorded-money-values"]
     },
     {
       "id": "ui",
