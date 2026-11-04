@@ -213,11 +213,7 @@ export function readDiscoveryEngineResult(
         key,
         index,
         sourcePosition: document.source_position,
-        revision: ownerDocument
-          ? document.revision
-          : document.owner === 'accounts'
-            ? document.revision
-            : String(document.security_revision),
+        revision: 'security_revision' in document ? String(document.security_revision) : document.revision,
         ...(ownerDocument ? { sourceVersion: document.source_version } : {}),
         matched: matched ?? [],
         sort,

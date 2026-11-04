@@ -836,7 +836,12 @@ async function reconcileDiscoveryPage(
   )
     throw new Error('Discovery reconciliation page is malformed');
   const hits = page.body.hits.hits;
-  const keys = hits.map((hit) => parseDiscoveryHitIdentity(registry, hit));
+  const keys: DiscoveryKey[] = hits.map((hit) => {
+    const key = parseDiscoveryHitIdentity(registry, hit);
+    if ((key.owner !== 'accounts' && key.owner !== 'semantic') || key.owner !== row.owner)
+      throw new Error('Discovery reconciliation owner is inconsistent');
+    return key;
+  });
   let expected: DiscoveryIndexAction[];
   const codec = await readDiscoveryDocumentCodec(search, discoveryIndexName(target.prefix, target.generation));
   if (entry.owner === 'accounts') {

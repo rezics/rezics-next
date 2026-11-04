@@ -25,7 +25,7 @@ import type {
   PublicFilterConsumerUnavailable,
 } from './public-filter-consumer-contract.ts';
 import type { SearchWriterPublicationFence, SearchWriterPublicationGuard } from './writer-guard.ts';
-import type { DiscoveryConsumerCaptureInput, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';
+import type { DiscoveryConsumerCaptureInput, DiscoveryRegistry, DiscoveryUnionKey } from './discovery.ts';
 import { createDiscoveryProjection, validateAccountPage } from './account-discovery.ts';
 import { parseDiscoveryHitIdentity, discoveryDocumentId, validateDiscoveryDocument } from './discovery-documents.ts';
 import {
@@ -810,7 +810,7 @@ export function createSearchGenerationPublication(
       // Composite after_key is native enumeration state. No returned hit length or total certifies exhaustion.
       const next = page.after_key;
       if (next !== undefined && (!object(next) || same(next, job.engine_after))) throw new Pending('source_pending');
-      const grouped = new Map<string, { partition: number; ids: string[]; keys: DiscoveryKey[] }>();
+      const grouped = new Map<string, { partition: number; ids: string[]; keys: DiscoveryUnionKey[] }>();
       for (const bucket of page.buckets) {
         if (
           !object(bucket) ||
@@ -825,7 +825,7 @@ export function createSearchGenerationPublication(
         const hit: unknown = bucket.row.hits.hits[0];
         if (!object(hit) || hit._index !== job.physical_target || typeof hit._id !== 'string' || !object(hit._source))
           throw new Pending('source_pending');
-        let id: string, partition: number, key: DiscoveryKey | undefined;
+        let id: string, partition: number, key: DiscoveryUnionKey | undefined;
         if (job.family === 'discovery') {
           key = parseDiscoveryHitIdentity(registry!, hit);
           validateDiscoveryDocument(registry!, hit._source);
