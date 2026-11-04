@@ -87,6 +87,12 @@ export type ShowcaseVocabularyRequirement = Readonly<{
   schemeId?: string;
 }>;
 
+export function showcaseVocabularyExternalId(sourceKey: string): string {
+  if (!/^[a-z][a-z0-9_.:-]{0,127}$/u.test(sourceKey))
+    throw new TypeError('Invalid showcase vocabulary source key');
+  return `vocabulary:${sourceKey}`;
+}
+
 export type ShowcaseOmission = Readonly<{
   provider: 'bangumi' | 'vndb';
   sourceKey: string;
@@ -360,7 +366,7 @@ export function buildShowcaseManifest(input: {
     if (
       !selectedKeys.has(`${requirement.provider}\0${requirement.ownerKey}`) ||
       requirement.source.source !== aliases[requirement.provider] ||
-      requirement.source.external_id !== requirement.ownerKey ||
+      requirement.source.external_id !== showcaseVocabularyExternalId(requirement.sourceKey) ||
       requirement.source.field_group !== 'facts' ||
       !requirement.sourceUri.startsWith('https://')
     ) {

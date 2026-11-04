@@ -9,6 +9,7 @@ import {
   showcaseLimits,
   showcaseSourceMatches,
   showcaseStatementMatches,
+  showcaseVocabularyExternalId,
   type ShowcaseAcknowledgement,
   type ShowcaseAssertion,
   type ShowcaseManifest,
@@ -421,7 +422,9 @@ function errorCode(error: unknown): string {
 }
 
 function recordSource(record: ShowcaseRecord, assertion: ShowcaseAssertion): boolean {
-  return assertion.source.source === record.sourceAlias && assertion.source.external_id === record.sourceKey;
+  const externalId =
+    record.kind === 'source-vocabulary' ? showcaseVocabularyExternalId(record.sourceKey) : record.sourceKey;
+  return assertion.source.source === record.sourceAlias && assertion.source.external_id === externalId;
 }
 
 function proseOrImage(property: string): boolean {
@@ -639,6 +642,31 @@ function recordHasSourceIdentity(record: ShowcaseRecord): boolean {
   );
 }
 
+function sourceCitationMatchesRecord(record: ShowcaseRecord, citation: string): boolean {
+  if (!record.sourceUri) return false;
+  if (citation === record.sourceUri) return true;
+  if (record.provider !== 'bangumi' || record.kind !== 'work') return false;
+  try {
+    const source = new URL(record.sourceUri);
+    const cited = new URL(citation);
+    if (
+      cited.protocol !== 'https:' ||
+      cited.origin !== source.origin ||
+      cited.pathname !== source.pathname ||
+      cited.search !== source.search
+    )
+      return false;
+    const staffPrefix = `#/subject-persons/${record.sourceKey}/`;
+    const voicePrefix = `#/person-characters/${record.sourceKey}/`;
+    return (
+      (cited.hash.startsWith(staffPrefix) && /^[1-9][0-9]*\/position$/u.test(cited.hash.slice(staffPrefix.length))) ||
+      (cited.hash.startsWith(voicePrefix) && /^[1-9][0-9]*\/[1-9][0-9]*$/u.test(cited.hash.slice(voicePrefix.length)))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function safeGapKey(value: Record<string, unknown>): string {
   for (const field of ['id', 'subject_id', 'vid', 'person_id', 'character_id', 'episode_id']) {
     const entry = value[field];
@@ -816,11 +844,6 @@ export async function publishShowcase(input: {
     omissions.push({ provider: 'bangumi', sourceKey: unresolved.holder, code: 'source-claim-withheld' });
   if (result.creditGaps.length || result.characterDiagnostics.length)
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'source-claim-withheld' });
-  const typeById = new Map<string, string>();
-  for (const record of manifest.records)
-    if (record.subjectId && record.nativeType) typeById.set(record.subjectId, record.nativeType);
-  for (const record of manifest.vocabulary) typeById.set(record.subjectId, record.nativeType);
-
   const assertions = [
     ...manifest.records.flatMap((record) => record.assertions.map((assertion) => ({ record, assertion }))),
     ...manifest.vocabulary.flatMap((record) =>
@@ -909,7 +932,7 @@ export async function publishShowcase(input: {
       }
       currentSubjectCache.set(id, current);
     }
-    if (!current || subjectId(current) !== id || subjectType(current) !== typeById.get(id)) {
+    if (!current || subjectId(current) !== id || subjectType(current) !== record.nativeType) {
       omissions.push({
         provider: record.provider,
         sourceKey: record.sourceKey,
@@ -946,12 +969,22 @@ export async function publishShowcase(input: {
           const parsed = new URL(uri);
           if (parsed.protocol !== 'https:') return true;
           const host = parsed.hostname.toLowerCase();
-          return record.provider === 'bangumi'
+          const exactVocabularySource =
+            record.kind === 'source-vocabulary' &&
+            input.vocabularyRequirements?.some(
+              (requirement) =>
+                requirement.provider === record.provider &&
+                requirement.sourceKey === record.sourceKey &&
+                requirement.sourceUri === uri,
+            );
+          return exactVocabularySource
+            ? false
+            : record.provider === 'bangumi'
             ? host !== 'bgm.tv' &&
-                host !== 'bangumi.tv' &&
-                host !== 'www.bgm.tv' &&
-                host !== 'www.bangumi.tv' &&
-                !(assertion.property === 'schema:image' && host === 'lain.bgm.tv')
+              host !== 'bangumi.tv' &&
+              host !== 'www.bgm.tv' &&
+              host !== 'www.bangumi.tv' &&
+              !(assertion.property === 'schema:image' && host === 'lain.bgm.tv')
             : host !== 'vndb.org' && !host.endsWith('.vndb.org');
         } catch {
           return true;
@@ -965,7 +998,7 @@ export async function publishShowcase(input: {
       record.kind !== 'source-vocabulary' &&
       assertion.source.digest === record.semanticDigest &&
       record.sourceUri &&
-      !assertion.citations.includes(record.sourceUri)
+      !assertion.citations.some((citation) => sourceCitationMatchesRecord(record, citation))
     ) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'source-uri-not-current' });
       continue;
@@ -1148,7 +1181,7 @@ export async function publishShowcase(input: {
       if (
         !sourceRead ||
         subjectId(sourceRead) !== id ||
-        subjectType(sourceRead) !== typeById.get(id) ||
+        subjectType(sourceRead) !== group.record.nativeType ||
         !publicHasSourceIdentity(sourceRead, group.record)
       ) {
         omissions.push({

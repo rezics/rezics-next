@@ -1107,20 +1107,49 @@ integration; no capability promotion is claimed.
 
 ## Bangumi creator and voice credits
 
-Admitted `subject-persons` and `person-characters` rows now reach native credit proposals through the existing
-operator seed caller after work/person/character claims exist. Detailed role Concepts bind through
-`wdt:P3831`; voice credits keep the bound character on `wdt:P453`. Archive staff `position` is a role code.
-Music and live-action staff remain the pinned omitted producer binding.
+The explicit local real-dump showcase invocation now derives only selected type-2 anime staff roles from the finite
+reviewed Bangumi inventory. The adapter writes source Concepts through ordinary acknowledged commands, then delegates
+independent acceptance/adoption and current public reads to the common showcase publisher. Staff credit candidates
+preserve the exact work/person IDs, selected-work citation, mapped main property and role Concept in `wdt:P3831`.
+Voice candidates preserve the exact work/performer pair and the character on `wdt:P453`. Current work, person and
+character reads must match their released native types and Bangumi identifier statements before the dependent facts are
+sent. Missing endpoints produce bounded source gaps; same-name and cross-provider endpoints do not resolve credits.
 
-Decision: music/live-action staff codes stay the inventory omission
-`Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.`
+Decision: staff-role Concepts cite the pinned Bangumi `subject_staffs.yml` definition; each staff or voice credit cites
+its selected Bangumi work row.
+Vocabulary source IDs use `vocabulary:bangumi.staff[:code]` to keep their native subjects distinct from the selected
+work ID while the manifest retains that work as the evidence owner.
+The common publisher accepts only the exact staff-position or
+performer-character row fragment under that selected work URL as credit
+evidence.
 
-Frozen focused scenarios:
+Staff `position` remains a role code, never `schema:position`. Credited spelling is emitted only when an association
+actually supplies it; `person-characters.summary` remains association commentary. Music and live-action staff, unprofiled
+type-3/type-6 roles, and retracted or wrong-scheme vocabulary bindings stay withheld. The exported role-binding helper
+accepts type 1 or 4 for the future book caller; book selection and author assignment remain with that worker. Ordinary
+imports stay proposal-only unless local showcase state is explicitly provided. The work-credit consumer requires
+public projections for `schema:author`, `schema:director`, the other mapped staff properties, and `wdt:P725` with
+`wdt:P453`/`wdt:P3831`; any missing projection field remains Semantic's producer contract and is not manufactured by
+this importer.
+
+- Touches: at most 64 staff and 64 voice association rows per work, a bounded finite role set, and exact current reads
+  for the associated work/person/character subjects.
+- Bound: vocabulary candidates require the exact common-manifest create and candidate acknowledgements, pinned source
+  citation, native type, current `schema:sameAs`, and `skos:inScheme`. Credit candidates require the exact staff-position
+  or performer-character citation fragment under the selected work URL. Read caching is local to the import operation
+  and is cleared after publication; no label scan or generic import auto-publication is used.
+- Growth check: `services/importer/tests/showcase-bangumi-credits.test.ts` covers the real-format adapter, current role
+  binding and one unresolved association. `services/kernel/test/imports/showcase-bangumi-credits.test.ts` covers
+  independent native acceptance/adoption, exact public work/person/character reads, role and citation meaning,
+  retracted binding withholding, and identity reuse on refresh. Native execution remains controller-owned. The actual
+  dump walkthrough remains M1 proof.
+
+Existing focused scenarios retained:
 
 - `authored staff and voice rows keep detailed role and character without fabricated order`
 - `music and live-action staff remain the pinned omitted producer binding`
 - `absent endpoints, unknown roles and a changed role withhold or replace the credit`
-- `production seed caller without sourceVocabulary cannot publish detailed credits`
+- `ordinary conversion without admitted role vocabulary withholds detailed credits`
 - `operator publishes authored staff and voice credits, keeps keys on reopen, and withholds honest loss`
 - `a facts fence withholds refresh and music staff reports the exact omitted producer binding`
 - `operator seed publishes detailed creator and voice credits for an independent editor`

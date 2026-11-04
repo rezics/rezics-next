@@ -8,12 +8,17 @@ import {
   type SourceVocabularyInput,
   type SourceVocabularyResult,
 } from './source-vocabulary.ts';
-import { mapSourceEnumeration } from './cross-media-entities.ts';
+import {
+  bangumiStaffRoleDefinition,
+  mapSourceEnumeration,
+  type BangumiStaffRoleDefinition,
+} from './cross-media-entities.ts';
 
 export const bangumiVocabularyRevision = 'bangumi-vocabulary@2';
 const episodeScheme = 'https://rezics.com/schemes/bangumi/episode-types';
 const characterScheme = 'https://rezics.com/schemes/bangumi/character-kinds';
 const appearanceScheme = 'https://rezics.com/schemes/bangumi/appearance-roles';
+export const bangumiStaffSchemeUri = 'https://rezics.com/schemes/bangumi/staff';
 const episodeCodes = new Set(['0', '1', '2', '3', '4', '5', '6']);
 const characterCodes = new Set(['1', '2', '3', '4']);
 const appearanceCodes = new Set(['1', '2', '3']);
@@ -62,6 +67,24 @@ const staffTerms: Readonly<Record<1 | 2 | 4, Readonly<Record<string, readonly nu
     'schema:producer': [1032],
   },
 };
+
+/** Finite, exact role data shared by the anime default and the book credit caller. */
+export function bangumiStaffRoleMapping(
+  subjectType: 1 | 2 | 4,
+  roleCode: number,
+): (BangumiStaffRoleDefinition & { property: string; code: string }) | undefined {
+  const code = String(roleCode);
+  const property = Object.entries(staffTerms[subjectType]).find(([, codes]) => codes.includes(roleCode))?.[0];
+  const definition = bangumiStaffRoleDefinition(subjectType, roleCode);
+  if (
+    !property ||
+    !definition ||
+    definition.schemeUri !== bangumiStaffSchemeUri ||
+    definition.uri !== `${bangumiStaffSchemeUri}/${code}`
+  )
+    return undefined;
+  return { ...definition, property, code };
+}
 function conceptIdentity(value: ResolvedConcept): NativeIdentity {
   return { id: value.id, type: value.type, releaseDigest: value.releaseDigest };
 }
@@ -158,11 +181,11 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         });
         return;
       }
-      const table =
+      const mapping =
         row.subjectType === 1 || row.subjectType === 2 || row.subjectType === 4
-          ? staffTerms[row.subjectType]
+          ? bangumiStaffRoleMapping(row.subjectType, row.roleCode)
           : undefined;
-      const property = table && Object.entries(table).find(([, codes]) => codes.includes(row.roleCode))?.[0];
+      const property = mapping?.property;
       if (!code || !property) {
         environment.pushGap({
           path,
@@ -182,7 +205,7 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         });
         return;
       }
-      const resolved = exactConcept(environment, 'bangumi.staff', code, path);
+      const resolved = exactConcept(environment, 'bangumi.staff', code, path, bangumiStaffSchemeUri);
       if (!resolved) return;
       const qualifiers: { property: string; content: unknown; identity?: NativeIdentity }[] = [
         { property: 'wdt:P3831', content: resolved.id, identity: conceptIdentity(resolved) },
@@ -214,7 +237,7 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         target: row.holder,
         sourceEndpoint: row.holderCode,
         qualifiers,
-        mappingRevision: `staff-${row.subjectType}@1`,
+        mappingRevision: `staff-${row.subjectType}@2`,
       });
       return;
     }

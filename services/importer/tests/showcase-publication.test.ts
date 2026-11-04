@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement, BatchWriteResult } from '@rezics/definitions/bulk';
+import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import {
   crossMediaAliases,
@@ -75,7 +76,30 @@ test('selected dump candidates publish only by exact intent and resume a refused
   const read = (id: string) => {
     const subject = subjects.get(id);
     if (!subject) throw new Error('Missing fake subject');
-    return { subject } as unknown as ReviewedSubjectRead;
+    const identity = /^(?:(person|character):)?([0-9]+)$/u.exec(subject.sourceExternalId);
+    if (!identity) return { subject } as unknown as ReviewedSubjectRead;
+    const property = identity[1] === 'person' ? 'wdt:P6298' : identity[1] === 'character' ? 'wdt:P6296' : 'wdt:P5732';
+    return {
+      subject: {
+        ...subject,
+        statements: {
+          ...subject.statements,
+          [property]: [
+            {
+              property: { id: property },
+              value: { type: 'value', content: identity[2] },
+              references: [
+                {
+                  parts: [
+                    { property: { id: 'schema:url' }, value: { type: 'value', content: bangumiRecordUrl(subject.sourceExternalId) } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    } as unknown as ReviewedSubjectRead;
   };
   const port = {
     async batch(request: { commands: readonly BatchCommand[] }): Promise<BatchWriteResult> {

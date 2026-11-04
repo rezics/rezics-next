@@ -1,6 +1,7 @@
 import { BATCH_LIMIT, checkBatchWrite, type BatchCommand, type BatchWriteResult } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { SourceRecord } from '@rezics/conversion';
+import type { ReviewedSubjectRead } from './import-client.ts';
 import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
 import { bangumiRecordUrl, converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import {
@@ -171,6 +172,15 @@ export function buildBangumiCreatorCreditRows(input: {
       });
       continue;
     }
+    if (draft.workType !== 2) {
+      gaps.push({
+        provider: 'bangumi',
+        path: draft.path,
+        reason: 'unsupported_source_case',
+        property: 'wdt:P725',
+      });
+      continue;
+    }
     const performer = input.identities[draft.person];
     const character = draft.character ? input.identities[draft.character] : undefined;
     rows.push({
@@ -195,7 +205,8 @@ export async function deliverBangumiCreatorCredits(input: {
   claim(owner: { source: string; external_id: string }): Claim | null;
   batch(request: { commands: BatchCommand[] }): Promise<BatchWriteResult>;
   fence?(tuple: { source: string; externalId: string; fieldGroup: 'facts' }): Promise<{ fenced: boolean }>;
-  read(subjectId: string): Promise<{ subject?: { type?: string } }>;
+  read(subjectId: string): Promise<ReviewedSubjectRead>;
+  expectedNativeType(externalId: string): string | undefined;
   metadataFor(work: string): Pick<SourceVocabularyMetadata, 'digest' | 'recordRevision' | 'recordUrl'>;
 }): Promise<BangumiCreatorCreditResult> {
   const alias = input.alias ?? aliasDefault;
@@ -205,6 +216,15 @@ export async function deliverBangumiCreatorCredits(input: {
   const gaps: BangumiCreatorCreditGap[] = [];
   const keys: string[] = [];
   const identities: Record<string, NativeIdentity> = {};
+  const reads = new Map<string, Promise<ReviewedSubjectRead | null>>();
+  const readCurrent = (id: string): Promise<ReviewedSubjectRead | null> => {
+    let pending = reads.get(id);
+    if (!pending) {
+      pending = input.read(id).catch(() => null);
+      reads.set(id, pending);
+    }
+    return pending;
+  };
   const works = [...new Set(input.drafts.map((draft) => draft.work))];
   for (const work of works) {
     const owned = input.drafts.filter((draft) => draft.work === work);
@@ -225,8 +245,30 @@ export async function deliverBangumiCreatorCredits(input: {
     for (const key of endpoints) {
       const claim = input.claim({ source: alias, external_id: key });
       if (claim?.state !== 'bound' || !uuid.test(claim.subject)) continue;
-      const type = nativeType(await input.read(claim.subject));
-      if (!type) continue;
+      const current = await readCurrent(claim.subject);
+      const subject = current?.subject as
+        | {
+            id?: unknown;
+            type?: unknown;
+            statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[]>;
+          }
+        | undefined;
+      const type = nativeType(current);
+      const expectedType = input.expectedNativeType(key);
+      const identityProperty = key.startsWith('person:')
+        ? 'wdt:P6298'
+        : key.startsWith('character:')
+          ? 'wdt:P6296'
+          : /^\d+$/u.test(key)
+            ? 'wdt:P5732'
+            : undefined;
+      const sourceId = key.startsWith('person:') || key.startsWith('character:') ? key.slice(key.indexOf(':') + 1) : key;
+      const hasIdentity =
+        identityProperty !== undefined &&
+        (subject?.statements?.[identityProperty]?.some(
+          (statement) => statement.value?.type === 'value' && statement.value.content === sourceId,
+        ) ?? false);
+      if (!type || subject?.id !== claim.subject || type !== expectedType || !hasIdentity) continue;
       const identity = { id: claim.subject, type, releaseDigest: bundledDigest };
       resolved[key] = identity;
       identities[key] = identity;
@@ -327,6 +369,22 @@ export async function importBangumiCreatorCredits(input: {
       batch: (request) => input.port.batch(request),
       fence: (tuple) => input.port.fence(tuple),
       read: (subjectId) => input.port.readReviewedSubject(subjectId),
+      expectedNativeType: (externalId) => {
+        if (externalId === input.work.key) {
+          const bootstrap = registration.convert(
+            { external_id: input.work.key, record_revision: input.work.revision, record: input.work.payload },
+            { source: alias },
+          ).proposals.find((command) => command.op === 'create');
+          return bootstrap?.op === 'create' ? bootstrap.subject.type : undefined;
+        }
+        const row = [...input.people, ...(input.characters ?? [])].find((record) => record.key === externalId);
+        if (!row) return undefined;
+        const bootstrap = registration.convert(
+          { external_id: row.key, record_revision: row.revision, record: row.payload },
+          { source: alias },
+        ).proposals.find((command) => command.op === 'create');
+        return bootstrap?.op === 'create' ? bootstrap.subject.type : undefined;
+      },
       metadataFor: () => ({
         digest: conversion.digest,
         recordRevision: input.work.revision,

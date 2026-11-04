@@ -99,6 +99,13 @@ export type SourceMapping = {
   concept?: { id: string; scheme: string; label: string };
 };
 
+export type BangumiStaffRoleDefinition = Readonly<{
+  uri: string;
+  schemeUri: string;
+  label: string;
+  sourceUri: string;
+}>;
+
 type InventoryValue = {
   id?: number | string;
   value?: string;
@@ -235,6 +242,42 @@ export function mapSourceEnumeration(
     vndbIndex.set(group, groupMap);
   }
   return groupMap.get(key);
+}
+
+/** Read the exact source concept descriptor nested in the pinned staff-position inventory. */
+export function bangumiStaffRoleDefinition(
+  subjectType: 1 | 2 | 4,
+  code: number,
+): BangumiStaffRoleDefinition | undefined {
+  const group = loadBangumi().enumerations.find((entry) => entry.id === `staff.${subjectType}`);
+  const value = group?.values.find((entry) => entry.id === code);
+  const mapping = value?.mapping as
+    | {
+        qualifiers?: {
+          role?: {
+            value?: {
+              concept?: { id?: unknown; scheme?: unknown; label?: unknown };
+              source?: unknown;
+            };
+          };
+        };
+      }
+    | undefined;
+  const role = mapping?.qualifiers?.role?.value;
+  const concept = role?.concept;
+  if (
+    typeof concept?.id !== 'string' ||
+    typeof concept.scheme !== 'string' ||
+    typeof concept.label !== 'string' ||
+    typeof role?.source !== 'string'
+  )
+    return undefined;
+  return {
+    uri: concept.id,
+    schemeUri: concept.scheme,
+    label: concept.label,
+    sourceUri: role.source,
+  };
 }
 
 export function isFamilyRelationTerm(term: string | undefined): boolean {

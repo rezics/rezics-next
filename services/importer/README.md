@@ -2232,16 +2232,53 @@ date is not completion or access authority.
 
 ### Bangumi creator and voice credits
 
-The cross-media seed caller and `importBangumiCreatorCredits` resolve admitted
-`subject-persons` and `person-characters` rows after the work, person and
-character subjects are bound, then map them through `mapBangumiVocabulary`.
-Archive `position` is the role code; it is never copied into `schema:position`.
-Credited spelling is emitted only when the association actually supplies it.
-Voice credits keep `wdt:P453` on the bound character. Music and live-action
-staff codes stay the pinned omitted inventory gap.
+The real local showcase seed derives only the finite staff roles used by
+selected type-2 anime `subject-persons` rows. It uses the reviewed mappings in
+`bangumi-vocabulary.ts`, creates source Concepts only through acknowledged
+ordinary import commands, and sends them through the common showcase manifest,
+independent acceptance/adoption and tokenless current reads. The selected
+work's native source ID, the person's Bangumi ID and the character's Bangumi ID
+must each match their current native subject type and identity statement before
+a dependent credit is sent. Exact UUIDs carry through the mapper; names and
+cross-provider title matches never resolve endpoints.
 
-Decision: music/live-action staff is reported as that missing producer binding
-rather than a guessed mapping.
+Decision: staff-role Concepts cite the pinned Bangumi `subject_staffs.yml`
+definition; each staff or voice credit cites its selected Bangumi work row.
+Vocabulary source IDs use `vocabulary:bangumi.staff[:code]` so their native
+subjects stay distinct from the selected work ID while the manifest keeps that
+work as the evidence owner.
+The common publisher accepts only the exact Bangumi staff-position or
+performer-character row fragment under that selected work URL for these
+credit facts.
+
+Archive staff `position` remains a role code and is never copied into
+`schema:position`. A credited spelling is preserved only when a supporting
+association supplies it; `person-characters.summary` remains commentary and
+does not become `wdt:P1932`. Voice credits keep the bound character on
+`wdt:P453` for that performer and work. Music and live-action staff, unprofiled
+type-3/type-6 roles, and stale or wrong-scheme role bindings remain exact gaps.
+The same exported role-binding helper accepts type 1 or 4 for a future book
+caller; book selection and author assignment remain that worker's ownership.
+Ordinary imports without explicit showcase state remain proposal-only.
+
+- Touches: at most 64 staff and 64 voice association rows per Bangumi work;
+  only selected source types 1, 2 and 4 use the finite staff inventory, and the
+  default showcase adapter derives role Concepts from type 2 anime rows.
+- Bound: each selected role is checked against its exact common-manifest
+  create/candidate acknowledgements, pinned vocabulary citation, current
+  native type, current `schema:sameAs`, and `skos:inScheme`. Credit citations
+  must be the exact staff-position or performer-character row under the
+  selected work URL. Work/person/character reads are operation-local and
+  invalidated after publication. No catalogue-wide label scan or generic
+  import auto-publication is added.
+- Growth check: `services/importer/tests/showcase-bangumi-credits.test.ts`
+  follows real-format staff/cast rows through the default adapter and an exact
+  unresolved endpoint gap. The native test
+  `services/kernel/test/imports/showcase-bangumi-credits.test.ts` covers
+  separate acceptance/adoption, exact work/person/character reads, role and
+  citation meaning, stale binding withholding, and identity reuse on refresh;
+  its execution remains controller-owned. A real dump walkthrough remains M1
+  proof.
 
 ### Bangumi character identity and appearance mapping
 

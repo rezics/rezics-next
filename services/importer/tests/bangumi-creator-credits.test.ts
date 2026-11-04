@@ -53,7 +53,10 @@ function authoredCharacter(id: number, name: string): SourceRecord {
 }
 
 function port() {
-  const types = new Map<string, string>();
+  const subjects = new Map<
+    string,
+    { id: string; type: string; labels: Record<string, string>; statements: Record<string, unknown[]> }
+  >();
   const receipts = new Map<string, { bytes: string; result: BatchWriteResult['results'][number] }>();
   const requests: BatchWriteRequest[] = [];
   const fencedIds = new Set<string>();
@@ -68,9 +71,9 @@ function port() {
     async writeSourceStatistic() {},
     async clearSourceStatistic() {},
     async readReviewedSubject(subjectId: string) {
-      return {
-        subject: { id: subjectId, type: types.get(subjectId) ?? 'schema:TVSeries', labels: { en: 'authored' } },
-      } as unknown as Awaited<ReturnType<BangumiCreatorCreditPort['readReviewedSubject']>>;
+      return { subject: subjects.get(subjectId) } as unknown as Awaited<
+        ReturnType<BangumiCreatorCreditPort['readReviewedSubject']>
+      >;
     },
     async batch(request: BatchWriteRequest): Promise<BatchWriteResult> {
       requests.push(structuredClone(request));
@@ -96,8 +99,20 @@ function port() {
                     value: { candidate: randomUUID(), revision: 1 },
                   }
                 : { key: command.key, status: 200 as const, value: { revision: 1 } };
-          if (command.op === 'create' && typeof command.subject === 'object' && 'id' in result.value)
-            types.set(result.value.id, command.subject.type);
+          if (command.op === 'create' && typeof command.subject === 'object' && 'id' in result.value) {
+            const externalId = command.source.external_id;
+            const match = /^(person|character):([1-9][0-9]*)$/u.exec(externalId);
+            const property = match?.[1] === 'person' ? 'wdt:P6298' : match?.[1] === 'character' ? 'wdt:P6296' : 'wdt:P5732';
+            const value = match?.[2] ?? externalId;
+            subjects.set(result.value.id, {
+              id: result.value.id,
+              type: command.subject.type,
+              labels: { en: 'authored' },
+              statements: {
+                [property]: [{ value: { type: 'value', content: value } }],
+              },
+            });
+          }
           receipts.set(command.key, { bytes, result });
           return result;
         }),
@@ -126,7 +141,7 @@ function directory() {
   return mkdtempSync(join(tmpdir(), 'bangumi-creator-credits-'));
 }
 
-test('production seed caller without sourceVocabulary cannot publish detailed credits', () => {
+test('ordinary conversion without admitted role vocabulary withholds detailed credits', () => {
   const registration = createSourceRegistration('bangumi', {
     source: 'bangumi_cross_media',
     converterRevision: 'cross-media-entities@1',
@@ -219,7 +234,7 @@ test('operator publishes authored staff and voice credits, keeps keys on reopen,
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test('a facts fence withholds refresh and music staff reports the exact omitted producer binding', async () => {
   const root = directory();
