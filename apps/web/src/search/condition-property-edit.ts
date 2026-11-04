@@ -1,5 +1,6 @@
-import type { FilterDocument, FilterRange } from '@rezics/filter';
+import type { ConceptSelection, FilterDocument, FilterRange } from '@rezics/filter';
 import type { ConditionMetadata } from './condition-editor-model';
+import { conditionConceptProperty } from './condition-concept-model';
 
 type Properties = ConditionMetadata['properties'];
 type PropertyDefinition = Properties[string] | undefined;
@@ -77,17 +78,26 @@ export function changeStatementProperty(
   const statement = value.statement;
   const previousDefinition = properties[statement.property];
   const nextDefinition = properties[nextProperty];
-  const operands: { in?: readonly string[]; range?: FilterRange } = {};
+  const operands: { in?: readonly string[]; range?: FilterRange; concept?: ConceptSelection } = {};
   let requiresConfirmation = false;
   let retainedOperand = false;
 
   if ('in' in statement) {
-    if (sameValueDefinition(previousDefinition, nextDefinition)) {
+    const retainsConcept =
+      statement.concept !== undefined &&
+      conditionConceptProperty(previousDefinition) &&
+      conditionConceptProperty(nextDefinition);
+    if (retainsConcept) {
+      operands.in = statement.in;
+      operands.concept = statement.concept;
+      retainedOperand = true;
+    } else if (sameValueDefinition(previousDefinition, nextDefinition)) {
       operands.in = statement.in;
       retainedOperand = true;
     } else if (hasValues(statement.in)) {
       requiresConfirmation = true;
     }
+    if (statement.concept && !retainsConcept) requiresConfirmation = true;
   }
 
   if ('range' in statement) {

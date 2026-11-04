@@ -220,3 +220,4 @@ edits remain on their occurrence and block form Apply without publishing a repla
 survive Boolean wrapping and equivalent renders; property/mode, external request and reader replacement retire
 obsolete repair state. Coverage describes committed endpoints, precision and possible overlap, excluding missing
 dates, independently of raw edits. No date normalization, browser storage or second calendar authority is used.
+Decision: Concept tag controls come from current released classification properties targeting `skos:Concept`; suggestion and detail reads stay closed for scoped and reader-bound Search until a matching native scoped loader exists.

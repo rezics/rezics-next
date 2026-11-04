@@ -83,3 +83,4 @@ export const loadScopedHeaderSuggestions: HeaderSuggestionLoader = async (query,
     throw problem(503, 'scoped_suggestions_unavailable', 'Scoped suggestions are unavailable');
   return requestSuggestions(signal, params);
 };
+
