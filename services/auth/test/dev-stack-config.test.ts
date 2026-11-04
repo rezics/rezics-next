@@ -24,11 +24,16 @@ test('local setup refuses remote databases', () => {
 });
 
 test('persona retries open mixed Search and POST facets alongside anonymous GET groups only', async () => {
-  const route = (method: string, group: string, security = [{}]) =>
-    ({ method, hooks: { detail: { 'x-exposure': `gate:${group}`, security } } });
+  const route = (method: string, group: string, security = [{}]) => ({
+    method,
+    hooks: { detail: { 'x-exposure': `gate:${group}`, security } },
+  });
   const routes = [
-    route('GET', 'subjects'), route('GET', 'search'), route('POST', 'search_advanced'),
-    route('POST', 'write_gate'), route('GET', 'private_gate', [{ bearerAuth: [] }]),
+    route('GET', 'subjects'),
+    route('GET', 'search'),
+    route('POST', 'search_advanced'),
+    route('POST', 'write_gate'),
+    route('GET', 'private_gate', [{ bearerAuth: [] }]),
   ];
   const receipts = new Map<string, string>();
   const attempts: string[] = [];
@@ -44,12 +49,14 @@ test('persona retries open mixed Search and POST facets alongside anonymous GET 
 
 test('a failed native opening stops persona setup and names the group, cause and retry', async () => {
   const attempted: string[] = [];
-  await expect(openLocalShowcase([], async ({ group }) => {
-    attempted.push(group);
-    throw new Error('Exposure command denied');
-  })).rejects.toThrow(
+  await expect(
+    openLocalShowcase([], async ({ group }) => {
+      attempted.push(group);
+      throw new Error('Exposure command denied');
+    }),
+  ).rejects.toThrow(
     'Local showcase opening search failed: Exposure command denied. ' +
-    'Resolve the native command failure, then rerun task dev:persona (or task seed:dev).',
+      'Resolve the native command failure, then rerun task dev:persona (or task seed:dev).',
   );
   expect(attempted).toEqual(['search']);
 });
