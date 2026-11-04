@@ -64,7 +64,65 @@ function markdownFiles(directory: string): string[] {
   }
 }
 
-/** The source task is already a dependency; only other unfinished work conflicts with its remainder. */
+function remainingPaths(paths: string[], policy: ControlPolicy['brief']): string[] {
+  const shared = policy.sharedPaths ?? [];
+  return paths.filter((path) => !shared.some((pattern) => pathsOverlap(path, pattern, policy)));
+}
+
+function coversAll(candidate: string[], other: string[], policy: ControlPolicy['brief']): boolean {
+  return (
+    candidate.length > 0 && candidate.every((path) => other.some((pattern) => pathsOverlap(path, pattern, policy)))
+  );
+}
+
+function coversAny(candidate: string[], other: string[], policy: ControlPolicy['brief']): boolean {
+  return candidate.some((path) => other.some((pattern) => pathsOverlap(path, pattern, policy)));
+}
+
+function continuationBatchPrefix(taskId: string, attempt: number): string {
+  return `continuation-${taskId.slice(0, 8)}-${attempt}-`;
+}
+
+function dispatchedFromBatch(stateDirectory: string, goal: string, taskId: string, prefix: string): boolean {
+  try {
+    return readdirSync(join(backlogDirectory(stateDirectory, goal), 'dispatched')).some((name) => {
+      const rest = name.startsWith(`${taskId}-`) ? name.slice(taskId.length + 1) : '';
+      return rest.startsWith(prefix);
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Append dependency task IDs to a brief's `after` list; existing values stay first. */
+export function withContinuationAfter(markdown: string, taskIds: string[]): string {
+  if (!taskIds.length) return markdown;
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
+  if (!match) return markdown;
+  let raw: unknown;
+  try {
+    raw = Bun.YAML.parse(match[1]!);
+  } catch {
+    return markdown;
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return markdown;
+  const front: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
+  const existing = Array.isArray(front.after) ? front.after.filter((value) => typeof value === 'string') : [];
+  const after = [...existing];
+  for (const id of taskIds) if (!after.includes(id)) after.push(id);
+  if (after.length === existing.length && after.every((id, index) => id === existing[index])) return markdown;
+  front.after = after;
+  const newline = match[0].includes('\r\n') ? '\r\n' : '\n';
+  const yaml = Bun.YAML.stringify(front, null, 2).trimEnd().replaceAll('\n', newline);
+  return `---${newline}${yaml}${newline}---${newline}${markdown.slice(match.index + match[0].length)}`;
+}
+
+export type ContinuationOverlap = { reason?: string; after: string[] };
+
+/**
+ * The source task is already a dependency. Same-attempt siblings never block each other. Shared paths do not count.
+ * A duplicate is a matching title, or every remaining path covered by one active task or ready brief.
+ */
 export function continuationOverlap(
   db: Database,
   stateDirectory: string,
@@ -73,11 +131,16 @@ export function continuationOverlap(
   sourceTask: string | undefined,
   ignoredFiles: string[] = [],
   policy: ControlPolicy['brief'] = defaultPolicy.brief,
-): string | undefined {
+  sourceAttempt?: number,
+): ContinuationOverlap {
   const candidate = scope(markdown);
-  const overlaps = (other: ReturnType<typeof scope>) =>
-    (candidate.title && candidate.title === other.title) ||
-    candidate.paths.some((path) => other.paths.some((pattern) => pathsOverlap(path, pattern, policy)));
+  const remaining = remainingPaths(candidate.paths, policy);
+  const prefix =
+    sourceTask !== undefined && sourceAttempt !== undefined
+      ? continuationBatchPrefix(sourceTask, sourceAttempt)
+      : undefined;
+  const duplicate = (reason: string): ContinuationOverlap => ({ reason, after: [] });
+  const after = new Set<string>();
   const rows = db
     .query(`SELECT id, body FROM worker_tasks
     WHERE json_extract(body, '$.brief.goal') = ?
@@ -86,23 +149,34 @@ export function continuationOverlap(
     .all(goal) as { id: string; body: string }[];
   for (const row of rows) {
     if (row.id === sourceTask) continue;
+    if (prefix && dispatchedFromBatch(stateDirectory, goal, row.id, prefix)) continue;
     const brief = (JSON.parse(row.body) as Task).brief;
-    if (overlaps({ paths: brief.paths ?? [], title: scope(brief.markdown ?? '').title }))
-      return `overlaps task ${row.id}; merge the remainder into that task's scope`;
+    const other = { paths: remainingPaths(brief.paths ?? [], policy), title: scope(brief.markdown ?? '').title };
+    if (candidate.title && candidate.title === other.title)
+      return duplicate(`overlaps task ${row.id}; merge the remainder into that task's scope`);
+    if (coversAll(remaining, other.paths, policy))
+      return duplicate(`overlaps task ${row.id}; merge the remainder into that task's scope`);
+    if (coversAny(remaining, other.paths, policy)) after.add(row.id);
   }
   const root = backlogDirectory(stateDirectory, goal);
-  for (const directory of [root, join(root, 'held'), join(root, '.dispatching'), join(root, 'proposed')]) {
+  for (const directory of [root, join(root, 'held'), join(root, '.dispatching')]) {
     for (const file of markdownFiles(directory)) {
       try {
-        const other = readFileSync(file, 'utf8');
-        if (ignoredFiles.includes(file) && other === markdown) continue;
-        if (overlaps(scope(other))) return `overlaps brief ${file}; merge the remainder into that scope`;
+        const otherMarkdown = readFileSync(file, 'utf8');
+        if (ignoredFiles.includes(file) && otherMarkdown === markdown) continue;
+        if (prefix && basename(file).startsWith(prefix)) continue;
+        const other = scope(otherMarkdown);
+        if (candidate.title && candidate.title === other.title)
+          return duplicate(`overlaps brief ${file}; merge the remainder into that scope`);
+        const otherRemaining = remainingPaths(other.paths, policy);
+        if (coversAll(remaining, otherRemaining, policy))
+          return duplicate(`overlaps brief ${file}; merge the remainder into that scope`);
       } catch {
         // An incomplete manager draft has no usable scope yet; ordinary dispatch will validate it.
       }
     }
   }
-  return undefined;
+  return { after: [...after] };
 }
 
 /** Explicit per-Goal values override the default derived from the Goal's durable brief history. */
@@ -390,14 +464,16 @@ export function harvestContinuations(
         task.id,
         [...readyCandidates, ...proposedCandidates],
         settings.policy?.brief,
+        ref.attempt,
       );
+      const admitted = overlap.reason ? markdown : withContinuationAfter(markdown, overlap.after);
       const proposalReason =
-        overlap ??
+        overlap.reason ??
         (continuationReview(
           settings.stateDirectory,
           task.brief.goal,
           settings.policy,
-          [...readyCandidates, ...proposedCandidates].some((file) => publicationState(file, markdown) === 'match')
+          [...readyCandidates, ...proposedCandidates].some((file) => publicationState(file, admitted) === 'match')
             ? 0
             : 1,
         )
@@ -405,12 +481,12 @@ export function harvestContinuations(
           : undefined);
       const directory = proposalReason ? join(target, 'proposed') : target;
       const candidates = basenames.map((basename) => join(directory, basename));
-      let destination = candidates.find((candidate) => publicationState(candidate, markdown) === 'match');
+      let destination = candidates.find((candidate) => publicationState(candidate, admitted) === 'match');
       if (!destination) {
         for (const candidate of candidates) {
-          if (publicationState(candidate, markdown) !== 'absent') continue;
+          if (publicationState(candidate, admitted) !== 'absent') continue;
           mkdirSync(directory, { recursive: true });
-          if (publishComplete(candidate, markdown) || publicationState(candidate, markdown) === 'match') {
+          if (publishComplete(candidate, admitted) || publicationState(candidate, admitted) === 'match') {
             destination = candidate;
             break;
           }

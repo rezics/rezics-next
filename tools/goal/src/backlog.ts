@@ -7,7 +7,13 @@ import { basename, join } from 'node:path';
 import type { ManagerEvent, ManagerInbox } from './contracts.ts';
 import { migrate } from './db.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
-import { continuationOverlap, continuationReview, continuationReleased, proposeContinuation } from './continuation.ts';
+import {
+  continuationOverlap,
+  continuationReview,
+  continuationReleased,
+  proposeContinuation,
+  withContinuationAfter,
+} from './continuation.ts';
 import { readBriefContinuation } from './briefs.ts';
 import type { BriefContinuation } from './types.ts';
 
@@ -466,13 +472,19 @@ async function dispatchReady(
       continuation = readBriefContinuation(markdown);
       // Worker remainders create new work; manager-authored retries retain their exact-owner validation.
       if (basename(claimed).startsWith('continuation-')) {
+        const claimedName = basename(claimed);
         const source =
           continuation?.taskId ??
           (
             runtime.db
               .query("SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?")
               .all(pick.goal) as { id: string }[]
-          ).find((row) => basename(claimed).startsWith(`continuation-${row.id.slice(0, 8)}-`))?.id;
+          ).find((row) => claimedName.startsWith(`continuation-${row.id.slice(0, 8)}-`))?.id;
+        const sourcePrefix = source ? `continuation-${source.slice(0, 8)}-` : undefined;
+        const parsedAttempt =
+          sourcePrefix && claimedName.startsWith(sourcePrefix)
+            ? Number(/^(\d+)-/.exec(claimedName.slice(sourcePrefix.length))?.[1])
+            : Number.NaN;
         const overlap = continuationOverlap(
           runtime.db,
           runtime.stateDirectory,
@@ -481,11 +493,12 @@ async function dispatchReady(
           source,
           [claimed],
           runtime.policy?.brief,
+          Number.isSafeInteger(parsedAttempt) && parsedAttempt > 0 ? parsedAttempt : undefined,
         );
         const reason =
-          overlap ??
+          overlap.reason ??
           (continuationReview(runtime.stateDirectory, pick.goal, runtime.policy) &&
-          !continuationReleased(runtime.stateDirectory, pick.goal, basename(claimed), markdown)
+          !continuationReleased(runtime.stateDirectory, pick.goal, claimedName, markdown)
             ? 'Goal continuation review is enabled; release or retire this proposal'
             : undefined);
         if (reason) {
@@ -498,6 +511,7 @@ async function dispatchReady(
           });
           continue;
         }
+        if (overlap.after.length) writeFileSync(claimed, withContinuationAfter(markdown, overlap.after));
       }
       if (continuation) {
         await runtime.continueTask(pick.goal, continuation, claimed);

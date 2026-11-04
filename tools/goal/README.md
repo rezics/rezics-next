@@ -548,6 +548,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.brief.bytes`                                  | `65536`                     | Maximum brief and owner-decision input size (UTF-8 bytes).                                      |
 | `policy.brief.pathCharacters`                         | `65536`                     | Maximum declared path pattern characters.                                                       |
 | `policy.brief.pathMatchStates`                        | `1000000`                   | Maximum visited cells per path-pattern intersection.                                            |
+| `policy.brief.sharedPaths`                            | README, docs, generated     | Declared paths ignored by continuation overlap; landing already resolves these files.           |
 | `policy.workerPrompt.characters`                      | `20000`                     | Total worker prompt characters when delivering an owner decision.                               |
 | `policy.workerPrompt.gitBufferBytes`                  | `16777216`                  | Worker prompt changed-path Git output buffer (bytes).                                           |
 | `policy.history.attemptPageSize`                      | `100`                       | Maximum attempt or attempt-record page size.                                                    |
@@ -1536,12 +1537,18 @@ harvests only untracked regular files created after that attempt started (creati
 Decision: preserve tracked continuation files and directories containing them so harvesting cannot dirty retained
 source or remove another outcome's briefs. Older untracked files
 are dropped with a recorded reason, including files inherited from another attempt. Valid briefs keep the source
-Goal and manager; a foreign Goal is dropped with its reason. Before a brief becomes ready, its paths and normalized
-title are compared with the same Goal's ready, running, held, landing and stopped tasks and its ready, held, claimed
-and proposed briefs. The source task is exempt because the continuation depends on it. Any overlapping path or
-matching title sends the brief to `proposed/` with a `.reason` naming the overlapping task or brief and an inbox
-notice to the manager, so the manager can merge the remaining scope. Dispatch checks overlap again under the same
-backlog lease used by harvest. Nonoverlapping briefs outside review mode move to
+Goal and manager; a foreign Goal is dropped with its reason. Before a brief becomes ready, its remaining paths and
+normalized title are compared with the same Goal's ready, running, held, landing and stopped tasks and its ready, held
+and claimed briefs. Proposed briefs are ignored, so a parked sibling cannot deadlock a batch. Continuations from the
+same source task and attempt never block each other: their backlog names share the prefix
+`continuation-<source8>-<attempt>-`, and a dispatched sibling is `${taskId}-` plus that prefix. Paths in
+`policy.brief.sharedPaths` do not count toward overlap (READMEs, `docs/**`, generated definition and recorded files,
+and the derived outputs landing already regenerates). Decision: empty remaining paths after that subtraction are not a
+path-duplicate; a duplicate is a matching title, or every remaining path covered by one single active task or ready
+brief. That duplicate goes to `proposed/` with a `.reason` naming the overlapping task or brief and an inbox notice so
+the manager can merge the remaining scope. A continuation that only partly overlaps an active task is admitted with
+every such task appended to `after`. Dispatch checks overlap again under the same backlog lease used by harvest.
+Nonoverlapping briefs outside review mode move to
 `<state>/backlog/<goal>/continuation-<task>-<attempt>-<name>.md` and record `continuation-queued`. A name that normalizes or truncates onto a file
 already holding the same brief is left in place. A different brief is published under a stable distinct name, and the
 source is removed only then; when every distinct name is occupied the source stays and a `continuation-retained` event
@@ -1557,8 +1564,9 @@ continuations versus manager briefs across the Goal's ready, proposed, dispatche
 claimed files, including the incoming brief; enable review when continuations outnumber manager briefs.
 To release a proposal, move its Markdown file into the Goal's ready directory under the same name, keeping its
 `.reason` in `proposed/`; the reason's content fingerprint binds that release to the reviewed brief. A changed brief
-is proposed again on the next sweep, so the manager can release its revised contents. Overlap still prevents dispatch after
-release. To retire it, move it into `retired/`. Proposed and retired files never dispatch or count as ready.
+is proposed again on the next sweep, so the manager can release its revised contents. Duplicate title or remaining-path
+coverage still prevents dispatch after release; a brief that remains in `proposed/` does not. To retire it, move it
+into `retired/`. Proposed and retired files never dispatch or count as ready.
 A later attempt cannot enqueue the remainder again once an earlier attempt queued or proposed it.
 
 Rebase-stage conflicts with the integration branch receive same-profile resolution attempts after the control plane
