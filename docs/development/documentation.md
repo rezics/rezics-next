@@ -25,6 +25,7 @@ of a reference.
 
 Role templates in `tools/goal/prompts/` are the role text. Condition byte budgets count filled condition template
 bodies; the shared wait and own-tests footer is appended once per check condition and counted in the session total.
+Runtime command argv and wrapper-result lines are extras, not condition-template bytes.
 
 ### Rules
 
