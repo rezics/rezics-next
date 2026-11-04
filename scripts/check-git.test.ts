@@ -369,31 +369,35 @@ test('one failed push retries the identical candidate and retains redacted trans
   }
 }, 30000);
 
-test.each([false, true])('final push failure keeps stderr and snapshot fallback; expired retry=%s', async (expire) => {
-  const { root, source, log } = publicationFixture(`echo 'fatal: gateway unavailable' >&2; exit 1`);
-  const errors: string[] = [];
-  const output = spyOn(console, 'error').mockImplementation((message) => {
-    errors.push(String(message));
-  });
-  let clock = 0;
-  try {
-    const manifest = await stageCheckGit(source, join(root, 'publication'), {
-      ref: 'refs/checks/final-failure',
-      deadlineMs: 1000,
-      now: () => clock,
-      backoff: async () => {
-        if (expire) clock = 1000;
-      },
+test.each([false, true])(
+  'final push failure keeps stderr and snapshot fallback; expired retry=%s',
+  async (expire) => {
+    const { root, source, log } = publicationFixture(`echo 'fatal: gateway unavailable' >&2; exit 1`);
+    const errors: string[] = [];
+    const output = spyOn(console, 'error').mockImplementation((message) => {
+      errors.push(String(message));
     });
-    expect(existsSync(join(dirname(manifest), 'snapshot.pack'))).toBe(true);
-    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(expire ? 1 : 2);
-    expect(errors.join('\n')).toContain('gateway unavailable');
-    expect(errors.join('\n')).toContain(expire ? 'deadline exceeded' : 'exit 1');
-    expect(errors.join('\n')).toContain('using full snapshot upload');
-  } finally {
-    output.mockRestore();
-  }
-}, 30000);
+    let clock = 0;
+    try {
+      const manifest = await stageCheckGit(source, join(root, 'publication'), {
+        ref: 'refs/checks/final-failure',
+        deadlineMs: 1000,
+        now: () => clock,
+        backoff: async () => {
+          if (expire) clock = 1000;
+        },
+      });
+      expect(existsSync(join(dirname(manifest), 'snapshot.pack'))).toBe(true);
+      expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(expire ? 1 : 2);
+      expect(errors.join('\n')).toContain('gateway unavailable');
+      expect(errors.join('\n')).toContain(expire ? 'deadline exceeded' : 'exit 1');
+      expect(errors.join('\n')).toContain('using full snapshot upload');
+    } finally {
+      output.mockRestore();
+    }
+  },
+  30000,
+);
 
 test('failed manifest delivery releases a published ref using the earlier intent', async () => {
   const { root, source, origin } = publicationFixture('exit 0');
@@ -565,7 +569,9 @@ test('a live preparation pin keeps reused objects through another run forced GC'
     ageStore(store);
     const other = fetchPublication(beta.publication, checkoutB, store, origin);
     expect(other.exitCode, other.stderr.toString()).toBe(0);
-    expect(git(root, '--git-dir', store, 'rev-parse', 'refs/check-runs/alpha-run')).toBe(alpha.publication.remote.commit);
+    expect(git(root, '--git-dir', store, 'rev-parse', 'refs/check-runs/alpha-run')).toBe(
+      alpha.publication.remote.commit,
+    );
     expect(storeHas(store, alpha.blob)).toBe(true);
     pokeFifo(barrier.go);
     expect(await paused.exited, await new Response(paused.stderr).text()).toBe(0);
