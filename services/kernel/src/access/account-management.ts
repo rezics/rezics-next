@@ -253,8 +253,7 @@ export async function createManagementRead(deps: Dependencies, actor: Actor, dea
         account_id: row.subjectAccountId,
       });
       const account = publicAccounts.get(row.subjectAccountId) ?? null;
-      const current =
-        relation?.operatorAccountId === operatorId && relation.reservationId === row.reservationId;
+      const current = relation?.operatorAccountId === operatorId && relation.reservationId === row.reservationId;
       const target =
         account && admitted && current
           ? await readAccount(deps.pool, routeOf(row.subjectAccountId)!, row.subjectAccountId)
