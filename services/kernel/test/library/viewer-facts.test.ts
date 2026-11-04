@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test as bunTest } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import {
@@ -18,6 +18,8 @@ import {
   type SourceStatisticLifecycleFixture,
 } from '../rating/source-statistic-lifecycle-fixture.ts';
 
+// Keep the shared native viewer fixture single-owner within this file.
+const test = bunTest.serial;
 let fixture: SourceStatisticLifecycleFixture;
 let owner: AccountActor;
 const deadline = () => Date.now() + 120_000;

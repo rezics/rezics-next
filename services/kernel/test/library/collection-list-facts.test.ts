@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, test as bunTest } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -12,6 +12,8 @@ import detailSQL from '../../src/semantic/read-subject.sql';
 import factsSQL from '../../src/semantic/list-presentation-subjects.sql';
 import { createCollectionListFactsFixture } from './support/collection-list-facts-fixture.ts';
 
+// Keep each native Auth workflow host single-owner within this file.
+const test = bunTest.serial;
 const quantity = (amount: string) => ({ amount, unit: '1' });
 async function page(response: Response) {
   expect(response.status, await response.clone().text()).toBe(200);
