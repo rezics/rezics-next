@@ -116,13 +116,12 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         );
         return;
       }
-      const admitted =
-        platform
-          ? (() => {
-              const mapping = mapSourceEnumeration('vndb', 'platform', code);
-              return mapping?.term === property;
-            })()
-          : vndbReleaseMediumCodes.has(code);
+      const admitted = platform
+        ? (() => {
+            const mapping = mapSourceEnumeration('vndb', 'platform', code);
+            return mapping?.term === property;
+          })()
+        : vndbReleaseMediumCodes.has(code);
       if (!admitted) {
         rowGap(
           environment,

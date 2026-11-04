@@ -133,7 +133,9 @@ export async function readVndbReleaseBindings(
   const read = (id: string) => {
     let pending = readCache.get(id);
     if (!pending) {
-      pending = Promise.resolve().then(() => port.readReviewedSubject(id)).catch(() => undefined);
+      pending = Promise.resolve()
+        .then(() => port.readReviewedSubject(id))
+        .catch(() => undefined);
       readCache.set(id, pending);
     }
     return pending;
@@ -190,8 +192,7 @@ export async function readVndbReleaseBindings(
       .sort((left, right) => compareText(left.code, right.code) || compareText(left.id, right.id));
     conceptCount += conceptLimit;
     for (const item of orderedConcepts) {
-      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(item.code) || !UUID.test(item.id))
-        continue;
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(item.code) || !UUID.test(item.id)) continue;
       const conceptRead = await read(item.id);
       const concept = (conceptRead as { subject?: { id?: string; type?: string } } | undefined)?.subject;
       if (!concept || concept.id !== item.id || concept.type !== 'skos:Concept') continue;
@@ -294,7 +295,9 @@ export function vndbReleaseVocabularyAdmission(
 /** Select admitted works and their source releases from a bounded authored dump. One source release stays one native release. */
 export async function planVndbReleaseFidelity(
   input: CrossMediaTables,
-): Promise<CrossMediaPlan & { facts: VndbReleaseFacts; releasePlatforms: ReadonlyMap<string, VndbReleasePlatformFacts> }> {
+): Promise<
+  CrossMediaPlan & { facts: VndbReleaseFacts; releasePlatforms: ReadonlyMap<string, VndbReleasePlatformFacts> }
+> {
   const plan: CrossMediaPlan = emptyCrossMediaPlan();
   const facts: VndbReleaseFacts = { works: new Map(), releases: new Map() };
   const gap = (table: string, record: Row, reason: string) => {
@@ -473,8 +476,7 @@ export async function importVndbReleaseFidelity(input: {
   const boundedGroups: VndbReleaseBindingGroup[] = [];
   if (groups.length <= sourceVocabularyLimits.schemes) {
     let totalConcepts = 0;
-    for (const group of groups)
-      totalConcepts += group && Array.isArray(group.concepts) ? group.concepts.length : 0;
+    for (const group of groups) totalConcepts += group && Array.isArray(group.concepts) ? group.concepts.length : 0;
     if (totalConcepts <= sourceVocabularyLimits.concepts) {
       for (const group of groups) {
         const wanted = group && typeof group.taxonomy === 'string' ? neededCodes.get(group.taxonomy) : undefined;
@@ -491,12 +493,14 @@ export async function importVndbReleaseFidelity(input: {
   const current = await readVndbReleaseBindings(input.port, boundedGroups);
   const classificationTaxonomies = new Set(vndbReleaseClassificationTaxonomies());
   const suppliedBindingsCurrent = input.bindings?.releaseDigest === bundledDigest;
-  const suppliedSchemes = suppliedBindingsCurrent && Array.isArray(input.bindings?.schemes)
-    ? input.bindings.schemes.slice(0, sourceVocabularyLimits.schemes)
-    : [];
-  const suppliedConcepts = suppliedBindingsCurrent && Array.isArray(input.bindings?.concepts)
-    ? input.bindings.concepts.slice(0, sourceVocabularyLimits.concepts)
-    : [];
+  const suppliedSchemes =
+    suppliedBindingsCurrent && Array.isArray(input.bindings?.schemes)
+      ? input.bindings.schemes.slice(0, sourceVocabularyLimits.schemes)
+      : [];
+  const suppliedConcepts =
+    suppliedBindingsCurrent && Array.isArray(input.bindings?.concepts)
+      ? input.bindings.concepts.slice(0, sourceVocabularyLimits.concepts)
+      : [];
   const bindings: SourceVocabularyBindings = {
     releaseDigest: bundledDigest,
     schemes: [

@@ -30,7 +30,10 @@ async function authoredTables(
   await mkdir(db, { recursive: true });
   const files: Record<string, [string, string]> = {
     vn: ['id\tolang\tdevstatus\talias', 'v1\tja\t\N\t\N\nv2\tja\t\N\t\N'],
-    vn_titles: ['id\tlang\tofficial\ttitle\tlatin', 'v1\tja\tt\tAuthored work one\t\N\nv2\tja\tt\tAuthored work two\t\N'],
+    vn_titles: [
+      'id\tlang\tofficial\ttitle\tlatin',
+      'v1\tja\tt\tAuthored work one\t\N\nv2\tja\tt\tAuthored work two\t\N',
+    ],
     entry_meta: ['id\trevision\tlastmod', 'v1\t1\t2026-10-25\nv2\t1\t2026-10-25'],
     releases: ['id\treleased', 'r1\t20200101'],
     releases_titles: ['id\tlang\tmtl\ttitle\tlatin', 'r1\tja\tt\tAuthored release\t\N'],
@@ -51,10 +54,18 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
   try {
     const ids = new Map<string, string>();
     const groups: VndbReleaseBindingGroup[] = [
-      { taxonomy: vndbReleasePlatformTaxonomy, uri: vndbReleasePlatformSchemeUri, schemeId: randomUUID(), concepts: [] },
+      {
+        taxonomy: vndbReleasePlatformTaxonomy,
+        uri: vndbReleasePlatformSchemeUri,
+        schemeId: randomUUID(),
+        concepts: [],
+      },
       { taxonomy: vndbReleaseMediumTaxonomy, uri: vndbReleaseMediumSchemeUri, schemeId: randomUUID(), concepts: [] },
     ];
-    const codes = [['win', 'mac', 'ios'], ['cd', 'dvd']] as const;
+    const codes = [
+      ['win', 'mac', 'ios'],
+      ['cd', 'dvd'],
+    ] as const;
     for (const [index, group] of groups.entries()) {
       for (const code of codes[index]!) {
         const id = randomUUID();
@@ -103,17 +114,31 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
         };
       },
       setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-      async fence() { return { fenced: false, securityRevision: null }; },
-      async writeSourceStatistic() { throw new Error('No statistic in this authored fixture'); },
+      async fence() {
+        return { fenced: false, securityRevision: null };
+      },
+      async writeSourceStatistic() {
+        throw new Error('No statistic in this authored fixture');
+      },
       async clearSourceStatistic() {},
       async readReviewedSubject(id) {
         return (known.get(id) ?? { subject: { id } }) as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
       },
     };
-    const propertyOf = (command: BatchCommand) => command.op === 'propose' ? command.statement.property.id : '';
+    const propertyOf = (command: BatchCommand) => (command.op === 'propose' ? command.statement.property.id : '');
     const targetOf = (command: BatchCommand) =>
-      command.op === 'propose' && command.statement.value.type === 'value' ? command.statement.value.content : undefined;
-    const firstTables = await authoredTables(directory, ['mac', 'win', 'win', 'xyz'], [['dvd', '5'], ['cd', '1'], ['dvd', '2']]);
+      command.op === 'propose' && command.statement.value.type === 'value'
+        ? command.statement.value.content
+        : undefined;
+    const firstTables = await authoredTables(
+      directory,
+      ['mac', 'win', 'win', 'xyz'],
+      [
+        ['dvd', '5'],
+        ['cd', '1'],
+        ['dvd', '2'],
+      ],
+    );
     const planned = await planVndbReleaseFidelity(firstTables);
     expect(planned.releasePlatforms.get('r1')).toMatchObject({
       platforms: [{ code: 'mac' }, { code: 'win' }],
@@ -135,11 +160,21 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
     expect(firstFacts.map(targetOf).sort()).toEqual(['win', 'mac', 'cd', 'dvd'].map((code) => ids.get(code)!).sort());
     expect(JSON.stringify(first.gaps)).toContain('xyz');
     expect(firstFacts).toHaveLength(4);
-    const citations = firstFacts.flatMap((command) => command.op === 'propose' ? command.statement.references ?? [] : []);
+    const citations = firstFacts.flatMap((command) =>
+      command.op === 'propose' ? (command.statement.references ?? []) : [],
+    );
     expect(JSON.stringify(citations)).toContain('/releases_platforms/r1/platform');
     expect(JSON.stringify(citations)).toContain('/releases_media/r1/medium');
 
-    const reordered = await authoredTables(directory, ['xyz', 'win', 'mac', 'mac'], [['dvd', '2'], ['cd', '1'], ['cd', '9']]);
+    const reordered = await authoredTables(
+      directory,
+      ['xyz', 'win', 'mac', 'mac'],
+      [
+        ['dvd', '2'],
+        ['cd', '1'],
+        ['cd', '9'],
+      ],
+    );
     const repeat = await importVndbReleaseFidelity({
       tables: reordered,
       path: join(directory, 'state.sqlite'),
@@ -151,20 +186,35 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
 
     const beforeRefresh = commands.length;
     const changed = await importVndbReleaseFidelity({
-      tables: await authoredTables(directory, ['win', 'lin', 'mac', 'ios', 'xyz'], [['cd', '1'], ['dvd', '1']]),
+      tables: await authoredTables(
+        directory,
+        ['win', 'lin', 'mac', 'ios', 'xyz'],
+        [
+          ['cd', '1'],
+          ['dvd', '1'],
+        ],
+      ),
       path: join(directory, 'state.sqlite'),
       port,
       bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
       bindingGroups: groups,
     });
-    const refreshed = commands.slice(beforeRefresh).filter((command) => ['schema:gamePlatform', 'wdt:P437'].includes(propertyOf(command)));
+    const refreshed = commands
+      .slice(beforeRefresh)
+      .filter((command) => ['schema:gamePlatform', 'wdt:P437'].includes(propertyOf(command)));
     expect(changed.runs.vndb?.counts.changed).toBeGreaterThan(0);
-    expect(refreshed.filter((command) => propertyOf(command) === 'schema:gamePlatform').map(targetOf).sort()).toEqual(
-      [ids.get('ios'), ids.get('mac'), ids.get('win')].sort(),
-    );
-    expect(refreshed.filter((command) => propertyOf(command) === 'wdt:P437').map(targetOf).sort()).toEqual(
-      [ids.get('cd'), ids.get('dvd')].sort(),
-    );
+    expect(
+      refreshed
+        .filter((command) => propertyOf(command) === 'schema:gamePlatform')
+        .map(targetOf)
+        .sort(),
+    ).toEqual([ids.get('ios'), ids.get('mac'), ids.get('win')].sort());
+    expect(
+      refreshed
+        .filter((command) => propertyOf(command) === 'wdt:P437')
+        .map(targetOf)
+        .sort(),
+    ).toEqual([ids.get('cd'), ids.get('dvd')].sort());
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

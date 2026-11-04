@@ -1,6 +1,10 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
-import { sourceVocabularyLimits, type NativeIdentity, type VndbVocabularyRow } from '@rezics/conversion/source-vocabulary';
+import {
+  sourceVocabularyLimits,
+  type NativeIdentity,
+  type VndbVocabularyRow,
+} from '@rezics/conversion/source-vocabulary';
 import {
   vndbReleaseMediumCodes,
   vndbReleaseMediumTaxonomy,
@@ -37,10 +41,17 @@ function fieldsOf(table: string, record: Row): string[] {
 }
 
 function compareGap(left: CrossMediaGap, right: CrossMediaGap): number {
-  const leftRecord = JSON.stringify(Object.fromEntries(Object.entries(left.record).sort(([a], [b]) => compareText(a, b))));
-  const rightRecord = JSON.stringify(Object.fromEntries(Object.entries(right.record).sort(([a], [b]) => compareText(a, b))));
-  return compareText(left.fields.join('\0'), right.fields.join('\0')) ||
-    compareText(leftRecord, rightRecord) || compareText(left.reason, right.reason);
+  const leftRecord = JSON.stringify(
+    Object.fromEntries(Object.entries(left.record).sort(([a], [b]) => compareText(a, b))),
+  );
+  const rightRecord = JSON.stringify(
+    Object.fromEntries(Object.entries(right.record).sort(([a], [b]) => compareText(a, b))),
+  );
+  return (
+    compareText(left.fields.join('\0'), right.fields.join('\0')) ||
+    compareText(leftRecord, rightRecord) ||
+    compareText(left.reason, right.reason)
+  );
 }
 
 function codeGapRecord(id: unknown, field: 'platform' | 'medium', code: unknown): Row {
@@ -60,7 +71,10 @@ export async function planVndbReleasePlatforms(
   if (releaseKeys.length > RELEASE_CAP || releaseKeys.some((id) => !RELEASE_ID.test(id)))
     throw new TypeError('Invalid selected VNDB release keys');
   const selected = new Set([...new Set(releaseKeys)].sort(compareText));
-  const mutable = new Map<string, { platforms: Map<string, VndbReleaseAssociation>; media: Map<string, VndbReleaseAssociation> }>();
+  const mutable = new Map<
+    string,
+    { platforms: Map<string, VndbReleaseAssociation>; media: Map<string, VndbReleaseAssociation> }
+  >();
   for (const id of selected) mutable.set(id, { platforms: new Map(), media: new Map() });
   const gaps: CrossMediaGap[] = [];
   const seenAssociations = new Set<string>();
@@ -71,8 +85,7 @@ export async function planVndbReleasePlatforms(
     if (gaps.length < GAP_CAP) gaps.push(candidate);
     else {
       let last = 0;
-      for (let index = 1; index < gaps.length; index += 1)
-        if (compareGap(gaps[last]!, gaps[index]!) < 0) last = index;
+      for (let index = 1; index < gaps.length; index += 1) if (compareGap(gaps[last]!, gaps[index]!) < 0) last = index;
       if (compareGap(candidate, gaps[last]!) < 0) gaps[last] = candidate;
     }
   };
@@ -149,9 +162,7 @@ export function vndbReleasePlatformVocabulary(
   if (!facts) return [];
   const release: NativeIdentity = { id: subject, type: 'wd:Q20631656', releaseDigest: bundledDigest };
   return [
-    ...facts.platforms.map(
-      ({ code, path }): VndbVocabularyRow => ({ kind: 'release-platform', path, release, code }),
-    ),
+    ...facts.platforms.map(({ code, path }): VndbVocabularyRow => ({ kind: 'release-platform', path, release, code })),
     ...facts.media.map(({ code, path }): VndbVocabularyRow => ({ kind: 'release-medium', path, release, code })),
   ];
 }

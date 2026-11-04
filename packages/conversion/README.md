@@ -427,6 +427,7 @@ quantity in years (`wd:Q577`) with the VNDB release citation. It remains on the
 Release and is never copied to a work. Decision: `minage` accepts only canonical
 COPY integers or API integers; zero means all ages, while null and absent stay
 unknown.
+
 ### VNDB release platforms and distribution media
 
 The production release operator carries selected `releases_platforms.platform`
