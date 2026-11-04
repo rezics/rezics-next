@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { runDevelopmentSeed } from '../../../scripts/datasets/cross-media-seed.ts';
 import { cacheDumpAsset } from '../../../scripts/datasets/fetch-dumps.ts';
 import { normalizeCrossMediaSeedOrigin } from '../src/cross-media-seed.ts';
 
@@ -39,4 +40,43 @@ test('seed origins allow loopback HTTP and require HTTPS elsewhere', () => {
   expect(() => normalizeCrossMediaSeedOrigin('http://imports.example.test')).toThrow(
     'Seed API and Auth require HTTPS origins or loopback HTTP origins',
   );
+});
+
+test('development seed fetches the shared cache once and passes the local persona to the importer', async () => {
+  const root = resolve(import.meta.dir, '../../..');
+  const key = join(root, '.temp', 'persona.key');
+  const args: string[] = [];
+  let fetches = 0;
+  await runDevelopmentSeed({
+    root,
+    env: {
+      REZICS_DEV_PERSONA_ACCOUNT_KEY: key,
+      REZICS_DEV_PERSONA_ACCOUNT: 'local-importer',
+      REZICS_DEV_PERSONA_CLIENT: 'local-cli',
+      KERNEL_PORT: '4100',
+      AUTH_ORIGIN: 'http://localhost:4300',
+    },
+    fetchDumps: async () => {
+      fetches++;
+      return {
+        cacheRoot: '/shared/dumps',
+        bangumi: '/shared/dumps/bangumi',
+        vndb: '/shared/dumps/vndb',
+        bangumiArchive: '/shared/dumps/bangumi.zip',
+        vndbArchive: '/shared/dumps/vndb.tar.zst',
+      };
+    },
+    runSeed: async (argv) => {
+      args.push(...argv);
+    },
+  });
+  const option = (name: string) => args[args.indexOf(name) + 1];
+  expect(fetches).toBe(1);
+  expect(option('--bangumi')).toBe('/shared/dumps/bangumi');
+  expect(option('--vndb')).toBe('/shared/dumps/vndb');
+  expect(option('--api')).toBe('http://127.0.0.1:4100');
+  expect(option('--auth')).toBe('http://localhost:4300');
+  expect(option('--account-key')).toBe(key);
+  expect(option('--account')).toBe('local-importer');
+  expect(option('--client')).toBe('local-cli');
 });

@@ -1,24 +1,30 @@
 import { runCrossMediaSeedCli } from '../../services/importer/src/cross-media-seed.ts';
-import { resolve, join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fetchCrossMediaDumps } from './fetch-dumps.ts';
 
-function requiredEnvironment(name: string): string {
-  const value = process.env[name]?.trim();
+function requiredEnvironment(name: string, env: NodeJS.ProcessEnv): string {
+  const value = env[name]?.trim();
   if (!value) throw new Error(`Missing ${name}; configure the local development persona and origins first`);
   return value;
 }
 
-async function runDevelopmentSeed(): Promise<void> {
-  const accountKey = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT_KEY');
-  const account = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT');
-  const client = requiredEnvironment('REZICS_DEV_PERSONA_CLIENT');
-  const auth = requiredEnvironment('AUTH_ORIGIN');
-  const api = process.env.KERNEL_ORIGIN || `http://127.0.0.1:${process.env.KERNEL_PORT || '4100'}`;
-  const dumps = await fetchCrossMediaDumps();
-  const root = resolve(import.meta.dir, '../..');
+export async function runDevelopmentSeed(options: {
+  env?: NodeJS.ProcessEnv;
+  fetchDumps?: typeof fetchCrossMediaDumps;
+  runSeed?: typeof runCrossMediaSeedCli;
+  root?: string;
+} = {}): Promise<void> {
+  const env = options.env ?? process.env;
+  const accountKey = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT_KEY', env);
+  const account = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT', env);
+  const client = requiredEnvironment('REZICS_DEV_PERSONA_CLIENT', env);
+  const auth = requiredEnvironment('AUTH_ORIGIN', env);
+  const api = env.KERNEL_ORIGIN || `http://127.0.0.1:${env.KERNEL_PORT || '4100'}`;
+  const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();
+  const root = options.root ?? resolve(import.meta.dir, '../..');
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
   const result = join(root, '.temp', 'cross-media-seed', 'result.json');
-  await runCrossMediaSeedCli([
+  await (options.runSeed ?? runCrossMediaSeedCli)([
     '--bangumi',
     dumps.bangumi,
     '--vndb',
