@@ -135,6 +135,7 @@ async function classificationFixture(
     facts?: unknown;
     association?: ClassificationAssociation | null;
     admit?: boolean;
+    mutationResponse?: 'malformed' | 'opposite-state';
   } = {},
 ) {
   const temporaryRoot = resolve(import.meta.dir, '../../../.temp');
@@ -145,6 +146,7 @@ async function classificationFixture(
   const sequence = { value: 0 };
   let lost = false;
   let facts: unknown = options.facts === undefined ? admittedFacts() : options.facts;
+  let mutationResponse = options.mutationResponse;
   let bound: ClassificationAssociation | null = options.association === undefined ? association : options.association;
   let emptyReadReason: 'not_observed' | 'not_found' = 'not_observed';
   let hideNextConfirmation = false;
@@ -218,6 +220,12 @@ async function classificationFixture(
       }
       const digest = classificationObservation(body.association!, body.value as never).digest;
       stored.set(`${subjectIdFromPath}:${classificationAssociationKey(body.association!)}`, { ...body.value, digest });
+      if (mutationResponse && path.endsWith(':put')) {
+        const response = mutationResponse;
+        mutationResponse = undefined;
+        if (response === 'malformed') return Response.json({ state: 'published' });
+        return Response.json({ observationDigest: digest, state: 'cleared' });
+      }
       return Response.json({
         observationDigest: digest,
         state: path.endsWith(':clear') ? 'cleared' : 'published',
@@ -462,6 +470,24 @@ test('a successful response without an independent matching head stays uncertain
     expect(f.writes[1]).toEqual(sealed);
   } finally {
     await f.close();
+  }
+});
+
+test('malformed and opposite-state responses remain uncertain and retry the exact sealed CAS request', async () => {
+  for (const mutationResponse of ['malformed', 'opposite-state'] as const) {
+    const f = await classificationFixture({ mutationResponse });
+    try {
+      f.hideNextConfirmationAfterWrite();
+      expect((await f.run()).status).toBe('bulk-failed');
+      expect(f.writes).toHaveLength(1);
+      const sealed = f.writes[0]!;
+      expect((sealed.body as { expectedObservation: string | null }).expectedObservation).toBeNull();
+
+      expect((await f.run()).status).toBe('committed');
+      expect(f.writes).toEqual([sealed, sealed]);
+    } finally {
+      await f.close();
+    }
   }
 });
 

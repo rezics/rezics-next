@@ -148,3 +148,67 @@ test('import transport posts generated classification read, put and clear client
   ]);
   expect(generatedMutationClosure).toEqual([true, true, true, true]);
 });
+
+test('classification mutation transport rejects malformed and opposite-state success responses', async () => {
+  const responses = [
+    { operation: 'put', body: { observationDigest: digest, state: 'cleared', figure: {} } },
+    { operation: 'put', body: { state: 'published', figure: {} } },
+    { operation: 'clear', body: { observationDigest: digest, state: 'published', figure: {} } },
+    { operation: 'clear', body: { state: 'cleared' } },
+  ] as const;
+
+  for (const item of responses) {
+    const requests: { method: string; path: string; key: string | null; body: unknown }[] = [];
+    const transport = createImportTransport({
+      origin: 'https://api.importer.test',
+      tokenProvider: async () => 'test-token',
+      fetch: (async (request: Request) => {
+        requests.push({
+          method: request.method,
+          path: new URL(request.url).pathname,
+          key: request.headers.get('idempotency-key'),
+          body: JSON.parse(await request.text()),
+        });
+        return Response.json(item.body);
+      }) as typeof fetch,
+    });
+    const key = `classification:${item.operation}-uncertain`;
+    const clearValue = {
+      sourceAlias: observation.sourceAlias,
+      sourceRecordId: observation.sourceRecordId,
+      sourceAssociationId: observation.sourceAssociationId,
+      asOf: '2026-11-04T00:00:00.000Z',
+      cleared: true as const,
+    };
+    const pending =
+      item.operation === 'put'
+        ? transport.writeSourceClassification!({
+            subjectId,
+            association,
+            value: observation,
+            expectedObservation: null,
+            idempotencyKey: key,
+          })
+        : transport.clearSourceClassification!({
+            subjectId,
+            association,
+            value: clearValue,
+            expectedObservation: digest,
+            idempotencyKey: key,
+          });
+
+    await expect(pending).rejects.toThrow();
+    expect(requests).toEqual([
+      {
+        method: 'POST',
+        path: `/v1/subjects/${subjectId}/source-classifications:${item.operation}`,
+        key: `"${key}"`,
+        body: {
+          association,
+          expectedObservation: item.operation === 'put' ? null : digest,
+          value: item.operation === 'put' ? observation : clearValue,
+        },
+      },
+    ]);
+  }
+});

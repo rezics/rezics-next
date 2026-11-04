@@ -1461,6 +1461,12 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Bound: at most one native clear effect per source record/run under existing logical-write/transport budgets. UNKNOWN sends zero statistic requests; source rows/candidates remain indexed and bounded. Physical retries remain visible in native HTTP captures, separately from positive PUTs and votes.
 - Growth check: existing importer counted/store/transport bounds remain unchanged. Content owns native exact-key clear/read/fence growth. The connected native journey observes effect/receipt/recovery; it adds no synthetic PostgreSQL growth series and has not been run in this attempt.
 
+### Receive admitted source classifications
+
+- Touches: the exact admitted association and current Semantic selection, the existing three source-fence checks, one sealed classification journal entry, one mounted `:put` or `:clear`, and one independent authoritative readback. Replays retain the original request body, expected observation and idempotency key.
+- Bound: O(N + A + R) for selected records N, admitted association intents A and existing bounded retry work R. Each intent stays bound to one Subject and association; withheld or stale associations produce no native classification write. Source classifications remain independent of community ballots and aggregates.
+- Growth check: `tests/source-classification.test.ts` covers admission, exact retry, authoritative readback, malformed/opposite-state uncertainty and unchanged sealed CAS. Kernel physical-prefix and all-pool growth at 256/1024/4096 remain controller integration acceptance; this receiving check does not claim those native ceilings.
+
 ### Source-only provenance refresh
 
 - Touches: the already bounded current record's <=300 owned candidates/proposals and existing exact source/subject/fence/journal reads; no new lookup authority.
