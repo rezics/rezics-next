@@ -138,7 +138,10 @@ test('checkGrowth classifies merged native captures at three scales and refuses 
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     aggregateCaptures: aggregateBoth,
     async grow(_database, scale, previous) {
-      await primary.admin.query(`INSERT INTO ${table} SELECT generate_series($1, $2)`, [previous + 1, scale]);
+      await primary.admin.query(`INSERT INTO ${table} SELECT generate_series($1::integer, $2::integer)`, [
+        previous + 1,
+        scale,
+      ]);
     },
     async prepare(_database, _scale, repetition) {
       await withConnection(primary.pool, async (client) => {
