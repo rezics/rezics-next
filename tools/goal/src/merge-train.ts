@@ -1379,6 +1379,7 @@ export type TrainOptions = {
     batchAcceptanceConcurrency?: number;
     devLandingChecks?: boolean;
     devPrelandingTypecheck?: boolean;
+    devLandingBootCheck?: boolean;
     gateTimeoutMs?: number;
   };
   queue: SqliteLandingQueue;
