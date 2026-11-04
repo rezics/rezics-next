@@ -79,6 +79,7 @@ test('legacy scalar release title stays an untagged name', () => {
   expect(output.proposals).toHaveLength(1);
   expect(output.normalizedRecord).toMatchObject({ id: 'r1', name: 'Authored exact release' });
   expect(output.normalizedRecord).not.toHaveProperty('olang');
+  expect(output.normalizedRecord).not.toHaveProperty('gtin');
   if (output.proposals[0]?.op !== 'create') throw new Error('Expected bootstrap');
   expect(output.proposals[0].subject.labels).toEqual({ und: 'Authored exact release' });
 });
@@ -117,5 +118,5 @@ test('invalid language, malformed rows and bound edges stay at addressable paths
   );
   expectInvalid(record([{ id: 'r1', lang: 'en', mtl: 'yes', title: 'Harbor', latin: null }]), '/releases_titles/0/mtl');
   expectInvalid(record([title('en', '')]), '/releases_titles/0/title');
-  expect(vndbReleaseNameLimits.maxCommands).toBe(162);
+  expect(vndbReleaseNameLimits.maxCommands).toBe(163);
 });

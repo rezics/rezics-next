@@ -278,8 +278,8 @@ silently truncating them. The main caps are:
 - VNDB: 64 KiB projection, at most 64 titles, 64 alias lines, and 32 external
   links; at most 162 commands (1 identifier + 64 names + 64 alternate names +
   32 URLs + 1 original language). A VideoGameRelease title projection reuses
-  those title/alias/byte caps and at most 162 commands (1 identifier + 64 names
-  - 64 Romanized alternate names + 32 URLs + 1 original language).
+  those title/alias/byte caps and at most 163 commands (1 identifier + 64 names
+  + 64 Romanized alternate names + 32 URLs + 1 original language + 1 GTIN).
 - Open Library: 2 MiB projection, at most 64 entries per collection and 64
   combined author/work relations, at most 1 MiB of unlicensed prose retained as
   metadata, and at most 100 commands.
@@ -370,6 +370,22 @@ Missing, unknown, malformed and unmapped codes withhold only that fact; they
 never become `und`, a title language, the work language or a viewer locale.
 Decision: raw `pt-br` stays distinct from canonical `pt-BR` in the digest;
 COPY `\\N` is the dump null representation and writes no language statement.
+
+### VNDB release barcodes
+
+The current `cross-media-entities@5` mapping keeps the COPY `releases.gtin`
+cell in the sanitized projection. Admitted values are the exact decimal
+spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
+digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
+JavaScript numbers are withheld as diagnostics and never become a padded
+barcode, ISBN, catalog number or `schema:sameAs`. The JSON API's nullable
+string is not the dump encoding: COPY bigint cells stay text, and a distinction
+already lost as an integer is not guessed back. Barcode equality does not merge
+releases. The ordinary entity converter and the release-fidelity operator emit
+one `schema:gtin` fact on the existing `facts` group.
+
+Decision: dump COPY `gtin` is a bigint decimal cell with unknown sentinel `0`;
+admitted values keep that spelling under the released 8 or 12–14 digit contract.
 
 ### VNDB staff preferred and additional source names
 
