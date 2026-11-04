@@ -1,7 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
 import type { ManagedWatch, WatchManagementIO, WatchRead } from '../src/settings/watch-native';
@@ -11,23 +10,30 @@ mock.module('@tanstack/react-start/server', () => start);
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
-const { sessionQuery } = await import('../src/session/query');
-const { SettingsSessionOwner, SettingsSessionContext } = await import('../src/settings/settings-session-owner');
-const { WatchesSection } = await import('../src/settings/watches');
-const { m } = await import('../src/paraglide/messages.js');
 const window = new Window({ url: 'https://site.test/en/settings#watches' });
-const saved = new Map<string, PropertyDescriptor | undefined>();
-for (const [key, value] of Object.entries({
+const globals = {
   window,
   document: window.document,
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  Element: window.Element,
   Node: window.Node,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  Event: window.Event,
+  MouseEvent: window.MouseEvent,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  matchMedia: window.matchMedia.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
-})) {
-  saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+};
+const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-}
 afterAll(() => {
   for (const [key, descriptor] of saved) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
@@ -35,6 +41,11 @@ afterAll(() => {
   }
   void window.happyDOM.close();
 });
+const { createRoot } = await import('react-dom/client');
+const { sessionQuery } = await import('../src/session/query');
+const { SettingsSessionOwner, SettingsSessionContext } = await import('../src/settings/settings-session-owner');
+const { WatchesSection } = await import('../src/settings/watches');
+const { m } = await import('../src/paraglide/messages.js');
 
 test('the mounted private view separates inaccessible targets, uncertain removal, sparse/empty pages and refresh failure', async () => {
   const client = new QueryClient();
