@@ -284,7 +284,7 @@ test('unknown retry keeps its original command and missing rows move focus to th
   const toggles = feed.host.querySelectorAll<HTMLButtonElement>('[data-board-pin-focus="toggle"]');
   expect(toggles).toHaveLength(1);
   await act(async () => {
-    toggles[0]!.click();
+    toggles[0]!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   const dialog = document.querySelector<HTMLElement>('[data-slot="alert-dialog-content"]');
@@ -292,14 +292,14 @@ test('unknown retry keeps its original command and missing rows move focus to th
   const confirm = dialog?.querySelectorAll<HTMLButtonElement>('button').item(1);
   expect(confirm).toBeDefined();
   await act(async () => {
-    confirm!.click();
+    confirm!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   expect(feed.host.textContent).toContain(m.board_pin_unknown());
   const retry = feed.host.querySelector<HTMLButtonElement>('[data-board-pin-focus="retry"]');
   expect(retry).toBeDefined();
   await act(async () => {
-    retry!.click();
+    retry!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
