@@ -92,8 +92,13 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
         return {
           results: request.commands.map((command) => ({
             key: command.key,
-            status: 201 as const,
-            value: command.op === 'create' ? { id: randomUUID(), revision: 1 } : { candidate: randomUUID(), revision: 1 },
+            status: command.op === 'retract' ? (200 as const) : (201 as const),
+            value:
+              command.op === 'create'
+                ? { id: randomUUID(), revision: 1 }
+                : command.op === 'retract'
+                  ? { revision: 1 }
+                  : { candidate: randomUUID(), revision: 1 },
           })),
         };
       },
