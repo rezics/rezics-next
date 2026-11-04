@@ -2,6 +2,7 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import type { DiscoveryFilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
 import type { Access } from '../../src/request/access.ts';
 import { ProblemError } from '../../src/http/problem.ts';
@@ -125,7 +126,7 @@ test('general discovery admits a released inverse relation and carries it into n
   const qualifier = definition.qualifiers!.find(
     (candidate) => bundledRelease.properties[candidate]?.datatype === 'wikibase-item',
   )!;
-  const filter = {
+  const filter: DiscoveryFilterDocument = {
     and: [
       { kind: { in: ['schema:Person'] } },
       {
@@ -133,7 +134,7 @@ test('general discovery admits a released inverse relation and carries it into n
           property,
           inverse: true,
           in: [id],
-          qualifiers: [{ property: qualifier, in: ['018f0000-0000-7000-8000-00a000000002'] }],
+          qualifiers: [{ property: qualifier, in: [id] }],
         },
       },
     ],
@@ -148,7 +149,7 @@ test('general discovery admits a released inverse relation and carries it into n
   const admitted = admitDiscoveryRequest(request, current, bundledRelease);
   expect(admitted.filter).toEqual(filter);
   expect(currentDiscoveryFilter(admitted.filter!, current, 'schema:Person', bundledRelease)).toEqual(
-    filter.and[1],
+    filter.and[1]!,
   );
   const capture = compileDiscoveryCapture(
     {

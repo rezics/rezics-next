@@ -95,7 +95,7 @@ function fixture() {
             facet: 'statement',
             property: probe.property,
             values: [probe.value],
-            qualifiers: probe.qualifiers,
+            ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
           })
         );
       });
