@@ -189,6 +189,8 @@ test('pagehide after registration dispatch restores an unknown review without pu
 
   await flush(() => button(host, m.auth_security_passkey_registration_continue())!.click());
   await flush(() => reads[2]!.resolve(initial));
+  expect(host.querySelector('[data-passkey-enrollment-history]')?.textContent)
+    .toContain(m.auth_security_passkey_history_unknown());
   expect(host.querySelector('#security-passkey-name')).not.toBeNull();
   expect(registrationPaths(calls)).toBe(1);
   await flush(() => button(host, m.auth_security_passkey_add())!.click());
