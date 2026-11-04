@@ -3,6 +3,7 @@ import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-co
 import {
   assertRealmOwnerMayLeave,
   createAccess,
+  readRealmOwnerLeaveObservation,
   readRealmOwnershipRoles,
   RealmLastOwnerError,
 } from '../../src/access/index.ts';
@@ -11,6 +12,8 @@ import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { resolveResourceRoles } from '../../src/access/resource-roles.ts';
 import { ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { authoritativeTimeValue, currentCommand, mintReadTime } from '../../src/command/command.ts';
+import { withConnection } from '../../src/database/pool.ts';
+import { accessCheck } from '../../src/request/access.ts';
 import { grantCommand, type GrantCommandContext } from '../../src/access/grant-command.ts';
 import { newId } from '../../src/route/route.ts';
 import { grantFixture } from './grant-fixture.ts';
@@ -191,6 +194,49 @@ test('the leave guard belongs inside the real authorized resource command, never
   );
   expect(result.replayed).toBe(false);
   expect(await owners()).toEqual([f.recipient]);
+});
+
+test('read-only owner leave advice follows exact read admission and the native holder predicate', async () => {
+  const context = await f.context();
+  const disclose = await accessCheck(f.access, context.actor, 'realm:read', f.resource, context);
+  await withConnection(f.pool, async (client) => {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const at = await mintReadTime(client);
+    expect(await disclose(client, at)).toBe(true);
+    const observation = await readRealmOwnerLeaveObservation(client, { resource: f.resource, accountId: f.actor, at });
+    expect(observation).toMatchObject({ owner: true, remaining: false });
+    expect(observation.source).toBeString();
+    await client.query('COMMIT');
+  });
+
+  await role(f.recipient);
+  let originalSource = '';
+  await withConnection(f.pool, async (client) => {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const at = await mintReadTime(client);
+    expect(await disclose(client, at)).toBe(true);
+    const observation = await readRealmOwnerLeaveObservation(client, { resource: f.resource, accountId: f.actor, at });
+    expect(observation).toMatchObject({ owner: true, remaining: true });
+    expect(observation.source).toBeString();
+    originalSource = observation.source!;
+    await client.query('COMMIT');
+  });
+
+  await f.reader.query(
+    `DELETE FROM access.resource_role_grant WHERE route=$1 AND resource_id=$2
+      AND subject_id=$3 AND subject_role='' AND grant_role=$4`,
+    [f.resource.route, f.resource.id, f.actor, owner],
+  );
+  await role(f.actor);
+  await withConnection(f.pool, async (client) => {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const at = await mintReadTime(client);
+    expect(await disclose(client, at)).toBe(true);
+    const observation = await readRealmOwnerLeaveObservation(client, { resource: f.resource, accountId: f.actor, at });
+    expect(observation).toMatchObject({ owner: true, remaining: true });
+    expect(observation.source).not.toBe(originalSource);
+    await client.query('COMMIT');
+  });
 });
 
 test('private current role ordering excludes an uninstalled administrator and ignores groups', async () => {

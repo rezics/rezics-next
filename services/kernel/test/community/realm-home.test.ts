@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { Account, CommunityDriver, Fixture } from '../../../../specs/community-driver.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { REALM_OWNER_ROLE } from '../../src/access/realm-ownership.ts';
 import { createRealmHomeBoardObservationReader } from '../../src/content/realm-board-home.ts';
 import { createRealmHomePublicationObservationReader } from '../../src/community/realm-home-publications.ts';
 import { createRealmHomeReader, type realmHomeResponse } from '../../src/community/realm-home.ts';
@@ -43,6 +44,22 @@ async function command<T>(path: string, body: unknown, method = 'POST', head?: s
   const json = await response.json();
   expect(response.status, JSON.stringify(json)).toBe(method === 'POST' ? 201 : 200);
   return json as T;
+}
+async function grantOwner(realmId: string, account: Account, actor: Account, revoke = false) {
+  const response = await driver.request({
+    actor,
+    path: `/v1/roleGrants${revoke ? ':revoke' : ''}`,
+    method: 'POST',
+    key: key(),
+    body: {
+      resource: { route: routeOf(realmId)!, id: realmId },
+      subject: { kind: 'account', id: account.id },
+      role: REALM_OWNER_ROLE,
+      valid: '(,)',
+    },
+  });
+  const result = await response.json();
+  expect(response.status, JSON.stringify(result)).toBe(revoke ? 200 : 201);
 }
 async function realm(visibility: 'public' | 'protected' = 'public') {
   const { space } = await command<{ space: { spaceId: string } }>('/v1/spaces', { title: 'Home carrier' });
@@ -322,7 +339,7 @@ test('native home carries membership and current entry, management, and leave ad
   expect(owner.viewer.membership.state).toBe('member');
   expect(owner.actions.leave).toEqual({
     state: 'unavailable',
-    reason: 'owner_invariant_observation_unavailable',
+    reason: 'last_explicit_holder',
   });
   expect(owner.actions.manage).toMatchObject({ state: 'available', method: 'GET' });
   expect(
@@ -343,6 +360,42 @@ test('native home carries membership and current entry, management, and leave ad
     throw new Error('Protected moderator viewer was not observed');
   expect(protectedModerator.viewer.membership.state).toBe('none');
   expect(protectedModerator.actions.manage).toMatchObject({ state: 'available', method: 'GET' });
+});
+
+test('home retires a replaced explicit owner source even when leave advice stays available', async () => {
+  const target = await realm();
+  const member = await driver.request({
+    actor: people.member,
+    method: 'POST',
+    path: `/v1/realms/${target.realmId}/membership`,
+    key: key(),
+  });
+  expect(member.status).toBe(202);
+  await driver.settle();
+  await grantOwner(target.realmId, people.member, people.owner);
+  const before = await home(target.realmId, people.owner);
+  expect(before.actions.leave).toMatchObject({ state: 'available', method: 'DELETE' });
+
+  const observer = observeSql(runtime.system.database.pool);
+  const barrier = observer.hold({ statement: summaries.sql }, 'after');
+  const pending = read(`/v1/realms/${target.realmId}/home`, people.owner);
+  try {
+    await barrier.entered;
+    await grantOwner(target.realmId, people.owner, people.member, true);
+    await grantOwner(target.realmId, people.owner, people.member);
+    barrier.release();
+    const stale = await pending;
+    expect(stale.status).toBe(503);
+    expect((await stale.json()).code).toBe('transaction_retry_exhausted');
+  } finally {
+    barrier.release();
+    await pending;
+    await observer.close();
+  }
+  expect((await home(target.realmId, people.owner)).actions.leave).toMatchObject({
+    state: 'available',
+    method: 'DELETE',
+  });
 });
 
 test('home retries on leave/rejoin, containing-Space change, and role revocation during hydration', async () => {
