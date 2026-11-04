@@ -57,3 +57,14 @@ uncertain write, Retry sends the original body and idempotency key. A conflict r
 review the new revision before deliberately applying their still-visible draft. No credential arrival submits a
 command. Native 401 retires the displayed private entry. Source provenance remains a separate owner fact and is not
 cleared by annotation edits.
+
+The local editor reviews the selected Subject and complete received/proposed note and priority before the existing
+writer can save. Opening or closing review performs no read or command; returning to either field preserves the
+draft and requires renewed review. UTF-8 byte and integer-rank errors remain beside their fields. Empty note means
+clear, while an unchanged field remains unchanged. A form without changes reports that no command was sent.
+
+An unsent draft can be deliberately discarded back to the received values. The existing diary link offers Stay or
+Discard before leaving; unresolved commands retain their original retry identity and cannot be discarded as if
+cancelled. Decision: diary departure waits for an open source editor to be finished or closed independently, so
+annotation discard never resets a source draft or command. Review and private draft state last only for the current
+originating visit and retire with account, session, Subject, Entry or exposure authority.
