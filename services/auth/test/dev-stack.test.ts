@@ -75,6 +75,20 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
         { timeout: 180_000 },
       )
       .toBe(200);
+    for (const url of ['http://127.0.0.1:4100/health', 'http://127.0.0.1:3000/']) {
+      await browserExpect
+        .poll(
+          async () => {
+            try {
+              return (await fetch(url)).status;
+            } catch {
+              return 0;
+            }
+          },
+          { timeout: 180_000 },
+        )
+        .toBe(200);
+    }
     await page.goto('http://127.0.0.1:3000/');
     await page.locator('a[href^="/auth/sign-in"]').first().click();
     await page.waitForURL('**/login?**');
