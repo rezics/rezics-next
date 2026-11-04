@@ -52,14 +52,12 @@ async function setup(saved?: TransferAttempt) {
   const page = await open(view(), session);
   const queuedFetch = globalThis.fetch;
   await flush(() => {});
-  await flush(() => page.calls[0]!.resolve(Response.json(session)));
   await flush(() =>
-    page.calls[1]!.resolve(Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } })),
+    page.calls[0]!.resolve(Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } })),
   );
   if (saved?.phase === 'approve') {
-    await flush(() => page.calls[2]!.resolve(Response.json(session)));
     await flush(() =>
-      page.calls[3]!.resolve(
+      page.calls[1]!.resolve(
         saved.side === 'source'
           ? Response.json({
               viewer: { kind: 'ready' },

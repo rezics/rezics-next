@@ -38,8 +38,8 @@ for (const [name, value] of Object.entries(globals))
   Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
 const { createRoot } = await import('react-dom/client');
 const { OperatorTransferPage } = await import('../src/routes/operators.transfer');
-const { OPERATOR_MANAGEMENT_PROFILE, OPERATOR_TRANSFER_PAGE_PATH, storeTransferAttempt } =
-  await import('../src/operator-transfer');
+const { OPERATOR_MANAGEMENT_PROFILE, storeTransferAttempt } = await import('../src/operator-transfer');
+const { OPERATOR_TRANSFER_PAGE_PATH } = await import('../src/operator-transfer-page');
 const { overwriteGetLocale, locales } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 overwriteGetLocale(() => 'en');

@@ -7,8 +7,9 @@ import type { TransferAttempt } from '../src/operator-transfer';
 creationFixture();
 const { createRoot } = await import('react-dom/client');
 const { OperatorTransferPage } = await import('../src/routes/operators.transfer');
-const { OPERATOR_MANAGEMENT_PROFILE, OPERATOR_TRANSFER_PAGE_PATH, restoreTransferAttempt, storeTransferAttempt } =
+const { OPERATOR_MANAGEMENT_PROFILE, restoreTransferAttempt, storeTransferAttempt } =
   await import('../src/operator-transfer');
+const { OPERATOR_TRANSFER_PAGE_PATH } = await import('../src/operator-transfer-page');
 const { m } = await import('../src/paraglide/messages.js');
 const session: AccountSessionResult = {
   kind: 'ready',
