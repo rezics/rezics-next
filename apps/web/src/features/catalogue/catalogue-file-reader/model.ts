@@ -25,6 +25,7 @@ import type { ProfileRelationPage } from '../../pages/views';
 
 type Statement = SubjectRead['subject']['statements'][string][number];
 type Related = SubjectRead['related'];
+type Definitions = Pick<Release, 'types' | 'properties'>;
 
 export type CatalogueFileFact = {
   property: string;
@@ -50,7 +51,7 @@ export type CatalogueFileReaderVisit = {
   public: SubjectRead;
   locale: string;
   digest?: string;
-  release?: Release;
+  release?: Definitions;
   grain: { text: string; lang: string | null };
   groups: Record<'identifiers' | 'technical' | 'language' | 'group' | 'credits' | 'facts', CatalogueFileFact[]>;
   associations: CatalogueFileAssociation[];
@@ -115,7 +116,7 @@ function summaryOf(value: unknown): { id: string; type: string; label: string; l
   return { id: value.id, type: value.type, label, ...(language ? { language } : {}) };
 }
 
-function associationKind(release: Release, type: string): FileStream['kind'] | undefined {
+function associationKind(release: Definitions, type: string): FileStream['kind'] | undefined {
   if (!release.types[type]) return;
   if (type === 'schema:Episode' || isA(release, type, 'schema:Episode')) return 'episode';
   if (isReleaseType(release, type)) return 'release';
@@ -125,7 +126,7 @@ function associationKind(release: Release, type: string): FileStream['kind'] | u
 
 function factFields(
   publicRead: SubjectRead,
-  release: Release,
+  release: Definitions,
   properties: readonly string[],
   locale: string,
 ): CatalogueFileFact[] {
@@ -142,7 +143,7 @@ function factFields(
 
 function associations(
   publicRead: SubjectRead,
-  release: Release,
+  release: Definitions,
   digest: string,
   streams: readonly FileStream[],
   pages: readonly ProfileRelationPage[],
@@ -224,7 +225,7 @@ function associations(
 export function catalogueFileReaderVisit(input: {
   locale: string;
   public: SubjectRead;
-  release?: Release;
+  release?: Definitions;
   digest?: string;
   loading?: boolean;
   unavailable?: boolean;
