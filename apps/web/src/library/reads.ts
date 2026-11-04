@@ -34,10 +34,20 @@ export type CollectionVisibility = 'private' | 'public' | 'unlisted';
 type NativeMembers = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['collections']>['members']['get']>>['data']
 >;
+type NativeMemberPage = Extract<NativeMembers, { members: unknown[] }>;
+type NativeUnavailableViewerFacts = {
+  state: 'unavailable';
+  reason: 'identity' | 'currentness' | 'response_limit';
+  retryable: boolean;
+};
+/** The generated declaration currently lists the current branch; keep the native schema's unavailable branch too. */
+export type CollectionViewerFacts = NonNullable<NativeMemberPage['viewerFacts']> | NativeUnavailableViewerFacts;
 
 export type CollectionMember = {
   facts?: Extract<Extract<NativeMembers, { members: unknown[] }>['members'][number], { id: string }>['facts'];
   id: string;
+  /** Original admitted subject identity used by the native private row projection. */
+  subjectId?: string;
   note: string | null;
   addedAt: string;
   subject: LibrarySubject | null;
@@ -52,6 +62,8 @@ export type CollectionPageData = {
   curator: LibraryAccount | null;
   visibility: CollectionVisibility | null;
   members: CollectionMember[];
+  /** Caller-private native facts, kept separate from curator-owned occurrence details. */
+  viewerFacts?: CollectionViewerFacts;
   next: string | null;
 };
 
@@ -82,7 +94,7 @@ type RawMember = {
   facts?: CollectionMember['facts'];
   subject?: RawSubject | null;
 };
-type RawMemberPage = { members: RawMember[]; next: string | null };
+type RawMemberPage = { members: RawMember[]; next: string | null; viewerFacts?: CollectionViewerFacts };
 
 export class StaleCursorError extends Error {
   constructor() {
@@ -181,11 +193,13 @@ function present(identity: SessionIdentity, collection: RawCollection, members: 
     visibility: owner ? collection.visibility : null,
     members: members.members.map((member) => ({
       id: member.id,
+      ...(member.subjectId ? { subjectId: member.subjectId } : {}),
       note: member.note,
       addedAt: member.addedAt,
       subject: subjectOf(member.subject),
       ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
     })),
+    ...(members.viewerFacts ? { viewerFacts: members.viewerFacts } : {}),
     next: members.next,
   };
 }

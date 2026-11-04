@@ -8,7 +8,7 @@ import { CollectionMoveChooser, type CollectionMoveChoice } from './collection-m
 import { readCollectionDestination } from './collection-read';
 import { readCollectionMovePlacements } from './collection-move-read';
 import { CollectionAddMembers } from './collection-add-members';
-import { CollectionMemberDetails } from './collection-member-row';
+import { CollectionMemberDetails, CollectionMemberViewerDetails } from './collection-member-row';
 import { CollectionNoteReader } from './collection-note-reader';
 import { CollectionDescriptionReader } from './collection-description-reader';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
@@ -32,7 +32,7 @@ import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/fiel
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { RelativeTime } from '@rezics/ui/relative-time';
-import { useRouter } from '@tanstack/react-router';
+import { useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -85,6 +85,13 @@ import {
 import { FollowTargetControl } from './follow-target-control';
 import { collectionPublicItemList } from './collection-public-document';
 import { CollectionExport } from './collection-export';
+import { useOperation } from '../kernel/exposure';
+import {
+  collectionMemberReturnAddress,
+  collectionViewerActionHref,
+  collectionViewerProjection,
+  type CollectionViewerProjection,
+} from './collection-viewer/model';
 import { BulkFilteredAdd } from './bulk-filtered-add-view';
 import {
   BulkOccurrenceRemoveJourney,
@@ -384,6 +391,23 @@ function CollectionPageLifetime({
   const router = useRouter();
   const queryClient = useQueryClient();
   const session = useSession();
+  const currentHref = useLocation({ select: (location) => location.publicHref });
+  const personalEntryReadAdmitted = useOperation('library_entry.get');
+  const personalEntryWriteAdmitted = useOperation('library_entry.put');
+  const personalEntryDeleteAdmitted = useOperation('library_entry.delete');
+  const viewerId = session.state === 'signed-in' ? (session.subject ?? null) : null;
+  const viewerProjection = collectionViewerProjection(
+    page.viewerFacts,
+    page.provenance,
+    viewerId,
+    Boolean(viewerId && session.csrfToken && current() && (sourceCurrent?.() ?? true)),
+  );
+  const personalActionAllowed = Boolean(
+    viewerId &&
+      session.csrfToken &&
+      personalEntryReadAdmitted &&
+      (personalEntryWriteAdmitted || personalEntryDeleteAdmitted),
+  );
   const updateAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection.update');
   // The editor also needs the loaded private metadata, independently of native action admission.
   const owner = updateAdmitted && page.visibility !== null && (page.memberState ?? 'ready') === 'ready';
@@ -2182,6 +2206,22 @@ function CollectionPageLifetime({
             <CollectionReadMembers<ReadMember>
               members={(page.memberState ?? 'ready') !== 'ready' ? [] : (page.filteredMembers ?? page.members)}
               layout={layout}
+              viewerProjection={viewerProjection}
+              {...(personalActionAllowed
+                ? {
+                    viewerActionHref: (member: ReadMember) => {
+                      if (!member.subject) return undefined;
+                      const memberId = member.id ?? member.viewerRowKey;
+                      if (!memberId) return undefined;
+                      const title = pageText(libraryTitleValue(member.subject.label), getLocale()).text;
+                      const subject = subjectHref({ id: member.subject.id, label: title }, getLocale()).href;
+                      return collectionViewerActionHref(
+                        subject,
+                        collectionMemberReturnAddress(currentHref, memberId),
+                      );
+                    },
+                  }
+                : {})}
               presentationKind={page.presentationKind}
               typeRatios={page.typeRatios}
               listPresentations={page.listPresentations}
@@ -2352,6 +2392,8 @@ export function CollectionReadActions({
 
 type ReadMember = {
   id?: string;
+  subjectId?: string;
+  viewerRowKey?: string;
   subject: CollectionMember['subject'];
   facts?: CollectionMember['facts'];
   note?: string | null;
@@ -2364,6 +2406,8 @@ export function CollectionReadMembers<Member extends ReadMember>({
   presentationKind,
   typeRatios,
   listPresentations,
+  viewerProjection,
+  viewerActionHref,
   onCopy,
 }: {
   members: readonly Member[];
@@ -2371,6 +2415,8 @@ export function CollectionReadMembers<Member extends ReadMember>({
   presentationKind?: string | null | undefined;
   typeRatios?: Readonly<Record<string, string>> | undefined;
   listPresentations?: CollectionListPresentations | undefined;
+  viewerProjection?: CollectionViewerProjection;
+  viewerActionHref?: (member: Member) => string | undefined;
   onCopy: (member: Member) => void | Promise<void>;
 }) {
   const locale = getLocale();
@@ -2389,6 +2435,31 @@ export function CollectionReadMembers<Member extends ReadMember>({
       );
     }
     const title = pageText(libraryTitleValue(subject.label), locale);
+    const actionHref = viewerActionHref?.(member);
+    const rowDetails = (
+      <div
+        id={member.id || member.viewerRowKey ? `collection-member-${member.id ?? member.viewerRowKey}` : undefined}
+        data-collection-member-id={member.id}
+        className="space-y-1"
+      >
+        <CollectionMemberDetails member={member} listPresentations={listPresentations} />
+        {member.note ? (
+          <CollectionNoteReader
+            key={member.id ?? member.note}
+            note={member.note}
+            previewLines={4}
+            occurrence={m.library_member_occurrence({ title: title.text, position: index + 1 })}
+          />
+        ) : null}
+        {viewerProjection ? (
+          <CollectionMemberViewerDetails
+            member={member}
+            projection={viewerProjection}
+            {...(actionHref ? { actionHref } : {})}
+          />
+        ) : null}
+      </div>
+    );
     const presentation = listPresentations?.[subject.type];
     const menu = (
       <Menu
@@ -2422,17 +2493,7 @@ export function CollectionReadMembers<Member extends ReadMember>({
               ...(presentation ? { listPresentation: presentation } : {}),
             }}
             state={
-              <div className="space-y-1">
-                <CollectionMemberDetails member={member} listPresentations={listPresentations} />
-                {member.note ? (
-                  <CollectionNoteReader
-                    key={member.id ?? member.note}
-                    note={member.note}
-                    previewLines={4}
-                    occurrence={m.library_member_occurrence({ title: title.text, position: index + 1 })}
-                  />
-                ) : null}
-              </div>
+              rowDetails
             }
             menuTrigger={menu}
           />
@@ -2451,14 +2512,7 @@ export function CollectionReadMembers<Member extends ReadMember>({
         {...(presentation ? { listPresentation: presentation } : {})}
         trailing={menu}
       >
-        <CollectionMemberDetails member={member} listPresentations={listPresentations} />
-        {member.note ? (
-          <CollectionNoteReader
-            key={member.id ?? member.note}
-            note={member.note}
-            occurrence={m.library_member_occurrence({ title: title.text, position: index + 1 })}
-          />
-        ) : null}
+        {rowDetails}
       </MemberListRow>
     );
   });

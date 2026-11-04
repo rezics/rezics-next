@@ -22,6 +22,7 @@ import {
   StaleCursorError,
   subjectOf,
   type CollectionPageData,
+  type CollectionViewerFacts,
   type LibraryAccount,
 } from './reads';
 import {
@@ -94,11 +95,13 @@ export function collectionResultMatches(
 type CuratedMemberPage = {
   members: {
     id: string;
+    subjectId?: string;
     note: string | null;
     addedAt: string;
     facts?: CollectionPageData['members'][number]['facts'];
     subject?: Parameters<typeof subjectOf>[0] | null;
   }[];
+  viewerFacts?: CollectionViewerFacts;
   next: string | null;
 };
 
@@ -234,13 +237,14 @@ export async function loadDynamicMembers(
 
 export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
   CollectionPresentationData & {
+    provenance?: CollectionReadProvenance;
     coverMediaId?: string | null;
     presentationTypes?: CollectionTypeOption[] | null;
     listPresentations?: CollectionListPresentations;
     viewerActions?: CollectionViewerActions;
     memberState?: 'ready' | 'preparing' | 'unavailable' | 'failed';
     retryAfterMs?: number;
-    filteredMembers?: DynamicCollectionPage['members'];
+    filteredMembers?: (DynamicCollectionPage['members'][number] & { viewerRowKey?: string })[];
     /** An authorized known total; null when the current viewer's read cannot disclose one. */
     memberCount: number | null;
     /** The requested page, retained for its indexing policy. */
@@ -380,7 +384,8 @@ export async function loadEditableCollectionPage(
   const ownerFilter = Boolean(
     input.filter && viewer && 'curatorAccountId' in collection && viewer === collection.curatorAccountId,
   );
-  const memberHeaders = publicMembership && !editor && !ownerFilter ? {} : headers;
+  const anonymousPublicMembers = publicMembership && !editor && !ownerFilter;
+  const memberHeaders = anonymousPublicMembers ? {} : headers;
   const filterState: { status: EditableCollectionPage['filterStatus'] } = {
     status: input.filterStatus === 'preparing' ? undefined : input.filterStatus,
   };
@@ -417,6 +422,24 @@ export async function loadEditableCollectionPage(
     authorization ? readCollectionViewerActions(client, input.id, authorization) : undefined,
   ]);
   const membersResult = first.stale ? await readMembers() : first.page;
+  let privateViewerFacts: CollectionViewerFacts | undefined;
+  if (
+    credentialMode === 'session' &&
+    authorization &&
+    anonymousPublicMembers &&
+    collection.membershipKind !== 'dynamic' &&
+    resultStatus(membersResult) === 200
+  ) {
+    try {
+      const privatePage = await collectionMembersReader(client, input.id, headers, input.filter)(input.cursor);
+      if (resultStatus(privatePage) === 200) {
+        const payload = record(record(privatePage).data);
+        privateViewerFacts = payload.viewerFacts as CollectionViewerFacts | undefined;
+      }
+    } catch {
+      // Personal facts are optional enrichment. The admitted public member page remains readable on failure.
+    }
+  }
   const filterStatus = filterState.status;
   const cursorRestarted = first.stale;
   if (collection.membershipKind === 'dynamic') {
@@ -545,6 +568,7 @@ export async function loadEditableCollectionPage(
             members.next === null
           ? visibleMembers.length
           : null;
+  const viewerFacts = members.viewerFacts ?? privateViewerFacts;
   return {
     provenance,
     ...collectionPresentationOf(collectionEnvelope.collection),
@@ -565,6 +589,7 @@ export async function loadEditableCollectionPage(
       : {}),
     members: (canonical ? [] : visibleMembers).map((member) => ({
       id: member.id,
+      ...(member.subjectId ? { subjectId: member.subjectId } : {}),
       note: member.note,
       addedAt: member.addedAt,
       subject: subjectOf(member.subject),
@@ -572,12 +597,15 @@ export async function loadEditableCollectionPage(
     })),
     ...(canonical
       ? {
-          filteredMembers: canonical.members.map((member) => ({
+          filteredMembers: canonical.members.map((member, index) => ({
             subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
+            subjectId: member.subjectId,
+            viewerRowKey: String(index),
             ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
           })),
         }
       : {}),
+    ...(viewerFacts ? { viewerFacts } : {}),
     next: canonical?.next ?? members.next,
     revision: collection.revision,
     firstPage: first.stale || input.cursor === undefined,

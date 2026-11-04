@@ -8,8 +8,33 @@ const subjectDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/sub
 const realmDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/realms/${uuid}$`);
 const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/library/copies$`);
 const returnAddressCap = 32768;
+const collectionDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/collections/${uuid}$`);
 
-/** A public return address may restore one admitted Subject view window without chaining history. */
+function collectionReturn(url: URL, locale?: string): string | undefined {
+  const match = collectionDestination.exec(url.pathname);
+  if (!match || (locale !== undefined && match[1] !== locale)) return undefined;
+  const params = new URLSearchParams();
+  const seen = new Set<string>();
+  let filters = 0;
+  for (const [key, value] of url.searchParams) {
+    if (key === 'cursor' || key === 'layout' || key === 'type') {
+      if (seen.has(key)) return undefined;
+      seen.add(key);
+      if (key === 'cursor' && value.length > 4096) return undefined;
+      if (key === 'layout' && value !== 'grid' && value !== 'list') return undefined;
+      if (key === 'type' && value.length > 128) return undefined;
+      params.append(key, value);
+    } else if (/^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key) && value.length <= 256 && filters < 100) {
+      params.append(key, value);
+      filters += 1;
+    }
+  }
+  const hash = /^#collection-member-[0-9a-f-]{36}$/i.test(url.hash) ? url.hash : '';
+  const query = params.toString();
+  return `${url.pathname}${query ? `?${query}` : ''}${hash}`;
+}
+
+/** A public return address may restore one admitted Subject or Collection view window. */
 export function subjectVisitReturn(value: unknown, locale?: string): string | undefined {
   if (typeof value !== 'string' || value.length > returnAddressCap) return;
   const catalogueReturn = realmCatalogueReturnHref(value, locale);
@@ -17,6 +42,8 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
   if (!value.startsWith('/') || value.startsWith('//')) return;
   try {
     const url = new URL(value, 'https://rezics.invalid');
+    const collection = collectionReturn(url, locale);
+    if (collection) return collection;
     const subject = subjectDestination.exec(url.pathname);
     const realmPath = realmDestination.exec(url.pathname);
     const copiesPath = copiesDestination.exec(url.pathname);
