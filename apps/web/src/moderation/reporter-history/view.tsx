@@ -181,26 +181,29 @@ export function ReporterHistoryPage({
       {result.state === 'denied' ? <p role="alert">{m.reporter_history_denied()}</p> : null}
       {result.state === 'unavailable' ? (
         <HistoryFailure
-          message={query.cursor !== undefined ? m.reporter_history_continuation_unavailable() : m.reporter_history_unavailable()}
+          message={
+            query.cursor !== undefined
+              ? m.reporter_history_continuation_unavailable()
+              : m.reporter_history_unavailable()
+          }
           retry={onRetry}
         />
       ) : null}
       {result.state === 'expired' ? (
         <div role="alert" className="space-y-3 rounded-lg border p-4">
           <p>{m.reporter_history_expired()}</p>
-          <button type="button" className="min-h-11 rounded-md border px-4 font-medium" onClick={() => void onRestart()}>
+          <button
+            type="button"
+            className="min-h-11 rounded-md border px-4 font-medium"
+            onClick={() => void onRestart()}
+          >
             {m.reporter_history_restart()}
           </button>
         </div>
       ) : null}
       {result.state === 'retired' ? <p role="status">{m.reporter_history_denied()}</p> : null}
       {result.state === 'loaded' ? (
-        <ReporterHistoryResults
-          page={result.page}
-          query={query}
-          onSelect={onSelect}
-          onContinue={onContinue}
-        />
+        <ReporterHistoryResults page={result.page} query={query} onSelect={onSelect} onContinue={onContinue} />
       ) : null}
     </section>
   );
@@ -280,9 +283,7 @@ function HistoryEntry({
 }) {
   const summary = entry.targetSummary;
   const targetLabel = summary.state === 'available' ? summary.label || m.reporter_status_target() : null;
-  const statusHref = selected
-    ? localizeHref(reporterHistoryStatusHref(entry.id, query.cursor))
-    : undefined;
+  const statusHref = selected ? localizeHref(reporterHistoryStatusHref(entry.id, query.cursor)) : undefined;
   return (
     <li className="rounded-lg border p-4 sm:p-5" data-selected={selected || undefined}>
       <article className="space-y-4">
@@ -333,7 +334,10 @@ function HistoryEntry({
             {selected ? m.reporter_history_selected() : m.reporter_history_select()}
           </button>
           {statusHref ? (
-            <a className="inline-flex min-h-11 items-center px-2 font-medium underline underline-offset-4" href={statusHref}>
+            <a
+              className="inline-flex min-h-11 items-center px-2 font-medium underline underline-offset-4"
+              href={statusHref}
+            >
               {m.reporter_status_view()}
             </a>
           ) : null}

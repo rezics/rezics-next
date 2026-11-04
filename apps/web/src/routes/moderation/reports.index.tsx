@@ -49,8 +49,7 @@ function ReporterHistoryRoute() {
   const navigationKey = location.state.__TSR_key ?? location.href;
   const navigation = useMemo(
     () => ({
-      isCurrent: () =>
-        (router.state.location.state.__TSR_key ?? router.state.location.href) === initial.navigationKey,
+      isCurrent: () => (router.state.location.state.__TSR_key ?? router.state.location.href) === initial.navigationKey,
       subscribe: (retire: () => void) => {
         const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
           if ((toLocation.state.__TSR_key ?? toLocation.href) !== initial.navigationKey) retire();
@@ -64,5 +63,7 @@ function ReporterHistoryRoute() {
     }),
     [router, initial.navigationKey, initial.generation],
   );
-  return <ReporterHistoryCurrent key={`${initial.generation}:${navigationKey}`} initial={initial} navigation={navigation} />;
+  return (
+    <ReporterHistoryCurrent key={`${initial.generation}:${navigationKey}`} initial={initial} navigation={navigation} />
+  );
 }

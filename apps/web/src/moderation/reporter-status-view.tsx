@@ -50,9 +50,11 @@ const readCurrent: ReporterStatusReader = async (data) =>
   (await import('./reporter-status-read')).readReporterStatus({ data });
 
 /** Default route composition, with synchronous observation of the real browser session cache. */
-export function ReporterStatusCurrent(
-  props: { initial: ReporterStatusRead; navigation?: ReporterStatusNavigation; returnHref?: string },
-) {
+export function ReporterStatusCurrent(props: {
+  initial: ReporterStatusRead;
+  navigation?: ReporterStatusNavigation;
+  returnHref?: string;
+}) {
   return <ReporterStatusVisit key={props.initial.generation} {...props} />;
 }
 

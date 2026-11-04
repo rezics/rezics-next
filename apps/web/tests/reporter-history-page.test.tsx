@@ -4,14 +4,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { operationIsAdmitted } from '../src/kernel/exposure';
 import { ReporterHistoryCurrent, ReporterHistoryPage } from '../src/moderation/reporter-history/view';
-import {
-  reporterHistoryReturnHref,
-  reporterHistoryStatusHref,
-} from '../src/moderation/reporter-history/navigation';
-import {
-  prepareReporterHistoryVisit,
-  type ReporterHistoryReader,
-} from '../src/moderation/reporter-history/journey';
+import { reporterHistoryReturnHref, reporterHistoryStatusHref } from '../src/moderation/reporter-history/navigation';
+import { prepareReporterHistoryVisit, type ReporterHistoryReader } from '../src/moderation/reporter-history/journey';
 import type {
   ReporterHistoryEntry,
   ReporterHistoryPage as HistoryPage,
@@ -91,9 +85,9 @@ test('My reports is a signed-in Library destination filtered by its native opera
   expect(destination.searchParams.get('cursor')).toBe(cursor);
   expect(destination.searchParams.get('reportId')).toBe(reportId);
   expect(reporterHistoryReturnHref({ historyReportId: secondReportId }, reportId)).toBeNull();
-  expect(new URL(reporterHistoryStatusHref(reportId, cursor), 'https://site.test').searchParams.get('historyCursor')).toBe(
-    cursor,
-  );
+  expect(
+    new URL(reporterHistoryStatusHref(reportId, cursor), 'https://site.test').searchParams.get('historyCursor'),
+  ).toBe(cursor);
 });
 
 test('localized page states distinguish preparation, completion, denial, continuation retry, selection and expiry', () => {
@@ -159,7 +153,11 @@ test('mounted history replaces one page, retries the exact cursor, opens the sel
   const previousLocale = getLocale();
   setLocale('en', { reload: false });
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-  cache.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'reporter-account', csrfToken: 'credential' });
+  cache.setQueryData(sessionQuery.queryKey, {
+    state: 'signed-in',
+    subject: 'reporter-account',
+    csrfToken: 'credential',
+  });
   const exposureOwner = viewerExposureLifetime(cache);
   const releaseExposure = exposureOwner.subscribe(() => {});
   const admission = exposureOwner.getSnapshot();
@@ -207,8 +205,7 @@ test('mounted history replaces one page, retries the exact cursor, opens the sel
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(container);
   const draw = () =>
-    createElement(QueryClientProvider, { client: cache },
-      createElement(ReporterHistoryCurrent, { initial, read }));
+    createElement(QueryClientProvider, { client: cache }, createElement(ReporterHistoryCurrent, { initial, read }));
 
   try {
     await act(async () => {
@@ -217,7 +214,9 @@ test('mounted history replaces one page, retries the exact cursor, opens the sel
     releaseExposure();
     expect(container.textContent).toContain('First private report');
 
-    const continueButton = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('Load more'));
+    const continueButton = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Load more'),
+    );
     if (!continueButton) throw new Error('The first page should offer its sparse continuation');
     await act(async () => {
       continueButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
@@ -226,21 +225,22 @@ test('mounted history replaces one page, retries the exact cursor, opens the sel
     });
     expect(container.textContent).toContain('next page could not be loaded');
 
-    const retryButton = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('Try again'));
+    const retryButton = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Try again'),
+    );
     if (!retryButton) throw new Error('The failed continuation should expose retry');
     await act(async () => {
       retryButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(reads.slice(0, 2)).toEqual([
-      { cursor: 'next/frontier' },
-      { cursor: 'next/frontier' },
-    ]);
+    expect(reads.slice(0, 2)).toEqual([{ cursor: 'next/frontier' }, { cursor: 'next/frontier' }]);
     expect(container.textContent).toContain('Selected private report');
     expect(container.textContent).not.toContain('First private report');
 
-    const selectButton = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('Select report'));
+    const selectButton = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Select report'),
+    );
     if (!selectButton) throw new Error('The continuation report should be selectable');
     await act(async () => {
       selectButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));

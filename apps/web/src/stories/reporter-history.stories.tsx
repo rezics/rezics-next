@@ -37,7 +37,14 @@ function page(
   selectedReportId: string | null = null,
   nextCursor: string | null = null,
 ): HistoryPage {
-  return { state, entries, selectedReportId, nextCursor, retry: { cursor: 'opaque/history-cursor' }, viewer: { kind: 'reporter' } };
+  return {
+    state,
+    entries,
+    selectedReportId,
+    nextCursor,
+    retry: { cursor: 'opaque/history-cursor' },
+    viewer: { kind: 'reporter' },
+  };
 }
 
 function loaded(value: HistoryPage) {
