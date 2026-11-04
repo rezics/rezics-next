@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
-import { type WorkDimensions } from '../../src/library/collection-source.ts';
+import { createCollectionSource, type WorkDimensions } from '../../src/library/collection-source.ts';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import {
   COLLECTION_SOURCE_WORK_COST,
@@ -117,6 +117,20 @@ test('selected Collection source refuses an undeclared context before IO and see
     const reservation = await fixture.store.reserve(fixture.actor, fixture.collectionId, [definition()]);
     const locator = reservation.episodes[0]!.locator;
     const deadline = Date.now() + 5000;
+    const allowance = {
+      reservationId: 'unfunded-selected-source',
+      remaining: {
+        candidateKeys: 0,
+        nativeRows: 0,
+        identityMetadataRows: 0,
+        emptySeeks: 0,
+        nativePoints: 0,
+        witnessKeys: 0,
+        statements: 0,
+        bytes: 0,
+      },
+    };
+    const source = createCollectionSource({ pool: runtime.db.pool, access: runtime.kernel.testAccess });
     const page = await runOperationalTransaction(
       runtime.db.pool,
       {
@@ -136,9 +150,11 @@ test('selected Collection source refuses an undeclared context before IO and see
         }) as typeof tx.query;
         const undeclared = { kind: 'undeclared-source', tx, locator } as unknown as ScopeWorkContext;
         await expect(
-          readCollectionSourceWorkState(runtime.db.pool, undeclared, {
-            access: runtime.kernel.testAccess,
+          source.prepare({
+            collectionId: fixture.collectionId,
+            work: undeclared,
             deadline,
+            allowance,
           }),
         ).rejects.toMatchObject({ code: 'semantic_not_ready' });
         expect(statements).toBe(0);
@@ -148,13 +164,25 @@ test('selected Collection source refuses an undeclared context before IO and see
           deadline,
         });
         const first = await seekCollectionSourceWorkGroup(work, state, null, { deadline });
-        return { state, first };
+        const prepared = await source.prepare({ collectionId: fixture.collectionId, work, deadline, allowance });
+        const result = await source.prefix({
+          source: prepared.source,
+          work,
+          deadline,
+          allowance,
+          afterSubjectId: null,
+        });
+        return { state, first, prepared, result, statements };
       },
     );
     expect(page.state.metadata.state).toBe('active');
     expect(page.state.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST.state));
     expect(page.first.subjectId).toBeNull();
     expect(page.first.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST.seek));
+    expect(page.result).toMatchObject({ kind: 'canonical_subject_prefix', candidates: [], exhausted: true });
+    expect(Object.values(page.prepared.work.used).every((value) => value === 0)).toBe(true);
+    expect(Object.values(page.result.work.used).every((value) => value === 0)).toBe(true);
+    expect(page.statements).toBeGreaterThan(0);
   } finally {
     await runtime.close();
   }
