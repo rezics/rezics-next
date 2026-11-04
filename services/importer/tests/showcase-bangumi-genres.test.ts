@@ -180,9 +180,23 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
       { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '0', unit: '1' } } },
     ]);
     const firstCandidate = firstKeyword.candidateId;
-    const titleId = first.bangumiGenrePublication!.acknowledgements.find(
-      (entry) => entry.command.op === 'propose' && entry.command.statement.property.id === 'schema:name',
-    )!.candidateId;
+    const firstSession = new ImportSession(statePath);
+    let titleId: string | undefined;
+    try {
+      const title = firstSession.bindings.candidates(
+        { source: 'bangumi_cross_media', external_id: '884' },
+        'facts',
+        { limit: 100 },
+      ).find((candidate) => {
+        const command = (JSON.parse(candidate.bytes) as { commands: BatchCommand[] }).commands[0];
+        return command?.op === 'propose' && command.statement.property.id === 'schema:name';
+      });
+      if (!title) throw new Error('Independent title candidate is missing');
+      titleId = title.candidate;
+    } finally {
+      firstSession.close();
+    }
+    if (!titleId) throw new Error('Independent title candidate identity is missing');
 
     unavailable = true;
     const retry = await seed();
