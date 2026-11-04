@@ -5,8 +5,15 @@ import { shelfHref, shelfSort, validateShelfSearch } from '../src/library/shelf-
 import { resolveShelfPresentation, unsupportedShelfSorts } from '../src/library/shelf-preferences';
 
 test('title URLs retain native intent across filters and display changes, with an explicit first-page restart', () => {
-  const search = validateShelfSearch({ orderBy: 'title', direction: 'asc', state: 'planned', type: 'schema:Book',
-    cursor: 'native-page', layout: 'table', size: 's' });
+  const search = validateShelfSearch({
+    orderBy: 'title',
+    direction: 'asc',
+    state: 'planned',
+    type: 'schema:Book',
+    cursor: 'native-page',
+    layout: 'table',
+    size: 's',
+  });
   expect(shelfSort(search)).toEqual({ orderBy: 'title', direction: 'asc' });
   const { cursor: _cursor, ...first } = search;
   const href = shelfHref('en', { ...first, layout: 'list' });
@@ -26,11 +33,14 @@ test('a title preference cannot select an uninstalled index', () => {
 
 test('the unpublished title client remains explicit preparation without fetching or sorting a date page', async () => {
   let calls = 0;
-  const client = createKernelClient('https://kernel.invalid', { fetch: async () => {
-    calls++;
-    return new Response('{}', { status: 503 });
-  } });
-  await expect(readEntryPage(client, 'Bearer current', undefined, undefined, 20,
-    { orderBy: 'title', direction: 'asc' })).rejects.toMatchObject({ state: 'preparing' });
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: async () => {
+      calls++;
+      return new Response('{}', { status: 503 });
+    },
+  });
+  await expect(
+    readEntryPage(client, 'Bearer current', undefined, undefined, 20, { orderBy: 'title', direction: 'asc' }),
+  ).rejects.toMatchObject({ state: 'preparing' });
   expect(calls).toBe(0);
 });

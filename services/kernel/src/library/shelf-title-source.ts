@@ -34,14 +34,20 @@ export interface ShelfTitleSource {
 
 export function titleLanguages(value: unknown): string[] {
   if (
-    !Array.isArray(value) || value.length > 16 ||
-    value.some((tag) => typeof tag !== 'string' || tag.length > 128 || !/^[a-z]{1,8}(?:-[a-z0-9]{1,8})*$(?![\s\S])/i.test(tag))
-  ) throw new TypeError('Invalid shelf title languages');
+    !Array.isArray(value) ||
+    value.length > 16 ||
+    value.some(
+      (tag) => typeof tag !== 'string' || tag.length > 128 || !/^[a-z]{1,8}(?:-[a-z0-9]{1,8})*$(?![\s\S])/i.test(tag),
+    )
+  )
+    throw new TypeError('Invalid shelf title languages');
   return value.map((tag: string) => tag.toLowerCase());
 }
 
 export function shelfTitlePolicy(languages: readonly string[]): string {
-  return createHash('sha256').update(JSON.stringify([SHELF_TITLE_KEY_POLICY, titleLanguages(languages)])).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify([SHELF_TITLE_KEY_POLICY, titleLanguages(languages)]))
+    .digest('hex');
 }
 
 export async function currentShelfTitleBasis(

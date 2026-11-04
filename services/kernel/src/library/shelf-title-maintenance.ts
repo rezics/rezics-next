@@ -8,8 +8,11 @@ import { newId, routeOf } from '../route/route.ts';
 import { createLibraryCommandRunner, requireRoute } from './command-support.ts';
 import { shelfTitleKey } from './shelf-title-key.ts';
 import {
-  currentShelfTitleBasis, shelfTitlePolicy, titleLanguages,
-  type ShelfTitleLabels, type ShelfTitleSource,
+  currentShelfTitleBasis,
+  shelfTitlePolicy,
+  titleLanguages,
+  type ShelfTitleLabels,
+  type ShelfTitleSource,
 } from './shelf-title-source.ts';
 import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 import type { ShelfOwner } from './shelf-maintenance-ops-contract.ts';
@@ -43,18 +46,24 @@ async function readHead(client: Client, owner: ShelfOwner, lock = false) {
 }
 
 async function readCandidates(client: Client, owner: ShelfOwner, after: string | null) {
-  return (await client.query<Candidate>(
-    `SELECT subject_id,incarnation_id,transaction_id,state,type_id FROM library.entry
+  return (
+    await client.query<Candidate>(
+      `SELECT subject_id,incarnation_id,transaction_id,state,type_id FROM library.entry
      WHERE route=$1 AND account_id=$2::uuid${after === null ? '' : ' AND subject_id>$3::uuid'}
      ORDER BY subject_id LIMIT 101`,
-    [owner.route, owner.accountId, ...(after === null ? [] : [after])],
-  )).rows;
+      [owner.route, owner.accountId, ...(after === null ? [] : [after])],
+    )
+  ).rows;
 }
 
 /** Exact batched coverage is required; absence of identity must never become an invented missing title. */
 export function shelfTitleObservations(ids: readonly string[], entries: readonly ShelfTitleLabels[]) {
   const observations = new Map(entries.map((row) => [row.subjectId, row]));
-  if (observations.size !== entries.length || observations.size !== ids.length || ids.some((id) => !observations.has(id)))
+  if (
+    observations.size !== entries.length ||
+    observations.size !== ids.length ||
+    ids.some((id) => !observations.has(id))
+  )
     throw new ShelfReadUnavailableError('complete disclosed title batch');
   for (const row of entries)
     if (!row.sourceBasis || row.sourceBasis.length > 256 || routeOf(row.sourceId) === null)
@@ -68,7 +77,10 @@ export function shelfTitleObservations(ids: readonly string[], entries: readonly
  * repeat preparation; receipt replay remains the original effect. No title data enters a command operand.
  */
 export function createShelfTitlePreparation(deps: {
-  pool: Pool; access: Access; clock?: KernelClock; titleSource?: ShelfTitleSource;
+  pool: Pool;
+  access: Access;
+  clock?: KernelClock;
+  titleSource?: ShelfTitleSource;
 }) {
   const runner = createLibraryCommandRunner(deps);
   return async (actor: Actor, key: string, rawLanguages: readonly string[]): Promise<ShelfTitlePreparation> => {
@@ -79,33 +91,48 @@ export function createShelfTitlePreparation(deps: {
     const result = await runner.ownAccountPrepared(
       actor,
       {
-        action: 'library_entry:list', kind: 'library.shelf.title.prepare', requestKey: key, input: { policy },
+        action: 'library_entry:list',
+        kind: 'library.shelf.title.prepare',
+        requestKey: key,
+        input: { policy },
         async prepare() {
           // Unavailable evidence is deferred until the fresh body, preserving exact receipt replay.
           if (!deps.titleSource) return null;
           try {
             const basis = await currentShelfTitleBasis(deps.titleSource, owner, languages, actor);
             const head = await withConnection(deps.pool, (client) => readHead(client, owner));
-            const candidates = head?.phase === 'build' && head.policy === policy && head.source_basis === basis
-              ? await withConnection(deps.pool, (client) => readCandidates(client, owner, head.after_subject_id))
-              : [];
+            const candidates =
+              head?.phase === 'build' && head.policy === policy && head.source_basis === basis
+                ? await withConnection(deps.pool, (client) => readCandidates(client, owner, head.after_subject_id))
+                : [];
             const selected = candidates.slice(0, 100);
-            const labels = selected.length ? await deps.titleSource.labels(
-              owner, languages, basis, selected.map((row) => row.subject_id), actor,
-            ) : { status: 'current' as const, entries: [] };
+            const labels = selected.length
+              ? await deps.titleSource.labels(
+                  owner,
+                  languages,
+                  basis,
+                  selected.map((row) => row.subject_id),
+                  actor,
+                )
+              : { status: 'current' as const, entries: [] };
             if (labels.status !== 'current') return null;
-            const observations = shelfTitleObservations(selected.map((row) => row.subject_id), labels.entries);
+            const observations = shelfTitleObservations(
+              selected.map((row) => row.subject_id),
+              labels.entries,
+            );
             const rows = selected.map((entry) => {
               const source = observations.get(entry.subject_id)!;
               const title = shelfTitleKey(source.labels, languages, source.originalLanguage);
               return {
-                ...entry, source_id: source.sourceId, source_basis: source.sourceBasis,
+                ...entry,
+                source_id: source.sourceId,
+                source_basis: source.sourceBasis,
                 missing: title.coverage === 'missing',
                 key: Buffer.from(title.bytes ?? []),
               };
             });
             // The whole source basis, including disclosure/ownership, is checked after the batched reads.
-            if (basis !== await currentShelfTitleBasis(deps.titleSource, owner, languages, actor)) return null;
+            if (basis !== (await currentShelfTitleBasis(deps.titleSource, owner, languages, actor))) return null;
             return { basis, head, rows, more: candidates.length > 100 };
           } catch (error) {
             return { error };
@@ -140,10 +167,11 @@ export function createShelfTitlePreparation(deps: {
         if (head.phase === 'ready') return { value: { installation: 'installed' as const, prepared: 0 }, events: [] };
         if (head.phase === 'cleanup') {
           const removed = await cleanupShelfTitleKeys(tx, owner);
-          if (removed < 100) await tx.query(
-            `UPDATE library.shelf_title_head SET phase='build' WHERE route=$1 AND account_id=$2::uuid`,
-            [owner.route, owner.accountId],
-          );
+          if (removed < 100)
+            await tx.query(`UPDATE library.shelf_title_head SET phase='build' WHERE route=$1 AND account_id=$2::uuid`, [
+              owner.route,
+              owner.accountId,
+            ]);
           return { value: pending, events: [] };
         }
         // A concurrent page, population edit or replacement build cannot advance this captured frontier.
@@ -152,30 +180,50 @@ export function createShelfTitlePreparation(deps: {
           throw new ShelfReadUnavailableError('complete native Entry incarnation and type maintenance');
         // Exactly the bounded captured Entry versions must remain at this frontier; no per-Subject reads.
         const current = await readCandidates(tx, owner, head.after_subject_id);
-        if (JSON.stringify(current.slice(0, 100)) !== JSON.stringify(input.rows.map(
-          ({ source_id: _source, source_basis: _basis, missing: _missing, key: _key, ...entry }) => entry,
-        )) || (current.length > 100) !== input.more) return { value: pending, events: [] };
-        if (input.rows.length) await tx.query(
-          `INSERT INTO library.shelf_title_key(route,account_id,subject_id,generation,incarnation_id,
+        if (
+          JSON.stringify(current.slice(0, 100)) !==
+            JSON.stringify(
+              input.rows.map(
+                ({ source_id: _source, source_basis: _basis, missing: _missing, key: _key, ...entry }) => entry,
+              ),
+            ) ||
+          current.length > 100 !== input.more
+        )
+          return { value: pending, events: [] };
+        if (input.rows.length)
+          await tx.query(
+            `INSERT INTO library.shelf_title_key(route,account_id,subject_id,generation,incarnation_id,
              transaction_id,state,type_id,source_id,source_basis,missing,key)
            SELECT $1,$2::uuid,v.subject_id,$3::uuid,v.incarnation_id,v.transaction_id,v.state,v.type_id,
              v.source_id,v.source_basis,v.missing,decode(v.key,'hex')
            FROM jsonb_to_recordset($4::jsonb) AS v(subject_id uuid,incarnation_id uuid,transaction_id uuid,
              state text,type_id uuid,source_id uuid,source_basis text,missing boolean,key text)`,
-          [owner.route, owner.accountId, head.generation, JSON.stringify(input.rows.map(
-            (row) => ({ ...row, key: row.key.toString('hex') }),
-          ))],
-        );
+            [
+              owner.route,
+              owner.accountId,
+              head.generation,
+              JSON.stringify(input.rows.map((row) => ({ ...row, key: row.key.toString('hex') }))),
+            ],
+          );
         await tx.query(
           `UPDATE library.shelf_title_head SET after_subject_id=$3::uuid,phase=$4
            WHERE route=$1 AND account_id=$2::uuid`,
-          [owner.route, owner.accountId, input.rows.at(-1)?.subject_id ?? head.after_subject_id,
-            input.more ? 'build' : 'ready'],
+          [
+            owner.route,
+            owner.accountId,
+            input.rows.at(-1)?.subject_id ?? head.after_subject_id,
+            input.more ? 'build' : 'ready',
+          ],
         );
-        return { value: { installation: input.more ? 'pending' as const : 'installed' as const, prepared: input.rows.length }, events: [] };
+        return {
+          value: {
+            installation: input.more ? ('pending' as const) : ('installed' as const),
+            prepared: input.rows.length,
+          },
+          events: [],
+        };
       },
     );
     return result.value;
   };
 }
-

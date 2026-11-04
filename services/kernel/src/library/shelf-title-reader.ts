@@ -10,7 +10,11 @@ type Client = Pick<PoolClient, 'query'>;
 
 /** Same native RR snapshot as the ordered page; source observations have already been released. */
 export async function shelfTitleBinding(
-  client: Client, route: number, accountId: string, languages: readonly string[], sourceBasis: string,
+  client: Client,
+  route: number,
+  accountId: string,
+  languages: readonly string[],
+  sourceBasis: string,
 ) {
   const policy = shelfTitlePolicy(languages);
   const { rows } = await client.query<{ generation: string; population: string }>(
@@ -22,8 +26,11 @@ export async function shelfTitleBinding(
   );
   if (!rows[0]) throw new ShelfReadUnavailableError('complete current native title generation');
   return {
-    titleGeneration: rows[0].generation, titlePopulation: rows[0].population,
-    titlePolicy: policy, titleKeyPolicy: SHELF_TITLE_KEY_POLICY, titleSourceBasis: sourceBasis,
+    titleGeneration: rows[0].generation,
+    titlePopulation: rows[0].population,
+    titlePolicy: policy,
+    titleKeyPolicy: SHELF_TITLE_KEY_POLICY,
+    titleSourceBasis: sourceBasis,
     titleLanguages: JSON.stringify(titleLanguages(languages)),
   };
 }
@@ -53,11 +60,13 @@ export function createShelfTitleReader(): ShelfDateReader {
       const args: unknown[] = [route, accountId, query.titleGeneration];
       let predicate = 'route=$1 AND account_id=$2::uuid AND generation=$3::uuid';
       for (const [column, value, type] of [
-        ['state', query.state, 'text'], ['type_id', query.typeId, 'uuid'],
-      ] as const) if (value !== null) {
-        args.push(value);
-        predicate += ` AND ${column}=$${args.length}::${type}`;
-      }
+        ['state', query.state, 'text'],
+        ['type_id', query.typeId, 'uuid'],
+      ] as const)
+        if (value !== null) {
+          args.push(value);
+          predicate += ` AND ${column}=$${args.length}::${type}`;
+        }
       let labelled = `${predicate} AND NOT missing`;
       let missing = `${predicate} AND missing`;
       if (after) {
@@ -96,12 +105,16 @@ export function createShelfTitleReader(): ShelfDateReader {
         throw new ShelfReadUnavailableError('current complete title Entry basis');
       const page = rows.slice(0, query.limit);
       const last = page.at(-1);
-      const position: ShelfSeek | undefined = last ? {
-        key: last.missing ? 'm:' : `l:${last.key.toString('base64url')}`, subjectId: last.subjectId,
-      } : undefined;
+      const position: ShelfSeek | undefined = last
+        ? {
+            key: last.missing ? 'm:' : `l:${last.key.toString('base64url')}`,
+            subjectId: last.subjectId,
+          }
+        : undefined;
       return {
         entries: page.map(({ key: _key, missing, current: _current, ...entry }) => ({
-          ...entry, titleCoverage: missing ? 'missing' as const : 'labelled' as const,
+          ...entry,
+          titleCoverage: missing ? ('missing' as const) : ('labelled' as const),
         })),
         more: rows.length > query.limit,
         ...(position ? { after: position } : {}),
