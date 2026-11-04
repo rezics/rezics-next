@@ -68,11 +68,9 @@ test('browser package exports load portable helpers and compiled data without na
   for (const request of requests)
     expect(browserDirections.resolve(...request)).toEqual(defaultDirections.resolve(...request));
   expect(
-    loaded.definitions.createReleasedRelationDirectionResolver(undefined, undefined).resolve(
-      'schema:Person',
-      'wdt:P725',
-      'inverse',
-    ),
+    loaded.definitions
+      .createReleasedRelationDirectionResolver(undefined, undefined)
+      .resolve('schema:Person', 'wdt:P725', 'inverse'),
   ).toEqual(
     createReleasedRelationDirectionResolver(undefined, undefined).resolve('schema:Person', 'wdt:P725', 'inverse'),
   );
