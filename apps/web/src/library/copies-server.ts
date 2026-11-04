@@ -1,5 +1,8 @@
 import type { KernelClient } from '@rezics/client';
 
+export type NativeCopyList = NonNullable<Awaited<ReturnType<KernelClient['copies']['get']>>['data']>;
+export type NativeCopyListQuery = NonNullable<NonNullable<Parameters<KernelClient['copies']['get']>[0]>['query']>;
+
 export type NativeCopy = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['copies']>['get']>>['data']>['copy'];
 export type NativeCopyPresentation = NonNullable<NativeCopy['presentation']>;
 type DetailOptions = NonNullable<Parameters<ReturnType<KernelClient['copies']>['get']>[0]>;
