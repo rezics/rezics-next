@@ -11,9 +11,7 @@ import { readListPresentationFacts } from '../semantic/list-presentation.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 
-type IdentityMapping = Awaited<ReturnType<typeof readIdentityMappings>> extends ReadonlyMap<string, infer Mapping>
-  ? Mapping
-  : never;
+type IdentityMapping = Awaited<ReturnType<typeof readIdentityMappings>>[number];
 
 export const COPY_LIST_CONTEXT_MAX_ROWS = 100;
 export const COPY_LIST_CONTEXT_MAX_BYTES = 65_536;
