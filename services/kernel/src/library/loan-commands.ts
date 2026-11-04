@@ -123,15 +123,7 @@ async function admitAccount(client: Pick<PoolClient, 'query'>, owner: AccountAct
   const route = routeOf(owner.accountId);
   if (route === null) throw new GrantDeniedError();
   const current = await readAccount(client, route, owner.accountId);
-  if (
-    !current ||
-    current.kind !== 'actor' ||
-    current.state !== 'active' ||
-    current.fenced ||
-    !Number.isSafeInteger(owner.authnEpoch) ||
-    owner.authnEpoch < 1 ||
-    current.minimumAuthnEpoch > BigInt(owner.authnEpoch)
-  )
+  if (!current || current.kind !== 'actor' || current.state !== 'active' || current.fenced)
     throw new GrantDeniedError();
 }
 
