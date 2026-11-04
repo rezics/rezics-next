@@ -37,9 +37,11 @@ export type ClassificationCreateHandoff = {
 };
 
 const prefix = 'rezics:classification-create-handoff:';
+const acknowledgementPrefix = 'rezics:concept-create-ack:';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const typeId = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]{1,256}$/;
 const handoffLifetime = 30 * 60 * 1000;
+const acknowledgementLifetime = 24 * 60 * 60 * 1000;
 
 export function classificationHandoffSearch(input: Record<string, unknown>): string | undefined {
   return typeof input.classificationHandoff === 'string' && uuid.test(input.classificationHandoff)
@@ -242,6 +244,65 @@ function persist(value: ClassificationCreateHandoff): boolean {
   }
 }
 
+type ClassificationCreateAcknowledgement = { id: string; reader: string; createdAt: number };
+
+function decodeAcknowledgement(value: unknown): ClassificationCreateAcknowledgement | undefined {
+  const item = record(value);
+  if (
+    !item ||
+    typeof item.id !== 'string' ||
+    !uuid.test(item.id) ||
+    typeof item.reader !== 'string' ||
+    item.reader.length < 1 ||
+    item.reader.length > 256 ||
+    typeof item.createdAt !== 'number' ||
+    !Number.isFinite(item.createdAt) ||
+    Date.now() - item.createdAt > acknowledgementLifetime
+  )
+    return undefined;
+  return item as ClassificationCreateAcknowledgement;
+}
+
+/** Keep only the acknowledged UUID and reader binding after return-draft custody expires. */
+export function recordClassificationCreateAcknowledgement(token: string, reader: string, id: string): boolean {
+  if (!uuid.test(token) || !uuid.test(id) || reader.length < 1 || reader.length > 256) return false;
+  const target = store();
+  if (!target) return false;
+  const key = `${acknowledgementPrefix}${token}`;
+  try {
+    const raw = target.getItem(key);
+    if (raw) {
+      const existing = raw.length <= 1024 ? decodeAcknowledgement(JSON.parse(raw)) : undefined;
+      if (existing && (existing.id !== id || existing.reader !== reader)) return false;
+      if (existing) return true;
+    }
+    target.setItem(key, JSON.stringify({ id, reader, createdAt: Date.now() }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Acknowledgements are reader-bound and never restore a stored label, Type or authority snapshot. */
+export function readClassificationCreateAcknowledgement(token: string, reader: string): string | undefined {
+  if (!uuid.test(token) || reader.length < 1 || reader.length > 256) return undefined;
+  const target = store();
+  if (!target) return undefined;
+  const key = `${acknowledgementPrefix}${token}`;
+  try {
+    const raw = target.getItem(key);
+    if (!raw || raw.length > 1024) return undefined;
+    const value = decodeAcknowledgement(JSON.parse(raw));
+    if (!value) {
+      target.removeItem(key);
+      return undefined;
+    }
+    return value.reader === reader ? value.id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function snapshotClassificationDrafts(drafts: readonly FactDraft[]): ClassificationDraftSnapshot[] | undefined {
   if (!drafts.length || drafts.length > 16) return undefined;
   const snapshots: ClassificationDraftSnapshot[] = [];
@@ -326,7 +387,13 @@ export function recordCreatedClassificationIdentity(
   identity?: CreatedClassificationIdentity,
 ): ClassificationCreateHandoff | undefined {
   const value = readClassificationCreateHandoff(token);
-  if (!value || value.phase !== 'creating' || value.sourceId !== sourceId || value.reader !== reader || !uuid.test(id))
+  if (
+    !value ||
+    (value.phase !== 'creating' && value.phase !== 'ready') ||
+    value.sourceId !== sourceId ||
+    value.reader !== reader ||
+    !uuid.test(id)
+  )
     return undefined;
   if (value.createdId && value.createdId !== id) {
     discardClassificationCreateHandoff(token);
