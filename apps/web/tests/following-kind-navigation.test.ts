@@ -18,12 +18,18 @@ test('native reads select a complete kind, retain it on stale restart, and omit 
       const url = new URL(String(input));
       requests.push(url);
       expect(new Headers(init?.headers).get('authorization')).toBe('Bearer token');
-      if (url.searchParams.has('cursor'))
-        return Response.json({ code: 'stale_cursor' }, { status: 409 });
+      if (url.searchParams.has('cursor')) return Response.json({ code: 'stale_cursor' }, { status: 409 });
       const kind = url.searchParams.get('targetType') ?? 'subject';
-      return Response.json({ follows: ['second', 'first'].map((targetId) => ({
-        targetId, targetType: kind, state: 'following', reason: 'explicit', target: null,
-      })), next: 'continue' });
+      return Response.json({
+        follows: ['second', 'first'].map((targetId) => ({
+          targetId,
+          targetType: kind,
+          state: 'following',
+          reason: 'explicit',
+          target: null,
+        })),
+        next: 'continue',
+      });
     },
   });
   const env = {
@@ -52,7 +58,10 @@ test('native reads select a complete kind, retain it on stale restart, and omit 
     const page = await loadMineFollowingPage(client, request, env, { kind, cursor: 'another-kind-cursor' });
     expect(page.signedIn).toBe(true);
     expect(page.follows.map((row) => row.targetId)).toEqual(['second', 'first']);
-    expect(page.follows.map((row) => row.targetType)).toEqual([kind === 'all' ? 'subject' : kind, kind === 'all' ? 'subject' : kind]);
+    expect(page.follows.map((row) => row.targetType)).toEqual([
+      kind === 'all' ? 'subject' : kind,
+      kind === 'all' ? 'subject' : kind,
+    ]);
     expect(page.next).toBe('continue');
     expect(page.cursorReset).toBe(true);
     expect(page.kindUnavailable).toBeUndefined();
