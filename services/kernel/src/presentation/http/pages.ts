@@ -34,14 +34,20 @@ import { ProblemError, problemSchema, type FieldError } from '../../http/problem
 import { createAccess } from '../../access/index.ts';
 import { actionCatalogue } from '../../http/request.ts';
 import { SESSION_HEADER } from '../../http/request.ts';
-import { accessCheck, type Access, type AccessFactory } from '../../request/access.ts';
+import { accessCheck, type Access, type AccessFactory, type Actor } from '../../request/access.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { cataloguePageMetadata, semanticPageView } from '../semantic-page.ts';
+import {
+  cataloguePageMetadata,
+  quotationPageDocuments,
+  quotationTypeAdmitted,
+  readQuotationPageAuthority,
+  semanticPageView,
+} from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -524,10 +530,15 @@ export function pageRoutes<App>(
         resolved,
         views,
         subject: subject?.id ?? null,
+        subjectType: subject?.type ?? null,
         account,
         probes,
         budget,
         probeSession,
+        actor,
+        access: authority.deps.access,
+        pool,
+        deadline: job.deadline,
         ...(languages === undefined ? {} : { languages }),
       });
     },
@@ -545,6 +556,7 @@ async function pageAnswer(input: {
   resolved: ResolvedTemplate;
   views: View[] | null;
   subject: string | null;
+  subjectType: string | null;
   account: PageAccount | null;
   probes: Map<string, ReadResult>;
   budget: PageReadBudget;
@@ -561,6 +573,10 @@ async function pageAnswer(input: {
     context: string;
     actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
   }>;
+  actor: Actor;
+  access: Access;
+  pool: Pool;
+  deadline: number;
 }): Promise<Response> {
   const violations = validateDocumentFilters(
     platformRegistry,
@@ -629,7 +645,14 @@ async function pageAnswer(input: {
   const subjectBody = observation?.status === 200 && isRecord(observation.body) ? observation.body.subject : undefined;
   const properties =
     isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
-  const documents = documentRead(input.resolved.document, input.subject, properties, input.context?.id);
+  const documents = quotationPageDocuments(
+    documentRead(input.resolved.document, input.subject, properties, input.context?.id),
+    input.release,
+    input.subjectType,
+    input.subject,
+    properties,
+    input.context?.id,
+  );
   const incoming = new Request(input.request.url, { headers: input.request.headers, signal: input.request.signal });
   const forwarded = mergedSession(
     input.session.ring,
@@ -688,6 +711,15 @@ async function pageAnswer(input: {
         : result;
   }
 
+  const quotationAuthority =
+    input.subject !== null && quotationTypeAdmitted(input.release, input.subjectType)
+      ? await readQuotationPageAuthority({
+          pool: input.pool,
+          access: input.access,
+          actor: input.actor,
+          deadline: input.deadline,
+        })
+      : null;
   return respond(
     200,
     {
@@ -702,6 +734,9 @@ async function pageAnswer(input: {
       ...(input.catalogue ? { catalogue: input.catalogue } : {}),
       ...(input.viewer ? { viewer: await input.viewer() } : {}),
       reads,
+      ...(quotationAuthority === null
+        ? {}
+        : { viewer: quotationAuthority.viewer, actions: quotationAuthority.actions }),
     },
     readSession,
     true,

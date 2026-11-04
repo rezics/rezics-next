@@ -1,4 +1,23 @@
 types:
   schema:MusicAlbum: 앨범
+  schema:Quotation: 인용
 typeDescriptions:
   schema:MusicAlbum: '여러 곡을 묶은 음악 앨범 작품입니다. 특정 소장본이나 유통 판본과는 독립적입니다.'
+  schema:Quotation: '작품에서 가져온 인용문입니다. 화자, 표기된 창작자, 출처를 구분합니다.'
+properties:
+  schema:text: 본문
+  schema:spokenByCharacter: 화자
+  schema:about: 작품
+  schema:creator: 표기된 창작자
+  schema:actor: 목소리
+propertyDescriptions:
+  schema:text: '인용의 정확한 본문 문서입니다. 관계 이름이나 다른 텍스트 칸이 아니라 문서 값을 넣습니다.'
+  schema:spokenByCharacter: '이 인용을 말하는 허구 인물입니다. 표기된 창작자나 성우가 아닙니다.'
+  schema:about: '이 인용이 가리키는 작품입니다. 작품 또는 부분의 정확한 정체성이 필요하며, 부분 문자열 일치로는 관계가 생기지 않습니다.'
+  schema:creator: '이 인용에 표기된 사람 또는 조직이며, 허구 화자와 따로 둡니다.'
+  schema:actor: '선택적인 연기 목소리입니다. 화자만으로 출처 주장 없이 성우를 추론하지 않습니다.'
+inverseProperties:
+  schema:spokenByCharacter: 말한 인용
+  schema:about: 인용
+  schema:creator: 표기된 인용
+  schema:actor: 목소리 인용

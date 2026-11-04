@@ -36,7 +36,7 @@ Only this custom object and the existing library mapping are removed before ordi
 all other annotations and LinkML validation remain intact. Older releases may omit hints entirely.
 
 The published inventory in `catalogue/` gives every Type a portrait 5:7 cover frame and portrait list aspect,
-including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, person and
+including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, quotation, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
 is immutable: 1.0.1 is current, while release 1.0.0 bytes and its digest remain loadable for existing pins. Book
@@ -499,7 +499,7 @@ Run `bun run --cwd packages/definitions check` from the repository root.
 ### Schema.org subject types
 
 For each concrete catalogue profile, select the narrowest Schema.org class
-that is true of its entire admitted scope. The following 24 mappings are the
+that is true of its entire admitted scope. The following 26 mappings are the
 reviewed choices for subject JSON-LD; the source research and supporting
 rationales are in [the Schema.org mapping report](../../docs/research/catalogue-schema-org-mapping.md).
 The corresponding `annotations.schema_org_type` values are a separate profile
@@ -534,13 +534,14 @@ mappings or property semantics.
 | `wd:Q2095` / Food                                  | `https://schema.org/Thing`               |
 | `schema:Recipe` / Recipe                           | `https://schema.org/Recipe`              |
 | `schema:MusicAlbum` / MusicAlbum                   | `https://schema.org/MusicAlbum`          |
+| `schema:Quotation` / Quotation                     | `https://schema.org/Quotation`           |
 
 Book work and its book-specific edition both use `Book` while keeping distinct
 native identities. Broad fictional characters and Food use `Thing`; broad game
 releases, add-ons and story arcs use `CreativeWork`. `DefinedTerm` and
 `DefinedTermSet` apply to the classification profiles only. The remaining rows
 select the explicit native-profile classes for games, anime and manga, series,
-people, organizations, applications, recipes and music.
+people, organizations, applications, recipes, music and quotations.
 
 ### Public classification and genuine measurements
 
@@ -835,6 +836,12 @@ locally without a translation service.
 | `foaf:focus`                | [focus](http://xmlns.com/foaf/spec/#term_focus), the subject a concept stands for                                                                          |
 | `schema:genre`              | [genre](https://schema.org/genre), mapped to [genre (P136)](https://www.wikidata.org/wiki/Property:P136)                                                   |
 | `schema:keywords`           | [keywords](https://schema.org/keywords), tag concepts                                                                                                      |
+| `schema:Quotation`          | [Quotation](https://schema.org/Quotation), an authored quotation of a work                                                                                 |
+| `schema:text`               | [text](https://schema.org/text), the exact authored quotation document                                                                                     |
+| `schema:spokenByCharacter`  | [spokenByCharacter](https://schema.org/spokenByCharacter), the fictional speaker                                                                           |
+| `schema:about`              | [about](https://schema.org/about), the cited work; a substring match never creates this relationship                                                       |
+| `schema:creator`            | [creator](https://schema.org/creator), a credited person or organization, never the fictional speaker                                                      |
+| `schema:actor`              | [actor](https://schema.org/actor), an optional performing voice; a speaker never infers a voice actor                                                      |
 | `wdt:P179`                  | [part of the series](https://www.wikidata.org/wiki/Property:P179), membership on the member                                                                |
 
 Release tooling imports `compileCatalogue` and `CatalogueError` from
