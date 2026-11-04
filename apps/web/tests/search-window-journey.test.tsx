@@ -240,6 +240,7 @@ test('a superseded query and a moved focus cannot publish a pending window or re
   });
   const replacement = reads.at(-1)!;
   expect(replacement.params.query).toBe('Atlas');
+  expect(abandoned.signal?.aborted).toBe(true);
   await act(async () => {
     abandoned.finish();
   });

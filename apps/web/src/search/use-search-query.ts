@@ -44,6 +44,22 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
     void query.refetch({ cancelRefetch: true });
   }, [owner, key, matches]);
   useEffect(() => {
+    if (!router) return;
+    return router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+      const next = toLocation.pathname.replace(/\/$/, '').endsWith('/search')
+        ? searchLoaderDeps(toLocation.search)
+        : undefined;
+      const target =
+        next && !next.invalidInput ? JSON.stringify(searchQueryOptions(locale, next, reader).queryKey) : null;
+      // The previous match can still be mounted while its successor loads. Retire even a loader read
+      // that has not gained a component observer; a late native reply cannot enroll that abandoned window.
+      void client.cancelQueries({
+        queryKey: ['search', 'discovery-v1'],
+        predicate: (candidate) => JSON.stringify(candidate.queryKey) !== target,
+      });
+    });
+  }, [router, client, locale, reader]);
+  useEffect(() => {
     const restored = (event: PageTransitionEvent) => {
       if (event.persisted) void query.refetch({ cancelRefetch: true });
     };
