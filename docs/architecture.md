@@ -38,6 +38,50 @@ creating a privileged parallel write path. Test fixtures are not product write p
 Definitions own semantic vocabulary. Product modules own generic behaviour. Presentation configures how those
 capabilities appear. A value's representation does not determine its semantic meaning or authority.
 
+## Modules and boundaries
+
+Capabilities are modules with one owner and a declared public surface. Their structure is checked by tools, not by
+convention. The evidence is in [engineering modularity (Opus 5.5)](research/engineering-modularity-opus-5-5.md) and
+[(GPT-6 Astra)](research/engineering-modularity-gpt-6-astra.md).
+
+**The module manifest.** Every production file belongs to one module of one kind, recorded in a machine-readable
+manifest. The manifest gives each module's paths, owner Goal, public entries, allowed dependencies and the
+capabilities it registers. The kinds are:
+
+- **contract:** vocabulary, schemas and values;
+- **core:** pure rules;
+- **application:** use cases over ports;
+- **adapter:** Elysia, Postgres, DBOS or Web runtime code;
+- **composition root:** the code that wires a process together;
+- **UI or transport library.**
+
+**The rules.**
+
+1. Each capability has exactly one registered mechanism and one owner. A second registry or ledger for the same
+   concept is refused.
+2. Cross-module imports go through declared public entries only, including type-only and generated imports.
+3. The module graph is acyclic, and dependencies point from adapters and applications toward cores and contracts. No
+   new value-import cycle is admitted anywhere.
+4. Cores and contracts are pure: no Elysia, `pg`, SQL, DBOS, React, runtime modules, environment, network, filesystem,
+   clock or randomness. Time, IDs and facts arrive as values.
+5. Adapters own effects, applications own use cases, and only composition roots choose implementations.
+6. Each operation's wire and security metadata comes from one declarative operation descriptor, checked statically.
+7. Shared code becomes a package under `packages/<capability>` only with a complete contract, conformance tests and
+   two production consumers, or a recorded standalone requirement. A package never imports a service or an app.
+8. Existing violations are listed in a ratchet baseline with an owner and a reason. The baseline may only shrink.
+
+**Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
+landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
+before they hand off. Every worker prompt carries the module map generated from the manifest.
+
+**Access.** The access model is a small pure policy core in `packages/access`. It compiles the permission catalogue
+and plans the facts a decision needs. It decides with a per-operand explanation, and it partially evaluates list
+requests into a closed filter that compiles to SQL over a bounded neighbourhood. Conformance vectors specify it
+across languages. The Kernel keeps fact acquisition, temporal storage, revocation fences and command admission as
+adapters. The catalogue is independent of HTTP routing. Cedar is the formal reference, not the engine; if the core
+ever needs general recursion, host functions or a solver, adoption is reopened. Evidence:
+[access model (Opus 5.5)](research/access-model-opus-5-5.md) and [(GPT-6 Astra)](research/access-model-gpt-6-astra.md).
+
 ## Data access
 
 Writes are single-partition commands. A read may not join rows across partitions.
