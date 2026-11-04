@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { act, createElement as h } from 'react';
 import { dirname } from 'node:path';
-import { planReads, platformRegistry } from '@rezics/composition';
+import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import definitions from '../../../packages/definitions/release/rezics.json';
@@ -66,7 +66,10 @@ function page() {
   result.subject = id(1);
   Object.assign(reading.subject, { id: id(1), type: 'wd:Q95074' });
   result.document = { root: { props: {} }, content: [{ type: 'SubjectHeader', props: { id: 'identity' } }] };
-  const plan = planReads(platformRegistry, result.document, { subject: id(1), context: result.context });
+  const plan = planReads(platformRegistry, result.document as CompositionDocument, {
+    subject: id(1),
+    context: result.context,
+  });
   result.reads = Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: reading }]));
   return result;
 }
@@ -150,7 +153,7 @@ async function mounted(
       spoilerShow: 'Reveal',
       relations: {},
       sections: {},
-      ...(context ? { context: { id: context } } : {}),
+      ...(context ? { context: { id: context, population: { kind: 'global' } } } : {}),
     } as any;
     await act(async () =>
       root.render(
@@ -190,7 +193,7 @@ test('mounted anonymous Character keeps assertions separate, retries only credit
     };
     await render(read);
     expect(host.querySelectorAll('#connections')).toHaveLength(1);
-    expect(host.querySelectorAll('[data-slot="character-work-visit"] article')).toHaveLength(2);
+    expect(host.querySelectorAll('[data-slot="character-work-visit"] [data-work-statement]')).toHaveLength(2);
     expect(host.textContent).toContain('Released protagonist role');
     expect(host.textContent).toContain('https://source.test/assertion-10');
     expect(host.textContent).not.toContain('Disclosed performer');
@@ -277,10 +280,9 @@ test('adapter64/512/4096 charges typed calls, retained native rows and UTF-8 byt
     const catalogue = new Map(Array.from({ length: population }, (_, n) => [id(n + 100), { obsolete: n }]));
     const requests: URL[] = [];
     const body = { links: [row(), row(11)], next: 'opaque-next' };
-    const client = createKernelClient({
-      origin: 'https://kernel.test',
-      fetch: (async (input: RequestInfo | URL) => {
-        const url = new URL(String(input));
+    const client = createKernelClient('https://kernel.test', {
+      fetch: (async (input, init) => {
+        const url = new URL(new Request(input, init).url);
         requests.push(url);
         return Response.json(body);
       }) as typeof fetch,
