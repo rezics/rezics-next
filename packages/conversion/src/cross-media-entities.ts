@@ -36,7 +36,7 @@ import {
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
 
-export const converter_revision = 'cross-media-entities@10';
+export const converter_revision = 'cross-media-entities@11';
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +
