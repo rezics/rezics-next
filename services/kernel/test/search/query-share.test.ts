@@ -100,7 +100,7 @@ test('mounted preparation executes native admission and a recipient denial canno
     );
   const response = await send();
   expect(response.status).toBe(200);
-  expect((await response.json()).action).toBe('allowed');
+  expect((await response.json()).action).toBe('disabled');
   expect(executions).toBe(1);
   permitted = false;
   const denied = await send();

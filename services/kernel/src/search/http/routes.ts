@@ -1,4 +1,4 @@
-import { prepareQueryShare } from '../query-share.ts';
+import { prepareQueryShare, unavailableQueryShare } from '../query-share.ts';
 import { QueryShareSchema } from './query-share-schemas.ts';
 import { createTrendingSearchesService } from '../trending-searches.ts';
 import { requiresAdvancedDiscoverySearch } from '../discovery-request.ts';
@@ -590,7 +590,10 @@ export function searchRoutes<App>(
             for (const [id, definition] of Object.entries(active.release.types)) labels[id] = definition.labels;
             for (const [id, definition] of Object.entries(active.release.properties)) labels[id] = definition.labels;
           }
-          const projection = prepareQueryShare(body, labels);
+          const projection =
+            body.representation === 'discovery-v1'
+              ? prepareQueryShare(body, labels)
+              : unavailableQueryShare('unsupported');
           projection.viewer = actor.kind === 'account' ? 'signed-in' : 'anonymous';
           return projection;
         }

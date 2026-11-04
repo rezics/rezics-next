@@ -1911,7 +1911,8 @@ late native final completion. These unit cases remain authored UNRUN.
 ## Query sharing
 
 `POST /v1/subjects:search` with `prepareShare:true` returns a preparation projection after the ordinary execution,
-including current native admission and existing Search grants. It never writes a share document. The returned
+including current native admission and existing Search grants. Portable preparation uses `discovery-v1`; compatibility
+representations return a disabled action rather than widening their implicit result-kind population. It never writes a share document. The returned
 `parameters` uses the existing localized Search URL; opening it executes the complete predicate again under the
 recipient. Labels are explanatory language-tagged released metadata, never authority. The canonical document
 preserves raw text, Boolean branches, language preference order and ordering. Only explicit text/filter/languages/sort
