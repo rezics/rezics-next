@@ -1,0 +1,11 @@
+[Unit]
+Description=Regenerate Goal derived files hourly
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1h
+AccuracySec=1min
+Unit=rezics-goal-regenerate.service
+
+[Install]
+WantedBy=timers.target

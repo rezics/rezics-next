@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 
-const OUTPUT_LIMIT = 2 * 1024 * 1024;
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 
 export type BoundedProcessResult = {
   status: number | null;
@@ -48,7 +48,10 @@ export function recordCodexArgv(
   return wrapper;
 }
 
-export function recordSystemdRun(directory: string): { path: string; executable: string; logPath: string } {
+export function recordSystemdRun(
+  directory: string,
+  policy = defaultPolicy.launchSmoke,
+): { path: string; executable: string; logPath: string } {
   const executable = Bun.which('systemd-run', { PATH: process.env.PATH ?? '', cwd: process.cwd() });
   if (!executable) throw new Error('systemd-run is required for lifecycle smoke');
   mkdirSync(directory, { recursive: true });
@@ -56,7 +59,7 @@ export function recordSystemdRun(directory: string): { path: string; executable:
   const logPath = join(directory, 'systemd-run-argv.jsonl');
   writeFileSync(
     path,
-    `#!${process.execPath}\nimport { appendFileSync } from 'node:fs';\nimport { spawnSync } from 'node:child_process';\nconst args = process.argv.slice(2);\nappendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + '\\n');\nconst result = spawnSync(${JSON.stringify(executable)}, args, { stdio: 'inherit', env: process.env, timeout: 25000 });\nif (result.error) { console.error(result.error.message); process.exit(127); }\nprocess.exit(result.status ?? 1);\n`,
+    `#!${process.execPath}\nimport { appendFileSync } from 'node:fs';\nimport { spawnSync } from 'node:child_process';\nconst args = process.argv.slice(2);\nappendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + '\\n');\nconst result = spawnSync(${JSON.stringify(executable)}, args, { stdio: 'inherit', env: process.env, timeout: ${policy.systemdCommandTimeoutMs} });\nif (result.error) { console.error(result.error.message); process.exit(127); }\nprocess.exit(result.status ?? 1);\n`,
     { mode: 0o700 },
   );
   chmodSync(path, 0o700);
@@ -102,10 +105,17 @@ function validApproach(value: unknown): boolean {
 export async function runBoundedProcess(
   command: string,
   args: string[],
-  options: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number; outputLimit?: number },
+  options: {
+    cwd: string;
+    env?: NodeJS.ProcessEnv;
+    timeoutMs: number;
+    outputLimit?: number;
+    policy?: ControlPolicy['launchSmoke'];
+  },
 ): Promise<BoundedProcessResult> {
   const startedAt = Date.now();
-  const outputLimit = options.outputLimit ?? OUTPUT_LIMIT;
+  const policy = options.policy ?? defaultPolicy.launchSmoke;
+  const outputLimit = options.outputLimit ?? policy.outputBytes;
   let stdout = '';
   let stderr = '';
   let timedOut = false;
@@ -131,7 +141,7 @@ export async function runBoundedProcess(
       () => {
         timedOut = true;
         signalOwnedProcessGroup(child, 'SIGTERM');
-        forceKill = setTimeout(() => signalOwnedProcessGroup(child, 'SIGKILL'), 1000);
+        forceKill = setTimeout(() => signalOwnedProcessGroup(child, 'SIGKILL'), policy.processTerminationGraceMs);
       },
       Math.max(1, options.timeoutMs),
     );
@@ -143,7 +153,7 @@ export async function runBoundedProcess(
       settled = true;
       if (timeout) clearTimeout(timeout);
       if (forceKill) clearTimeout(forceKill);
-      await cleanupOwnedProcessGroup(child);
+      await cleanupOwnedProcessGroup(child, policy);
       resolve({
         status,
         signal,
@@ -171,12 +181,12 @@ function signalOwnedProcessGroup(child: ChildProcess, signal: NodeJS.Signals): v
   }
 }
 
-async function cleanupOwnedProcessGroup(child: ChildProcess): Promise<void> {
+async function cleanupOwnedProcessGroup(child: ChildProcess, policy: ControlPolicy['launchSmoke']): Promise<void> {
   if (process.platform === 'win32' || !child.pid || !processGroupExists(child.pid)) return;
   signalOwnedProcessGroup(child, 'SIGTERM');
-  const deadline = Date.now() + 500;
+  const deadline = Date.now() + policy.processCleanupGraceMs;
   while (Date.now() < deadline && processGroupExists(child.pid))
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => setTimeout(resolve, policy.processCleanupPollMs));
   if (processGroupExists(child.pid)) signalOwnedProcessGroup(child, 'SIGKILL');
 }
 

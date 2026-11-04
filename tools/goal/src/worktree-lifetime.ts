@@ -206,7 +206,7 @@ function recordPermissionFailure(
     worktreeIdentity: { dev: String(worktreeStat.dev), ino: String(worktreeStat.ino) },
     detail: String(error)
       .replace(/[\r\n]+/g, ' ')
-      .slice(0, 1000),
+      .slice(0, store.policy.worker.summaryCharacters),
     recordedAt: new Date().toISOString(),
   };
   if (store.recordWorktreeCleanup(disposition)) notify(reporter, task, disposition);
@@ -220,7 +220,10 @@ export async function removeFinishedWorktree(
 ): Promise<string | null> {
   const lease = (() => {
     try {
-      return acquireDirectoryLease(join(settings.stateDirectory, 'leases', 'worktree-lifetime'));
+      return acquireDirectoryLease(
+        join(settings.stateDirectory, 'leases', 'worktree-lifetime'),
+        settings.policy?.leases,
+      );
     } catch (error) {
       if (error instanceof LeaseHeldError) return null;
       throw error;
@@ -242,7 +245,7 @@ export async function removeFinishedWorktree(
       if (!eligibleDirectory(task, roots)) continue;
       let taskLease: DirectoryLease;
       try {
-        taskLease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', task.id));
+        taskLease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', task.id), settings.policy?.leases);
       } catch (error) {
         if (error instanceof LeaseHeldError) continue;
         throw error;

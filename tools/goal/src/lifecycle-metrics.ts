@@ -3,9 +3,10 @@ import { migrate } from './db.ts';
 import { ensureFlow } from './flow.ts';
 import { completeRebaseConflictContext, completeWorkerSourceBaseline } from './conflict-progress.ts';
 import { readWidthSnapshot, type WidthSnapshot } from './width-governor.ts';
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 
+// UTC-hour buckets and trailing-hour metrics are part of the reporting format.
 const HOUR_MS = 60 * 60_000;
-const CONFLICT_WINDOW_LIMIT = 1_000;
 
 export type ConflictMetrics = {
   /** The current producer does not record every conflict or its resolution method/occurrence time. */
@@ -446,7 +447,7 @@ function objectBody(body: string): Record<string, unknown> {
 }
 
 /** Read existing producer facts only. No resolution event or historical occurrence time is synthesized. */
-function conflictMetrics(db: Database, start: string, end: string): ConflictMetrics {
+function conflictMetrics(db: Database, start: string, end: string, limit: number): ConflictMetrics {
   const result = unavailableConflicts(
     'The producer records rebase outcomes and retry setup, but not all conflicts, conflict occurrence times or owner/rerere/replay resolution identities.',
   );
@@ -457,6 +458,7 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
 
   // The sink accepts one outcome per task/attempt/stage. Re-delivery cannot move it into another hour or add a count.
   // LIMIT bounds returned evidence even in a busy hour; incomplete counts are explicitly lower bounds.
+  // One extra row detects truncation without claiming the returned sample is complete.
   const rows = db
     .query(`
     SELECT e.task_id, e.attempt, e.at, e.body FROM worker_events AS e
@@ -470,14 +472,14 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
       )
     ORDER BY e.at, e.sequence LIMIT ?
   `)
-    .all(start, end, CONFLICT_WINDOW_LIMIT + 1) as { task_id: string; attempt: number; at: string; body: string }[];
+    .all(start, end, limit + 1) as { task_id: string; attempt: number; at: string; body: string }[];
   const durations: number[] = [];
   const openAges: number[] = [];
   let observedCount = 0;
   let unclassifiedCount = 0;
   let unknownTimingCount = 0;
   let unlandedCount = 0;
-  for (const row of rows.slice(0, CONFLICT_WINDOW_LIMIT)) {
+  for (const row of rows.slice(0, limit)) {
     const body = objectBody(row.body);
     if (body.passed !== false || body.refusal || !completeRebaseConflictContext(body.rebaseConflict)) {
       unclassifiedCount++;
@@ -501,7 +503,7 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
     durations.length ? durations[Math.ceil(durations.length * fraction) - 1]! : null;
   result.recordedOutcomes = {
     available: true,
-    complete: rows.length <= CONFLICT_WINDOW_LIMIT,
+    complete: rows.length <= limit,
     observedCount,
     unclassifiedCount,
     unknownTimingCount,
@@ -519,10 +521,10 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
     WHERE json_extract(body, '$.startedAt') >= ? AND json_extract(body, '$.startedAt') <= ?
     ORDER BY json_extract(body, '$.startedAt'), task_id, attempt LIMIT ?
   `)
-    .all(start, end, CONFLICT_WINDOW_LIMIT + 1) as { task_id: string; attempt: number; started_at: string }[];
+    .all(start, end, limit + 1) as { task_id: string; attempt: number; started_at: string }[];
   let createdCount = 0;
   let unknownCauseCount = 0;
-  for (const attempt of attempts.slice(0, CONFLICT_WINDOW_LIMIT)) {
+  for (const attempt of attempts.slice(0, limit)) {
     // Attempt.escalation is mutable: the attempt that encountered a conflict is also marked rebase-conflict.
     // Only the new retry receives worker-source-baseline, from the rebase-conflict branch in Tasks.retryTask.
     const baseline = db
@@ -539,7 +541,7 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
   }
   result.createdAttempts = {
     available: true,
-    complete: attempts.length <= CONFLICT_WINDOW_LIMIT,
+    complete: attempts.length <= limit,
     observedCount: createdCount,
     unknownCauseCount,
     totalCount: null,
@@ -548,19 +550,32 @@ function conflictMetrics(db: Database, start: string, end: string): ConflictMetr
 }
 
 /** Read hourly lifecycle measurements using durable launch, queue, task and quarantine records. */
-export function lifecycleMetrics(db: Database, at: Date | number = new Date()): LifecycleMetrics {
+export function lifecycleMetrics(
+  db: Database,
+  at: Date | number = new Date(),
+  policy: ControlPolicy = defaultPolicy,
+): LifecycleMetrics {
   const now = dateValue(at);
-  return lifecycleMetricsWithWidth(db, now, readWidthSnapshot(db, now));
+  return lifecycleMetricsWithWidth(db, now, readWidthSnapshot(db, now, { policy }), policy);
 }
 
 /** Async variant for the manager host; width reads yield between bounded SQLite pages. */
-export async function lifecycleMetricsAsync(db: Database, at: Date | number = new Date()): Promise<LifecycleMetrics> {
+export async function lifecycleMetricsAsync(
+  db: Database,
+  at: Date | number = new Date(),
+  policy: ControlPolicy = defaultPolicy,
+): Promise<LifecycleMetrics> {
   const now = dateValue(at);
-  const width = await readWidthSnapshot(db, now, { yieldBetweenPages: true });
-  return lifecycleMetricsWithWidth(db, now, width);
+  const width = await readWidthSnapshot(db, now, { yieldBetweenPages: true, policy });
+  return lifecycleMetricsWithWidth(db, now, width, policy);
 }
 
-function lifecycleMetricsWithWidth(db: Database, now: Date, width: WidthSnapshot): LifecycleMetrics {
+function lifecycleMetricsWithWidth(
+  db: Database,
+  now: Date,
+  width: WidthSnapshot,
+  policy: ControlPolicy,
+): LifecycleMetrics {
   const nowMs = now.getTime();
   const start = new Date(nowMs - HOUR_MS);
   ensureFlow(db);
@@ -594,7 +609,7 @@ function lifecycleMetricsWithWidth(db: Database, now: Date, width: WidthSnapshot
     orphanedLandings: orphanedLandings(db),
     promotion: promotionPhase(db, nowMs, hasTransitions),
     quarantines: quarantines(db, now, start),
-    conflicts: conflictMetrics(db, start.toISOString(), now.toISOString()),
+    conflicts: conflictMetrics(db, start.toISOString(), now.toISOString(), policy.lifecycle.conflictWindowRows),
   };
 }
 

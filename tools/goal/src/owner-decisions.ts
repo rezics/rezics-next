@@ -1,16 +1,15 @@
 import { createHash } from 'node:crypto';
 import { accessSync, constants, lstatSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { MAX_BRIEF_BYTES } from './briefs.ts';
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { AttemptRef } from './contracts.ts';
-import { MANAGER_SEND_MAX_CHARACTERS } from './inbox.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import type { WorkerEvent, WorkerStore } from './store.ts';
 import type { Task } from './types.ts';
 
 const DECISION_EVENT = 'owner-contract-decision-accepted';
 const DELIVERY_EVENT = 'owner-contract-decision-delivery';
-export const MAX_WORKER_PROMPT_CHARACTERS = 20_000;
+export const MAX_WORKER_PROMPT_CHARACTERS = defaultPolicy.workerPrompt.characters;
 
 type DocumentReference = { path: string; change?: string };
 type OwnerDecision = {
@@ -50,13 +49,13 @@ function stableId(decisionId: string, managerId: string): string {
         .digest('hex');
 }
 
-function safeDocumentReference(value: unknown): DocumentReference | undefined {
+function safeDocumentReference(value: unknown, policy: ControlPolicy): DocumentReference | undefined {
   const item = record(value);
   if (!item || typeof item.path !== 'string') return undefined;
   const path = item.path.trim();
   if (
     !path ||
-    Buffer.byteLength(path) > MAX_BRIEF_BYTES ||
+    Buffer.byteLength(path) > policy.brief.bytes ||
     isAbsolute(path) ||
     path.includes('\\') ||
     path.includes('\0') ||
@@ -66,13 +65,14 @@ function safeDocumentReference(value: unknown): DocumentReference | undefined {
   return {
     path,
     ...(typeof item.change === 'string' && item.change.trim()
-      ? { change: item.change.trim().slice(0, MANAGER_SEND_MAX_CHARACTERS) }
+      ? { change: item.change.trim().slice(0, policy.inbox.managerMessageCharacters) }
       : {}),
   };
 }
 
 /** Only this command ingress promotes caller data to a persisted owner decision. */
 export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: unknown, env: NodeJS.ProcessEnv): void {
+  const policy = store.policy;
   store.write(ref, () => {
     const actor = authenticatedManager(store.db, env);
     const task = store.task(ref.taskId);
@@ -88,10 +88,10 @@ export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: 
       body.decisionId.length > 128 ||
       typeof body.summary !== 'string' ||
       !body.summary.trim() ||
-      body.summary.trim().length > MANAGER_SEND_MAX_CHARACTERS ||
+      body.summary.trim().length > policy.inbox.managerMessageCharacters ||
       (body.documentRefs !== undefined && !Array.isArray(body.documentRefs)) ||
-      (Array.isArray(body.documentRefs) && body.documentRefs.some((item) => !safeDocumentReference(item))) ||
-      Buffer.byteLength(JSON.stringify(body)) > MAX_BRIEF_BYTES
+      (Array.isArray(body.documentRefs) && body.documentRefs.some((item) => !safeDocumentReference(item, policy))) ||
+      Buffer.byteLength(JSON.stringify(body)) > policy.brief.bytes
     )
       throw new Error('owner decision requires decisionId, summary and optional repository-relative documentRefs');
     const accepted = {
@@ -103,18 +103,23 @@ export function submitOwnerDecision(store: WorkerStore, ref: AttemptRef, input: 
       taskId: task.id,
       attempt: ref.attempt,
     };
-    if (Buffer.byteLength(JSON.stringify(accepted)) > MAX_BRIEF_BYTES)
+    if (Buffer.byteLength(JSON.stringify(accepted)) > policy.brief.bytes)
       throw new Error('owner decision exceeds the existing prompt input limit');
     store.event(ref, DECISION_EVENT, accepted);
   });
 }
 
-function decisionFromEvent(event: WorkerEvent, task: Task, ref: AttemptRef): OwnerDecision | undefined {
+function decisionFromEvent(
+  event: WorkerEvent,
+  task: Task,
+  ref: AttemptRef,
+  policy: ControlPolicy,
+): OwnerDecision | undefined {
   if (
     event.kind !== DECISION_EVENT ||
     event.task_id !== task.id ||
     event.attempt !== ref.attempt ||
-    Buffer.byteLength(event.body) > MAX_BRIEF_BYTES
+    Buffer.byteLength(event.body) > policy.brief.bytes
   )
     return undefined;
   let body: Record<string, unknown> | undefined;
@@ -128,7 +133,7 @@ function decisionFromEvent(event: WorkerEvent, task: Task, ref: AttemptRef): Own
   const senderSessionId = body.senderSessionId;
   const summary = body.summary;
   const references = Array.isArray(body.documentRefs) ? body.documentRefs : [];
-  const refs = references.map(safeDocumentReference);
+  const refs = references.map((reference) => safeDocumentReference(reference, policy));
   if (
     managerId !== task.brief.manager ||
     typeof senderSessionId !== 'string' ||
@@ -141,7 +146,7 @@ function decisionFromEvent(event: WorkerEvent, task: Task, ref: AttemptRef): Own
     body.attempt !== ref.attempt ||
     typeof summary !== 'string' ||
     !summary.trim() ||
-    summary.trim().length > MANAGER_SEND_MAX_CHARACTERS ||
+    summary.trim().length > policy.inbox.managerMessageCharacters ||
     (body.documentRefs !== undefined && !Array.isArray(body.documentRefs)) ||
     refs.some((reference) => reference === undefined)
   )
@@ -204,10 +209,15 @@ function deliveredState(events: readonly WorkerEvent[], decision: OwnerDecision)
   return { summaryDelivered, deliveredDocumentPaths };
 }
 
-function latestDecision(events: readonly WorkerEvent[], task: Task, ref: AttemptRef): OwnerDecision | undefined {
+function latestDecision(
+  events: readonly WorkerEvent[],
+  task: Task,
+  ref: AttemptRef,
+  policy: ControlPolicy,
+): OwnerDecision | undefined {
   const unique = new Map<string, OwnerDecision>();
   for (const event of events) {
-    const decision = decisionFromEvent(event, task, ref);
+    const decision = decisionFromEvent(event, task, ref, policy);
     if (!decision) continue;
     const previous = unique.get(decision.id);
     if (!previous || decision.sequence < previous.sequence) unique.set(decision.id, decision);
@@ -222,10 +232,11 @@ export function prepareOwnerDecisionPrompt(
   task: Task,
   ref: AttemptRef,
   prompt: string,
+  policy: ControlPolicy = defaultPolicy,
 ): PreparedOwnerDecisionPrompt {
   if (task.id !== ref.taskId || task.currentAttempt !== ref.attempt) return { prompt };
   const events = store.ownerDecisionEvents(ref);
-  const decision = latestDecision(events, task, ref);
+  const decision = latestDecision(events, task, ref, policy);
   if (!decision) return { prompt };
 
   const delivered = deliveredState(events, decision);
@@ -241,8 +252,8 @@ export function prepareOwnerDecisionPrompt(
   ];
   const documentRefs: OwnerDecisionDelivery['documentRefs'] = [];
   const fits = (block: string) =>
-    `${prompt}\n\n${block}`.length <= MAX_WORKER_PROMPT_CHARACTERS &&
-    Buffer.byteLength(`${prompt}\n\n${block}`) <= MAX_BRIEF_BYTES;
+    `${prompt}\n\n${block}`.length <= policy.workerPrompt.characters &&
+    Buffer.byteLength(`${prompt}\n\n${block}`) <= policy.brief.bytes;
   let omitted = 0;
   for (const reference of pendingDocuments) {
     const available = availableInWorktree(task.worktree, reference.path);

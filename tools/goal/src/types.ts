@@ -172,6 +172,8 @@ export type Brief = {
   };
   /** Ordinary dev product briefs default to the routing slice ceiling when no estimate is supplied. */
   estimate: { lines: number; files: number };
+  /** Authorized repair work uses reserved host slots. */
+  urgent?: boolean;
   criticalPath: boolean;
   waiting: string[];
   after: string[];
@@ -438,6 +440,7 @@ export type AttemptRecord = AttemptRef & {
   startedAt: string;
   endedAt: string;
   steps: number;
+  urgent?: boolean;
   criticalPath: boolean;
   tokens: Tokens;
   before: PoolReading | null;

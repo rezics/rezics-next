@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { reapContainers, staleContainers } from './containers.ts';
+import { readControlPolicy } from './policy.ts';
 
 function dockerSandbox() {
   const directory = mkdtempSync(join(tmpdir(), 'containers-'));
@@ -28,6 +29,31 @@ function executable(path: string, body: string): void {
 }
 
 const emptyDb = { query: () => ({ all: () => [] }) } as unknown as Database;
+
+test.serial('central container defaults preserve host opt-in and explicit host age precedence', () => {
+  const box = dockerSandbox(),
+    state = join(box.directory, 'state');
+  mkdirSync(state);
+  const policy = readControlPolicy({ containers: { maxAgeHours: 0.5, commandTimeoutMs: 50 } }).containers;
+  executable(
+    join(box.bin, 'docker'),
+    `#!/bin/sh\ncase "$1" in\nps) printf 'old\\tworker\\t2026-11-03 11:00:00 +0800 CST\\n';;\nrm) printf 'old\\n';;\nesac\n`,
+  );
+  const now = Date.parse('2026-11-03T12:00:00+08:00');
+  try {
+    expect(reapContainers(emptyDb, state, now, policy)).toBe(0);
+    writeFileSync(join(state, 'containers.json'), '{}');
+    expect(reapContainers(emptyDb, state, now, policy)).toBe(1);
+    writeFileSync(join(state, 'containers.json'), '{"maxAgeHours":2}');
+    expect(reapContainers(emptyDb, state, now, policy)).toBe(0);
+    executable(join(box.bin, 'docker'), '#!/bin/sh\nexec sleep 60\n');
+    const started = Date.now();
+    expect(reapContainers(emptyDb, state, now, policy)).toBe(0);
+    expect(Date.now() - started).toBeLessThan(3000);
+  } finally {
+    box.close();
+  }
+});
 
 test('only old containers not protected by keep prefixes or running task names are stale', () => {
   const hour = 3_600_000,

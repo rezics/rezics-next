@@ -4,29 +4,43 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { WORKER_CPU_WEIGHT, WORKER_IO_WEIGHT, WORKER_SLICE, WorkerSlice } from './worker-slice.ts';
+import { readControlPolicy, type ControlPolicy } from './policy.ts';
 
 const temporary: string[] = [];
 afterEach(() => {
   for (const directory of temporary.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
-function memoryPolicy(totalKiB: number, memoryMax = String(24 * 1024 ** 3), checkStatus = 0) {
+function memoryPolicy(
+  totalKiB: number,
+  memoryMax = String(24 * 1024 ** 3),
+  checkStatus = 0,
+  policy?: ControlPolicy['workerResources'],
+) {
   const calls: { command: string; args: string[] }[] = [];
+  const timeouts: (number | undefined)[] = [];
   const reports: string[] = [];
   let reads = 0;
-  const run: NonNullable<ConstructorParameters<typeof WorkerSlice>[0]> = (command, args) => {
+  const run: NonNullable<ConstructorParameters<typeof WorkerSlice>[0]> = (command, args, options) => {
     calls.push({ command, args });
+    timeouts.push(options.timeout);
     const probe = args[0] === 'show';
     const stdout = Buffer.from(probe ? memoryMax : '');
     const stderr = Buffer.alloc(0);
     return { pid: 1, output: [null, stdout, stderr], stdout, stderr, status: probe ? checkStatus : 0, signal: null };
   };
-  const worker = new WorkerSlice(run, () => {
-    reads++;
-    return `MemTotal: ${totalKiB} kB\nMemFree: 1 kB\n`;
-  });
+  const worker = new WorkerSlice(
+    run,
+    () => {
+      reads++;
+      return `MemTotal: ${totalKiB} kB\nMemFree: 1 kB\n`;
+    },
+    undefined,
+    policy,
+  );
   return {
     calls,
+    timeouts,
     reports,
     reads: () => reads,
     launch: (env: NodeJS.ProcessEnv = {}) =>
@@ -41,6 +55,32 @@ function memoryPolicy(totalKiB: number, memoryMax = String(24 * 1024 ** 3), chec
       ),
   };
 }
+
+test('worker resource overrides tune weights, memory reserve, fractional floor and configuration deadline', () => {
+  const configured = readControlPolicy({
+    workerResources: {
+      cpuWeight: 20,
+      ioWeight: 30,
+      preparationTimeoutMs: 75,
+      memoryReserveGiB: 2,
+      minimumMemoryFraction: 0.5,
+    },
+  }).workerResources;
+  for (const [checkGiB, expectedGiB] of [
+    [24, 36],
+    [60, 31],
+  ]) {
+    const policy = memoryPolicy(62 * 1024 ** 2, String(checkGiB! * 1024 ** 3), 0, configured);
+    policy.launch();
+    expect(policy.calls[1]!.args.slice(-3)).toEqual(['CPUWeight=20', 'IOWeight=30', `MemoryHigh=${expectedGiB}G`]);
+    expect(policy.timeouts.slice(0, 2)).toEqual([75, 75]);
+    policy.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: '9' }); // Cached configuration retains the first launch's tuning.
+    expect(policy.calls.filter(({ command }) => command === 'systemctl')).toHaveLength(2);
+  }
+  const explicit = memoryPolicy(62 * 1024 ** 2, '0', 0, configured);
+  explicit.launch({ REZICS_WORKER_MEMORY_HIGH_GIB: '9' });
+  expect(explicit.calls[0]!.args.at(-1)).toBe('MemoryHigh=9G');
+});
 
 test("configuring the worker slice sets MemoryHigh to total memory minus the local check slice's MemoryMax minus a 14 GiB reserve, never below a quarter of total memory, in the same call as the CPU and IO weights", () => {
   for (const [totalGiB, checkGiB, expectedGiB] of [
