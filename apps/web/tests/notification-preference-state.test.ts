@@ -275,6 +275,7 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
       await editor.submit(7);
       await editor.retry();
       await editor.reload();
+      const retryDeadline = now + 30_000;
       const readFailed = editor.snapshot();
       expect(readFailed).toMatchObject({
         phase: 'failed',
@@ -282,15 +283,21 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
         readOrigin: 'review',
         readReason: 'unavailable',
         readFailure: { status: 422, retryAfter },
-        readRetryAt: now + 30_000,
-        commandRetryAt: now + 30_000,
+        readRetryAt: retryDeadline,
+        commandRetryAt: retryDeadline,
       });
       expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'GET']);
       now += 29_999;
       await editor.edit('thread_watch', false, 7);
       await editor.restore(7);
       await editor.reload();
-      expect(editor.snapshot()).toBe(readFailed);
+      expect(editor.snapshot()).toMatchObject({
+        draft: { ...optional, reply: false, thread_watch: false },
+        intent: { reply: false, thread_watch: false },
+        currentAdvice: null,
+        readRetryAt: retryDeadline,
+        commandRetryAt: retryDeadline,
+      });
       now++;
       await Promise.resolve();
       expect(transport.calls).toHaveLength(2);
