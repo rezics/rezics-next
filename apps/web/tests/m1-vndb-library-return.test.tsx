@@ -21,6 +21,17 @@ const { VndbUploadForm } = await import('../src/library/personal-list-import/upl
 const uploadId = '00000000-0000-4000-8000-000000000001';
 const targetId = '00000000-0000-4000-8000-000000000002';
 const reviewId = '00000000-0000-4000-8000-000000000003';
+const scoreReviewId = '00000000-0000-4000-8000-000000000004';
+const question = {
+  id: '00000000-0000-4000-8000-000000000005',
+  revision: 1,
+  meaning: 'enjoyment',
+  label: 'Enjoyment',
+  grain: 'work' as const,
+  scale: { min: 0, max: 20, step: 1 },
+  aggregateEffect: 'public-standard-aggregate' as const,
+};
+const currentVote = { state: 'absent' as const };
 const nothing = () => {};
 const preview: VndbPreview = {
   uploadId,
@@ -45,7 +56,7 @@ const source: VndbRow = {
   labels: ['Playing'],
   suggestedRole: 'active',
   fields: {
-    score: { kind: 'value', raw: '07.3', value: 7.3, scale: { min: 1, max: 10, step: 0.1 } },
+    score: { kind: 'value', raw: '07.0', value: 7, scale: { min: 1, max: 10, step: 0.1 } },
     notes: { kind: 'value', raw: 'Private source note', value: 'Private source note' },
   },
   retainedReason: '',
@@ -61,11 +72,11 @@ const source: VndbRow = {
   consumptionDateReview: null,
   consumptionDateOutcome: null,
   nativeScore: {
-    question: null,
-    currentVote: { state: 'unavailable' },
+    question,
+    currentVote,
     sourceReason: 'private source',
-    exactUnits: null,
-    admission: { status: 'unavailable', reason: 'native-question-unavailable' },
+    exactUnits: 14,
+    admission: { status: 'unavailable', reason: 'conditional-admission-unavailable' },
   },
   fieldsTreatment: { state: 'review', score: 'private source', other: 'retain' },
 };
@@ -110,7 +121,7 @@ async function render(node: ReactNode) {
 
 // Focused composition with generated native request/results; the seeded walkthrough is deferred to integration.
 test('XML → exact target/state review → explicit selected apply → a separately read current Library in three locales', async () => {
-  const requests: { path: string; body: unknown }[] = [];
+  const requests: { path: string; body: unknown; url: string }[] = [];
   const entryPage: ImportLibraryPage = {
     libraryEntries: [
       {
@@ -137,8 +148,21 @@ test('XML → exact target/state review → explicit selected apply → a separa
         const request = new Request(input, init);
         const path = new URL(request.url).pathname;
         const body = request.method === 'POST' ? await request.json() : null;
-        requests.push({ path, body });
+        requests.push({ path, body, url: request.url });
         if (path.endsWith(':preview')) return Response.json(preview);
+        if (path.endsWith(':review') && (body as { action?: string }).action === 'score')
+          return Response.json({
+            reviewId: scoreReviewId,
+            status: 'reviewed',
+            targetId,
+            action: 'vote',
+            units: 14,
+            question,
+            currentVote,
+            consent: 'adopt-native-vote',
+            sourceReason: 'exact source units',
+            nativeAdmission: 'unavailable',
+          });
         if (path.endsWith(':review'))
           return Response.json({
             reviewId,
@@ -149,8 +173,18 @@ test('XML → exact target/state review → explicit selected apply → a separa
             replace: false,
             action: 'state',
           });
-        if (path.endsWith(':apply'))
-          return Response.json({ uploadId, outcomes: [{ ordinal: 0, reviewId, status: 'applied' }], stopped: null });
+        if (path.endsWith(':apply')) {
+          const rows = (body as { rows: { ordinal: number; reviewId?: string; scoreReviewId?: string }[] }).rows;
+          return Response.json({
+            uploadId,
+            outcomes: rows.map((row) =>
+              row.scoreReviewId
+                ? { ordinal: row.ordinal, scoreReviewId: row.scoreReviewId, status: 'unavailable' }
+                : { ordinal: row.ordinal, reviewId: row.reviewId, status: 'applied' },
+            ),
+            stopped: null,
+          });
+        }
         if (path.endsWith('/libraryEntries')) return Response.json(entryPage);
         return Response.json({
           uploadId,
@@ -179,7 +213,7 @@ test('XML → exact target/state review → explicit selected apply → a separa
     }),
   });
   const file = new File(
-    ['<vndb-export version="1.0"><vns><vn id="v123"><title>原題</title><vote>7.3</vote></vn></vns></vndb-export>'],
+    ['<vndb-export version="1.0"><vns><vn id="v123"><title>原題</title><vote>7.0</vote></vn></vns></vndb-export>'],
     'vndb.xml',
   );
   await journey.preview(await file.text());
@@ -196,6 +230,7 @@ test('XML → exact target/state review → explicit selected apply → a separa
         onReview={nothing}
         onNext={nothing}
         onPrevious={nothing}
+        onRefresh={nothing}
         onConfirm={nothing}
         onSource={nothing}
         onHideSource={nothing}
@@ -204,12 +239,24 @@ test('XML → exact target/state review → explicit selected apply → a separa
     expect(review).toContain(source.title);
     expect(review).toContain('v123');
     expect(review).toContain('r456');
-    expect(review).toContain('07.3');
-    expect(review).toContain('data-vndb-score-review="unavailable"');
+    expect(review).toContain('07.0');
+    expect(review).toContain('Enjoyment');
+    expect(review).toContain('14');
+    expect(review).toContain('data-vndb-score-review="pending"');
     expect(review).toContain('aria-pressed="false"');
   }
   setLocale('en', { reload: false });
+  await journey.review({
+    ordinal: 0,
+    action: 'score',
+    targetId,
+    questionId: question.id,
+    questionRevision: question.revision,
+    selection: { kind: 'vote', units: 14 },
+    consent: 'adopt-native-vote',
+  });
   await journey.review({ ordinal: 0, action: 'state', targetId, state: 'playing', replace: false });
+  expect(journey.snapshot().selectedEffects).toBe(2);
   const confirm = await render(
     <VndbConfirmPage snap={journey.openConfirm()} busy={false} onBack={nothing} onConfirm={nothing} />,
   );
@@ -217,21 +264,29 @@ test('XML → exact target/state review → explicit selected apply → a separa
   expect(confirm).not.toContain('data-vndb-confirm="1"');
   expect(requests.some((row) => row.path.endsWith(':apply'))).toBe(false);
   const result = await journey.confirm();
-  expect(requests.find((row) => row.path.endsWith(':apply'))?.body).toEqual({ rows: [{ ordinal: 0, reviewId }] });
+  expect(requests.filter((row) => row.path.endsWith(':apply')).map((row) => row.body)).toEqual([
+    { rows: [{ ordinal: 0, reviewId }] },
+    { rows: [{ ordinal: 0, scoreReviewId }] },
+  ]);
   const results = await render(
     <VndbResultPage snap={result} busy={false} onResume={nothing} onReview={nothing} onDiscard={nothing} />,
   );
   expect(results).toContain('data-vndb-result="applied"');
+  expect(results).toContain('data-vndb-result="unavailable"');
+  expect(results).toContain(reviewId);
+  expect(results).toContain(scoreReviewId);
   const fresh = await client.libraryEntries.get({
     query: { view: 'FULL', limit: 8, orderBy: 'lastActivity', direction: 'desc' },
   });
+  const pageRequest = requests.find((row) => row.path.endsWith('/libraryEntries'))!;
+  expect(new URL(pageRequest.url).searchParams.get('limit')).toBe('8');
   const html = await render(
     <ImportLibraryView result={{ state: 'current', page: fresh.data! }} busy={false} onRead={nothing} />,
   );
   expect(html).toContain('現在のライブラリの題名');
   expect(html).toContain('/library');
   expect(html).not.toContain('Private source note');
-  expect(html).not.toContain('07.3');
+  expect(html).toContain('may not show every imported target');
   await journey.backToReview();
   expect(requests.filter((row) => row.path.endsWith(`/${uploadId}`))).toHaveLength(2);
 });

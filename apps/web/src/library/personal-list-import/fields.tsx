@@ -49,8 +49,9 @@ function FieldValue({ name, value }: { name: string; value: VndbSourceValue }) {
 
 export function VndbEvidence({ row }: { row: VndbRow }) {
   const notes = Object.entries(row.fields).filter(([name]) => name === 'notes');
-  const ordinary = Object.entries(row.fields).filter(([name]) => name !== 'notes');
-  const score = row.fields.score ?? row.fields.vote;
+  const ordinary = Object.entries(row.fields).filter(
+    ([name]) => name !== 'notes' && (row.kind !== 'vn' || (name !== 'score' && name !== 'vote')),
+  );
   const evidence = JSON.stringify(row.evidence, null, 2);
   return (
     <div className="space-y-3">
@@ -62,13 +63,6 @@ export function VndbEvidence({ row }: { row: VndbRow }) {
             <FieldValue key={name} name={name} value={value} />
           ))}
         </ul>
-      ) : null}
-      {score ? (
-        <aside className="space-y-2 rounded-md border p-3 text-sm" data-vndb-score-review="unavailable">
-          <p>{m.library_vndb_score_review_unavailable()}</p>
-          <p>{m.library_vndb_score_conversion()}</p>
-          <p>{m.library_vndb_score_zero_clear()}</p>
-        </aside>
       ) : null}
       {notes.length ? (
         <details className="rounded-md border p-3">

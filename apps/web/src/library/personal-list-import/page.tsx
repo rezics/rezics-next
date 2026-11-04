@@ -135,6 +135,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
             onReview={(body) => void act((current) => current.review(body))}
             onNext={() => void act((current) => current.loadPage(snap.page?.next ?? 0))}
             onPrevious={() => void act((current) => current.loadPage(Math.max(0, snap.offset - 8)))}
+            onRefresh={() => void act((current) => current.loadPage(snap.offset))}
             onConfirm={() => void act((current) => current.openConfirm())}
             onSource={() => void act((current) => current.source())}
             onHideSource={() => void act((current) => current.hideSource())}
@@ -153,7 +154,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
         <VndbApplying
           applied={snap.applied}
           applying={snap.applying}
-          total={snap.selection.length + snap.outcomes.length}
+          total={snap.outcomes.length + snap.unattemptedEffects.length}
         />
       ) : null}
       {snap.stage === 'results' ? (
@@ -166,12 +167,12 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
             onDiscard={() => void act((current) => current.discard())}
           />
           <CurrentImportLibrary
-            key={`${snap.uploadId}:${snap.outcomes.map((row) => `${row.reviewId}:${row.status}`).join(',')}`}
+            key={`${snap.uploadId}:${snap.outcomes.map((row) => `${'scoreReviewId' in row ? row.scoreReviewId : row.reviewId}:${row.status}`).join(',')}`}
             visit={visit}
           />
         </>
       ) : null}
-      {snap.stage === 'removed' ? <VndbRemoved outcomes={snap.outcomes} /> : null}
+      {snap.stage === 'removed' ? <VndbRemoved outcomes={snap.outcomes} effects={snap.settledEffects} /> : null}
       {snap.sourceVisible && snap.sourceXML !== null ? (
         <VndbAction type="button" variant="outline" onClick={() => download(snap.sourceXML!)}>
           {m.library_vndb_download_source()}

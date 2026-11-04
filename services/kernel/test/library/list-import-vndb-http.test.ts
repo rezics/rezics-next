@@ -249,6 +249,16 @@ test('VNDB score review preserves unsupported precision, explicit native units a
     nativeAdmission: 'unavailable',
   });
 
+  const stateReview = await f.send(
+    scorer.bearer,
+    'POST',
+    `${base}/${uploadId}:review`,
+    { ordinal: 0, action: 'state', targetId: target, state: 'playing', replace: false },
+    entryKey(),
+  );
+  expect(stateReview.status).toBe(200);
+  const afterStateReview = await f.send(scorer.bearer, 'GET', `${base}/${uploadId}`);
+  expect((await afterStateReview.json()).rows[0].scoreDecision.reviewId).toBe(adoptedReview.reviewId);
   const cleared = await f.send(
     scorer.bearer,
     'POST',
