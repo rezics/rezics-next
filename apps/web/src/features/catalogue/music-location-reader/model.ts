@@ -49,7 +49,6 @@ export type MusicLocationRead =
       rows: PartRow[];
       labels: ReturnType<typeof partLabels>;
       types: Record<string, ReturnType<typeof pickText>>;
-      concealed: boolean;
       next: string | null;
       count?: ForwardPage['count'] | undefined;
       caughtUp: boolean;
@@ -250,7 +249,9 @@ function validRow(release: Definitions, stream: PartStream, current: MusicLocati
   );
 }
 
-function relatedSummaries(values: InversePage['links'][number]['related']): SubjectRead['related'] {
+function relatedSummaries(
+  values: ForwardPage['relations'][number]['related'] | InversePage['links'][number]['related'],
+): SubjectRead['related'] {
   return Object.fromEntries(
     Object.entries(values ?? {}).map(([id, summary]) => [
       id,
@@ -308,7 +309,6 @@ export async function readMusicLocation(
         rows: [],
         labels: {},
         types: {},
-        concealed: false,
         next: null,
         caughtUp: true,
         ...(sessionOf(current) ? { session: sessionOf(current) } : {}),
@@ -340,7 +340,12 @@ export async function readMusicLocation(
       const page = result.data;
       if ((stream.direction === 'forward') !== ('relations' in page)) return { ok: false, reason: 'unavailable' };
       const nativeRows = 'relations' in page ? page.relations : page.links;
-      if ('relations' in page && page.relations.some((row) => row.target !== row.statement.value.content))
+      if (
+        'relations' in page &&
+        page.relations.some(
+          (row) => row.statement.value.type !== 'value' || row.target !== row.statement.value.content,
+        )
+      )
         return { ok: false, reason: 'unavailable' };
       if ('links' in page && page.links.some((row) => row.property !== stream.property))
         return { ok: false, reason: 'unavailable' };
@@ -356,38 +361,22 @@ export async function readMusicLocation(
       )
         return { ok: false, reason: 'unavailable' };
 
-      let concealed = false;
       rows =
         'relations' in page
-          ? page.relations.flatMap((row) => {
-              if (!row.summary) {
-                concealed = true;
-                return [];
-              }
-              return [{
+          ? page.relations.map((row) => ({
                 holder: address.id,
                 statementId: row.statement.id,
                 statement: row.statement,
                 summary: row.summary,
-                related: row.related,
-              }];
-            })
-          : page.links.flatMap((row) => {
-              if (!row.summary) {
-                concealed = true;
-                return [];
-              }
-              return [
-                {
-                  holder: row.subject,
-                  statementId: row.statement,
-                  ...(row.assertion ? { statement: row.assertion } : {}),
-                  summary: row.summary,
-                  related: relatedSummaries(row.related),
-                },
-              ];
-            });
-      if (!concealed && rows.length !== nativeRows.length) return { ok: false, reason: 'unavailable' };
+                related: relatedSummaries(row.related),
+              }))
+          : page.links.map((row) => ({
+              holder: row.subject,
+              statementId: row.statement,
+              ...(row.assertion ? { statement: row.assertion } : {}),
+              summary: row.summary,
+              related: relatedSummaries(row.related),
+            }));
       const seen = new Set<string>();
       for (const row of rows) {
         const key = `${row.holder}:${row.statementId}`;
@@ -395,7 +384,7 @@ export async function readMusicLocation(
         seen.add(key);
       }
       next = page.next;
-      count = concealed || !('count' in page) ? undefined : page.count;
+      count = !('count' in page) ? undefined : page.count;
       caughtUp = page.freshness.caught_up;
     }
 
@@ -423,7 +412,6 @@ export async function readMusicLocation(
       rows,
       labels: partLabels(release, rows, locale),
       types,
-      concealed,
       next,
       ...(count ? { count } : {}),
       caughtUp,

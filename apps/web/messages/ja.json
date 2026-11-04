@@ -6677,7 +6677,6 @@
   "music_context_unreadable_artist": "関連する人物を現在読めません。",
   "music_context_unavailable": "この場所・出来事・楽器の案内は利用できません。",
   "music_location_unsupported": "この項目は現在の定義で音楽コンテキストとして認められていません。一般的な Subject 情報と既存の修正手段は引き続き利用できます。",
-  "music_location_hidden": "一部の行き先は非公開のため、リンクとして表示されません。",
   "music_context_denied": "現在のセッションではこの案内を利用できません。",
   "music_context_more": "関連作品を続ける",
   "music_context_correct": "修正を提案",

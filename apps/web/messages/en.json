@@ -6734,7 +6734,6 @@
   "music_context_unreadable_artist": "An associated artist is currently unreadable.",
   "music_context_unavailable": "This place, event or instrument profile is unavailable.",
   "music_location_unsupported": "This entity is not admitted as a music context in the current definitions. General Subject facts and the existing correction route remain available.",
-  "music_location_hidden": "Some destinations are withheld, so they are not shown as links.",
   "music_context_denied": "This profile is not available for the current session.",
   "music_context_more": "More related works",
   "music_context_correct": "Propose a correction",

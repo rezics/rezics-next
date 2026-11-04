@@ -6677,7 +6677,6 @@
   "music_context_unreadable_artist": "关联艺人目前无法读取。",
   "music_context_unavailable": "此地点、活动或乐器资料不可用。",
   "music_location_unsupported": "当前定义未将此实体列为音乐语境。一般主体信息和现有更正途径仍可使用。",
-  "music_location_hidden": "部分目标未公开，因此不会显示为链接。",
   "music_context_denied": "当前会话无法使用此资料。",
   "music_context_more": "更多相关作品",
   "music_context_correct": "提出更正",

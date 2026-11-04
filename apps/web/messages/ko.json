@@ -6677,7 +6677,6 @@
   "music_context_unreadable_artist": "연결된 아티스트를 지금은 읽을 수 없습니다.",
   "music_context_unavailable": "이 장소, 행사, 악기 프로필을 볼 수 없습니다.",
   "music_location_unsupported": "이 항목은 현재 정의에서 음악 맥락으로 인정되지 않습니다. 일반 주제 정보와 기존 수정 경로는 계속 이용할 수 있습니다.",
-  "music_location_hidden": "일부 대상은 공개되지 않아 링크로 표시하지 않습니다.",
   "music_context_denied": "현재 세션에서는 이 프로필을 볼 수 없습니다.",
   "music_context_more": "관련 작품 더 보기",
   "music_context_correct": "수정 제안",

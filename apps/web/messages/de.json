@@ -6677,7 +6677,6 @@
   "music_context_unreadable_artist": "Ein zugehöriger Künstler ist derzeit nicht lesbar.",
   "music_context_unavailable": "Dieses Orts-, Ereignis- oder Instrumentenprofil ist nicht verfügbar.",
   "music_location_unsupported": "Dieser Eintrag ist in den aktuellen Definitionen nicht als Musikkontext zugelassen. Allgemeine Subject-Angaben und der bestehende Korrekturweg bleiben verfügbar.",
-  "music_location_hidden": "Einige Ziele sind zurückgehalten und werden daher nicht als Links angezeigt.",
   "music_context_denied": "Dieses Profil ist für die aktuelle Sitzung nicht verfügbar.",
   "music_context_more": "Weitere verwandte Werke",
   "music_context_correct": "Korrektur vorschlagen",

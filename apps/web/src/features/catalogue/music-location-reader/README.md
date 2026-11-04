@@ -9,8 +9,8 @@ Only a released Type admits a music-context identity. Forward properties must be
 properties must be admitted on a released source Type and target the current identity. Relationship labels, direction,
 qualifiers and references come from those definitions and the native assertion. A destination links only when the
 current page returns its exact readable summary. Unsupported Types have an explicit state; sparse facts, hidden targets
-and unsupported coordinate strings never become invented values or links. A withheld destination is named without
-exposing its identifier or implying that the view is empty. No map, editor, generated declaration or provider mapping is added.
+and unsupported coordinate strings never become invented values or links. No map, editor, generated declaration or
+provider mapping is added.
 
 Decision: related Subjects open in a same-locale new tab; closing it returns keyboard focus to the source relation link.
 

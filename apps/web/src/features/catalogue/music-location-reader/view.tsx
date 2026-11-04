@@ -198,7 +198,6 @@ export function MusicLocationWindow({
           {page.kind === 'unsupported' ? (
             <p role="status">{m.music_location_unsupported({}, options)}</p>
           ) : null}
-              {page.concealed ? <p role="status">{m.music_location_hidden({}, options)}</p> : null}
           {page.stream ? (
             <>
               {page.streams.length > 1 ? (

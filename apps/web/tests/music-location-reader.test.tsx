@@ -126,7 +126,6 @@ test('sparse, unsupported, hidden and retired observations never invent destinat
   const hiddenFixture = musicLocationExample('hidden-target');
   const hidden = await hiddenFixture.read({ ...hiddenFixture.address, stream: 'in:schema:location' });
   expect(hidden.ok && hidden.rows).toEqual([]);
-  expect(hidden.ok && hidden.concealed).toBe(true);
 
   const retired = await musicLocationExample('retired').read();
   expect(retired).toEqual({ ok: false, reason: 'stale' });

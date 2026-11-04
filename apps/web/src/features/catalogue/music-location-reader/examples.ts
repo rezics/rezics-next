@@ -57,6 +57,7 @@ function statement(
     rank: 'normal',
     qualifiers,
     references,
+    rezics: { release: releaseDigest, revision: 1 },
   };
 }
 
@@ -103,7 +104,7 @@ function releaseForExamples() {
     qualifiers: ['schema:startDate'],
     multivalued: true,
     value: { type: 'string', pattern: '^[0-9a-f-]+$' },
-    relation: { group: 'location', order: 'time', inverse: 'venue', inverseLabels: { en: 'Venue for' } },
+    relation: { group: 'world', inverse: 'venue', inverseLabels: { en: 'Venue for' } },
   };
   release.properties['schema:containedInPlace'] = {
     iri: 'https://schema.org/containedInPlace',
@@ -115,7 +116,7 @@ function releaseForExamples() {
     qualifiers: [],
     multivalued: false,
     value: { type: 'string', pattern: '^[0-9a-f-]+$' },
-    relation: { group: 'location', order: 'time', inverse: 'venue', inverseLabels: { en: 'Contains place' } },
+    relation: { group: 'world', inverse: 'venue', inverseLabels: { en: 'Contains place' } },
   };
   release.properties['schema:performer'] = {
     iri: 'https://schema.org/performer',
@@ -127,7 +128,7 @@ function releaseForExamples() {
     qualifiers: [],
     multivalued: true,
     value: { type: 'string', pattern: '^[0-9a-f-]+$' },
-    relation: { group: 'credit', order: 'time', inverse: 'event', inverseLabels: { en: 'Performs at' } },
+    relation: { group: 'credit', inverse: 'event', inverseLabels: { en: 'Performs at' } },
   };
   release.properties['schema:instrument'] = {
     iri: 'https://schema.org/instrument',
@@ -139,7 +140,7 @@ function releaseForExamples() {
     qualifiers: [],
     multivalued: true,
     value: { type: 'string', pattern: '^[0-9a-f-]+$' },
-    relation: { group: 'credit', order: 'time', inverse: 'event', inverseLabels: { en: 'Used at' } },
+    relation: { group: 'credit', inverse: 'event', inverseLabels: { en: 'Used at' } },
   };
   return release;
 }
@@ -207,7 +208,7 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
     property: 'schema:location',
     statement: eventVenue.id,
     ...(assertion ? { assertion } : {}),
-    summary: scenario === 'hidden-target' ? null : summary(sourceId, sourceType, sourceLabel),
+    summary: summary(sourceId, sourceType, sourceLabel),
     type: sourceType,
     label: sourceLabel,
     related: {},
@@ -225,7 +226,7 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
           '00000000-0000-4000-8000-00000000d213',
           'schema:location',
           'wikibase-item',
-          musicPlaceId,
+          { type: 'value', content: musicPlaceId },
           [
             {
               property: { id: 'schema:startDate', data_type: 'time' },
@@ -249,7 +250,7 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
           '00000000-0000-4000-8000-00000000d215',
           'schema:instrument',
           'wikibase-item',
-          musicInstrumentId,
+          { type: 'value', content: musicInstrumentId },
         ),
         target: musicInstrumentId,
         external: null,
@@ -267,7 +268,7 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
           '00000000-0000-4000-8000-00000000d216',
           'schema:performer',
           'wikibase-item',
-          musicPersonId,
+          { type: 'value', content: musicPersonId },
         ),
         target: musicPersonId,
         external: null,
@@ -282,7 +283,7 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
   const emptyInverse: Inverse = { links: [], freshness, next: null };
   const firstInverse: Inverse = {
     links:
-      scenario === 'sparse'
+      scenario === 'sparse' || scenario === 'hidden-target'
         ? []
         : [makeLink(musicEventId, 'schema:Event', 'Harbour concert', eventVenue)],
     freshness,
@@ -298,7 +299,7 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
           '00000000-0000-4000-8000-00000000d214',
           'schema:location',
           'wikibase-item',
-          musicPlaceId,
+          { type: 'value', content: musicPlaceId },
         ),
         summary: summary('00000000-0000-4000-8000-00000000d106', 'schema:Event', 'River concert'),
         type: 'schema:Event',
@@ -333,18 +334,18 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
               ? scenario === 'admitted-area'
                 ? emptyForward
                 : {
-                  relations:
-                    scenario === 'sparse'
-                      ? []
-                      : [
-                          {
-                            statement: areaRelation,
-                            target: musicAreaId,
-                            external: null,
-                            summary: summary(musicAreaId, 'schema:AdministrativeArea', 'North Shore'),
-                            related: {},
-                          },
-                        ],
+                    relations:
+                      scenario === 'sparse' || scenario === 'hidden-target'
+                        ? []
+                        : [
+                            {
+                              statement: areaRelation,
+                              target: musicAreaId,
+                              external: null,
+                              summary: summary(musicAreaId, 'schema:AdministrativeArea', 'North Shore'),
+                              related: {},
+                            },
+                          ],
                   freshness,
                   next: null,
                 }
