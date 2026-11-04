@@ -5,7 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { CopyInventoryFilters } from '../src/library/copy-inventory-filters';
 import type { NativeCopyList, NativeCopyListQuery } from '../src/library/copies-server';
 import { m } from '../src/paraglide/messages.js';
-import { setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
+const originalGetLocale = getLocale;
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -23,6 +24,7 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 afterAll(async () => {
+  overwriteGetLocale(originalGetLocale);
   await window.happyDOM.close();
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
@@ -55,8 +57,8 @@ const props = {
 };
 
 test('bounded named controls use native historical labels and meanings, retaining exact IDs without labels', () => {
-  for (const locale of ['en', 'zh-Hant']) {
-    setLocale(locale, { reload: false });
+  for (const locale of ['en', 'zh-Hant'] as const) {
+    overwriteGetLocale(() => locale);
     const host = window.document.createElement('main');
     host.innerHTML = renderToStaticMarkup(<CopyInventoryFilters {...props} />);
     const form = host.querySelector('form')!;
@@ -81,7 +83,7 @@ test('bounded named controls use native historical labels and meanings, retainin
 });
 
 test('filter changes submit the exact Subject and other filter, omit empty predicates and restart the cursor; stale origins cannot submit', async () => {
-  setLocale('en', { reload: false });
+  overwriteGetLocale(() => 'en');
   const host = window.document.createElement('main');
   const root = createRoot(host);
   let current = true;
