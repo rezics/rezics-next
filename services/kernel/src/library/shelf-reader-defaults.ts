@@ -7,7 +7,10 @@ import { createShelfTypeLookup } from './shelf-reader-types.ts';
 import type { ShelfTypeDigest } from './shelf-type-keys.ts';
 import { readShelfGeneration } from './shelf-reader-generation.ts';
 
-export type ShelfNativeReadBindings = Pick<ShelfReadDependencies, 'maintenance' | 'generation' | 'scoreCurrentness' | 'titleSource'> & {
+export type ShelfNativeReadBindings = Pick<
+  ShelfReadDependencies,
+  'maintenance' | 'generation' | 'scoreCurrentness' | 'titleSource'
+> & {
   shelfTypeDigest?: ShelfTypeDigest;
 };
 

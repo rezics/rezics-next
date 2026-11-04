@@ -88,10 +88,10 @@ export function createShelfPageReader(): ShelfPageReader {
         query.orderBy === 'title'
           ? title
           : query.orderBy === 'personalScore'
-          ? score
-          : query.orderBy === 'priority'
-            ? priority[query.direction]
-            : readers[query.orderBy][query.direction];
+            ? score
+            : query.orderBy === 'priority'
+              ? priority[query.direction]
+              : readers[query.orderBy][query.direction];
       const page: ShelfDateRows = await reader.page(client, route, accountId, query, after);
       const sessions = await active.sessions(
         client,

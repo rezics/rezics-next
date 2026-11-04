@@ -480,8 +480,11 @@ async function purgePage(
   cursor: ShelfMaintenanceCursor,
 ): Promise<{ complete: boolean; cursor: ShelfMaintenanceCursor }> {
   if (run.phase === 'cancel-work') {
-    if (await cleanupShelfTitleKeys(tx, owner) === 100) return { complete: false, cursor: [] };
-    await tx.query('DELETE FROM library.shelf_title_head WHERE route=$1 AND account_id=$2::uuid', [owner.route, owner.accountId]);
+    if ((await cleanupShelfTitleKeys(tx, owner)) === 100) return { complete: false, cursor: [] };
+    await tx.query('DELETE FROM library.shelf_title_head WHERE route=$1 AND account_id=$2::uuid', [
+      owner.route,
+      owner.accountId,
+    ]);
     return { complete: true, cursor: [] };
   }
   if (run.phase === 'bulk-evidence') {
@@ -976,7 +979,10 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
           }
           const terminal = phase === 'complete';
           if (terminal && run.kind === 'purge') {
-            await tx.query('DELETE FROM library.shelf_title_owner WHERE route=$1 AND account_id=$2::uuid', [owner.route, owner.accountId]);
+            await tx.query('DELETE FROM library.shelf_title_owner WHERE route=$1 AND account_id=$2::uuid', [
+              owner.route,
+              owner.accountId,
+            ]);
             gate.mode = 'purged';
             await saveGate(tx, owner, gate);
           }

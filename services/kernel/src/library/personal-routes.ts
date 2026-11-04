@@ -884,9 +884,15 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       async ({ actor, headers: requestHeaders, admission, job, set, request }) => {
         shelfOwner(actor);
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => command(() => createShelfTitlePreparation(config())(
-          actor, idempotencyKeyOf(requestHeaders['idempotency-key']), languageRanges(request.headers.get('accept-language')),
-        )));
+        return admission.run('normal', job, () =>
+          command(() =>
+            createShelfTitlePreparation(config())(
+              actor,
+              idempotencyKeyOf(requestHeaders['idempotency-key']),
+              languageRanges(request.headers.get('accept-language')),
+            ),
+          ),
+        );
       },
     )
     .post(
@@ -941,7 +947,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           const readPage = () =>
             admission.run('normal', job, async () => {
               await admitShelfRead({ ...config(), clock: dependencies.clock ?? systemClock }, actor, job.deadline);
-              return command(() => shelves('listShelf').listShelf(actor, { ...pageQuery, ...(query.orderBy === 'title' ? { languages } : {}) }));
+              return command(() =>
+                shelves('listShelf').listShelf(actor, {
+                  ...pageQuery,
+                  ...(query.orderBy === 'title' ? { languages } : {}),
+                }),
+              );
             });
           const result = await readPage();
           const revalidate = async () => assertShelfPageCurrent(result, await readPage());
