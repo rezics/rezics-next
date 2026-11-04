@@ -100,7 +100,7 @@ beforeAll(async () => {
   const createdBody = (await created.json()) as {
     subject: { id: string; statements: Record<string, { value: { type: string } }[]> };
   };
-  expect(createdBody.subject.statements['schema:spokenByCharacter'][0]!.value.type).toBe('somevalue');
+  expect(createdBody.subject.statements['schema:spokenByCharacter']?.[0]?.value.type).toBe('somevalue');
   quotationId = createdBody.subject.id;
 }, 60_000);
 afterAll(async () => {
