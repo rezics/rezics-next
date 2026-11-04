@@ -738,7 +738,7 @@ files:
         mapping:
           status: proposed
           term: wdt:P518
-          'on': schema:CreativeWork
+          'on': schema:TVSeries
           wikidata: wd:P518
           meaning: The episodes to which a credit applies; preserve episode ranges and resolve only unambiguous references.
           sources:

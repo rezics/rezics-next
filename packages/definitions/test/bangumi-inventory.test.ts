@@ -640,7 +640,7 @@ test('every inventoried Bangumi term is bundled, proposed by the vocabulary rule
   expect(liveActionRelations.find((entry) => entry.id === 1)!.mapping).toMatchObject({
     status: 'existing',
     term: 'rezics:crossMediaCounterpart',
-    on: 'schema:CreativeWork',
+    on: 'schema:TVSeries',
   });
   for (const entry of liveActionRelations.filter((entry) => entry.id !== 1))
     expect(entry.mapping.status).toBe('omitted');
