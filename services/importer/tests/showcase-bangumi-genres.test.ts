@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import { emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
 import { ImportSession } from '../src/import-session.ts';
-import { seedReviewedCatalogue, type ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
+import { readReviewedBangumiBinding, seedReviewedCatalogue, type ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
 
 const context = '00000000-0000-8000-8000-000000000000';
 type Candidate = {
@@ -146,6 +146,34 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
   };
   return port as unknown as ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2];
 }
+
+test('current reviewed binding accepts transport JSON records and still refuses changed statement provenance', async () => {
+  const directory = await mkdtemp(join(import.meta.dir, '../../../.temp/reviewed-binding-'));
+  const path = join(directory, 'state.sqlite');
+  const native = fakePort();
+  let changed = false;
+  const port: ReviewedCataloguePort = {
+    ...native,
+    async reviewedCandidates(...args) {
+      const page = JSON.parse(JSON.stringify(await native.reviewedCandidates(...args)), (_key, value) =>
+        value && typeof value === 'object' && !Array.isArray(value) ? Object.setPrototypeOf(value, null) : value,
+      );
+      if (changed && page.candidates[0]) page.candidates[0].statement.references = [];
+      return page;
+    },
+  };
+  try {
+    const result = await seedReviewedCatalogue({ path, port });
+    const session = new ImportSession(path);
+    try {
+      expect(await readReviewedBangumiBinding(session.bindings, port)).toEqual({
+        sourceConcept: result.subjects['source-harem'], canonicalConcept: result.subjects['canonical-harem'],
+      });
+      changed = true;
+      expect(await readReviewedBangumiBinding(session.bindings, port)).toBeNull();
+    } finally { session.close(); }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test('default cross-media seed binds the exact editor tag and resumes unchanged facts across a current-binding outage', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-genre-'));
