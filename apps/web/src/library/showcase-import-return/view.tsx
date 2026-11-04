@@ -48,9 +48,10 @@ export function ImportLibraryView({
     launcher: HTMLButtonElement;
   } | null>(null);
   const pageHeading = useRef<HTMLParagraphElement>(null);
-  const pageIdentity = useRef<{ source: CurrentImportLibraryRead | null; generation: number }>({
+  const pageIdentity = useRef<{ source: CurrentImportLibraryRead | null; generation: number; revision: number }>({
     source: null,
     generation: 0,
+    revision: 0,
   });
   const snapshot: ImportLibrarySnapshot = suppliedSnapshot ?? {
     visible: result?.state === 'current' ? result : null,
@@ -63,8 +64,16 @@ export function ImportLibraryView({
   const visible = available && !snapshot.retired ? snapshot.visible : null;
   const rows = visible ? importLibraryRows(visible.page, locale, visible.labels) : [];
   const href = importLibraryShelfHref(locale, layout, size);
-  if (pageIdentity.current.source !== visible) {
-    pageIdentity.current = { source: visible, generation: pageIdentity.current.generation + 1 };
+  if (
+    pageIdentity.current.source !== visible ||
+    (!snapshot.pending && !snapshot.failed && pageIdentity.current.revision !== snapshot.revision)
+  ) {
+    // Equal successful replacements retire an inspection too; page-object equality grants no read authority.
+    pageIdentity.current = {
+      source: visible,
+      generation: pageIdentity.current.generation + 1,
+      revision: snapshot.revision,
+    };
   }
   const inspected =
     inspection && inspection.generation === pageIdentity.current.generation
@@ -121,8 +130,7 @@ export function ImportLibraryView({
               layout={layout}
               size={size}
               onInspect={(position, launcher) => {
-                if (available && !snapshot.pending)
-                  setInspection({ generation: pageIdentity.current.generation, position, launcher });
+                if (available) setInspection({ generation: pageIdentity.current.generation, position, launcher });
               }}
             />
           </div>
