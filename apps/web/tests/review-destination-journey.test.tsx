@@ -337,6 +337,7 @@ test('a Realm replacement retires a late destination page and its selection', as
   try {
     await view.click(m.thread_review_write());
     await until(() => calls.filter(({ path }) => path === '/v1/me/realms').length === 1);
+    await view.click(m.realms_more());
     await view.click(laterRealm.name);
     await until(() => calls.filter(({ path }) => path.endsWith('/review-destinations')).length === 1);
     const original = view.host.querySelector('button[aria-pressed="true"]');
@@ -394,6 +395,7 @@ test('a sparse destination page continues only on More and retries the exact fai
   try {
     await view.click(m.thread_review_write());
     await until(() => calls.length === 1);
+    await view.click(m.realms_more());
     await view.click(laterRealm.name);
     await until(() => view.host.textContent?.includes(m.thread_review_more()) === true);
     expect(destinations()).toHaveLength(1);
