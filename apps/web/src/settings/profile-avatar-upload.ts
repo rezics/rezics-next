@@ -374,8 +374,18 @@ export class ProfileAvatarUpload {
           this.retryAt = preferenceRetryDeadline(error.retryAfter?.toString());
           this.rateFailure = failure;
         }
-        this.update({ phase: 'error', url: selection.url, stage: this.state.stage, failure });
-      } else this.update({ phase: 'error', url: selection.url, stage: this.state.stage });
+        this.update({
+          phase: 'error',
+          url: selection.url,
+          ...(this.state.stage ? { stage: this.state.stage } : {}),
+          failure,
+        });
+      } else
+        this.update({
+          phase: 'error',
+          url: selection.url,
+          ...(this.state.stage ? { stage: this.state.stage } : {}),
+        });
     } finally {
       if (this.request === request) this.request = null;
     }
