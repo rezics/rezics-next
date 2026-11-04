@@ -7,7 +7,7 @@ import {
   createRouter,
   RouterContextProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, open } from './creation-page-fixture';
+import { creationFixture, button, dom, fill, open } from './creation-page-fixture';
 import { OperatorTransferPage } from '../src/routes/operators.transfer';
 import {
   OPERATOR_MANAGEMENT_PROFILE,
@@ -184,12 +184,8 @@ for (const stage of ['relation', 'approval'])
   test(`acceptance and unresolved ${stage} survive Stay; Leave preserves recovery and retires later stages`, async () => {
     const page = await setup(source);
     await page.importText('acceptance', 'opaque-acceptance');
-    await page.navigate();
-    await page.choose('Stay');
-    expect(page.input('acceptance').value).toBe('opaque-acceptance');
-    await flush(() => page.input('confirm').click());
-    await page.submit('confirm');
-    if (stage === 'approval')
+    if (stage === 'approval') {
+      await page.choose(m.auth_transfer_review_same_person());
       await flush(() =>
         page.calls[0]!.resolve(
           Response.json({
@@ -202,30 +198,44 @@ for (const stage of ['relation', 'approval'])
           }),
         ),
       );
+      await flush(() => page.input('confirm').click());
+      await page.submit('confirm');
+      await flush(() =>
+        page.calls[1]!.resolve(
+          Response.json({
+            viewer: { kind: 'ready' },
+            review: {
+              kind: 'source',
+              relation: { previous: source.request.previous, expectedVersion: '12' },
+              action: 'allowed',
+            },
+          }),
+        ),
+      );
+    } else {
+      await page.choose(m.auth_transfer_review_same_person());
+    }
+    await page.navigate();
+    await page.choose('Stay');
+    expect(page.input('acceptance').value).toBe('opaque-acceptance');
     const original = restoreTransferAttempt();
     await page.navigate();
     await page.choose('Stay');
     expect(restoreTransferAttempt()).toEqual(original);
     await page.navigate();
     await page.choose('Leave');
-    await page.render(page.view());
-    await flush(() =>
-      page.calls.at(-1)!.resolve(
-        stage === 'approval'
-          ? approval()
-          : Response.json({
-              viewer: { kind: 'ready' },
-              review: {
-                kind: 'source',
-                relation: { previous: source.request.previous, expectedVersion: '12' },
-                action: 'allowed',
-              },
-            }),
-      ),
-    );
     expect(restoreTransferAttempt()).toEqual(original);
-    expect(page.calls).toHaveLength(stage === 'approval' ? 2 : 1);
-    expect(page.input('confirm').checked).toBe(false);
+    expect(page.calls.some(({ path }) => path.endsWith('/execute'))).toBe(false);
+    if (stage === 'approval') {
+      expect(original).toMatchObject({
+        request: { sourceOperationKey: source.request.sourceOperationKey },
+        acceptance: 'opaque-acceptance',
+      });
+      expect(page.calls.some(({ path }) => path.endsWith('/account-operations/approve'))).toBe(true);
+    } else {
+      expect(original).toEqual(source);
+      expect(page.calls.some(({ path }) => path.includes('/account-operations/'))).toBe(false);
+    }
   });
 test('reconciled results leave normally and permission loss revokes a draft without prompting', async () => {
   const page = await setup({ ...source, phase: 'readback', reference: 'approval', acceptance: 'acceptance' });

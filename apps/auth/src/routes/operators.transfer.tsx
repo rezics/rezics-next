@@ -198,8 +198,9 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       value.session?.kind === 'ready' &&
       !value.needsProof &&
       value.result?.kind !== 'current' &&
+      !(value.result?.kind === 'acknowledged' && value.result.readback.kind === 'current') &&
       Boolean(
-        (value.attempt && !(value.result?.kind === 'acknowledged' && value.result.readback.kind === 'current')) ||
+        value.attempt ||
         value.subject.trim() ||
         value.destination.trim() ||
         value.requestText.trim() ||
