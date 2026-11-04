@@ -273,6 +273,19 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
     expect(view.host.textContent).not.toContain('The original edition leaves room for the reader to pause.');
     expect(view.router.state.location.href).toContain('historyReturn=');
     expect(view.router.state.location.href).not.toContain(cursor);
+    const { markHistoryReturnCommand, resolveHistoryReturnTarget } = await import(
+      '../src/threads/revision-return/history-return'
+    );
+    const token = new URL(view.router.state.location.href, 'https://site.test').searchParams.get('historyReturn')!;
+    const returnTarget = resolveHistoryReturnTarget(
+      token,
+      { postId: selected.id, revisionId: targetRevision.revisionId },
+      'en',
+      'anonymous',
+      historicalReaderSource(view.client),
+    );
+    expect(returnTarget).toBeDefined();
+    expect(markHistoryReturnCommand(returnTarget!, targetRevision.revisionId, true)).toBe(true);
 
     const historyResolved = nextResolved(view.router);
     const historyRead = waitForHistoryRead(3);
