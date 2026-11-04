@@ -32,17 +32,19 @@ export function readingMutation(known: ReadingPreferences, draft: ReadingValues)
 
 /** Native defaults with the reviewed version; never a browser-invented default. */
 export function readingReset(known: ReadingPreferences): Readonly<PreferenceChange> | null {
-  if (known.spoilerLevel === 0 && known.suitability === 'blur') return null;
+  const defaults = readingDefaults(known.advice);
+  if (!defaults || !ownerMayChangeReading(known.advice) || !validReading(known, known.version)) return null;
+  if (sameReading(known, defaults)) return null;
   return Object.freeze({
     expectedVersion: known.version,
-    spoilerLevel: 0 as const,
-    suitability: 'blur' as const,
+    spoilerLevel: defaults.spoilerLevel,
+    suitability: defaults.suitability,
     idempotencyKey: crypto.randomUUID(),
   });
 }
 
 export function ownerMayChangeReading(advice: ReadingPreferences['advice']): boolean {
-  return advice?.viewerState === 'current' && advice.allowedActions.update.allowed === true;
+  return advice?.viewerState === 'current' && advice.allowedActions?.update?.allowed === true;
 }
 
 export function readingAdviceFor(values: ReadingValues, writable = true): NonNullable<ReadingPreferences['advice']> {
@@ -60,13 +62,52 @@ export function readingAdviceFor(values: ReadingValues, writable = true): NonNul
   };
 }
 
+function isSpoilerLevel(value: unknown): value is SpoilerLevel {
+  return value === 0 || value === 1 || value === 2;
+}
+
+function isSuitability(value: unknown): value is ReadingValues['suitability'] {
+  return value === 'blur' || value === 'show';
+}
+
+export function readingAdviceReady(advice: ReadingPreferences['advice']): boolean {
+  if (!advice || advice.viewerState !== 'current' || advice.allowedActions?.read?.allowed !== true) return false;
+  const reading = advice.reading;
+  const levels = reading?.supported?.spoilerLevels;
+  const suitability = reading?.supported?.suitability;
+  const effective = reading?.effective;
+  const defaults = reading?.defaults;
+  return (
+    Array.isArray(levels) &&
+    levels.length > 0 &&
+    levels.every(isSpoilerLevel) &&
+    Array.isArray(suitability) &&
+    suitability.length > 0 &&
+    suitability.every(isSuitability) &&
+    !!effective &&
+    isSpoilerLevel(effective.spoilerLevel) &&
+    isSuitability(effective.suitability) &&
+    levels.includes(effective.spoilerLevel) &&
+    suitability.includes(effective.suitability) &&
+    !!defaults &&
+    isSpoilerLevel(defaults.spoilerLevel) &&
+    isSuitability(defaults.suitability) &&
+    levels.includes(defaults.spoilerLevel) &&
+    suitability.includes(defaults.suitability)
+  );
+}
+
+export function readingDefaults(advice: ReadingPreferences['advice']): ReadingValues | undefined {
+  if (!advice || !readingAdviceReady(advice)) return undefined;
+  return { spoilerLevel: advice.reading.defaults.spoilerLevel, suitability: advice.reading.defaults.suitability };
+}
+
 function supportedReading(preferences: ReadingPreferences): boolean {
   const advice = preferences.advice;
-  if (!advice)
-    return [0, 1, 2].includes(preferences.spoilerLevel) && ['blur', 'show'].includes(preferences.suitability);
+  if (!advice || !readingAdviceReady(advice)) return false;
   return (
-    advice.reading.supported.spoilerLevels.includes(preferences.spoilerLevel) &&
-    advice.reading.supported.suitability.includes(preferences.suitability)
+    advice.reading.effective.spoilerLevel === preferences.spoilerLevel &&
+    advice.reading.effective.suitability === preferences.suitability
   );
 }
 
@@ -96,6 +137,7 @@ export async function readReading(
       return { ok: false, reason, failure };
     }
     const { preferences } = page;
+    if (preferences.advice?.allowedActions?.read?.allowed === false) return { ok: false, reason: 'forbidden' };
     // Another preference card can confirm a newer version while this GET is in flight.
     if (!validReading(preferences, typeof minimumVersion === 'function' ? minimumVersion() : minimumVersion))
       return { ok: false, reason: 'unavailable' };

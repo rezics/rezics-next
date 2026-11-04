@@ -46,10 +46,11 @@ after the response. An unresolved original patch and key stay until acknowledgem
 result can refresh current values without clearing that original. Session retirement clears private drafts; a stale
 response cannot restore edit authority.
 
-**Decision:** Reset PATCHes `spoilerLevel` 0 and `suitability` `blur` with the reviewed version. Viewer state and
-read/update actions live as additive siblings of the notification catalogue `page` on the same preference 200, without
-a second preference version. Catalogue `page.actions` use the same current `allowedActions.update` observation. A 409
-returns catalogue `page` only and does not imply complete Reading advice.
+**Decision:** Reset PATCHes the admitted native defaults with the reviewed version; missing or malformed choice/default
+advice leaves reset unavailable. Viewer state and read/update actions live as additive siblings of the notification
+catalogue `page` on the same preference 200, without a second preference version. Catalogue `page.actions` use the same
+current `allowedActions.update` observation. A 409 returns catalogue `page` only and does not imply complete Reading
+advice.
 
 ## Watches
 
