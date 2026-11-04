@@ -208,18 +208,20 @@ function AccountSignOut({
   const [phase, setPhase] = useState<'idle' | 'csrf' | 'failed' | 'uncertain'>('idle');
   const [recovering, setRecovering] = useState(false);
   const locked = useRef(false);
+  const isCurrent = props.isCurrent ?? alwaysCurrent;
   const unavailable = !props.csrfToken || phase === 'csrf';
   const recover = async () => {
-    if (recovering) return;
+    if (recovering || !isCurrent()) return;
     setRecovering(true);
     try {
       await props.onReload();
+      if (!isCurrent()) return;
       locked.current = false;
       setPhase('idle');
     } catch {
       // Keep the original failure/uncertainty visible until a session read succeeds.
     } finally {
-      setRecovering(false);
+      if (isCurrent()) setRecovering(false);
     }
   };
   return (
@@ -233,7 +235,8 @@ function AccountSignOut({
         className="m-0"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!props.csrfToken || !(props.isCurrent ?? alwaysCurrent)()) {
+          if (!isCurrent()) return;
+          if (!props.csrfToken) {
             setPhase('csrf');
             return;
           }
@@ -275,7 +278,9 @@ function AccountSignOut({
             className={actionClass}
             disabled={recovering}
             aria-label={`${m.settings_reload()}: ${m.account_sign_out()}`}
-            onClick={() => void recover()}
+            onClick={() => {
+              if (isCurrent()) void recover();
+            }}
           >
             {m.settings_reload()}
           </Button>
@@ -296,6 +301,8 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
   );
   const waiting = usePreferenceRetry(undefined, retryAt);
   const links = props.state === 'signed-in' ? accountSafetyLinks(props.securityHref) : null;
+  const isCurrent = props.state === 'signed-in' ? (props.isCurrent ?? alwaysCurrent) : alwaysCurrent;
+  const navigationGuard = managedNavigationGuard(isCurrent);
   const actionClass =
     'h-auto min-h-11 w-full min-w-0 max-w-full whitespace-normal py-2 text-center [overflow-wrap:anywhere]';
   return (
@@ -305,7 +312,11 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
           <h2 id="settings-account-heading">{m.settings_account_heading()}</h2>
         </CardTitle>
       </CardHeader>
-      <CardContent className="min-w-0 max-w-full space-y-6 [overflow-wrap:anywhere]">
+      <CardContent
+        className="min-w-0 max-w-full space-y-6 [overflow-wrap:anywhere]"
+        onClickCapture={navigationGuard}
+        onAuxClickCapture={navigationGuard}
+      >
         {props.state === 'signed-out' ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">{m.settings_account_sign_in_text()}</p>
@@ -313,17 +324,11 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
           </div>
         ) : (
           <>
-            <div
-              className="contents"
-              onClickCapture={managedNavigationGuard(read?.isCurrent ?? alwaysCurrent)}
-              onAuxClickCapture={managedNavigationGuard(read?.isCurrent ?? alwaysCurrent)}
-            >
-              <AccountRenameLink
-                context={props.renameAccount ?? null}
-                loading={read?.loading ?? false}
-                failure={failure}
-              />
-            </div>
+            <AccountRenameLink
+              context={props.renameAccount ?? null}
+              loading={read?.loading ?? false}
+              failure={failure}
+            />
             {props.renameRead ? (
               <div aria-busy={props.renameRead.loading} className="space-y-2">
                 <Button
@@ -332,7 +337,9 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
                   className={actionClass}
                   disabled={props.renameRead.loading || waiting}
                   aria-describedby={waiting ? `${id}-rename-wait` : undefined}
-                  onClick={props.renameRead.reload}
+                  onClick={() => {
+                    if (isCurrent() && (read?.isCurrent?.() ?? true)) props.renameRead?.reload();
+                  }}
                   aria-label={`${m.settings_reload()}: ${m.settings_account_rename_heading()}`}
                 >
                   {m.settings_reload()}
