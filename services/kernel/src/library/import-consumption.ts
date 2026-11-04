@@ -272,6 +272,8 @@ function selectedFieldOutcomes(review: ImportConsumptionDateReview, fields: read
     } else if (decision.status === 'clear') {
       patch[field] = null;
       outcomes.push({ field, status: 'cleared' });
+    } else if (decision.status === 'ready') {
+      outcomes.push({ field, status: 'unsupported' });
     } else {
       outcomes.push({ field, status: decision.status });
     }

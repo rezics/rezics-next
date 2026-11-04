@@ -59,6 +59,7 @@ function sourceDescriptor(value: Awaited<ReturnType<Reads['readCollection']>>): 
 }
 
 function canonicalFilter(filter: string | undefined): string | null {
+  // Keep JSON syntax and object-shape failures within the public FieldErrorCode vocabulary.
   if (filter === undefined) return null;
   let value: unknown;
   try {
