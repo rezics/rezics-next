@@ -391,7 +391,8 @@ export function parseBrief(
   const researchers = researcherModels(raw.researchers, kind, raw.model);
   const researchGroup = raw.researchGroup === undefined ? undefined : text(raw.researchGroup, 'researchGroup');
   const researchReport = raw.researchReport === undefined ? undefined : text(raw.researchReport, 'researchReport');
-  if (researchGroup !== undefined && kind !== 'research') throw new Error('researchGroup is only valid on research briefs');
+  if (researchGroup !== undefined && kind !== 'research')
+    throw new Error('researchGroup is only valid on research briefs');
   if (researchGroup !== undefined && !/^[A-Za-z0-9_-]{1,128}$/.test(researchGroup))
     throw new Error('researchGroup must be a valid identifier');
   if (researchReport !== undefined) {

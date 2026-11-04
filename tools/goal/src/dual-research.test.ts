@@ -126,15 +126,16 @@ test('research fan-out pins separate model tasks and delivers one completion eve
   ]);
   expect(f.dispatched.every(({ text }) => text.includes('Do not wait for or read another researcher'))).toBe(true);
 
-  for (const [index, row] of (f.db.query('SELECT id, body FROM worker_tasks ORDER BY sequence').all() as {
-    id: string;
-    body: string;
-  }[]).entries()) {
+  for (const [index, row] of (
+    f.db.query('SELECT id, body FROM worker_tasks ORDER BY sequence').all() as {
+      id: string;
+      body: string;
+    }[]
+  ).entries()) {
     const body = JSON.parse(row.body) as Record<string, unknown>;
-    f.db.query('UPDATE worker_tasks SET body=? WHERE id=?').run(
-      JSON.stringify({ ...body, state: index === 0 ? 'integrated' : 'stopped' }),
-      row.id,
-    );
+    f.db
+      .query('UPDATE worker_tasks SET body=? WHERE id=?')
+      .run(JSON.stringify({ ...body, state: index === 0 ? 'integrated' : 'stopped' }), row.id);
   }
   await sweepBacklog(f.runtime);
   await sweepBacklog(f.runtime);
@@ -155,7 +156,13 @@ test('Claude pins use the claude-worker allowance and research web search while 
   expect(claude).toMatchObject({ cli: 'claude', model: 'claude-opus-5-5', poolClass: 'claude' });
   expect(() =>
     routeTask(
-      { ...parseBrief(researchMarkdown('model: claude-opus-5-5').replace('kind: research', 'kind: implementation'), { version: 1, areas: {} }), model: 'claude-opus-5-5' },
+      {
+        ...parseBrief(researchMarkdown('model: claude-opus-5-5').replace('kind: research', 'kind: implementation'), {
+          version: 1,
+          areas: {},
+        }),
+        model: 'claude-opus-5-5',
+      },
       1,
       routing,
     ),
@@ -174,8 +181,20 @@ test('Claude pins use the claude-worker allowance and research web search while 
   expect(choosePoolWithFallback(claude, [], [pool], [reading(pool, 84)], { now }).pool.name).toBe('claude-worker');
   expect(() => choosePoolWithFallback(claude, [], [pool], [reading(pool, 86)], { now })).toThrow('no allowed pool');
 
-  const claudeCommand = claudeAdapter.start({ profile: claude, pool, worktree: '/work', prompt: 'research', research: true });
-  const codexCommand = codexAdapter.start({ profile: codexRoute, pool: { ...pool, name: 'codex', cli: 'codex' }, worktree: '/work', prompt: 'research', research: true });
+  const claudeCommand = claudeAdapter.start({
+    profile: claude,
+    pool,
+    worktree: '/work',
+    prompt: 'research',
+    research: true,
+  });
+  const codexCommand = codexAdapter.start({
+    profile: codexRoute,
+    pool: { ...pool, name: 'codex', cli: 'codex' },
+    worktree: '/work',
+    prompt: 'research',
+    research: true,
+  });
   expect(claudeCommand[1]).toContain('--allowedTools');
   expect(claudeCommand[1]).toContain('WebSearch');
   expect(codexCommand[1]).toContain('web_search="live"');

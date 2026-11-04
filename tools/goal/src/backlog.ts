@@ -443,11 +443,13 @@ function researchSlug(markdown: string, sourceName: string, input: ResearchFanou
   );
   const heading = /^#\s+(.+)$/m.exec(markdown)?.[1];
   const raw = report ? basename(report, '.md') : heading || basename(sourceName, '.md');
-  return raw
-    .normalize('NFKD')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'research';
+  return (
+    raw
+      .normalize('NFKD')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'research'
+  );
 }
 
 function researchReportPaths(markdown: string, sourceName: string, input: ResearchFanoutBrief): Record<string, string> {
