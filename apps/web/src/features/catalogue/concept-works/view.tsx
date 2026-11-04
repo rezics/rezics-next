@@ -303,7 +303,13 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
       ) : noSelection ? (
         <DiscoveryResults state={{ status: 'unsupported' }} locale={locale} />
       ) : (
-        <div ref={(element) => (personal.regionRef.current = element)} className="space-y-3" data-slot="concept-tagged-works-results">
+        <div
+          ref={(element) => {
+            personal.regionRef.current = element;
+          }}
+          className="space-y-3"
+          data-slot="concept-tagged-works-results"
+        >
           {continuationFailure && (
             <div role="alert" tabIndex={-1} className="space-y-2">
               <p>{m.concept_tagged_works_continuation_failed({}, options)}</p>
