@@ -58,6 +58,7 @@ type VocabularySource = {
 
 // This importer consumes the pinned VNDB dump declared in packages/definitions/sources/vndb.yaml.
 const VNDB_DUMP_AS_OF = '2026-10-25';
+const selectedBangumiRevision = `${bangumiRevision}+${crossMediaRevision}`;
 
 type NativeSource = Readonly<{
   source: string;
@@ -269,7 +270,11 @@ export function createSourceRegistration(
     describeSourceRecord: (externalId) => describeSourceRecord(sourceKind, externalId),
     convert(input, context) {
       if (context.source !== source) throw new TypeError('Conversion context source differs from registration');
-      if (converterRevision === crossMediaRevision && (sourceKind === 'bangumi' || sourceKind === 'vndb')) {
+      if (
+        (converterRevision === crossMediaRevision ||
+          (sourceKind === 'bangumi' && converterRevision === selectedBangumiRevision)) &&
+        (sourceKind === 'bangumi' || sourceKind === 'vndb')
+      ) {
         const kind = crossMediaEntityKind(sourceKind, input.external_id, input.record);
         if (kind) {
           const entity = convertCrossMediaEntity(input, context, { converterRevision, sourceKind });
@@ -297,4 +302,14 @@ export function createSourceRegistration(
       return addAliases(result, source, sourceKind, context);
     },
   };
+}
+
+/** Selected-family Bangumi records use a revision that tracks both native and entity conversion. */
+export function createSelectedFamilySourceRegistration(
+  sourceKind: 'bangumi' | 'vndb',
+  source: string,
+): SourceRegistration<SourceAssets> {
+  return sourceKind === 'bangumi'
+    ? createSourceRegistration('bangumi', { source, converterRevision: selectedBangumiRevision })
+    : createSourceRegistration('vndb', { source, converterRevision: crossMediaRevision });
 }

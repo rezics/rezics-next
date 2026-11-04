@@ -19,8 +19,7 @@ import {
 } from './showcase-manifest.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
-import { createSourceRegistration } from './source-registry.ts';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import { subjectSlug } from '@rezics/definitions/slug';
 import { safeSourceUrl } from '../../../packages/conversion/src/support.ts';
 import type { BangumiCoverSource, BangumiCoverSourceJournal, CrossMediaMediaOutcome } from './showcase-media.ts';
@@ -698,7 +697,7 @@ async function resolveLegacyCandidates(input: {
     const id = reading && subjectId(reading.subject);
     if (!id) continue;
     const alias = input.aliases[provider];
-    const registration = createSourceRegistration(provider, { source: alias, converterRevision: entityRevision });
+    const registration = createSelectedFamilySourceRegistration(provider, alias);
     const mediaContext =
       provider === 'bangumi'
         ? showcaseMediaContext({

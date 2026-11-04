@@ -256,7 +256,7 @@ refreshes under this revision. Unknown or invalid types still fail with
 and retry keys. Platform and community tools use this same pure module;
 importer skipped-count accounting is separate.
 
-Bangumi revision `bangumi@8` converts the pinned TVAnime infobox fields
+The current Bangumi revision `bangumi@9` retains the pinned TVAnime infobox fields
 `放送开始`, `播放结束` and `话数` on type 2 through the same bound proposal
 path, preserving `bangumi@7` TVAnime name extraction. Start and end keep
 Gregorian year/month/day precision, including explicit `年月日` spellings;
@@ -899,3 +899,22 @@ rights follow their current paths.
   deferred to integration.
 
 Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
+
+### Bangumi Game publication date
+
+`bangumi@9` reads only one unqualified `发行日期` occurrence from the pinned
+Game infobox. The accepted scalar grammar is the existing strict Gregorian
+`YYYY`, `YYYY-MM` or `YYYY-MM-DD` parser; its canonical time value retains the
+source precision. Type-4 top-level `date`, qualified dates and duplicate fields
+remain unavailable. Other Game fields stay on their current paths.
+
+- Touches: one `schema:datePublished` proposal on a source-bound VideoGame with
+  the exact Bangumi subject citation.
+- Bound: at most 64 top-level infobox fields and one sanitized omission inside
+  the existing 65,536-character infobox, 64 KiB projection and command limits.
+  No recursive wiki evaluation or linked-page fetch is used.
+- Growth check: `services/importer/tests/bangumi-game-publication.test.ts`
+  covers ordinary and selected-family registrations, qualified omission and a
+  corrected partial date. The native review/adoption and read scenario is
+  `services/kernel/test/imports/bangumi-game-publication.test.ts`; execution
+  remains controller-owned.

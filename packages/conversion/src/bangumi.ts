@@ -9,6 +9,7 @@ import {
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
+import { bangumiGamePublication } from './bangumi-game-publication.ts';
 import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
 import {
@@ -23,7 +24,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@8';
+export const converter_revision = 'bangumi@9';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
@@ -307,6 +308,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
   }
   const television = bangumiTelevisionRun(record);
+  const gamePublication = bangumiGamePublication(record);
   const proposals: BatchCommand[] = [];
   const propose = (
     statement: BatchStatement,
@@ -347,6 +349,8 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       if (published) proposals.push(propose(fact('schema:datePublished', published), 'facts', 'date'));
     }
     for (const item of television.facts)
+      proposals.push(propose(fact(item.property, item.content), 'facts', item.field));
+    for (const item of gamePublication.facts)
       proposals.push(propose(fact(item.property, item.content), 'facts', item.field));
     if (document) {
       proposals.push({
@@ -407,6 +411,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     diagnostics: [
       ...retainedFieldDiagnostics(record, extractedNames.diagnostics, television.handledInfobox),
       ...television.diagnostics,
+      ...gamePublication.diagnostics,
     ],
     coverAssets,
     mediaImportIntents,

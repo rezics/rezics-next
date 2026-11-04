@@ -409,7 +409,7 @@ export async function runJourney() {
         source: 'bangumi',
         external_id: target,
         record_revision: 'unversioned',
-        converter_revision: 'bangumi@8',
+        converter_revision: 'bangumi@9',
         digest: returnedState.members[0]!.row.baseline!.digest,
         field_group: 'facts',
       });
