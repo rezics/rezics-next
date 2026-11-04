@@ -125,7 +125,9 @@ export async function loadDraftPreview(
     )
       return { ok: false, reason: 'unavailable' };
     const page = { ...raw, subject: raw.subject ?? null } as unknown as SubjectPageData;
-    if ('subject' in input.target && page.subject !== input.target.subject) return { ok: false, reason: 'unavailable' };
+    // The draft witness binds the original target. Native identity resolution may select its current survivor.
+    if ('subject' in input.target && (typeof page.subject !== 'string' || !uuid.test(page.subject)))
+      return { ok: false, reason: 'unavailable' };
     if ('account' in input.target && page.account?.handle !== input.target.account)
       return { ok: false, reason: 'unavailable' };
     if (
