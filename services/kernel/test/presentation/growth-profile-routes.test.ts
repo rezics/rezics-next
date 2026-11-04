@@ -45,7 +45,7 @@ function profileHistory(name: string, head: { next: number }): Population {
   };
 }
 
-function unrelatedContexts(name: string, contextIds: string[]): Population {
+function unrelatedContexts(name: string): Population {
   return {
     name,
     hotPartition: 0,
@@ -53,7 +53,6 @@ function unrelatedContexts(name: string, contextIds: string[]): Population {
     // Global Context authorization reads semantic.context by its exact key while other Contexts share and cross partitions.
     rows: ({ ordinal, route }) => {
       const contextId = newId(route);
-      contextIds.push(contextId);
       return {
         'semantic.context': [
           {
@@ -97,12 +96,11 @@ async function checkRouteGrowth(kind: 'profile' | 'active-profile' | 'curation-o
   await database.admin.query('TRUNCATE presentation.profile_activation, presentation.profile');
 
   const runId = `${kind}-${randomUUID()}`;
-  const contextIds: string[] = [];
   const targets = new Map<number, { digest: string; body: PresentationProfile }>();
   const head = { next: 1 };
   let nextRepetition = 0;
   const profiles = profileHistory(`${runId}-history`, head);
-  const contexts = unrelatedContexts(`${runId}-contexts`, contextIds);
+  const contexts = unrelatedContexts(`${runId}-contexts`);
 
   const read = async (growth: GrowthDatabase, repetition: number): Promise<void> => {
     const target = targets.get(repetition);
@@ -166,8 +164,6 @@ async function checkRouteGrowth(kind: 'profile' | 'active-profile' | 'curation-o
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   } finally {
     await database.admin.query('TRUNCATE presentation.profile_activation, presentation.profile');
-    if (contextIds.length > 0)
-      await database.admin.query('DELETE FROM semantic.context WHERE context_id = ANY($1::uuid[])', [contextIds]);
   }
 }
 
