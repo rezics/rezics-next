@@ -14,19 +14,45 @@ import {
   TOOL_INCIDENT_PROBE_MS,
 } from './tool-incidents.ts';
 
+function incidentAttempt(taskId: string, attempt: number, blocker: string | null): Attempt {
+  const now = new Date().toISOString();
+  return {
+    taskId,
+    attempt,
+    state: 'exited',
+    failureKind: blocker ? 'tool' : null,
+    profile: { cli: 'codex', model: 'fixture', effort: 'medium', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt: now,
+    endedAt: now,
+    process: null,
+    driver: null,
+    logPath: '',
+    evidencePath: '',
+    auxiliaryProcesses: [],
+    session: null,
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: blocker ? 1 : 0,
+    result: blocker ?? 'RESULT: success',
+    blocker,
+    approaches: [],
+  };
+}
+
 function seedIncident(h: ReturnType<typeof harness>, now: number, errorLine: string) {
   const tasks = Array.from({ length: 3 }, () => h.tasks.dispatch(h.briefFile));
   const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
   const refs = tasks.map((task) => {
     const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number) =>
-      ({
-        taskId: task.id,
-        attempt: number,
-        state: 'exited',
-        failureKind: 'tool',
-        blocker: errorLine,
-        result: errorLine,
-      }) as unknown as Attempt,
+      incidentAttempt(task.id, number, errorLine),
     );
     return { taskId: task.id, attempt: attempt.attempt };
   });
@@ -123,14 +149,7 @@ test('a later probe attempt without the original blocker resolves the incident a
     ]);
     const differentLine = 'ECONNRESET: worker transport closed';
     const laterAttempt = h.store.nextAttempt(incident.probe, (attempt) =>
-      ({
-        taskId: incident.probe.taskId,
-        attempt,
-        state: 'exited',
-        failureKind: 'tool',
-        blocker: differentLine,
-        result: differentLine,
-      }) as unknown as Attempt,
+      incidentAttempt(incident.probe.taskId, attempt, differentLine),
     );
     const laterRef = { taskId: incident.probe.taskId, attempt: laterAttempt.attempt };
     const task = h.store.task(laterRef.taskId);
@@ -165,11 +184,7 @@ test('an integrated probe makes held retries eligible without opening another pr
     ]);
 
     const integratedAttempt = h.store.nextAttempt(incident.probe, (attempt) =>
-      ({
-        taskId: incident.probe.taskId,
-        attempt,
-        state: 'exited',
-      }) as unknown as Attempt,
+      incidentAttempt(incident.probe.taskId, attempt, null),
     );
     h.store.updateTask({ taskId: incident.probe.taskId, attempt: integratedAttempt.attempt }, (task) => {
       task.state = 'integrated';
