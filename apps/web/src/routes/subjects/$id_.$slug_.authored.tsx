@@ -2,7 +2,7 @@ import { editorRequest } from '../../features/catalogue/editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { useQuery } from '@tanstack/react-query';
-import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
+import { createFileRoute, notFound, redirect, useRouterState } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -61,23 +61,21 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/authored')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => ({
     property: typeof input.property === 'string' && input.property.length <= 256 ? input.property : undefined,
-    via: subjectVisitReturn(input.via, getLocale()),
   }),
   loader: ({ params, location }) =>
     canonicalAuthored({
       data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
-    }).then((result) => ({
-      ...result,
-      via: subjectVisitReturn(new URLSearchParams(location.searchStr).get('via'), getLocale()),
-    })),
+    }),
   head: () => ({ meta: [{ title: m.authored_title() }, { name: 'robots', content: 'noindex' }] }),
   component: candidateSession(AuthoredRoute),
 });
 
 function AuthoredRoute() {
-  const { id, via } = Route.useLoaderData();
+  const { id } = Route.useLoaderData();
   const { property } = Route.useSearch();
   const locale = getLocale();
+  const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
+  const via = subjectVisitReturn(new URLSearchParams(locationSearch).get('via'), locale);
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
   const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property]));
   const { state } = useSession();
