@@ -174,7 +174,10 @@ test('a contributor previews, edits, submits and explicitly selects the exact au
     const unavailableActionReads = stack
       .kernelRequests()
       .slice(permissionCheckFrom)
-      .filter((request) => request.method === 'POST' && new URL(request.url, stack.kernelOrigin).pathname === '/v1/viewerActions');
+      .filter(
+        (request) =>
+          request.method === 'POST' && new URL(request.url, stack.kernelOrigin).pathname === '/v1/viewerActions',
+      );
     expect(unavailableActionReads.at(-1)?.failure?.status).toBe(503);
     expect(
       stack
@@ -190,7 +193,10 @@ test('a contributor previews, edits, submits and explicitly selects the exact au
     await expect(finalReview.getByRole('button', { name: m.authored_submit_contribution() })).toBeVisible();
 
     const aliceIdentity = await stack.authPersona('alice');
-    const grantHeaders = () => ({ 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) });
+    const grantHeaders = () => ({
+      'content-type': 'application/json',
+      'idempotency-key': JSON.stringify(crypto.randomUUID()),
+    });
     const grant = await stack.kernel(
       '/v1/grants',
       {

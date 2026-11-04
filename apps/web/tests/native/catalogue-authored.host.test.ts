@@ -124,7 +124,11 @@ test('a contributor submits, retries, reviews and selects an original abstract t
     const observedFrom = stack.kernelRequests().length;
     let droppedResponse: { status: number; body: string } | undefined;
     const dropFirstProposalResponse = async (route: import('playwright').Route) => {
-      if (!droppedResponse && route.request().method() === 'POST' && route.request().postData()?.includes(replacementText)) {
+      if (
+        !droppedResponse &&
+        route.request().method() === 'POST' &&
+        route.request().postData()?.includes(replacementText)
+      ) {
         const response = await route.fetch();
         droppedResponse = { status: response.status(), body: await response.text() };
         await route.abort('failed');

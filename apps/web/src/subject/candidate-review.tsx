@@ -790,7 +790,8 @@ function CandidateReviewLive({
                       </div>
                       <div className="flex flex-col gap-3">
                         <div className="flex flex-wrap gap-2">
-                          {candidate.retracted === null && candidate.decision !== 'accepted' && (
+                          {candidate.retracted === null &&
+                            candidate.decision !== 'accepted' &&
                             actionAllowed('accept') && (
                               <Button
                                 variant="outline"
@@ -805,9 +806,9 @@ function CandidateReviewLive({
                               >
                                 {m.candidate_accept({}, options)}
                               </Button>
-                            )
-                          )}
-                          {candidate.retracted === null && candidate.decision !== 'rejected' && (
+                            )}
+                          {candidate.retracted === null &&
+                            candidate.decision !== 'rejected' &&
                             actionAllowed('reject') && (
                               <Button
                                 variant="outline"
@@ -822,8 +823,7 @@ function CandidateReviewLive({
                               >
                                 {m.candidate_reject({}, options)}
                               </Button>
-                            )
-                          )}
+                            )}
                           <Button
                             variant="outline"
                             className="min-h-11"
@@ -958,20 +958,22 @@ function CandidateReviewLive({
                         )}
                         {!draft.selection.length && <p>{m.candidate_clear_selection({}, options)}</p>}
                         {!valid && <p role="status">{m.candidate_selection_invalid({}, options)}</p>}
-                        {actionAllowed('adopt') && <Button
-                          variant="outline"
-                          className="min-h-11 self-start"
-                          disabled={
-                            locked ||
-                            requiresReload ||
-                            !valid ||
-                            selectionAvailability === 'denied' ||
-                            selectionAvailability === 'unavailable'
-                          }
-                          onClick={(event) => openConfirmation('adopt', event.currentTarget)}
-                        >
-                          {context ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}
-                        </Button>}
+                        {actionAllowed('adopt') && (
+                          <Button
+                            variant="outline"
+                            className="min-h-11 self-start"
+                            disabled={
+                              locked ||
+                              requiresReload ||
+                              !valid ||
+                              selectionAvailability === 'denied' ||
+                              selectionAvailability === 'unavailable'
+                            }
+                            onClick={(event) => openConfirmation('adopt', event.currentTarget)}
+                          >
+                            {context ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}
+                          </Button>
+                        )}
                         {confirmation === 'adopt' && confirmationContent}
                       </ContentItemFrame>
                     </section>

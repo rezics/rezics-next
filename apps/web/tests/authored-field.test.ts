@@ -325,9 +325,7 @@ test('a native stale rejection retains frozen draft and recovery while exact rea
     licence: 'CC-BY-4.0',
     references: [
       {
-        parts: [
-          { property: { id: 'schema:url' }, value: { type: 'value' as const, content: citation } },
-        ],
+        parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: citation } }],
       },
     ],
     original: true,
@@ -382,10 +380,7 @@ test('a native stale rejection retains frozen draft and recovery while exact rea
   expect(state.command?.key).toBe(next.key);
   expect(
     fixture.calls.filter((call) => call.path === `/v1/subjects/${fixture.id}/candidates`).map((call) => call.key),
-  ).toEqual([
-    command.key,
-    next.key,
-  ]);
+  ).toEqual([command.key, next.key]);
 });
 
 test('current, proposed and selected native document values use exact authorized readback without row hydration or draft substitution', async () => {

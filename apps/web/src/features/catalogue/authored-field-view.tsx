@@ -1025,11 +1025,7 @@ function AuthoredFieldLive({
       {stageNavigation}
       {current && !proposed && !command && proposalAllowed !== true && (
         <div role="status" className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
-          <p>
-            {proposalAllowed === false
-              ? m.authored_action_denied({}, o)
-              : m.authored_actions_unavailable({}, o)}
-          </p>
+          <p>{proposalAllowed === false ? m.authored_action_denied({}, o) : m.authored_actions_unavailable({}, o)}</p>
           <Button
             type="button"
             variant="outline"
