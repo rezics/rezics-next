@@ -45,6 +45,7 @@ mock.module('@rezics/ui/shadcn/dialog', () => ({
   DialogOverlay: Part,
 }));
 const { createRoot } = await import('react-dom/client');
+const { flushSync } = await import('react-dom');
 const { ConsolidationWorkspace } = await import('../src/library/label-consolidation/workspace');
 const { LabelShelfEntries } = await import('../src/library/shelf-view');
 const { sessionQuery } = await import('../src/session/query');
@@ -76,10 +77,13 @@ const entries: LabelShelfEntry[] = Array.from({ length: 6 }, (_, n) => ({
     cover: null,
   },
 }));
+const releases: (() => void)[] = [];
 function client() {
   const value = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   value.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'owner', csrfToken: 'csrf' });
-  const snapshot = viewerExposureLifetime(value).getSnapshot();
+  const lifetime = viewerExposureLifetime(value);
+  releases.push(lifetime.subscribe(() => {}));
+  const snapshot = lifetime.getSnapshot();
   if (snapshot.state !== 'signed-in') throw new Error('Missing test viewer');
   value.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
     subject: 'owner',
@@ -103,6 +107,8 @@ test('the real shelf selects exact visible assignments, reviews all pages, repla
   const queryClient = client();
   const calls: unknown[][] = [];
   const refreshes: string[][] = [];
+  const catalogueCalls: unknown[] = [];
+  let staleTargetPage = true;
   let unknown = true;
   let expired = true;
   const transport: ConsolidationTransport = {
@@ -218,6 +224,14 @@ test('the real shelf selects exact visible assignments, reviews all pages, repla
   await act(async () => {
     (radios[0] as unknown as HTMLInputElement).click();
   });
+  await click(m.library_more());
+  expect(window.document.body.textContent).toContain(m.library_labels_unavailable());
+  await click(m.subject_view_retry());
+  expect(catalogueCalls).toEqual([
+    { query: '' },
+    { query: '', cursor: 'next-target' },
+    { query: '', cursor: 'next-target' },
+  ]);
   await click(m.library_consolidation_review());
   expect(calls[0]).toEqual([
     'review',
@@ -249,7 +263,7 @@ test('the real shelf selects exact visible assignments, reviews all pages, repla
 });
 
 test('the concrete private-reader envelope synchronously retires A → B → A and reader replacement', async () => {
-  for (const change of ['viewer', 'reader']) {
+  for (const change of ['viewer', 'reader', 'unmount']) {
     const queryClient = client();
     const source = {};
     queryClient.setQueryData(['assignment-reader'], source);
@@ -286,7 +300,8 @@ test('the concrete private-reader envelope synchronously retires A → B → A a
       if (change === 'viewer') {
         queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'other', csrfToken: 'other' });
         queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'owner', csrfToken: 'csrf' });
-      } else queryClient.setQueryData(['assignment-reader'], { changed: true });
+      } else if (change === 'reader') queryClient.setQueryData(['assignment-reader'], { changed: true });
+      else flushSync(() => root.render(<div />));
       expect(visit.isRetired).toBe(true);
       expect(visit.review.total).toBe(0);
     });
@@ -307,6 +322,7 @@ test('all eight locales retain outcome distinctions and interpolate review opera
 });
 afterAll(async () => {
   await act(async () => root.unmount());
+  releases.forEach((release) => release());
   mock.restore();
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
