@@ -9,6 +9,8 @@ and Edit facts links; a source code never supplies a new concept or an inferred 
 An actual software release is a separate Subject reached only through a disclosed inverse `schema:exampleOfWork`
 assertion whose holder, statement, target and summary identities agree. Only released software-release Types get
 release navigation. Add-ons remain separate; platform/language combinations create no release, version or copy.
+The explicit inverse `schema:exampleOfWork` window includes the current disclosed assertion even when it has no
+qualifiers; navigation never depends on adding an incidental qualifier or relaxing target disclosure.
 Release-specific facts remain on that release's ordinary Subject and existing `/release` companion. Existing
 finite Relations and Credits views, generic facts and Game correction retain their owners.
 
