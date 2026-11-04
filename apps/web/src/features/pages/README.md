@@ -202,6 +202,9 @@ Graph-only classification return validation remains unchanged.
 
 A return restores the browse or evidence control only when that assertion is still admitted at the same spoiler
 preference; otherwise the tag heading is the safe restart. It never opens stale evidence automatically. One
+return locator is consumed once per address visit; an unchanged URL cannot replay focus after a preference or
+equal-source replacement. Classification continuation uses released Concept-targeting facets, keeping credit
+and series membership readers with their existing owners. One
 explicit evidence disclosure is retained at a time. A successful source replacement, even an equal one, resets it.
 Preference, address, account and credential replacement retire it through the existing catalogue/browser lifetime;
 A/B/A cannot revive a previous callback. Source and evidence reads remain separate from command owners.

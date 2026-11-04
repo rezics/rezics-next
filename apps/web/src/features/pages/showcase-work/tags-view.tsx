@@ -170,6 +170,8 @@ export function SubjectConceptTags({
 }: Props) {
   const heading = useId();
   const root = useRef<HTMLElement>(null);
+  const returnVisit = useRef({ href: currentHref, consumed: false });
+  if (returnVisit.current.href !== currentHref) returnVisit.current = { href: currentHref, consumed: false };
   const source = useRef({ subject, related, definitions, generation: 0 });
   if (
     source.current.subject !== subject ||
@@ -208,7 +210,9 @@ export function SubjectConceptTags({
 
   // A return locator never opens evidence. Recheck current admission and the preference before restoring focus.
   useLayoutEffect(() => {
-    if (!currentHref || !lifetime.active()) return;
+    if (!currentHref || !lifetime.active() || returnVisit.current.consumed) return;
+    // A retained URL is not a new visit after a preference or equal-source replacement, including A/B/A.
+    returnVisit.current.consumed = true;
     const accepted = subjectVisitReturn(currentHref, locale);
     if (!accepted) return;
     const hash = new URL(accepted, 'https://rezics.invalid').hash;

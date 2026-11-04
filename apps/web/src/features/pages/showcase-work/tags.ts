@@ -111,9 +111,14 @@ export function readWorkTags(
   if (!definitions) return { state: 'unavailable' };
   if (!definitions.types[subject.type]) return { state: 'unavailable' };
   if (!typeExtends(definitions, subject.type, 'schema:CreativeWork')) return { state: 'unsupported' };
-  const properties = facetProperties(definitions, [subject.type]).filter(
-    (property) => definitions.properties[property]?.datatype === 'wikibase-item',
-  );
+  const properties = facetProperties(definitions, [subject.type]).filter((property) => {
+    const definition = definitions.properties[property];
+    // Credits and series membership are also item facets; their continuation belongs to their own readers.
+    return (
+      definition?.datatype === 'wikibase-item' &&
+      definition.targets?.some((target) => typeExtends(definitions, target, 'skos:Concept'))
+    );
+  });
   if (!properties.length) return { state: 'unsupported' };
   const tags: WorkTag[] = [];
   for (const property of properties) {
