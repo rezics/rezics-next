@@ -55,6 +55,7 @@ async function preview(subjectIds: string[], requestKey = key()) {
 }
 
 test('preview is inert, confirmation binds stored peers, and changed entries are skipped individually', async () => {
+  await f.setLibraryOpen(false);
   await f.grantLibraryGate(f.owner.actor.accountId);
   const a = await entry(),
     b = await entry();
@@ -157,6 +158,10 @@ test('filtered preview exhausts native Members pages before status confirmation'
   for (let n = 0; n < 101; n++)
     await collections.addMember(owner.actor, source.id, { subjectId, note: `occurrence-${n}` }, key());
 
+  const collectionRead = await f.send(owner.bearer, 'GET', `/v1/collections/${source.id}`);
+  expect(collectionRead.status, await collectionRead.clone().text()).toBe(200);
+  const memberRead = await f.send(owner.bearer, 'GET', `/v1/collections/${source.id}/members`);
+  expect(memberRead.status, await memberRead.clone().text()).toBe(200);
   const response = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
     action: 'set_status',
     state: 'completed',
@@ -268,6 +273,7 @@ test('filtered preview exhausts native Members pages before status confirmation'
 
 test('current authority loss prevents another effect and result disclosure', async () => {
   await f.setLibraryOpen(false);
+  await f.revokeLibraryGate(f.owner.actor.accountId);
   await f.grantLibraryGate(f.owner.actor.accountId);
   const a = await entry(),
     b = await entry(),
@@ -435,6 +441,7 @@ test('native add receipt replay survives partial cancellation; results stay priv
     key(),
   );
   const operationId = created.value.operation.id;
+  await bulk.confirm(owner.actor, operationId, key());
   const persisted = await withConnection(f.pool, async (tx) => {
     const locator = { route: sourceRoute, accountId: owner.actor.accountId, operationId };
     const operation = (await readCollectionBulk(tx, locator))!;
