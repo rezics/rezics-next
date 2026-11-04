@@ -11,6 +11,8 @@ const id = '00000000-0000-4000-8000-00000000c001';
 const target = '00000000-0000-4000-8000-00000000c002';
 const origin = `/en/subjects/${target}/classification/graph`;
 const role = 'vndb:不明/المصدر/00-A';
+const originalRelease = `sha256:${'a'.repeat(64)}`;
+const replacementRelease = `sha256:${'b'.repeat(64)}`;
 
 // Caller evidence uses the existing Subject and bounded inverse response, never an invented transport DTO.
 async function response(
@@ -35,7 +37,7 @@ async function response(
       id: options.id ?? id,
       type: options.admitted === false ? 'schema:Book' : 'skos:Concept',
       revision: 1,
-      release: options.release ?? 'sha256:original',
+      release: options.release ?? originalRelease,
       context: target,
       labels: { en: 'Original concept' },
       aliases: { ja: ['元の概念'] },
@@ -211,7 +213,7 @@ test('mounted native hierarchy retains a failed page, retries its original input
     expect(host.textContent).toContain(role);
     const correct = [...host.querySelectorAll('a')].find((node) => node.textContent === 'Correct this fact')!;
     const correction = new URL(correct.href);
-    expect(correction.pathname).toEndWith('/facts');
+    expect(correction.pathname).toEndWith('/edit');
     expect(correction.searchParams.get('returnTo')).toBe(origin);
     await click('More hierarchy');
     expect(pending.calls[1]!.input).toEqual({ cursor: 'next:原文', session: 'receipt-A' });
@@ -315,7 +317,7 @@ test('partial refresh retains only the same native revision and receipt, while d
     await pending.complete(1, { state: 'preparing' });
     expect(links(hierarchy(host))).toEqual(['First rows']);
     await click('Retry this page');
-    await pending.complete(2, { state: 'unavailable', release: 'sha256:replacement' });
+    await pending.complete(2, { state: 'unavailable', release: replacementRelease });
     expect(links(hierarchy(host))).toEqual([]);
     expect(host.textContent).not.toContain('Showing retained');
     await click('Retry this page');
