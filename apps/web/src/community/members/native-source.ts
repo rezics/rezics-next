@@ -4,8 +4,7 @@ import type { MemberPageRead, MemberSelectionRead, RealmMembersSource } from './
 type NativeReader = (input: RealmMembersReadInput) => Promise<NativeRealmMembersRead>;
 
 const idPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const productionRead: NativeReader = async (input) =>
-  (await import('./transport')).readRealmMembers({ data: input });
+const productionRead: NativeReader = async (input) => (await import('./transport')).readRealmMembers({ data: input });
 const productionAddMember: NonNullable<RealmMembersSource['addMember']> = async (intent) =>
   (await import('./commands')).addSelectedRealmMember(intent);
 
