@@ -1,4 +1,9 @@
-import { reporterHistoryPage, reporterHistoryQuery, type ReporterHistoryPage, type ReporterHistoryQuery } from './model';
+import {
+  reporterHistoryPage,
+  reporterHistoryQuery,
+  type ReporterHistoryPage,
+  type ReporterHistoryQuery,
+} from './model';
 export type ReporterHistoryResult =
   | { state: 'loaded'; page: ReporterHistoryPage; nativeSourceFingerprint: string }
   | { state: 'denied' | 'expired' | 'unavailable' };
@@ -25,15 +30,34 @@ export async function loadReporterHistory(
     }
     if (!response.ok) {
       const problem: unknown = await response.json();
-      if ((response.status === 400 || response.status === 409) && problem && typeof problem === 'object' && 'code' in problem && (problem.code === 'invalid_cursor' || problem.code === 'stale_cursor')) return { state: 'expired' };
+      if (
+        (response.status === 400 || response.status === 409) &&
+        problem &&
+        typeof problem === 'object' &&
+        'code' in problem &&
+        (problem.code === 'invalid_cursor' || problem.code === 'stale_cursor')
+      )
+        return { state: 'expired' };
       return { state: 'unavailable' };
     }
     const nativeSession = response.headers.get('rezics-session-token');
-    if (!nativeSession) { await response.body?.cancel(); return { state: 'unavailable' }; }
+    if (!nativeSession) {
+      await response.body?.cancel();
+      return { state: 'unavailable' };
+    }
     const page = reporterHistoryPage(await response.json(), query);
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(['reporter-history-source', nativeSession])));
+    const digest = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(JSON.stringify(['reporter-history-source', nativeSession])),
+    );
     signal?.throwIfAborted();
-    return { state: 'loaded', page, nativeSourceFingerprint: Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('') };
+    return {
+      state: 'loaded',
+      page,
+      nativeSourceFingerprint: Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(
+        '',
+      ),
+    };
   } catch {
     return { state: 'unavailable' };
   }
