@@ -1,4 +1,5 @@
 -- Keep only opaque native receipt linkage for one bounded day after source expiry.
+-- migrate:up
 ALTER TABLE library.bangumi_upload
   ADD COLUMN recovery_until timestamptz;
 
