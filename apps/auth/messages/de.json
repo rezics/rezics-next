@@ -161,7 +161,7 @@
   "auth_organization_conflict": "Die Organisation konnte nicht erstellt werden. Der Handle ist möglicherweise bereits vergeben.",
   "auth_organization_create": "Organisation erstellen",
   "auth_organization_created": "Die Organisation @{handle} wurde erstellt.",
-  "auth_organization_delete_accepted": "Der Befehl zur Organisationslöschung wurde angenommen. Die Bereinigung bei allen Datenverantwortlichen sowie gemeinsamer und externer Kopien kann noch ausstehen. Eine vollständige Löschung ist nicht bestätigt.",
+  "auth_organization_delete_accepted": "Die Löschung der Organisation wurde verbindlich ausgeführt. Die Bereinigung bei Datenverantwortlichen sowie geteilter und externer Kopien kann noch ausstehen; die vollständige Löschung ist nicht bestätigt.",
   "auth_organization_delete_changed": "Konto, Organisation oder Anfrage haben sich geändert. Prüfe die aktuelle Organisation und bestätige eine neue Anfrage.",
   "auth_organization_delete_denied": "Die nativen Löschprüfungen haben die Anfrage abgelehnt. Kläre Eigentumspflichten, ausstehende Übertragungen und betriebene Konten, bevor du erneut bestätigst.",
   "auth_organization_delete_effect": "Die Löschung schließt diese Organisation endgültig und kann nicht rückgängig gemacht werden. Die Bereinigung nativer Daten sowie gemeinsamer und externer Kopien kann noch ausstehen.",
@@ -460,5 +460,8 @@
   "auth_account_delete_advice_available": "Die aktuelle Berechtigung erlaubt eine Löschanfrage. Voraussetzungen und Berechtigung werden beim Absenden erneut geprüft.",
   "auth_account_delete_review_changed": "Ihr Konto oder Ihre Sitzung hat sich geändert. Laden Sie die Prüfung neu und bestätigen Sie erneut.",
   "auth_account_delete_submit_requirements": "Beim Absenden werden auch vorübergehende Sperren und ausstehende interne Arbeiten geprüft. Diese Prüfung bestätigt nicht, dass sie erledigt sind.",
-  "auth_account_delete_retention_limits": "Erforderliche aufbewahrte Daten unterliegen den festgelegten Ausnahmen. Backups und externe Kopien sind gesondert zu behandeln; diese Seite bestätigt deren Löschung nicht."
+  "auth_account_delete_retention_limits": "Erforderliche aufbewahrte Daten unterliegen den festgelegten Ausnahmen. Backups und externe Kopien sind gesondert zu behandeln; diese Seite bestätigt deren Löschung nicht.",
+  "auth_organization_delete_authentication_required": "Authentifiziere dich, um diese Auswahl zu prüfen. Die ausgewählte ID ist unbestätigt. Die Identität der Organisation, deine Berechtigung und die Löschvoraussetzungen sind erst nach der Autorisierung verfügbar.",
+  "auth_organization_delete_authenticate": "Zur Prüfung authentifizieren",
+  "auth_organization_delete_advice": "Diese Prüfung zeigt die aktuelle Berechtigung. Sie erteilt keine Löschfreigabe und bestätigt nicht alle Voraussetzungen. Bei der Bestätigung werden die frische Authentifizierung und die aktuellen Voraussetzungen erneut geprüft."
 }

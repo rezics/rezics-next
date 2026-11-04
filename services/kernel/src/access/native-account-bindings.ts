@@ -1,6 +1,9 @@
 import { createAccountDeletionPageAccess, type AccountDeletionPageAccess } from './account-deletion-page-source.ts';
 import { createOperatorOpeningPageAccess, type OperatorOpeningPageAccess } from './operator-opening-page-source.ts';
-import { createOrganizationDeletionAccess, type OrganizationDeletionAccess } from './organization-deletion-source.ts';
+import {
+  createOrganizationDeletionAccess,
+  type OrganizationDeletionPageAccess,
+} from './organization-deletion-source.ts';
 import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
 import { createAccountProfileAccess, type AccountProfileAccess } from './account-profile-source.ts';
 import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
@@ -257,11 +260,16 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   const boundary = () => ({ pool, deadline: deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS) });
   const creationContext: NonNullable<TrustedAccessPorts['readNativeCreationContext']> = (input) =>
     readNativeCreationContext({ pool, access, approvals }, input, boundary());
+  const organizationDeletion = createOrganizationDeletionAccess({
+    pool,
+    access,
+    accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+  });
   const trustedAccess: TrustedAccessPorts &
     ManagementMembershipAccess &
     AutomatedOperatorAccess &
     AccountProfileAccess &
-    OrganizationDeletionAccess &
+    OrganizationDeletionPageAccess &
     AccountDeletionPageAccess &
     OperatorOpeningPageAccess = {
     ...createAccountDeletionPageAccess({
@@ -279,11 +287,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       access,
       accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
     }),
-    ...createOrganizationDeletionAccess({
-      pool,
-      access,
-      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
-    }),
+    ...organizationDeletion,
     readNativeCreationContext: creationContext,
     readOriginalLifecycleResult: (input) =>
       readOriginalLifecycleResult({ pool, referenceKeys, source: workflow }, input),
@@ -417,11 +421,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       throw new WorkflowApprovalUnavailableError();
     },
     actorAccountId: (context) => context.actor.accountId,
-    ...createOrganizationDeletionAccess({
-      pool,
-      access,
-      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
-    }),
+    readOrganizationForDeletion: organizationDeletion.readOrganizationForDeletion,
     readNativeCreationContext: creationContext,
     copyActors: (context) => readNativeCopyActors({ pool, access }, context),
     stableCommandKey: (context, phase) => `${required(workflowApprovalBinding(context)).commandKeyPrefix}:${phase}`,

@@ -2993,18 +2993,29 @@ preparation, authentication and acknowledgment) and `../rezics/apps/web/features
 ## Organization deletion review
 
 `POST /account-management/organizations/deletion-review` accepts exactly `{ organizationId }`, with the issuer
-Origin and existing JSON/CSRF bounds, no bearer or query. The default host consumes `readOrganizationForDeletion`
-from the native trusted bindings. Auth's live cookie proof retains exactly the account-operation client's
-`account:delete` profile; the same proof is revalidated after native I/O. Review permits an older authentication
-so approval can request its existing fresh step-up; review neither approves nor executes a command.
+Origin and existing JSON/CSRF bounds, no bearer or query. One private/no-store observation supplies the live
+initiating human, readiness and any admitted organization identity. It replaces the page's separate session read.
+The host consumes `readOrganizationDeletionPage` from the existing native deletion factory's trusted binding;
+`readOrganizationForDeletion` remains exact-profile on both trusted and workflow bindings. Ordinary page readiness
+is absent from workflow ports. Construction invokes no Auth callback or I/O.
 
-The private producer reuses the native management account/role source and `readManagedAuthActions` deletion ENTRY
-formula, without the generic endpoint's `account:read` scope, public attribution, or member inventory. It compares
-native identity, lifecycle, human floor, role and home epochs after released permission preparation. Only the
-selected organization identity and the server-bound initiating human reach the browser. Approval and execution
-retain their independent current checks, original command/key and uncertainty recovery.
+Decision: an ordinary live human sees only their initiating ID, the untrusted selected organization ID and an
+explicit authentication continuation; target existence, labels, membership, permission and requirements stay unobserved.
+Missing bindings and failed preparations stay unavailable. Exact-profile native denial never becomes step-up advice.
+The continuation retains only human, target and operation key through the existing deletion step-up flow. Returning
+renews review, clears typed confirmation and requires explicit submission; no approval or command runs on return.
 
-Decision: unrelated organizations return hidden, missing/inactive sources return missing, current authority refusals
-return denied, and failed or changing native reads return unavailable; none discloses an organization identity.
-The page uses its existing localized denial text for hidden results. Cost is two bounded two-account snapshots,
-two role points, native management ENTRY preparation/checks, and constant Auth session checks; no inventory or polling.
+The exact-profile private producer reuses the native management account/role source and `readManagedAuthActions`
+deletion ENTRY formula without the generic endpoint's `account:read` scope, public attribution or member inventory.
+It compares identity, lifecycle, human floor, role and home epochs after released permission preparation. A changed
+snapshot retires review; missing/inactive accounts return missing, unrelated organizations hidden and current
+native refusals denied, without private identity. Only a ready result carries the allowlisted organization identity
+and confirm action. Read advice grants nothing and cannot establish approval freshness or clear command requirements.
+
+The whole page response, including Auth proof currentness before and after native I/O, has a three-second bound.
+The exact branch costs two bounded two-account snapshots, two role points, the existing finite native management
+ENTRY preparation/checks and constant Auth session checks. The ordinary branch performs only those Auth currentness
+checks and profile classification; no target lookup, permission preparation, inventory, workflow or polling.
+Approval and execution retain independent checks, exact original command/key and the pre-send uncertainty fence.
+Readback never resolves an unknown execution. Committed deletion means cleanup pending, with adopted retention
+exceptions and backups/external copies distinguished from complete erasure.

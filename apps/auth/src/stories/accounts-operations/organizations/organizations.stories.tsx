@@ -61,3 +61,72 @@ export const SignedOut = {
     </AuthStory>
   ),
 };
+
+// Selected deletion fixtures are private page observations, never action grants.
+import { OrganizationDeleteContent } from '../../../routes/organizations.delete';
+import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../../../organization-deletion';
+const deletionHuman = '10000000-0000-7000-8000-000000000001';
+const deletionOrganization = '20000000-0000-7000-8000-000000000002';
+const deletionReview: OrganizationDeletionRead = {
+  kind: 'ready',
+  humanAccountId: deletionHuman,
+  action: 'confirm',
+  account: {
+    id: deletionOrganization,
+    kind: 'organization',
+    handle: 'reading-group',
+    displayName: 'International reading group — 世界の読書会・跨地區閱讀與共同出版組織',
+  },
+};
+const deletionSource =
+  (value: OrganizationDeletionRead): OrganizationDeletionReader =>
+  async () =>
+    value;
+const deletionAuthentication = deletionSource({
+  kind: 'authentication-required',
+  humanAccountId: deletionHuman,
+  action: 'authenticate',
+});
+const deletionAllowed = deletionSource(deletionReview);
+const deletionRefused = deletionSource({ kind: 'denied' });
+const deletionUnavailable = deletionSource({ kind: 'unavailable' });
+const deletionPage = (read: OrganizationDeletionReader, mode: 'success' | 'unknown' = 'success') => (
+  <AuthStory mode={mode}>
+    <OrganizationDeleteContent
+      organizationId={deletionOrganization}
+      privacyContact="mailto:privacy@example.test"
+      read={read}
+    />
+  </AuthStory>
+);
+const deletionParameters = {
+  viewport: {
+    options: {
+      phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+      desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '1000px' } },
+    },
+  },
+};
+export const DeleteAuthenticationRequired = {
+  parameters: deletionParameters,
+  render: () => deletionPage(deletionAuthentication),
+};
+export const DeleteLongIdentityAndConsequences = {
+  parameters: deletionParameters,
+  render: () => deletionPage(deletionAllowed),
+};
+export const DeleteRefused = { parameters: deletionParameters, render: () => deletionPage(deletionRefused) };
+export const DeleteUnavailable = { parameters: deletionParameters, render: () => deletionPage(deletionUnavailable) };
+export const DeleteUnknown = {
+  parameters: deletionParameters,
+  render: () => deletionPage(deletionAllowed, 'unknown'),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const input = await waitFor(() =>
+      canvasElement.querySelector<HTMLInputElement>('#organization-delete-confirmation'),
+    );
+    fill(input, '@reading-group');
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    button(canvasElement, m.auth_organization_delete_heading())!.click();
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_organization_delete_unknown()));
+  },
+};

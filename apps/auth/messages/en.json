@@ -161,7 +161,7 @@
   "auth_organization_conflict": "The organization could not be created. The handle may be taken.",
   "auth_organization_create": "Create organization",
   "auth_organization_created": "The organization @{handle} was created.",
-  "auth_organization_delete_accepted": "The organization deletion command was accepted. Cleanup across all data owners, shared copies and external copies may still be pending; complete erasure is not confirmed.",
+  "auth_organization_delete_accepted": "Organization deletion committed. Cleanup across data owners, shared copies and external copies may still be pending; complete erasure is not confirmed.",
   "auth_organization_delete_changed": "The account, organization or request changed. Review the current organization and confirm a new request.",
   "auth_organization_delete_denied": "The native deletion checks refused this request. Resolve ownership obligations, pending transfers and operated accounts before confirming again.",
   "auth_organization_delete_effect": "Deletion permanently closes this organization and cannot be undone. Native, shared and external cleanup can remain pending.",
@@ -460,5 +460,8 @@
   "auth_account_delete_advice_available": "Current permission allows a deletion request. Prerequisites and permission are checked again when you submit.",
   "auth_account_delete_review_changed": "Your account or session changed. Reload the review and confirm again.",
   "auth_account_delete_submit_requirements": "Submission also checks temporary holds and pending native work. This review does not verify that they are clear.",
-  "auth_account_delete_retention_limits": "Required retained records follow their adopted retention exceptions. Backup expiry and external copies are separate; this page cannot confirm their erasure."
+  "auth_account_delete_retention_limits": "Required retained records follow their adopted retention exceptions. Backup expiry and external copies are separate; this page cannot confirm their erasure.",
+  "auth_organization_delete_authentication_required": "Authenticate to review this selection. The selected ID is unverified; the organization’s identity, your permission and deletion requirements are available only after authorization.",
+  "auth_organization_delete_authenticate": "Authenticate to review",
+  "auth_organization_delete_advice": "This review observes current permission; it does not grant deletion or verify that all requirements are satisfied. Confirmation checks fresh authentication and current requirements again."
 }

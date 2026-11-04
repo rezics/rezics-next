@@ -161,7 +161,7 @@
   "auth_organization_conflict": "無法建立組織。此名稱可能已有人使用。",
   "auth_organization_create": "建立組織",
   "auth_organization_created": "組織 @{handle} 已建立。",
-  "auth_organization_delete_accepted": "組織刪除指令已受理。各資料擁有者、共用及外部副本的清理可能仍未完成；尚未確認完整清除。",
+  "auth_organization_delete_accepted": "組織刪除已提交生效。各資料負責方、共用副本及外部副本的清理可能仍未完成；尚未確認完全抹除。",
   "auth_organization_delete_changed": "帳號、組織或請求已變更。請檢視目前的組織，並確認新的請求。",
   "auth_organization_delete_denied": "原生刪除檢查拒絕了此請求。請先處理所有權責任、待完成的移轉及營運的帳號，再次確認。",
   "auth_organization_delete_effect": "刪除會永久關閉此組織，且無法復原。原生資料、共用副本及外部副本的清理可能仍在進行中。",
@@ -460,5 +460,8 @@
   "auth_account_delete_advice_available": "目前的權限允許提出刪除要求。送出時會再次檢查必要條件和權限。",
   "auth_account_delete_review_changed": "帳戶或工作階段已變更。請重新載入檢視，並再次明確確認。",
   "auth_account_delete_submit_requirements": "送出時也會檢查暫時保留及待處理的內部工作。本頁不代表這些條件已滿足。",
-  "auth_account_delete_retention_limits": "必須保留的紀錄依已採納的保留例外處理。備份到期及外部副本另行處理；本頁無法確認它們已清除。"
+  "auth_account_delete_retention_limits": "必須保留的紀錄依已採納的保留例外處理。備份到期及外部副本另行處理；本頁無法確認它們已清除。",
+  "auth_organization_delete_authentication_required": "請先驗證身分，再檢視此選擇。所選 ID 尚未核實；組織身分、你的刪除權限及刪除先決條件只有在授權後才可查看。",
+  "auth_organization_delete_authenticate": "驗證身分並檢視",
+  "auth_organization_delete_advice": "此檢視僅反映目前權限，不授予刪除權限，也不表示所有先決條件已滿足。確認時仍會重新檢查近期身分驗證及目前先決條件。"
 }

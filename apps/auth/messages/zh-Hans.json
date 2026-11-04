@@ -161,7 +161,7 @@
   "auth_organization_conflict": "无法创建组织。该名称可能已被使用。",
   "auth_organization_create": "创建组织",
   "auth_organization_created": "组织 @{handle} 已创建。",
-  "auth_organization_delete_accepted": "组织删除命令已受理。各数据所有者、共享及外部副本的清理可能仍未完成；尚未确认完整清除。",
+  "auth_organization_delete_accepted": "组织删除已提交生效。各数据负责方、共享副本和外部副本的清理可能仍未完成；尚未确认完全擦除。",
   "auth_organization_delete_changed": "账号、组织或请求已变更。请查看当前的组织，并确认新的请求。",
   "auth_organization_delete_denied": "原生删除检查拒绝了此请求。请先处理所有权责任、待完成的转移及运营的账号，再次确认。",
   "auth_organization_delete_effect": "删除会永久关闭此组织，且无法恢复。原生数据、共享副本及外部副本的清理可能仍在进行中。",
@@ -460,5 +460,8 @@
   "auth_account_delete_advice_available": "当前权限允许提交删除请求。提交时会再次检查前提条件和权限。",
   "auth_account_delete_review_changed": "账户或会话已变化。请重新加载查看，并再次明确确认。",
   "auth_account_delete_submit_requirements": "提交时还会检查临时保留和待处理的内部任务。本页不表示这些条件已满足。",
-  "auth_account_delete_retention_limits": "必须保留的记录遵循已采纳的保留例外。备份到期和外部副本另行处理；本页无法确认它们已被清除。"
+  "auth_account_delete_retention_limits": "必须保留的记录遵循已采纳的保留例外。备份到期和外部副本另行处理；本页无法确认它们已被清除。",
+  "auth_organization_delete_authentication_required": "请先验证身份，再审阅此选择。所选 ID 尚未核实；组织身份、你的删除权限和删除前提条件只有在授权后才可查看。",
+  "auth_organization_delete_authenticate": "验证身份并审阅",
+  "auth_organization_delete_advice": "此审阅仅反映当前权限，不授予删除权限，也不表示所有前提条件已满足。确认时仍会重新检查近期身份验证及当前前提条件。"
 }

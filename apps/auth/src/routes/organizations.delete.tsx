@@ -22,7 +22,6 @@ import {
   clearOrganizationDeleteStepUp,
   isAccountId,
   organizationDeletePendingMatches,
-  organizationDeleteSessionMatches,
   organizationDeleteStepUpUrl,
   readOrganizationDeleteStepUp,
   storeOrganizationDeleteStepUp,
@@ -198,7 +197,7 @@ export function OrganizationDeleteContent({
       ? await loadOrganizationDeletion(current.selected, read, current)
       : { kind: 'missing' as const };
     if (!current.isCurrent()) return;
-    if (result.kind === 'signed-out' || result.kind === 'denied' || result.kind === 'missing') {
+    if (['signed-out', 'denied', 'hidden', 'missing', 'changed'].includes(result.kind)) {
       invalidateReview(current);
       setLoaded(result);
       return;
@@ -209,7 +208,14 @@ export function OrganizationDeleteContent({
       continuation.value.organizationId === current.selected &&
       result.kind === 'ready'
     ) {
-      if (!organizationDeleteSessionMatches(result.target.session, continuation.value)) {
+      if (
+        !organizationDeletePendingMatches(
+          continuation.value,
+          result.target.humanAccountId,
+          result.target.organizationId,
+          operationKeyFor({ kind: 'delete', accountId: result.target.organizationId }, result.target.humanAccountId),
+        )
+      ) {
         clearOrganizationDeleteStepUp();
         invalidateReview(current);
         setLoaded({ kind: 'denied' });
@@ -299,6 +305,45 @@ export function OrganizationDeleteContent({
   const target = loaded?.kind === 'ready' ? loaded.target : null;
   const phrase = target ? organizationDeleteConfirmation(target, m.auth_organization_delete_phrase()) : '';
 
+  function authenticate(humanAccountId: string, selected: string) {
+    const current = review.current;
+    if (
+      !current?.isCurrent() ||
+      current.selected !== selected ||
+      current.humanAccountId !== humanAccountId ||
+      outcome !== 'form'
+    )
+      return;
+    // Unknown work is never replaced by a new authentication continuation.
+    if (readOrganizationDeleteUnknown(selected).kind !== 'absent') {
+      setConfirmation('');
+      setOutcome('unknown');
+      return;
+    }
+    const key = operationKeyFor({ kind: 'delete', accountId: selected }, humanAccountId);
+    const continuation = readOrganizationDeleteStepUp();
+    if (
+      continuation.kind === 'invalid' ||
+      (continuation.kind === 'pending' &&
+        !organizationDeletePendingMatches(continuation.value, humanAccountId, selected, key))
+    ) {
+      clearOrganizationDeleteStepUp();
+      invalidateReview(current);
+      setLoaded({ kind: 'changed' });
+      setConfirmation('');
+      return;
+    }
+    if (!storeOrganizationDeleteStepUp({ humanAccountId, organizationId: selected, operationKey: key })) {
+      setMessage(m.auth_account_operation_unavailable());
+      return;
+    }
+    setConfirmation('');
+    setLoaded(null);
+    current.active = false;
+    bypassDeparture.current = true;
+    window.location.assign(organizationDeleteStepUpUrl);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const current = review.current;
@@ -337,18 +382,7 @@ export function OrganizationDeleteContent({
         return;
       }
       if (result.reason === 'step-up') {
-        if (
-          storeOrganizationDeleteStepUp({
-            humanAccountId: target.humanAccountId,
-            organizationId: target.organizationId,
-            operationKey: key,
-          })
-        ) {
-          bypassDeparture.current = true;
-          window.location.assign(organizationDeleteStepUpUrl);
-          return;
-        }
-        setMessage(m.auth_account_operation_failure());
+        authenticate(target.humanAccountId, target.organizationId);
         return;
       }
       setConfirmation('');
@@ -402,8 +436,7 @@ export function OrganizationDeleteContent({
     try {
       const result = await loadOrganizationDeletion(currentOrganizationId, read, current);
       if (!current.isCurrent()) return;
-      if (result.kind === 'signed-out' || result.kind === 'denied' || result.kind === 'missing')
-        invalidateReview(current);
+      if (['signed-out', 'denied', 'hidden', 'missing', 'changed'].includes(result.kind)) invalidateReview(current);
       // A missing/denied read is not proof of deletion; a readable target is not
       // proof that an earlier command failed. Preserve the unknown command state.
       setLoaded(result);
@@ -435,6 +468,7 @@ export function OrganizationDeleteContent({
       <div className="auth-login-form">
         <p>{m.auth_organization_delete_effect()}</p>
         <p>{m.auth_organization_delete_remedies()}</p>
+        <p>{m.auth_account_delete_retention_limits()}</p>
         {privacyContact ? (
           <p>
             {privacyBefore}
@@ -476,12 +510,23 @@ export function OrganizationDeleteContent({
             <p>{m.auth_account_operation_sign_in_required()}</p>
             <a href="/login">{m.auth_security_sign_in()}</a>
           </>
+        ) : loaded.kind === 'authentication-required' ? (
+          <>
+            <p>{m.auth_transfer_acting_as({ account: loaded.humanAccountId })}</p>
+            <p className="break-all">{selectedId.current}</p>
+            <p>{m.auth_organization_delete_authentication_required()}</p>
+            <Button type="button" onClick={() => authenticate(loaded.humanAccountId, selectedId.current!)}>
+              {m.auth_organization_delete_authenticate()}
+            </Button>
+          </>
         ) : !target ? (
           <>
             <ErrorAlert>
-              {loaded.kind === 'denied' || loaded.kind === 'hidden' || loaded.kind === 'missing'
-                ? m.auth_organization_delete_read_denied()
-                : m.auth_account_operation_unavailable()}
+              {loaded.kind === 'changed'
+                ? m.auth_organization_delete_changed()
+                : loaded.kind === 'denied' || loaded.kind === 'hidden' || loaded.kind === 'missing'
+                  ? m.auth_organization_delete_read_denied()
+                  : m.auth_account_operation_unavailable()}
             </ErrorAlert>
             {loaded.kind === 'unavailable' ? (
               <Button type="button" onClick={() => void recover()}>
@@ -497,8 +542,12 @@ export function OrganizationDeleteContent({
             noValidate
             className="auth-login-form"
           >
-            <p>{target.displayName || (target.handle ? `@${target.handle}` : target.organizationId)}</p>
-            <p>{target.organizationId}</p>
+            <p className="break-all">{m.auth_transfer_acting_as({ account: target.humanAccountId })}</p>
+            <p>{m.auth_organization_delete_advice()}</p>
+            <p className="break-words">
+              {target.displayName || (target.handle ? `@${target.handle}` : target.organizationId)}
+            </p>
+            <p className="break-all">{target.organizationId}</p>
             <Field data-invalid={confirmationError}>
               <FieldLabel htmlFor="organization-delete-confirmation">
                 {m.auth_account_delete_confirmation_prompt({ phrase })}
