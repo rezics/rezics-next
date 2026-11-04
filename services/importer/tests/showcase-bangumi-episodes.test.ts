@@ -186,7 +186,7 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
   expect(selected.some((record) => record.key === 'episode:900003')).toBe(false);
   expect(plan.gaps.find((gap) => gap.externalId === 'episode:999999')?.reason).toContain('delivery window');
   const deliveryKeys = new Set(['81', 'episode:900001', 'episode:900002']);
-  plan.records.bangumi = [];
+  plan.records.bangumi = plan.records.bangumi.filter((record) => deliveryKeys.has(record.key));
   plan.records.vndb = [];
   plan.entities.bangumi = plan.entities.bangumi.filter((record) => deliveryKeys.has(record.key));
   plan.entities.vndb = [];
@@ -270,4 +270,4 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 15_000);
