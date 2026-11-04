@@ -55,11 +55,7 @@ function titleOf(member: CollectionMember | undefined): string {
     : m.library_subject_unavailable();
 }
 
-function occurrence(
-  memberId: string,
-  position: number | null,
-  members: readonly CollectionMember[],
-): string {
+function occurrence(memberId: string, position: number | null, members: readonly CollectionMember[]): string {
   const member = members.find((candidate) => candidate.id === memberId);
   if (position === null) return titleOf(member);
   return m.library_member_occurrence({ title: titleOf(member), position });
@@ -180,18 +176,10 @@ function MemberOperationText({
     );
   }
   const beforeAnchor = entry.beforeAnchorId
-    ? occurrence(
-        entry.beforeAnchorId,
-        initial.findIndex((member) => member.id === entry.beforeAnchorId) + 1,
-        initial,
-      )
+    ? occurrence(entry.beforeAnchorId, initial.findIndex((member) => member.id === entry.beforeAnchorId) + 1, initial)
     : m.collection_review_start();
   const afterAnchor = operation.after
-    ? occurrence(
-        operation.after,
-        desired.findIndex((member) => member.id === operation.after) + 1,
-        desired,
-      )
+    ? occurrence(operation.after, desired.findIndex((member) => member.id === operation.after) + 1, desired)
     : m.collection_review_start();
   return (
     <div className="space-y-2" data-operation-kind="move" data-member-id={operation.memberId}>
@@ -236,7 +224,11 @@ function PlanStep({
   }
   if (step.kind === 'remove-batch') {
     return (
-      <li data-review-step={step.id} data-review-kind="remove-batch" className="space-y-2 rounded-lg bg-destructive/5 p-3">
+      <li
+        data-review-step={step.id}
+        data-review-kind="remove-batch"
+        className="space-y-2 rounded-lg bg-destructive/5 p-3"
+      >
         <h3 className="font-medium text-destructive">
           {m.collection_review_batch_remove({ count: step.operations.length })}
         </h3>
@@ -362,12 +354,7 @@ function OutcomeGroups({
         const rows = outcomes.filter((outcome) => outcome.status === status);
         if (rows.length === 0) return null;
         return (
-          <section
-            key={status}
-            aria-label={outcomeHeading(status)}
-            data-outcome-group={status}
-            className="space-y-2"
-          >
+          <section key={status} aria-label={outcomeHeading(status)} data-outcome-group={status} className="space-y-2">
             <h4 className="text-sm font-semibold">{outcomeHeading(status)}</h4>
             <ol className="space-y-2">
               {rows.map((outcome) => {
@@ -411,7 +398,9 @@ function OutcomeGroups({
                                   ? step.operation
                                   : undefined
                                 : step.kind === 'remove-batch'
-                                  ? step.operations.find((operation) => operation.operation.memberId === episode.memberId)
+                                  ? step.operations.find(
+                                      (operation) => operation.operation.memberId === episode.memberId,
+                                    )
                                   : undefined;
                             return (
                               <li
@@ -470,7 +459,9 @@ function BasisMembers({
       <h4 className="font-semibold">{heading}</h4>
       <div className="space-y-1 text-sm">
         <p className="font-medium whitespace-pre-wrap [overflow-wrap:anywhere]">{page.title}</p>
-        <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{page.description || m.collection_review_no_value()}</p>
+        <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {page.description || m.collection_review_no_value()}
+        </p>
         <p>
           {page.visibility === 'public'
             ? m.library_visibility_public()
@@ -480,7 +471,12 @@ function BasisMembers({
         </p>
         <CollectionPresentationSummary kind={page.presentationKind ?? null} types={page.presentationTypes} />
         <p>
-          {m.subject_cover()}: {coverMember ? titleOf(coverMember) : page.coverMediaId ? m.library_collection_current_cover() : m.library_collection_auto()}
+          {m.subject_cover()}:{' '}
+          {coverMember
+            ? titleOf(coverMember)
+            : page.coverMediaId
+              ? m.library_collection_current_cover()
+              : m.library_collection_auto()}
         </p>
         <p className="text-muted-foreground">{m.collection_save_basis_revision({ revision: page.revision })}</p>
       </div>
@@ -549,9 +545,7 @@ function CurrentBasis({
           <section className="space-y-2 rounded-lg border border-border p-3" aria-live="polite">
             <h4 className="font-semibold">{m.collection_save_current_basis()}</h4>
             <p>
-              {basisState === 'reading'
-                ? m.collection_save_basis_reading()
-                : m.collection_save_basis_unavailable()}
+              {basisState === 'reading' ? m.collection_save_basis_reading() : m.collection_save_basis_unavailable()}
             </p>
             {basisState !== 'reading' && onReadCurrent ? (
               <Button type="button" variant="outline" onClick={onReadCurrent}>
@@ -565,10 +559,18 @@ function CurrentBasis({
         <p role="alert">
           {rebaseIssue.reason === 'member-missing'
             ? m.collection_save_unavailable_member({
-                title: occurrence(rebaseIssue.operation.operation.memberId, rebaseIssue.operation.beforePosition, initial),
+                title: occurrence(
+                  rebaseIssue.operation.operation.memberId,
+                  rebaseIssue.operation.beforePosition,
+                  initial,
+                ),
               })
             : m.collection_save_unavailable_anchor({
-                title: occurrence(rebaseIssue.operation.operation.memberId, rebaseIssue.operation.beforePosition, initial),
+                title: occurrence(
+                  rebaseIssue.operation.operation.memberId,
+                  rebaseIssue.operation.beforePosition,
+                  initial,
+                ),
               })}
         </p>
       ) : null}
@@ -639,13 +641,7 @@ export function CollectionSaveReview({
           ) : (
             <ol className="space-y-2" data-review-order>
               {plan.steps.map((step) => (
-                <PlanStep
-                  key={step.id}
-                  step={step}
-                  initial={initial}
-                  desired={desired}
-                  types={types}
-                />
+                <PlanStep key={step.id} step={step} initial={initial} desired={desired} types={types} />
               ))}
             </ol>
           )}
@@ -657,11 +653,12 @@ export function CollectionSaveReview({
             {complete
               ? plan.steps.length === 0
                 ? m.collection_save_no_changes()
-                : plan.metadataChanges.length && (plan.operations.length || plan.steps.some((step) => step.kind === 'transfer'))
-                ? m.collection_save_complete_mixed()
-                : plan.operations.length || plan.steps.some((step) => step.kind === 'transfer')
-                  ? m.collection_save_complete_members()
-                  : m.collection_save_complete_metadata()
+                : plan.metadataChanges.length &&
+                    (plan.operations.length || plan.steps.some((step) => step.kind === 'transfer'))
+                  ? m.collection_save_complete_mixed()
+                  : plan.operations.length || plan.steps.some((step) => step.kind === 'transfer')
+                    ? m.collection_save_complete_members()
+                    : m.collection_save_complete_metadata()
               : m.collection_save_outcomes_heading()}
           </h3>
           <OutcomeGroups outcomes={outcomes} plan={plan} initial={initial} desired={desired} types={types} />
@@ -696,4 +693,3 @@ export function CollectionSaveReview({
     </section>
   );
 }
-

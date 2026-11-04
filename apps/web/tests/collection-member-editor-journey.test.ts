@@ -197,9 +197,13 @@ test('Curator can add and edit Collection members without an always-open form wa
     await page.goto(`https://site.test/en/collections/${id}`);
     await page.addScriptTag({ type: 'module', content: await built.outputs[0]!.text() });
     try {
-      await page.getByRole('button', { name: m.library_collection_add_items(), exact: true }).click({ timeout: 10_000 });
+      await page
+        .getByRole('button', { name: m.library_collection_add_items(), exact: true })
+        .click({ timeout: 10_000 });
     } catch (error) {
-      throw new Error(`${String(error)}\nPage errors: ${pageErrors.join('\n')}\nBody: ${await page.locator('body').innerText()}`);
+      throw new Error(
+        `${String(error)}\nPage errors: ${pageErrors.join('\n')}\nBody: ${await page.locator('body').innerText()}`,
+      );
     }
     const search = page.getByRole('combobox', { name: m.library_collection_find_subject() });
     await search.fill('Snow');
@@ -244,7 +248,9 @@ test('Curator can add and edit Collection members without an always-open form wa
       await page.getByRole('textbox', { name: `${m.library_member_note()}: Snow Country`, exact: true }).inputValue(),
     ).toBe('Keep my unsaved note');
     expect(await page.locator('[data-conflict-basis]').count()).toBe(0);
-    await page.getByRole('textbox', { name: `${m.library_member_note()}: Snow Country`, exact: true }).fill('Saved note');
+    await page
+      .getByRole('textbox', { name: `${m.library_member_note()}: Snow Country`, exact: true })
+      .fill('Saved note');
     await page.getByRole('button', { name: m.library_collection_save(), exact: true }).click();
     await page.locator('[data-collection-save]').waitFor({ state: 'detached' });
     await page.getByText('Saved note', { exact: true }).waitFor();
@@ -264,7 +270,9 @@ test('Curator can add and edit Collection members without an always-open form wa
     ]);
     await page.getByRole('button', { name: m.collection_save_retry_original(), exact: true }).click();
     await page.locator('[data-collection-save]').waitFor({ state: 'detached' });
-    expect(await page.evaluate(() => (window as unknown as JourneyWindow).collectionRevision())).toBe(revisionAtUnknown);
+    expect(await page.evaluate(() => (window as unknown as JourneyWindow).collectionRevision())).toBe(
+      revisionAtUnknown,
+    );
     await page.locator('[data-collection-edit-review]').waitFor();
     expect(await page.locator('[data-collection-save-outcomes] [data-save-outcome="confirmed"]').count()).toBe(2);
     await page.evaluate(() => (window as unknown as JourneyWindow).retire());

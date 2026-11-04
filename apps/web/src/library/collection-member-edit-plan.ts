@@ -170,7 +170,8 @@ function reviewOperation(
   const beforeMember = initial[beforeIndex]!;
   const afterMember = afterIndex < 0 ? undefined : desired[afterIndex];
   const beforeAnchorId = beforeIndex > 0 ? initial[beforeIndex - 1]!.id : null;
-  const afterAnchorId = operation.kind === 'move' ? operation.after : afterIndex > 0 ? desired[afterIndex - 1]!.id : null;
+  const afterAnchorId =
+    operation.kind === 'move' ? operation.after : afterIndex > 0 ? desired[afterIndex - 1]!.id : null;
   return {
     id: `${operation.kind}:${operation.memberId}`,
     operation,
@@ -191,7 +192,8 @@ export function buildCollectionSaveReviewPlan(input: CollectionSaveReviewPlanInp
   const rawOperations = buildCollectionMemberEditPlan(input.initial, input.desired, input.firstPage);
   const operations = rawOperations.map((operation) => reviewOperation(operation, input.initial, input.desired));
   const removals = operations.filter((entry) => entry.operation.kind === 'remove');
-  const usesBatchRemoval = removals.length > 1 || removals.some((entry) => input.batchRemovalIds?.has(entry.operation.memberId));
+  const usesBatchRemoval =
+    removals.length > 1 || removals.some((entry) => input.batchRemovalIds?.has(entry.operation.memberId));
   const metadataChangesList = metadataChanges(input.before, input.after);
   const hasNonRemoval = operations.some((entry) => entry.operation.kind !== 'remove');
   const metadataCommandRequired =
@@ -221,13 +223,7 @@ export function buildCollectionSaveReviewPlan(input: CollectionSaveReviewPlanInp
   };
 }
 
-export type CollectionSaveOutcomeStatus =
-  | 'not-sent'
-  | 'pending'
-  | 'confirmed'
-  | 'unknown'
-  | 'refused'
-  | 'conflict';
+export type CollectionSaveOutcomeStatus = 'not-sent' | 'pending' | 'confirmed' | 'unknown' | 'refused' | 'conflict';
 
 export type CollectionSaveStepOutcome = {
   stepId: string;

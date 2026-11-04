@@ -378,10 +378,7 @@ type CollectionPageProps = {
 
 type CollectionRestoreOffer = CollectionMemberUndo & { key: string; purgeAfter?: string; uncertain?: boolean };
 
-type CollectionSaveCommandResult =
-  | CollectionWriteResult
-  | CollectionBatchResult
-  | CollectionTransferResult;
+type CollectionSaveCommandResult = CollectionWriteResult | CollectionBatchResult | CollectionTransferResult;
 
 type CapturedCollectionSaveAttempt = {
   operation: CollectionOperation;
@@ -1056,7 +1053,8 @@ function CollectionPageLifetime({
   }
 
   function discardDraftForCurrentBasis() {
-    if (!conflictBasis || !saveIntent.current || collectionSaveHasUnknown(saveIntent.current.outcomes) || !isCurrent()) return;
+    if (!conflictBasis || !saveIntent.current || collectionSaveHasUnknown(saveIntent.current.outcomes) || !isCurrent())
+      return;
     resetEditor(conflictBasis);
   }
 
@@ -1287,13 +1285,8 @@ function CollectionPageLifetime({
 
     const targetId = 'id' in result ? result.id : undefined;
     const revision = 'revision' in result ? result.revision : undefined;
-    const undoEpisodes = 'undo' in result
-      ? Array.isArray(result.undo)
-        ? result.undo
-        : result.undo
-          ? [result.undo]
-          : []
-      : [];
+    const undoEpisodes =
+      'undo' in result ? (Array.isArray(result.undo) ? result.undo : result.undo ? [result.undo] : []) : [];
     const outcome: CollectionSaveStepOutcome = {
       stepId: step.id,
       status: 'confirmed',
@@ -1822,7 +1815,9 @@ function CollectionPageLifetime({
         {page.viewerActions?.state === 'unavailable' ? (
           <p role="status">{m.library_collection_actions_unavailable()}</p>
         ) : null}
-        {ownerCurrent && isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview') ? (
+        {ownerCurrent &&
+        isCurrent('collection_member.batch_remove') &&
+        admission.current('library_operation.preview') ? (
           <Button
             type="button"
             variant="outline"
@@ -2566,9 +2561,7 @@ function CollectionPageLifetime({
             currentBasis={conflictBasis}
             rebaseIssue={rebaseIssue}
             recoverCurrent={!activeSave?.transfer}
-            {...(activeSave
-              ? { onRetry: () => void save(undefined, true, Boolean(activeSave.transfer)) }
-              : {})}
+            {...(activeSave ? { onRetry: () => void save(undefined, true, Boolean(activeSave.transfer)) } : {})}
             {...(activeSave && !activeSave.transfer
               ? {
                   onReadCurrent: () => void readCurrentConflictBasis(),

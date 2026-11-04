@@ -9,10 +9,7 @@ import {
   remainingCollectionMemberOperations,
   runCollectionSaveSteps,
 } from '../src/library/collection-member-edit-plan';
-import {
-  CollectionSaveReview,
-  type CollectionSaveCurrentBasis,
-} from '../src/library/collection-save-review/review';
+import { CollectionSaveReview, type CollectionSaveCurrentBasis } from '../src/library/collection-save-review/review';
 import { CollectionMemberList } from '../src/library/collection-editor';
 import { loadEditableCollectionPage } from '../src/library/collection-load';
 import type { SessionEnv } from '../src/session/client';
@@ -43,11 +40,7 @@ test('captured review and execution plan keep duplicate occurrences distinct and
     { ...other, id: 'other-c', note: null },
     { ...other, id: 'removed-d', note: 'Keep this note in the removal review' },
   ];
-  const desired = [
-    initial[1]!,
-    { ...initial[0]!, note: 'A after' },
-    initial[2]!,
-  ];
+  const desired = [initial[1]!, { ...initial[0]!, note: 'A after' }, initial[2]!];
   expect(initial[0]!.subjectId).toBe(initial[1]!.subjectId);
   expect(initial[0]!.id).not.toBe(initial[1]!.id);
   const plan = buildCollectionSaveReviewPlan({
@@ -77,9 +70,7 @@ test('captured review and execution plan keep duplicate occurrences distinct and
     'note:same-subject-a',
     'move:same-subject-b',
   ]);
-  const html = renderToStaticMarkup(
-    createElement(CollectionSaveReview, { plan, initial, desired, types: [] }),
-  );
+  const html = renderToStaticMarkup(createElement(CollectionSaveReview, { plan, initial, desired, types: [] }));
   expect([...html.matchAll(/data-review-step="([^"]+)"/g)].map((match) => match[1])).toEqual(
     plan.steps.map((step) => step.id),
   );
@@ -140,12 +131,7 @@ test('partial save reports settled outcomes and retries the original uncertain s
 
   const retry = await runCollectionSaveSteps(plan.steps, outcomes, execute, () => {});
   expect(retry).toEqual({ complete: true, stoppedAt: null });
-  expect(calls.map((call) => call.step)).toEqual([
-    'metadata',
-    'note:partial-0',
-    'note:partial-0',
-    'note:partial-1',
-  ]);
+  expect(calls.map((call) => call.step)).toEqual(['metadata', 'note:partial-0', 'note:partial-0', 'note:partial-1']);
   expect(calls[1]!.key).toBe(calls[2]!.key);
   expect(keys.get('note:partial-0')).toBe(originalKey);
   expect(outcomes.map((outcome) => outcome.status)).toEqual(['confirmed', 'confirmed', 'confirmed']);
@@ -161,11 +147,7 @@ test('conflict recovery separates the current basis and preserves only unresolve
     { ...memberRecording.members[1]!, id: 'recover-b', note: null },
     { ...memberRecording.members[2]!, id: 'recover-c', note: null },
   ];
-  const desired = [
-    initial[1]!,
-    { ...initial[0]!, note: 'confirmed note' },
-    initial[2]!,
-  ];
+  const desired = [initial[1]!, { ...initial[0]!, note: 'confirmed note' }, initial[2]!];
   const metadata = {
     title: 'Shelf',
     description: null,
@@ -189,11 +171,7 @@ test('conflict recovery separates the current basis and preserves only unresolve
   ];
   const remaining = remainingCollectionMemberOperations(plan, outcomes);
   expect(remaining.map((entry) => entry.id)).toEqual(['move:recover-b']);
-  const currentMembers = [
-    initial[2]!,
-    { ...initial[0]!, note: 'confirmed note' },
-    initial[1]!,
-  ];
+  const currentMembers = [initial[2]!, { ...initial[0]!, note: 'confirmed note' }, initial[1]!];
   const currentBasis: CollectionSaveCurrentBasis = {
     id: collectionId,
     revision: 10,
