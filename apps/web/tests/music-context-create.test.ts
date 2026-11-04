@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
+import type { Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { CreateResult, CreatedReader, InitialSubject } from '../src/features/catalogue/create-subject';
 import * as start from '../.storybook/react-start';
@@ -11,7 +12,21 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const sessionModule = await import('../src/session/query');
 
-const release = bundledRelease;
+function withPlaceGrain(source: Release): Release {
+  const release = structuredClone(source);
+  release.types['schema:Place'] = {
+    iri: 'http://schema.org/Place',
+    labels: { en: 'place' },
+    descriptions: { en: 'A location used as music-context identity.' },
+    mappings: [],
+    bases: ['schema:Thing'],
+    properties: ['schema:name', 'schema:sameAs', 'schema:url'].filter((id) => !!release.properties[id]),
+    facets: [],
+  };
+  return release;
+}
+
+const release = withPlaceGrain(bundledRelease);
 const digest = 'sha256:music-context-create-eligibility';
 type Viewer = {
   state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
@@ -55,6 +70,7 @@ test('music-context creation exposes only real released grains and emitted field
     musicContextCreateTypes,
   } = await import('../src/features/catalogue/music-context-create');
   const { musicContextKind } = await import('../src/features/catalogue/music-context-profile');
+  expect(musicContextCreateTypes(bundledRelease, 'en')).toEqual([]);
   const offered = musicContextCreateTypes(release, 'en');
   const typeId = offered.some((entry) => entry.id === 'schema:Place') ? 'schema:Place' : offered[0]!.id;
   expect(offered.map(({ id }) => id).sort()).toEqual(
