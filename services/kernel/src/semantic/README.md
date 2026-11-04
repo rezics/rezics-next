@@ -2184,3 +2184,9 @@ current or historical roots' directory entries.
   two and three Releases, noninitial exact descriptors, locale fallback, literal
   ties, large IDs, interrupted preparation, stale/tampered cursors, immutable
   Release1 reads, and the actual bounded edge range plans at both catalogue sizes.
+
+## Source Concept reader
+
+Decision: This reader reads current source state only, explicitly identifies unsupported historical pins, and retains at most five opaque hierarchy cursor addresses; revisiting an address rechecks current disclosure.
+
+Correction entry comes from the mounted `subject.propose` operation and is evaluated at its actual Global Context authority, with the current subject visibility and revision checked again in the same native viewer-action read.

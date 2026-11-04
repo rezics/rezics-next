@@ -21,7 +21,6 @@ export const readSubjectConcept = createServerFn({ method: 'POST', strict: false
       locale: input.locale,
       cursor: typeof input.cursor === 'string' && input.cursor.length <= 8192 ? input.cursor : undefined,
       role: typeof input.role === 'string' && input.role.length <= 128 ? input.role : undefined,
-      pin: typeof input.pin === 'string' && input.pin.length <= 128 ? input.pin : undefined,
       session: typeof input.session === 'string' && input.session.length <= 16384 ? input.session : undefined,
     };
   })
