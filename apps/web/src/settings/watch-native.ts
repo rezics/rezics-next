@@ -4,6 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { MediaProblem } from '../media/kernel';
 import { threadLocation } from '../threads/thread-href';
+import { settingsCommandKeyHeader } from './command-headers';
 
 export type WatchKind = 'thread' | 'board';
 export type WatchAdvice = 'available' | 'denied';
@@ -46,6 +47,8 @@ export type StopWatch = Readonly<{
   expectedRevision: number;
   idempotencyKey: string;
 }>;
+/** Original removal episode together with the session credential that dispatched it. */
+export type StopWatchIntent = Readonly<StopWatch & { credential: string }>;
 export type StopWatchResult =
   | { kind: 'removed' }
   | { kind: 'rejected'; problem: NativeWatchProblem }
@@ -63,7 +66,7 @@ export interface WatchManagementIO {
       signal: AbortSignal;
     }>,
   ): Promise<WatchRead>;
-  /** Dispatch the original removal episode through the current Settings session. */
+  /** Dispatch the original removal episode with the credential captured for that intent. */
   stop(input: StopWatch, csrfToken: string): Promise<StopWatchResult>;
 }
 
@@ -138,6 +141,7 @@ export async function readWatchInventoryNative(
 export async function removeWatchNative(
   client: Pick<KernelClient, 'accounts'>,
   input: StopWatch,
+  authorization: string,
 ): Promise<StopWatchResult> {
   try {
     const result = await client
@@ -147,7 +151,10 @@ export async function removeWatchNative(
         { expectedRevision: input.expectedRevision },
         {
           query: { kind: input.kind },
-          headers: { 'idempotency-key': JSON.stringify(input.idempotencyKey) },
+          headers: {
+            authorization,
+            'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey),
+          },
         },
       );
     if (!result.error && result.status === 200 && result.data?.removed === true) return { kind: 'removed' };

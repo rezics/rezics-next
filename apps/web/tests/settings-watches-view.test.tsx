@@ -162,3 +162,62 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     client.clear();
   }
 });
+
+test('uncertain removal stays with the original viewer; replacement clears it before retry', async () => {
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
+  const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  let writes = 0;
+  const io: WatchManagementIO = {
+    read: async () => ({
+      kind: 'page',
+      page: {
+        viewer: { state: 'current', accountId: 'alice' },
+        actions: { remove: 'available' },
+        watches: [
+          {
+            subscriptionId: 'hidden-owner-id',
+            kind: 'thread',
+            revision: 8,
+            createdAt: '2026-11-02T10:00:00.000Z',
+            command: { watchId: 'hidden-owner-id', kind: 'thread', expectedRevision: 8 },
+            remove: 'available',
+            target: null,
+          },
+        ],
+        next: null,
+      },
+    }),
+    stop: async () => {
+      writes++;
+      return { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } };
+    },
+  };
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <SettingsSessionContext.Provider value={owner}>
+            <WatchesSection io={io} />
+          </SettingsSessionContext.Provider>
+        </QueryClientProvider>,
+      ),
+    );
+    const stop = [...host.querySelectorAll('button')].find((item) => item.textContent === m.settings_watches_stop());
+    expect(stop).toBeDefined();
+    await act(async () => stop!.click());
+    expect(host.textContent).toContain(m.settings_watches_uncertain_text());
+    await act(async () =>
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'bob' }),
+    );
+    expect(host.textContent).toBe('');
+    expect(writes).toBe(1);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    client.clear();
+  }
+});

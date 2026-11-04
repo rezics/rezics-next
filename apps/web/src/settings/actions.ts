@@ -238,5 +238,5 @@ export const removeWatchSubscription = createServerFn({ method: 'POST' })
     const accountId = sessionSubject(request);
     if (!authorization || !accountId || accountId !== data.accountId || requestCsrfToken(request) !== data.csrfToken)
       return { kind: 'denied', problem: { status: 403, code: null } };
-    return removeWatchNative(kernelClient(undefined, authorization), data);
+    return removeWatchNative(kernelClient(undefined, authorization), data, authorization);
   });
