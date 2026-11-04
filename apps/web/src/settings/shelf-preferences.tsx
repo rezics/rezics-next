@@ -526,7 +526,12 @@ export class ShelfPreferenceDraftRecovery {
         writeResponse: shelfResponse(reason, result.failure),
         writeBusy: false,
         current: false,
-        advice: result.reason === 'forbidden' ? deniedShelfUpdate(this.state.advice) : undefined,
+        advice:
+          result.reason === 'forbidden'
+            ? deniedShelfUpdate(this.state.advice)
+            : result.reason === 'conflict'
+              ? undefined
+              : this.state.advice,
       });
       return;
     }
@@ -540,7 +545,6 @@ export class ShelfPreferenceDraftRecovery {
         confirmedWrite: null,
         writeReceipt: null,
         current: false,
-        advice: undefined,
         writeBusy: false,
         writeResponse: shelfResponse('write:unknown_outcome'),
       });
