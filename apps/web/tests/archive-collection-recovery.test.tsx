@@ -531,9 +531,14 @@ async function chooseCurrentTarget(host: HTMLElement) {
   );
   expect(input).toBeTruthy();
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-  setter?.call(input, target.title);
-  await act(async () => input!.dispatchEvent(new window.InputEvent('input', { bubbles: true, data: target.title })));
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 500)));
+  await act(async () => {
+    input!.focus();
+    setter?.call(input, target.title);
+    input!.dispatchEvent(
+      new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: target.title }),
+    );
+  });
+  await act(async () => Bun.sleep(270));
   const option = [...window.document.querySelectorAll('[role=option]')].find((item) =>
     item.textContent?.includes(target.title),
   );
