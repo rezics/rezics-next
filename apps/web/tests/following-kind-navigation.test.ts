@@ -28,6 +28,11 @@ test('native reads select a complete kind, retain it on stale restart, and omit 
   });
   const env = {
     SITE_ORIGINS: 'https://site.test',
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: 'unused',
     SESSIONS: {
       idFromName: (name: string) => name,
       get: () => ({
