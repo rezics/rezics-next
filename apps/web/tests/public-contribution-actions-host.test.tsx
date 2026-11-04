@@ -840,7 +840,10 @@ test('PostActions retains the original report body, sender, key and credential f
       return label ? document.getElementById(label)?.textContent?.trim() === m.report_other() : false;
     });
     expect(other).toBeDefined();
-    await act(async () => other!.click());
+    await act(async () => {
+      other!.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     const details = document.querySelector<HTMLTextAreaElement>('textarea');
     expect(details).toBeDefined();
     await act(async () => {
@@ -849,8 +852,13 @@ test('PostActions retains the original report body, sender, key and credential f
         'the original report body',
       );
       details!.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await clickButton(node, 'Verify test challenge');
+    const submit = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (candidate) => candidate.textContent?.trim() === m.report_submit(),
+    );
+    expect(submit?.disabled).toBe(false);
     await clickButton(node, m.report_submit());
     expect(reportCalls).toHaveLength(1);
     const first = reportCalls[0]!;
