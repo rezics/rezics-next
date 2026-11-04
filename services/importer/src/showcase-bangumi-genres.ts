@@ -132,9 +132,16 @@ export async function prepareShowcaseBangumiGenres(input: {
   lookupDiagnostics: readonly BangumiGenreDiagnostic[];
 }): Promise<BangumiGenrePublication> {
   const tagged = input.records.filter(hasReviewedTag);
+  const ownerKeys = input.records.map((row) => row.key);
   const diagnostics = new Map(input.lookupDiagnostics.map((item) => [item.sourceKey, item]));
   if (!tagged.length)
-    return { acknowledgements: [], candidateIds: [], ownerKeys: [], vocabulary: [], diagnostics: [...diagnostics.values()] };
+    return {
+      acknowledgements: [],
+      candidateIds: [],
+      ownerKeys,
+      vocabulary: [],
+      diagnostics: [...diagnostics.values()],
+    };
 
   const current = await inspectReviewedBangumiBinding(input.bindings, input.port);
   if (current.state !== 'bound') {
@@ -143,7 +150,7 @@ export async function prepareShowcaseBangumiGenres(input: {
     return {
       acknowledgements: [],
       candidateIds: [],
-      ownerKeys: tagged.map((row) => row.key),
+      ownerKeys,
       vocabulary: [],
       diagnostics: [...diagnostics.values()].sort((a, b) => a.sourceKey.localeCompare(b.sourceKey)).slice(0, 256),
     };
@@ -243,7 +250,7 @@ export async function prepareShowcaseBangumiGenres(input: {
   return {
     acknowledgements: [...catalogue.acknowledgements, ...acknowledgements],
     candidateIds,
-    ownerKeys: tagged.map((row) => row.key),
+    ownerKeys,
     vocabulary: candidateIds.length ? catalogue.records : [],
     diagnostics: [...diagnostics.values()].sort((a, b) => a.sourceKey.localeCompare(b.sourceKey)).slice(0, 256),
   };
