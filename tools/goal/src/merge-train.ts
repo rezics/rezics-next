@@ -2225,7 +2225,10 @@ export class MergeTrain {
               if (context) result.rebaseConflict = context;
             }
             if (error instanceof WorkerConflictError && previous !== base) {
-              appendFileSync(logPath, `Deferred until a later batch round; conflict with an earlier member: ${error.path}\n`);
+              appendFileSync(
+                logPath,
+                `Deferred until a later batch round; conflict with an earlier member: ${error.path}\n`,
+              );
               deferred.add(entry.id);
               resetTo(trainTree, previous);
               continue;
@@ -2968,11 +2971,15 @@ export class MergeTrain {
     outcome.conflictedFiles = canonical;
     const conflict = makeRebaseConflictContext(
       targetHead,
-      entry.request.workerCommit ?? this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
+      entry.request.workerCommit ??
+        this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
       canonical,
     );
     if (conflict) outcome.rebaseConflict = conflict;
-    outcome.firstFailure ??= firstFailure(`Rebase conflicts with dev: ${canonical.join(', ')}`, this.options.policy?.merge);
+    outcome.firstFailure ??= firstFailure(
+      `Rebase conflicts with dev: ${canonical.join(', ')}`,
+      this.options.policy?.merge,
+    );
     appendFileSync(
       outcome.logPath,
       `Dev landing conflict queued for the train resolver: ${canonical.join(', ')}; target=${targetHead}\n`,
@@ -3039,7 +3046,15 @@ export class MergeTrain {
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId).map((file) => file.path);
         let conflict: TrainConflict | undefined;
         try {
-          conflict = await resolver.compose(request, tree, lastTarget, targetRef, sourceCommit, frozen, outcome.logPath);
+          conflict = await resolver.compose(
+            request,
+            tree,
+            lastTarget,
+            targetRef,
+            sourceCommit,
+            frozen,
+            outcome.logPath,
+          );
         } catch (error) {
           failure = String(error);
           tokens = addTokens(tokens, newResolverTokens());
@@ -3130,11 +3145,7 @@ export class MergeTrain {
     outcome.stage = 'rebase';
     outcome.passed = false;
     outcome.conflictedFiles = paths;
-    const conflict = makeRebaseConflictContext(
-      lastTarget,
-      request.workerCommit ?? sourceCommit,
-      paths,
-    );
+    const conflict = makeRebaseConflictContext(lastTarget, request.workerCommit ?? sourceCommit, paths);
     if (conflict) outcome.rebaseConflict = conflict;
     outcome.conflictResolution = { method: 'worker', tokens, attempts };
     outcome.firstFailure = firstFailure(
@@ -3155,7 +3166,10 @@ export class MergeTrain {
     o.queue.finish(entry.id, outcome);
   }
 
-  private async integrate(entry: LandingEntry, custody?: OrdinaryProofCustody): Promise<GateOutcome | DevResolutionHandoff> {
+  private async integrate(
+    entry: LandingEntry,
+    custody?: OrdinaryProofCustody,
+  ): Promise<GateOutcome | DevResolutionHandoff> {
     const o = this.options;
     const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
       assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit, o.policy?.integration);

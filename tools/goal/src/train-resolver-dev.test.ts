@@ -41,12 +41,7 @@ function train(h: ReturnType<typeof integrationHarness>): MergeTrain {
   });
 }
 
-function resolverAdapter(
-  write: string,
-  started?: () => void,
-  marker?: string,
-  targets: readonly string[] = [dev],
-) {
+function resolverAdapter(write: string, started?: () => void, marker?: string, targets: readonly string[] = [dev]) {
   let calls = 0;
   return {
     adapter: {
