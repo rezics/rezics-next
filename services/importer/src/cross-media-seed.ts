@@ -2151,7 +2151,7 @@ export async function seedCrossMedia(
         credits.fenced.length ||
         (vndbCredits?.diagnostics.length ?? 0) ||
         (fidelity?.gaps.length ?? 0) ||
-        episodeDiagnostics.length
+        episodeDiagnostics.length ||
         mediaOutcomes.some((outcome) => outcome.status !== 'available')
           ? ('imported-with-gaps' as const)
           : ('imported' as const),
