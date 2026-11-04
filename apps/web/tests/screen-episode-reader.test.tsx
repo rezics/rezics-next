@@ -7,9 +7,7 @@ import {
   SCREEN_EPISODE_PAGE_MAX_BYTES,
   type ScreenEpisodeEntry,
 } from '../src/features/catalogue/screen-episode-reader/read';
-import {
-  screenEpisodeContinuationHref,
-} from '../src/features/catalogue/screen-episode-reader/navigation';
+import { screenEpisodeContinuationHref } from '../src/features/catalogue/screen-episode-reader/navigation';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { subjectHref } from '../src/subject/subject-href';
 import { screenProfileFixture } from '../src/kernel/fake/catalogue-screen-profile';
@@ -20,7 +18,13 @@ const seasonMembership = '00000000-0000-4000-8000-000000000912';
 const episodeMembership = '00000000-0000-4000-8000-000000000913';
 const realmId = '00000000-0000-4000-8000-000000000904';
 
-function statement(id: string, parent: string, position?: string, spoiler = false, source = 'https://example.invalid/source') {
+function statement(
+  id: string,
+  parent: string,
+  position?: string,
+  spoiler = false,
+  source = 'https://example.invalid/source',
+) {
   return {
     id,
     rank: 'normal',
@@ -102,14 +106,7 @@ test('screen episode windows retain ordered original memberships, disclosures, c
     queries,
   );
 
-  const read = await readScreenEpisodePage(
-    client,
-    profile.release,
-    profile.public,
-    'en',
-    realmId,
-    'opaque-page-two',
-  );
+  const read = await readScreenEpisodePage(client, profile.release, profile.public, 'en', realmId, 'opaque-page-two');
   expect(queries).toEqual([
     {
       id: profile.public.subject.id,
@@ -137,7 +134,10 @@ test('screen episode windows retain ordered original memberships, disclosures, c
         holderId: episodeId,
         type: 'schema:Episode',
         position: 'SP 1',
-        statement: { id: episodeMembership, references: [{ parts: [{ value: { content: 'https://example.invalid/source' } }] }] },
+        statement: {
+          id: episodeMembership,
+          references: [{ parts: [{ value: { content: 'https://example.invalid/source' } }] }],
+        },
       },
     ],
     next: 'next-window',
@@ -182,7 +182,12 @@ test('spoiler membership titles stay out of the tree and unsupported membership 
   if (!profile.ok || !profile.public) throw new Error('Expected a current Screen profile');
   const privateMembership = statement(episodeMembership, profile.public.subject.id, 'SP 1', true);
   const spoiled = await readScreenEpisodePage(
-    clientFor(linkPage([link(episodeId, episodeMembership, 'Secret title', 'schema:Episode', privateMembership)], { value: 1, exact: true })),
+    clientFor(
+      linkPage([link(episodeId, episodeMembership, 'Secret title', 'schema:Episode', privateMembership)], {
+        value: 1,
+        exact: true,
+      }),
+    ),
     profile.release,
     profile.public,
     'en',
@@ -204,7 +209,14 @@ test('spoiler membership titles stay out of the tree and unsupported membership 
   const noMembershipRelease = { ...profile.release, properties: {} } as typeof profile.release;
   const unsupported = await readScreenEpisodePage(
     {
-      subjects: () => ({ links: { get: async () => { requests += 1; return { status: 200, data: linkPage([]) }; } } }),
+      subjects: () => ({
+        links: {
+          get: async () => {
+            requests += 1;
+            return { status: 200, data: linkPage([]) };
+          },
+        },
+      }),
     } as unknown as KernelClient,
     noMembershipRelease,
     profile.public,
@@ -220,14 +232,26 @@ test('unknown totals keep a sparse disclosed window continuable and oversized ev
   if (!profile.ok || !profile.public) throw new Error('Expected a current Screen profile');
   const membership = statement(seasonMembership, profile.public.subject.id, ' 1/2 ');
   const sparse = await readScreenEpisodePage(
-    clientFor(linkPage([link(seasonId, seasonMembership, 'Season One', 'schema:TVSeason', membership)], undefined, 'next-window')),
+    clientFor(
+      linkPage(
+        [link(seasonId, seasonMembership, 'Season One', 'schema:TVSeason', membership)],
+        undefined,
+        'next-window',
+      ),
+    ),
     profile.release,
     profile.public,
     'en',
   );
   expect(sparse).toMatchObject({ ok: true, state: 'ready', entries: [{ position: ' 1/2 ' }], next: 'next-window' });
 
-  const oversized = statement(episodeMembership, profile.public.subject.id, undefined, false, 'x'.repeat(SCREEN_EPISODE_PAGE_MAX_BYTES));
+  const oversized = statement(
+    episodeMembership,
+    profile.public.subject.id,
+    undefined,
+    false,
+    'x'.repeat(SCREEN_EPISODE_PAGE_MAX_BYTES),
+  );
   const refused = await readScreenEpisodePage(
     clientFor(linkPage([link(episodeId, episodeMembership, 'Large evidence', 'schema:Episode', oversized)])),
     profile.release,

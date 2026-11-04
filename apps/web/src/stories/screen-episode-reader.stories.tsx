@@ -30,7 +30,12 @@ function assertion(id: string, parent: string, position?: string, spoiler = fals
     ],
     references: [
       {
-        parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://example.invalid/source' } }],
+        parts: [
+          {
+            property: { id: 'schema:url', data_type: 'url' },
+            value: { type: 'value', content: 'https://example.invalid/source' },
+          },
+        ],
         hash: 'reference-hash',
       },
     ],
@@ -103,7 +108,9 @@ export const SpoilerChoice: Story = {
       ok: true,
       state: 'ready',
       next: null,
-      entries: [{ ...orderedEntries[1]!, statement: assertion(orderedEntries[1]!.membershipId, parentId, 'SP 1', true) }],
+      entries: [
+        { ...orderedEntries[1]!, statement: assertion(orderedEntries[1]!.membershipId, parentId, 'SP 1', true) },
+      ],
     },
   },
 };

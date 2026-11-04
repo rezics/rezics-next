@@ -12,10 +12,7 @@ import { isScreenType, screenReaderVisit, type ScreenReaderVisit } from './scree
 import { screenGroupLabel } from './screen-profile-fields';
 import type { ScreenGroup } from './screen-profile';
 import { loadScreenProfileForReader } from './screen-episode-reader/actions';
-import {
-  screenEpisodeCursor,
-  type ScreenEpisodeOrigin,
-} from './screen-episode-reader/navigation';
+import { screenEpisodeCursor, type ScreenEpisodeOrigin } from './screen-episode-reader/navigation';
 import { ScreenEpisodeList } from './screen-episode-reader/view';
 import type { ScreenEpisodeRead } from './screen-episode-reader/read';
 import { ProfileBoundNotes, ProfileLibraryNote, ProfileReaderGroups, ProfileSourceList } from './music-reader-view';
@@ -258,8 +255,7 @@ export function ScreenProfileOverview({
       if (retryToken.current === token) setRetryingVisitKey(undefined);
     }
   };
-  const currentEpisodeRead =
-    episodeRetryRead?.visitKey === episodeVisitKey ? episodeRetryRead.read : episodeRead;
+  const currentEpisodeRead = episodeRetryRead?.visitKey === episodeVisitKey ? episodeRetryRead.read : episodeRead;
   return (
     <ScreenProfileReader
       locale={locale}
@@ -270,9 +266,7 @@ export function ScreenProfileOverview({
       {...(query.isPending ? { loading: true } : {})}
       onRetry={() => void query.refetch()}
       {...(currentEpisodeRead ? { episodeRead: currentEpisodeRead } : {})}
-      {...(query.isPending || query.isFetching || retryingVisitKey === episodeVisitKey
-        ? { episodeLoading: true }
-        : {})}
+      {...(query.isPending || query.isFetching || retryingVisitKey === episodeVisitKey ? { episodeLoading: true } : {})}
       onEpisodeRetry={() => void retryEpisodes()}
       episodeOrigin={{ pathname: location.pathname, searchStr: location.searchStr, hash: location.hash }}
       readerSpoilerLevel={readerSpoilerLevel}

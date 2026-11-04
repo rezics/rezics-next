@@ -69,7 +69,10 @@ function MembershipEvidence({
   const o = options(locale);
   const label = entry.label || entry.typeLabel.text || m.screen_episode_reader_episode({}, o);
   return (
-    <div className="mt-3 space-y-3 rounded-md border border-border p-3" id={`screen-episode-evidence-${entry.membershipId}`}>
+    <div
+      className="mt-3 space-y-3 rounded-md border border-border p-3"
+      id={`screen-episode-evidence-${entry.membershipId}`}
+    >
       <h4 className="font-medium">{m.screen_episode_reader_evidence({}, o)}</h4>
       {qualifiers.map((part, index) => (
         <EvidencePart
@@ -225,9 +228,7 @@ export function ScreenEpisodeList({
                   {...(expanded ? { 'aria-controls': `screen-episode-evidence-${entry.membershipId}` } : {})}
                   onClick={() => setSelectedMembershipId(expanded ? undefined : entry.membershipId)}
                 >
-                  {expanded
-                    ? m.screen_episode_reader_hide_evidence({}, o)
-                    : m.screen_episode_reader_inspect({}, o)}
+                  {expanded ? m.screen_episode_reader_hide_evidence({}, o) : m.screen_episode_reader_inspect({}, o)}
                 </button>
                 {expanded ? <MembershipEvidence entry={entry} release={release} locale={locale} link={Link} /> : null}
               </div>
