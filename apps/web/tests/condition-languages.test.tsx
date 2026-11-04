@@ -7,6 +7,7 @@ import {
   updateLanguagePreferences,
 } from '../src/search/condition-languages';
 import { locales } from '../src/paraglide/runtime.js';
+import { m } from '../src/paraglide/messages.js';
 
 test('ordered language preferences append, remove, reorder and clear without changing authored tags', () => {
   let languages = ['en-GB', 'zh-Hant-TW'];
