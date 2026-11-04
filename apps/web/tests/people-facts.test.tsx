@@ -4,6 +4,7 @@ import { act, createElement as h } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
+import * as session from '../src/session/query';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 import { peopleFactsExample } from '../src/features/catalogue/people-facts/examples';
 import { personGroups, personScalarFields } from '../src/features/catalogue/person-reader/model';
@@ -14,6 +15,12 @@ let read: (request: ValueRequest) => Promise<ValueRead> = async () => ({ kind: '
 const requests: ValueRequest[] = [];
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
+// The mounted fixture supplies an anonymous observation; native session receiving remains in its own suite.
+const anonymousSession = {
+  ...session,
+  useSession: () => ({ state: 'signed-out' as const, csrfToken: null, subject: null }),
+};
+mock.module('../src/session/query', () => anonymousSession);
 mock.module('../src/features/catalogue/value-explanation-actions', () => ({
   loadValueExplanation: ({ data }: { data: ValueRequest }) => {
     requests.push(data);
@@ -203,6 +210,50 @@ test('exact currentness loss returns to the field; held results cannot survive s
       }),
     );
     expect(host.querySelector('[data-slot="people-fact-visit"]')).toBeNull();
+  } finally {
+    await page.close();
+  }
+});
+
+test('native withheld inspection and missing target disclosure do not expose an alternate view', async () => {
+  const page = await mounted();
+  try {
+    const { fixture, host, click } = page;
+    const first = fixture.rows[0]!;
+    first.qualifiers.push({
+      property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+      value: { type: 'value', content: { amount: '+1', unit: '1' } },
+    });
+    page.replace();
+    await page.draw();
+    let calls = 0;
+    const native = createKernelClient('https://people-facts.test', {
+      fetch: (async (input, init) => {
+        calls++;
+        const request = input instanceof Request ? input : new Request(String(input), init);
+        return new URL(request.url).pathname === `/v1/subjects/${fixture.read.subject.id}`
+          ? Response.json(fixture.read)
+          : Response.json({ code: 'overloaded' }, { status: 503 });
+      }) as typeof fetch,
+    });
+    read = (request) => readValueExplanation(native, request);
+    let row = host.querySelector(`[data-statement="${first.id}"]`)!;
+    expect(row.textContent).not.toContain('最初 العربية');
+    expect(row.querySelector('a[href*="/value?"]')).toBeNull();
+    await click(row.querySelector('button')!);
+    await click(row.querySelector('a[href*="/value?"]')!);
+    expect(host.textContent).toContain(m.value_withheld());
+    expect(calls).toBe(1);
+    await click(page.button(m.people_facts_return()));
+    first.qualifiers.pop();
+    delete fixture.read.related[fixture.occupation];
+    page.replace();
+    await page.draw();
+    row = host.querySelector(`[data-statement="${first.id}"]`)!;
+    await click(row.querySelector('a[href*="/value?"]')!);
+    const inspection = host.querySelector('[data-slot="people-fact-visit"]')!;
+    expect(inspection.textContent).toContain(m.candidate_value_unavailable());
+    expect(inspection.innerHTML).not.toContain(fixture.occupation);
   } finally {
     await page.close();
   }
