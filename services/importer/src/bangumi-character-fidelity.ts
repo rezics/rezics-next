@@ -133,42 +133,47 @@ async function currentVocabularyBindings(
   port: { readReviewedSubject(id: string): Promise<ReviewedSubjectRead> },
 ): Promise<SourceVocabularyBindings> {
   if (input.releaseDigest !== bundledDigest) return { ...input, schemes: [], concepts: [] };
-  const currentSchemes: SourceVocabularyBindings['schemes'][number][] = [];
-  for (const taxonomy of Object.keys(schemes) as Taxonomy[]) {
-    const binding = input.schemes.find((item) => item.taxonomy === taxonomy && item.uri === schemes[taxonomy]);
-    if (!binding) continue;
-    const subject = await publicSubject(port, binding.id);
-    if (
-      subject?.type === 'skos:ConceptScheme' &&
-      hasCurrentValue(subject, 'schema:url', schemes[taxonomy])
+  const currentSchemes = (
+    await Promise.all(
+      (Object.keys(schemes) as Taxonomy[]).map(async (taxonomy) => {
+        const binding = input.schemes.find((item) => item.taxonomy === taxonomy && item.uri === schemes[taxonomy]);
+        if (!binding) return null;
+        const subject = await publicSubject(port, binding.id);
+        return subject?.type === 'skos:ConceptScheme' && hasCurrentValue(subject, 'schema:url', schemes[taxonomy])
+          ? binding
+          : null;
+      }),
     )
-      currentSchemes.push(binding);
-  }
+  ).filter((binding): binding is SourceVocabularyBindings['schemes'][number] => binding !== null);
   const schemeIds = new Map(currentSchemes.map((item) => [item.taxonomy, item.id]));
-  const currentConcepts: SourceVocabularyBindings['concepts'][number][] = [];
-  for (const taxonomy of Object.keys(schemes) as Taxonomy[]) {
+  const conceptBindings = (Object.keys(schemes) as Taxonomy[]).flatMap((taxonomy) => {
     const schemeId = schemeIds.get(taxonomy);
-    if (!schemeId) continue;
-    for (const code of codes[taxonomy]) {
-      const binding = input.concepts.find(
-        (item) => item.taxonomy === taxonomy && item.code === code && item.schemeId === schemeId,
-      );
-      if (!binding) continue;
-      const expected = mapSourceEnumeration(
-        'bangumi',
-        taxonomy === 'bangumi.character.role' ? 'character.role' : 'subject-characters.type',
-        code,
-      )?.concept?.id;
-      if (!expected) continue;
-      const subject = await publicSubject(port, binding.id);
-      if (
-        subject?.type === 'skos:Concept' &&
-        hasCurrentValue(subject, 'schema:url', expected) &&
-        hasCurrentValue(subject, 'skos:inScheme', schemeId)
-      )
-        currentConcepts.push(binding);
-    }
-  }
+    return schemeId
+      ? codes[taxonomy].flatMap((code) => {
+          const binding = input.concepts.find(
+            (item) => item.taxonomy === taxonomy && item.code === code && item.schemeId === schemeId,
+          );
+          const expected = mapSourceEnumeration(
+            'bangumi',
+            taxonomy === 'bangumi.character.role' ? 'character.role' : 'subject-characters.type',
+            code,
+          )?.concept?.id;
+          return binding && expected ? [{ binding, schemeId, expected }] : [];
+        })
+      : [];
+  });
+  const currentConcepts = (
+    await Promise.all(
+      conceptBindings.map(async ({ binding, schemeId, expected }) => {
+        const subject = await publicSubject(port, binding.id);
+        return subject?.type === 'skos:Concept' &&
+          hasCurrentValue(subject, 'schema:url', expected) &&
+          hasCurrentValue(subject, 'skos:inScheme', schemeId)
+          ? binding
+          : null;
+      }),
+    )
+  ).filter((binding): binding is SourceVocabularyBindings['concepts'][number] => binding !== null);
   return { releaseDigest: input.releaseDigest, schemes: currentSchemes, concepts: currentConcepts };
 }
 
