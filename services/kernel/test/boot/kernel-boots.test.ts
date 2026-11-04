@@ -5,12 +5,28 @@ import { Pool } from 'pg';
 import { trustedAccessPorts } from '../../../auth/test/support/trusted-access.ts';
 import { withThrowawayDatabase } from '../../scripts/derived.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 setDefaultTimeout(600_000);
 
 const key = () => randomBytes(32).toString('base64url');
 const unused = async (): Promise<never> => {
   throw new Error('Unexpected account workflow access');
+};
+const access = {
+  registrationTarget: () => {
+    throw new Error('Unexpected registration target');
+  },
+  reserveHandle: unused,
+  createPending: unused,
+  claimHandle: unused,
+  activate: unused,
+  expireRegistration: unused,
+  releaseExpiredRegistrationHandle: unused,
+  provisioningReference: unused,
+  provisioningEvidence: unused,
+  raiseFence: unused,
+  readAccount: unused,
 };
 
 async function boot(env: NodeJS.ProcessEnv) {
@@ -23,61 +39,51 @@ async function boot(env: NodeJS.ProcessEnv) {
     KERNEL_WRITE_RATE_SECRET: key(),
     KERNEL_PORT: '0',
   };
-  const workerKeys = {
-    ...serverKeys,
-    KERNEL_RATING_COUNTER_SECRET: key(),
-    KERNEL_EXECUTOR_ID: `boot-${crypto.randomUUID()}`,
-    AUTH_ISSUER: 'https://auth.boot.test',
-    AUTH_AUDIENCE: 'https://api.boot.test',
-    AUTH_JWKS_URL: 'https://auth.boot.test/.well-known/jwks.json',
-  };
   const { readConfig, startServer } = await import('../../src/server.ts');
   const { readWorkerConfig, startWorker } = await import('../../src/worker.ts');
   const { createAuthHost } = await import('../../../auth/src/host.ts');
-  const stops: Array<() => Promise<void>> = [];
+  // DBOS is process-global; production runs these entries in separate processes.
+
+  const server = await startServer(readConfig(serverKeys));
   try {
-    const server = await startServer(readConfig(serverKeys));
-    stops.push(() => server.stop());
-    const worker = await startWorker(readWorkerConfig(workerKeys), undefined, workerKeys);
-    stops.push(() => worker.stop());
-    const database = new Pool({
-      connectionString: await createAuthDatabase(databaseUrl, `auth_boot_${crypto.randomUUID().replaceAll('-', '')}`),
-    });
-    const pair = await generateKeyPair('ES256', { extractable: true });
-    const signing = { ...(await exportJWK(pair.privateKey)), kid: 'boot', alg: 'ES256' };
-    const host = await createAuthHost({
-      database,
-      issuer: workerKeys.AUTH_ISSUER,
-      audience: workerKeys.AUTH_AUDIENCE,
-      secret: 'kernel-boot-auth-host-secret-32bytes!!',
-      signing: { activeKid: signing.kid, privateKeys: [signing] },
-      stagingKey: randomBytes(32),
-      trustedAccess: trustedAccessPorts({ readAccount: async () => null, authorizeProvisioning: unused }),
-      access: {
-        registrationTarget: () => {
-          throw new Error('Unexpected registration target');
-        },
-        reserveHandle: unused,
-        createPending: unused,
-        claimHandle: unused,
-        activate: unused,
-        expireRegistration: unused,
-        releaseExpiredRegistrationHandle: unused,
-        provisioningReference: unused,
-        provisioningEvidence: unused,
-        raiseFence: unused,
-        readAccount: unused,
-      },
-      maintenanceSchedule: '0 0 1 1 *',
-      executorId: 'kernel-boot-auth',
-    });
-    stops.push(() => host.stop());
-    await host.start();
     const health = await fetch(new URL('/health', server.url));
     expect([health.status, await health.json()]).toEqual([200, { status: 'ok' }]);
   } finally {
-    for (const stop of stops.reverse()) await stop();
+    await server.stop();
   }
+
+  const authUrl = await createAuthDatabase(databaseUrl, `auth_boot_${crypto.randomUUID().replaceAll('-', '')}`);
+  const database = new Pool({ connectionString: authUrl });
+  const system = new Pool({ connectionString: authUrl, max: 8 });
+  const pair = await generateKeyPair('ES256', { extractable: true });
+  const signing = { ...(await exportJWK(pair.privateKey)), kid: 'boot', alg: 'ES256' };
+  const host = await createAuthHost({
+    database,
+    systemDatabasePool: system,
+    issuer: 'https://auth.boot.test',
+    audience: 'https://api.boot.test',
+    secret: 'kernel-boot-auth-host-secret-32bytes!!',
+    signing: { activeKid: signing.kid, privateKeys: [signing] },
+    stagingKey: randomBytes(32),
+    trustedAccess: trustedAccessPorts({ readAccount: async () => null, authorizeProvisioning: unused }),
+    access,
+    maintenanceSchedule: '0 0 1 1 *',
+    executorId: 'kernel-boot-auth',
+  });
+  try {
+    await host.start();
+  } finally {
+    await host.stop();
+  }
+
+  const workerKeys = {
+    ...workerTestEnv(),
+    ...serverKeys,
+    KERNEL_RATING_COUNTER_SECRET: key(),
+    KERNEL_EXECUTOR_ID: `boot-${crypto.randomUUID()}`,
+  };
+  const worker = await startWorker(readWorkerConfig(workerKeys), undefined, workerKeys);
+  await worker.stop();
 }
 
 test('the Kernel API, worker and native Auth host entries start against a throwaway database', async () => {
