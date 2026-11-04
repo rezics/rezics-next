@@ -2512,6 +2512,9 @@ Organization, refresh by digest, and respect the summary fence` in
 scenario uses the current released definitions and Auth/Access/public API;
 execution remains controller-owned and is not recorded as a local pass.
 
+Reviewed metadata and candidate provenance compare bounded canonical JSON values. Public transport snapshots
+with null object prototypes retain the same provenance; prototype identity is never a source or permission fact.
+
 ## Explicit local showcase publication
 
 Decision: the built-in `task seed:dev` path explicitly publishes a sealed finite intent of current source and candidate digests; ordinary imports remain proposal-only.

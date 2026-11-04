@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import seeds from '../../../packages/definitions/src/reviewed-vocabulary.json';
 import {
   reviewedCatalogueOwner,
@@ -37,4 +39,32 @@ test('invalid truncated duplicated or mass-disappeared finite inventory has zero
     ).rejects.toThrow();
   }
   expect(effects).toBe(0);
+});
+
+test('reviewed metadata accepts the public transport null-prototype JSON snapshot', async () => {
+  const root = resolve(import.meta.dir, '../../../.temp');
+  await mkdir(root, { recursive: true });
+  const directory = await mkdtemp(resolve(root, 'reviewed-json-'));
+  const reachedBootstrap = new Error('Stopped after metadata provenance was checked');
+  let creates = 0;
+  const port = {
+    fence: async () => ({ fenced: false, securityRevision: null }),
+    setSourceRecordMetadata: async ({ command }: Parameters<ReviewedCataloguePort['setSourceRecordMetadata']>[0]) => ({
+      record: Object.setPrototypeOf(structuredClone(command.metadata), null),
+      metadata_revision: 1,
+      effect: 'filled' as const,
+    }),
+    batch: async () => {
+      creates++;
+      throw reachedBootstrap;
+    },
+  } as ReviewedCataloguePort;
+  try {
+    await expect(seedReviewedCatalogue({ path: resolve(directory, 'state.sqlite'), port })).rejects.toBe(
+      reachedBootstrap,
+    );
+    expect(creates).toBe(1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
