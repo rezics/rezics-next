@@ -4,12 +4,20 @@ import { resolveCopyProfile } from '../src/library/copies-profiles';
 
 test('condition preparation preserves explicit kind admission and absence without guessing from labels', () => {
   const release: Release = {
-    types: { book: { library: { profileId: 'copies' } } }, properties: {},
-    libraryProfiles: { copies: { id: 'copies', copies: { kinds: [
-        { id: 'disc', labels: { en: 'Disc' }, condition: 'physical-v1', statuses: [] },
-        { id: 'physical', labels: { en: 'Physical' }, statuses: [] },
-        { id: 'digital', labels: { en: 'Digital' }, statuses: [] },
-    ] } } },
+    types: { book: { library: { profileId: 'copies' } } },
+    properties: {},
+    libraryProfiles: {
+      copies: {
+        id: 'copies',
+        copies: {
+          kinds: [
+            { id: 'disc', labels: { en: 'Disc' }, condition: 'physical-v1', statuses: [] },
+            { id: 'physical', labels: { en: 'Physical' }, statuses: [] },
+            { id: 'digital', labels: { en: 'Digital' }, statuses: [] },
+          ],
+        },
+      },
+    },
   };
   const kinds = resolveCopyProfile(release, 'book', 'en').kinds;
   expect(kinds[0]?.condition).toBe('physical-v1');
