@@ -24,6 +24,25 @@ export type ContextComparison = {
   adoption: CandidatePage['adoption'];
 };
 export type CandidateFailure = { ok: false; reason: 'denied' | 'stale' | 'unavailable' | 'invalid' };
+export type ViewerActionEntry = { action: string; operations: string[] };
+export type ViewerActionComponent =
+  | { state: 'not-requested' }
+  | { state: 'unavailable'; reason: 'not-found' | 'unavailable' }
+  | { state: 'available'; actions: ViewerActionEntry[] };
+export type CandidateViewerActions = { subject: ViewerActionComponent; context: ViewerActionComponent };
+export type NativeOperationAvailability = 'allowed' | 'denied' | 'unavailable';
+
+export function nativeOperationAvailability(
+  component: ViewerActionComponent | undefined,
+  action: string,
+  operation: string,
+): NativeOperationAvailability {
+  if (!component || component.state !== 'available') return 'unavailable';
+  return component.actions.some((entry) => entry.action === action && entry.operations.includes(operation))
+    ? 'allowed'
+    : 'denied';
+}
+
 export type CandidateRead =
   | CandidateFailure
   | {
@@ -32,6 +51,8 @@ export type CandidateRead =
       fields: CandidateField[];
       names: Record<string, Record<string, string>>;
       page: CandidatePage | null;
+      /** Current native operation projection when supplied by this page's bounded reader. */
+      actions?: CandidateViewerActions;
       contextReview?: ContextComparison;
       session?: string;
     };

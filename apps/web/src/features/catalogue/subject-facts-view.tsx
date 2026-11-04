@@ -22,11 +22,15 @@ import { m } from '../../paraglide/messages.js';
 import { pageText } from '../pages/data';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
-import { candidateContext } from '../../subject/candidates';
+import type { NativeOperationAvailability } from '../../subject/candidates';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { EditorFailure, PartValue, StatementFields, StatementViolationLinks } from './statement-editor-view';
-import type { EditorRead } from './statement-editor';
+import {
+  correctionInspectionAvailability,
+  correctionProposalAvailability,
+  type EditorRead,
+} from './statement-editor';
 import { presentStatementViolations, type StatementFeedback } from './statement-validation-presentation';
 import {
   applyReuse,
@@ -341,6 +345,7 @@ function FactField({
   onReview,
   onReuse,
   focusReference,
+  inspectionAvailability,
 }: {
   property: string;
   read: FactsCurrent;
@@ -356,6 +361,7 @@ function FactField({
   onReview: (address: ReviewAddress) => void;
   onReuse?: ((index: number, keyboard: boolean) => void) | undefined;
   focusReference?: { index: number; nonce: number } | undefined;
+  inspectionAvailability?: NativeOperationAvailability | undefined;
 }) {
   const o = { locale: locale as never };
   const visible = useCurrentReadingVisible();
@@ -597,6 +603,7 @@ function FactField({
                 {draft.result.ok ? (
                   <>
                     <p className="font-semibold">{m.correction_proposed({}, o)}</p>
+                    {inspectionAvailability === 'allowed' ? (
                     <a
                       href={`${href}/edit?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`}
                       {...(editorHref
@@ -624,6 +631,13 @@ function FactField({
                     >
                       {m.correction_review({}, o)}
                     </a>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {inspectionAvailability === 'denied'
+                          ? m.candidate_denied({}, o)
+                          : m.candidate_actions_unavailable({}, o)}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <>
@@ -802,6 +816,8 @@ function SubjectFactsLive({
   }
   const changed = includedChanges(drafts);
   const fingerprint = changedSetFingerprint(drafts);
+  const proposalAvailability = correctionProposalAvailability(current?.actions);
+  const inspectionAvailability = correctionInspectionAvailability(current?.actions);
   const nextReview = advanceChangedSetReview(changedReview, fingerprint);
   if (
     nextReview.status !== changedReview.status ||
@@ -811,6 +827,7 @@ function SubjectFactsLive({
   )
     setChangedReview(nextReview);
   const unsealed = changed.some((draft) => !draft.command);
+  const preparedRetries = changed.filter((draft) => !!draft.command && !draft.result?.ok);
   const success = drafts.filter((draft) => draft.result?.ok).length;
   // Inclusion controls the next batch, never ownership of an unfinished assertion.
   // Observing these drafts must not validate, seal or send a proposal.
@@ -865,10 +882,14 @@ function SubjectFactsLive({
     if (!lifetime.active()) return;
     if (!current || running.current || !changed.length) return;
     if (staleDraft) return;
-    if (unsealed && changedReview.status !== 'current') return;
+    if (unsealed && proposalAvailability === 'allowed' && changedReview.status !== 'current') return;
+    if (unsealed && proposalAvailability !== 'allowed' && !preparedRetries.length) return;
     running.current = true;
-    const sealed = sealFacts(current.public.subject.id, current.release, drafts);
-    setDrafts(sealed);
+    const sealed =
+      unsealed && proposalAvailability !== 'allowed'
+        ? preparedRetries
+        : sealFacts(current.public.subject.id, current.release, drafts);
+    if (proposalAvailability === 'allowed') setDrafts(sealed);
     setBusy(true);
     try {
       await sendFacts(
@@ -963,6 +984,10 @@ function SubjectFactsLive({
               )}
             </>
           )}
+          {proposalAvailability === 'unavailable' && (
+            <p role="status">{m.correction_actions_unavailable({}, o)}</p>
+          )}
+          {proposalAvailability === 'denied' && <p role="status">{m.correction_denied({}, o)}</p>}
         </header>
       )}
       {!read.ok && <EditorFailure reason={read.reason} locale={locale} />}
@@ -1025,6 +1050,7 @@ function SubjectFactsLive({
                         href={href}
                         editorHref={editorHref}
                         busy={busy}
+                        inspectionAvailability={inspectionAvailability}
                         canStage={drafts.length < factLimit}
                         draft={drafts.find((draft) => draft.property === property)}
                         onChange={change}
@@ -1105,7 +1131,12 @@ function SubjectFactsLive({
                   <Button
                     type="submit"
                     className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-                    disabled={busy || !changed.length || (unsealed && changedReview.status !== 'current')}
+                    disabled={
+                      busy ||
+                      !changed.length ||
+                      (unsealed && proposalAvailability === 'allowed' && changedReview.status !== 'current') ||
+                      (unsealed && proposalAvailability !== 'allowed' && !preparedRetries.length)
+                    }
                   >
                     {m.facts_submit({}, o)}
                   </Button>

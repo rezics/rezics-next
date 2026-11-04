@@ -1,8 +1,7 @@
 import { authorizedContextMetadata, contextNativeActions } from './context-lifecycle-read.ts';
 import { ContextDirectoryPreparingError } from './context-directory.ts';
-import type { ViewerActionResource } from '../access/viewer-actions.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import type { ViewerActionResources } from '../access/viewer-actions.ts';
+import type { ViewerActionResource, ViewerActionResources } from '../access/viewer-actions.ts';
 import type { AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import read from './viewer-actions.sql';
@@ -12,22 +11,26 @@ export async function readSubjectPublicStates(client: AccessClient, ids: readonl
   return read.run(client, { routes: ids.map((id) => routeOf(id)!), ids: [...ids] });
 }
 
-/** Register the released semantic catalogue, including namespaced type identifiers. */
-export const subjectViewerActionResources: ViewerActionResources = new Map(
-  Object.keys(bundledRelease.types).map((type) => [
-    type,
-    {
-      readAction: 'subject:read',
-      async read(client, ids) {
-        const rows = await readSubjectPublicStates(client, ids);
-        // Hidden subjects are absent even if a caller independently holds subject:read.
-        return Object.fromEntries(
-          rows.filter((row) => row.type === type && row.visibility === 'visible').map((row) => [row.id, true]),
-        );
-      },
-    },
-  ]),
-);
+/** Register the exact generic Subject target plus released types, including namespaced identifiers. */
+const subjectResource = (type?: string): ViewerActionResource => ({
+  readAction: 'subject:read',
+  async read(client, ids) {
+    const rows = await readSubjectPublicStates(client, ids);
+    // Hidden subjects are absent even if a caller independently holds subject:read.
+    return Object.fromEntries(
+      rows
+        .filter((row) => (type === undefined || row.type === type) && row.visibility === 'visible')
+        .map((row) => [row.id, true]),
+    );
+  },
+});
+
+export const subjectViewerActionResources: ViewerActionResources = new Map<string, ViewerActionResource>([
+  ['semantic.subject', subjectResource()],
+  ...Object.keys(bundledRelease.types)
+    .filter((type) => type !== 'semantic.subject')
+    .map((type): [string, ViewerActionResource] => [type, subjectResource(type)]),
+]);
 
 /** Native Context resolver shares the exact directory lifecycle reader; candidates and creators never grant. */
 export const contextViewerActionResource: ViewerActionResource = {

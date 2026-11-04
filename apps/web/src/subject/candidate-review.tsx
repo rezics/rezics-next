@@ -14,6 +14,7 @@ import { subjectHref } from './subject-href';
 import { candidateCanSelect, editCandidateDraft, refreshCandidateDraft, type CandidateDraft } from './candidate-draft';
 import {
   candidateSourceRecords,
+  nativeOperationAvailability,
   publicCandidateSelection,
   publicSlotStatements,
   type Candidate,
@@ -124,6 +125,21 @@ function CandidateReviewLive({
       ? JSON.stringify([id, initialProperty, exactCandidate, context, slot?.target, slot?.sameAs, slot?.key])
       : null;
   const current = read?.ok ? read : undefined;
+  const acceptanceAvailability = current?.actions
+    ? nativeOperationAvailability(current.actions.context, 'context:accept', 'subject.accept_candidate')
+    : undefined;
+  const rejectionAvailability = current?.actions
+    ? nativeOperationAvailability(current.actions.context, 'context:accept', 'subject.reject_candidate')
+    : undefined;
+  const selectionAvailability = current?.actions
+    ? nativeOperationAvailability(current.actions.context, 'context:adopt', 'subject.adopt')
+    : undefined;
+  const actionReadUnavailable = [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
+    (availability) => availability === 'unavailable',
+  );
+  const actionDenied = [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
+    (availability) => availability === 'denied',
+  );
   const publicRead = context
     ? (result?.contextReview?.reading ?? current?.contextReview?.reading)
     : result
@@ -282,13 +298,20 @@ function CandidateReviewLive({
   }
 
   async function confirm() {
+    const selectedAvailability =
+      confirmation === 'accept'
+        ? acceptanceAvailability
+        : confirmation === 'reject'
+          ? rejectionAvailability
+          : selectionAvailability;
     if (
       !work.live() ||
       !current?.page ||
       !confirmation ||
       running.current ||
       requiresReload ||
-      (confirmation === 'adopt' ? !valid : !candidate)
+      (confirmation === 'adopt' ? !valid : !candidate) ||
+      (selectedAvailability !== undefined && selectedAvailability !== 'allowed')
     )
       return;
     running.current = true;
@@ -460,6 +483,12 @@ function CandidateReviewLive({
           </Link>
         )}
         {returnUnavailable && <p role="status">{m.candidate_unavailable({}, options)}</p>}
+        {current?.actions && actionReadUnavailable && (
+          <p role="status">{m.candidate_actions_unavailable({}, options)}</p>
+        )}
+        {current?.actions && !actionReadUnavailable && actionDenied && (
+          <p role="status">{m.candidate_denied({}, options)}</p>
+        )}
       </div>
       {!opened ? (
         <Button variant="outline" className="min-h-11" onClick={() => void load()}>
@@ -684,7 +713,7 @@ function CandidateReviewLive({
                             <Button
                               variant="outline"
                               className="min-h-11"
-                              disabled={locked || requiresReload}
+                              disabled={locked || requiresReload || acceptanceAvailability === 'denied' || acceptanceAvailability === 'unavailable'}
                               onClick={(event) => openConfirmation('accept', event.currentTarget)}
                             >
                               {m.candidate_accept({}, options)}
@@ -694,7 +723,7 @@ function CandidateReviewLive({
                             <Button
                               variant="outline"
                               className="min-h-11"
-                              disabled={locked || requiresReload}
+                              disabled={locked || requiresReload || rejectionAvailability === 'denied' || rejectionAvailability === 'unavailable'}
                               onClick={(event) => openConfirmation('reject', event.currentTarget)}
                             >
                               {m.candidate_reject({}, options)}
@@ -837,7 +866,13 @@ function CandidateReviewLive({
                         <Button
                           variant="outline"
                           className="min-h-11 self-start"
-                          disabled={locked || requiresReload || !valid}
+                          disabled={
+                            locked ||
+                            requiresReload ||
+                            !valid ||
+                            selectionAvailability === 'denied' ||
+                            selectionAvailability === 'unavailable'
+                          }
                           onClick={(event) => openConfirmation('adopt', event.currentTarget)}
                         >
                           {context ? m.context_adopt({}, options) : m.candidate_adopt({}, options)}

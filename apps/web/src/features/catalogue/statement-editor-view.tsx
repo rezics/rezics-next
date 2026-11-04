@@ -30,6 +30,8 @@ import { ContributionLifecycle } from './contribution-lifecycle-view';
 import type { ContributionAddress, ContributionTransport } from './contribution-lifecycle';
 import {
   correctionProperty,
+  correctionInspectionAvailability,
+  correctionProposalAvailability,
   editableScalar,
   statementInput,
   validateStatement,
@@ -1205,6 +1207,8 @@ function StatementEditorLive({
   }, [busy, read, mount]);
   const lifetime = useCatalogueLifetime(JSON.stringify([draftRevision.current, draft?.property.id]), mount);
   const current = read.ok ? read : undefined;
+  const proposalAvailability = correctionProposalAvailability(current?.actions);
+  const inspectionAvailability = correctionInspectionAvailability(current?.actions);
   const subject = current?.public.subject;
   const label = subject ? pageText(subject.labels, locale).text : '';
   const href = subject ? subjectHref({ id: subject.id, label }, locale).href : undefined;
@@ -1301,6 +1305,7 @@ function StatementEditorLive({
     if (!lifetime.active()) return;
     if (!draft || !subject || running.current) return;
     if (!pending.current) {
+      if (proposalAvailability !== 'allowed') return;
       const errors = validateStatement(draft, current?.release);
       if (errors.length) {
         setFailure({ ok: false, reason: 'invalid', errors });
@@ -1361,6 +1366,10 @@ function StatementEditorLive({
         )}
         <p className="text-sm text-muted-foreground">{m.correction_intro({}, o)}</p>
         <p className="text-sm text-muted-foreground">{m.correction_global({}, o)}</p>
+        {proposalAvailability === 'unavailable' && current && (
+          <p role="status">{m.correction_actions_unavailable({}, o)}</p>
+        )}
+        {proposalAvailability === 'denied' && current && <p role="status">{m.correction_denied({}, o)}</p>}
         {subject && <DefinitionGuideLink locale={locale} address={{ type: subject.type, returnTo: guideReturn }} />}
       </header>
       {!read.ok && !result && !busy && (
@@ -1380,9 +1389,17 @@ function StatementEditorLive({
           {!cleared && <p role="status">{m.correction_proposed({}, o)}</p>}
           <div className="flex flex-wrap gap-3">
             {!cleared && (
-              <Button className={actionClassName} type="button" onClick={() => lifetime.active() && setReviewing(true)}>
-                {m.correction_review({}, o)}
-              </Button>
+              inspectionAvailability === 'allowed' ? (
+                <Button className={actionClassName} type="button" onClick={() => lifetime.active() && setReviewing(true)}>
+                  {m.correction_review({}, o)}
+                </Button>
+              ) : (
+                <p role="status">
+                  {inspectionAvailability === 'denied'
+                    ? m.candidate_denied({}, o)
+                    : m.candidate_actions_unavailable({}, o)}
+                </p>
+              )
             )}
             {submitted?.href && (
               <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={submitted.href}>
@@ -1481,7 +1498,7 @@ function StatementEditorLive({
             />
           </fieldset>
           <div className="flex flex-wrap gap-3">
-            <Button className={actionClassName} type="submit" disabled={busy}>
+            <Button className={actionClassName} type="submit" disabled={busy || (!pending.current && proposalAvailability !== 'allowed')}>
               {pending.current ? m.correction_retry({}, o) : m.correction_submit({}, o)}
             </Button>
             {!pending.current && (
