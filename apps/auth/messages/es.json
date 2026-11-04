@@ -589,5 +589,9 @@
   "auth_security_passkey_registration_confirmed": "Auth confirmó el registro. Se actualizarán las llaves de acceso y los permisos actuales antes de volver a habilitar los controles.",
   "auth_security_passkey_registration_review_finished": "Has revisado las llaves de acceso actuales. Esto no confirma si se completó el registro anterior.",
   "auth_security_passkey_registration_saving": "El navegador envió el registro. Es posible que Auth haya guardado la llave; se espera la respuesta.",
-  "auth_security_passkey_authority_retired": "El resultado anterior de la llave de acceso sigue sin resolverse, pero esta página ya no puede comprobarlo para la cuenta anterior."
+  "auth_security_passkey_authority_retired": "El resultado anterior de la llave de acceso sigue sin resolverse, pero esta página ya no puede comprobarlo para la cuenta anterior.",
+  "auth_automated_operator_invalid": "Introduce el ID completo de la cuenta operadora (UUID).",
+  "auth_automated_operator_unlabelled": "Operador sin nombre público",
+  "auth_automated_pending": "Comprobando la solicitud de creación actual…",
+  "auth_automated_responsibility": "El operador aparecerá públicamente como responsable de este actor. La creación no añade inicio de sesión ni permisos heredados; cambiar el operador requiere una acción autorizada independiente."
 }

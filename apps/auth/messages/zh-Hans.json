@@ -589,5 +589,9 @@
   "auth_security_passkey_registration_confirmed": "Auth 已确认注册。重新启用控件前，正在更新当前通行密钥和权限。",
   "auth_security_passkey_registration_review_finished": "你已查看当前通行密钥。此操作无法确认先前的注册是否成功。",
   "auth_security_passkey_registration_saving": "浏览器已发送注册请求。Auth 可能已保存通行密钥；正在等待响应。",
-  "auth_security_passkey_authority_retired": "先前的通行密钥结果仍未确定，但此页面已无法为先前的账户检查该结果。"
+  "auth_security_passkey_authority_retired": "先前的通行密钥结果仍未确定，但此页面已无法为先前的账户检查该结果。",
+  "auth_automated_operator_invalid": "请输入完整的运营者账号 ID（UUID）。",
+  "auth_automated_operator_unlabelled": "未设置公开名称的运营者",
+  "auth_automated_pending": "正在检查当前创建请求…",
+  "auth_automated_responsibility": "运营者将被公开标示为此角色的责任方。创建不会赋予角色登录方式或继承权限；更换运营者需要另行获得授权。"
 }

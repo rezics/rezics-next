@@ -589,5 +589,9 @@
   "auth_security_passkey_registration_confirmed": "Auth a confirmé la création. Les clés d’accès et autorisations actuelles sont actualisées avant de réactiver les commandes.",
   "auth_security_passkey_registration_review_finished": "Vous avez vérifié les clés d’accès actuelles. Cela ne confirme pas si la création précédente a abouti.",
   "auth_security_passkey_registration_saving": "Le navigateur a envoyé la demande. Auth a peut-être enregistré la clé ; sa réponse est attendue.",
-  "auth_security_passkey_authority_retired": "Le résultat précédent de la clé d’accès reste incertain, mais cette page ne peut plus le vérifier pour l’ancien compte."
+  "auth_security_passkey_authority_retired": "Le résultat précédent de la clé d’accès reste incertain, mais cette page ne peut plus le vérifier pour l’ancien compte.",
+  "auth_automated_operator_invalid": "Saisissez l’identifiant complet du compte opérateur (UUID).",
+  "auth_automated_operator_unlabelled": "Opérateur sans nom public",
+  "auth_automated_pending": "Vérification de la demande de création en cours…",
+  "auth_automated_responsibility": "L’opérateur sera publiquement désigné comme responsable de cet acteur. La création n’ajoute ni connexion ni autorisations héritées ; changer d’opérateur nécessite une action autorisée distincte."
 }

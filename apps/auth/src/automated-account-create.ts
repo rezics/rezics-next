@@ -302,16 +302,22 @@ export async function submitAutomatedAttempt(
   input: AutomatedAttempt,
   isCurrent: () => boolean = () => true,
 ): Promise<AutomatedOutcome> {
-  let attempt = parseAutomatedAttempt({ ...input, submitted: true });
+  const uncertain = !!(input.submitted || input.reference);
+  let attempt = parseAutomatedAttempt(input);
   if (!isCurrent() || !attempt || !saveAutomatedAttempt(attempt)) return { kind: 'refused' };
   const denied = await boundSession(attempt.accountId);
   if (!isCurrent()) return { kind: 'unavailable' };
-  if (denied) return denied;
+  if (denied) return uncertain && denied.kind === 'refused' ? { kind: 'unknown' } : denied;
   const { operation, operationKey, accountId } = attempt;
   {
+    attempt = parseAutomatedAttempt({ ...attempt, submitted: true })!;
+    if (!saveAutomatedAttempt(attempt)) return { kind: 'unavailable' };
     const approval = await authPost('/account-operations/approve', { operation, operationKey, accountId });
     if (!isCurrent()) return { kind: 'unavailable' };
-    if (!approval.ok) return failure(approval);
+    if (!approval.ok) {
+      const outcome = failure(approval);
+      return uncertain && outcome.kind === 'refused' ? { kind: 'unknown' } : outcome;
+    }
     if (
       !record(approval.body) ||
       !fields(approval.body, ['reference', 'expiresAt']) ||
@@ -325,14 +331,18 @@ export async function submitAutomatedAttempt(
   }
   const current = await boundSession(accountId);
   if (!isCurrent()) return { kind: 'unavailable' };
-  if (current) return current;
+  if (current) return current.kind === 'refused' ? { kind: 'unknown' } : current;
   const result = await authPost('/account-operations/execute', {
     operation,
     operationKey,
     accountId,
     reference: attempt.reference,
   });
-  if (!result.ok) return failure(result);
+  if (!isCurrent()) return { kind: 'unavailable' };
+  if (!result.ok) {
+    const outcome = failure(result);
+    return outcome.kind === 'refused' ? { kind: 'unknown' } : outcome;
+  }
   if (!record(result.body) || !fields(result.body, ['accountId']) || !automatedId(result.body.accountId))
     return { kind: 'unknown' };
   // Retain the immutable attempt even after success: navigation cannot accidentally
@@ -353,5 +363,6 @@ export async function reauthenticateAutomated(
   const result = await authPost('/signin', { email, password, ...AUTOMATED_PROFILE });
   if (!isCurrent()) return { kind: 'unavailable' };
   if (!result.ok) return { kind: 'unavailable' };
-  return boundSession(accountId);
+  const current = await boundSession(accountId);
+  return isCurrent() ? current : { kind: 'unavailable' };
 }

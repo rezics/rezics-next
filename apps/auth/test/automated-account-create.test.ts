@@ -179,3 +179,20 @@ test('pending registration unexpected result and forged operator identity are ne
     kind: 'unavailable',
   });
 });
+
+test('refusal after a lost submission remains unknown and cannot replace its immutable recovery', async () => {
+  setup();
+  const input = attempt();
+  respond((path) => {
+    if (path === '/session') return Response.json(proof());
+    throw new TypeError('Approval acknowledgement lost');
+  });
+  expect(await submitAutomatedAttempt(input)).toEqual({ kind: 'unknown' });
+  const saved = restoreAutomatedAttempt() as AutomatedAttempt;
+  expect(saved.submitted).toBe(true);
+  respond((path) =>
+    path === '/session' ? Response.json(proof()) : Response.json({ error: 'denied' }, { status: 403 }),
+  );
+  expect(await submitAutomatedAttempt(saved)).toEqual({ kind: 'unknown' });
+  expect(restoreAutomatedAttempt()).toEqual(saved);
+});

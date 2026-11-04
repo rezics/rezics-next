@@ -589,5 +589,9 @@
   "auth_security_passkey_registration_confirmed": "Auth 已確認註冊。重新啟用控制項前，正在更新目前的通行密鑰與權限。",
   "auth_security_passkey_registration_review_finished": "你已檢視目前的通行密鑰。此操作無法確認先前的註冊是否成功。",
   "auth_security_passkey_registration_saving": "瀏覽器已送出註冊要求。Auth 可能已儲存通行密鑰；正在等待回應。",
-  "auth_security_passkey_authority_retired": "先前的通行密鑰結果仍未確定，但此頁面已無法為先前的帳戶檢查該結果。"
+  "auth_security_passkey_authority_retired": "先前的通行密鑰結果仍未確定，但此頁面已無法為先前的帳戶檢查該結果。",
+  "auth_automated_operator_invalid": "請輸入完整的營運者帳號 ID（UUID）。",
+  "auth_automated_operator_unlabelled": "未設定公開名稱的營運者",
+  "auth_automated_pending": "正在檢查目前的建立請求…",
+  "auth_automated_responsibility": "營運者將被公開標示為此角色的責任方。建立不會賦予角色登入方式或繼承權限；更換營運者需要另行取得授權。"
 }

@@ -589,5 +589,9 @@
   "auth_security_passkey_registration_confirmed": "Auth confirmed the registration. Refreshing current passkeys and permissions before controls return.",
   "auth_security_passkey_registration_review_finished": "You reviewed the current passkeys. This does not confirm whether the earlier registration succeeded.",
   "auth_security_passkey_registration_saving": "The browser sent the registration. Auth may have saved the passkey; waiting for its response.",
-  "auth_security_passkey_authority_retired": "The earlier passkey result remains unresolved, but this page can no longer check it for the previous account."
+  "auth_security_passkey_authority_retired": "The earlier passkey result remains unresolved, but this page can no longer check it for the previous account.",
+  "auth_automated_operator_invalid": "Enter a complete operator account ID (UUID).",
+  "auth_automated_operator_unlabelled": "Operator without a public name",
+  "auth_automated_pending": "Checking the current creation request…",
+  "auth_automated_responsibility": "The operator will be publicly identified as responsible for this actor. Creation adds no actor sign-in or inherited grants; changing the operator requires its own authorized action."
 }

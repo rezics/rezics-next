@@ -589,5 +589,9 @@
   "auth_security_passkey_registration_confirmed": "Auth hat die Registrierung bestätigt. Aktuelle Passkeys und Berechtigungen werden geladen, bevor die Steuerelemente wieder verfügbar sind.",
   "auth_security_passkey_registration_review_finished": "Du hast die aktuellen Passkeys geprüft. Damit ist nicht bestätigt, ob die frühere Registrierung gespeichert wurde.",
   "auth_security_passkey_registration_saving": "Der Browser hat die Registrierung gesendet. Auth könnte den Passkey gespeichert haben; die Antwort steht noch aus.",
-  "auth_security_passkey_authority_retired": "Das frühere Passkey-Ergebnis ist weiterhin ungeklärt, aber diese Seite kann es für das vorherige Konto nicht mehr prüfen."
+  "auth_security_passkey_authority_retired": "Das frühere Passkey-Ergebnis ist weiterhin ungeklärt, aber diese Seite kann es für das vorherige Konto nicht mehr prüfen.",
+  "auth_automated_operator_invalid": "Gib eine vollständige Betreiber-Konto-ID (UUID) ein.",
+  "auth_automated_operator_unlabelled": "Betreiber ohne öffentlichen Namen",
+  "auth_automated_pending": "Die aktuelle Erstellungsanfrage wird geprüft…",
+  "auth_automated_responsibility": "Der Betreiber wird öffentlich als verantwortlich für diesen Akteur ausgewiesen. Die Erstellung fügt weder eine Anmeldung noch geerbte Berechtigungen hinzu. Ein Betreiberwechsel erfordert eine eigene autorisierte Aktion."
 }

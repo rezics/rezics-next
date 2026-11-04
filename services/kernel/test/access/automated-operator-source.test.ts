@@ -158,3 +158,109 @@ test('Existing credentialless automated creation loads minimal current operator 
     ),
   ).rejects.toMatchObject({ status: 403 });
 }, 60000);
+
+for (const kind of ['actor', 'organization'] as const)
+  test(`review does not authorize creation after account:manage is revoked on the ${kind} operator`, async () => {
+    const owner = await person(`review_revoke_${kind}`);
+    let operatorAccountId = owner.accountId;
+    if (kind === 'organization') {
+      operatorAccountId = newId(0x9422);
+      const hold = await f.bindings.internalLifecycle.reserveCoordination({
+        accountId: owner.accountId,
+        relatedAccountId: operatorAccountId,
+        purpose: 'membership',
+        key: key(),
+      });
+      await f.bindings.internalLifecycle.createOrganization({
+        organizationId: operatorAccountId,
+        ownerAccountId: owner.accountId,
+        ownerReservationId: hold.value.reservationId,
+        key: key(),
+      });
+      await f.bindings.operators.provisionManagementDefaults({ operatorAccountId, key: key() });
+    }
+    expect(await (await point(owner, operatorAccountId)).json()).toMatchObject({ readiness: 'review' });
+    const operationKey = key();
+    const operation = {
+      kind: 'automated' as const,
+      registrationId: '',
+      operationKey,
+      operatorAccountId,
+      handle: `revoked_${kind}_bot`,
+      authorization: 'approval-request',
+    };
+    const approved = await f
+      .approval()
+      .approve(owner.bearer, { operationKey, operation }, { pool, deadline: Date.now() + 10000 });
+    await f.bindings.grants.revoke(
+      { ...(await context(owner)), pool },
+      {
+        resource: { route: routeOf(operatorAccountId)!, id: operatorAccountId },
+        subjectId: owner.accountId,
+        subjectRole: '',
+        actions: ['account:manage'],
+        valid: '(,)',
+        key: key(),
+      },
+    );
+    expect(await (await point(owner, operatorAccountId)).json()).toMatchObject({
+      readiness: 'refused',
+      operator: null,
+    });
+    await expect(
+      f.approval().approve(owner.bearer, { operationKey, operation }, { pool, deadline: Date.now() + 10000 }),
+    ).rejects.toThrow();
+    await expect(
+      f.host.workflows.createAutomated({
+        key: operationKey,
+        authorization: approved.reference,
+        operatorAccountId,
+        handle: operation.handle,
+      }),
+    ).rejects.toThrow();
+  }, 60000);
+
+test('signed-out and operated callers cannot obtain human review; unavailable dependencies never become refusal', async () => {
+  expect((await f.request('/account-management/automated/operator', { operatorAccountId: null })).status).toBe(401);
+  const owner = await person('review_operated_owner');
+  const subject = await f.automated('review-operated-bot', owner);
+  const operation = {
+    kind: 'opening' as const,
+    operatorAccountId: owner.accountId,
+    subjectAccountId: subject.accountId,
+    authorization: 'approval-request',
+  };
+  const operationKey = key();
+  const approved = await f
+    .approval()
+    .approve(owner.bearer, { operationKey, operation }, { pool, deadline: Date.now() + 10000 });
+  const opened = await f.host.workflows.openOperatorSession({
+    key: operationKey,
+    authorization: approved.reference,
+    operatorAccountId: owner.accountId,
+    subjectAccountId: subject.accountId,
+    headers: owner.headers,
+  });
+  expect(opened.status).toBe(200);
+  expect((await point({ ...owner, headers: cookies(opened) }, owner.accountId)).status).toBe(403);
+  const ctx = await context(owner);
+  const disconnected = new Proxy(pool, {
+    get(target, property, receiver) {
+      if (property === 'connect')
+        return async () => {
+          throw new Error('Dependency unavailable');
+        };
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  await expect(
+    readAutomatedCreationOperator(
+      { pool: disconnected, access: f.access },
+      ctx.actor,
+      { operatorAccountId: owner.accountId },
+      { deadline: Date.now() + 10000 },
+    ),
+  ).rejects.toMatchObject({ status: 503 });
+  await f.bindings.internalLifecycle.raiseFence({ accountId: owner.accountId, key: key() });
+  expect((await point(owner, owner.accountId)).status).toBe(403);
+}, 60000);

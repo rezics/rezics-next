@@ -589,5 +589,9 @@
   "auth_security_passkey_registration_confirmed": "Auth が登録を確認しました。操作を再開する前に、現在のパスキーと権限を更新しています。",
   "auth_security_passkey_registration_review_finished": "現在のパスキーを確認しました。この確認では、先ほどの登録が成功したかどうかは分かりません。",
   "auth_security_passkey_registration_saving": "ブラウザーから登録が送信されました。Auth に保存された可能性があります。応答を待っています。",
-  "auth_security_passkey_authority_retired": "先ほどのパスキーの結果は未確定ですが、このページでは以前のアカウントについて確認できなくなりました。"
+  "auth_security_passkey_authority_retired": "先ほどのパスキーの結果は未確定ですが、このページでは以前のアカウントについて確認できなくなりました。",
+  "auth_automated_operator_invalid": "運営者の完全なアカウントID（UUID）を入力してください。",
+  "auth_automated_operator_unlabelled": "公開名のない運営者",
+  "auth_automated_pending": "現在の作成リクエストを確認中…",
+  "auth_automated_responsibility": "このアクターの責任を持つ運営者が公開表示されます。作成によってログイン手段や権限が引き継がれることはありません。運営者の変更には、別途承認された操作が必要です。"
 }
