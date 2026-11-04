@@ -130,7 +130,7 @@
   "settings_watches_removed": "ウォッチを解除しました。この登録の今後のウォッチ通知は停止します。",
   "settings_watches_rejected": "ウォッチは解除されませんでした。再試行する前に一覧を更新してください。",
   "settings_watches_uncertain_title": "ウォッチは解除されましたか？",
-  "settings_watches_uncertain_text": "結果を確認できません。一覧を更新しても元のリクエストの結果は確定しません。同じリクエストを再試行して結果を確認してください。",
+  "settings_watches_uncertain_text": "結果は不明です。リストを更新して、現在解除が許可されているか確認してください。許可されている場合は、同じリクエストを再試行して結果を確認してください。",
   "settings_watches_retry_original": "元の解除リクエストを再試行",
   "settings_watches_refresh": "このページを更新",
   "settings_watches_next": "次のウォッチ",

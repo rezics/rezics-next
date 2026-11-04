@@ -143,34 +143,93 @@ test('lost target access still permits removal by owner subscription identity, w
   expect(controller.snapshot()).toMatchObject({ write: 'removed', rows: [readable], command: null });
 });
 
-test('unknown stop preserves the immutable original through list refresh; only explicit retry sends it again', async () => {
+test('uncertain removal needs current advice and both captured retry deadlines before replaying its original', async () => {
+  const startedAt = Date.parse('2026-11-05T10:00:00.000Z');
+  const realNow = Date.now;
+  let now = startedAt;
+  Date.now = () => now;
   const commands: StopWatch[] = [];
   const credentials: string[] = [];
-  let current = page([readable, inaccessible]);
-  const { controller } = setup({
-    read: async () => current,
+  const cursors: (string | null)[] = [];
+  const nextCursor = 'sealed/+cursor==';
+  let current: WatchRead = page([readable, inaccessible], nextCursor);
+  const { client, controller } = setup({
+    read: async ({ cursor }) => {
+      cursors.push(cursor);
+      return current;
+    },
     stop: async (input, token) => {
       commands.push(input);
       credentials.push(token);
-      if (commands.length === 1) throw new Error('reply lost');
-      return { kind: 'removed' };
+      return commands.length === 1
+        ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded', retryAfter: '5' } }
+        : { kind: 'removed' };
     },
   });
-  await controller.first();
-  await controller.stop(readable.subscriptionId);
-  const original = controller.snapshot().command;
-  expect(original?.credential).toBe(identity.csrfToken);
-  expect(controller.needsDecision()).toBe(true);
-  current = page([]);
-  await controller.refresh();
-  await controller.stop(inaccessible.subscriptionId);
-  expect(controller.snapshot()).toMatchObject({ write: 'uncertain', command: original });
-  expect(commands).toHaveLength(1);
-  await controller.retryOriginal();
-  expect(commands[1]).toBe(original);
-  expect(credentials).toEqual([identity.csrfToken, identity.csrfToken]);
-  expect(controller.snapshot()).toMatchObject({ write: 'removed', command: null });
-  expect(controller.needsDecision()).toBe(false);
+  try {
+    await controller.first();
+    await controller.stop(readable.subscriptionId);
+    const original = controller.snapshot().command;
+    expect(original?.credential).toBe(identity.csrfToken);
+    expect(controller.needsDecision()).toBe(true);
+    expect(controller.snapshot().writeRetryAt).toBe(startedAt + 5000);
+    expect(controller.canRetryOriginal()).toBe(false);
+
+    current = { kind: 'denied', problem: { status: 410, code: 'closed', retryAfter: '2' } };
+    await controller.refresh();
+    expect(controller.snapshot()).toMatchObject({
+      read: 'denied',
+      command: original,
+      readRetryAt: startedAt + 2000,
+      writeRetryAt: startedAt + 5000,
+    });
+    expect(controller.canRetryOriginal()).toBe(false);
+    await controller.refresh();
+    await controller.retryOriginal();
+    expect(cursors).toEqual([null, null]);
+    expect(commands).toHaveLength(1);
+
+    now += 2000;
+    const denied = managed({
+      ...readable,
+      revision: readable.revision + 1,
+      command: { ...readable.command, expectedRevision: readable.revision + 1 },
+      remove: 'denied',
+    });
+    current = {
+      kind: 'page',
+      page: { viewer, actions: { remove: 'denied' }, watches: [denied], next: nextCursor },
+    };
+    await controller.refresh();
+    expect(controller.snapshot().command).toBe(original);
+    expect(controller.canRetryOriginal()).toBe(false);
+
+    const revised = managed({
+      ...readable,
+      revision: readable.revision + 2,
+      command: { ...readable.command, expectedRevision: readable.revision + 2 },
+    });
+    current = page([revised], nextCursor);
+    await controller.refresh();
+    expect(controller.snapshot().command).toBe(original);
+    expect(controller.canRetryOriginal()).toBe(false);
+    current = page([]);
+    await controller.next();
+    expect(controller.snapshot()).toMatchObject({ command: original, rows: [], writeRetryAt: startedAt + 5000 });
+    expect(controller.canRetryOriginal()).toBe(false);
+
+    now += 3000;
+    expect(controller.canRetryOriginal()).toBe(true);
+    await controller.retryOriginal();
+    expect(commands[1]).toBe(original);
+    expect(credentials).toEqual([identity.csrfToken, identity.csrfToken]);
+    expect(controller.snapshot()).toMatchObject({ write: 'removed', command: null });
+    expect(controller.needsDecision()).toBe(false);
+    expect(cursors).toEqual([null, null, null, null, nextCursor]);
+  } finally {
+    Date.now = realNow;
+    client.clear();
+  }
 });
 
 test('viewer replacement or failed session refresh retires rows, pending commands and saved callbacks before late results', async () => {

@@ -130,7 +130,7 @@
   "settings_watches_removed": "Suivi arrêté. Les prochaines notifications de cet abonnement sont arrêtées.",
   "settings_watches_rejected": "Le suivi n’a pas été arrêté. Actualisez vos suivis avant de réessayer.",
   "settings_watches_uncertain_title": "Le suivi a-t-il été arrêté ?",
-  "settings_watches_uncertain_text": "Le résultat est inconnu. Actualiser la liste ne permet pas de résoudre la demande initiale. Réessayez cette même demande pour confirmer son résultat.",
+  "settings_watches_uncertain_text": "Le résultat est inconnu. Actualisez la liste pour vérifier si l’arrêt est autorisé. Si c’est le cas, réessayez la même demande pour en confirmer le résultat.",
   "settings_watches_retry_original": "Réessayer la demande initiale",
   "settings_watches_refresh": "Actualiser cette page",
   "settings_watches_next": "Suivis suivants",

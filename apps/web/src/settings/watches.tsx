@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
@@ -47,17 +47,8 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
   useEffect(() => {
     if (controller.snapshot().read === 'idle') void controller.first();
   }, [controller]);
-  const retryFailure = useMemo(
-    () =>
-      state.problem
-        ? {
-            status: state.problem.status,
-            ...(state.problem.retryAfter ? { retryAfter: state.problem.retryAfter } : {}),
-          }
-        : undefined,
-    [state.problem],
-  );
-  const waiting = usePreferenceRetry(retryFailure);
+  const readWaiting = usePreferenceRetry(undefined, state.readRetryAt);
+  const originalWaiting = usePreferenceRetry(undefined, state.writeRetryAt);
   if (state.retired) return null;
   const reading = state.read === 'idle' || state.read === 'loading';
   const failed =
@@ -96,7 +87,7 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
               className={controlClass}
               variant="outline"
               aria-pressed={state.kind === 'thread'}
-              disabled={state.read === 'loading' || state.command !== null || state.write === 'sending'}
+              disabled={readWaiting || state.read === 'loading' || state.command !== null || state.write === 'sending'}
               onClick={() => void controller.selectKind('thread')}
             >
               {m.settings_watches_thread()}
@@ -106,7 +97,7 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
               className={controlClass}
               variant="outline"
               aria-pressed={state.kind === 'board'}
-              disabled={state.read === 'loading' || state.command !== null || state.write === 'sending'}
+              disabled={readWaiting || state.read === 'loading' || state.command !== null || state.write === 'sending'}
               onClick={() => void controller.selectKind('board')}
             >
               {m.settings_watches_board()}
@@ -130,10 +121,11 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
               <AlertTitle>{m.settings_watches_uncertain_title()}</AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>{m.settings_watches_uncertain_text()}</p>
+                {originalWaiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
                 <Button
                   className={controlClass}
                   variant="outline"
-                  disabled={!controller.canWrite() || reading}
+                  disabled={!controller.canRetryOriginal()}
                   onClick={() => void controller.retryOriginal()}
                 >
                   {m.settings_watches_retry_original()}
@@ -157,16 +149,21 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
                 >
                   {readText}
                 </p>
-                {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+                {readWaiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
                 {state.read === 'invalid_cursor' ? (
-                  <Button className={controlClass} variant="outline" onClick={() => void controller.first()}>
+                  <Button
+                    className={controlClass}
+                    variant="outline"
+                    disabled={readWaiting}
+                    onClick={() => void controller.first()}
+                  >
                     {m.settings_watches_restart()}
                   </Button>
                 ) : (
                   <Button
                     className={controlClass}
                     variant="outline"
-                    disabled={waiting}
+                    disabled={readWaiting}
                     onClick={() => void controller.refresh()}
                   >
                     {m.settings_retry()}
@@ -228,16 +225,31 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
                 </ul>
               )}
               <div className="flex flex-wrap gap-3">
-                <Button className={controlClass} variant="outline" onClick={() => void controller.refresh()}>
+                <Button
+                  className={controlClass}
+                  variant="outline"
+                  disabled={readWaiting}
+                  onClick={() => void controller.refresh()}
+                >
                   {m.settings_watches_refresh()}
                 </Button>
                 {state.next !== null ? (
-                  <Button className={controlClass} variant="outline" onClick={() => void controller.next()}>
+                  <Button
+                    className={controlClass}
+                    variant="outline"
+                    disabled={readWaiting}
+                    onClick={() => void controller.next()}
+                  >
                     {m.settings_watches_next()}
                   </Button>
                 ) : null}
                 {state.cursor !== null ? (
-                  <Button className={controlClass} variant="outline" onClick={() => void controller.first()}>
+                  <Button
+                    className={controlClass}
+                    variant="outline"
+                    disabled={readWaiting}
+                    onClick={() => void controller.first()}
+                  >
                     {m.settings_watches_first()}
                   </Button>
                 ) : null}

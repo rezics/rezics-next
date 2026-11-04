@@ -130,7 +130,7 @@
   "settings_watches_removed": "Abonnement beendet. Künftige Benachrichtigungen für dieses Abonnement sind gestoppt.",
   "settings_watches_rejected": "Das Abonnement wurde nicht beendet. Aktualisiere die Liste vor einem neuen Versuch.",
   "settings_watches_uncertain_title": "Wurde das Abonnement beendet?",
-  "settings_watches_uncertain_text": "Das Ergebnis ist unbekannt. Eine aktualisierte Liste klärt die ursprüngliche Anfrage nicht. Wiederhole dieselbe Anfrage, um ihr Ergebnis zu bestätigen.",
+  "settings_watches_uncertain_text": "Das Ergebnis ist unbekannt. Aktualisiere die Liste, um die aktuelle Berechtigung zum Entfernen zu prüfen. Wenn das Entfernen möglich ist, wiederhole dieselbe Anfrage, um ihr Ergebnis zu bestätigen.",
   "settings_watches_retry_original": "Ursprüngliche Anfrage wiederholen",
   "settings_watches_refresh": "Diese Seite aktualisieren",
   "settings_watches_next": "Nächste Abonnements",

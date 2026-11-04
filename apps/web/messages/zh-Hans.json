@@ -130,7 +130,7 @@
   "settings_watches_removed": "订阅已取消。将不再发送此订阅的新通知。",
   "settings_watches_rejected": "订阅未取消。请先刷新订阅列表再重试。",
   "settings_watches_uncertain_title": "订阅取消了吗？",
-  "settings_watches_uncertain_text": "结果未知。刷新列表无法确定原请求的结果。请重试同一请求以确认结果。",
+  "settings_watches_uncertain_text": "结果未知。请刷新当前列表以检查是否允许取消。如果允许，请重试同一请求以确认结果。",
   "settings_watches_retry_original": "重试原取消请求",
   "settings_watches_refresh": "刷新此页",
   "settings_watches_next": "下一页订阅",

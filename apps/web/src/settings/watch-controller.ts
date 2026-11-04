@@ -1,4 +1,5 @@
 import { withManagedReadDeadline } from './managed-read-deadline';
+import { preferenceRetryDeadline } from './preference-failure-retry';
 import type {
   ManagedWatch,
   NativeWatchProblem,
@@ -27,6 +28,8 @@ export type WatchState = Readonly<{
   viewer: WatchViewer | null;
   actions: WatchActions | null;
   problem: NativeWatchProblem | null;
+  readRetryAt: number;
+  writeRetryAt: number;
   command: StopWatchIntent | null;
   write: 'idle' | 'sending' | 'uncertain' | 'rejected' | 'removed' | 'conflict' | 'denied';
   retired: boolean;
@@ -40,6 +43,8 @@ const initial: WatchState = {
   viewer: null,
   actions: null,
   problem: null,
+  readRetryAt: 0,
+  writeRetryAt: 0,
   command: null,
   write: 'idle',
   retired: false,
@@ -90,6 +95,13 @@ export class WatchController {
   needsDecision = () => this.current() && this.state.command !== null;
   canWrite = () => this.current() && !!this.owner.credential();
   canRemove = () => this.canWrite() && this.state.actions?.remove === 'available';
+  canRetryOriginal = () =>
+    this.canWrite() &&
+    this.state.command !== null &&
+    this.state.write === 'uncertain' &&
+    this.state.read === 'ready' &&
+    this.state.actions?.remove === 'available' &&
+    Date.now() >= this.state.writeRetryAt;
 
   refresh = () => this.load(this.state.cursor);
   first = () => this.load(null);
@@ -127,7 +139,13 @@ export class WatchController {
     );
   }
   private async load(cursor: string | null, kind: WatchKind = this.state.kind) {
-    if (!this.current() || this.state.read === 'loading' || this.state.write === 'sending') return;
+    if (
+      !this.current() ||
+      this.state.read === 'loading' ||
+      this.state.write === 'sending' ||
+      Date.now() < this.state.readRetryAt
+    )
+      return;
     const generation = ++this.generation;
     this.request = new AbortController();
     // A failed refresh cannot lend its previous rows current read or command authority.
@@ -155,14 +173,19 @@ export class WatchController {
           viewer: result.page.viewer,
           actions: result.page.actions,
           problem: null,
+          readRetryAt: 0,
         });
       } else if (result.kind === 'invalid_cursor' || result.kind === 'denied' || result.kind === 'unavailable') {
-        this.update({ read: result.kind, problem: result.problem });
+        this.update({
+          read: result.kind,
+          problem: result.problem,
+          readRetryAt: preferenceRetryDeadline(result.problem.retryAfter),
+        });
       } else {
-        this.update({ read: 'failed' });
+        this.update({ read: 'failed', readRetryAt: 0 });
       }
     } catch {
-      if (this.current() && generation === this.generation) this.update({ read: 'failed' });
+      if (this.current() && generation === this.generation) this.update({ read: 'failed', readRetryAt: 0 });
     }
   }
 
@@ -182,8 +205,8 @@ export class WatchController {
     await this.send(command);
   };
   retryOriginal = async () => {
-    const command = this.state.command;
-    if (!this.canWrite() || !command || this.state.write !== 'uncertain' || this.state.read === 'loading') return;
+    if (!this.canRetryOriginal()) return;
+    const command = this.state.command!;
     this.update({ write: 'sending' });
     await this.send(command);
   };
@@ -193,15 +216,18 @@ export class WatchController {
       // Bound waiting without claiming cancellation reversed a dispatched command.
       const result = await withManagedReadDeadline(() => this.io.stop(command, command.credential));
       if (!this.current() || this.state.command !== command) return;
+      const writeRetryAt =
+        result.kind === 'uncertain' ? preferenceRetryDeadline(result.problem.retryAfter) : 0;
       if (result.kind === 'removed') {
         this.update({
           rows: this.state.rows.filter((row) => row.subscriptionId !== command.watchId || row.kind !== command.kind),
           command: null,
           write: 'removed',
           problem: null,
+          writeRetryAt,
         });
       } else if (result.kind === 'uncertain') {
-        this.update({ write: 'uncertain', problem: result.problem });
+        this.update({ write: 'uncertain', problem: result.problem, writeRetryAt });
       } else if (result.kind === 'denied') {
         this.update({
           command: null,
@@ -212,6 +238,7 @@ export class WatchController {
           viewer: null,
           actions: null,
           problem: result.problem,
+          writeRetryAt,
         });
       } else {
         this.update({
@@ -223,11 +250,12 @@ export class WatchController {
           viewer: null,
           actions: null,
           problem: result.problem,
+          writeRetryAt,
         });
       }
     } catch {
       if (this.current() && this.state.command === command)
-        this.update({ write: 'uncertain', problem: { status: null, code: null } });
+        this.update({ write: 'uncertain', problem: { status: null, code: null }, writeRetryAt: 0 });
     }
   }
 }
