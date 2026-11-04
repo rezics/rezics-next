@@ -1,5 +1,7 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { withThrowawayDatabase } from '../../scripts/derived.ts';
 
 setDefaultTimeout(600_000);
@@ -92,28 +94,25 @@ async function startKernelWorker(databaseUrl: string) {
 
 const OPERATION_ID = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
 
-/** Same parallel graph as `bun services/auth/scripts/dev-stack.ts persona` (`task dev:persona` / `task seed:dev`). */
+/** Exercise the actual local Auth composition, including native bindings and client registration. */
 async function startPersonaSeed(databaseUrl: string) {
-  const [, { createKernel }] = await Promise.all([
-    import('../../../auth/src/index.ts'),
-    import('../../src/http/kernel.ts'),
-    import('../../src/http/request.ts'),
-    import('../../src/access/index.ts'),
-    import('../../src/access/native-account-bindings.ts'),
-    import('../../src/server.ts'),
-    import('../../src/access/management-source.ts'),
-  ]);
-  const { Pool } = await import('pg');
-  const { testReceiptKeys } = await import('../support/receipt-keys.ts');
-  const pool = new Pool({ connectionString: databaseUrl });
+  const { assemble, developmentKeys } = await import('../../../auth/scripts/dev-stack.ts');
+  const { createAuthDatabase } = await import('../support/auth-database.ts');
+  const authDatabaseUrl = await createAuthDatabase(
+    databaseUrl,
+    `persona_boot_${crypto.randomUUID().replaceAll('-', '')}`,
+  );
+  const temporary = resolve(import.meta.dir, '../../../../.temp');
+  await mkdir(temporary, { recursive: true });
+  const directory = await mkdtemp(resolve(temporary, 'persona-boot-'));
+  const composition = await assemble({
+    env: serverKeys(databaseUrl),
+    authDatabaseUrl,
+    keys: await developmentKeys(directory),
+  });
   try {
-    const kernel = createKernel({
-      pool,
-      routeKey: randomBytes(32),
-      receiptKeys: testReceiptKeys(),
-    });
     const history: string[] = [];
-    for (const route of kernel.routes) {
+    for (const route of composition.kernel.routes) {
       const detail = route.hooks?.detail as Record<string, unknown> | undefined;
       if (!detail || detail.hide === true) continue;
       expect(detail.operationId).toMatch(OPERATION_ID);
@@ -123,7 +122,8 @@ async function startPersonaSeed(databaseUrl: string) {
     }
     expect(history.sort()).toEqual(['collection.structure_history_compare', 'collection.structure_history_list']);
   } finally {
-    await pool.end();
+    await composition.stop();
+    await rm(directory, { recursive: true, force: true });
   }
 }
 
