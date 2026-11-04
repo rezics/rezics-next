@@ -8103,5 +8103,20 @@
   "search_share_oversized": "此搜尋過大，無法透過連結分享。請繼續編輯以縮小搜尋。",
   "search_share_private": "此搜尋含有私密或不可攜的條件。分享前請明確移除這些條件。",
   "search_share_unavailable": "暫時無法分享。搜尋已保留，請重試。",
-  "search_share_close": "關閉預覽"
+  "search_share_close": "關閉預覽",
+  "curation_advice_heading": "目前操作權限",
+  "curation_advice_publish_label": "發佈",
+  "curation_advice_activate_label": "啟用",
+  "curation_advice_allowed": "允許",
+  "curation_advice_denied": "不允許",
+  "curation_advice_unavailable": "暫時無法使用",
+  "curation_advice_help": "此提示依據目前帳戶與已啟用的全域呈現。送出每項命令時都會重新檢查存取權限。",
+  "curation_advice_publish_only": "現在可以發佈不可變的設定。啟用操作目前無法使用；草稿與發佈收據會保留。",
+  "curation_advice_activate_only": "可以啟用先前發佈的設定。目前無法發佈新設定。",
+  "curation_advice_refresh": "重新整理操作權限",
+  "curation_advice_checking": "正在重新整理操作權限…",
+  "curation_no_active_profile": "目前沒有可用的已啟用呈現設定。",
+  "curation_published_waiting": "已發佈不可變設定：{digest}。啟用仍在等待中。",
+  "curation_retry_activation_help": "使用保留的設定與原命令金鑰重試啟用。不會發佈新設定。",
+  "curation_retry_activation": "重試啟用"
 }

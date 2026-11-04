@@ -1,20 +1,31 @@
 import { platformRegistry, profileDigest, validateProfile, type PresentationProfile } from '@rezics/composition';
-import type { CurationFailure, PublishInput, PublishResult } from './curate';
+import type {
+  ActivationInput,
+  CurationFailure,
+  PublishInput,
+  PublishReceipt,
+  PublishResult,
+} from './curate';
 import type { CurationAdmissionLease } from './curation-reader-admission';
 import { admitCurationInspection, curationInspectionRetryAt } from './curation-inspection-retry';
 import { admitPublicationRetry, publicationRetryAt } from './curation-retry-admission';
 
 export type ActiveCuration = { ok: true; reader: string; profile: PresentationProfile; digest: string; head: number };
 export type PublicationRead = ActiveCuration | CurationFailure | { ok: false; reason: 'signed-out' };
+export type CurationCommandAdvice = { publish: boolean; activate: boolean };
 export type PublicationTransport = {
   publish: (input: PublishInput, expectedReader: string) => Promise<PublishResult>;
+  publishOnly?: (input: PublishInput, expectedReader: string) => Promise<PublishReceipt>;
+  activate?: (input: ActivationInput & { intent: PublishInput }, expectedReader: string) => Promise<PublishResult>;
   read: (expectedReader: string) => Promise<PublicationRead>;
 };
+const commandsAllowed = { publish: true, activate: true } as const;
 export type PublicationIntent = PublishInput & { reader: string };
 export type PublicationConfirmation = { intent: PublicationIntent; result: Extract<PublishResult, { ok: true }> };
 export type PublicationState = {
   intent: PublicationIntent | null;
   result: PublishResult | null;
+  publishedDigest: string | null;
   active: ActiveCuration | null;
   readFailure: Exclude<PublicationRead, { ok: true }> | null;
   busy: boolean;
@@ -25,11 +36,15 @@ export type PublicationState = {
 export type CurationPublicationVisit = {
   readonly incarnation: number;
   isCurrent(): boolean;
-  start(profile: PresentationProfile, expectedHead: number): Promise<PublicationConfirmation | null>;
-  retry(): Promise<PublicationConfirmation | null>;
+  start(profile: PresentationProfile, expectedHead: number, advice?: CurationCommandAdvice): Promise<PublicationConfirmation | null>;
+  retry(advice?: CurationCommandAdvice): Promise<PublicationConfirmation | null>;
   inspect(): Promise<void>;
   reconcile(profile: PresentationProfile, choice: 'keep' | 'discard'): ActiveCuration | null;
-  replaceInvalid(profile: PresentationProfile, expectedHead: number): Promise<PublicationConfirmation | null>;
+  replaceInvalid(
+    profile: PresentationProfile,
+    expectedHead: number,
+    advice?: CurationCommandAdvice,
+  ): Promise<PublicationConfirmation | null>;
 };
 
 function freeze<T>(value: T): T {
@@ -49,11 +64,18 @@ export function retainedCurationPublication(reader: string, transport: Publicati
 
 /** Mounted publication intent only. The editor remains the sole owner of the draft. */
 export class CurationPublication {
-  private state: PublicationState = { intent: null, result: null, active: null, readFailure: null, busy: false };
+  private state: PublicationState = {
+    intent: null,
+    result: null,
+    publishedDigest: null,
+    active: null,
+    readFailure: null,
+    busy: false,
+  };
   private listeners = new Set<() => void>();
   private incarnation = 0;
   private active = true;
-  private operation: 'publish' | 'read' | null = null;
+  private operation: 'publish' | 'activate' | 'read' | null = null;
   private lease: CurationAdmissionLease | null = null;
   private stopLease: (() => void) | null = null;
 
@@ -96,7 +118,7 @@ export class CurationPublication {
       busy: false,
       active: null,
       readFailure: null,
-      ...(this.state.intent ? {} : { result: null, retryAt: undefined, readRetryAt: undefined }),
+      ...(this.state.intent ? {} : { result: null, publishedDigest: null, retryAt: undefined, readRetryAt: undefined }),
     });
     return visit;
   }
@@ -107,7 +129,8 @@ export class CurationPublication {
     if (!this.active && !this.operation) return;
     this.incarnation += 1;
     this.active = false;
-    const uncertain = this.operation === 'publish' && this.state.intent;
+    const uncertain = this.operation !== null && this.operation !== 'read' && this.state.intent;
+    const phase = this.operation === 'activate' ? 'activate' : 'publish';
     this.operation = null;
     this.stopLease?.();
     this.stopLease = null;
@@ -116,7 +139,9 @@ export class CurationPublication {
         busy: false,
         active: null,
         readFailure: null,
-        ...(uncertain ? { result: { ok: false, reason: 'unavailable', outcome: 'unknown' } as const } : {}),
+        ...(uncertain
+          ? { result: { ok: false, reason: 'unavailable', outcome: 'unknown', phase } as const }
+          : {}),
       },
       notify,
     );
@@ -126,11 +151,11 @@ export class CurationPublication {
     return {
       incarnation,
       isCurrent: () => this.isCurrent(incarnation),
-      start: (profile, expectedHead) => this.start(profile, expectedHead, incarnation),
-      retry: () => this.retry(incarnation),
+      start: (profile, expectedHead, advice) => this.start(profile, expectedHead, advice, incarnation),
+      retry: (advice) => this.retry(advice, incarnation),
       inspect: () => this.inspect(incarnation),
       reconcile: (profile, choice) => this.reconcile(profile, choice, incarnation),
-      replaceInvalid: (profile, expectedHead) => this.replaceInvalid(profile, expectedHead, incarnation),
+      replaceInvalid: (profile, expectedHead, advice) => this.replaceInvalid(profile, expectedHead, advice, incarnation),
     };
   }
 
@@ -151,6 +176,7 @@ export class CurationPublication {
   async start(
     profile: PresentationProfile,
     expectedHead: number,
+    advice: CurationCommandAdvice = commandsAllowed,
     expectedIncarnation = this.incarnation,
   ): Promise<PublicationConfirmation | null> {
     // A changed draft cannot quietly replace an unresolved operation.
@@ -160,24 +186,38 @@ export class CurationPublication {
       this.update({ result: { ok: false, reason: 'invalid', errors } });
       return null;
     }
+    if (!advice.publish) return null;
     const intent = freeze({
       reader: this.reader,
       profile: structuredClone(profile),
       expectedHead,
       keys: { publish: this.key(), activate: this.key() },
     });
-    this.update({ intent, result: null, active: null, readFailure: null, retryAt: undefined, readRetryAt: undefined });
-    return this.retry(expectedIncarnation);
+    this.update({
+      intent,
+      result: null,
+      publishedDigest: null,
+      active: null,
+      readFailure: null,
+      retryAt: undefined,
+      readRetryAt: undefined,
+    });
+    return this.retry(advice, expectedIncarnation);
   }
 
-  async retry(expectedIncarnation = this.incarnation): Promise<PublicationConfirmation | null> {
-    const { intent, busy } = this.state;
+  async retry(
+    advice: CurationCommandAdvice = commandsAllowed,
+    expectedIncarnation = this.incarnation,
+  ): Promise<PublicationConfirmation | null> {
+    const { intent, busy, publishedDigest } = this.state;
     if (
       !this.isCurrent(expectedIncarnation) ||
       !intent ||
       intent.reader !== this.reader ||
       busy ||
       !admitPublicationRetry(this.state.retryAt) ||
+      (!publishedDigest && !advice.publish) ||
+      (publishedDigest !== null && !advice.activate) ||
       (this.state.result?.ok === false &&
         this.state.result.reason === 'invalid' &&
         this.state.result.phase !== 'activate')
@@ -188,10 +228,76 @@ export class CurationPublication {
     const transport = this.transport;
     this.operation = 'publish';
     this.update({ busy: true });
+    const input: PublishInput = { profile: intent.profile, expectedHead: intent.expectedHead, keys: intent.keys };
+    if (transport.publishOnly && transport.activate) {
+      let receiptDigest = publishedDigest;
+      if (receiptDigest === null) {
+        let receipt: PublishReceipt;
+        try {
+          receipt = await transport.publishOnly(input, this.reader);
+          if (receipt.ok && receipt.digest !== profileDigest(intent.profile))
+            receipt = { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
+        } catch {
+          receipt = { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
+        }
+        if (!current()) return null;
+        if (!receipt.ok) {
+          this.operation = null;
+          this.update({
+            result: { ...receipt, phase: 'publish' },
+            publishedDigest: null,
+            retryAt: receipt.reason === 'rate-limited' ? publicationRetryAt(receipt.retryAfter) : undefined,
+          });
+          if (receipt.reason === 'stale') await this.readActive(incarnation, transport);
+          if (!current()) return null;
+          this.update({ busy: false });
+          return null;
+        }
+        receiptDigest = receipt.digest;
+        this.update({ publishedDigest: receiptDigest, result: null });
+      }
+
+      if (!advice.activate) {
+        this.operation = null;
+        this.update({ busy: false, result: null });
+        return null;
+      }
+
+      this.operation = 'activate';
+      let result: PublishResult;
+      try {
+        result = await transport.activate(
+          {
+            digest: receiptDigest,
+            expectedHead: intent.expectedHead,
+            key: intent.keys.activate,
+            intent: input,
+          },
+          this.reader,
+        );
+        if (result.ok && (result.digest !== receiptDigest || result.head !== intent.expectedHead + 1))
+          result = { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'activate' };
+      } catch {
+        result = { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'activate' };
+      }
+      if (!current()) return null;
+      this.operation = null;
+      this.update({
+        result: result.ok ? result : { ...result, phase: 'activate' },
+        retryAt: !result.ok && result.reason === 'rate-limited' ? publicationRetryAt(result.retryAfter) : undefined,
+        ...(result.ok
+          ? { intent: null, publishedDigest: null, active: null, readFailure: null, readRetryAt: undefined }
+          : { publishedDigest: receiptDigest }),
+      });
+      if (!result.ok && result.reason === 'stale') await this.readActive(incarnation, transport);
+      if (!current()) return null;
+      this.update({ busy: false });
+      return result.ok ? { intent, result } : null;
+    }
+
     let result: PublishResult;
     try {
-      // Always cross the BFF, including after a previous receipt or permission denial.
-      const input: PublishInput = { profile: intent.profile, expectedHead: intent.expectedHead, keys: intent.keys };
+      // Compatibility transports retain their existing composite command custody.
       result = await transport.publish(input, this.reader);
       if (result.ok && (result.digest !== profileDigest(intent.profile) || result.head !== intent.expectedHead + 1))
         result = { ok: false, reason: 'unavailable', outcome: 'unknown' };
@@ -202,6 +308,7 @@ export class CurationPublication {
     this.operation = null;
     this.update({
       result,
+      publishedDigest: !result.ok && result.phase === 'activate' ? (result as CurationFailure & { publishedDigest?: string }).publishedDigest ?? null : null,
       retryAt: !result.ok && result.reason === 'rate-limited' ? publicationRetryAt(result.retryAfter) : undefined,
       ...(result.ok ? { intent: null, active: null, readFailure: null, readRetryAt: undefined } : {}),
     });
@@ -271,6 +378,7 @@ export class CurationPublication {
     this.update({
       intent: null,
       result: null,
+      publishedDigest: null,
       active: null,
       readFailure: null,
       retryAt: undefined,
@@ -280,7 +388,12 @@ export class CurationPublication {
   }
 
   /** Validation refusal is terminal. A revised body requires a deliberate new intent. */
-  async replaceInvalid(profile: PresentationProfile, expectedHead: number, expectedIncarnation = this.incarnation) {
+  async replaceInvalid(
+    profile: PresentationProfile,
+    expectedHead: number,
+    advice: CurationCommandAdvice = commandsAllowed,
+    expectedIncarnation = this.incarnation,
+  ) {
     if (
       !this.isCurrent(expectedIncarnation) ||
       this.state.busy ||
@@ -292,7 +405,7 @@ export class CurationPublication {
     // Keep the original refusal and its profile until the revised draft is locally valid.
     if (validateProfile(platformRegistry, profile).length) return null;
     if (this.state.intent && profileDigest(profile) === profileDigest(this.state.intent.profile)) return null;
-    this.update({ intent: null, result: null, retryAt: undefined, readRetryAt: undefined });
-    return this.start(profile, expectedHead, expectedIncarnation);
+    this.update({ intent: null, result: null, publishedDigest: null, retryAt: undefined, readRetryAt: undefined });
+    return this.start(profile, expectedHead, advice, expectedIncarnation);
   }
 }

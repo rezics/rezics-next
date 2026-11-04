@@ -48,6 +48,7 @@ import {
 } from './curate';
 import { addStructuralBaseTemplate } from './curation-base-template';
 import type { CurationRead } from './curate-actions';
+import { unavailableCurationAdvice, type CurationAdvice, type CurationActionState } from './curation-advice';
 import {
   discardPresentationDraft,
   confirmPresentationDraft,
@@ -69,6 +70,7 @@ import {
   type CurationPublicationVisit,
   type PublicationConfirmation,
   type PublicationTransport,
+  type CurationCommandAdvice,
 } from './curation-publish';
 import { type CurationAdmissionLease, CurationReaderAdmission } from './curation-reader-admission';
 import {
@@ -101,7 +103,9 @@ const editorRecoveryClass =
   'contents [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:max-w-full [&_button]:whitespace-normal [&_button]:[overflow-wrap:anywhere] [&_summary]:min-h-11 [&_summary]:min-w-11 [&_summary]:cursor-pointer [&_summary]:rounded-md [&_summary]:py-2 [&_summary]:[overflow-wrap:anywhere] [&_summary]:focus-visible:outline-none [&_summary]:focus-visible:ring-2 [&_summary]:focus-visible:ring-ring [&_summary]:focus-visible:ring-offset-2 [&_pre]:focus-visible:ring-2 [&_pre]:focus-visible:ring-ring';
 
 /** The existing whole-profile publication helper owns transport; no retry protocol lives in the editor. */
-export type CurationEditorTransport = PublicationTransport;
+export type CurationEditorTransport = PublicationTransport & {
+  readOpening: (expectedReader: string) => Promise<CurationRead>;
+};
 export type ObservedCurationSession = {
   state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   subject?: string | null;
@@ -166,6 +170,14 @@ type FreshAdmissionResult = {
 };
 
 type AdmissionReadRequest = { reader: string; version: number; promise: Promise<CurationRead | undefined> };
+type CurationAdviceLease = {
+  reader: string;
+  locale: string;
+  digest: string;
+  head: number;
+  source: CurationEditorTransport;
+  advice: CurationAdvice;
+};
 
 function failureView(failure: CurationReadFailure, locale: string) {
   if (failure.reason === 'forbidden') return <ErrorPage />;
@@ -174,6 +186,13 @@ function failureView(failure: CurationReadFailure, locale: string) {
       <CurationFailureNotice failure={failure} locale={locale} />
     </div>
   );
+}
+
+function adviceLabel(state: CurationActionState, locale: string) {
+  const options = presentationMessageOptions(locale);
+  if (state === 'allowed') return m.curation_advice_allowed({}, options);
+  if (state === 'denied') return m.curation_advice_denied({}, options);
+  return m.curation_advice_unavailable({}, options);
 }
 
 function retryableReadFailure(
@@ -235,7 +254,7 @@ function ActualPresentationViewEditor({
       const promise = Promise.resolve().then(() => {
         if (!canDispatchCurationRead(waitRef.current, owner)) return;
         return admission.canRead(expectedReader, version)
-          ? invocationTransport.read(expectedReader)
+          ? invocationTransport.readOpening(expectedReader)
           : ({ ok: false, reason: 'unavailable' } as const);
       });
       request = { reader: expectedReader, version, promise };
@@ -436,7 +455,7 @@ function StandalonePresentationViewEditor({
     if (!canDispatchCurationRead(waitRef.current, owner)) return 0;
     const serial = ++admissionRequest.current;
     void invocationTransport
-      .read(expectedReader)
+      .readOpening(expectedReader)
       .then((result) => {
         if (admissionRequest.current === serial) applyAdmission(epoch, expectedReader, result);
       })
@@ -518,6 +537,17 @@ function AdmittedPresentationViewEditor({
   const formId = useId();
   const [current, setCurrent] = useState<CurationRead>(initial);
   const [draft, setDraft] = useState(() => (initial.ok ? presentationDraft(initial) : null));
+  const [adviceLease, setAdviceLease] = useState<CurationAdviceLease | null>(() => ({
+    reader,
+    locale,
+    digest: initial.digest,
+    head: initial.head,
+    source: transport,
+    advice: initial.advice,
+  }));
+  const [adviceFailure, setAdviceFailure] = useState<CurationReadFailure | null>(null);
+  const [adviceRefreshing, setAdviceRefreshing] = useState(false);
+  const adviceSequence = useRef(0);
   const waitOwner = { reader, generation: epoch };
   const { waitRef, waiting, replaceWait } = useCurationReadWait(waitOwner);
   const [failure, setFailure] = useState<CurationFailure | null>(null);
@@ -541,6 +571,24 @@ function AdmittedPresentationViewEditor({
   }
   const localeRef = useRef(locale);
   localeRef.current = locale;
+  const transportRef = useRef(transport);
+  transportRef.current = transport;
+  const adviceContext = useRef({ reader, locale, epoch, source: transport });
+  useEffect(() => {
+    const previous = adviceContext.current;
+    if (
+      previous.reader !== reader ||
+      previous.locale !== locale ||
+      previous.epoch !== epoch ||
+      previous.source !== transport
+    ) {
+      adviceSequence.current += 1;
+      setAdviceLease(null);
+      setAdviceFailure(null);
+      setAdviceRefreshing(false);
+    }
+    adviceContext.current = { reader, locale, epoch, source: transport };
+  }, [reader, locale, epoch, transport]);
   useLayoutEffect(() => {
     if (lease && !lease.isCurrent()) return;
     lifetime.current.active = true;
@@ -558,6 +606,25 @@ function AdmittedPresentationViewEditor({
   );
   const busy = loadingProfile || publicationState.busy;
   const pendingPublication = publicationState.intent !== null;
+  const observedHeadConflict =
+    publicationState.result?.ok === false &&
+    publicationState.result.reason === 'stale' &&
+    current.ok &&
+    publicationState.active !== null &&
+    (publicationState.active.digest !== current.digest || publicationState.active.head !== current.head);
+  const adviceMatchesCurrent =
+    current.ok &&
+    !observedHeadConflict &&
+    adviceLease?.reader === reader &&
+    adviceLease.locale === locale &&
+    adviceLease.digest === current.digest &&
+    adviceLease.head === current.head &&
+    adviceLease.source === transport;
+  const currentAdvice = adviceMatchesCurrent ? adviceLease.advice : unavailableCurationAdvice();
+  const commandAdvice: CurationCommandAdvice = {
+    publish: currentAdvice.publish === 'allowed',
+    activate: currentAdvice.activate === 'allowed',
+  };
   const inFlight = useRef(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [confirm, setConfirm] = useState<'discard' | 'reload' | null>(null);
@@ -607,12 +674,21 @@ function AdmittedPresentationViewEditor({
     if (!isCurrent() || dirty || publication.getSnapshot().intent) return;
     setOwned(setCurrent, initial);
     setOwned(setDraft, presentationDraft(initial));
+    setOwned(setAdviceLease, {
+      reader,
+      locale,
+      digest: initial.digest,
+      head: initial.head,
+      source: transport,
+      advice: initial.advice,
+    });
+    setOwned(setAdviceFailure, null);
     setOwned(setFailure, null);
     setOwned(setFailureProfile, initial.profile);
     setOwned(setCorrection, null);
     setOwned(setMessage, '');
     setOwned(setGeneration, (value) => value + 1);
-  }, [initialVersion]);
+  }, [initialVersion, reader, locale, transport]);
   const options = presentationMessageOptions(locale);
   const navigationGuard = (
     <CurationNavigationGuard
@@ -724,7 +800,7 @@ function AdmittedPresentationViewEditor({
     setOwned(setCorrection, null);
     setOwned(setMessage, '');
     try {
-      const next = await invocationTransport.read(reader);
+      const next = await invocationTransport.readOpening(reader);
       if (!isCurrent()) return;
       if (next.ok) {
         retireCurationReadWait(waitRef.current);
@@ -732,10 +808,20 @@ function AdmittedPresentationViewEditor({
         if (next.reader !== reader) {
           setOwned(setCurrent, { ok: false, reason: 'forbidden' });
           setOwned(setDraft, null);
+          setOwned(setAdviceLease, null);
           return;
         }
         setOwned(setCurrent, next);
         setOwned(setDraft, presentationDraft(next));
+        setOwned(setAdviceLease, {
+          reader,
+          locale: localeRef.current,
+          digest: next.digest,
+          head: next.head,
+          source: invocationTransport,
+          advice: next.advice,
+        });
+        setOwned(setAdviceFailure, null);
         setOwned(setGeneration, (value) => value + 1);
         setOwned(setMessage, m.curation_reloaded({}, options));
       } else if (next.reason === 'signed-out') {
@@ -757,6 +843,69 @@ function AdmittedPresentationViewEditor({
         inFlight.current = false;
         setOwned(setLoadingProfile, false);
       }
+    }
+  }
+
+  async function refreshAdvice() {
+    if (
+      !isCurrent() ||
+      !current.ok ||
+      adviceRefreshing ||
+      busy ||
+      inFlight.current ||
+      !canDispatchCurationRead(waitRef.current, waitOwner)
+    )
+      return;
+    const request = ++adviceSequence.current;
+    const expected = { reader, locale: localeRef.current, digest: current.digest, head: current.head };
+    const invocationTransport = transport;
+    setOwned(setAdviceRefreshing, true);
+    setOwned(setAdviceFailure, null);
+    try {
+      const next = await invocationTransport.readOpening(reader);
+      if (
+        !isCurrent() ||
+        request !== adviceSequence.current ||
+        transportRef.current !== invocationTransport ||
+        localeRef.current !== expected.locale
+      )
+        return;
+      if (!next.ok) {
+        setOwned(setAdviceLease, null);
+        setOwned(setAdviceFailure, next);
+        replaceWait(waitAfterCurationRead(waitRef.current, waitOwner, next));
+        return;
+      }
+      if (next.reader !== reader) {
+        setOwned(setAdviceLease, null);
+        setOwned(setAdviceFailure, { ok: false, reason: 'forbidden', admissionChanged: true });
+        return;
+      }
+      if (next.digest !== expected.digest || next.head !== expected.head) {
+        setOwned(setAdviceLease, null);
+        setOwned(setAdviceFailure, { ok: false, reason: 'stale' });
+        return;
+      }
+      retireCurationReadWait(waitRef.current);
+      replaceWait(null);
+      setOwned(setAdviceLease, {
+        ...expected,
+        source: invocationTransport,
+        advice: next.advice,
+      });
+    } catch {
+      if (!isCurrent() || request !== adviceSequence.current) return;
+      setOwned(setAdviceLease, null);
+      setOwned(setAdviceFailure, { ok: false, reason: 'unavailable' });
+      replaceWait(waitAfterCurationRead(waitRef.current, waitOwner, { ok: false, reason: 'unavailable' }));
+    } finally {
+      if (
+        isCurrent() &&
+        request === adviceSequence.current &&
+        transportRef.current === invocationTransport &&
+        localeRef.current === expected.locale
+      )
+        setOwned(setAdviceRefreshing, false);
     }
   }
 
@@ -865,7 +1014,16 @@ function AdmittedPresentationViewEditor({
   }
 
   async function publish(edited?: CompositionDocument) {
-    if (!isCurrent() || !draft || inFlight.current || publication.getSnapshot().busy || unresolvedPublication) return;
+    if (
+      !isCurrent() ||
+      !draft ||
+      currentAdvice.publish !== 'allowed' ||
+      adviceRefreshing ||
+      inFlight.current ||
+      publication.getSnapshot().busy ||
+      unresolvedPublication
+    )
+      return;
     const profile = draftPublicationProfile(draft, edited);
     if (!profile) return;
     const errors = validateProfile(platformRegistry, profile);
@@ -880,9 +1038,22 @@ function AdmittedPresentationViewEditor({
     const currentVisit = visit;
     if (!currentVisit?.isCurrent()) return;
     const confirmation = invalidPublication
-      ? await currentVisit.replaceInvalid(profile, draft.saved.head)
-      : await currentVisit.start(profile, draft.saved.head);
-    if (isCurrent() && currentVisit.isCurrent() && confirmation) published(confirmation);
+      ? await currentVisit.replaceInvalid(profile, draft.saved.head, commandAdvice)
+      : await currentVisit.start(profile, draft.saved.head, commandAdvice);
+    if (isCurrent() && currentVisit.isCurrent()) {
+      if (confirmation) {
+        published(confirmation);
+        setOwned(setAdviceLease, null);
+        setOwned(setAdviceFailure, null);
+      } else {
+        const result = publication.getSnapshot().result;
+        if (
+          result?.ok === false &&
+          (result.reason === 'forbidden' || result.reason === 'stale' || (result.reason === 'unavailable' && result.outcome === 'unknown'))
+        )
+          void refreshAdvice();
+      }
+    }
   }
 
   const activeRemoval =
@@ -914,6 +1085,12 @@ function AdmittedPresentationViewEditor({
       {m.curation_loading({}, options)}
     </p>
   );
+  const adviceLabel = (state: CurationActionState) =>
+    state === 'allowed'
+      ? m.curation_advice_allowed({}, options)
+      : state === 'denied'
+        ? m.curation_advice_denied({}, options)
+        : m.curation_advice_unavailable({}, options);
 
   return (
     <article
@@ -945,6 +1122,45 @@ function AdmittedPresentationViewEditor({
           </p>
         </details>
       </header>
+      <section
+        aria-labelledby="curation-advice-heading"
+        aria-live="polite"
+        className="space-y-3 rounded-xl border border-border bg-card p-4"
+      >
+        <h2 id="curation-advice-heading" className="font-semibold">
+          {m.curation_advice_heading({}, options)}
+        </h2>
+        <dl className="grid gap-2 text-sm sm:grid-cols-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 p-3">
+            <dt>{m.curation_advice_publish_label({}, options)}</dt>
+            <dd className="font-medium">{adviceLabel(currentAdvice.publish, locale)}</dd>
+          </div>
+          <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 p-3">
+            <dt>{m.curation_advice_activate_label({}, options)}</dt>
+            <dd className="font-medium">{adviceLabel(currentAdvice.activate, locale)}</dd>
+          </div>
+        </dl>
+        <p className="text-sm text-muted-foreground">{m.curation_advice_help({}, options)}</p>
+        {currentAdvice.publish === 'allowed' && currentAdvice.activate === 'denied' ? (
+          <p role="status" className="text-sm">
+            {m.curation_advice_publish_only({}, options)}
+          </p>
+        ) : null}
+        {currentAdvice.publish === 'denied' && currentAdvice.activate === 'allowed' ? (
+          <p role="status" className="text-sm">
+            {m.curation_advice_activate_only({}, options)}
+          </p>
+        ) : null}
+        {adviceFailure ? <CurationFailureNotice failure={adviceFailure} locale={locale} /> : null}
+        <Button
+          className={editorControlClass}
+          variant="outline"
+          disabled={adviceRefreshing || busy || waiting}
+          onClick={() => void refreshAdvice()}
+        >
+          {adviceRefreshing ? m.curation_advice_checking({}, options) : m.curation_advice_refresh({}, options)}
+        </Button>
+      </section>
       {message && (
         <p role="status" className="rounded-lg border border-border bg-card p-4">
           {message}
@@ -962,6 +1178,7 @@ function AdmittedPresentationViewEditor({
           {...(visit ? { visit } : {})}
           profile={profile}
           head={saved.head}
+          advice={commandAdvice}
           locale={locale}
           onPublished={published}
           correction={validationCorrection(publicationState.intent?.profile ?? profile)}
@@ -986,7 +1203,13 @@ function AdmittedPresentationViewEditor({
           {!editorOpen && (
             <Button
               className={editorControlClass}
-              disabled={!dirty || unresolvedPublication || (invalidPublication && !laterChanges)}
+              disabled={
+                !dirty ||
+                currentAdvice.publish !== 'allowed' ||
+                adviceRefreshing ||
+                unresolvedPublication ||
+                (invalidPublication && !laterChanges)
+              }
               onClick={() => void publish()}
             >
               {m.curation_publish({}, options)}
@@ -1147,7 +1370,14 @@ function AdmittedPresentationViewEditor({
                     draft={editors[editorKey]}
                     locale={locale}
                     pointerPrefix={viewPointer(profile, selection.template, selection.view)}
-                    publishDisabled={!dirty || unresolvedPublication || busy || (invalidPublication && !laterChanges)}
+                    publishDisabled={
+                      !dirty ||
+                      currentAdvice.publish !== 'allowed' ||
+                      adviceRefreshing ||
+                      unresolvedPublication ||
+                      busy ||
+                      (invalidPublication && !laterChanges)
+                    }
                     correction={correction}
                     onInvalid={(errors, document) => {
                       if (!isCurrent()) return;

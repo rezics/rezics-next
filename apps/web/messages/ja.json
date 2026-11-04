@@ -8103,5 +8103,20 @@
   "search_share_oversized": "この検索はリンクには大きすぎます。編集して短くしてください。",
   "search_share_private": "非公開または移植できない条件があります。共有前に明示的に削除してください。",
   "search_share_unavailable": "共有を利用できません。検索は保持されています。再試行してください。",
-  "search_share_close": "プレビューを閉じる"
+  "search_share_close": "プレビューを閉じる",
+  "curation_advice_heading": "現在の操作権限",
+  "curation_advice_publish_label": "公開",
+  "curation_advice_activate_label": "有効化",
+  "curation_advice_allowed": "許可",
+  "curation_advice_denied": "不許可",
+  "curation_advice_unavailable": "利用不可",
+  "curation_advice_help": "この表示は現在のアカウントと有効なグローバル表示に基づきます。各操作の送信時にアクセス権が再確認されます。",
+  "curation_advice_publish_only": "不変のプロフィールを公開できます。有効化は利用できませんが、下書きと公開レシートは保持されます。",
+  "curation_advice_activate_only": "以前に公開したプロフィールを有効化できます。新しいプロフィールの公開は利用できません。",
+  "curation_advice_refresh": "操作権限を更新",
+  "curation_advice_checking": "操作権限を更新中…",
+  "curation_no_active_profile": "有効な表示プロフィールがありません。",
+  "curation_published_waiting": "不変のプロフィールを公開しました: {digest}。有効化は保留中です。",
+  "curation_retry_activation_help": "保持されたプロフィールと元の操作キーで有効化を再試行します。新しいプロフィールは公開されません。",
+  "curation_retry_activation": "有効化を再試行"
 }

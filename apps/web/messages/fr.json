@@ -8103,5 +8103,20 @@
   "search_share_oversized": "Cette recherche est trop grande pour un lien. Modifiez-la pour la réduire.",
   "search_share_private": "Cette recherche contient des conditions privées ou non transférables. Retirez-les explicitement avant de partager.",
   "search_share_unavailable": "Le partage est indisponible. Votre recherche est conservée ; réessayez.",
-  "search_share_close": "Fermer l’aperçu"
+  "search_share_close": "Fermer l’aperçu",
+  "curation_advice_heading": "Autorisations actuelles des commandes",
+  "curation_advice_publish_label": "Publier",
+  "curation_advice_activate_label": "Activer",
+  "curation_advice_allowed": "Autorisé",
+  "curation_advice_denied": "Non autorisé",
+  "curation_advice_unavailable": "Indisponible",
+  "curation_advice_help": "Ces indications reflètent votre compte actuel et la présentation globale active. Chaque commande vérifie de nouveau l’accès lors de son envoi.",
+  "curation_advice_publish_only": "Vous pouvez publier un profil immuable maintenant. Son activation est indisponible ; votre brouillon et le reçu de publication sont conservés.",
+  "curation_advice_activate_only": "Vous pouvez activer un profil déjà publié. La publication d’un nouveau profil est indisponible.",
+  "curation_advice_refresh": "Actualiser les autorisations",
+  "curation_advice_checking": "Actualisation des autorisations…",
+  "curation_no_active_profile": "Aucun profil de présentation actif n’est disponible.",
+  "curation_published_waiting": "Profil immuable publié : {digest}. L’activation est en attente.",
+  "curation_retry_activation_help": "Réessayez l’activation avec le profil conservé et la clé de commande d’origine. Aucun nouveau profil ne sera publié.",
+  "curation_retry_activation": "Réessayer l’activation"
 }

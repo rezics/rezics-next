@@ -8103,5 +8103,20 @@
   "search_share_oversized": "Diese Suche ist zu groß für einen Link. Bearbeiten Sie sie weiter, um sie zu verkürzen.",
   "search_share_private": "Diese Suche enthält private oder nicht übertragbare Bedingungen. Entfernen Sie diese vor dem Teilen ausdrücklich.",
   "search_share_unavailable": "Teilen ist nicht verfügbar. Ihre Suche bleibt erhalten; versuchen Sie es erneut.",
-  "search_share_close": "Vorschau schließen"
+  "search_share_close": "Vorschau schließen",
+  "curation_advice_heading": "Aktuelle Hinweise zu Aktionen",
+  "curation_advice_publish_label": "Veröffentlichen",
+  "curation_advice_activate_label": "Aktivieren",
+  "curation_advice_allowed": "Erlaubt",
+  "curation_advice_denied": "Nicht erlaubt",
+  "curation_advice_unavailable": "Nicht verfügbar",
+  "curation_advice_help": "Die Hinweise beziehen sich auf Ihr aktuelles Konto und die aktive globale Darstellung. Beim Absenden prüft jeder Befehl den Zugriff erneut.",
+  "curation_advice_publish_only": "Sie können jetzt ein unveränderliches Profil veröffentlichen. Die Aktivierung ist nicht verfügbar; Ihr Entwurf und der Veröffentlichungsbeleg bleiben erhalten.",
+  "curation_advice_activate_only": "Sie können ein zuvor veröffentlichtes Profil aktivieren. Ein neues Profil kann nicht veröffentlicht werden.",
+  "curation_advice_refresh": "Aktionshinweise aktualisieren",
+  "curation_advice_checking": "Aktionshinweise werden aktualisiert …",
+  "curation_no_active_profile": "Es ist kein aktives Darstellungsprofil verfügbar.",
+  "curation_published_waiting": "Unveränderliches Profil {digest} veröffentlicht. Die Aktivierung steht noch aus.",
+  "curation_retry_activation_help": "Aktivierung mit dem gespeicherten Profil und ursprünglichen Befehlsschlüssel erneut versuchen. Es wird kein neues Profil veröffentlicht.",
+  "curation_retry_activation": "Aktivierung erneut versuchen"
 }

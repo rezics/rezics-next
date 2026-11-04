@@ -91,7 +91,7 @@ test('viewer actions keep bounded work for mixed types and every outcome over in
       let expected: ViewerActionsResponse | undefined;
       const report = await checkGrowth(driver.database, {
         name: `Personal viewer actions: ${axis}`,
-        scales: [1, 4, 16],
+        scales: [2, 8, 32],
         repetitions: 3,
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         async grow(_database, scale) {

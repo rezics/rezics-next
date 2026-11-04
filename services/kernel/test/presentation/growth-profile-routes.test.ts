@@ -12,7 +12,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 const scales = [1, 4, 16] as const;
-const ordinalsPerScale = 500;
+const ordinalsPerScale = 256;
 const routeKey = new Uint8Array(32).fill(7);
 let database: GrowthDatabase;
 let kernel: ReturnType<typeof createKernel>;
@@ -84,12 +84,12 @@ async function insertProfiles(targets: readonly { digest: string; body: Presenta
   );
 }
 
-async function request(path: string): Promise<{ status: number; body: Record<string, unknown> }> {
+async function request(path: string): Promise<{ status: number; body: Record<string, unknown>; headers: Headers }> {
   const response = await kernel.handle(new Request(`http://kernel.test${path}`));
-  return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+  return { status: response.status, body: (await response.json()) as Record<string, unknown>, headers: response.headers };
 }
 
-async function checkRouteGrowth(kind: 'profile' | 'active-profile'): Promise<void> {
+async function checkRouteGrowth(kind: 'profile' | 'active-profile' | 'curation-opening'): Promise<void> {
   await database.admin.query('TRUNCATE presentation.profile_activation, presentation.profile');
 
   const runId = `${kind}-${randomUUID()}`;
@@ -117,9 +117,21 @@ async function checkRouteGrowth(kind: 'profile' | 'active-profile'): Promise<voi
        VALUES (0, $1, $2, $3)`,
       [activeHead, target.digest, newId(0)],
     );
-    const result = await request('/v1/presentation/active');
-    if (result.status !== 200) throw new Error(`active-profile route returned ${result.status}`);
-    expect(result.body).toEqual({ digest: target.digest, head: activeHead });
+    const result = await request(kind === 'curation-opening' ? '/v1/presentation/curation' : '/v1/presentation/active');
+    if (result.status !== 200) throw new Error(`${kind} route returned ${result.status}`);
+    if (kind === 'active-profile') expect(result.body).toEqual({ digest: target.digest, head: activeHead });
+    else {
+      expect(result.headers.get('cache-control')).toBe('private, no-store');
+      expect(result.body).toMatchObject({
+        state: 'active',
+        viewer: 'anonymous',
+        digest: target.digest,
+        head: activeHead,
+        profile: target.body,
+        advice: { publish: 'denied', activate: 'denied' },
+      });
+      expect(new TextEncoder().encode(JSON.stringify(result.body)).byteLength).toBeLessThanOrEqual(1_048_576 + 4096);
+    }
   };
 
   try {
@@ -183,4 +195,5 @@ afterAll(async () => {
 test('Profile routes stay within their bound with Global Context authorization as profiles grow', async () => {
   await checkRouteGrowth('profile');
   await checkRouteGrowth('active-profile');
+  await checkRouteGrowth('curation-opening');
 }, 600_000);

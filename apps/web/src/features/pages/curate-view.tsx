@@ -4,21 +4,32 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useRef } from 'react';
 import { getLocale } from '../../paraglide/runtime';
 import { csrfHeaders } from '../../threads/composer';
-import { publishCuration, readCuration, type CurationRead } from './curate-actions';
+import {
+  activateCuration,
+  publishCuration,
+  publishCurationOnly,
+  readCuration,
+  readCurationActive,
+  type CurationRead,
+} from './curate-actions';
 import { confirmSubjectCandidate, readSubjectCandidates } from './curate-actions';
 import { changeOwnContribution, rereadOwnContribution } from '../catalogue/contribution-lifecycle-actions';
 import { editorRequest } from '../catalogue/editor-request';
 import { CandidateReview } from '../../subject/candidate-review';
 import { useSession } from '../../session/query';
-import { PresentationViewEditor } from './curate-view-editor';
-import type { PublicationTransport } from './curation-publish';
+import { PresentationViewEditor, type CurationEditorTransport } from './curate-view-editor';
 import { PresentationPreviewPanel, PresentationPreviewContext } from './presentation-preview-view';
 import { readPresentationPreview } from './curate-actions';
 import { CurationReaderAdmission } from './curation-reader-admission';
 
-const publicationTransport: PublicationTransport = {
-  read: (expectedReader) => readCuration({ data: { expectedReader }, headers: csrfHeaders() }),
+const publicationTransport: CurationEditorTransport = {
+  read: (expectedReader) => readCurationActive({ data: { expectedReader }, headers: csrfHeaders() }),
   publish: (intent, expectedReader) => publishCuration({ data: { intent, expectedReader }, headers: csrfHeaders() }),
+  publishOnly: (intent, expectedReader) =>
+    publishCurationOnly({ data: { intent, expectedReader }, headers: csrfHeaders() }),
+  activate: (intent, expectedReader) =>
+    activateCuration({ data: { ...intent, expectedReader }, headers: csrfHeaders() }),
+  readOpening: (expectedReader) => readCuration({ data: { expectedReader }, headers: csrfHeaders() }),
 };
 
 /** The subject's private curation region shares the existing prepared BFF transport. */
@@ -63,7 +74,7 @@ export function CurationView({
   transport = publicationTransport,
 }: {
   initial: CurationRead;
-  transport?: PublicationTransport;
+  transport?: CurationEditorTransport;
 }) {
   const preview = useContext(PresentationPreviewContext);
   const queryClient = useQueryClient();

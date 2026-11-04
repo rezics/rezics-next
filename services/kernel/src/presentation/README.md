@@ -145,6 +145,21 @@ lists it must also advance the source position and emit reindexing changes, prod
 No physical cleanup operation is added here. Source cleanup bounds belong to their owners; profile reads/writes and
 page dispatch retain the Cost bounds below.
 
+## Private curation opening
+
+`GET /v1/presentation/curation` returns the active digest, head and immutable profile with the native viewer kind and
+independent `presentation.publish` / `presentation.activate` advice for the exact Global Context. Missing active state
+is a separate response. The read requires current `presentation:read` eligibility; an allowed command is derived only
+from the matching mounted action and operation pair returned by `viewerActions`. The private response is `no-store`;
+the cacheable active and immutable-profile representations remain unchanged. Advice creates no receipt and is not
+authorization for either command.
+
+Decision: Keep the local draft editable when command advice is denied or unavailable, disable disallowed commands, and retry activation of a confirmed published digest with its original key without republishing.
+
+- Touches: one current Global read-eligibility check before and after assembly; two `(route, head)` latest-activation seeks; one `(route, digest)` profile-body seek; two in-process `viewerActions` reads, each for exactly the Global Context. Each viewer-action read uses its mounted fixed resource bindings and existing bounded Access preparation and final checks; it does not inspect command receipts or prior profile bodies.
+- Bound: constant selected rows and statements as profile count `P`, activation history `H`, unrelated Global grants `G`, and unrelated Contexts grow; indexed blocks are logarithmic in those populations plus the existing Access formula bound at its fixed admitted input. The profile contributes at most `MAX_PROFILE_BYTES` (1 MiB) of canonical UTF-8; Web admits at most 1 MiB + 4 KiB for the closed response. Advice output has two action states and one viewer kind. No list, history, offset or count is returned.
+- Growth checks: `test/presentation/growth-profile-routes.test.ts` exercises profile and activation populations 256/1024/4096 while holding the selected profile and response size fixed. `test/access/growth-viewer-actions.test.ts` checks unrelated grants, resource references and histories at those same populations. Both retain constant examined rows/statements and logarithmic index blocks.
+
 ## Cost
 
 Bounds count examined rows, shared index and heap blocks, and SQL statements. `P` is the number of stored profiles and

@@ -18,6 +18,7 @@ import { presentationMessageOptions } from './curate-view-editor-messages';
 import { useCurationPublicationFocus } from './curation-publication-focus';
 import {
   CurationPublication,
+  type CurationCommandAdvice,
   type ActiveCuration,
   type PublicationConfirmation,
   type PublicationRead,
@@ -47,6 +48,8 @@ export function CurationFailureNotice({
             ? m.curation_invalid({}, options)
             : failure.reason === 'stale'
               ? m.curation_stale({}, options)
+            : failure.reason === 'missing-profile'
+              ? m.curation_no_active_profile({}, options)
               : failure.reason === 'signed-out'
                 ? m.curation_signed_out({}, options)
                 : failure.reason === 'forbidden'
@@ -385,6 +388,7 @@ export function CurationPublicationRecovery({
   visit,
   profile,
   head,
+  advice = { publish: true, activate: true },
   onPublished,
   onReviewed,
   correction,
@@ -394,6 +398,7 @@ export function CurationPublicationRecovery({
   visit?: CurationPublicationVisit;
   profile: PresentationProfile;
   head: number;
+  advice?: CurationCommandAdvice;
   onPublished: (confirmation: PublicationConfirmation) => void;
   onReviewed: (active: ActiveCuration, choice: 'keep' | 'discard') => void;
   correction?: ValidationCorrection;
@@ -406,7 +411,7 @@ export function CurationPublicationRecovery({
       mounted.current = false;
     };
   }, [publication]);
-  const { intent, result, active, readFailure, busy, retryAt, readRetryAt } = useSyncExternalStore(
+  const { intent, result, publishedDigest, active, readFailure, busy, retryAt, readRetryAt } = useSyncExternalStore(
     publication.subscribe,
     publication.getSnapshot,
     publication.getSnapshot,
@@ -425,14 +430,14 @@ export function CurationPublicationRecovery({
   }
   async function retry() {
     if (!mounted.current || (visit && !visit.isCurrent())) return;
-    const confirmation = visit ? await visit.retry() : await publication.retry();
+    const confirmation = visit ? await visit.retry(advice) : await publication.retry(advice);
     if (mounted.current && (!visit || visit.isCurrent()) && confirmation) onPublished(confirmation);
   }
   async function replaceIntent() {
     if (!mounted.current || (visit && !visit.isCurrent())) return;
     const confirmation = visit
-      ? await visit.replaceInvalid(profile, head)
-      : await publication.replaceInvalid(profile, head);
+      ? await visit.replaceInvalid(profile, head, advice)
+      : await publication.replaceInvalid(profile, head, advice);
     if (mounted.current && (!visit || visit.isCurrent()) && confirmation) onPublished(confirmation);
   }
   const inspect = () => {
@@ -444,6 +449,7 @@ export function CurationPublicationRecovery({
   const originalDigest = intent ? profileDigest(intent.profile) : undefined;
   const revisedValid = invalid && draftValid;
   const laterChanges = !!intent && (!draftValid || draftDigest !== originalDigest);
+  const retryAllowed = publishedDigest ? advice.activate : advice.publish;
   const controlClass = 'min-h-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
   return (
     <section
@@ -468,6 +474,11 @@ export function CurationPublicationRecovery({
       ) : null}
       {result?.ok === false ? (
         <CurationFailureNotice failure={result} correction={correction} busy={busy} locale={locale} />
+      ) : null}
+      {publishedDigest ? (
+        <p role="status" className="break-all">
+          {m.curation_published_waiting({ digest: publishedDigest }, options)}
+        </p>
       ) : null}
       {busy ? <p role="status">{m.curation_review_working({}, options)}</p> : null}
       {intent ? (
@@ -533,18 +544,22 @@ export function CurationPublicationRecovery({
         <>
           {!invalid ? (
             <div className="space-y-2">
-              <p className="text-sm">{m.curation_review_retry_help({}, options)}</p>
+              <p className="text-sm">
+                {publishedDigest
+                  ? m.curation_retry_activation_help({}, options)
+                  : m.curation_review_retry_help({}, options)}
+              </p>
               <Button
                 ref={focus.actionRef}
                 variant="outline"
                 className={controlClass}
-                disabled={busy || waiting}
+                disabled={busy || waiting || !retryAllowed}
                 onClick={(event) => {
                   focus.noteActivation(event.currentTarget);
                   void retry();
                 }}
               >
-                {m.curation_retry_original({}, options)}
+                {publishedDigest ? m.curation_retry_activation({}, options) : m.curation_retry_original({}, options)}
               </Button>
             </div>
           ) : (
@@ -556,7 +571,7 @@ export function CurationPublicationRecovery({
               <Button
                 ref={focus.actionRef}
                 className={controlClass}
-                disabled={busy || !revisedValid || !laterChanges}
+                disabled={busy || !advice.publish || !revisedValid || !laterChanges}
                 onClick={(event) => {
                   focus.noteActivation(event.currentTarget);
                   void replaceIntent();
