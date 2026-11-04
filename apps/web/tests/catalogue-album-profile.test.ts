@@ -19,7 +19,11 @@ test('Released album catalogue editor uses actual released metadata native write
   expect(created).toEqual({
     ok: true,
     id: albumId,
-    reader: { state: 'ready', href: `/en/subjects/${albumId}/harbour-sessions` },
+    reader: {
+      state: 'ready',
+      href: `/en/subjects/${albumId}/harbour-sessions`,
+      identity: { id: albumId, type: 'schema:MusicAlbum', label: 'Harbour sessions' },
+    },
   });
   const write = fixture.calls.find((call) => call.method === 'POST')!;
   expect(write).toMatchObject({ path: '/v1/subjects', authorization: 'Bearer fixture', body: draft.item });

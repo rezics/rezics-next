@@ -525,12 +525,12 @@ test('Album creation composes complete terms and initial facts while preserving 
       undefined,
     ]);
     let rejection = true;
-    const commands: import('../src/features/catalogue/album-profile').AlbumCommand[] = [];
+    const exactCommands: import('../src/features/catalogue/album-profile').AlbumCommand[] = [];
     const exactPanel = await ready(exact, {
       transport: {
         ...exact.transport,
         create: async (command) => {
-          commands.push(structuredClone(command));
+          exactCommands.push(structuredClone(command));
           if (!rejection) return exact.transport.create(command);
           return {
             ok: false,
@@ -564,7 +564,9 @@ test('Album creation composes complete terms and initial facts while preserving 
     await replace(textbox(secondCreator, name(exact, 'wdt:P1932')), 'Credit');
     await replace(textbox(secondCreator, m.relation_citation()), 'https://example.com/credit');
     await confirmAlbum(exactPanel);
-    await until(() => commands.length === 1 && exactPanel.querySelector('form')?.getAttribute('aria-busy') === 'false');
+    await until(
+      () => exactCommands.length === 1 && exactPanel.querySelector('form')?.getAttribute('aria-busy') === 'false',
+    );
     const corrections = [...exactPanel.querySelectorAll<HTMLAnchorElement>('[role="alert"] a')];
     expect(corrections).toHaveLength(4);
     expect(corrections[0]!.hash).toBe(`#${secondCreator.id}-value`);
@@ -589,16 +591,19 @@ test('Album creation composes complete terms and initial facts while preserving 
     rejection = false;
     await confirmAlbum(exactPanel);
     await until(() => exactPanel.textContent!.includes(m.catalogue_create_reader_unavailable()));
-    expect(commands[1]!.item.labels).toEqual({ en: 'First name', ja: 'Corrected second name' });
-    expect(commands[1]!.item.statements['schema:contributor']![0]).toEqual(
-      commands[0]!.item.statements['schema:contributor']![0],
+    expect(exactCommands[1]!.item.labels).toEqual({ en: 'First name', ja: 'Corrected second name' });
+    expect(exactCommands[1]!.item.statements['schema:contributor']![0]).toEqual(
+      exactCommands[0]!.item.statements['schema:contributor']![0],
     );
-    expect(commands[1]!.item.statements['schema:contributor']![1]!.value).toEqual({ type: 'value', content: seriesId });
-    expect(commands[1]!.key).not.toBe(commands[0]!.key);
+    expect(exactCommands[1]!.item.statements['schema:contributor']![1]!.value).toEqual({
+      type: 'value',
+      content: seriesId,
+    });
+    expect(exactCommands[1]!.key).not.toBe(exactCommands[0]!.key);
     exact.setScenario('ready');
     await click(exactPanel, m.catalogue_create_retry());
     await until(() => within(exactPanel).queryByRole('link', { name: m.catalogue_create_open() }) !== null);
-    expect(commands).toHaveLength(2);
+    expect(exactCommands).toHaveLength(2);
 
     // Failed metadata refresh keeps the draft locked after Review new until deliberate successful reload.
     const metadata = albumFixture('invalid');
