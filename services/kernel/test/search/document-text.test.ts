@@ -17,7 +17,7 @@ const reference = {
   language: 'ja',
 };
 const selection = { subject, observation: 'native-observation-1', references: [reference] };
-const value = (text = '弱火で静かに煮込む。'): DocumentView => ({
+const value = (text = '弱火で静かに煮込む。'): Extract<DocumentView, { origin: 'account' }> => ({
   id: reference.document,
   subjectId: subject,
   candidateId: reference.candidate,
