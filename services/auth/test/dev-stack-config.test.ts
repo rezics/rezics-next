@@ -1,3 +1,5 @@
+import { developmentEnv } from '../../kernel/scripts/database.ts';
+import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -72,4 +74,21 @@ test('a failed native opening stops persona setup and names the group, cause and
       'Resolve the native command failure, then rerun task dev:persona (or task seed:dev).',
   );
   expect(attempted).toEqual(['search']);
+});
+
+test('development setup gives finite dataset write capacity and preserves explicit deployment budgets', () => {
+  const generated = developmentEnv('', 'postgres://127.0.0.1/rezics');
+  const value = generated
+    .split('\n')
+    .find((line) => line.startsWith('KERNEL_WRITE_RATE_OVERRIDES='))!
+    .split('=')
+    .slice(1)
+    .join('=');
+  const budgets = rateLimitBudgets(value);
+  expect(budgets['new-account'].write.maximum).toBe(100000);
+  expect(budgets.member.write.maximum).toBe(100000);
+  expect(budgets.anonymous.write.maximum).toBe(10);
+  expect(developmentEnv('KERNEL_WRITE_RATE_OVERRIDES={}\n', 'postgres://127.0.0.1/rezics')).toContain(
+    'KERNEL_WRITE_RATE_OVERRIDES={}\n',
+  );
 });

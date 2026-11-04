@@ -1134,7 +1134,8 @@ Never log the key, bearer tokens or client IP addresses.
 `KERNEL_WRITE_RATE_OVERRIDES` optionally contains strict partial budget JSON, for example
 `{"anonymous":{"write":{"maximum":10,"seconds":60}}}`. Unknown classes, families or fields,
 noninteger values, maximum outside 1–1000000, and seconds outside 1–86400 fail startup validation.
-The default is the versioned `RATE_LIMIT_V1` catalogue. Report and provider capacity have separate
+The default is the versioned `RATE_LIMIT_V1` catalogue. The development database setup writes new-account and member
+write overrides of 100,000 commands per minute for local dataset imports, preserving explicit existing overrides. Report and provider capacity have separate
 family keys from ordinary writes. Imports and semantic batches spend the total command count once,
 up to 100, before any command runs; a denied batch spends no units.
 
