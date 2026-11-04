@@ -1,5 +1,4 @@
 import { afterEach, expect, test } from 'bun:test';
-import { useState } from 'react';
 import { creationFixture, dom, flush, open } from './creation-page-fixture';
 import type { Root } from 'react-dom/client';
 import { AuthPage, AuthShell } from '../src/frame';
@@ -20,12 +19,9 @@ afterEach(() => {
   document.cookie = `${cookieName}=; path=/; max-age=0`;
 });
 const Page = observeLocaleComponent(function Page() {
-  const [draft, setDraft] = useState('');
   return (
     <AuthShell>
-      <AuthPage heading={m.auth_login_heading()}>
-        <input aria-label="Draft" value={draft} onChange={(event) => setDraft(event.target.value)} />
-      </AuthPage>
+      <AuthPage heading={m.auth_login_heading()} />
     </AuthShell>
   );
 });
