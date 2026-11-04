@@ -1606,6 +1606,9 @@ Three-scale physical acceptance remains a separate verification obligation.
 
 Decision: maintain the retained census hourly in bounded resumable partition turns; keep coverage preparing until native authority closure is complete.
 
+Review invalidation children use their native source partition key on the partitioned `effects` queue.
+Original-envelope validation, durable workflow IDs and replay remain unchanged.
+
 The default Content supervisor registers `content.review-census.sweep` and its persistent hourly schedule.
 Each sweep runs at most eight partition children concurrently. Each child processes at most eight durable pages,
 including cut resets, then yields to the next scheduled turn. It stops on exhaustion, preparing or unavailable;

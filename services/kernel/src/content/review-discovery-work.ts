@@ -1,6 +1,7 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkContext } from '../work/registry.ts';
 import { WORK_APPLICATION } from '../work/client.ts';
+import { partitionOf } from '../route/route.ts';
 import {
   createReviewDiscoveryDispatchEffect,
   createReviewDiscoveryEffect,
@@ -9,6 +10,24 @@ import {
 import type { ReviewDiscoveryWork } from './review-discovery-events.ts';
 
 export const REVIEW_DISCOVERY_WORKFLOW = 'content.review-discovery.invalidate';
+
+/** Effects is partitioned; an unpartitioned child remains queued without a consumer. */
+export async function enqueueReviewDiscoveryWork(
+  context: Pick<WorkContext, 'client'>,
+  ref: ReviewDiscoveryWork,
+): Promise<void> {
+  await context.client.enqueue(
+    {
+      applicationName: WORK_APPLICATION,
+      workflowName: REVIEW_DISCOVERY_WORKFLOW,
+      workflowID: `${REVIEW_DISCOVERY_WORKFLOW}:${ref.route}:${ref.id}`,
+      workflowIDReusePolicy: 'return-existing',
+      queueName: 'effects',
+      enqueueOptions: { queuePartitionKey: String(partitionOf(ref.route)) },
+    },
+    ref,
+  );
+}
 
 /** Mounted by createContentWork, hence also by registerContent in the default worker.
  * Each step owns at most one identity page and releases all checkouts before yielding. */
@@ -30,17 +49,6 @@ export function registerReviewDiscoveryWork(context: WorkContext): void {
   );
   context.addEffects([
     createReviewDiscoveryEffect(context.pool),
-    createReviewDiscoveryDispatchEffect(context.pool, async (ref) => {
-      await context.client.enqueue(
-        {
-          applicationName: WORK_APPLICATION,
-          workflowName: REVIEW_DISCOVERY_WORKFLOW,
-          workflowID: `${REVIEW_DISCOVERY_WORKFLOW}:${ref.route}:${ref.id}`,
-          workflowIDReusePolicy: 'return-existing',
-          queueName: 'effects',
-        },
-        ref,
-      );
-    }),
+    createReviewDiscoveryDispatchEffect(context.pool, (ref) => enqueueReviewDiscoveryWork(context, ref)),
   ]);
 }
