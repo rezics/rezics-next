@@ -1,3 +1,4 @@
+import { isCalendarDate } from '@rezics/filter';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { routeOf } from '../route/route.ts';
 
@@ -107,11 +108,6 @@ function isRevision(value: unknown): value is string {
   return revision >= MIN_SIGNED_BIGINT && revision <= MAX_SIGNED_BIGINT;
 }
 
-function daysInMonth(year: number, month: number): number {
-  if (month === 2) return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
-  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
-}
-
 function isRfc3339(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 64) return false;
   const match = RFC3339.exec(value);
@@ -124,7 +120,7 @@ function isRfc3339(value: unknown): value is string {
   const minute = Number(match[5]);
   const second = Number(match[6]);
   const zone = match[8]!;
-  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) return false;
+  if (!isCalendarDate({ year, month, day })) return false;
   if (hour > 23 || minute > 59 || second > 60) return false;
 
   if (second === 60) {

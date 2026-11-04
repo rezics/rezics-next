@@ -57,6 +57,31 @@ test('one current batch preserves the qualified role, partial date and disclosed
   expect(page.subjects[0]?.workContext).toEqual(context);
   expect(page.subjects[0]?.workContext).not.toHaveProperty('count');
   expect(page.subjects[0]?.workContext).not.toHaveProperty('destination');
+  for (const [precision, accepted, rejected] of [
+    ['year', '0000 1968', '+1968 -1968 10000 1968-06'],
+    ['month', '0000-02 1968-06', '1968 1968-00 1968-13 1968-06-01'],
+    [
+      'day',
+      '0000-02-29 2000-02-29',
+      '1900-02-29 2000-04-31 2000-01-00 2000-00-01 +2000-02-29 10000-01-01 2000-01-01T00:00:00Z',
+    ],
+  ] as const) {
+    for (const value of `${accepted} ${rejected}`.split(' ')) {
+      const date = { state: 'value' as const, property: 'schema:datePublished', value, precision };
+      const candidateContext = { ...context, relation: { ...context.relation!, date } };
+      const result = completeSuggestionWorkContext(
+        { subjects: [row], as_of: page.as_of },
+        {
+          languages: ['en'],
+          deadline: Date.now() + 10_000,
+          reader: async () => ({ contexts: [candidateContext], isCurrent: async () => true }),
+        },
+      );
+      if (accepted.split(' ').includes(value))
+        expect((await result).subjects[0]?.workContext).toEqual(candidateContext);
+      else await expect(result).rejects.toMatchObject({ code: 'index_not_ready' });
+    }
+  }
 });
 
 test('native work projection keeps exact creator role and same-statement partial date, while concealed identity stays withheld', () => {

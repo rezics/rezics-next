@@ -726,6 +726,12 @@ ordering, including public Realms, stays native. Private Realm figures never ent
 [Rating](../rating/README.md) owns the score formula, disclosure thresholds and privacy rules.
 Search uses the published score and does not recompute or reinterpret that policy.
 
+The public figure's `asOf` adapter keeps its RFC3339 grammar and exact original string, capped at 64 characters:
+four-digit years, `T`/`t`, `Z`/`z` or numeric offsets, and optional fractional seconds. Time, offset and UTC-minute
+leap-second checks belong to [rating-source.ts](rating-source.ts). Gregorian component validity, including year zero,
+belongs to the pure `isCalendarDate` rule at the public `@rezics/filter` entry; Search supplies privately parsed
+year/month/day numbers without converting or normalizing the timestamp.
+
 `RealmRatingSource` in [realm-rating-order.ts](realm-rating-order.ts) is the minimal native Content seam.
 Its `observe` checks current Context read/ban authority for the bound principal, standard question and same-population
 frozen prior. Its authority identity changes on relevant access transitions; its revision covers the complete
@@ -1323,6 +1329,12 @@ Decision: a confirmed-empty first page may offer at most three current public ne
 - Evidence: `test/search/empty-recovery.test.ts` pins two reads, the eight-candidate limit, three-alternative cap, shared freshness cut, preparing/unavailable states and serialized byte bound.
 
 ### Suggest
+
+Qualified suggestion dates in [suggestion-context.ts](suggestion-context.ts) retain the narrower four-digit `YYYY`,
+`YYYY-MM` and `YYYY-MM-DD` grammar, matching their authored year, month or day precision. Missing month/day components
+stay absent. Signed or extended years and timestamps are rejected. After that bounded grammar check, the public
+`@rezics/filter` `isCalendarDate` pure rule owns Gregorian validity, including leap centuries and year zero; the
+broader `readCalendarDate` parser does not define this wire format.
 
 The request-only Realm and Collection prefix path uses the same operation and retained native prefix producer; its
 predicate, readiness, caller and finite refill bounds are specified in [scoped suggestions](./scoped-suggestion.md).

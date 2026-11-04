@@ -29,6 +29,11 @@ test('public Global figures keep precision, nulls and zero without recomputing v
   expect(normalizePublicRatingFigure(scored, binding)).toEqual(scored);
 
   expect(normalizePublicRatingFigure(figure(), binding)).toMatchObject({ mean: 0, score: 0 });
+  for (const asOf of '0000-02-29T00:00:00Z 2000-02-29t00:00:00.1z 2016-12-31T23:59:60Z 2017-01-01T07:59:60+08:00'.split(
+    ' ',
+  )) {
+    expect(normalizePublicRatingFigure({ ...figure(), asOf }, binding).asOf).toBe(asOf);
+  }
   for (const revision of ['-9223372036854775808', '9223372036854775807']) {
     expect(normalizePublicRatingFigure({ ...figure(), revision }, binding).revision).toBe(revision);
   }
@@ -90,6 +95,9 @@ test('normalization rejects malformed data, invalid bindings and private fields'
     { ...base, revision: '9223372036854775808' },
     { ...base, revision: '-9223372036854775809' },
     { ...base, asOf: '2026-02-29T00:00:00Z' },
+    ...'1900-02-29T00:00:00Z 2000-04-31T00:00:00Z 2000-00-01T00:00:00Z 2000-01-00T00:00:00Z +2000-02-29T00:00:00Z 10000-01-01T00:00:00Z 2016-12-31T22:59:60Z 2000-01-01T00:00:00+00:60'
+      .split(' ')
+      .map((asOf) => ({ ...base, asOf })),
     { ...base, asOf: '2026-10-28T24:00:00Z' },
     { ...base, asOf: '2026-10-28T00:00:00' },
     { ...base, asOf: '2026-10-28T00:00:00+24:00' },
