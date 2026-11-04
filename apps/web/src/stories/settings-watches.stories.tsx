@@ -4,7 +4,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { readSettingsPage } from '../settings/actions';
 import type { SettingsPage } from '../settings/preferences';
 import { SettingsPageView } from '../settings/settings-page';
-import type { StopWatch, WatchKind, WatchManagementIO } from '../settings/watch-native';
+import type { ManagedWatch, StopWatch, WatchKind, WatchManagementIO } from '../settings/watch-native';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
@@ -17,54 +17,63 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const envelope = {
+  viewer: { state: 'current' as const, accountId: 'alice' },
+  actions: { remove: 'available' as const },
+};
+
+function previewWatch(
+  kind: WatchKind,
+  row: { subscriptionId: string; revision: number; target: ManagedWatch['target'] },
+): ManagedWatch {
+  return {
+    kind,
+    createdAt: '2026-11-03T10:00:00.000Z',
+    command: { watchId: row.subscriptionId, kind, expectedRevision: row.revision },
+    remove: 'available',
+    ...row,
+  };
+}
+
 /** Connected fixtures illustrate Settings watch states without claiming native or rendered acceptance. */
 function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
   const [page, setPage] = useState<SettingsPage | null>(null);
   const [io] = useState<WatchManagementIO>(() => ({
-    read: async ({ kind }: { kind: WatchKind }) => {
+    read: async ({ kind }) => {
       if (view === 'failed') throw new Error('Illustrative read failure');
+      const concealed = view === 'inaccessible' || view === 'uncertain';
       return {
         kind: 'page',
         page: {
+          ...envelope,
           next: null,
-          watches:
-            view === 'inaccessible' || view === 'uncertain'
-              ? kind === 'thread'
-                ? [
-                    {
-                      subscriptionId: 'private-unavailable',
-                      kind,
-                      revision: 7,
-                      createdAt: '2026-11-03T10:00:00.000Z',
-                      target: null,
-                    },
-                  ]
-                : []
-              : kind === 'thread'
-                ? [
-                    {
-                      subscriptionId: 'private-thread',
-                      kind,
-                      revision: 4,
-                      createdAt: '2026-11-03T10:00:00.000Z',
-                      target: { title: 'Reading together: autumn discoveries', href: '/en/threads/preview' },
-                    },
-                  ]
-                : [
-                    {
-                      subscriptionId: 'private-board',
-                      kind,
-                      revision: 5,
-                      createdAt: '2026-11-03T10:00:00.000Z',
-                      target: { title: 'Books and reading', href: '/en/boards/preview' },
-                    },
-                  ],
+          watches: concealed
+            ? kind === 'thread'
+              ? [previewWatch(kind, { subscriptionId: 'private-unavailable', revision: 7, target: null })]
+              : []
+            : kind === 'thread'
+              ? [
+                  previewWatch(kind, {
+                    subscriptionId: 'private-thread',
+                    revision: 4,
+                    target: { title: 'Reading together: autumn discoveries', href: '/en/threads/preview' },
+                  }),
+                ]
+              : [
+                  previewWatch(kind, {
+                    subscriptionId: 'private-board',
+                    revision: 5,
+                    target: { title: 'Books and reading', href: '/en/boards/preview' },
+                  }),
+                ],
         },
       };
     },
     stop: async (attempt) => {
       attempts.push(attempt);
-      return { kind: view === 'uncertain' ? 'uncertain' : 'removed' };
+      return view === 'uncertain'
+        ? { kind: 'uncertain', problem: { status: 503, code: null } }
+        : { kind: 'removed' };
     },
   }));
   useEffect(() => {
