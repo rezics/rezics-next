@@ -731,7 +731,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           closed,
         ),
         response: { 200: metadataHistoryPageResponse, ...failures },
-        detail: detail('collection.metadata_history.list', 'collection:update'),
+        detail: detail('collection.metadata_history_list', 'collection:update'),
         transform: ({ set }) => {
           set.headers['cache-control'] = 'private, no-store';
         },
@@ -751,7 +751,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           closed,
         ),
         response: { 200: metadataHistoryChangeResponse, ...failures },
-        detail: detail('collection.metadata_history.change', 'collection:update'),
+        detail: detail('collection.metadata_history_change', 'collection:update'),
         transform: ({ set }) => {
           set.headers['cache-control'] = 'private, no-store';
         },
