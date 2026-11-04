@@ -25,8 +25,14 @@ import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
 import { MusicContextCreateEntry } from './music-context-create-entry';
 import { ConceptCreateEntry } from './concept-create-entry';
-import { identityIntentKey, type IdentityIntakeInput } from './identity-intake';
-import { IdentityIntakePanel } from './identity-intake-view';
+import {
+  identityIntentKey,
+  isAllowedCreateAuthority,
+  observedCreateAuthority,
+  type CreateAuthority,
+  type IdentityIntakeInput,
+} from './identity-intake';
+import { CreateAuthorityStatus, IdentityIntakePanel } from './identity-intake-view';
 import { CatalogueFileCreateEntry } from './catalogue-file-create-entry';
 import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
 import {
@@ -228,6 +234,47 @@ function CreateSubjectFormLive({
   }
   // Definitions and the route's session read start independently.
   const definitions = useQuery({ queryKey, queryFn: () => loadDefinitions(), enabled: usesDefinitions, retry: false });
+  const eligibilityKey = ['catalogue-create', 'eligibility', locale, String(lifetime.generation), session];
+  const eligibilityQuery = useQuery({
+    queryKey: eligibilityKey,
+    queryFn: async () => {
+      if (session === 'signed-out') return { state: 'guest' } satisfies CreateAuthority;
+      if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' } satisfies CreateAuthority;
+      return observedCreateAuthority(await transport.eligibility());
+    },
+    enabled: !!transport.eligibility && session !== 'unknown',
+    retry: false,
+    staleTime: 0,
+  });
+  const observedAuthority: CreateAuthority | null = !transport.eligibility
+    ? null
+    : session === 'signed-out'
+      ? { state: 'guest' }
+      : session === 'unknown'
+        ? null
+        : eligibilityQuery.data
+          ? observedCreateAuthority(eligibilityQuery.data)
+          : eligibilityQuery.isError
+            ? { state: 'unknown', reason: 'unavailable' }
+            : null;
+  async function refreshCreateEligibility(): Promise<CreateAuthority> {
+    if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' };
+    if (session === 'signed-out') return { state: 'guest' };
+    try {
+      return observedCreateAuthority(
+        await client.fetchQuery({
+          queryKey: eligibilityKey,
+          queryFn: () => transport.eligibility!(),
+          staleTime: 0,
+          retry: false,
+        }),
+      );
+    } catch {
+      const next: CreateAuthority = { state: 'unknown', reason: 'unavailable' };
+      client.setQueryData(eligibilityKey, next);
+      return next;
+    }
+  }
   async function reloadDefinitions() {
     if (!usesDefinitions) return;
     await client
@@ -292,6 +339,8 @@ function CreateSubjectFormLive({
   const uncertain = (failure?.reason === 'unavailable' && request.current !== null) || unresolvedDelivery.current;
   const locked = busy || uncertain || failure?.reason === 'conflict';
   const disabled = locked || session !== 'signed-in';
+  const eligibilityBlocksNewCreate =
+    !!transport.eligibility && !request.current && !isAllowedCreateAuthority(observedAuthority);
   const errors = failure?.errors ?? [];
   const readOnlyType = !!profile?.type && profile.readOnlyType;
   const hasDraft = !!type || rows.some((row) => !!(row.label || row.description || row.aliases));
@@ -553,6 +602,11 @@ function CreateSubjectFormLive({
             return;
           }
         }
+        if (transport.eligibility) {
+          const current = await refreshCreateEligibility();
+          if (!lifetime.active()) return;
+          if (!isAllowedCreateAuthority(current)) return;
+        }
         request.current = { item: structuredClone(draft.item), key: crypto.randomUUID() };
       }
       if (!request.current) return;
@@ -637,6 +691,17 @@ function CreateSubjectFormLive({
           <p className="text-muted-foreground">{profile?.intro ?? m.catalogue_create_intro({}, options)}</p>
         </header>
       )}
+      {transport.eligibility && !directIdentityIntake && !created ? (
+        <CreateAuthorityStatus
+          locale={locale}
+          authority={observedAuthority}
+          pending={eligibilityQuery.isPending || eligibilityQuery.isFetching}
+          href={profile?.href ?? `/${locale}/catalogue/new`}
+          onRetry={() => {
+            void refreshCreateEligibility();
+          }}
+        />
+      ) : null}
       {created ? (
         <section
           ref={outcome}
@@ -982,6 +1047,13 @@ function CreateSubjectFormLive({
                     else profile?.refreshMetadata?.();
                   }}
                   inputId="create-label-0"
+                  authority={observedAuthority}
+                  onAuthority={(next) => client.setQueryData(eligibilityKey, next)}
+                  onRefreshAuthority={() => {
+                    void refreshCreateEligibility();
+                  }}
+                  authorityPending={eligibilityQuery.isPending || eligibilityQuery.isFetching}
+                  createHref={profile?.href ?? `/${locale}/catalogue/new`}
                 />
               ) : null}
               {profile && (
@@ -1115,7 +1187,8 @@ function CreateSubjectFormLive({
                     session !== 'signed-in' ||
                     failure?.reason === 'conflict' ||
                     definitionsBlocked ||
-                    (directIdentityIntake && !identityConfirmed)
+                    (directIdentityIntake && !identityConfirmed) ||
+                    eligibilityBlocksNewCreate
                   }
                 >
                   {busy

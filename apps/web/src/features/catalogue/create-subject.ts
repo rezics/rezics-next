@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { PropertyDefinition, TypeDefinition } from '@rezics/definitions';
 import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
+import type { CreateAuthority } from './identity-intake';
 import type { StatementInput } from './statement-editor';
 
 /** The generated POST body is the public ItemInputSchema, not an editor-specific wire format. */
@@ -48,6 +49,8 @@ export type CreateResult = CreateFailure | { ok: true; id: string; reader: Creat
 export type CreateTransport = {
   definitions?: (refresh?: boolean) => Promise<CreateDefinitions>;
   typeDirectory?: TypeDirectoryTransport;
+  /** Current parent subject.create observation. Absent on specialized profile creators. */
+  eligibility?: () => Promise<CreateAuthority>;
   submit: (command: CreateSubjectCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<CreatedReader>;
 };

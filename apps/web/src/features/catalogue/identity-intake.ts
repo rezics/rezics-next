@@ -17,6 +17,23 @@ export type IdentityIntakeStatus =
   | 'denied'
   | 'invalid';
 
+export const CATALOGUE_CREATE_PARENT_TYPE = 'semantic.context';
+export const CATALOGUE_CREATE_PARENT_ID = '00000000-0000-8000-8000-000000000000';
+export const CATALOGUE_CREATE_ACTION = 'subject:create';
+export const CATALOGUE_CREATE_OPERATION = 'subject.create';
+
+export type CreateAuthority =
+  | { state: 'guest' }
+  | { state: 'allowed'; action: 'subject:create'; operations: ['subject.create'] }
+  | { state: 'refused'; reason: 'permission' | 'gate' | 'suspended' }
+  | { state: 'unknown'; reason: 'dependency' | 'unavailable' };
+
+export const allowedCreateAuthority: Extract<CreateAuthority, { state: 'allowed' }> = {
+  state: 'allowed',
+  action: CATALOGUE_CREATE_ACTION,
+  operations: [CATALOGUE_CREATE_OPERATION],
+};
+
 export type IdentityHit = {
   id: string;
   type: string;
@@ -34,7 +51,7 @@ export type IdentityIntakePage = {
     continueWithResults: boolean;
     continueUnverified: boolean;
     retry: boolean;
-    createAuthority: 'unknown';
+    createAuthority: CreateAuthority;
   };
   results: IdentityHit[];
 };
@@ -110,6 +127,34 @@ export function identityBinding(input: IdentityIntakeInput, generation: number):
   return { ...input, q, language, generation };
 }
 
+export function isCreateAuthority(value: unknown): value is CreateAuthority {
+  if (value === null || typeof value !== 'object') return false;
+  const authority = value as Partial<CreateAuthority> & { action?: unknown; operations?: unknown; reason?: unknown };
+  if (authority.state === 'guest') return true;
+  if (authority.state === 'allowed')
+    return (
+      authority.action === CATALOGUE_CREATE_ACTION &&
+      Array.isArray(authority.operations) &&
+      authority.operations.length === 1 &&
+      authority.operations[0] === CATALOGUE_CREATE_OPERATION
+    );
+  if (authority.state === 'refused')
+    return authority.reason === 'permission' || authority.reason === 'gate' || authority.reason === 'suspended';
+  if (authority.state === 'unknown') return authority.reason === 'dependency' || authority.reason === 'unavailable';
+  return false;
+}
+
+export function isAllowedCreateAuthority(value: CreateAuthority | null | undefined): value is Extract<
+  CreateAuthority,
+  { state: 'allowed' }
+> {
+  return value?.state === 'allowed';
+}
+
+export function observedCreateAuthority(value: unknown): CreateAuthority {
+  return isCreateAuthority(value) ? value : { state: 'unknown', reason: 'unavailable' };
+}
+
 export function isIdentityIntakePage(value: unknown): value is IdentityIntakePage {
   if (value === null || typeof value !== 'object') return false;
   const page = value as Partial<IdentityIntakePage>;
@@ -131,7 +176,7 @@ export function isIdentityIntakePage(value: unknown): value is IdentityIntakePag
       page.viewer.state === 'unavailable') &&
     typeof page.actions === 'object' &&
     page.actions !== null &&
-    page.actions.createAuthority === 'unknown' &&
+    isCreateAuthority(page.actions.createAuthority) &&
     Array.isArray(page.results)
   );
 }

@@ -15,12 +15,16 @@ and continue confirmation while preserving the private draft. The private read b
 Type release and viewer state; native Search has no suggestion cursor, so this visit offers its finite first page.
 
 Search failures remain distinct from an empty result. Retry stays available, and an explicit unverified-discovery
-acknowledgement permits a deliberate attempt to continue after an outage. Creation permission remains unknown in
-the browser; the existing native create command checks current Global `subject:create` authority, and an acknowledged
-create retry reads the exact returned identity. Specialized creators and the private related-work handoff keep their
-existing routes and writers.
+acknowledgement permits a deliberate attempt to continue after an outage. The intake page returns current
+`subject.create` eligibility from the mounted Global Context parent, independently of suggestion success. Guest,
+allowed, refused (permission, gate, or suspension) and temporarily unknown eligibility stay distinct from session
+availability. A stale allowed observation is not an authorization bypass; fresh submission re-reads current
+eligibility, and the native create command remains final. Match browsing stays available when creation is refused.
+An acknowledged create retry reads the exact returned identity and never resubmits. Specialized creators and the
+private related-work handoff keep their existing routes and writers.
 
 Decision: after unavailable discovery, direct generic creation may continue only with an explicit unverified-search acknowledgement; the failure never counts as no matches or as creation authority.
+Decision: catalogue identity creation eligibility is the current Global Context `subject.create` viewer-action observation, independent of suggestion status; guest is session-derived.
 
 ## Browser flow: multilingual subject terms
 

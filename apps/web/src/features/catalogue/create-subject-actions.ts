@@ -14,6 +14,8 @@ import {
   type CreateSubjectCommand,
   type CreatedReader,
 } from './create-subject';
+import { observedCreateAuthority, type CreateAuthority } from './identity-intake';
+import { observeCreateEligibility } from './identity-intake-server';
 import { createSubjectRecord, readCreatedSubject } from './create-subject-request';
 
 export const readCreateDefinitions = createServerFn({ method: 'GET' })
@@ -67,3 +69,25 @@ export const readCreatedCatalogueSubject = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     return readCreatedSubject(kernelClient(), data, requestLocale() ?? 'en');
   });
+
+export const readCatalogueCreateEligibility = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<CreateAuthority> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    try {
+      const [{ prepareSession, viewerCredential }, { carriesSession }] = await Promise.all([
+        import('../../session/request'),
+        import('../../session/csrf'),
+      ]);
+      const stale = await prepareSession(request, env as Partial<SessionEnv>);
+      const credential = stale ? null : viewerCredential(request);
+      const viewer = !stale && credential ? 'signed-in' : 'signed-out';
+      if (!stale && !credential && carriesSession(request)) return { state: 'unknown', reason: 'unavailable' };
+      return observedCreateAuthority(
+        await observeCreateEligibility(kernelClient(requestLocale() ?? 'en'), credential, viewer),
+      );
+    } catch {
+      return { state: 'unknown', reason: 'unavailable' };
+    }
+  },
+);

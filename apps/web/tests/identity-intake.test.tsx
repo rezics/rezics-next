@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { act, createElement, useState } from 'react';
 import {
+  allowedCreateAuthority,
   identityBinding,
   identityIntentKey,
   type IdentityIntakeInput,
@@ -61,7 +62,7 @@ test('current intent replaces late matches and offers only deliberate navigation
       continueWithResults: true,
       continueUnverified: false,
       retry: false,
-      createAuthority: 'unknown',
+      createAuthority: allowedCreateAuthority,
     },
     results: [
       {
@@ -90,7 +91,7 @@ test('current intent replaces late matches and offers only deliberate navigation
           continueWithResults: false,
           continueUnverified: true,
           retry: true,
-          createAuthority: 'unknown',
+          createAuthority: allowedCreateAuthority,
         },
         results: [],
       });
@@ -146,6 +147,7 @@ test('current intent replaces late matches and offers only deliberate navigation
 
     await act(async () => user.click(canvas().getByRole('button', { name: m.identity_intake_search() })));
     await canvas().findByRole('heading', { name: 'Known Book' });
+    expect(canvas().getByText(m.identity_intake_authority_allowed())).toBeDefined();
     const link = canvas().getByRole('link', { name: new RegExp(m.identity_intake_open()) });
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('href')).toContain(resultId);
