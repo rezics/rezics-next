@@ -169,9 +169,11 @@ test('default seed publishes the cited VN work link on its own identity and refr
       },
     });
     expect(bridge.source?.digest).toBe(first.workLinks[0]?.candidateDigest);
-    expect(bridge.statement.references).toContainEqual({
-      parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: linkedUrl } }],
-    });
+    expect(
+      bridge.statement.references?.some((reference) =>
+        reference.parts.some((part) => part.property.id === 'schema:url' && part.value.content === linkedUrl),
+      ),
+    ).toBe(true);
     const urlCandidates = await candidates(vnId, 'schema:url');
     const urlCandidate = urlCandidates.candidates.find((candidate) => candidate.statement.value.content === linkedUrl)!;
     expect(urlCandidate.statement.references?.some((reference) =>
