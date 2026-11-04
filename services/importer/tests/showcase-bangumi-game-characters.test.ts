@@ -65,6 +65,9 @@ function sourceTables(order: unknown): CrossMediaTables {
       { id: 1002, name: 'Voice B', type: 1 },
       { id: 1003, name: 'Unrelated Voice', type: 1 },
     ],
+    'vndb/vn': [{ id: 'v1', olang: 'ja', alias: null }],
+    'vndb/vn_titles': [{ id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null }],
+    'vndb/entry_meta': [{ id: 'v1', revision: '1' }],
   };
   return { async *rows(provider, table) { yield* rows[`${provider}/${table}`] ?? []; } };
 }
