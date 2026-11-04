@@ -297,6 +297,7 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
     await act(async () => historyResolved);
     expect(view.router.state.location.href).toContain('/threads/');
     expect(view.router.state.location.href).toContain('historyReturn=');
+    console.log('return-debug', view.router.state.location.href, view.host.textContent);
     await historyRead;
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor, cursor]);
