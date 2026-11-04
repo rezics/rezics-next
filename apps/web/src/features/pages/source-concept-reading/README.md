@@ -6,7 +6,6 @@ A failed hierarchy request retains a separately identified last readable page on
 
 Whole-subject failure withdraws source data and private advice. Native correction advice remains independent of hierarchy readiness. The existing classification origin allowlist also applies to direct callers; graph query and selection returns belong to the graph journey.
 
-
 The human name and definition lead the visit. Aliases retain their language; the original identity and release are optional disclosures. Scheme, code and broader sections iterate original native assertions, including distinct assertions of the same target. Each whole assertion, its target, inspection address, qualifiers and citations uses the existing numeric `rezics:spoilerLevel` gate and current reader preference. A boolean warning is not native spoiler admission. Unlabelled or withheld item values never fall back to their IDs. Bounded inverse rows without an inspectable assertion show unavailable evidence.
 
 Inspection reuses `FactInspectionEntry` and its exact holder/property/statement/Context value explanation address. Local evidence disclosures reset after each completed read and on source, locale, preference or caller replacement. Follow uses `FollowTargetControl` with the source's current-origin lifetime; its native operation advice and sealed recovery remain library-owned. Correction still requires the exact advertised action and operation. Works/filter admission and cursor ownership are unchanged.

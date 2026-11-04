@@ -77,6 +77,7 @@ function fixture(state: State, locale: string) {
   const assertion = source.subject.statements['skos:inScheme']![0]!;
   assertion.references = [
     {
+      hash: '1'.repeat(64),
       parts: [
         { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://vndb.org/g1' } },
       ],

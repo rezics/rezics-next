@@ -43,6 +43,7 @@ const assertion = (suffix: number, property: string, content: string, spoiler = 
     : [],
   references: [
     {
+      hash: '1'.repeat(64),
       parts: [
         {
           property: { id: 'schema:url', data_type: 'url' },
@@ -131,7 +132,9 @@ async function mounted(
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf-A' });
-  const observation = viewerExposureLifetime(client).getSnapshot();
+  const observer = viewerExposureLifetime(client);
+  const stopObservation = observer.subscribe(() => {});
+  const observation = observer.getSnapshot();
   if (observation.state !== 'signed-in') throw Error('missing observation');
   client.setQueryData(viewerExposureQuery(observation.observation).queryKey, {
     subject: 'alice',
@@ -161,6 +164,7 @@ async function mounted(
     });
   } finally {
     await act(async () => root.unmount());
+    stopObservation();
     client.clear();
     await window.happyDOM.abort();
     for (const [key, descriptor] of saved) {
