@@ -1,5 +1,6 @@
-import { expect, test } from 'bun:test';
-import { createElement } from 'react';
+import { afterAll, expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ConditionEditor } from '../src/search/condition-editor';
 import { m } from '../src/paraglide/messages.js';
@@ -11,10 +12,23 @@ import { parseDiscoveryPage, parseLegacySearchPage, readDiscovery } from '../src
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { FilterRelease } from '@rezics/filter';
 import { parseReleaseSearch, releaseSearchHref, releaseSearchRequest } from '../src/search/release-search';
-import { parseReleaseSearchChildrenPage, parseReleaseSearchGroupsPage } from '../src/search/release-search-query';
-import { ReleaseSearchPage } from '../src/search/release-search-page';
+import * as releaseSearchQuery from '../src/search/release-search-query';
 import { defaultParseSearch } from '@tanstack/react-router';
 import { GLOBAL, QUESTION } from '../src/features/pages/subject-ratings';
+
+type ChildReader = typeof releaseSearchQuery.readReleaseSearchChildren;
+type ChildReaderInput = Parameters<ChildReader>[0];
+type ChildReaderResult = Awaited<ReturnType<ChildReader>>;
+
+let readChildren: ChildReader = releaseSearchQuery.readReleaseSearchChildren;
+mock.module('../src/search/release-search-query', () => ({
+  ...releaseSearchQuery,
+  readReleaseSearchChildren: (...args: Parameters<ChildReader>) => readChildren(...args),
+}));
+
+const { parseReleaseSearchChildrenPage, parseReleaseSearchGroupsPage } = releaseSearchQuery;
+const { ReleaseSearchPage } = await import('../src/search/release-search-page');
+afterAll(() => mock.restore());
 
 test('the universal editor preserves precise endpoints instead of rendering numeric year inputs', () => {
   const locale = 'ja';
@@ -445,5 +459,141 @@ test('grouped responses retain current cards and render independent work expansi
     expect(html).toContain(`data-release-work="${otherWorkId}"`);
     expect(html).toContain(m.release_search_related_releases({}, { locale }));
     expect(html).toContain(m.release_search_continue({}, { locale }));
+  }
+});
+
+test('work expansions keep independent child progress and resume their own response cursors', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/search/releases' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    FormData: window.FormData,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const firstWork = '018f0000-0000-7000-8000-000000000012';
+  const secondWork = '018f0000-0000-7000-8000-000000000013';
+  const firstRelease = '018f0000-0000-7000-8000-000000000014';
+  const secondRelease = '018f0000-0000-7000-8000-000000000015';
+  const parsed = parseReleaseSearch({ subtype: releaseType }, bundledRelease, 'en');
+  const page = parseReleaseSearchGroupsPage({
+    status: 'ready',
+    groups: [
+      {
+        kind: 'work',
+        id: firstWork,
+        work: groupedCard({ year: 2024 }, firstWork, 'schema:CreativeWork', 'First work'),
+        releases: [],
+        next: 'preview-one',
+      },
+      {
+        kind: 'work',
+        id: secondWork,
+        work: groupedCard({ year: 2024 }, secondWork, 'schema:CreativeWork', 'Second work'),
+        releases: [],
+        next: 'preview-two',
+      },
+    ],
+    next: null,
+    as_of: '2026-11-04T00:00:00Z',
+  });
+  if (!page) throw new Error('Expected a grouped release page');
+  const calls: ChildReaderInput['data'][] = [];
+  let completeFirst!: (result: ChildReaderResult) => void;
+  const firstPending = new Promise<ChildReaderResult>((resolve) => {
+    completeFirst = resolve;
+  });
+  const asOf = '2026-11-04T00:00:00Z';
+  const ready = (children: ReturnType<typeof groupedCard>[], next: string | null): ChildReaderResult => ({
+    status: 'ready',
+    page: { status: 'ready', children, next, as_of: asOf },
+  });
+  const preparing = (next: string): ChildReaderResult => ({
+    status: 'preparing',
+    page: { status: 'preparing', children: [], next, as_of: asOf },
+  });
+  readChildren = ({ data }) => {
+    calls.push(data);
+    if (data.work === firstWork && data.cursor === 'preview-one') return firstPending;
+    if (data.work === firstWork && data.cursor === 'resume-one')
+      return Promise.resolve(ready([groupedCard({ year: 2024 }, firstRelease, releaseType, 'First edition')], 'first-next'));
+    if (data.work === firstWork && data.cursor === 'first-next')
+      return Promise.resolve(ready([groupedCard({ year: 2025 }, `${firstRelease}-later`, releaseType, 'First later edition')], null));
+    if (data.work === secondWork && data.cursor === 'preview-two')
+      return Promise.resolve(ready([groupedCard({ year: 2023 }, secondRelease, releaseType, 'Second edition')], 'second-next'));
+    if (data.work === secondWork && data.cursor === 'second-next')
+      return Promise.resolve(ready([groupedCard({ year: 2024 }, `${secondRelease}-later`, releaseType, 'Second later edition')], null));
+    throw new Error('Unexpected child continuation');
+  };
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const work = (id: string) => host.querySelector(`[data-release-work="${id}"]`)!;
+  const expand = (id: string) => work(id).querySelector('summary')!.click();
+  const continueButton = (id: string) => work(id).querySelector('button') as HTMLButtonElement;
+  try {
+    await act(async () => root.render(createElement(ReleaseSearchPage, {
+      locale: 'en',
+      parsed,
+      state: { status: 'ready', page },
+    })));
+    await act(async () => expand(firstWork));
+    expect(work(firstWork).querySelector('details')!.open).toBe(true);
+    expect(work(secondWork).querySelector('details')!.open).toBe(false);
+    await act(async () => expand(secondWork));
+    expect(work(firstWork).querySelector('details')!.open).toBe(true);
+    expect(work(secondWork).querySelector('details')!.open).toBe(true);
+
+    await act(async () => continueButton(firstWork).click());
+    expect(continueButton(firstWork).disabled).toBe(true);
+    expect(continueButton(secondWork).disabled).toBe(false);
+    await act(async () => continueButton(secondWork).click());
+    expect(work(secondWork).textContent).toContain('Second edition');
+    expect(continueButton(firstWork).disabled).toBe(true);
+
+    await act(async () => {
+      completeFirst(preparing('resume-one'));
+      await firstPending;
+    });
+    expect(work(firstWork).textContent).toContain(m.discovery_preparing({}, { locale: 'en' }));
+    expect(work(firstWork).querySelector('[role="status"][aria-live="polite"]')).not.toBeNull();
+    expect(continueButton(firstWork).disabled).toBe(false);
+
+    await act(async () => continueButton(firstWork).click());
+    expect(calls.map(({ work, cursor }) => [work, cursor])).toEqual([
+      [firstWork, 'preview-one'],
+      [secondWork, 'preview-two'],
+      [firstWork, 'resume-one'],
+    ]);
+    expect(work(firstWork).textContent).toContain('First edition');
+    expect(work(secondWork).textContent).toContain('Second edition');
+
+    await act(async () => continueButton(secondWork).click());
+    await act(async () => continueButton(firstWork).click());
+    expect(calls.map(({ work, cursor }) => [work, cursor])).toEqual([
+      [firstWork, 'preview-one'],
+      [secondWork, 'preview-two'],
+      [firstWork, 'resume-one'],
+      [secondWork, 'second-next'],
+      [firstWork, 'first-next'],
+    ]);
+    expect(work(firstWork).textContent).toContain('First later edition');
+    expect(work(secondWork).textContent).toContain('Second later edition');
+  } finally {
+    readChildren = releaseSearchQuery.readReleaseSearchChildren;
+    await act(async () => root.unmount());
+    window.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
   }
 });
