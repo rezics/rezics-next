@@ -30,9 +30,11 @@ import type { DevVerifierFinding, DevVerifierRun, Settings, Task } from './types
 
 const roots: string[] = [];
 const repositoryRoot = join(import.meta.dir, '../../..');
-const repositoryPackageManager = (JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8')) as {
-  packageManager: string;
-}).packageManager;
+const repositoryPackageManager = (
+  JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8')) as {
+    packageManager: string;
+  }
+).packageManager;
 const repositoryBunPackage = join(repositoryRoot, 'node_modules/bun');
 const fixturePackageManager = `bun@${Bun.version}`;
 afterEach(() => {
@@ -189,9 +191,7 @@ test('uses the candidate pinned Bun and falls back to the installed producer art
   let command = withTreeBun(['bun', 'test', 'tests/example.test.ts'], candidate, producer);
   expect(command[0]).toBe('env');
   expect(command[2]).toBe(join(candidate, 'node_modules/bun/bin/bun.exe'));
-  expect(command[1]).toContain(
-    `PATH=${join(candidate, 'node_modules/.bin')}:${join(producer, 'node_modules/.bin')}:`,
-  );
+  expect(command[1]).toContain(`PATH=${join(candidate, 'node_modules/.bin')}:${join(producer, 'node_modules/.bin')}:`);
 
   rmSync(join(candidate, 'node_modules/bun'));
   command = withTreeBun(['bun', 'test', 'tests/example.test.ts'], candidate, producer);

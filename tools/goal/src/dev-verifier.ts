@@ -200,9 +200,11 @@ function infraFailure(output: string, timedOut: boolean): boolean {
   );
 }
 function unavailableFailure(output: string): boolean {
-  return /(?:command|executable|script|module|package|dependency).{0,50}(?:not found|missing|cannot be found|not configured|unknown)|cannot find (?:module|package)|module not found|ERR_MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION|no such file or directory|ENOENT|permission denied|not recognized as an internal or external command/i.test(
-    output,
-  ) || /pinned Bun: absent installed (?:package|binary)/i.test(output);
+  return (
+    /(?:command|executable|script|module|package|dependency).{0,50}(?:not found|missing|cannot be found|not configured|unknown)|cannot find (?:module|package)|module not found|ERR_MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION|no such file or directory|ENOENT|permission denied|not recognized as an internal or external command/i.test(
+      output,
+    ) || /pinned Bun: absent installed (?:package|binary)/i.test(output)
+  );
 }
 function truncatedOutput(output: string): boolean {
   return /(?:output|log|result).{0,40}truncated|truncated.{0,40}(?:output|log|result)|\[TRUNCATED\]|<truncated>/i.test(
@@ -379,11 +381,7 @@ function checkInput(settings: Settings, commit: string, check: Check): string | 
     toolchain: toolchainIdentity(settings, commit),
   });
 }
-function installDependencies(
-  tree: string,
-  stateDirectory: string,
-  policy = defaultPolicy,
-): boolean {
+function installDependencies(tree: string, stateDirectory: string, policy = defaultPolicy): boolean {
   if (!existsSync(join(tree, 'package.json')) || !existsSync(join(tree, 'bun.lock'))) return true;
   const installLog = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
   for (let attempt = 0; attempt < policy.verifier.installAttempts; attempt++) {
@@ -715,11 +713,7 @@ export function withTreeBun(command: readonly string[], tree: string, fallbackRo
   const executable = repositoryBun(tree, artifactRoot).binary;
   const bins = [...new Set([join(tree, 'node_modules/.bin'), join(fallbackRoot, 'node_modules/.bin')])];
   const path = [...bins, process.env.PATH ?? ''].filter(Boolean).join(':');
-  return [
-    'env',
-    `PATH=${path}`,
-    ...command.map((argument, position) => (position === index ? executable : argument)),
-  ];
+  return ['env', `PATH=${path}`, ...command.map((argument, position) => (position === index ? executable : argument))];
 }
 
 function forCheckAtCommit(result: DevVerifierEvidence, commit: string, check: Check): DevVerifierEvidence {
