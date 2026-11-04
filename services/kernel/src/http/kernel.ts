@@ -442,7 +442,14 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
   });
+  let viewerResources: Map<string, ViewerActionResource> | undefined;
+  let viewerBindings: ViewerActionBindings | undefined;
   providerReviewQueueRoutes(subjects, {
+    clock,
+    viewerActions: () => {
+      if (!viewerResources || !viewerBindings) throw new ProblemError('dependency_unavailable');
+      return { resources: viewerResources, bindings: viewerBindings };
+    },
     pool: dependencies.pool,
     tokens,
     routeKey: dependencies.routeKey,
@@ -556,8 +563,6 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
   let contentAccess: Access | undefined;
   let realmParticipation: RealmParticipationCheck | undefined;
-  let viewerResources: Map<string, ViewerActionResource> | undefined;
-  let viewerBindings: ViewerActionBindings | undefined;
   let viewerGuestSecurity: ReadonlyMap<string, 'anonymous' | 'authenticated' | 'unknown'> | undefined;
   let content: ReturnType<typeof contentRoutes>;
   const checkRealmParticipation: RealmParticipationCheck = (client, input, time) => {
