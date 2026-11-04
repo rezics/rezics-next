@@ -1,5 +1,9 @@
 # Auth account effects
 
+For the complete loopback stack, generated keys, persona and reset command, see
+[Local development stack](../../docs/development/local-stack.md). Run `task dev:infra` then `task dev` from the repository root.
+
+
 `@rezics/auth` is a separate workspace and PostgreSQL store. It owns password
 credentials, Better Auth sessions, registered clients, consent and signing keys.
 Access owns the only public identity, `account_id`, and all account state,

@@ -1,5 +1,9 @@
 ## Local public app
 
+For the complete loopback stack, generated keys, persona and reset command, see
+[Local development stack](../../docs/development/local-stack.md). Run `task dev:infra` then `task dev` from the repository root.
+
+
 Decision: `bun run dev` starts the product app on loopback; `bun run storybook` remains the separate interface catalogue.
 
 Use the Bun version pinned by the root `packageManager` and installed dependencies (`bun install --frozen-lockfile`

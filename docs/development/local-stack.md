@@ -1,24 +1,88 @@
-# Local stack
+# Local development stack
 
-## Seed the local stack with cross-media catalogue data
+Use Bun, Docker and Go Task (`task`, or the repository's `go-task` binary). From a fresh checkout:
 
-Start the local services with `task dev`, then run `task seed:dev`. The command fetches the pinned Bangumi Archive
-release and VNDB dump, verifies their archive or schema fingerprints, extracts the source tables, and seeds the local
-Kernel over loopback HTTP. Later runs reuse the shared dump cache. Seed state and the import report are kept under
-`.temp/cross-media-seed/`.
+```sh
+bun install --frozen-lockfile
+task dev:infra
+task dev
+```
 
-The cache defaults to `/home/edge/projects/rezics/rezics-datasets/dumps/`. Set `REZICS_DATASETS_DUMP_CACHE` to use a
-different cache location. The Bangumi archive is pinned by SHA-256; the VNDB archive is checked by tar integrity and
-the pinned `README.txt` and `schema_vndbid.sql` hashes, along with every table and `.header` required by the seed.
+`dev:infra` starts persistent PostgreSQL and OpenSearch, migrates Kernel and a separate `rezics_auth` database,
+creates development keys and configures the Web worker. It can be repeated. An interrupted setup can be repeated too.
+`dev` also runs setup, then starts these processes together; Ctrl-C ends the processes it launched and leaves
+infrastructure running. A child startup failure ends the other children.
 
-The seed uses these origins and development-persona values:
+| Service | Loopback address |
+| --- | --- |
+| Web | http://127.0.0.1:3000 |
+| Auth pages and public issuer | http://127.0.0.1:4200 |
+| Native Auth behind the pages | http://127.0.0.1:3100 |
+| Kernel API | http://127.0.0.1:4100 |
+| Kernel background worker | No HTTP listener |
+| PostgreSQL | 127.0.0.1:54329 |
+| OpenSearch | http://127.0.0.1:59200 |
 
-- `KERNEL_ORIGIN`, or `http://127.0.0.1:${KERNEL_PORT:-4100}`.
-- `AUTH_ORIGIN`, supplied by local Auth configuration.
-- `REZICS_DEV_PERSONA_ACCOUNT_KEY`, `REZICS_DEV_PERSONA_ACCOUNT`, and `REZICS_DEV_PERSONA_CLIENT`.
+Open Web and choose Sign in. Auth offers password sign-in, passkeys and sign-up. Sign-up works without an email
+provider or Cloudflare account. The development widget completes locally; it and its verifier exist only in the
+explicit local host. Use `127.0.0.1` throughout, including callbacks. Cookies are host-bound. The API token audience
+remains `https://api.rezics.test`; it is an identifier, not an external network dependency. Dependency installation,
+the first Docker image download and dataset downloads still need network access.
 
-The seed accepts HTTPS origins and loopback HTTP origins (`localhost`, `127.0.0.1`, or `[::1]`). The accounts
-development-persona task has not landed in this checkout yet; until it does, provide the three persona values from
-the configured local account. Keep its private key outside the repository.
+## Persona and import permissions
 
-Decision: use `REZICS_DATASETS_DUMP_CACHE` for the shared dump cache and `REZICS_DEV_PERSONA_*` as the seed's minimal environment seam until the accounts persona task supplies those values.
+```sh
+task dev:persona
+task dev
+# In another terminal, after the stack is ready:
+task seed:dev
+```
+
+The one persona task provisions `developer@rezics.test`, prints its generated password and account ID, installs its
+importer key through native credential authorization and writes `.temp/local-stack/seed.env` for `seed:dev`.
+Native Auth startup also provisions this persona, so first-run public reads work without a separate manual bootstrap.
+The persona owns the development platform governance role, including `gate:any`, Access grant authority and the
+cross-media importer's subject, statement, source-statistic, source-fence and media-import permissions. The importer
+client requests only its import scopes. The same person can sign into Web using the printed password.
+
+Decision: local setup uses the existing native governance bootstrap for the developer and opens only mounted anonymous
+GET exposure groups in the local database; production configuration and private/write gates retain their defaults.
+A public exposure opening admits that group, while ordinary route and resource permissions still apply. Kernel and
+both app servers bind loopback. Do not expose this development database or host to a network.
+
+## Keys and reset
+
+Generated Auth signing, website, importer, staging and workflow reference keys and the persona password live under
+`.temp/local-stack/` with private file permissions. Kernel `.env` retains separate session, receipt, route and rating
+keys across restarts, and supplies the local Auth issuer, audience and JWKS URL to both API and worker.
+`apps/web/.dev.vars` contains the local website client key and loopback bindings. All generated files are ignored.
+Local setup owns `apps/web/.dev.vars`; keep deployment secrets in deployment configuration. Production entrypoints
+never import the development host or create these grants.
+
+If a database was created from an incompatible migration baseline (for example, `relation "revision" already exists`),
+stop your local `task dev` and run this one command:
+
+```sh
+task dev:reset
+```
+
+This explicitly deletes the configured local PostgreSQL container and volume, including both development databases,
+then migrates fresh databases. It keeps generated keys and the OpenSearch volume. Re-run `task dev`; the persona and
+public-read openings are rebuilt. This command is destructive: use it only for your own development stack, never a
+shared database. It never prunes Docker. Normal `dev:infra` never resets data automatically.
+
+Individual commands are `dev:web`, `dev:auth` (pages), `dev:auth:host`, `dev:kernel` and `dev:worker`. Complete sign-in
+needs the full stack. PostgreSQL and search ports can be changed with `KERNEL_DATABASE_PORT` and `KERNEL_SEARCH_PORT`;
+container and volume names can be isolated with `KERNEL_DATABASE_CONTAINER`, `KERNEL_DATABASE_VOLUME`,
+`KERNEL_SEARCH_CONTAINER` and `KERNEL_SEARCH_VOLUME`. App and issuer ports above are fixed for local callbacks.
+
+## Cross-media dump cache
+
+`seed:dev` fetches the pinned Bangumi Archive release and VNDB dump, checks archive or schema fingerprints,
+extracts source tables and seeds Kernel over loopback HTTP. Later runs reuse the dump cache; state and the import
+report stay under `.temp/cross-media-seed/`. The cache defaults to `/home/edge/projects/rezics/rezics-datasets/dumps/`;
+set `REZICS_DATASETS_DUMP_CACHE` to choose another location. Bangumi is pinned by SHA-256. VNDB is checked by tar
+integrity, pinned `README.txt` and `schema_vndbid.sql` hashes, and required tables and `.header` files.
+
+The seed's `REZICS_DEV_PERSONA_*`, `AUTH_ORIGIN` and `KERNEL_ORIGIN` environment seam also works with a manually
+configured local account. Seed origins accept HTTPS or loopback HTTP (`localhost`, `127.0.0.1`, `[::1]`).
