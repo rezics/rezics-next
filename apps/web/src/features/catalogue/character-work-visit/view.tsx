@@ -4,6 +4,7 @@ import { CandidateValue } from '../../pages/data';
 import { SpoilerGate } from '../../pages/values';
 import type { OverviewValue } from '../../pages/overview';
 import type { ConnectionSection } from '../../pages/subject-connections';
+import type { ConnectionReturnWindow } from '../../pages/subject-visit-navigation';
 import { connectionReturnHref, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 import { valueExplanationHref } from '../value-explanation';
 import { type Snak } from '../../pages/shared';
@@ -18,10 +19,12 @@ export function CharacterWorkRows({
   current,
   value,
   kind,
+  returnWindow,
 }: {
   current: ConnectionSection;
   value: OverviewValue;
   kind: CharacterWorkKind;
+  returnWindow?: ConnectionReturnWindow;
 }) {
   const rows = characterWorkRows(current, value.subject!, value.locale, value.reader.spoilerLevel);
   const o = { locale: value.locale as never };
@@ -35,6 +38,7 @@ export function CharacterWorkRows({
           current={current}
           value={value}
           kind={kind}
+          returnWindow={returnWindow}
         />
       ))}
       {Array.isArray(raw) && raw.length > rows.length && <p role="status">{m.character_work_unavailable({}, o)}</p>}
@@ -47,11 +51,13 @@ function CharacterWorkAppearance({
   current,
   value,
   kind,
+  returnWindow,
 }: {
   row: CharacterWorkRow;
   current: ConnectionSection;
   value: OverviewValue;
   kind: CharacterWorkKind;
+  returnWindow?: ConnectionReturnWindow;
 }) {
   const o = { locale: value.locale as never };
   const returnHref = connectionReturnHref(
@@ -61,11 +67,13 @@ function CharacterWorkAppearance({
     value.realm,
     current.reading
       ? {
-          stream: current.stream.key,
-          reading: current.reading,
-          ...(current.section.ok && 'cursor' in current.section.read && current.section.read.cursor
-            ? { cursor: current.section.read.cursor }
-            : {}),
+          ...(returnWindow ?? {
+            stream: current.stream.key,
+            reading: current.reading,
+            ...(current.section.ok && 'cursor' in current.section.read && current.section.read.cursor
+              ? { cursor: current.section.read.cursor }
+              : {}),
+          }),
           ...(row.statement ? { focus: row.statement, holder: row.holder } : {}),
         }
       : undefined,

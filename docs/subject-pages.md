@@ -1496,7 +1496,7 @@ groups, and are labelled with the Context they come from.
 The Character overview links directly to its public work appearances in the existing Connections reading. An
 anonymous reader sees the admitted incoming `schema:character` window as **Work appearances** and the independently
 admitted, Character-qualified incoming `wdt:P725` window as **Voice performances**. Both reuse the current loader,
-section state, released labels, shared covers, qualified values and native More/Retry controls. Other connection
+section state, released labels, shared covers, qualified values and native Previous/Next/Retry controls. Other connection
 streams and the signed-in Global correction workspace retain their separate uses. Character identity and main
 character associations remain their released producer's assertions; neither appearance roles nor voice credits
 establish identity.
@@ -1556,9 +1556,9 @@ window. The Character relation presentation selects and pages that one current R
 reader or target-subject reads. Incoming rows name the original holder and the released inverse meaning, with a
 separate original-property label when it differs. Every exact statement offers the existing original-assertion
 destination, while a target remains usable if statement identity is unavailable. A current page with no rows, a
-withheld summary, missing release configuration and a failed stream keep distinct states. More and Retry remain the
-single controls of the selected native window, and returning validates its stream, cursor, reading and assertion
-focus before restoring focus.
+withheld summary, missing release configuration and a failed stream keep distinct states. Previous, Next, Retry and
+restart operate on the selected native window, and returning validates its stream, retained cursor addresses, reading
+and assertion focus before restoring focus.
 
 Unavailable configuration (age-at-appearance, main-character linkage, character-to-character properties the current
 release does not admit) is named on the page. An independently unreadable stream keeps the character identity and the
@@ -1965,12 +1965,18 @@ reader never joins another subject's biography into an appearance or treats a qu
 actor. Existing character and generic catalogue editors retain all command, admission and immutable retry custody.
 
 Each of Relations, Characters and Credits owns one selected property/direction and one current page of at most
-12 rows. Changing that selection or choosing More removes its prior page before requesting the replacement;
-sibling sections remain independent. Native counts may include concealed endpoints. Empty pages with a native
-continuation still offer More; hidden summaries never acquire a guessed title or a raw-ID link. The existing
+12 rows. Changing that selection or choosing Next removes its prior page before requesting the replacement; Previous
+refetches the retained cursor under the current admitted reader instead of restoring rows. Each group and selected
+stream retains at most eight cursor addresses, not page responses. When earlier pages have rolled off, the oldest
+retained address names that boundary and offers a restart from the first page. Stream changes begin at that stream's
+first page, and sibling sections remain independent. Native counts may include concealed endpoints. Empty pages with a
+native continuation still offer Next; hidden summaries never acquire a guessed title or a raw-ID link. The existing
 qualified-credit projection supplies credited names, order, role, character and part notes from each assertion's
 own disclosed related summaries. Spoiler consent remains per assertion occurrence and content. Nothing in a
 character's voice-credit result authorizes its appearance endpoint, or conversely.
+
+Decision: Connections keeps at most eight cursor addresses per group and stream; exact assertion returns carry only
+validated addresses that fit the 28 KiB fragment cap, with an explicit restart at any omitted-history boundary.
 
 The supplemental authenticated Web loader re-resolves the actual page representation before and after the selected
 native reads. It checks the caller's expected Context and current release. A replacement or refused reading retires

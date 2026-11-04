@@ -31,7 +31,7 @@ const snak = (property: string, content: string) => ({
   property: { id: property, data_type: 'wikibase-item' },
   value: { type: 'value', content },
 });
-function CharacterVisit({ locale, failed }: { locale: 'en' | 'ja' | 'zh-Hant'; failed: boolean }) {
+function CharacterVisit({ locale, failed, paged }: { locale: 'en' | 'ja' | 'zh-Hant'; failed: boolean; paged: boolean }) {
   const streams = (['schema:character', 'wdt:P725'] as const).map((property, index) => ({
     key: `in:${property}${index ? ':qualified' : ''}`,
     property,
@@ -42,12 +42,8 @@ function CharacterVisit({ locale, failed }: { locale: 'en' | 'ja' | 'zh-Hant'; f
     language: locale,
     ...(index ? { filter: id(1) } : {}),
   }));
-  const read: ConnectionRead = async () => ({
-    ok: true,
-    id: id(1),
-    release: 'example',
-    streams,
-    sections: Object.fromEntries(
+  const read: ConnectionRead = async (address) => {
+    const allSections = Object.fromEntries(
       streams.map((stream, index) => [
         stream.group,
         {
@@ -60,7 +56,13 @@ function CharacterVisit({ locale, failed }: { locale: 'en' | 'ja' | 'zh-Hant'; f
                   ok: true,
                   read: { kind: 'links', id: id(1), property: stream.property, limit: 12 },
                   body: {
-                    links: [0, 1, 2].map((row) => ({
+                    links: (paged && stream.group === 'characters'
+                      ? address.selection?.characters?.cursor === 'appearance-page-3'
+                        ? []
+                        : address.selection?.characters?.cursor === 'appearance-page-2'
+                          ? [3]
+                          : [0, 1, 2]
+                      : [0, 1, 2]).map((row) => ({
                       subject: id(2),
                       property: stream.property,
                       statement: id(10 + index * 10 + row),
@@ -97,13 +99,27 @@ function CharacterVisit({ locale, failed }: { locale: 'en' | 'ja' | 'zh-Hant'; f
                         [id(4)]: summary(4, '声の出演者／配音演員', 'schema:Person'),
                       },
                     })),
-                    next: 'opaque-next',
+                    next:
+                      paged && stream.group === 'characters'
+                        ? address.selection?.characters?.cursor === 'appearance-page-3'
+                          ? null
+                          : address.selection?.characters?.cursor === 'appearance-page-2'
+                            ? 'appearance-page-3'
+                            : 'appearance-page-2'
+                        : 'opaque-next',
                   },
                 },
         },
       ]),
-    ),
-  });
+    );
+    return {
+      ok: true,
+      id: id(1),
+      release: 'example',
+      streams,
+      sections: address.only ? { [address.only]: allSections[address.only] } : allSections,
+    };
+  };
   const value = {
     subject: id(1),
     subjectLabel: '長い名前の登場人物／角色的長名字',
@@ -128,7 +144,7 @@ function CharacterVisit({ locale, failed }: { locale: 'en' | 'ja' | 'zh-Hant'; f
 const meta = {
   title: 'Pages/Character/Work appearances',
   component: CharacterVisit,
-  args: { locale: 'en', failed: false },
+  args: { locale: 'en', failed: false, paged: false },
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof CharacterVisit>;
 export default meta;
@@ -136,5 +152,7 @@ type Story = StoryObj<typeof meta>;
 /** Current rows, distinct assertions to one work, withheld association and per-assertion spoiler. */
 export const CurrentWindow: Story = {};
 export const IndependentCreditFailure: Story = { args: { failed: true } };
+/** The selected appearance stream exposes Previous, Next, page status and an empty terminal page. */
+export const BoundedPages: Story = { args: { paged: true } };
 export const LongJapanese: Story = { args: { locale: 'ja' } };
 export const LongChinese: Story = { args: { locale: 'zh-Hant' } };
