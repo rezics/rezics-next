@@ -161,6 +161,43 @@ new profiled values, not historic reads, clearing or exact undo. Generic labels 
 profile binding or lookup, and never invent a default state.
 Copy location/source allow 200 Unicode scalar values each and notes 1,000; the editor shows localized limits and accessible field errors after an invalid submit, preserves exact draft text, and validates before capturing a new command.
 
+### Physical copy condition
+
+Decision: Library owns the finite `physical-v1` condition vocabulary, independently for media and packaging;
+only an accepting released Copy kind with explicit `condition: 'physical-v1'` admits either field, including clear.
+No kind name, label, note, import mapping or current profile can supply historical admission.
+
+The stable values and English labels are `unknown` (Unknown), `mint` (Mint), `near_mint` (Near mint),
+`very_good_plus` (Very good plus), `very_good` (Very good), `good` (Good), `fair` (Fair) and `poor` (Poor).
+Mint means no observable wear or defects; near mint means almost no wear; very good plus means minor wear;
+very good means noticeable wear while fully usable; good means substantial wear while usable; fair means damage
+limits ordinary use; poor means severe damage prevents ordinary use. These are personal observations, with no
+catalogue, seller, price or valuation authority. Existing bounded Copy notes cover explanations; no additional text
+or arbitrary attributes are admitted.
+
+The existing create/update command input gains independent optional `mediaCondition` and `packagingCondition`
+values. An omitted field remains unchanged on edit and not recorded on creation. `unknown` records an explicit
+unknown assessment; `null` records an intentional clear. Both fields and their presence participate in the existing
+complete command intent, expected revision and original request key. Never fill omitted fields before hashing old
+receipt operands. Old absent rows remain not recorded without a migration that guesses a grade. Each supplied field
+captures its own exact accepting profile pin and kind. Editing the other field preserves that accepted meaning.
+Historical display uses those exact releases; failure to resolve them is unavailable, never unknown or a grade.
+Current editing advice is independent from historical display and cannot authorize a later command.
+
+The Discogs row in the [API audit](research/api-first-platform-coverage.md#discogs) supplies the model requirement.
+The legacy loans view is an interaction reference: it keys individual loan cards by identity and presents edition
+and format beside the work. It supplies no condition vocabulary. The current Copies page already has independent
+field errors and preserves exact draft text. No rendered comparison or earlier Collection-item comparison has been
+established by this implementation part.
+
+The native pure vocabulary, parsing, field merge and historical display helpers are implemented in
+`copy-condition.ts`. Persistence, revisioned command integration, native presentation and Web controls are still
+required; existing endpoints do not yet accept these fields. The retained Content publisher must add optional
+`condition: 'physical-v1'` to the Definitions Copy kind source/release schema and type, preserve it through compilation,
+and publish generated native create/update/detail shapes and root exports after integration. The installed contract
+currently has only kind labels/statuses; admission remains unavailable. This document claims no native integration,
+growth, browser or promoted acceptance result.
+
 A Collection has one identity, curator, visibility, title/description, follow target, Zone mount and schema.org
 `ItemList` surface. Curated membership stores ordered occurrences, each with its own ID and note; duplicates remain
 editable. Dynamic membership derives unique subjects from native truth. One shared Collection members service and
