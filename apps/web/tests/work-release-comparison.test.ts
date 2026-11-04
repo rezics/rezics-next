@@ -35,7 +35,7 @@ test('Game release dates retain signed partial dates, uncertainty, TBA, no-value
   expect(gameDatePresentation({ ...original, value: { type: 'novalue' } }, fixture.release.digest, 'en').kind).toBe(
     'none',
   );
-  expect(original.value.content).toEqual(month);
+  expect(original.value.type === 'value' && original.value.content).toEqual(month);
 });
 
 test('native invalid_request on a supplied release cursor is a restart rather than exhaustion', async () => {
