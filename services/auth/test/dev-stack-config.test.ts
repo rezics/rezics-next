@@ -1,9 +1,35 @@
-import { developmentEnv } from '../../kernel/scripts/database.ts';
-import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { developmentKeys, issuerRequest, localDatabase, openLocalShowcase, publicKey, retireDevelopmentSeedState } from '../scripts/dev-stack.ts';
+import { createRequire } from 'node:module';
+import {
+  developmentKeys,
+  developmentBindings,
+  issuerRequest,
+  localDatabase,
+  openLocalShowcase,
+  publicKey,
+  retireDevelopmentSeedState,
+} from '../scripts/dev-stack.ts';
+import { developmentEnv } from '../../kernel/scripts/database.ts';
+import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
+
+test('development setup gives finite dataset write capacity and preserves explicit deployment budgets', () => {
+  const generated = developmentEnv('', 'postgres://127.0.0.1/rezics');
+  const value = generated
+    .split('\n')
+    .find((line) => line.startsWith('KERNEL_WRITE_RATE_OVERRIDES='))!
+    .split('=')
+    .slice(1)
+    .join('=');
+  const budgets = rateLimitBudgets(value);
+  expect(budgets['new-account'].write.maximum).toBe(100000);
+  expect(budgets.member.write.maximum).toBe(100000);
+  expect(budgets.anonymous.write.maximum).toBe(10);
+  expect(developmentEnv('KERNEL_WRITE_RATE_OVERRIDES={}\n', 'postgres://127.0.0.1/rezics')).toContain(
+    'KERNEL_WRITE_RATE_OVERRIDES={}\n',
+  );
+});
 
 test('native loopback transport retains the public issuer and original request evidence', async () => {
   const request = new Request('http://127.0.0.1:3100/signin', {
@@ -30,6 +56,21 @@ test('first-run secrets remain private and stable across setup retries', async (
     expect(keys.secret).not.toBe(keys.staging);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('database reset retires old native-ID journals and preserves the development keys', async () => {
+  const repository = await mkdtemp(resolve(import.meta.dir, '../../../.temp/reset-seed-'));
+  try {
+    const keys = await developmentKeys(resolve(repository, '.temp/local-stack'));
+    await mkdir(resolve(repository, '.temp/cross-media-seed'));
+    await writeFile(resolve(repository, '.temp/cross-media-seed/state.sqlite'), 'old-native-ids');
+    const archived = await retireDevelopmentSeedState(repository);
+    expect(await readFile(resolve(archived!, 'state.sqlite'), 'utf8')).toBe('old-native-ids');
+    expect(await retireDevelopmentSeedState(repository)).toBeUndefined();
+    expect(await developmentKeys(resolve(repository, '.temp/local-stack'))).toEqual(keys);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
   }
 });
 
@@ -76,34 +117,16 @@ test('a failed native opening stops persona setup and names the group, cause and
   expect(attempted).toEqual(['search']);
 });
 
-test('development setup gives finite dataset write capacity and preserves explicit deployment budgets', () => {
-  const generated = developmentEnv('', 'postgres://127.0.0.1/rezics');
-  const value = generated
-    .split('\n')
-    .find((line) => line.startsWith('KERNEL_WRITE_RATE_OVERRIDES='))!
-    .split('=')
-    .slice(1)
-    .join('=');
-  const budgets = rateLimitBudgets(value);
-  expect(budgets['new-account'].write.maximum).toBe(100000);
-  expect(budgets.member.write.maximum).toBe(100000);
-  expect(budgets.anonymous.write.maximum).toBe(10);
-  expect(developmentEnv('KERNEL_WRITE_RATE_OVERRIDES={}\n', 'postgres://127.0.0.1/rezics')).toContain(
-    'KERNEL_WRITE_RATE_OVERRIDES={}\n',
-  );
-});
-
-test('database reset retires old native-ID journals and preserves the development keys', async () => {
-  const repository = await mkdtemp(resolve(import.meta.dir, '../../../.temp/reset-seed-'));
+test('generated Web bindings preserve literal JWK JSON through the actual Vite dotenv loader', async () => {
+  const directory = await mkdtemp(resolve(import.meta.dir, '../../../.temp/web-bindings-'));
   try {
-    const keys = await developmentKeys(resolve(repository, '.temp/local-stack'));
-    await mkdir(resolve(repository, '.temp/cross-media-seed'));
-    await writeFile(resolve(repository, '.temp/cross-media-seed/state.sqlite'), 'old-native-ids');
-    const archived = await retireDevelopmentSeedState(repository);
-    expect(await readFile(resolve(archived!, 'state.sqlite'), 'utf8')).toBe('old-native-ids');
-    expect(await retireDevelopmentSeedState(repository)).toBeUndefined();
-    expect(await developmentKeys(resolve(repository, '.temp/local-stack'))).toEqual(keys);
+    const key = { kty: 'EC', crv: 'P-256', kid: 'fixture', d: 'fixture' };
+    await writeFile(resolve(directory, '.env'), developmentBindings({ WEBSITE_CLIENT_KEY: JSON.stringify(key) }));
+    const require = createRequire(resolve(import.meta.dir, '../../../apps/web/package.json'));
+    const { loadEnv } = await import(require.resolve('vite'));
+    const bindings = loadEnv('development', directory, 'WEBSITE_');
+    expect(JSON.parse(bindings.WEBSITE_CLIENT_KEY!)).toEqual(key);
   } finally {
-    await rm(repository, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
   }
 });

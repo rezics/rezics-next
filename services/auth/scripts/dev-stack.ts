@@ -71,6 +71,18 @@ async function privateFile(path: string, value: string) {
   await writeFile(path, value, { mode: 0o600 });
   await chmod(path, 0o600);
 }
+
+/** Dotenv retains backslash-escaped quotes inside double quotes; JWK JSON must stay literal. */
+export function developmentBindings(values: Record<string, string>): string {
+  return (
+    Object.entries(values)
+      .map(([name, value]) => {
+        if (/[\r\n']/.test(value)) throw new Error(`Invalid local binding ${name}`);
+        return `${name}='${value}'`;
+      })
+      .join('\n') + '\n'
+  );
+}
 export async function developmentKeys(directory = state): Promise<DevelopmentKeys> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const file = resolve(directory, 'keys.json');
@@ -157,7 +169,7 @@ async function setup() {
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
   await privateFile(
     resolve(root, 'apps/web/.dev.vars'),
-    Object.entries({
+    developmentBindings({
       AUTH_ISSUER: origins.issuer,
       API_RESOURCE: origins.audience,
       WEBSITE_CLIENT_ID: 'rezics-website',
@@ -165,9 +177,7 @@ async function setup() {
       WEBSITE_SCOPES: websiteScopes.join(' '),
       SITE_ORIGINS: origins.web,
       KERNEL_ORIGIN: origins.kernel,
-    })
-      .map(([name, value]) => `${name}=${JSON.stringify(value)}`)
-      .join('\n') + '\n',
+    }),
   );
 }
 
@@ -548,8 +558,7 @@ if (import.meta.main) {
     else if (action === 'reset') {
       await retireDevelopmentSeedState();
       await setup();
-    }
-    else if (action === 'host') await serveHost();
+    } else if (action === 'host') await serveHost();
     else if (action === 'persona') {
       const composition = await assemble();
       try {
