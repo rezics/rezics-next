@@ -8840,5 +8840,22 @@
   "music_location_previous": "이전에 수락된 주소",
   "music_location_start": "선택한 관계의 시작",
   "music_location_boundary": "보관된 주소 중 가장 이전 주소입니다. 시작으로 돌아가면 이 관계를 처음부터 읽을 수 있습니다.",
-  "music_location_time_evidence": "원본 시간 근거"
+  "music_location_time_evidence": "원본 시간 근거",
+  "people_facts_scope": "이 프로필에서 제공된 현재 사실이며 전체 목록, 후보 집합 또는 출처 목록의 완전성을 뜻하지 않습니다.",
+  "people_facts_filter": "이 로컬 창에 표시된 텍스트 필터",
+  "people_facts_reset": "창 필터 초기화",
+  "people_facts_empty": "이 창에 일치하는 표시된 사실이 없습니다. 필터를 초기화하면 원래 행으로 돌아갑니다.",
+  "people_facts_window": "로컬 사실 창",
+  "people_facts_previous": "이전 사실",
+  "people_facts_next": "다음 사실",
+  "people_facts_collapse": "사실 접기",
+  "people_facts_browse": "제공된 사실 보기",
+  "people_facts_overflow": "첫 번째 로컬 창만 표시됩니다. 제공된 사실을 열어 계속하세요.",
+  "people_facts_unavailable": "이 읽기에서는 로컬 사실 상세 보기를 사용할 수 없습니다. 독립적인 프로필 사실은 계속 읽을 수 있습니다.",
+  "people_facts_return": "이 프로필 사실로 돌아가기",
+  "people_facts_changed": "이 사실이 변경되었거나 더 이상 선택되지 않았습니다. 필드로 돌아가 프로필을 새로 고치세요.",
+  "people_facts_route_return": "수정과 출처는 기존 페이지를 사용합니다. 이 페이지를 떠나면 세부 위치를 복원할 수 없습니다. 이 프로필의 사실 필드로 돌아오세요.",
+  "people_facts_unsupported": "이 필드의 데이터 유형은 지원되지 않습니다.",
+  "people_facts_suppressed": "현재 컨텍스트에서 이 필드는 표시가 억제되었습니다.",
+  "people_facts_unresolved": "현재 컨텍스트에서 이 필드는 미해결 상태입니다."
 }

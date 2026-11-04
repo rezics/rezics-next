@@ -10,7 +10,16 @@ import { LanguageTag, SpoilerGate } from '../../pages/values';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { catalogueEntries } from '../catalogue-entry';
 import { loadPersonDefinitions } from './actions';
-import { personEvidenceFits, personGroups, profileFields, type PersonDefinitions, type PersonStatement } from './model';
+import {
+  personEvidenceFits,
+  personGroups,
+  personScalarFields,
+  profileFields,
+  type PersonDefinitions,
+  type PersonStatement,
+} from './model';
+import { PeopleFactField } from '../people-facts/field';
+import { FactInspectionEntry, PeopleFacts, useFactVisit } from '../people-facts/visit';
 import { SuppliedNames } from '../../pages/showcase-people/names';
 
 export const personReaderAnchor = 'person-biography';
@@ -122,7 +131,9 @@ function Evidence({ statement, reading }: { statement: PersonStatement; reading:
 }
 
 export function ProfileFact({ statement, reading }: { statement: PersonStatement; reading: Reading }) {
+  const visit = useFactVisit();
   const o = options(reading.locale);
+  if (visit?.stale.has(statement.id)) return <p role="status">{m.people_facts_changed({}, o)}</p>;
   const content = statement.value.type === 'value' ? statement.value.content : undefined;
   const language =
     typeof content === 'object' && content && 'language' in content && typeof content.language === 'string'
@@ -130,13 +141,12 @@ export function ProfileFact({ statement, reading }: { statement: PersonStatement
       : undefined;
   const fact = (
     <div className="space-y-2">
-      <Value part={statement} reading={reading} />
-      {language && <LanguageTag lang={language} locale={reading.locale} />}
-      <Evidence statement={statement} reading={reading} />
-      <details>
-        <summary className={control}>{m.person_reader_statement({}, o)}</summary>
-        <code className="block break-all">{statement.id}</code>
-      </details>
+      <div data-fact-text className="space-y-2">
+        <Value part={statement} reading={reading} />
+        {language && <LanguageTag lang={language} locale={reading.locale} />}
+        <Evidence statement={statement} reading={reading} />
+      </div>
+      <FactInspectionEntry statement={statement} reading={reading} />
     </div>
   );
   return spoilerLevel(statement) > (reading.reader ?? defaultReader).spoilerLevel ? (
@@ -150,39 +160,30 @@ export function ProfileFact({ statement, reading }: { statement: PersonStatement
 
 /** Character traits and Person facts share the existing document, qualifier and citation presentation. */
 export function ProfileFields({ fields, reading }: { fields: ReturnType<typeof profileFields>; reading: Reading }) {
-  const o = options(reading.locale);
-  const label = pickText(reading.public.subject.labels, reading.locale).text;
-  const href = subjectHref({ id: reading.public.subject.id, label }, reading.locale).href;
-  const Link = reading.link ?? PlainLink;
   return (
-    <dl className="min-w-0 space-y-5">
+    <div className="min-w-0 space-y-5">
       {fields.map((field) => (
-        <div key={field.id} className="min-w-0 space-y-2">
-          <dt lang={field.label.lang ?? undefined} className="font-medium">
-            {field.label.text || m.subject_value_unlabelled({}, o)}
-          </dt>
-          <dd>
-            <ul className="space-y-3">
-              {field.facts.map((statement) => (
-                <li key={statement.id}>
-                  <ProfileFact statement={statement} reading={reading} />
-                </li>
-              ))}
-            </ul>
-            {field.more && (
-              <Link className={control} href={`${href}/details`}>
-                {m.person_reader_more({}, o)}
-              </Link>
-            )}
-          </dd>
-        </div>
+        <PeopleFactField key={field.id} field={field} reading={reading} />
       ))}
-    </dl>
+    </div>
   );
 }
 
 /** Presentation of one current composition read; no Subject, target or document fetches. */
 export function PersonReader(reading: Reading) {
+  const groups = personGroups(reading.release, reading.public, reading.locale);
+  const fields = [
+    ...personScalarFields(reading.release, reading.public),
+    ...groups.flatMap((group) => group.fields.map((field) => field.id)),
+  ];
+  return (
+    <PeopleFacts reading={reading} fields={fields}>
+      <PersonFacts {...reading} />
+    </PeopleFacts>
+  );
+}
+
+function PersonFacts(reading: Reading) {
   const { public: read, release, locale } = reading;
   const o = options(locale);
   const groups = personGroups(release, read, locale);
@@ -195,7 +196,7 @@ export function PersonReader(reading: Reading) {
       <SuppliedNames reading={reading} />
       <ProfileFields
         reading={reading}
-        fields={profileFields(release, read, ['schema:alternateName', 'wdt:P1559'], locale).filter(
+        fields={profileFields(release, read, personScalarFields(release, read), locale).filter(
           (field) => field.facts.length > 0,
         )}
       />
@@ -207,31 +208,7 @@ export function PersonReader(reading: Reading) {
           <h3 className="text-xl font-semibold">{title(group.kind, locale)}</h3>
           {!group.fields.length && <p role="status">{m.people_biography_unsupported({}, o)}</p>}
           {group.fields.map((field) => (
-            <section key={field.id} className="min-w-0 space-y-3">
-              {group.fields.length > 1 && (
-                <h4 className="font-medium" lang={field.label.lang ?? undefined}>
-                  {field.label.text || title(group.kind, locale)}
-                </h4>
-              )}
-              {!field.presentable ? (
-                <p role="status">{m.candidate_value_unavailable({}, o)}</p>
-              ) : (
-                !field.facts.length && <p role="status">{m.people_biography_absent({}, o)}</p>
-              )}
-              <ul className="space-y-4">
-                {field.presentable &&
-                  field.facts.map((statement) => (
-                    <li key={statement.id} className="min-w-0">
-                      <ProfileFact statement={statement} reading={reading} />
-                    </li>
-                  ))}
-              </ul>
-              {field.more && (
-                <Link className={control} href={`${href}/details`}>
-                  {m.person_reader_more({}, o)}
-                </Link>
-              )}
-            </section>
+            <PeopleFactField key={field.id} field={field} reading={reading} />
           ))}
           {group.more && (
             <Link className={control} href={`${href}/details`}>

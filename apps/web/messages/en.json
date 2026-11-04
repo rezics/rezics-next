@@ -8932,5 +8932,22 @@
   "music_location_previous": "Previous accepted address",
   "music_location_start": "Start of selected relationship",
   "music_location_boundary": "This is the earliest retained address. Use Start to return to the beginning of this relationship.",
-  "music_location_time_evidence": "Original time evidence"
+  "music_location_time_evidence": "Original time evidence",
+  "people_facts_scope": "These are supplied current facts in this profile reading, not a complete catalogue, candidate set or source inventory.",
+  "people_facts_filter": "Filter displayed text in this local window",
+  "people_facts_reset": "Reset window filter",
+  "people_facts_empty": "No displayed facts in this window match. Reset the filter to return to its rows.",
+  "people_facts_window": "Local fact window",
+  "people_facts_previous": "Previous facts",
+  "people_facts_next": "Next facts",
+  "people_facts_collapse": "Collapse facts",
+  "people_facts_browse": "Browse supplied facts",
+  "people_facts_overflow": "Only the first local window is shown. Browse supplied facts to continue.",
+  "people_facts_unavailable": "The local fact visit is unavailable for this reading. Independent profile facts remain readable.",
+  "people_facts_return": "Return to this profile fact",
+  "people_facts_changed": "This fact changed or is no longer selected. Return to the field and refresh the profile.",
+  "people_facts_route_return": "Correction and Sources use their existing destinations. Detailed local position cannot be restored after leaving this page; use this profile fact section to return.",
+  "people_facts_unsupported": "This field has an unsupported datatype.",
+  "people_facts_suppressed": "This field is suppressed in the current Context.",
+  "people_facts_unresolved": "This field is unresolved in the current Context."
 }

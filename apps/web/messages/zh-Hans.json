@@ -8840,5 +8840,22 @@
   "music_location_previous": "上一个已接受地址",
   "music_location_start": "所选关系的起点",
   "music_location_boundary": "这是保留的最早地址。使用起点按钮可从头读取此关系。",
-  "music_location_time_evidence": "原始时间证据"
+  "music_location_time_evidence": "原始时间证据",
+  "people_facts_scope": "这些是本次资料读取提供的当前事实，不代表完整的目录、候选集或来源清单。",
+  "people_facts_filter": "筛选此本地窗口中显示的文字",
+  "people_facts_reset": "重置窗口筛选",
+  "people_facts_empty": "此窗口没有匹配的已显示事实。重置筛选可返回原来的行。",
+  "people_facts_window": "本地事实窗口",
+  "people_facts_previous": "上一组事实",
+  "people_facts_next": "下一组事实",
+  "people_facts_collapse": "收起事实",
+  "people_facts_browse": "浏览提供的事实",
+  "people_facts_overflow": "当前仅显示第一个本地窗口。浏览提供的事实以继续。",
+  "people_facts_unavailable": "本次读取无法提供本地事实详情。独立的资料事实仍可阅读。",
+  "people_facts_return": "返回此资料事实",
+  "people_facts_changed": "此事实已更改或不再被选中。返回字段并刷新资料。",
+  "people_facts_route_return": "更正与来源使用现有页面。离开此页面后无法恢复详细位置；请返回此资料的事实字段。",
+  "people_facts_unsupported": "此字段的数据类型不受支持。",
+  "people_facts_suppressed": "此字段在当前语境中被抑制。",
+  "people_facts_unresolved": "此字段在当前语境中尚未解决。"
 }
