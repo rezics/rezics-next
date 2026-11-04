@@ -19,6 +19,9 @@ import {
   withReactionCountsAndCoverage,
   withViewerReactions,
   readBoard,
+  contentSourceWitness,
+  readCitationDisclosure,
+  threadPostSelectionWitness,
 } from './reads.ts';
 import type { ContentReadDependencies, PostEntry, ThreadView, ViewerReactionKind } from './reads.ts';
 import type { AnchoredPosition } from './model.ts';
@@ -364,6 +367,11 @@ function entryWitness(entry: PostEntry) {
     hasRevision ? entry.revisionId : null,
     'securityRevision' in entry ? entry.securityRevision : null,
     'visibility' in entry ? entry.visibility : null,
+    'authorId' in entry ? entry.authorId : null,
+    'boardId' in entry ? entry.boardId : null,
+    'voteCitation' in entry ? entry.voteCitation : null,
+    readCitationDisclosure(entry),
+    contentSourceWitness(entry),
   ];
 }
 
@@ -645,9 +653,9 @@ export function normalizeSelectedReadingCardReferences(
       continue;
     }
     byKey.set(key, reference);
-    normalized.push(reference);
+    normalized.push(Object.freeze({ ...reference }));
   }
-  return normalized;
+  return Object.freeze(normalized);
 }
 
 /** A missing native total row is unknown coverage, not an exact zero. */
@@ -1529,6 +1537,7 @@ export async function readContentReadingPage(
   if (
     threadWitness(thread) !== threadWitness(finalThread.value) ||
     boardWitness(firstBoard.value) !== boardWitness(finalBoard.value) ||
+    threadPostSelectionWitness(selected.page) !== threadPostSelectionWitness(finalSelection.page) ||
     replyWitness(replies, selected.page.nextCursor !== null) !==
       replyWitness(finalSelection.replies, finalSelection.page.nextCursor !== null)
   )

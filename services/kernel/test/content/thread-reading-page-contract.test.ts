@@ -127,7 +127,10 @@ test('selected post rechecks accept repeated observations and reject changed sou
   const selected = item(id('10'), openingId);
   const witness = readingPageEntryWitness(selected);
   expect(readingPageEntryWitness(structuredClone(selected))).toBe(witness);
-  for (const change of [{ revisionId: id('6') }, { securityRevision: '2' }, { parentId: id('7') }])
+  for (const change of [
+    { revisionId: id('6') }, { securityRevision: '2' }, { parentId: id('7') },
+    { authorId: id('8') }, { boardId: id('9') },
+  ])
     expect(readingPageEntryWitness({ ...selected, ...change })).not.toBe(witness);
 });
 
@@ -151,6 +154,9 @@ test('selected reading-card references keep exact keys and close raw and reactio
     sourceRevisionId: id('403'),
   };
   expect(normalizeSelectedReadingCardReferences([postReference])).toEqual([postReference]);
+  const retained = normalizeSelectedReadingCardReferences([postReference]);
+  postReference.sourceRevisionId = id('404');
+  expect(retained[0]!.sourceRevisionId).toBe(id('403'));
   expect(() => normalizeSelectedReadingCardReferences([...selected, selected[0]!])).toThrow();
   expect(() =>
     normalizeSelectedReadingCardReferences([selected[0]!, { ...selected[0]!, placeId: id('301') }]),

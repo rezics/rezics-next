@@ -3954,7 +3954,7 @@ the actual mounted operation and metadata projection and reserves 16 KiB for rea
 allowance. A serialized author summary must fit 32 KiB. Native content can scan at most 200 ordered candidates per
 `listThreadPosts` call; the reading
 composition calls it once for the response and once for its final check. Each exact candidate disclosure retains the
-existing maximum of 33 post ancestors, so sparse pages can examine up to 400 candidates and 13,200 candidate ancestry
+existing maximum of 33 post ancestors in each internal observation, so sparse pages can examine up to 400 candidates and 26,400 candidate ancestry
 rows across both calls, in addition to the opening/root and board checks. Reaction counts use one target seek per
 target in each represented content partition (at most seven kind rows); own reactions use one viewer-home batch.
 Accounts, handle claims, avatars, verified Subjects, Access preparation, mounted bindings, watch state, and slow-mode
@@ -3967,6 +3967,11 @@ and slow-mode observations are independently rechecked and become unavailable if
 is explicit. Content, Accounts, Access, reaction totals, watch, and slow-mode observations do not share a fabricated
 cross-home transaction. A continuation certifies only its newly selected page, not entries returned on earlier pages;
 commands remain authoritative if a source changes after this response.
+
+Decision: final confirmation retains server-only native chain and raw candidate/frontier witnesses; reply cursors
+bind the account, client and authentication epoch, and selected card keys are copied before asynchronous hydration.
+The witnesses include unreadable candidates, selected ancestor identities, heads and security revisions, and citation
+disclosure. They add no public fields, source selection rounds or foreign preparation inside a source checkout.
 
 Decision: The envelope includes the existing board slow-mode summary as advisory context; only the mounted parent-thread
 action represents reply eligibility, and the command remains final for admission.
@@ -4002,19 +4007,19 @@ Decision: the thread reading receiver and its public response alias use the emit
 
 ### Cost: selected current-thread cards
 
-- Let R<=20 be raw selected references, H<=R distinct parent threads, P<=R selected posts, B<=H represented places,
+- Touches: let R<=20 be raw selected references, H<=R distinct parent threads, P<=R selected posts, B<=H represented places,
   A<=3R distinct authors and X<=3R live reaction targets. A thread group reads its opening once; a selected post
   reads its exact current ancestry. One initial and one final pass use the existing `readThread` or
   `readSubjectThread`, `readPost`, and `readBoard` readers. Each exact source reader retains its own initial/final
   native disclosure and Access work. A post disclosure can inspect up to 33 ancestry rows, so the two external
   passes can inspect up to 132 ancestry rows per selected post, or 2640 at P=20, before the reader's other parent,
   place, Realm, membership and Access work. No page candidates are scanned and no earlier card is repeated.
-- Initial source processing is sequential and retains only exact source witnesses, original IDs, revisions,
+  Initial source processing is sequential and retains only exact source witnesses, original IDs, revisions,
   security revisions, anchors and small hydration targets after each native reader returns. At most H opening bodies
   and P selected-post bodies are read per external pass, each admitted by `MAX_DOCUMENT_BYTES`; each exact reader
   also performs its own native recheck, so body reads and parsed-document allocations must include both internal
   observations. The final pass repeats those bounds. The output does not copy source bodies or protected history.
-- Accounts receives one deduplicated batch of A<=3R authors and retains its account, handle-claim, avatar, optional
+  Accounts receives one deduplicated batch of A<=3R authors and retains its account, handle-claim, avatar, optional
   Subject and final-account checks across their native homes. Reactions cover X<=3R thread/opening/post targets:
   own slots use one viewer-home batch and counts use one target seek per represented content partition, at most 60
   partitions and seven kind rows per target. Missing target coverage is unknown, not zero. Mounted actions receive
@@ -4022,10 +4027,39 @@ Decision: the thread reading receiver and its public response alias use the emit
   the mounted bindings before hydration. Authenticated watch uses at most two existing point reads per selected
   parent thread, each retaining its native thread and account authority work. Optional identity, action or watch
   failures return explicit unavailable state and no stale positive controls.
-- The JSON envelope is preflighted against the mounted catalogue before source reads and bounded to 8 MiB after
+- Bound: the JSON envelope is preflighted against the mounted catalogue before source reads and bounded to 8 MiB after
   hydration. It reserves 32 KiB per author and 16 KiB per reaction target; source bodies and every nested native
   query remain charged even though they are not serialized in this projection. Cross-home observations are
   independent. A later command remains the final authority check.
+- Growth check: the retained native acceptance independently grows unrelated rows, selected retained history,
+  author/media, identity/source/authority and relevant membership/ban/repair histories at 256/1024/4096 while fixing
+  candidate/output limits, represented homes, selected/context keys and admitted bytes. Include populated, empty,
+  withheld, stale and same-input retry paths, cold work, every participating pool and actual registered runner phase,
+  SQL/control, preparation/evaluation, physically examined rows and raw/materialized/retained/serialized bytes and
+  body copies, including discarded work. Use shared catalog classification, async-context background attribution
+  and the established invisible-MVCC exclusion. No executed growth measurement is claimed here.
+
+### Cost: mounted thread reading page
+
+- Touches: the two outer `readThread` calls and the initial/final root in each of the two `listThreadPosts` calls
+  invoke six native thread disclosures before nested watch, erasure, slow-mode and action work. Each candidate
+  disclosure reads its selected ancestry initially and again for native confirmation; 400 candidates at depth 33
+  therefore admit 26,400 ancestry-row visits before thread, revision, Board/Realm and Access work. Each live
+  candidate also loads its revision body after authorization. The six root disclosures load six opening bodies;
+  the two account-only outer erasure-admission confirmations add two more. Count additional native source reads
+  inside Accounts, Semantic/citations, watch, slow-mode, actions and reactions separately, across their own homes.
+- Bound: preserve both original rounds of at most 200 raw candidates, one 21-row initial output interval or 20-row
+  continuation interval per round, at most 21 authors and 22 action/reaction targets, the existing document/identity
+  and response byte caps, and the original signed cursor. Candidate/frontier witnesses retain at most 200 ordered
+  time/ID keys per round. Native source witnesses retain metadata for the admitted ancestry, never another body
+  copy. A changed raw interval or disclosed source fails for retry even if its visible output is unchanged.
+  These are source-derived cardinalities, not ceilings for total examined work or measured physical rows.
+- Growth check: `thread-reading-page-native.test.ts` supplies mounted persona, exact revision/cursor, withheld and
+  erased reply, selected-ancestor and invisible-candidate interleavings. It does not establish the independent
+  256/1024/4096 physical-prefix journey. That acceptance must derive the entire nested caller cost before selecting
+  ceilings and capture all dimensions and paths listed for selected cards above, including retained source history,
+  unavailable dependencies and source changes during final confirmation. Native/rendered and growth execution
+  remains controller work; source, emitted declarations and installed typing do not establish those outcomes.
 
 ## Home and Subject conversation activity
 

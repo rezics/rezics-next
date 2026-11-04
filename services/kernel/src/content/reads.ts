@@ -216,6 +216,18 @@ type Row = {
 type Chain = { thread: Row; posts: Row[]; revision: Row | null };
 type Key = { at: string; id: string };
 
+// Server-only observations: never add ancestry or raw candidate keys to a public DTO.
+const contentSourceWitnesses = new WeakMap<object, string>();
+const threadPostSelectionWitnesses = new WeakMap<object, string>();
+
+export function contentSourceWitness(value: PostEntry | ThreadView): string | undefined {
+  return contentSourceWitnesses.get(value);
+}
+
+export function threadPostSelectionWitness(page: Page<PostEntry>): string | undefined {
+  return threadPostSelectionWitnesses.get(page);
+}
+
 export class ContentNotFoundError extends Error {
   constructor() {
     super('Content not found');
@@ -1506,6 +1518,11 @@ async function disclose(
       return final;
     }),
   );
+  if (disclosed.value && !('firstPostId' in disclosed.value)) {
+    const witness = fingerprint(initial)!;
+    contentSourceWitnesses.set(disclosed.value, witness);
+    if ('firstPost' in disclosed.value) contentSourceWitnesses.set(disclosed.value.firstPost, witness);
+  }
   return disclosed;
 }
 
@@ -2065,6 +2082,8 @@ async function list(
       threadId,
       postId: null,
       viewer: context.actor.kind === 'account' ? context.actor.accountId : null,
+      client: context.actor.kind === 'account' ? context.actor.clientId : null,
+      authnEpoch: context.actor.kind === 'account' ? context.actor.authnEpoch : null,
     },
   };
   let after: Key | null = null;
@@ -2081,6 +2100,7 @@ async function list(
     after = { at: decoded.after[0], id: decoded.after[1] };
   }
   const entries: PostEntry[] = [];
+  const selectedKeys: Key[] = [];
   let scanned = 0;
   let more = false;
   while (scanned < 200 && entries.length < limit) {
@@ -2092,6 +2112,7 @@ async function list(
     for (const key of selected.value.candidates) {
       after = key;
       scanned++;
+      selectedKeys.push(key);
       const result = await withRealmDisclosureScope(
         async () =>
           (await disclose(
@@ -2114,7 +2135,7 @@ async function list(
   // Recheck the root after hydration; concealed and missing roots share absence.
   const final = await readThread(dependencies, threadId, context);
   if (!final.value) throw new ContentNotFoundError();
-  return {
+  const page: Page<PostEntry> = {
     entries,
     anchor: final.anchor,
     nextCursor:
@@ -2127,6 +2148,11 @@ async function list(
           )
         : null,
   };
+  threadPostSelectionWitnesses.set(
+    page,
+    JSON.stringify([root.anchor.epoch, final.anchor.epoch, selectedKeys, after, more]),
+  );
+  return page;
 }
 
 export async function listThreadPosts(
