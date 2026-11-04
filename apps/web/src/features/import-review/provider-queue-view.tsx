@@ -446,8 +446,10 @@ function ProviderQueueResults({
               ).text || m.candidate_field(),
             related: { ...related, ...current?.related },
             reading,
-            operations: state.page.actions?.state === 'available' && state.page.actions.context === scope.context
-              ? state.page.actions.operations : [],
+            operations:
+              state.page.actions?.state === 'available' && state.page.actions.context === scope.context
+                ? state.page.actions.operations
+                : [],
           };
         }),
         ...(state.session ? { session: state.session } : {}),
@@ -632,14 +634,18 @@ function ProviderQueueResults({
         </>
       )}
       {page.state === 'ready' && page.page.actions?.state !== 'available' && (
-        <p role="status" className="text-sm text-muted-foreground">{m.prq_actions_unavailable()}</p>
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.prq_actions_unavailable()}
+        </p>
       )}
       {page.state === 'ready' && page.page.actions?.state === 'available' && (
         <p role="status" className="text-sm text-muted-foreground">
-          {m.prq_actions_current()} {' '}
+          {m.prq_actions_current()}{' '}
           {page.page.actions.operations.includes('subject.accept_candidate') && m.candidate_accept()}{' '}
           {page.page.actions.operations.includes('subject.reject_candidate') && m.candidate_reject()}{' '}
-          {page.page.actions.operations.includes('subject.adopt') ? m.prq_selection_separate() : m.prq_selection_not_allowed()}
+          {page.page.actions.operations.includes('subject.adopt')
+            ? m.prq_selection_separate()
+            : m.prq_selection_not_allowed()}
         </p>
       )}
       <ProviderReviewActions

@@ -87,8 +87,10 @@ export function providerRowIsSelectable(row: ProviderDecisionRow, scope: Provide
 }
 
 export function providerRowAllows(row: ProviderDecisionRow, operation: ProviderDecision['operation']): boolean {
-  return (row.operations === undefined || row.operations.includes(`subject.${operation}_candidate`)) &&
-    (operation === 'accept' ? row.candidate.decision !== 'accepted' : row.candidate.decision !== 'rejected');
+  return (
+    (row.operations === undefined || row.operations.includes(`subject.${operation}_candidate`)) &&
+    (operation === 'accept' ? row.candidate.decision !== 'accepted' : row.candidate.decision !== 'rejected')
+  );
 }
 
 export function providerRowIsConcealed(row: ProviderDecisionRow): boolean {
@@ -108,7 +110,8 @@ export function prepareProviderBatch(
   if (!wanted.size || wanted.size > providerSelectionLimit) return null;
   const rows = new Map(visible.map((row) => [providerRowKey(row), row]));
   const chosen = [...wanted].map((id) => rows.get(id));
-  if (chosen.some((row) => !row || !providerRowIsSelectable(row, scope) || !providerRowAllows(row, operation))) return null;
+  if (chosen.some((row) => !row || !providerRowIsSelectable(row, scope) || !providerRowAllows(row, operation)))
+    return null;
   return {
     scope: { ...scope },
     attempts: chosen.map((row) => ({
@@ -191,7 +194,8 @@ export async function decideProviderCandidate(
     if (
       acceptance.context !== command.context ||
       acceptance.candidate !== command.candidate ||
-      !Number.isSafeInteger(acceptance.head) || acceptance.head < 1 ||
+      !Number.isSafeInteger(acceptance.head) ||
+      acceptance.head < 1 ||
       acceptance.decision !== command.operation
     )
       return providerFailure(503);

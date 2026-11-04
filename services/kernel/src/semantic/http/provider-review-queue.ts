@@ -1,7 +1,11 @@
 import { withHeaders } from '@elysia/openapi';
 import { SourceSchema } from '@rezics/definitions/bulk';
 import { t } from 'elysia';
-import { readViewerActions, type ViewerActionResources, type ViewerActionBindings } from '../../access/viewer-actions.ts';
+import {
+  readViewerActions,
+  type ViewerActionResources,
+  type ViewerActionBindings,
+} from '../../access/viewer-actions.ts';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { resourceAuthorization } from '../../access/resource-authorization.ts';
@@ -116,7 +120,15 @@ export function providerReviewQueueRoutes(
                 next: t.Union([t.String(), t.Null()]),
                 freshness: native.freshness,
                 actions: t.Union([
-                  t.Object({ state: t.Literal('available'), viewer: t.Object({ kind: t.Literal('account'), id: t.String() }), context: t.String(), operations: t.Array(t.String(), { maxItems: 3 }) }, { additionalProperties: false }),
+                  t.Object(
+                    {
+                      state: t.Literal('available'),
+                      viewer: t.Object({ kind: t.Literal('account'), id: t.String() }),
+                      context: t.String(),
+                      operations: t.Array(t.String(), { maxItems: 3 }),
+                    },
+                    { additionalProperties: false },
+                  ),
                   t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
                 ]),
               },
@@ -189,21 +201,35 @@ export function providerReviewQueueRoutes(
           }
           session.record(result.component);
           // One native Context anchor for the entire bounded page. Row state is checked separately.
-          let actions: { state: 'available'; viewer: { kind: 'account'; id: string }; context: string; operations: string[] } | { state: 'unavailable' } = { state: 'unavailable' };
+          let actions:
+            | { state: 'available'; viewer: { kind: 'account'; id: string }; context: string; operations: string[] }
+            | { state: 'unavailable' } = { state: 'unavailable' };
           try {
             const catalogue = deps.viewerActions();
             const operations = new Set(['subject.accept_candidate', 'subject.reject_candidate', 'subject.adopt']);
-            const bindings = new Map([...catalogue.bindings].map(([type, entries]) => [type, entries.filter((entry) => operations.has(entry.operationId))]));
+            const bindings = new Map(
+              [...catalogue.bindings].map(([type, entries]) => [
+                type,
+                entries.filter((entry) => operations.has(entry.operationId)),
+              ]),
+            );
             const observed = await readViewerActions(
               { pool: deps.pool, access: deps.access(), resources: catalogue.resources, bindings, clock: deps.clock },
-              actor, [{ type: 'semantic.context', id: context }], job.deadline,
+              actor,
+              [{ type: 'semantic.context', id: context }],
+              job.deadline,
             );
             const anchor = observed.resources[0];
-            if (anchor && 'viewerActions' in anchor) actions = {
-              state: 'available', viewer: { kind: 'account', id: actor.accountId }, context,
-              operations: anchor.viewerActions.flatMap((entry) => entry.operations),
-            };
-          } catch { /* Reading remains useful; missing action evidence grants nothing. */ }
+            if (anchor && 'viewerActions' in anchor)
+              actions = {
+                state: 'available',
+                viewer: { kind: 'account', id: actor.accountId },
+                context,
+                operations: anchor.viewerActions.flatMap((entry) => entry.operations),
+              };
+          } catch {
+            /* Reading remains useful; missing action evidence grants nothing. */
+          }
           // Revoked list admission cannot be hidden by an unavailable action component.
           await authorizeContext();
           return { candidates: result.candidates, next: result.next, freshness: result.freshness, actions };

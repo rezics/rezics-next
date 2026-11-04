@@ -194,9 +194,13 @@ test('unavailable action hydration preserves comparisons but grants no fresh que
   if (fixture.initial.state !== 'ready') throw new Error('Expected page');
   const initial = structuredClone(fixture.initial);
   initial.page.actions = { state: 'unavailable' };
-  const html = renderToStaticMarkup(createElement(ProviderQueue, {
-    transport: fixture.transport, initial, initialScope: fixture.scope,
-  }));
+  const html = renderToStaticMarkup(
+    createElement(ProviderQueue, {
+      transport: fixture.transport,
+      initial,
+      initialScope: fixture.scope,
+    }),
+  );
   expect(html).toContain(m.prq_actions_unavailable());
   expect(html).toContain(fixture.native.publicRead.subject.labels.en!);
   expect(html).toMatch(/role="checkbox"[^>]*disabled/);

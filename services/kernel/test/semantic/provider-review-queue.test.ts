@@ -76,7 +76,11 @@ test('explicit derived preparation builds a real native page; GET does no bootst
   await client.retrieveWorkflow(work!.workflowID).getResult({ pollingIntervalMs: 10 });
   const page = status(await f.call('GET', endpoint), 200);
   expect(Object.keys(page).sort()).toEqual(['actions', 'candidates', 'freshness', 'next']);
-  expect(page.actions).toMatchObject({ state: 'available', context: GLOBAL_CONTEXT, operations: expect.arrayContaining(['subject.accept_candidate', 'subject.reject_candidate']) });
+  expect(page.actions).toMatchObject({
+    state: 'available',
+    context: GLOBAL_CONTEXT,
+    operations: expect.arrayContaining(['subject.accept_candidate', 'subject.reject_candidate']),
+  });
   expect(page.candidates).toHaveLength(3);
   expect(page.candidates[0].candidate).toMatchObject({
     source: { source: provider },
@@ -88,7 +92,11 @@ test('explicit derived preparation builds a real native page; GET does no bootst
   await f.real.grant(global, 'ordinary', 'context:accept');
   const ordinary = status(await f.call('GET', endpoint, undefined, 'ordinary'), 200);
   expect(ordinary.candidates).toHaveLength(3);
-  expect(ordinary.actions).toMatchObject({ state: 'available', context: GLOBAL_CONTEXT, operations: ['subject.accept_candidate', 'subject.reject_candidate'] });
+  expect(ordinary.actions).toMatchObject({
+    state: 'available',
+    context: GLOBAL_CONTEXT,
+    operations: ['subject.accept_candidate', 'subject.reject_candidate'],
+  });
   status(
     await f.call(
       'POST',

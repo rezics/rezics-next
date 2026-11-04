@@ -58,7 +58,12 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
     Object.entries(definitions.release.properties).map(([id, value]) => [id, value.labels]),
   );
   const page = {
-    actions: { state: 'available' as const, viewer: { kind: 'account' as const, id: native.id }, context: scope.context, operations: ['subject.accept_candidate', 'subject.reject_candidate'] },
+    actions: {
+      state: 'available' as const,
+      viewer: { kind: 'account' as const, id: native.id },
+      context: scope.context,
+      operations: ['subject.accept_candidate', 'subject.reject_candidate'],
+    },
     candidates: suggestions.map((candidate) => ({ subject: native.id, candidate, adoption: null })),
     next: null,
     freshness: { consistency: 'eventual' as const, target_seconds: 10 as const, caught_up: true },
