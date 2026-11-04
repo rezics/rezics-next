@@ -12,7 +12,17 @@ type Board = CommunityBoardPage['board'];
 type BoardAdvice = CommunityBoardPage['actions']['createThread'];
 
 /** The mounted page's current advice controls the entry; the composer command remains authoritative. */
-export function BoardStartThread({ board, advice, returnTo }: { board: Board; advice: BoardAdvice; returnTo: string }) {
+export function BoardStartThread({
+  board,
+  advice,
+  returnTo,
+  preparedReturnTo,
+}: {
+  board: Board;
+  advice: BoardAdvice;
+  returnTo: string;
+  preparedReturnTo?: string;
+}) {
   const { state: session } = useSession();
   const available =
     board.availability === 'available' && board.visibility !== 'taken_down' && board.visibility !== 'draft';
@@ -30,7 +40,12 @@ export function BoardStartThread({ board, advice, returnTo }: { board: Board; ad
     );
   if (advice !== 'allowed') return null;
   return (
-    <Link to="/boards/$id/new" params={{ id: board.id }} className={buttonVariants({ size: 'lg' })}>
+    <Link
+      to="/boards/$id/new"
+      params={{ id: board.id }}
+      search={preparedReturnTo ? { returnTo: preparedReturnTo } : {}}
+      className={buttonVariants({ size: 'lg' })}
+    >
       <MessageSquarePlusIcon aria-hidden="true" className="size-4" />
       {m.board_start_thread()}
     </Link>

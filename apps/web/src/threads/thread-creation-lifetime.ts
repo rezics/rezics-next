@@ -12,18 +12,23 @@ import {
 } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { sessionQuery } from '../session/query';
+import { subjectCommunityVisitReturn } from '../features/pages/subject-visit-navigation';
 import type { AuthoringLocation } from './authoring-departure';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** The route and its departure guard admit exactly the same preset. Titles are display hints. */
-export function threadCreationPreset(search: Record<string, unknown>): { subject?: string; subjectTitle?: string } {
+export function threadCreationPreset(
+  search: Record<string, unknown>,
+  locale: string = getLocale(),
+): { subject?: string; subjectTitle?: string; returnTo?: string } {
   const subject = typeof search.subject === 'string' && uuid.test(search.subject) ? search.subject : undefined;
   const subjectTitle =
     subject && typeof search.subjectTitle === 'string' && search.subjectTitle.length <= 512
       ? search.subjectTitle
       : undefined;
-  return { ...(subject ? { subject } : {}), ...(subjectTitle ? { subjectTitle } : {}) };
+  const returnTo = subjectCommunityVisitReturn(search.returnTo, locale);
+  return { ...(subject ? { subject } : {}), ...(subjectTitle ? { subjectTitle } : {}), ...(returnTo ? { returnTo } : {}) };
 }
 
 /** Include the preset intent while leaving unrelated queries and anchors alone. */
