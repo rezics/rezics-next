@@ -137,9 +137,7 @@ function AlbumProfileCreateLive({
   const focusAddedLanguage = useSpecialistLanguageAddFocus();
   const currentRelease = useRef(release);
   currentRelease.current = release;
-  const [terms, setTerms] = useState<TermRow[]>([
-    { id: 0, language: locale, label: '', description: '', aliases: '' },
-  ]);
+  const [terms, setTerms] = useState<TermRow[]>([{ id: 0, language: locale, label: '', description: '', aliases: '' }]);
   const currentTerms = useRef(terms);
   const draftRevision = useRef(0);
   const replaceTerms = (next: TermRow[] | ((current: TermRow[]) => TermRow[])) => {
@@ -238,7 +236,10 @@ function AlbumProfileCreateLive({
     reviewReturnFocus.current = false;
     const first = document.getElementById(`${termsId}-label-0`);
     if (first instanceof HTMLElement && !first.matches(':disabled')) first.focus();
-    else formRef.current?.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled), select:not(:disabled)')?.focus();
+    else
+      formRef.current
+        ?.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled), select:not(:disabled)')
+        ?.focus();
   }, [review.status, termsId, metadataReady]);
 
   useLayoutEffect(() => {
@@ -396,8 +397,7 @@ function AlbumProfileCreateLive({
           latestRows.map((row) => row.statement),
         );
         const latestReview = reviewState.current;
-        const currentReview =
-          latestReview.status === 'current' && latestReview.fingerprint === latestFingerprint;
+        const currentReview = latestReview.status === 'current' && latestReview.fingerprint === latestFingerprint;
         const newerReview = currentReview && reviewRevision.current !== reviewed.reviewRevision;
         const stillCurrent =
           latestInputs.revision === reviewed.inputRevision &&
@@ -596,7 +596,10 @@ function AlbumProfileCreateLive({
               onClick={(event) => {
                 if (!termEditingAdmitted.current() || currentRelease.current !== release) return;
                 const id = nextTermId.current++;
-                replaceTerms((previous) => [...previous, { id, language: '', label: '', description: '', aliases: '' }]);
+                replaceTerms((previous) => [
+                  ...previous,
+                  { id, language: '', label: '', description: '', aliases: '' },
+                ]);
                 focusAddedLanguage(
                   event,
                   `${termsId}-language-${id}`,
@@ -820,10 +823,10 @@ function AlbumProfileCreateLive({
           : admissionPending
             ? m.identity_intake_authority_reading({}, o)
             : pending.current
-            ? m.catalogue_create_retry({}, o)
-            : reviewReady
-              ? m.album_create({}, o)
-              : m.album_create_review({}, o)}
+              ? m.catalogue_create_retry({}, o)
+              : reviewReady
+                ? m.album_create({}, o)
+                : m.album_create_review({}, o)}
       </Button>
     </form>
   );

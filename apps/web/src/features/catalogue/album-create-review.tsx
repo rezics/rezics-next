@@ -109,11 +109,7 @@ export function AlbumCreateReview({
   const staleMessage = useRef<HTMLParagraphElement>(null);
   const wasStale = useRef(false);
   useLayoutEffect(() => {
-    if (
-      stale &&
-      !wasStale.current &&
-      !document.activeElement?.matches('input, textarea, select')
-    )
+    if (stale && !wasStale.current && !document.activeElement?.matches('input, textarea, select'))
       staleMessage.current?.focus();
     wasStale.current = stale;
   }, [stale]);

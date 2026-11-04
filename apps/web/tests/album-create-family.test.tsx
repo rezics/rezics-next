@@ -50,7 +50,7 @@ test('Album creation composes complete terms and initial facts while preserving 
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { AlbumProfile } = await import('../src/features/catalogue/album-profile-view');
   const { AlbumProfileCreate } = await import('../src/features/catalogue/album-profile-create');
-    const { allowedCreateAuthority } = await import('../src/features/catalogue/identity-intake');
+  const { allowedCreateAuthority } = await import('../src/features/catalogue/identity-intake');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { albumFixture, albumId, artistId, roleId, seriesId, partId } =
     await import('../src/kernel/fake/catalogue-album-profile');
@@ -902,7 +902,9 @@ test('Album creation composes complete terms and initial facts while preserving 
         />,
       );
     await renderAdmission(obsoleteTransport);
-    await until(() => !!host.querySelector('form') && host.textContent!.includes(m.identity_intake_authority_allowed()));
+    await until(
+      () => !!host.querySelector('form') && host.textContent!.includes(m.identity_intake_authority_allowed()),
+    );
     await fillTerms(host);
     const contributor = await add(host, 'schema:contributor');
     await chooseTarget(contributor, name(admission, 'schema:contributor'), 'Harbour', /The Harbour Ensemble/);
@@ -945,9 +947,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     metadataCurrent = true;
     await renderAdmission(currentTransport, true, 'admission-current');
     await until(
-      () =>
-        currentEligibilityReads === 1 &&
-        host.textContent!.includes(m.identity_intake_authority_allowed()),
+      () => currentEligibilityReads === 1 && host.textContent!.includes(m.identity_intake_authority_allowed()),
     );
     await click(host, m.album_create_review());
     currentAuthority = { state: 'refused', reason: 'permission' };
@@ -961,9 +961,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     currentAuthority = allowedCreateAuthority;
     await click(host, m.identity_intake_authority_retry());
     await until(
-      () =>
-        currentEligibilityReads === 3 &&
-        host.textContent!.includes(m.identity_intake_authority_allowed()),
+      () => currentEligibilityReads === 3 && host.textContent!.includes(m.identity_intake_authority_allowed()),
     );
     await click(host, m.album_create_review());
     await expect((within(host).getByRole('button', { name: m.album_create() }) as HTMLButtonElement).disabled).toBe(
@@ -1030,7 +1028,9 @@ test('Album creation composes complete terms and initial facts while preserving 
       </CandidateReaderBoundary>
     );
     await show(retirementPage('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', 'AAAAAAAAAAAAAAAAAAAAAA'));
-    await until(() => !!host.querySelector('form') && host.textContent!.includes(m.identity_intake_authority_allowed()));
+    await until(
+      () => !!host.querySelector('form') && host.textContent!.includes(m.identity_intake_authority_allowed()),
+    );
     await replace(textbox(host, m.catalogue_create_label()), 'Retired admission');
     await click(host, m.album_create_review());
     await click(host, m.album_create());
