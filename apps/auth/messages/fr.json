@@ -796,5 +796,12 @@
   "auth_transfer_return_heading": "Activité de transfert antérieure",
   "auth_transfer_return_dismiss": "Fermer le résumé",
   "auth_transfer_return_separate": "L’état actuel est affiché séparément. Fermer ce résumé n’annule, ne relance ni ne résout un transfert.",
-  "auth_transfer_return_review": "Une vérification de transfert non envoyé a été fermée. Sa préparation privée a été supprimée."
+  "auth_transfer_return_review": "Une vérification de transfert non envoyé a été fermée. Sa préparation privée a été supprimée.",
+  "auth_consent_current_request": "Demande d’autorisations actuelle",
+  "auth_consent_history_first": "Résultat antérieur non résolu",
+  "auth_consent_history_latest": "Résultat du dernier examen",
+  "auth_consent_history_unattributed": "Un envoi antérieur reste non résolu. Cette page ne peut pas identifier le compte qui l’a envoyé.",
+  "auth_consent_history_refused": "La dernière approbation a été refusée. Ce refus ne résout aucun résultat antérieur inconnu.",
+  "auth_consent_history_dismiss": "Masquer cette explication",
+  "auth_consent_history_dismiss_explanation": "Masquer cette explication n’annule, ne confirme ni ne révoque une décision du service. Tout envoi non résolu le reste."
 }

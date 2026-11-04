@@ -796,5 +796,12 @@
   "auth_transfer_return_heading": "先前的轉移操作",
   "auth_transfer_return_dismiss": "關閉摘要",
   "auth_transfer_return_separate": "目前狀態分開顯示。關閉此摘要不會取消、重試或確定轉移結果。",
-  "auth_transfer_return_review": "已關閉尚未送出的轉移審核，私密準備內容已清除。"
+  "auth_transfer_return_review": "已關閉尚未送出的轉移審核，私密準備內容已清除。",
+  "auth_consent_current_request": "目前的權限請求",
+  "auth_consent_history_first": "先前尚未確定的結果",
+  "auth_consent_history_latest": "最近一次審核的結果",
+  "auth_consent_history_unattributed": "先前一次提交的結果尚未確定。此頁面無法確定是哪個帳號提交的。",
+  "auth_consent_history_refused": "最近一次授權遭到拒絕。這次拒絕無法確定先前未知的結果。",
+  "auth_consent_history_dismiss": "隱藏此說明",
+  "auth_consent_history_dismiss_explanation": "隱藏此說明不會取消、確認或撤銷服務端的決定。尚未確定的提交結果仍然未知。"
 }

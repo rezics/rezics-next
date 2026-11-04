@@ -133,14 +133,18 @@ test('mounted history survives loss of current review, replacement, new acknowle
     expect(host.textContent).toContain(unknown);
     expect(document.activeElement).toBe(host.querySelector('[aria-label="Review permissions"]'));
     await click('Approve');
+    await click('Hide this explanation');
+    expect(button('Approve').disabled).toBe(true);
+    expect(host.textContent).not.toContain(unknown);
+    expect(dom.sessionStorage.length).toBe(2);
     await answer(200, { client_id: 'reader', account_id: 'replacement', requested: ['openid'], scope: ['openid'] });
     expect(host.textContent).toContain('Access approved.');
-    expect(host.textContent).toContain(unknown);
+    expect(host.textContent).not.toContain(unknown);
     await retry();
     await answer(200, replacement);
     await click('Decline');
     expect(host.textContent).toContain('An earlier approval may still have taken effect.');
-    expect(host.textContent).toContain(unknown);
+    expect(host.textContent).not.toContain(unknown);
     // Current readback and a local refusal never send an additional decision.
     expect(calls.filter((call) => call.init?.method === 'POST')).toHaveLength(2);
     const exit = host.querySelector<HTMLAnchorElement>('a[href="/security"]')!;
@@ -149,7 +153,7 @@ test('mounted history survives loss of current review, replacement, new acknowle
     expect(document.querySelector('[role=alertdialog]')?.textContent).toContain('Leaving does not cancel');
     await click('Stay');
     expect(document.activeElement).toBe(exit);
-    expect(host.textContent).toContain(unknown);
+    expect(host.textContent).not.toContain(unknown);
     const unload = new dom.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);

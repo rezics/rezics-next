@@ -796,5 +796,12 @@
   "auth_transfer_return_heading": "先前的转移操作",
   "auth_transfer_return_dismiss": "关闭摘要",
   "auth_transfer_return_separate": "当前状态单独显示。关闭此摘要不会取消、重试或确定转移结果。",
-  "auth_transfer_return_review": "已关闭尚未发送的转移审核，私密准备内容已清除。"
+  "auth_transfer_return_review": "已关闭尚未发送的转移审核，私密准备内容已清除。",
+  "auth_consent_current_request": "当前权限请求",
+  "auth_consent_history_first": "先前尚未确定的结果",
+  "auth_consent_history_latest": "最近一次审核的结果",
+  "auth_consent_history_unattributed": "先前一次提交的结果尚未确定。此页面无法确定是哪个账号提交的。",
+  "auth_consent_history_refused": "最近一次授权被拒绝。这次拒绝无法确定先前未知的结果。",
+  "auth_consent_history_dismiss": "隐藏此说明",
+  "auth_consent_history_dismiss_explanation": "隐藏此说明不会取消、确认或撤销服务端的决定。尚未确定的提交结果仍然未知。"
 }

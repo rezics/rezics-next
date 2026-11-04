@@ -796,5 +796,12 @@
   "auth_transfer_return_heading": "Earlier transfer activity",
   "auth_transfer_return_dismiss": "Dismiss summary",
   "auth_transfer_return_separate": "Current state is shown separately. Dismissing this summary does not cancel, retry or resolve a transfer.",
-  "auth_transfer_return_review": "An unsent transfer review was closed. Its private preparation was discarded."
+  "auth_transfer_return_review": "An unsent transfer review was closed. Its private preparation was discarded.",
+  "auth_consent_current_request": "Current permission request",
+  "auth_consent_history_first": "Earlier unresolved result",
+  "auth_consent_history_latest": "Latest review outcome",
+  "auth_consent_history_unattributed": "An earlier submission is unresolved. This page cannot identify which account submitted it.",
+  "auth_consent_history_refused": "The latest approval was refused. This refusal does not resolve any earlier unknown result.",
+  "auth_consent_history_dismiss": "Hide this explanation",
+  "auth_consent_history_dismiss_explanation": "Hiding this explanation does not cancel, confirm or undo a native decision. Any unresolved submission remains unresolved."
 }

@@ -796,5 +796,12 @@
   "auth_transfer_return_heading": "Actividad de transferencia anterior",
   "auth_transfer_return_dismiss": "Cerrar resumen",
   "auth_transfer_return_separate": "El estado actual se muestra por separado. Cerrar este resumen no cancela, reintenta ni resuelve una transferencia.",
-  "auth_transfer_return_review": "Se cerró una revisión de transferencia sin enviar. Se descartó su preparación privada."
+  "auth_transfer_return_review": "Se cerró una revisión de transferencia sin enviar. Se descartó su preparación privada.",
+  "auth_consent_current_request": "Solicitud de permisos actual",
+  "auth_consent_history_first": "Resultado anterior sin resolver",
+  "auth_consent_history_latest": "Resultado de la última revisión",
+  "auth_consent_history_unattributed": "Un envío anterior sigue sin resolverse. Esta página no puede identificar qué cuenta lo envió.",
+  "auth_consent_history_refused": "La última aprobación fue rechazada. Este rechazo no resuelve ningún resultado anterior desconocido.",
+  "auth_consent_history_dismiss": "Ocultar esta explicación",
+  "auth_consent_history_dismiss_explanation": "Ocultar esta explicación no cancela, confirma ni deshace una decisión del servicio. Los envíos sin resolver siguen sin resolverse."
 }

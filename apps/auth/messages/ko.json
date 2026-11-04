@@ -796,5 +796,12 @@
   "auth_transfer_return_heading": "이전 이전 작업",
   "auth_transfer_return_dismiss": "요약 닫기",
   "auth_transfer_return_separate": "현재 상태는 별도로 표시됩니다. 요약을 닫아도 이전 작업이 취소되거나 재시도되거나 결과가 확정되지 않습니다.",
-  "auth_transfer_return_review": "전송하지 않은 이전 검토를 닫았습니다. 비공개 준비 내용은 삭제되었습니다."
+  "auth_transfer_return_review": "전송하지 않은 이전 검토를 닫았습니다. 비공개 준비 내용은 삭제되었습니다.",
+  "auth_consent_current_request": "현재 권한 요청",
+  "auth_consent_history_first": "이전의 미해결 결과",
+  "auth_consent_history_latest": "최근 검토 결과",
+  "auth_consent_history_unattributed": "이전 전송 결과가 아직 확인되지 않았습니다. 이 페이지에서는 어느 계정이 전송했는지 확인할 수 없습니다.",
+  "auth_consent_history_refused": "최근 승인이 거부되었습니다. 이 거부로 이전의 알 수 없는 결과가 해결되지는 않습니다.",
+  "auth_consent_history_dismiss": "이 설명 숨기기",
+  "auth_consent_history_dismiss_explanation": "이 설명을 숨겨도 서비스의 결정을 취소하거나 확정하거나 되돌리지 않습니다. 확인되지 않은 전송 결과는 그대로 남습니다."
 }

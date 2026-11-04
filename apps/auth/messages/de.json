@@ -796,5 +796,12 @@
   "auth_transfer_return_heading": "Frühere Übertragungsaktivität",
   "auth_transfer_return_dismiss": "Zusammenfassung schließen",
   "auth_transfer_return_separate": "Der aktuelle Zustand wird separat angezeigt. Das Schließen dieser Zusammenfassung bricht eine Übertragung weder ab noch wiederholt oder klärt es sie.",
-  "auth_transfer_return_review": "Eine noch nicht gesendete Übertragungsprüfung wurde geschlossen. Ihre vertrauliche Vorbereitung wurde verworfen."
+  "auth_transfer_return_review": "Eine noch nicht gesendete Übertragungsprüfung wurde geschlossen. Ihre vertrauliche Vorbereitung wurde verworfen.",
+  "auth_consent_current_request": "Aktuelle Berechtigungsanfrage",
+  "auth_consent_history_first": "Früheres ungeklärtes Ergebnis",
+  "auth_consent_history_latest": "Ergebnis der letzten Prüfung",
+  "auth_consent_history_unattributed": "Eine frühere Übermittlung ist ungeklärt. Diese Seite kann nicht feststellen, welches Konto sie gesendet hat.",
+  "auth_consent_history_refused": "Die letzte Genehmigung wurde abgelehnt. Diese Ablehnung klärt kein früheres unbekanntes Ergebnis.",
+  "auth_consent_history_dismiss": "Diese Erklärung ausblenden",
+  "auth_consent_history_dismiss_explanation": "Das Ausblenden dieser Erklärung storniert, bestätigt oder widerruft keine Entscheidung des Dienstes. Ungeklärte Übermittlungen bleiben ungeklärt."
 }

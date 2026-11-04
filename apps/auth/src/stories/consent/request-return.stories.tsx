@@ -17,9 +17,9 @@ export default {
   decorators: [authLocale],
   parameters: reviewParameters,
 };
-type Mode = 'signed-out' | 'not-found' | 'failed' | 'loading' | 'replacement' | 'acknowledged' | 'pending';
+type Mode = 'signed-out' | 'not-found' | 'failed' | 'loading' | 'replacement' | 'acknowledged' | 'approved' | 'declined' | 'pending';
 // Presentation responses only; the stories make no native execution claim.
-function Visit({ mode }: { mode: Mode }) {
+function Visit({ mode, dark = false }: { mode: Mode; dark?: boolean }) {
   const [ready, setReady] = useState(false);
   const [router] = useState(() => {
     const parent = createRootRoute();
@@ -39,6 +39,7 @@ function Visit({ mode }: { mode: Mode }) {
     const retained = window.sessionStorage.getItem(marker);
     window.sessionStorage.removeItem(marker);
     let reads = 0;
+    let posts = 0;
     let release: ((response: Response) => void) | undefined;
     const review = {
       client_id: 'story-consent',
@@ -52,11 +53,12 @@ function Visit({ mode }: { mode: Mode }) {
     };
     globalThis.fetch = (async (_input, init) => {
       if (init?.method === 'POST') {
+        posts++;
         if (mode === 'pending')
           return new Promise<Response>((resolve) => {
             release = resolve;
           });
-        return mode === 'acknowledged'
+        return mode === 'acknowledged' || (mode === 'approved' && posts > 1)
           ? Response.json({
               client_id: review.client_id,
               account_id: 'story-viewer',
@@ -70,6 +72,7 @@ function Visit({ mode }: { mode: Mode }) {
         return new Promise<Response>((resolve) => {
           release = resolve;
         });
+      if (mode === 'approved' || mode === 'declined') return Response.json(review);
       if (mode === 'replacement')
         return Response.json({
           ...review,
@@ -91,9 +94,9 @@ function Visit({ mode }: { mode: Mode }) {
       else window.sessionStorage.setItem(marker, retained);
     };
   }, [mode]);
-  return <AuthShell>{ready ? <RouterProvider router={router} /> : null}</AuthShell>;
+  return <div className={dark ? 'dark' : ''}><AuthShell>{ready ? <RouterProvider router={router} /> : null}</AuthShell></div>;
 }
-async function reachHistory(canvas: HTMLElement, pending = false) {
+async function reachHistory(canvas: HTMLElement, pending = false, loading = false) {
   (await waitFor(() => button(canvas, m.auth_consent_approve()))).click();
   if (pending) {
     await waitFor(() => canvas.textContent?.includes(m.auth_consent_sending()));
@@ -102,7 +105,7 @@ async function reachHistory(canvas: HTMLElement, pending = false) {
     return;
   }
   (await waitFor(() => button(canvas, m.auth_consent_review_current()))).click();
-  await waitFor(() => !button(canvas, m.auth_consent_approve()) || canvas.textContent?.includes('Current application'));
+  if (!loading) await waitFor(() => !canvas.textContent?.includes(m.auth_consent_loading()));
 }
 export const SignedOutUnknown = {
   render: () => <Visit mode="signed-out" />,
@@ -118,7 +121,7 @@ export const ReadFailedUnknown = {
 };
 export const LoadingUnknown = {
   render: () => <Visit mode="loading" />,
-  play: ({ canvasElement }: { canvasElement: HTMLElement }) => reachHistory(canvasElement),
+  play: ({ canvasElement }: { canvasElement: HTMLElement }) => reachHistory(canvasElement, false, true),
 };
 export const ReplacementWithReductionPending = {
   render: () => <Visit mode="replacement" />,
@@ -132,3 +135,25 @@ export const LeavingPendingDecision = {
   render: () => <Visit mode="pending" />,
   play: ({ canvasElement }: { canvasElement: HTMLElement }) => reachHistory(canvasElement, true),
 };
+
+const phone = { viewport: { ...reviewParameters.viewport, defaultViewport: 'phone390' } };
+const desktop = { viewport: { ...reviewParameters.viewport, defaultViewport: 'desktop1280' } };
+async function latest(canvas: HTMLElement, decision: 'approve' | 'decline') {
+  await reachHistory(canvas);
+  (await waitFor(() => button(canvas, decision === 'approve' ? m.auth_consent_approve() : m.auth_consent_decline()))).click();
+  await waitFor(() => canvas.textContent?.includes(decision === 'approve' ? m.auth_consent_approved() : m.auth_consent_declined_after_submission()));
+}
+export const UnknownThenApprovedPhoneLight = {
+  parameters: phone,
+  render: () => <Visit mode="approved" />,
+  play: ({ canvasElement }: { canvasElement: HTMLElement }) => latest(canvasElement, 'approve'),
+};
+export const UnknownThenApprovedDesktopDark = {
+  ...UnknownThenApprovedPhoneLight, parameters: desktop, render: () => <Visit mode="approved" dark />,
+};
+export const UnknownThenDeclinedPhoneDark = {
+  parameters: phone,
+  render: () => <Visit mode="declined" dark />,
+  play: ({ canvasElement }: { canvasElement: HTMLElement }) => latest(canvasElement, 'decline'),
+};
+export const UnknownCurrentReviewDesktopLight = { ...ReplacementWithReductionPending, parameters: desktop };

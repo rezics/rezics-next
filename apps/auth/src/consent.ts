@@ -1,6 +1,7 @@
 import { privateAuthRead } from './private-auth-read';
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
+import type { ConsentOutcome } from './consent-request-return';
 
 export type Consent = {
   client_id: string;
@@ -37,18 +38,24 @@ const encoder = new TextEncoder();
 
 // A visit owns its reads and writes. Storage contains only an uncertainty marker;
 // the legacy unscoped marker stays unresolved because it cannot be assigned safely.
-export function createConsentDecision(clientId: string, scope: string, publish: (value: ConsentDecision) => void) {
+export function createConsentDecision(
+  clientId: string,
+  scope: string,
+  publish: (value: ConsentDecision) => void,
+  outcome: (value: ConsentOutcome) => void = () => {},
+) {
   const legacyKey = `${markerPrefix}${JSON.stringify([clientId, scope])}`;
   let accountKey: string | undefined;
   let uncertain = false;
   let unattributedUncertain = false;
-  // Mounted presentation only: no identity, grants, payload or storage copy.
+  // Request-local caution survives account replacement; generic presentation is owned by the page.
   let history: ConsentDecision['history'] = 'none';
   try {
     unattributedUncertain = window.sessionStorage.getItem(legacyKey) === 'pending';
   } catch {
     // The mounted visit still protects results when browser storage is unavailable.
   }
+  if (unattributedUncertain) outcome('unattributed');
   let current: ConsentDecision = { state: 'loading', pending: false, uncertain, unattributedUncertain, history };
   let reader: ReturnType<typeof createConsentReview> | undefined;
   let disposed = false;
@@ -76,6 +83,7 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
     } catch {
       uncertain = false;
     }
+    if (uncertain) outcome('unknown');
   }
   function retainHistory() {
     if (current.pending || uncertain) history = 'unknown';
@@ -97,6 +105,7 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
     if (current.pending) {
       uncertain = true;
       remember(accountKey, true);
+      outcome('unknown');
     }
     update({ state: 'loading', pending: false });
   }
@@ -148,12 +157,15 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
         if (priorUncertainty) history = 'unknown';
         else if (history !== 'unknown') history = 'acknowledged';
         update({ state: 'approved', consent, approved: acknowledged, pending: false });
+        outcome('acknowledged');
         return;
       }
       const uncertainAfter = priorUncertainty || (result.ok ? true : result.status >= 500);
       remember(submittedKey, uncertainAfter);
       uncertain = uncertainAfter;
       if (uncertainAfter) history = 'unknown';
+      // Classify this reply separately from older unresolved work.
+      outcome(result.ok || result.status >= 500 ? 'unknown' : 'refused');
       if (!result.ok && result.status === 401) update({ state: 'signed-out', pending: false });
       else if (!result.ok && result.status === 404) update({ state: 'not-found', pending: false });
       else if (!result.ok && result.status === 409 && result.code === 'stale_review') {
@@ -169,10 +181,14 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
         });
     },
     decline() {
-      if (reader && current.state === 'ready' && current.consent?.decisions.decline && !current.pending)
+      if (reader && current.state === 'ready' && current.consent?.decisions.decline && !current.pending) {
         update({ state: 'declined', consent: current.consent, pending: false });
+        outcome('declined');
+      }
     },
     dispose() {
+      // Retirement captures an in-flight result before relinquishing ownership.
+      if (!disposed) suspend();
       disposed = true;
       reader?.dispose();
       reader = undefined;

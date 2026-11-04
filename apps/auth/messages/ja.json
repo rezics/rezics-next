@@ -796,5 +796,12 @@
   "auth_transfer_return_heading": "以前の移管操作",
   "auth_transfer_return_dismiss": "概要を閉じる",
   "auth_transfer_return_separate": "現在の状態は別に表示されます。この概要を閉じても、移管の取り消し、再試行、結果の確定は行われません。",
-  "auth_transfer_return_review": "未送信の移管確認を閉じました。非公開の準備内容は破棄されました。"
+  "auth_transfer_return_review": "未送信の移管確認を閉じました。非公開の準備内容は破棄されました。",
+  "auth_consent_current_request": "現在の権限リクエスト",
+  "auth_consent_history_first": "未解決の以前の結果",
+  "auth_consent_history_latest": "直近の確認結果",
+  "auth_consent_history_unattributed": "以前の送信結果は未解決です。このページでは、どのアカウントが送信したかを特定できません。",
+  "auth_consent_history_refused": "直近の承認は拒否されました。この拒否によって、以前の不明な結果が解決されることはありません。",
+  "auth_consent_history_dismiss": "この説明を非表示にする",
+  "auth_consent_history_dismiss_explanation": "この説明を非表示にしても、サービスの判断を取り消し、確定し、元に戻すことはできません。未解決の送信結果は未解決のままです。"
 }

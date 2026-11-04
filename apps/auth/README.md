@@ -269,18 +269,39 @@ Uncertain writes remain unresolved and are never replayed automatically. Tab sto
 context for the admitted account, client and request. A legacy marker without an account remains visibly unattributed;
 a different account cannot inherit or resolve it from matching consent.
 
-Consent history follows the mounted lifetime, with current private client/scopes/account shown only from fresh
-exact review. Read Retry uses the same client/scope GET and sends no decision. Pending reduction advice remains
+Consent outcome explanations live above the keyed private request during the mounted `/consent` route lifetime.
+They retain only the first unresolved classification and the latest interruption, acknowledgement, refusal or local
+Decline, at most two generic records. Records carry no former account, client, scope, request key, payload, URL or
+timestamp. A new acknowledgement explains only its own result; neither it nor a refusal, Decline or current read can
+settle an earlier unknown. A fresh document makes no historical assertion without evidence; existing exact-request
+uncertainty hints can still require caution when that same request is reopened. History adds no browser persistence.
+
+Each notice can be hidden independently. Hiding is presentation only: it does not cancel, confirm or undo native
+work, clear an uncertainty marker, release a pending send, remove required review or change the request's departure
+warning. An unrelated current read does not reconstruct a hidden notice. Dismissal focuses the remaining latest
+notice, then the earlier notice, then the current review. This focus order keeps keyboard users on retained content.
+
+The current request has its own heading and shows private client/scopes/account only from its exact native review.
+Client, scope and invalid-query replacement synchronously retire the previous reader and callbacks during layout
+cleanup. Pagehide synchronously clears private DOM before freezing; pageshow reobserves without approving. A retired
+approval reply remains unknown even if it later arrives, and cannot clear another attempt's marker. Duplicate client
+or scope parameters admit no speculative read or decision. Read Retry is query-only, excludes overlapping reads and
+provides loading feedback through failed, signed-out and not-found recovery. Pending reduction advice remains
 separate from historical uncertainty. Allow requires current native review and deliberate activation; Decline sends
-nothing. Protected navigation uses Stay/Leave and unload warnings. Focus moves to the generic review summary when
-private controls retire, then to the current read result/error. Fixed exits are exact review sign-in and Security;
+nothing. Protected navigation uses Stay/Leave and unload warnings. Focus moves away from retired private controls to
+the generic notice, current review or current error. Fixed exits are exact review sign-in and Security;
 no client-supplied redirect is accepted.
 
-Whole-call costs: initial review, each explicit read Retry, focus return after blur and cached-document restoration
-perform at most one existing five-second bounded exact consent GET each (zero if the client is missing or the request
-is invalid). Each deliberate Allow performs one existing five-second bounded POST; there is no implicit resend,
-inventory read, marker scan, polling or per-permission call. Repeated activation shares the active read or decision;
-Decline, Stay and historical presentation perform zero requests. Leaving can only retire browser ownership.
+Whole-call costs: initial review, each query replacement, each explicit read Retry, focus return after blur and
+cached-document restoration perform at most one exact consent GET each (zero if the client is missing or the request
+is invalid). `privateAuthRead` owns one five-second deadline through headers, response body and private BFF transport,
+and races retirement cancellation even when a transport ignores abort. The existing native currentness boundary
+revalidates the session, client and request under issuance/consent locks; the consumer adds no authority mechanism.
+Each deliberate Allow performs one existing five-second bounded POST with exact reviewed account/grant/request
+bindings; native currentness and stale-review refusal remain authoritative. There is no implicit resend, inventory
+read, marker scan, polling, prefetch or per-permission call. Repeated activation shares the active read or decision;
+locale changes, history dismissal, Decline and Stay send zero decisions and add no reads. Leaving only retires browser
+ownership; native work can continue. Return and Retry send zero decisions.
 
 Page paths render only for GET and HEAD. Other methods, including `POST /consent` and `POST /signup`, pass the
 original request through to Auth at the issuer origin in production, or through the existing `AUTH_ORIGIN` proxy in

@@ -8,38 +8,28 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { AuthButton as Button } from './button';
-import type { ConsentDecision } from './consent';
+import type { ConsentOutcome } from './consent-request-return';
 import { m } from './paraglide/messages.js';
 
-/** This summary deliberately accepts no account, client, permission or operation identifier. */
-export function ConsentRecoveryView({
-  state,
-  history,
-  uncertain,
-  unattributedUncertain,
-  pending,
-  retry,
-}: Pick<ConsentDecision, 'state' | 'history' | 'uncertain' | 'unattributedUncertain' | 'pending'> & {
-  retry: () => void;
-}) {
-  const unknown = history === 'unknown' || uncertain;
-  const hasHistory = unknown || unattributedUncertain || history === 'acknowledged';
+/** Generic notices never accept former account, client or permission details. */
+export function ConsentRecoveryView({ outcome, dismiss }: { outcome: ConsentOutcome; dismiss: () => void }) {
   return (
     <>
-      {pending ? <p role="status">{m.auth_consent_sending()}</p> : null}
-      {unknown ? <p role="status">{m.auth_consent_history_unknown()}</p> : null}
-      {unattributedUncertain ? <p role="status">{m.auth_consent_unattributed_submission()}</p> : null}
-      {!unknown && history === 'acknowledged' && state !== 'approved' ? (
-        <p role="status">{m.auth_consent_history_acknowledged()}</p>
-      ) : null}
-      {hasHistory ? <p>{m.auth_consent_history_next()}</p> : null}
-      {!pending &&
-      state !== 'loading' &&
-      (hasHistory || state === 'failed' || state === 'not-found' || state === 'signed-out') ? (
-        <Button type="button" variant="outline" onClick={retry}>
-          {m.auth_consent_review_current()}
-        </Button>
-      ) : null}
+      <p role="status">
+        {outcome === 'unknown'
+          ? m.auth_consent_history_unknown()
+          : outcome === 'unattributed'
+            ? m.auth_consent_history_unattributed()
+            : outcome === 'acknowledged'
+              ? m.auth_consent_history_acknowledged()
+              : outcome === 'refused'
+                ? m.auth_consent_history_refused()
+                : m.auth_consent_declined()}
+      </p>
+      <p className="text-sm">{m.auth_consent_history_dismiss_explanation()}</p>
+      <Button type="button" variant="outline" onClick={dismiss}>
+        {m.auth_consent_history_dismiss()}
+      </Button>
     </>
   );
 }
