@@ -3,7 +3,7 @@ import { useRouter } from '@tanstack/react-router';
 import { useWorkspaceAdmission, useReaderAddress } from '../../session/reader';
 import { discoverySearchHref, type SearchLoaderDeps } from '../search-params';
 import {
-  SEARCH_WINDOW_STATE, emptySearchWindows, restoreSearchWindows, admitSearchWindow,
+  SEARCH_WINDOW_STATE, SEARCH_ADDRESS_LIMIT, emptySearchWindows, restoreSearchWindows, admitSearchWindow,
   searchWindowPosition, searchWindowNextAllowed, type SearchWindowHistory,
 } from './history';
 import { searchWindowFocus } from './focus';
@@ -30,6 +30,7 @@ export function useSearchWindow({
   const firstHref = discoverySearchHref(locale, { ...state, cursor: undefined });
   const request = JSON.stringify([firstHref, session, reader.subject, reader.viewer, reader.observation?.id]);
   const cursor = state.cursor ?? null;
+  const historyEnabled = firstHref.length <= SEARCH_ADDRESS_LIMIT;
   const visit = useRef<Visit | undefined>(undefined);
   const pending = useRef<Transition | undefined>(undefined);
   const focus = useRef<ReturnType<typeof searchWindowFocus> | undefined>(undefined);
@@ -57,7 +58,7 @@ export function useSearchWindow({
     }
   }
   const current = visit.current;
-  if (ready && enabled) {
+  if (ready && enabled && historyEnabled) {
     if (checkpoint && current.checkpoint && checkpoint !== current.checkpoint) {
       current.history = emptySearchWindows(firstHref);
       pending.current = undefined;
@@ -76,7 +77,7 @@ export function useSearchWindow({
       setBusy(false);
       focus.current?.settle(request, cursor, navigationRef.current, regionRef.current);
     } else if (!transition) setBusy(false);
-    if (!ready || typeof window === 'undefined') return;
+    if (!ready || !historyEnabled || typeof window === 'undefined') return;
     // Preserve the router's own entry key and scroll state. No navigation or request is dispatched here.
     window.history.replaceState({
       ...window.history.state,
