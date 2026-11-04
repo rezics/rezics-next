@@ -275,25 +275,34 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
       await editor.submit(7);
       await editor.retry();
       await editor.reload();
-      expect(editor.snapshot()).toBe(failed);
-      expect(transport.calls).toHaveLength(1);
+      const readFailed = editor.snapshot();
+      expect(readFailed).toMatchObject({
+        phase: 'failed',
+        currentAdvice: null,
+        readOrigin: 'review',
+        readReason: 'unavailable',
+        readFailure: { status: 422, retryAfter },
+        readRetryAt: now + 30_000,
+        commandRetryAt: now + 30_000,
+      });
+      expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'GET']);
       now += 29_999;
       await editor.edit('thread_watch', false, 7);
       await editor.restore(7);
       await editor.reload();
-      expect(editor.snapshot()).toBe(failed);
+      expect(editor.snapshot()).toBe(readFailed);
       now++;
       await Promise.resolve();
-      expect(transport.calls).toHaveLength(1);
+      expect(transport.calls).toHaveLength(2);
       refused = false;
       await editor.reload();
       await editor.submit(8);
-      expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'GET', 'PATCH']);
-      expect(transport.sessionReads()).toBe(3);
-      expect(transport.calls[2]!.headers.get('idempotency-key')).not.toBe(
+      expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'GET', 'GET', 'PATCH']);
+      expect(transport.sessionReads()).toBe(4);
+      expect(transport.calls[3]!.headers.get('idempotency-key')).not.toBe(
         transport.calls[0]!.headers.get('idempotency-key'),
       );
-      expect(await transport.calls[2]!.json()).toEqual({ expectedVersion: 8, notifications: { reply: false } });
+      expect(await transport.calls[3]!.json()).toEqual({ expectedVersion: 8, notifications: { reply: false } });
       expect(editor.snapshot()).toMatchObject({ phase: 'saved', draft: { ...optional, reply: false } });
     } finally {
       clock.mockRestore();
@@ -307,6 +316,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
   try {
     const receiptNotifications = { ...optional, reply: false };
     const receipt = accountEnvelope(receiptNotifications, 8);
+    const currentNotifications = { ...optional, reply: false, mention: false, thread_watch: false };
     let step = 0;
     const transport = harness(() => {
       step++;
@@ -322,10 +332,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
           { status: 403, headers: { 'retry-after': '20' } },
         );
       const version = step === 5 ? 9 : 10;
-      const notifications =
-        step === 5
-          ? { ...optional, reply: true, mention: true }
-          : { ...optional, reply: false, mention: false, thread_watch: false };
+      const notifications = step === 5 ? { ...optional, reply: true, mention: true } : currentNotifications;
       return Response.json(accountEnvelope(notifications, version));
     }, 'POST');
     const confirmed: number[] = [];
@@ -377,8 +384,9 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     expect(editor.snapshot()).toMatchObject({
       phase: 'review',
       pending: null,
-      known: { notifications: optional, version: 10 },
-      draft: { ...optional, reply: false, mention: false },
+      known: { notifications: currentNotifications, version: 10 },
+      draft: { ...currentNotifications, thread_watch: true },
+      intent: { reply: false, mention: false, thread_watch: true },
     });
     for (const index of [1, 4]) {
       expect(transport.calls[index]!.headers.get('idempotency-key')).toBe(
