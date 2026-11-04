@@ -50,6 +50,8 @@ For a kind outside a leaf's declared domain, both truth polarities remain unprov
 may still select its kind. Every referenced resource is authorized before execution, even under `NOT` or a true
 `OR` branch. Universal condition evaluation and disclosure rules remain authoritative.
 
+Decision: Retain catalogue type/property clauses unchanged; apply them only to discovery kinds whose registered domains support them, never match non-applicable kinds under `NOT`, and disclose partial effects while offering removal or an explicit kind switch for owner-only queries.
+
 ## Request, ordering and currentness
 
 The caller uses the existing `POST /v1/subjects:search` endpoint with `representation: "discovery-v1"`. Text,

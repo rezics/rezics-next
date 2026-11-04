@@ -7,6 +7,7 @@ export type RequestedFacet = { property: string; size?: number; cursor?: string 
 export type FacetRequest = {
   text?: string;
   filter?: FilterDocument;
+  kinds?: string[];
   conditions?: unknown;
   scope?: SearchResourceScope;
   languages?: string[];

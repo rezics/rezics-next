@@ -141,11 +141,13 @@ export function createFacetDiscoveryStorage(
         consumer: queried.consumer,
         property: plan.property,
         meaning: plan.meaning.digest,
+        kinds: plan.kinds ?? null,
         ...(scope === null ? {} : { scope }),
       }),
       hash({
         observation: queried.snapshot.observation,
         property: plan.property,
+        kinds: plan.kinds ?? null,
         ...(scope === null ? {} : { scope }),
       }),
     ];
@@ -442,7 +444,11 @@ export function createFacetDiscoveryStorage(
                 ...body,
                 query: {
                   bool: {
-                    filter: [body.query, compileText(plan.text, { field: 'search_text', prefix: 'facet-text-' }).query],
+                    filter: [
+                      body.query,
+                      ...(plan.kinds?.length ? [{ terms: { kind: [...plan.kinds] } }] : []),
+                      compileText(plan.text, { field: 'search_text', prefix: 'facet-text-' }).query,
+                    ],
                   },
                 },
               },

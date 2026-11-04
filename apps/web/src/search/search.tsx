@@ -24,7 +24,7 @@ import { PageHeading } from '../shell/page-heading';
 import { localizedLabel } from './results.tsx';
 
 import { discoveryRequest } from './search-request.ts';
-import { refinementProperties } from './refinement/model';
+import { applicableRefinementProperties, refinementProperties } from './refinement/model';
 import { readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
 import { scopedRefinementRequests } from './refinement/scoped-refinement';
 import { Refinement, type RefinementData } from './refinement/refinement';
@@ -383,28 +383,30 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const type = data.type;
     const knownType = release && allowedType(release, type) ? type : undefined;
     const languages = data.languages ?? requestLanguages(data.locale);
-    const years = release ? yearProperties(release, knownType) : [];
-    const properties = release
-      ? [...new Set([...(knownType ? factProperties(release, knownType) : []), ...years])].slice(0, 4)
+    const selectedSemanticKinds = release && data.kinds?.length
+      ? data.kinds.filter((kind) => allowedType(release, kind))
+      : undefined;
+    const years = release
+      ? knownType
+        ? yearProperties(release, knownType)
+        : selectedSemanticKinds
+          ? [...new Set(selectedSemanticKinds.flatMap((kind) => yearProperties(release, kind)))].slice(0, YEAR_PROPERTIES)
+          : yearProperties(release)
       : [];
-    const roster = release ? refinementProperties(release, knownType ?? data.facetValues.type) : [];
-    const eligibleFacets = roster.filter((entry) => entry.mode === 'values' || entry.mode === 'types');
-    const requestedFacets = [
-      ...eligibleFacets.filter((entry) => entry.property === RESOURCE_LANGUAGE_PROPERTY),
-      ...eligibleFacets.filter((entry) => entry.property !== RESOURCE_LANGUAGE_PROPERTY),
-    ]
-      .slice(0, 8)
-      .map(({ property }) => ({ property, size: 10 }));
+    const properties = release
+      ? [...new Set([
+          ...(knownType
+            ? factProperties(release, knownType)
+            : selectedSemanticKinds?.flatMap((kind) => factProperties(release, kind)) ?? []),
+          ...years,
+        ])].slice(0, 4)
+      : [];
+    const refinementTypes = knownType ?? (data.facetValues.type?.length ? data.facetValues.type : selectedSemanticKinds);
+    const roster = release ? refinementProperties(release, refinementTypes) : [];
     let refinementRequests: ReturnType<typeof scopedRefinementRequests> | undefined;
     try {
       const fallbackLanguages = requestLanguages(data.locale);
-      const searchRequest = scopedRefinementRequests(queryState, fallbackLanguages, []);
-      const optionRequest = scopedRefinementRequests(
-        withoutResourceLanguageSelection(queryState),
-        fallbackLanguages,
-        requestedFacets,
-      );
-      refinementRequests = { ...searchRequest, ...(optionRequest.facets ? { facets: optionRequest.facets } : {}) };
+      refinementRequests = scopedRefinementRequests(queryState, fallbackLanguages, []);
     } catch {
       refinementRequests = undefined;
     }
@@ -423,12 +425,17 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       return response;
     };
     const realmRatingUnavailable = data.sort === 'rating' && data.ratingPopulation !== undefined;
-    const searchPromise = hasSearch
+    const runSearch = hasSearch || body !== undefined;
+    const searchPromise = runSearch
       ? (async () => {
           // No installed Content complete-order adapter exists yet. Never ask Global Search and relabel it.
           if (realmRatingUnavailable) return { recovery: { status: 'unavailable' } as SearchRecoveryState };
           if (!body) return { recovery: { status: 'invalid' } as SearchRecoveryState };
-          const request = { ...body, ...(properties.length ? { properties } : {}) };
+          const request = {
+            ...body,
+            ...(!hasSearch || !properties.length ? {} : { properties }),
+            ...(!hasSearch ? { limit: 1 } : {}),
+          };
           if (data.representation !== 'subjects-v1') {
             return readSearchOutcome(request, sendSearch, signal);
           }
@@ -437,10 +444,29 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         })()
       : Promise.resolve(undefined);
 
-    const facetRead = refinementRequests?.facets;
-    const facetsPromise: Promise<FacetState | undefined> =
-      body && facetRead
-        ? readFacetPage(facetRead, (request) =>
+    const outcome = await searchPromise;
+    const result = hasSearch && outcome && 'result' in outcome ? outcome.result : undefined;
+    const discovery = outcome && 'discovery' in outcome ? outcome.discovery : undefined;
+    const applicability = discovery?.status === 'ready' ? discovery.page.applicability : undefined;
+    const eligibleFacets = applicableRefinementProperties(roster, applicability).filter(
+      (entry) => entry.mode === 'values' || entry.mode === 'types',
+    );
+    const requestedFacets = [
+      ...eligibleFacets.filter((entry) => entry.property === RESOURCE_LANGUAGE_PROPERTY),
+      ...eligibleFacets.filter((entry) => entry.property !== RESOURCE_LANGUAGE_PROPERTY),
+    ]
+      .slice(0, 8)
+      .map(({ property }) => ({ property, size: 10 }));
+    let facetResult: FacetState | undefined;
+    if (body && discovery?.status === 'ready' && requestedFacets.length) {
+      try {
+        const optionRequest = scopedRefinementRequests(
+          withoutResourceLanguageSelection(queryState),
+          requestLanguages(data.locale),
+          requestedFacets,
+        );
+        if (optionRequest.facets)
+          facetResult = await readFacetPage(optionRequest.facets, (request) =>
             kernelClient(data.locale).subjects.$facets.post(request, {
               ...(reader ? { headers: { authorization: reader.authorization } } : {}),
               fetch: { signal },
@@ -455,12 +481,12 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
                 problem: facetProblem(error.problem),
               };
             return { status: 'unavailable', code: error instanceof Error ? error.name : 'transport_error' };
-          })
-        : Promise.resolve(undefined);
-
-    const [outcome, facetResult] = await Promise.all([searchPromise, facetsPromise]);
-    const result = outcome && 'result' in outcome ? outcome.result : undefined;
-    const discovery = outcome && 'discovery' in outcome ? outcome.discovery : undefined;
+          });
+      } catch (error) {
+        if (signal.aborted) throw error;
+        facetResult = { status: 'invalid', code: error instanceof Error ? error.name : 'invalid_facet_request' };
+      }
+    }
     const recovery = !outcome
       ? undefined
       : ['session', 'closed', 'denied'].includes(outcome.recovery.status)
@@ -510,6 +536,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         data.facetValues[RESOURCE_LANGUAGE_PROPERTY] ?? [],
         facetResult ?? (release ? undefined : { status: 'unavailable', code: 'release_unavailable' }),
         release !== undefined,
+        applicability?.statement,
       ),
       ...(data.ranges ? { ranges: data.ranges } : {}),
       ...(data.condition ? { condition: data.condition } : {}),
@@ -1054,11 +1081,39 @@ export function SearchPage({
         options,
       )
     : undefined;
-  const filterRefinementProperties = (data?.refinement?.properties ?? [])
+  const filterApplicability = data?.discovery?.status === 'ready' ? data.discovery.page.applicability : undefined;
+  const typeApplicability = filterApplicability?.type ?? 'unknown';
+  const statementApplicability = filterApplicability?.statement ?? 'unknown';
+  const typeRefinementAvailable = typeApplicability === 'all' || typeApplicability === 'partial';
+  const statementRefinementAvailable = statementApplicability === 'all' || statementApplicability === 'partial';
+  const selectedTypeCondition = Boolean(type || selectedFacets.type?.length);
+  const selectedStatementCondition =
+    Object.keys(selectedFacets).some((property) => property !== 'type') ||
+    Object.keys(data?.ranges ?? {}).length > 0 ||
+    Boolean(draft.condition);
+  const ownerOnlyPopulation = typeApplicability === 'none' && statementApplicability === 'none';
+  const retainedFilterCondition = ownerOnlyPopulation && Boolean(removeSearchResourceScope(data?.queryState?.filter));
+  const retainedUnavailableCondition =
+    (selectedTypeCondition && typeApplicability === 'none') ||
+    (selectedStatementCondition && statementApplicability === 'none') ||
+    retainedFilterCondition;
+  const partialRefinement = typeApplicability === 'partial' || statementApplicability === 'partial';
+  const unavailableSemanticCondition =
+    (selectedTypeCondition && typeApplicability === 'unknown') ||
+    (selectedStatementCondition && statementApplicability === 'unknown');
+  const filterRefinementProperties = applicableRefinementProperties(
+    data?.refinement?.properties ?? [],
+    filterApplicability,
+  )
     .filter(
       (entry) =>
+        (entry.property === 'type' ? typeRefinementAvailable : statementRefinementAvailable) &&
         (entry.mode !== 'types' || selectedFacets.type?.length) &&
-        !(entry.property === RESOURCE_LANGUAGE_PROPERTY && resourceLanguage?.applicability !== 'applicable'),
+        !(
+          entry.property === RESOURCE_LANGUAGE_PROPERTY &&
+          resourceLanguage?.applicability !== 'applicable' &&
+          resourceLanguage?.applicability !== 'partial'
+        ),
     )
     .map((entry) =>
       entry.property === RESOURCE_LANGUAGE_PROPERTY
@@ -1097,7 +1152,37 @@ export function SearchPage({
           {m.search_resource_language_metadata_unavailable({}, options)}
         </p>
       )}
-      {resourceLanguage?.applicability !== 'applicable' && resourceLanguage?.actions.clear && (
+      {partialRefinement && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_refinement_partial({}, options)}
+        </p>
+      )}
+      {ownerOnlyPopulation && !retainedUnavailableCondition && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_refinement_owner_only({}, options)}
+        </p>
+      )}
+      {retainedUnavailableCondition && (
+        <div role="status" className="space-y-2 text-sm text-muted-foreground">
+          <p>{m.search_refinement_not_applicable({}, options)}</p>
+          {data?.queryState && (
+            <a
+              className={linkClass}
+              href={discoverySearchHref(locale, { ...data.queryState, kinds: undefined, cursor: undefined })}
+            >
+              {m.search_kind_navigation_all({}, options)}
+            </a>
+          )}
+        </div>
+      )}
+      {unavailableSemanticCondition && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_refinement_metadata_unavailable({}, options)}
+        </p>
+      )}
+      {resourceLanguage?.applicability !== 'applicable' &&
+        resourceLanguage?.applicability !== 'partial' &&
+        resourceLanguage?.actions.clear && (
         <Button type="button" variant="outline" size="sm" onClick={clearResourceLanguage}>
           {m.search_resource_language_clear({}, options)}
         </Button>
@@ -1108,12 +1193,18 @@ export function SearchPage({
       {(data?.discovery?.status !== 'ready' ? (data?.queryState?.kinds ?? []) : []).map((kind) => (
         <input key={kind} type="hidden" name="kinds" value={kind} />
       ))}
-      {!data?.refinement &&
+      {(!data?.refinement ||
+        Object.entries(selectedFacets).some(([property]) =>
+          !filterRefinementProperties.some((entry) => entry.property === property),
+        )) &&
         Object.entries(selectedFacets).flatMap(([property, values]) =>
-          values.map((value) => (
-            <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
-          )),
+          !data?.refinement || !filterRefinementProperties.some((entry) => entry.property === property)
+            ? values.map((value) => (
+                <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
+              ))
+            : [],
         )}
+      {!typeRefinementAvailable && type && <input type="hidden" name="type" value={type} />}
       {data?.discovery?.status === 'ready' && data.queryState && (
         <DiscoveryKinds
           key={JSON.stringify([data.queryState, locale, data.discovery.page.as_of])}
@@ -1147,7 +1238,7 @@ export function SearchPage({
           }}
         />
       )}
-      <Field>
+      {typeRefinementAvailable ? <Field>
         <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type({}, options)}</FieldLabel>
         <p className="text-sm text-muted-foreground">{m.search_subject_type_help({}, options)}</p>
         <NativeSelect
@@ -1170,8 +1261,8 @@ export function SearchPage({
             </NativeSelectOption>
           ))}
         </NativeSelect>
-      </Field>
-      {data?.refinement && (
+      </Field> : null}
+      {data?.refinement && filterRefinementProperties.length > 0 && (
         <Refinement
           key={`${surface}-${data.refinement.key}`}
           rangeDraftKey={stateKey}
@@ -1238,7 +1329,7 @@ export function SearchPage({
           {...(data.sort === 'rating' ? { sort: 'rating' as const } : {})}
         />
       )}
-      <ConditionEditor
+      {statementRefinementAvailable ? <ConditionEditor
         value={draft.condition}
         onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
         metadata={data?.conditionMetadata}
@@ -1252,7 +1343,7 @@ export function SearchPage({
         )}
         languages={draft.languages}
         onLanguages={(languages) => setDraft((previous) => ({ ...previous, languages }))}
-      />
+      /> : draft.condition ? <input type="hidden" name="condition" value={JSON.stringify(draft.condition)} /> : null}
       {!data?.conditionMetadata && (
         <a className={linkClass} href={discoverySearchHref(locale, committedState)}>
           {m.search_facet_retry({}, options)}

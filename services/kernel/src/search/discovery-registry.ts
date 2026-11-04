@@ -2,6 +2,7 @@ import { RELEASE_LIMITS } from '@rezics/definitions';
 import { routeOf } from '../route/route.ts';
 import type {
   DiscoveryCondition,
+  DiscoveryFilterApplicability,
   DiscoveryDomain,
   DiscoveryKey,
   DiscoveryOwnerAdapter,
@@ -198,6 +199,27 @@ export function discoveryKindDirectory(
 
 function registeredDomains(registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>, kind: string) {
   return registry.domains ? registry.domains(kind) : registry.get(kind).domains;
+}
+
+/** Derive Search refinement coverage from the registered source domains for this result population. */
+export function discoveryFilterApplicability(
+  registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>,
+  selectedKinds?: readonly string[] | null,
+): DiscoveryFilterApplicability {
+  if (selectedKinds === null) return { type: 'unknown', statement: 'unknown' };
+  let kinds: readonly string[];
+  try {
+    kinds = selectedKinds ?? discoveryKindDirectory(registry).map(({ kind }) => kind);
+    for (const kind of kinds) registeredDomains(registry, kind);
+  } catch {
+    return { type: 'unknown', statement: 'unknown' };
+  }
+  const coverage = (domain: 'type' | 'statement') => {
+    if (!kinds.length) return 'none' as const;
+    const matching = kinds.filter((kind) => registeredDomains(registry, kind).includes(domain)).length;
+    return matching === 0 ? 'none' : matching === kinds.length ? 'all' : 'partial';
+  };
+  return { type: coverage('type'), statement: coverage('statement') };
 }
 
 /** Domain admission is independent of membership, resource authorization and native source availability. */

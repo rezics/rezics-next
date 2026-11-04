@@ -113,6 +113,7 @@ test('opaque continuations bind scope, principal, conditions and dynamic admissi
     principal: readerPrincipal,
     text: undefined,
     originalFilter: undefined,
+    kinds: ['schema:Book', 'collection'],
     languages: ['en'],
     now,
     facets: [facet],
@@ -144,10 +145,19 @@ test('opaque continuations bind scope, principal, conditions and dynamic admissi
       scopeBinding: { request: 'd'.repeat(64), admission: 'a'.repeat(64) },
     }),
   ).rejects.toMatchObject({ code: 'invalid_request' });
+  await expect(authenticateFacetCursors(ring, { ...resumed, kinds: ['collection'] })).rejects.toMatchObject({
+    code: 'invalid_request',
+  });
   const admitted = await admitScopedFacetRequest(
-    { scope: { kind: 'realm', id: 'r-1' }, conditions: conditionTree, facets: [{ property: 'type' }] },
+    {
+      scope: { kind: 'realm', id: 'r-1' },
+      conditions: conditionTree,
+      kinds: ['schema:Book', 'collection'],
+      facets: [{ property: 'type' }],
+    },
     fixture().admit,
   );
+  expect(admitted.kinds).toEqual(['schema:Book', 'collection']);
   const changedConditions = await admitScopedFacetRequest(
     {
       scope: { kind: 'realm', id: 'r-1' },
