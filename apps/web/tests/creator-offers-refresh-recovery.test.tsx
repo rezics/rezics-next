@@ -572,6 +572,7 @@ describe('Creator offer editing recovery retains real drafts without extending p
       expect(p.host.querySelector('form')).toBeNull();
       expect(p.host.textContent).toContain(m.creator_offers_empty());
       await p.show('editor');
+      await p.tick();
       await p.settle(p.editorReads[0]!, editor());
       await p.refresh();
       const fresh = editor();
