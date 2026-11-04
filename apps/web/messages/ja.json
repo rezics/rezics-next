@@ -1112,6 +1112,8 @@
   "library_progress_record_heading": "進捗を記録",
   "library_progress_remove_units": "単位を削除",
   "library_progress_restart": "やり直す",
+  "library_progress_return_to_progress": "進捗ページに戻る",
+  "library_progress_return_to_subject": "この作品に戻る",
   "library_progress_start": "開始",
   "library_progress_start_heading": "進捗管理を始める",
   "library_progress_start_draft_navigation_title": "このProgress設定を破棄しますか？",

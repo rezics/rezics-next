@@ -1129,6 +1129,8 @@
   "library_progress_record_heading": "Record progress",
   "library_progress_remove_units": "Remove units",
   "library_progress_restart": "Start again",
+  "library_progress_return_to_progress": "Return to progress",
+  "library_progress_return_to_subject": "Return to this work",
   "library_progress_start": "Start",
   "library_progress_start_heading": "Start tracking",
   "library_progress_start_draft_navigation_title": "Discard this Progress setup?",

@@ -8,6 +8,8 @@ import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { CurrentProgressDetail } from '../../library/progress-session';
 import { readProgressDetail } from '../../library/progress-detail-server';
+import { progressReturnContextFromLocationState } from '../../library/progress-start-draft-navigation';
+import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/progress/$id')({
@@ -53,6 +55,12 @@ export const Route = createFileRoute('/library/progress/$id')({
     if (issue || pending)
       return <ProgressAddressCorrection address={address} issue={issue} pending={!issue && pending} />;
     if (loaded.state === 'invalid') return <ProgressAddressCorrection address={address} issue={loaded.issue} />;
-    return <CurrentProgressDetail loaded={loaded} address={{ id, ...search }} />;
+    return (
+      <CurrentProgressDetail
+        loaded={loaded}
+        address={{ id, ...search }}
+        returnContext={progressReturnContextFromLocationState(requested.state, id, getLocale())}
+      />
+    );
   },
 });
