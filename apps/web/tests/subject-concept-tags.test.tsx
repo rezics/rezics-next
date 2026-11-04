@@ -153,7 +153,12 @@ test('mounted work tags paginate, retain source assertions, gate each spoiler, a
     const firstEvidence = new URL(firstWhy.href);
     expect(firstEvidence.searchParams.get('role')).toBe(property);
     expect(firstEvidence.searchParams.get('returnTo')).toBe(
-      subjectHref({ id: firstSubject.id, label: 'Work A' }, 'en').href,
+      `${subjectHref({ id: firstSubject.id, label: 'Work A' }, 'en').href}#work-tags?${new URLSearchParams({
+        property,
+        statement: uuid(1000),
+        spoiler: '0',
+        focus: 'evidence',
+      })}`,
     );
     const firstConcept = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
       (link) => link.textContent?.trim() === 'Shared concept',

@@ -120,7 +120,8 @@ test('public tag chips use the disclosed Concept label and destination, keep sou
   expect(safe).toContain('https://api.vndb.org/kana#post-vn');
   const conceptHref = new RegExp(`href="([^"]*/subjects/${tag}/shared-tag[^\"]*)"`, 'u').exec(safe)?.[1];
   expect(conceptHref).toBeDefined();
-  expect(new URL(conceptHref!, 'https://site.test').searchParams.has('returnTo')).toBe(true);
+  const conceptAddress = new URL(conceptHref!.replaceAll('&amp;', '&'), 'https://site.test');
+  expect(conceptAddress.searchParams.has('returnTo')).toBe(true);
   expect(safe.match(/data-slot="source-tag-weight" data-state="available"/gu)).toHaveLength(1);
   expect(safe.match(/data-slot="source-tag-weight" data-state="absent"/gu)).toHaveLength(1);
 
@@ -140,6 +141,7 @@ test('unsupported and absent metrics never receive a numeric fallback', async ()
     taggedStatement('0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f44', tag, '+2.4'),
   ];
   const statement = (subject.statements as Record<string, any[]>)['schema:keywords']![0]!;
+  related[tag] = { type: 'skos:Concept', labels: { en: 'Shared tag' } } as Related[string];
   statement.qualifiers[1].value.content = 'rawIndividualVote';
   const unsupported = text(render(subject, related, definitions, 0));
   expect(unsupported).toContain('Unsupported source metric');
