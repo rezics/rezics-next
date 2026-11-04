@@ -16,22 +16,41 @@ export type ConceptSchemeRef = {
   id: string;
   label: string;
   lang: string | null;
-  source?: string;
+  readable: boolean;
+  conceptPage: boolean;
 };
-export type ConceptHierarchyRow = { id: string; label: string; lang: string | null; direction: 'broader' | 'narrower' };
+export type ConceptHierarchyRow = {
+  id: string;
+  label: string;
+  lang: string | null;
+  type: string;
+  direction: 'broader' | 'narrower';
+  conceptPage: boolean;
+};
+export type ConceptHierarchyState = 'available' | 'lagging' | 'preparing' | 'unavailable' | 'unsupported';
+export type ConceptViewerActions =
+  | { state: 'available'; account: { id: string } | null; actions: { action: string; operations: string[] }[] }
+  | { state: 'unavailable' };
 export type ConceptRead =
   | CandidateFailure
   | {
       ok: true;
       public: SubjectRead;
       admitted: boolean;
-      retired: boolean;
+      retired: boolean | null;
       aliases: { text: string; lang: string | null }[];
       definition: { text: string; lang: string | null } | null;
       schemes: ConceptSchemeRef[];
-      codes: { property: string; label: string; value: string; unknown: boolean }[];
-      hierarchy: ConceptHierarchyRow[];
-      next: string | null;
+      codes: { property: string; label: string; labelLang: string | null; value: string; unknown: boolean }[];
+      broader: { rows: ConceptHierarchyRow[]; withheld: number };
+      narrower: {
+        state: ConceptHierarchyState;
+        rows: ConceptHierarchyRow[];
+        cursor?: string;
+        next: string | null;
+        exactEmpty: boolean;
+      };
+      viewerActions: ConceptViewerActions;
       spoiler: boolean;
       session?: string | undefined;
     };
@@ -53,10 +72,26 @@ export function conceptTypeAdmitted(release: Definitions, type: string) {
   return typeExtends(release, type, conceptRequested.type) || typeExtends(release, type, conceptRequested.scheme);
 }
 
-function relatedLabel(related: SubjectRead['related'], id: string, locale: string) {
+function relatedSummary(related: SubjectRead['related'], id: string) {
   const summary = related[id];
-  if (!summary || !('labels' in summary)) return;
-  return pickText(summary.labels ?? {}, locale);
+  return summary && 'labels' in summary ? summary : undefined;
+}
+
+function relatedLabel(related: SubjectRead['related'], id: string, locale: string) {
+  const summary = relatedSummary(related, id);
+  return summary ? pickText(summary.labels ?? {}, locale) : undefined;
+}
+
+function actionState(current: SubjectRead): ConceptViewerActions {
+  const state = current.viewerActions;
+  if (!state || state.state !== 'available') return { state: 'unavailable' };
+  return { state: 'available', account: current.account, actions: state.actions };
+}
+
+function relationValue(statement: SubjectRead['subject']['statements'][string][number]) {
+  return statement.value.type === 'value' && typeof statement.value.content === 'string'
+    ? statement.value.content
+    : undefined;
 }
 
 export async function readSourceConcept(
@@ -69,92 +104,152 @@ export async function readSourceConcept(
     cursor?: string | undefined;
     session?: string | undefined;
     role?: string | undefined;
-    pin?: string | undefined;
   },
 ): Promise<ConceptRead> {
   try {
     const headers = headersOf(authorization, input.session);
-    const current = await client.subjects({ id }).get({ headers });
+    const current = await client.subjects({ id }).get({ query: { includeViewerActions: true }, headers });
     if (current.status !== 200 || !current.data) return candidateFailure(current.status);
     if (current.data.subject.id !== id) return candidateFailure(400);
     const admitted = conceptTypeAdmitted(release, current.data.subject.type);
+    let session = tokenOf(current) ?? input.session;
+    const viewerActions = actionState(current.data);
     if (!admitted) {
       return {
         ok: true,
         public: current.data,
         admitted: false,
-        retired: false,
+        retired: null,
         aliases: [],
         definition: null,
         schemes: [],
-        codes: input.role ? [{ property: 'role', label: input.role, value: input.role, unknown: true }] : [],
-        hierarchy: [],
-        next: null,
+        codes: input.role ? [{ property: 'role', label: input.role, labelLang: null, value: input.role, unknown: true }] : [],
+        broader: { rows: [], withheld: 0 },
+        narrower: { state: 'unsupported', rows: [], next: null, exactEmpty: false },
+        viewerActions,
         spoiler: false,
+        ...(session ? { session } : {}),
       };
     }
-    const retired = !!input.pin && input.pin !== (release.digest ?? current.data.subject.release);
+
+    const retired = release.digest ? current.data.subject.release !== release.digest : null;
     const aliases = Object.entries(current.data.subject.aliases)
       .flatMap(([lang, values]) => values.map((text) => ({ text, lang })))
-      .filter((alias, index, list) => list.findIndex((entry) => entry.text === alias.text) === index);
+      .filter((alias, index, list) => list.findIndex((entry) => entry.text === alias.text && entry.lang === alias.lang) === index);
     const definition = pickText(current.data.subject.descriptions, locale);
-    const schemes: ConceptSchemeRef[] = (current.data.subject.statements[conceptRequested.inScheme] ?? []).flatMap(
-      (statement) => {
-        const target = statement.value.type === 'value' ? statement.value.content : undefined;
-        if (typeof target !== 'string') return [];
-        const label = relatedLabel(current.data.related, target, locale);
-        if (!label) return [{ id: target, label: '', lang: null }];
-        return [{ id: target, label: label.text, lang: label.lang }];
-      },
-    );
+    const schemes: ConceptSchemeRef[] = [];
+    const schemeIds = new Set<string>();
+    for (const statement of current.data.subject.statements[conceptRequested.inScheme] ?? []) {
+      const target = relationValue(statement);
+      if (!target || schemeIds.has(target)) continue;
+      schemeIds.add(target);
+      const summary = relatedSummary(current.data.related, target);
+      const label = relatedLabel(current.data.related, target, locale);
+      schemes.push({
+        id: target,
+        label: label?.text ?? '',
+        lang: label?.lang ?? null,
+        readable: !!summary,
+        conceptPage: !!summary && conceptTypeAdmitted(release, summary.type),
+      });
+    }
+
     const codes = Object.entries(current.data.subject.statements).flatMap(([property, statements]) => {
       const definition = release.properties[property];
-      if (!definition || (definition.datatype !== 'external-id' && property !== 'schema:sameAs')) return [];
+      if (!definition || definition.datatype !== 'external-id') return [];
       return statements.flatMap((statement) => {
-        if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return [];
+        const value = relationValue(statement);
+        if (value === undefined) return [];
         return [
           {
             property,
-            label: pickText(definition.labels, locale).text,
-            value: statement.value.content,
+            label: pickText(definition.labels, locale).text || property,
+            labelLang: pickText(definition.labels, locale).lang,
+            value,
             unknown: false,
           },
         ];
       });
     });
     if (input.role && !codes.some((code) => code.value === input.role)) {
-      codes.push({ property: 'role', label: input.role, value: input.role, unknown: true });
+      codes.push({ property: 'role', label: input.role, labelLang: null, value: input.role, unknown: true });
     }
-    const broader = current.data.subject.statements[conceptRequested.broader] ?? [];
-    const hierarchy: ConceptHierarchyRow[] = broader.flatMap((statement) => {
-      const target = statement.value.type === 'value' ? statement.value.content : undefined;
-      if (typeof target !== 'string') return [];
+
+    const broaderRows: ConceptHierarchyRow[] = [];
+    let broaderWithheld = 0;
+    for (const statement of current.data.subject.statements[conceptRequested.broader] ?? []) {
+      const target = relationValue(statement);
+      if (!target) continue;
+      const summary = relatedSummary(current.data.related, target);
       const label = relatedLabel(current.data.related, target, locale);
-      return [{ id: target, label: label?.text ?? '', lang: label?.lang ?? null, direction: 'broader' as const }];
-    });
-    let next: string | null = null;
-    let session = tokenOf(current) ?? input.session;
-    if (release.properties[conceptRequested.broader]?.relation?.inverse === conceptRequested.narrower) {
-      const page = await client.subjects({ id }).links.get({
-        query: {
-          property: conceptRequested.broader,
-          language: locale,
-          limit: CONCEPT_PAGE_CAP,
-          ...(input.cursor ? { cursor: input.cursor } : {}),
-        },
-        headers: headersOf(authorization, session),
+      if (!summary || !label?.text) {
+        broaderWithheld++;
+        continue;
+      }
+      broaderRows.push({
+        id: target,
+        label: label.text,
+        lang: label.lang,
+        type: summary.type,
+        direction: 'broader',
+        conceptPage: conceptTypeAdmitted(release, summary.type),
       });
-      if (page.status === 200 && page.data && 'links' in page.data) {
-        session = tokenOf(page) ?? session;
-        next = page.data.next;
-        for (const row of page.data.links) {
-          hierarchy.push({
-            id: row.subject,
-            label: row.summary?.label?.value ?? '',
-            lang: row.summary?.label?.language ?? null,
-            direction: 'narrower',
-          });
+    }
+
+    let narrower: Extract<ConceptRead, { ok: true }>['narrower'] = {
+      state:
+        release.properties[conceptRequested.broader]?.relation?.inverse === conceptRequested.narrower
+          ? 'unavailable'
+          : 'unsupported',
+      rows: [],
+      ...(input.cursor ? { cursor: input.cursor } : {}),
+      next: null,
+      exactEmpty: false,
+    };
+    if (narrower.state !== 'unsupported') {
+      try {
+        const page = await client.subjects({ id }).links.get({
+          query: {
+            property: conceptRequested.broader,
+            language: locale,
+            limit: CONCEPT_PAGE_CAP,
+            ...(input.cursor ? { cursor: input.cursor } : {}),
+          },
+          headers: headersOf(authorization, session),
+        });
+        if (page.status === 200 && page.data && 'links' in page.data) {
+          session = tokenOf(page) ?? session;
+          narrower = {
+            state: page.data.freshness.caught_up ? 'available' : 'lagging',
+            rows: page.data.links.flatMap((row) => {
+              const label = row.summary.label;
+              if (!row.summary.id || !label?.value) return [];
+              return [
+                {
+                  id: row.summary.id,
+                  label: label.value,
+                  lang: label.language,
+                  type: row.summary.type,
+                  direction: 'narrower' as const,
+                  conceptPage: conceptTypeAdmitted(release, row.summary.type),
+                },
+              ];
+            }),
+            ...(input.cursor ? { cursor: input.cursor } : {}),
+            next: page.data.next,
+            exactEmpty:
+              page.data.freshness.caught_up === true && page.data.count?.exact === true && page.data.count.value === 0,
+          };
+        } else {
+          const code = page.data && 'code' in page.data ? page.data.code : undefined;
+          if (page.status === 401 || page.status === 403 || page.status === 404) return candidateFailure(page.status);
+          narrower = {
+            ...narrower,
+            state: page.status === 503 && code === 'semantic_not_ready' ? 'preparing' : 'unavailable',
+          };
         }
+      } catch {
+        narrower = { ...narrower, state: 'unavailable' };
       }
     }
     const spoiler = Object.values(current.data.subject.statements).some((statements) =>
@@ -173,8 +268,9 @@ export async function readSourceConcept(
       definition: definition.text ? definition : null,
       schemes,
       codes,
-      hierarchy,
-      next,
+      broader: { rows: broaderRows, withheld: broaderWithheld },
+      narrower,
+      viewerActions,
       spoiler,
       ...(session ? { session } : {}),
     };

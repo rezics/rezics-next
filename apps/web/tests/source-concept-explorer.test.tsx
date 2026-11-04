@@ -80,12 +80,12 @@ function item(mode: 'ok' | 'unreadable' | 'retired'): SubjectRead {
   };
 }
 
-function client(mode: 'ok' | 'unreadable' | 'retired') {
+function client(mode: 'ok' | 'unreadable' | 'retired', linksStatus = 200) {
   return {
     subjects: ({ id }: { id: string }) => ({
       get: async () => (mode === 'unreadable' ? { status: 404 } : { status: 200, data: item(mode) }),
       links: {
-        get: async ({ query }: { query: { cursor?: string } }) => ({
+        get: async ({ query }: { query: { cursor?: string } }) => linksStatus === 200 ? ({
           status: 200,
           data: {
             links: [
@@ -103,7 +103,7 @@ function client(mode: 'ok' | 'unreadable' | 'retired') {
             next: query.cursor ? null : 'concept-next',
             freshness: { caught_up: true },
           },
-        }),
+        }) : ({ status: linksStatus, data: { code: 'dependency_unavailable' } }),
       },
     }),
   } as unknown as KernelClient;
@@ -118,21 +118,34 @@ test('source concept explorer covers two schemes, duplicate labels, unknown role
   expect(read.schemes.map((scheme) => scheme.label).sort()).toEqual(['Bangumi tags', 'VNDB traits']);
   expect(read.aliases.filter((alias) => alias.text === 'Protagonist').length).toBe(1);
   expect(read.codes.some((code) => code.unknown && code.value === 'vndb:unknown')).toBe(true);
-  expect(read.hierarchy.some((row) => row.direction === 'broader' && row.id === broader)).toBe(true);
-  expect(read.next).toBe('concept-next');
+  expect(read.public.subject.id).toBe(concept);
+  expect(read.broader.rows.some((row) => row.direction === 'broader' && row.id === broader)).toBe(true);
+  expect(read.codes.some((code) => code.property === 'schema:sameAs')).toBe(false);
+  expect(read.narrower.next).toBe('concept-next');
   const continued = await readSourceConcept(client('ok'), 'Bearer reader', bundledRelease, concept, 'en', {
     cursor: 'concept-next',
   });
-  expect(continued.ok && continued.next).toBeNull();
+  expect(continued.ok && continued.narrower.next).toBeNull();
+  const failed = await readSourceConcept(client('ok', 503), 'Bearer reader', bundledRelease, concept, 'en', {
+    cursor: 'concept-next',
+  });
+  expect(failed.ok && failed.narrower).toMatchObject({ state: 'unavailable', cursor: 'concept-next', next: null });
+  const unsupportedRelease = {
+    ...bundledRelease,
+    properties: {
+      ...bundledRelease.properties,
+      'skos:broader': { ...bundledRelease.properties['skos:broader'], relation: undefined },
+    },
+  };
+  const unsupported = await readSourceConcept(client('ok'), 'Bearer reader', unsupportedRelease, concept, 'en', {});
+  expect(unsupported.ok && unsupported.narrower.state).toBe('unsupported');
   const retired = await readSourceConcept(
     client('retired'),
     'Bearer reader',
     { ...bundledRelease, digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
     concept,
     'en',
-    {
-      pin: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    },
+    {},
   );
   expect(retired.ok && retired.retired).toBe(true);
   expect(await readSourceConcept(client('unreadable'), 'Bearer reader', bundledRelease, concept, 'en', {})).toEqual({

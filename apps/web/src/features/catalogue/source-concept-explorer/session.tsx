@@ -10,11 +10,13 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   locale,
   role,
   returnTo,
+  pinUnsupported,
 }: {
   id: string;
   locale: string;
   role?: string | undefined;
   returnTo?: string | undefined;
+  pinUnsupported?: boolean | undefined;
 }) {
   const work = useCatalogueLifetime('concept-explore');
   const { state } = useSession();
@@ -22,10 +24,12 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   if (state === 'unknown') return <p>{m.concept_explore_loading({}, { locale: locale as never })}</p>;
   return (
     <SourceConceptView
+      key={`${id}:${locale}:${state}:${expectedReader ?? 'anonymous'}`}
       id={id}
       locale={locale}
       role={role}
       returnTo={returnTo}
+      pinUnsupported={pinUnsupported}
       transport={{
         read: (next) =>
           readSubjectConcept({

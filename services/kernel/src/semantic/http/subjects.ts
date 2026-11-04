@@ -70,6 +70,8 @@ import { AccountAgentLabelEditError, AccountAgentWriteDeniedError } from '../age
 import readRedirect from '../read-redirect.sql';
 import { SourceRecordSchema } from '../source-records.ts';
 import { revisionResource, StaleRevisionAuthorshipError } from '../authorship.ts';
+import { readSubjectCorrectionActions } from '../viewer-actions.ts';
+import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
 import { requireAccessDeadline } from '../../access/unavailable.ts';
 import { withReadTransaction } from '../read.ts';
 import { readPartition } from '../../partition/partition.ts';
@@ -293,12 +295,28 @@ const redirectResponse = t.Object(
   { additionalProperties: false },
 );
 const itemResponse = t.Object({ subject: ItemSchema }, { additionalProperties: false });
+const viewerActionEntry = t.Object(
+  {
+    action: t.String(),
+    operations: t.Array(t.String(), { minItems: 1, maxItems: 256, uniqueItems: true }),
+  },
+  { additionalProperties: false },
+);
 const readResponse = t.Object(
   {
     subject: ItemSchema,
     account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
     related: t.Record(t.String(), LabelsSchema),
+    viewerActions: t.Optional(
+      t.Union([
+        t.Object(
+          { state: t.Literal('available'), actions: t.Array(viewerActionEntry, { maxItems: 64 }) },
+          { additionalProperties: false },
+        ),
+        t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
+      ]),
+    ),
   },
   { additionalProperties: false },
 );
@@ -499,6 +517,7 @@ type SubjectRouteDependencies = {
   tokens: KeyRing;
   access: () => Access;
   clock: () => Date;
+  viewerActionBindings?: () => ViewerActionBindings;
 };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
@@ -587,7 +606,7 @@ function relatedIds(subject: Item): { propertyIds: Set<string>; subjectIds: Set<
 
 function subjectRoutes(
   app: ReturnType<typeof createApp>,
-  { pool, routeKey, tokens, access, clock }: SubjectRouteDependencies,
+  { pool, routeKey, tokens, access, clock, viewerActionBindings }: SubjectRouteDependencies,
 ) {
   function contributionAuthorization(
     actor: AccountActor,
@@ -948,7 +967,11 @@ function subjectRoutes(
       '/v1/subjects/:id',
       {
         params: t.Object({ id: t.String() }),
-        query: t.Object({ context: t.Optional(EditorialBodyContext), language: t.Optional(t.String()) }),
+        query: t.Object({
+          context: t.Optional(EditorialBodyContext),
+          language: t.Optional(t.String()),
+          includeViewerActions: t.Optional(t.Boolean()),
+        }),
         response: {
           200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String(), ...cacheControl }),
           308: withHeaders(redirectResponse, { location: t.String() }),
@@ -1037,6 +1060,37 @@ function subjectRoutes(
           }),
         );
         const active = await activeRelease(pool);
+        let currentViewerActions:
+          | { state: 'available'; actions: { action: string; operations: string[] }[] }
+          | { state: 'unavailable' }
+          | undefined;
+        if (query.includeViewerActions) {
+          if (!active || !Object.hasOwn(active.release.types, result.subject.type) || !viewerActionBindings) {
+            currentViewerActions = { state: 'unavailable' };
+          } else {
+            let actionRead: Awaited<ReturnType<typeof readSubjectCorrectionActions>>;
+            try {
+              actionRead = await readSubjectCorrectionActions({
+                pool,
+                access: access(),
+                bindings: viewerActionBindings(),
+                actor,
+                clock,
+                subject: params.id,
+                type: result.subject.type,
+                revision: result.subject.revision,
+                deadline: job.deadline,
+              });
+            } catch {
+              actionRead = { state: 'unavailable' };
+            }
+            if (actionRead.state === 'concealed') throw new ProblemError('not_found');
+            currentViewerActions =
+              actionRead.state === 'available'
+                ? { state: 'available', actions: actionRead.actions }
+                : { state: 'unavailable' };
+          }
+        }
         const summaries = active
           ? await readSubjectSummaries(
               {
@@ -1058,8 +1112,14 @@ function subjectRoutes(
 
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
-        set.headers['cache-control'] = 'no-cache';
-        return { subject: result.subject, account: result.account, summary: result.summary, related };
+        set.headers['cache-control'] = query.includeViewerActions ? 'private, no-store' : 'no-cache';
+        return {
+          subject: result.subject,
+          account: result.account,
+          summary: result.summary,
+          related,
+          ...(currentViewerActions ? { viewerActions: currentViewerActions } : {}),
+        };
       },
     )
     .post(
