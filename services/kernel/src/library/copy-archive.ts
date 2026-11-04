@@ -1462,7 +1462,9 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
             step = steps[stepIndex];
           let command = storedStepCommand(app.active_command);
           if (app.active_step === null) {
-            command = step ? makeStepCommand(reviewId, stepIndex, step, plan, app.session_id, app.session_revision) : null;
+            command = step
+              ? makeStepCommand(reviewId, stepIndex, step, plan, app.session_id, app.session_revision)
+              : null;
             if (!command) {
               await tx.query(
                 `UPDATE library.copy_archive_progress_apply SET state='failed',error_code='recovery_operands_unavailable',
@@ -1767,11 +1769,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         );
       if (checkpoint.step === null || !checkpoint.command)
         throw new Error('Archive progress checkpoint omitted its next command');
-      reservation = await claimNext(
-        activeReservation.evidence,
-        activeReservation.plan,
-        activeReservation.totalSteps,
-      );
+      reservation = await claimNext(activeReservation.evidence, activeReservation.plan, activeReservation.totalSteps);
     }
   }
   function applicationResult(

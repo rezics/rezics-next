@@ -151,8 +151,7 @@ function safeFieldErrors(errors: readonly FieldError[] | undefined): FieldError[
   const result: FieldError[] = [];
   const seen = new Set<string>();
   for (const error of errors) {
-    if (!isSafePointer(error.pointer) || !fieldErrorCodes().includes(error.code) || seen.has(error.pointer))
-      continue;
+    if (!isSafePointer(error.pointer) || !fieldErrorCodes().includes(error.code) || seen.has(error.pointer)) continue;
     seen.add(error.pointer);
     result.push({ pointer: error.pointer, code: error.code });
     if (result.length === 16) break;

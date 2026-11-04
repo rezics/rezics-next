@@ -451,13 +451,7 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
               if (executable.selection.kind !== 'explicit') throw new ProblemError('dependency_unavailable');
               const input = explicitCollectionBulkAdd(executable);
               try {
-                const resolved = await prepareCollectionBulkAddAdmission(
-                  deps,
-                  owner,
-                  input,
-                  attempt.time,
-                  context,
-                );
+                const resolved = await prepareCollectionBulkAddAdmission(deps, owner, input, attempt.time, context);
                 return { ...base, input, resolved };
               } catch (error) {
                 return {
