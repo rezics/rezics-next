@@ -128,6 +128,7 @@ test('guarded native BFF ports refuse credentials changed during session await a
   let session = { status: 'active' as const, subject: reader, csrfToken: token, accessToken: 'reader' };
   let pause: ReturnType<typeof deferred<typeof session>> | undefined;
   const env = {
+    SITE_ORIGINS: 'https://site.invalid',
     AUTH_ISSUER: 'https://auth.invalid',
     API_RESOURCE: 'api',
     WEBSITE_SCOPES: 'scopes',

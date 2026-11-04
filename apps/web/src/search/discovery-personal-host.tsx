@@ -173,6 +173,7 @@ export function useDiscoveryPersonalResults(input: {
     if (episode.retired || episodeRef.current !== episode) return;
     episode.active = true;
     if (episode.abort.signal.aborted) episode.abort = new AbortController();
+    const lifetime = episode.abort;
     let current: Mounted | undefined;
     const owns = () => {
       const query = client.getQueryState(sessionQuery.queryKey);
@@ -180,6 +181,7 @@ export function useDiscoveryPersonalResults(input: {
       const latest = exposureLifetime.getSnapshot();
       return (
         episode.active &&
+        !lifetime.signal.aborted &&
         episodeRef.current === episode &&
         now?.state === 'signed-in' &&
         now.subject === session.subject &&
@@ -201,7 +203,7 @@ export function useDiscoveryPersonalResults(input: {
     if (!ready)
       return () => {
         episode.active = false;
-        episode.abort.abort();
+        lifetime.abort();
       };
     const request = structuredClone(input.request!);
     const binding = { expectedReader: session.subject!, expectedCredential: session.csrfToken! };
@@ -300,14 +302,14 @@ export function useDiscoveryPersonalResults(input: {
         setMounted(null);
       }
     });
-    void load(episode.abort.signal)
+    void load(lifetime.signal)
       .then(install)
       .catch(() => {
         if (owns()) install({ state: { status: 'unavailable' }, capabilities: null });
       });
     return () => {
       episode.active = false;
-      episode.abort.abort();
+      lifetime.abort();
       current?.page.dispose();
       unsubscribe();
     };
