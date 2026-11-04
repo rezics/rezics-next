@@ -334,7 +334,8 @@ export async function readViewerFacts(
       subject_ids: entryIds,
     });
   }
-  if (prepared.canReadEntries) entryReadStages.set(prepared, { ids: entryIds, fingerprint: entryFingerprint(prepared, entryRows) });
+  if (prepared.canReadEntries)
+    entryReadStages.set(prepared, { ids: entryIds, fingerprint: entryFingerprint(prepared, entryRows) });
   const entries = new Map(entryRows.map((row) => [row.subjectId, row]));
 
   const native = nativeStages.get(prepared);

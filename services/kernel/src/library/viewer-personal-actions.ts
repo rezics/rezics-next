@@ -141,10 +141,7 @@ function personalActions(
   return projected;
 }
 
-function sameActionRuntime(
-  left: ActionRuntimeSnapshot,
-  right: ActionRuntimeSnapshot,
-): boolean {
+function sameActionRuntime(left: ActionRuntimeSnapshot, right: ActionRuntimeSnapshot): boolean {
   return (
     left.runtime.access === right.runtime.access &&
     left.runtime.clock === right.runtime.clock &&
@@ -200,10 +197,7 @@ function combineActionStates(
       continue;
     }
     if (subjectState.state === 'unavailable' || typedState.state === 'unavailable') {
-      result.set(
-        refKey(reference),
-        subjectState.state === 'unavailable' ? subjectState : typedState,
-      );
+      result.set(refKey(reference), subjectState.state === 'unavailable' ? subjectState : typedState);
       continue;
     }
     const merged = new Map<string, Set<string>>();
@@ -232,24 +226,8 @@ async function readActionProjection(
   questionId: string,
   question: ViewerQuestion | null,
 ): Promise<Map<string, InternalActionState>> {
-  const subject = await readActionBatch(
-    dependencies,
-    runtime,
-    actor,
-    groups.subject,
-    deadline,
-    questionId,
-    question,
-  );
-  const typed = await readActionBatch(
-    dependencies,
-    runtime,
-    actor,
-    groups.typed,
-    deadline,
-    questionId,
-    question,
-  );
+  const subject = await readActionBatch(dependencies, runtime, actor, groups.subject, deadline, questionId, question);
+  const typed = await readActionBatch(dependencies, runtime, actor, groups.typed, deadline, questionId, question);
   return combineActionStates(rows, subject, typed);
 }
 
@@ -320,9 +298,7 @@ function matchingActionStates(
     }
     result.set(
       key,
-      JSON.stringify(before) === JSON.stringify(after)
-        ? after
-        : { state: 'unavailable', reason: 'currentness' },
+      JSON.stringify(before) === JSON.stringify(after) ? after : { state: 'unavailable', reason: 'currentness' },
     );
   }
   return result;
@@ -336,12 +312,7 @@ async function currentFacts(
   deadline: number,
 ): Promise<boolean> {
   try {
-    return await viewerFactsCurrent(
-      { pool: dependencies.pool, access: runtime.access },
-      actor,
-      prepared,
-      deadline,
-    );
+    return await viewerFactsCurrent({ pool: dependencies.pool, access: runtime.access }, actor, prepared, deadline);
   } catch {
     return false;
   }
@@ -396,7 +367,9 @@ export async function readViewerPersonalActionsPage(
   }
 
   const actionReferences = [
-    ...new Map([...references.subject, ...references.typed].map((reference) => [refKey(reference), reference])).values(),
+    ...new Map(
+      [...references.subject, ...references.typed].map((reference) => [refKey(reference), reference]),
+    ).values(),
   ];
   const resourceTypes = [...new Set(actionReferences.map(({ type }) => type))];
   let firstRuntime: ViewerPersonalActionRuntime;
@@ -418,10 +391,7 @@ export async function readViewerPersonalActionsPage(
   } catch {
     if (!(await currentFacts(dependencies, accountActor, prepared, initialRuntime, deadline)))
       return unavailablePage('currentness');
-    const unavailable = unavailableStates(
-      [...references.typed, ...references.subject],
-      'dependency',
-    );
+    const unavailable = unavailableStates([...references.typed, ...references.subject], 'dependency');
     const actions = combineActionStates(rows, unavailable, unavailable);
     return pageWithActions(facts, rows, actions);
   }

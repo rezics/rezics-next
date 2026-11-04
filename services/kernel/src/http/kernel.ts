@@ -72,10 +72,7 @@ import { vndbImportRoutes } from '../library/list-import-vndb-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
-import {
-  readViewerPersonalActionsPage,
-  type ViewerPersonalActionsReader,
-} from '../library/viewer-personal-actions.ts';
+import { readViewerPersonalActionsPage, type ViewerPersonalActionsReader } from '../library/viewer-personal-actions.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';

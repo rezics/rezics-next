@@ -174,7 +174,7 @@ nonempty standard call pays the following complete composition in addition to it
   history scan, blanket reservation, maintained cache, new payer, vote mutation or repair occurs.
 - Correlation and encoding cost O(N) rows plus the bounded serialized input/output bytes and native fingerprints (which retain clear/absence distinctions).
   Empty/no-scope/unsupported-question paths skip native vote work; identity/preparation/read/finish mismatch exits
- early and discards provisional facts. Byte overflow returns unavailable; deadline, cancellation and dependency
+  early and discards provisional facts. Byte overflow returns unavailable; deadline, cancellation and dependency
   errors propagate through existing rollback/release paths. A same-input retry pays preparation and snapshots
   again, with no hidden refill or internal retry loop.
 
