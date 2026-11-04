@@ -38,6 +38,7 @@ import { catalogueNavigation } from '../features/catalogue/navigation';
 import { importReviewNavigation } from '../features/import-review/navigation';
 import { communityNavigation } from '../community/navigation';
 import { libraryNavigation } from '../library/navigation';
+import { LocaleNavigationProvider } from '../shell/locale-navigation/context';
 
 export const commerceNavigation = createNavigation([
   ...contextsNavigation,
@@ -203,7 +204,7 @@ function Root({ children }: { children: ReactNode }) {
     document.documentElement.dataset.hydrated = '';
   }, []);
   return (
-    <html lang={getLocale()} suppressHydrationWarning>
+    <html lang={locale} dir={/^(ar|ckb|dv|fa|he|ku|ps|sd|ug|ur|yi)(?:-|$)/i.test(locale) ? 'rtl' : 'ltr'} suppressHydrationWarning>
       <head>
         {nonce ? <meta property="csp-nonce" content={nonce} /> : null}
         <PreferencesScript />
@@ -221,9 +222,11 @@ function Root({ children }: { children: ReactNode }) {
             {m.shell_client_reload({}, options)}
           </a>
         </div>
-        <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
-          {platformClosed ? <ClosedPage /> : children}
-        </AppShell>
+        <LocaleNavigationProvider>
+          <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+            {platformClosed ? <ClosedPage /> : children}
+          </AppShell>
+        </LocaleNavigationProvider>
         <Scripts />
       </body>
     </html>
