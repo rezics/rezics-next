@@ -13,7 +13,7 @@ type Occurrence = {
   file: File;
   context: string;
   attempt: symbol;
-  observation: AttachmentObservation;
+  observation?: AttachmentObservation;
   accepted?: UploadedImage;
   detach: () => void;
 };
@@ -78,7 +78,6 @@ export class ComposerAttachmentEpisode {
         file: attachment.file,
         context: contextKey(this.context()),
         attempt: Symbol(),
-        observation: { stage: 'reservation' },
         detach: () => {},
       };
       this.rows.set(attachment, row);
@@ -103,7 +102,7 @@ export class ComposerAttachmentEpisode {
         row.file,
         signal,
         (stage) => {
-          if (!active() || original.observation.stage === stage) return;
+          if (!active() || original.observation?.stage === stage) return;
           original.observation = { stage };
           this.changed();
         },
