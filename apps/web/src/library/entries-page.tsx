@@ -12,7 +12,8 @@ import type { LibraryRestoreReceipt, LibraryRestoreResult, PersonalLibraryView }
 import { Exposure, useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { shelfHref, shelfSort, type ShelfDisplay } from './shelf-params';
+import { explicitShelfDisplay, shelfHref, shelfSort, type ShelfDisplay, type ShelfPresentationIntent } from './shelf-params';
+import type { ShelfPresentationResolution } from './shelf-preferences';
 import { ShelfEntries, ShelfScoreUnavailable } from './shelf-view';
 import { DisplayControls, SortControls, EntriesFirstPage } from './entries-current';
 import { shelfMutationLease, type ShelfMutationLease } from './shelf-rows';
@@ -35,6 +36,7 @@ type Display = ShelfDisplay;
 
 export function PersonalLibraryPage({
   page,
+  presentation,
   summary,
   locale,
   display,
@@ -54,6 +56,7 @@ export function PersonalLibraryPage({
   isCurrent,
 }: {
   page: PersonalLibraryView;
+  presentation?: ShelfPresentationResolution;
   summary?: ShelfSummaryPresentation;
   locale: string;
   display: Display;
@@ -99,22 +102,26 @@ export function PersonalLibraryPage({
   const filterSort = page.sortExplicit ? sort : undefined;
   const effectiveCursor = page.cursorReset ? undefined : cursor;
   const typeSearch = page.type ? { type: page.type } : {};
-  const firstPage = { ...typeSearch, ...(page.state ? { state: page.state } : {}), ...sort, ...display };
+  const intent: ShelfPresentationIntent = presentation?.intent ?? {
+    ...typeSearch,
+    ...(page.state ? { state: page.state } : {}),
+    ...(filterSort ?? {}),
+    ...explicitShelfDisplay(display),
+    ...(effectiveCursor ? { cursor: effectiveCursor } : {}),
+  };
+  const firstPage: ShelfPresentationIntent = { ...intent };
+  delete firstPage.cursor;
   const saveQuerySearch = new URL(
-    shelfHref(locale, { ...typeSearch, ...(page.state ? { state: page.state } : {}), ...sort, ...display }),
+    shelfHref(locale, firstPage),
     'https://rezics.local',
   ).searchParams;
   const saveQuerySelection = admitSavedQuerySelection({
     ...(page.type ? { type: page.type } : {}),
     search: saveQuerySearch,
   });
-  const { layout, ...otherDisplay } = display;
-  const clearTypeHref = shelfHref(locale, {
-    ...(page.state ? { state: page.state } : {}),
-    ...sort,
-    ...otherDisplay,
-    ...(display.layoutExplicit !== false ? { layout } : {}),
-  });
+  const clearTypeView: ShelfPresentationIntent = { ...firstPage };
+  delete clearTypeView.type;
+  const clearTypeHref = shelfHref(locale, clearTypeView);
   const typeLabel = page.typeLabel ?? m.library_type_unnamed();
   const firstUse = shelfSummaryFirstUse(summary?.page, page, effectiveCursor);
   const heading = page.state
@@ -147,10 +154,7 @@ export function PersonalLibraryPage({
           locale={locale}
           csrfToken={csrfToken ?? null}
           returnTo={shelfHref(locale, {
-            ...typeSearch,
-            ...display,
-            ...sort,
-            ...(page.state ? { state: page.state } : {}),
+            ...intent,
             ...(effectiveCursor ? { cursor: effectiveCursor } : {}),
           })}
         />
@@ -180,22 +184,15 @@ export function PersonalLibraryPage({
               {...(page.state ? { state: page.state } : {})}
               locale={locale}
               display={display}
+              {...(presentation ? { presentation } : {})}
               {...(isCurrent ? { isCurrent } : {})}
               tableAvailable={!page.readState && page.entries.length > 0}
-              sort={sort}
               {...(filterSort ? { filterSort } : {})}
               {...(effectiveCursor ? { cursor: effectiveCursor } : {})}
             />
           </Exposure>
         </div>
         <p className="text-sm text-muted-foreground">
-          {display.layoutSource === 'url' || display.layoutExplicit
-            ? m.library_layout_source_url()
-            : display.layoutSource === 'type'
-              ? m.library_layout_source_type()
-              : display.layoutSource === 'all'
-                ? m.library_layout_source_all()
-                : m.library_layout_source_application()}{' '}
           <a className="underline underline-offset-4" href={`/${locale}/settings#display`}>
             {m.settings_shelf_heading()}
           </a>
@@ -206,6 +203,7 @@ export function PersonalLibraryPage({
           {...(page.state ? { state: page.state } : {})}
           display={display}
           sort={sort}
+          {...(presentation ? { presentation } : {})}
           {...(isCurrent ? { isCurrent } : {})}
           {...typeSearch}
         />
@@ -213,7 +211,7 @@ export function PersonalLibraryPage({
           <ShelfTypes
             key={`${locale}:${page.type ?? ''}`}
             locale={locale}
-            view={{ ...typeSearch, ...(page.state ? { state: page.state } : {}), ...sort, ...display }}
+            view={intent}
             {...(page.typeLabel ? { typeLabel: page.typeLabel } : {})}
           />
           {page.type ? (
@@ -307,11 +305,8 @@ export function PersonalLibraryPage({
           <a
             className={buttonVariants({ variant: 'outline' })}
             href={shelfHref(locale, {
-              ...typeSearch,
-              ...(page.state ? { state: page.state } : {}),
-              ...sort,
+              ...firstPage,
               cursor: page.next,
-              ...display,
             })}
           >
             {m.library_next_page()}
@@ -327,12 +322,14 @@ export function LabelShelfPage({
   page,
   locale,
   display,
+  presentation,
   isCurrent,
   canUnassign,
 }: {
   page: LabelShelfPageData;
   locale: string;
   display: Display;
+  presentation?: ShelfPresentationResolution;
   isCurrent?: () => boolean;
   canUnassign?: () => boolean;
 }) {
@@ -367,7 +364,13 @@ export function LabelShelfPage({
     <div className="max-w-6xl space-y-6 text-foreground">
       <PageHeading>{page.label.name}</PageHeading>
       <SubjectLabelNotice {...(page.labelResult !== undefined ? { result: page.labelResult } : {})} />
-      <DisplayControls locale={locale} display={display} label={page.label.id} {...(isCurrent ? { isCurrent } : {})} />
+      <DisplayControls
+        locale={locale}
+        display={display}
+        label={page.label.id}
+        {...(presentation ? { presentation } : {})}
+        {...(isCurrent ? { isCurrent } : {})}
+      />
       {page.entries.length ? (
         <LabelShelfEntries
           entries={page.entries}
@@ -389,7 +392,10 @@ export function LabelShelfPage({
           onClick={(event) => {
             if (isCurrent && !isCurrent()) event.preventDefault();
           }}
-          href={shelfHref(locale, { label: page.label.id, ...display, cursor: page.next })}
+          href={shelfHref(locale, {
+            ...(presentation?.intent ?? { label: page.label.id, ...explicitShelfDisplay(display) }),
+            cursor: page.next,
+          })}
           className={buttonVariants({ variant: 'outline', size: 'lg' })}
         >
           {m.library_more()}
@@ -400,7 +406,10 @@ export function LabelShelfPage({
           <form
             data-label-undo
             method="post"
-            action={shelfHref(locale, { label: page.label.id, ...display })}
+            action={shelfHref(
+              locale,
+              presentation?.intent ?? { label: page.label.id, ...explicitShelfDisplay(display) },
+            )}
             onSubmit={(event) => {
               if (canUnassign && !canUnassign()) event.preventDefault();
             }}

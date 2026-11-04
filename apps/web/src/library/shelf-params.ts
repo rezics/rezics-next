@@ -130,6 +130,13 @@ export type ShelfSearch = {
   label?: string;
 };
 
+/** An address plus the explicitness metadata needed to preserve a chosen default in ordinary links. */
+export type ShelfPresentationIntent = ShelfSearch & {
+  layoutExplicit?: boolean;
+  sizeExplicit?: boolean;
+  columnsExplicit?: boolean;
+};
+
 function oneOf<T extends string>(values: readonly T[], value: unknown): T | undefined {
   return typeof value === 'string' && (values as readonly string[]).includes(value) ? (value as T) : undefined;
 }
@@ -170,22 +177,25 @@ export function shelfDisplay(search: ShelfSearch): ShelfDisplay {
   };
 }
 
+/** Copy only choices that came from the address into a new navigation intent. */
+export function explicitShelfDisplay(display: ShelfDisplay): Partial<ShelfPresentationIntent> {
+  return {
+    ...(display.layoutExplicit ? { layout: display.layout, layoutExplicit: true } : {}),
+    ...(display.sizeExplicit ? { size: display.size, sizeExplicit: true } : {}),
+    ...(display.columnsExplicit && display.columns ? { columns: display.columns, columnsExplicit: true } : {}),
+  };
+}
+
 /** The address of a shelf view. Defaults stay out of it, and the layout and size are kept unless the caller changes them. */
 export function shelfHref(
   locale: string,
-  view: {
-    type?: string;
-    label?: string;
+  view: Omit<ShelfPresentationIntent, 'state'> & {
     state?: LibraryEntryStateWrite | null;
     orderBy?: ShelfSort['orderBy'];
     direction?: ShelfSort['direction'];
     layout?: ShelfLayout;
     size?: ShelfSize;
     columns?: string;
-    layoutExplicit?: boolean;
-    sizeExplicit?: boolean;
-    columnsExplicit?: boolean;
-    cursor?: string;
   },
 ): string {
   const params = new URLSearchParams();

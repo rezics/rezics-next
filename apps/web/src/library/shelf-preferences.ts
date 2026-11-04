@@ -4,6 +4,7 @@ import {
   shelfDisplay,
   shelfSort,
   type PersonalShelfColumnId,
+  type ShelfPresentationIntent,
   type ShelfSearch,
   type ShelfSort,
 } from './shelf-params';
@@ -79,9 +80,22 @@ function typeScope(type: string | undefined): string | undefined {
 }
 
 export type ShelfPresentationResolution = {
+  /** The choices that came from the address, before saved or application defaults are applied. */
+  intent: ShelfPresentationIntent;
+  /** The effective request used by the bounded native reader. */
   search: ShelfSearch;
   display: ReturnType<typeof shelfDisplay>;
   sort: ShelfSort;
+  sources: {
+    layout: NonNullable<ReturnType<typeof shelfDisplay>['layoutSource']>;
+    size: 'url' | 'saved' | 'application';
+    columns: 'url' | 'saved' | 'application';
+    sort: 'url' | 'saved' | 'application';
+  };
+  unsupported: {
+    sort?: string;
+    columns: string[];
+  };
   cursorInvalidated: boolean;
 };
 
@@ -93,7 +107,8 @@ export function resolveShelfPresentation(
   const saved = shelf ?? {};
   const fallbackSort = shelfSort(search);
   const tab = shelfTabForState(search.state);
-  const savedSort = tab ? libraryOrderFromShelf(saved.sorts?.[tab]) : undefined;
+  const savedSortPreference = tab ? saved.sorts?.[tab] : undefined;
+  const savedSort = libraryOrderFromShelf(savedSortPreference);
   const orderBy = search.orderBy ?? savedSort?.orderBy ?? fallbackSort.orderBy;
   const direction =
     search.direction ??
@@ -119,7 +134,29 @@ export function resolveShelfPresentation(
           : base.size);
   const columns = search.columns ?? columnsFromShelf(saved);
   const { cursor, ...withoutCursor } = search;
+  const intent: ShelfPresentationIntent = {
+    ...search,
+    layoutExplicit: search.layout !== undefined,
+    sizeExplicit: search.size !== undefined,
+    columnsExplicit: search.columns !== undefined,
+  };
+  if (cursorInvalidated) delete intent.cursor;
+  const layoutSource =
+    search.layout !== undefined
+      ? 'url'
+      : scope && saved.layouts?.[scope]
+        ? 'type'
+        : saved.layouts?.all
+          ? 'all'
+          : 'application';
+  const unsupportedSavedSort =
+    savedSortPreference &&
+    (!savedSort || savedSort.orderBy === 'personalScore')
+      ? savedSortPreference.field.replaceAll('_', ' ')
+      : undefined;
+  const unsupportedSort = search.orderBy === undefined ? unsupportedSavedSort : undefined;
   return {
+    intent,
     search: {
       ...withoutCursor,
       orderBy,
@@ -132,20 +169,54 @@ export function resolveShelfPresentation(
       size,
       ...(columns !== undefined ? { columns } : {}),
       layoutExplicit: search.layout !== undefined,
-      layoutSource:
-        search.layout !== undefined
-          ? 'url'
-          : scope && saved.layouts?.[scope]
-            ? 'type'
-            : saved.layouts?.all
-              ? 'all'
-              : 'application',
+      layoutSource,
       sizeExplicit: search.size !== undefined,
       columnsExplicit: search.columns !== undefined,
     },
     sort: { orderBy, direction },
+    sources: {
+      layout: layoutSource,
+      size: search.size !== undefined ? 'url' : saved.gridSize ? 'saved' : 'application',
+      columns: search.columns !== undefined ? 'url' : saved.tableColumns ? 'saved' : 'application',
+      sort: search.orderBy !== undefined || search.direction !== undefined
+        ? 'url'
+        : savedSort
+          ? 'saved'
+          : 'application',
+    },
+    unsupported: {
+      ...(unsupportedSort ? { sort: unsupportedSort } : {}),
+      columns: search.columns === undefined ? unsupportedShelfColumns(saved) : [],
+    },
     cursorInvalidated,
   };
+}
+
+/** Keep only explicit URL choices when moving between Library views. */
+export function shelfIntentWith(
+  presentation: ShelfPresentationResolution,
+  patch: Partial<ShelfPresentationIntent>,
+  options: { clearCursor?: boolean } = {},
+): ShelfPresentationIntent {
+  const intent = { ...presentation.intent, ...patch };
+  if (options.clearCursor) delete intent.cursor;
+  return intent;
+}
+
+/** Replace the view portion of a router search while retaining independent feedback/action parameters. */
+export function replaceShelfAddress(
+  previous: Record<string, unknown>,
+  next: ShelfPresentationIntent,
+): Record<string, unknown> {
+  const result = { ...previous };
+  const addressKeys = ['type', 'state', 'label', 'orderBy', 'direction', 'layout', 'size', 'columns', 'cursor'] as const;
+  for (const key of addressKeys)
+    delete result[key];
+  for (const key of addressKeys) {
+    const value = next[key];
+    if (typeof value === 'string') result[key] = value;
+  }
+  return result;
 }
 
 export function unsupportedShelfSorts(shelf: ShelfPreferences): Array<{ tab: ShelfPreferenceTab; field: string }> {
