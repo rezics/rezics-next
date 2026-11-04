@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:72a1835980bb4e84a89b29ff924fc56e8941a2382e0f6e0638308fda8d1f213c",
+  "digest": "sha256:47c241a4dafea05fc417e1a9881ff634951de64c2a5139551ab2a343d544d673",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -2552,7 +2552,7 @@
       "schema": "http://schema.org/",
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.7" },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.8" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {
@@ -4036,7 +4036,7 @@
             "zh-Hant": "此類型的作品"
           }
         },
-        "qualifiers": ["rezics:spoilerLevel"],
+        "qualifiers": ["rezics:sourceTagWeight", "rezics:sourceTagWeightMetric", "rezics:spoilerLevel"],
         "multivalued": true,
         "descriptions": {
           "de": "Ein Genrekonzept für dieses Werk, etwa Science-Fiction.",
@@ -4800,7 +4800,7 @@
             "zh-Hant": "使用此標籤的主體"
           }
         },
-        "qualifiers": ["rezics:spoilerLevel"],
+        "qualifiers": ["rezics:sourceTagWeight", "rezics:sourceTagWeightMetric", "rezics:spoilerLevel"],
         "multivalued": true,
         "descriptions": {
           "de": "Ein Schlagwortkonzept zur Klassifikation des Subjekts; keine kommagetrennte Zeichenfolge und kein persönliches Bibliotheksetikett.",
@@ -7952,6 +7952,135 @@
           "ko": "연대순 관계와 별개로 이 출시판이 대체하는 특정 소프트웨어 출시판입니다.",
           "zh-Hans": "此发行版所取代的确切软件发行版，与时间顺序无关。",
           "zh-Hant": "此發行版所取代的確切軟體發行版，與時間順序無關。"
+        }
+      },
+      "rezics:sourceSnapshot": {
+        "iri": "https://rezics.com/vocab/sourceSnapshot",
+        "labels": {
+          "de": "Quellen-Snapshot",
+          "en": "source snapshot",
+          "es": "instantánea de la fuente",
+          "fr": "instantané de la source",
+          "ja": "出典スナップショット",
+          "ko": "출처 스냅샷",
+          "zh-Hans": "来源快照",
+          "zh-Hant": "來源快照"
+        },
+        "mappings": [],
+        "datatype": "string",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500,
+          "pattern": "^unversioned:sha256:[0-9a-f]{64}$(?![\\s\\S])"
+        },
+        "descriptions": {
+          "de": "SHA-256-Prüfsumme der exakten, nicht versionierten, zitierten Anbieterantwort.",
+          "en": "The SHA-256 digest of the exact unversioned provider response cited by this association.",
+          "es": "Huella SHA-256 de la respuesta exacta y sin versión del proveedor citada.",
+          "fr": "Empreinte SHA-256 de la réponse exacte et non versionnée du fournisseur citée ici.",
+          "ja": "引用した未版管理プロバイダー応答そのものの SHA-256 ダイジェスト。",
+          "ko": "인용된 버전 없는 공급자 응답 원본의 SHA-256 다이제스트입니다.",
+          "zh-Hans": "所引用的未版本化提供方响应原文的 SHA-256 摘要。",
+          "zh-Hant": "所引用的未版本化提供者回應原文的 SHA-256 摘要。"
+        }
+      },
+      "rezics:sourceTagId": {
+        "iri": "https://rezics.com/vocab/sourceTagId",
+        "labels": {
+          "de": "VNDB-Schlagwort-ID",
+          "en": "VNDB tag ID",
+          "es": "ID de etiqueta de VNDB",
+          "fr": "ID de tag VNDB",
+          "ja": "VNDB タグ ID",
+          "ko": "VNDB 태그 ID",
+          "zh-Hans": "VNDB 标签 ID",
+          "zh-Hant": "VNDB 標籤 ID"
+        },
+        "mappings": [],
+        "datatype": "string",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": { "type": "string", "minLength": 1, "maxLength": 1500, "pattern": "^g[1-9][0-9]{0,9}$(?![\\s\\S])" },
+        "descriptions": {
+          "de": "Anbieterkennung dieses Schlagworts im zitierten VNDB-Datensatz.",
+          "en": "The provider identifier for this exact tag within its cited VNDB record.",
+          "es": "Identificador de esta etiqueta dentro del registro de VNDB citado.",
+          "fr": "Identifiant de ce tag précis dans la fiche VNDB citée.",
+          "ja": "引用した VNDB レコードにあるこのタグのプロバイダー識別子。",
+          "ko": "인용된 VNDB 레코드에서 이 태그를 식별하는 공급자 ID입니다.",
+          "zh-Hans": "所引用 VNDB 记录中此标签的提供方标识。",
+          "zh-Hant": "所引用 VNDB 紀錄中此標籤的提供者識別碼。"
+        }
+      },
+      "rezics:sourceTagWeight": {
+        "iri": "https://rezics.com/vocab/sourceTagWeight",
+        "labels": {
+          "de": "Quellengewicht des Schlagworts",
+          "en": "source tag weight",
+          "es": "peso de etiqueta de la fuente",
+          "fr": "poids du tag selon la source",
+          "ja": "出典タグの重み",
+          "ko": "출처 태그 가중치",
+          "zh-Hans": "来源标签权重",
+          "zh-Hant": "來源標籤權重"
+        },
+        "mappings": [],
+        "datatype": "quantity",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "additionalProperties": false,
+          "properties": {
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$" },
+            "unit": { "enum": ["1"] }
+          }
+        },
+        "units": ["1"],
+        "minimum": 0,
+        "maximum": 3,
+        "minimumExclusive": true,
+        "descriptions": {
+          "de": "Exakter aggregierter Quellenwert dieser Zuordnung. VNDB tags.rating liegt auf der Skala (0,3] und ist weder REZICS-Stimme noch Konfidenz.",
+          "en": "An exact provider aggregate on this association. VNDB tags.rating is in rating points on (0,3]; it is not a REZICS vote or confidence.",
+          "es": "Valor agregado exacto de la fuente para esta asociación. VNDB tags.rating usa la escala (0,3]; no es un voto ni una confianza de REZICS.",
+          "fr": "Valeur agrégée exacte de la source pour cette association. VNDB tags.rating utilise l’échelle (0,3] ; ce n’est ni un vote ni une confiance REZICS.",
+          "ja": "この関連に付された出典の正確な集計値。VNDB tags.rating の尺度は (0,3] です。REZICS の投票や確信度ではありません。",
+          "ko": "이 연결에 대한 출처의 정확한 집계값입니다. VNDB tags.rating의 척도는 (0,3]이며 REZICS 투표나 신뢰도가 아닙니다.",
+          "zh-Hans": "此关联的来源精确聚合值。VNDB tags.rating 的尺度为 (0,3]；它不是 REZICS 投票或置信度。",
+          "zh-Hant": "此關聯的來源精確聚合值。VNDB tags.rating 的尺度為 (0,3]；它不是 REZICS 投票或信心度。"
+        }
+      },
+      "rezics:sourceTagWeightMetric": {
+        "iri": "https://rezics.com/vocab/sourceTagWeightMetric",
+        "labels": {
+          "de": "Kennzahl des Quellengewichts",
+          "en": "source tag weight metric",
+          "es": "métrica del peso de la fuente",
+          "fr": "métrique du poids de source",
+          "ja": "出典重みの指標",
+          "ko": "출처 가중치 지표",
+          "zh-Hans": "来源权重指标",
+          "zh-Hant": "來源權重指標"
+        },
+        "mappings": [],
+        "datatype": "string",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": { "type": "string", "minLength": 1, "maxLength": 1500, "pattern": "^(?:vndbTagsRating)$(?![\\s\\S])" },
+        "descriptions": {
+          "de": "Die typisierte Quellenkennzahl, die Skala und Bedeutung eines Quellengewichts festlegt.",
+          "en": "The typed provider metric that gives a source tag weight its scale and meaning.",
+          "es": "La métrica tipada de la fuente que define la escala y el significado del peso.",
+          "fr": "La métrique typée de la source qui définit l’échelle et le sens du poids.",
+          "ja": "出典タグ重みの尺度と意味を定める型付き指標。",
+          "ko": "출처 태그 가중치의 척도와 의미를 정하는 유형화된 지표입니다.",
+          "zh-Hans": "定义来源标签权重尺度和含义的类型化指标。",
+          "zh-Hant": "定義來源標籤權重尺度與含義的型別化指標。"
         }
       }
     },
