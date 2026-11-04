@@ -130,13 +130,23 @@ test('each quotation assertion owns its evidence, language choice, inspection an
     'Node',
     'Document',
     'IS_REACT_ACT_ENVIRONMENT',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'getComputedStyle',
   ];
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of keys)
     Object.defineProperty(globalThis, key, {
       configurable: true,
       writable: true,
-      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key as keyof typeof window],
+      value:
+        key === 'window'
+          ? window
+          : key === 'IS_REACT_ACT_ENVIRONMENT'
+            ? true
+            : ['requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle'].includes(key)
+              ? (window[key as keyof typeof window] as Function).bind(window)
+              : window[key as keyof typeof window],
     });
   const { createRoot } = await import('react-dom/client');
   const { QuotationView } = await import('../src/features/pages/quotation-view');
