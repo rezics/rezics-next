@@ -606,7 +606,9 @@ test('independent publication creation, local corrections, immutable recovery an
     const publisherFact = scope().getByRole('heading', { name: 'publisher', level: 3 }).closest('fieldset')!;
     await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
     await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
-    await replace(urlIn(workSection()), '');
+    await act(async () =>
+      user.click(within(workSection()).getByRole('button', { name: m.correction_remove_reference() })),
+    );
     expect(recoveryButton().disabled).toBe(false);
     await click(m.catalogue_create_review_new());
     await create();
