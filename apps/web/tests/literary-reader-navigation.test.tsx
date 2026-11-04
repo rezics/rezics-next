@@ -12,18 +12,21 @@ test('destination return preserves the selected stream row address and never bor
     property: 'wdt:P179',
     direction: 'inverse' as const,
   };
+  const context = { id: literaryIds.author } as import('@rezics/composition').SelectedContext;
   const original = literaryAddress({
     id: literaryIds.series,
     label: 'Harbour stories',
     locale: 'ja',
     view: 'contents',
     realm: literaryIds.author,
+    context,
     stream: selected,
     continuation: { node: selected.node, cursor: 'native opaque cursor' },
+    focus: 'members:assertion',
   });
   expect(subjectVisitReturn(original, 'ja')).toBe(original);
   const destination = new URL(
-    literaryDestination(literaryIds.member, 'Harbour work', 'ja', original, literaryIds.author),
+    literaryDestination(literaryIds.member, 'Harbour work', 'ja', original, literaryIds.author, context),
     'https://site.test',
   );
   const returned = destination.searchParams.get('via')!;
@@ -32,10 +35,12 @@ test('destination return preserves the selected stream row address and never bor
   expect(address.pathname).toContain('/contents');
   expect(address.hash).toBe('#literary-reader');
   expect(address.searchParams.get('realm')).toBe(literaryIds.author);
+  expect(address.searchParams.get('context')).toBe(context.id);
   expect(address.searchParams.get('node')).toBe(selected.node);
   expect(address.searchParams.get('streamProperty')).toBe(selected.property);
   expect(address.searchParams.get('streamDirection')).toBe(selected.direction);
   expect(address.searchParams.get('cursor')).toBe('native opaque cursor');
+  expect(address.searchParams.get('focus')).toBe('members:assertion');
 
   const history = [{
     view: 'contents' as const,
