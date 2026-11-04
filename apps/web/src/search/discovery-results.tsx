@@ -293,6 +293,7 @@ export function DiscoveryResults({
                   ...hit,
                   labels: hit.labels ?? (label ? { [label.language]: label.value } : {}),
                   summary,
+                  creativeWork: summary.creativeWork,
                 }}
                 locale={locale}
                 hitTypes={kinds}

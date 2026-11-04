@@ -51,6 +51,7 @@ export type ResultHit = SubjectHit & {
   aliases?: Record<string, string[]>;
   figure?: NativeHit['figure'];
   storyOverlay?: boolean;
+  creativeWork?: boolean;
   workContext?: WorkContext;
 };
 
@@ -330,7 +331,7 @@ export function ResultRow({
               ) : null}
             </ListRowControl>
           ) : null}
-          {hit.summary?.creativeWork || hit.workContext ? (
+          {hit.creativeWork || hit.workContext ? (
             <ListRowControl className="min-w-0">
               <WorkContextView context={hit.workContext} locale={locale} subjectHrefFor={subjectHrefFor} />
             </ListRowControl>

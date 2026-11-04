@@ -20,7 +20,7 @@ function options(locale: string) {
 function Term({ term, locale }: { term: WorkContextTerm; locale: string }) {
   const label = pickText(term.labels, locale);
   return (
-    <span lang={label.lang} dir="auto" title={term.id}>
+    <span lang={label.lang ?? undefined} dir="auto" title={term.id}>
       {label.text || term.id}
     </span>
   );
@@ -94,7 +94,7 @@ function Value({ value, locale, subjectHrefFor }: { value: WorkContextValue } & 
         <span data-target-id={value.id} data-original-id={value.originalId} data-target-type={value.type.id}>
           <a
             className={control}
-            lang={label.lang}
+            lang={label.lang ?? undefined}
             dir="auto"
             href={subjectHrefFor?.(target) ?? subjectHref(target, locale).href}
           >
