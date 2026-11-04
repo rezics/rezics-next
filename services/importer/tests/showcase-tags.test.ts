@@ -300,7 +300,10 @@ function journaledPort(journal: ShowcaseJournal, commands: BatchCommand[]) {
     identities,
     async batch(request: { commands: BatchCommand[] }): Promise<BatchWriteResult> {
       commands.push(...request.commands);
-      for (const command of request.commands) journal.prepareCommand(command);
+      for (const command of request.commands) {
+        if (command.op !== 'create' && command.op !== 'propose') continue;
+        journal.prepareCommand(command);
+      }
       const results = request.commands.map((command) => {
         if (command.op === 'create') {
           const id = identities.get(command.source.external_id) ?? randomUUID();
@@ -308,14 +311,18 @@ function journaledPort(journal: ShowcaseJournal, commands: BatchCommand[]) {
           if (!subjects.has(id)) subjects.set(id, { subject: { id, type: command.subject.type, statements: {} } });
           return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
         }
-        const subject = command.op === 'propose' ? subjects.get(command.subject)?.subject : undefined;
-        if (subject && command.op === 'propose') {
-          const statement = structuredClone(command.statement) as { value: { type: string; content: unknown } };
-          subject.statements[command.statement.property.id] = [statement];
+        if (command.op === 'propose') {
+          const subject = subjects.get(command.subject)?.subject;
+          if (subject) {
+            const statement = structuredClone(command.statement) as { value: { type: string; content: unknown } };
+            subject.statements[command.statement.property.id] = [statement];
+          }
+          return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
         }
-        return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
+        return { key: command.key, status: 201 as const, value: { revision: 1 } };
       });
       for (const [index, command] of request.commands.entries()) {
+        if (command.op !== 'create' && command.op !== 'propose') continue;
         journal.acknowledgeCommand(
           command,
           results[index]! as Extract<BatchWriteResult['results'][number], { status: 200 | 201 }>,
@@ -462,6 +469,7 @@ test('default seed publishes dictionary without a UUID file, rereads, and withho
     );
     expect(laterGenres.filter((command) => content(command) === g311 && !genres.includes(command))).toEqual([]);
     expect(afterRetract.bindings.concepts.map((item) => item.code)).toEqual(['g44']);
+    subject.statements['schema:url'] = [{ value: { content: vndbPublicTagScheme('cont') } }];
 
     const overflowParents = Array.from({ length: 520 }, (_, index) => `g${2000 + index}`);
     const overflow = publicationTables({
