@@ -47,7 +47,11 @@ export function feedRoutes(
         503: problemSchema('deadline_exceeded', 'dependency_unavailable', 'overloaded', 'partition_unavailable'),
       },
     },
-  });
+  }, (schemas, detail) => ({
+    query: schemas.query.schema,
+    response: schemas.response.schema,
+    detail,
+  }));
   return app.get(
     operation.path,
     {

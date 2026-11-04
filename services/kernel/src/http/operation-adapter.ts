@@ -65,11 +65,15 @@ function requireSchemaReference(
 }
 
 /** Binds framework schemas to pure references and projects all mounted metadata from one descriptor. */
-export function bindOperation<const Schemas extends OperationSchemaBindings>(
+export function bindOperation<const Schemas extends OperationSchemaBindings, Options>(
   catalogue: OperationCatalogue,
   operationId: string,
   expectedMethod: OperationMethod,
   schemas: Schemas,
+  bindOptions: (
+    schemas: Schemas,
+    detail: ReturnType<typeof operationDetail>,
+  ) => Options,
 ) {
   const descriptor = catalogue.get(operationId);
   if (!descriptor) throw new Error(operationId + ': operation descriptor is not registered');
@@ -86,14 +90,7 @@ export function bindOperation<const Schemas extends OperationSchemaBindings>(
     requireSchemaReference(descriptor, slot, descriptor.contracts[slot], schemas[slot]?.reference);
   requireSchemaReference(descriptor, 'response', descriptor.contracts.response, schemas.response.reference);
 
-  const options = {
-    ...(schemas.params === undefined ? {} : { params: schemas.params.schema }),
-    ...(schemas.query === undefined ? {} : { query: schemas.query.schema }),
-    ...(schemas.headers === undefined ? {} : { headers: schemas.headers.schema }),
-    ...(schemas.body === undefined ? {} : { body: schemas.body.schema }),
-    response: schemas.response.schema,
-    detail: operationDetail(descriptor),
-  };
+  const options = bindOptions(schemas, operationDetail(descriptor));
   return {
     method: descriptor.method,
     path: descriptor.path,

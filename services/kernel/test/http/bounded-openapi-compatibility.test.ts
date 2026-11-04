@@ -30,6 +30,20 @@ const detail = {
   'x-exposure': 'public',
   security: [{ bearerAuth: [] }, {}],
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function operationsOf(document: unknown): Record<string, unknown>[] {
+  if (!isRecord(document) || !isRecord(document.paths)) throw new TypeError('OpenAPI paths are unavailable');
+  const operations: Record<string, unknown>[] = [];
+  for (const path of Object.values(document.paths))
+    if (isRecord(path))
+      for (const operation of Object.values(path)) if (isRecord(operation)) operations.push(operation);
+  return operations;
+}
+
 function probe() {
   return createApp({ pool }).post('/bounded-openapi', { body: schema, detail }, ({ body, request }) => {
     expect(bodyWireBytes(request)).toBeGreaterThan(0);
@@ -59,7 +73,7 @@ test('the actual kernel generation caller retains closed subject and typed JSON 
   expect(search).toMatchObject({ additionalProperties: false, properties: { limit: { type: 'integer' } } });
   const kernel = createKernel({ pool, routeKey: new Uint8Array(32) });
   expect(openApiDocument(kernel)).toEqual(document);
-  const operations = Object.values(document.paths).flatMap((path) => Object.values(path));
+  const operations = operationsOf(document);
   const record = operations.find((operation) => operation.operationId === 'progress_session.record');
   const continued = operations.find((operation) => operation.operationId === 'library_continue.list');
   const feed = operations.find((operation) => operation.operationId === 'feed_item.list');

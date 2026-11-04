@@ -369,7 +369,13 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         503: unavailable,
       },
     },
-  });
+  }, (schemas, detail) => ({
+    params: schemas.params.schema,
+    headers: schemas.headers.schema,
+    body: schemas.body.schema,
+    response: schemas.response.schema,
+    detail,
+  }));
 
   const episodeRow = t.Object(
     {

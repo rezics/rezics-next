@@ -61,7 +61,11 @@ export function continueRoutes(
         ),
       },
     },
-  });
+  }, (schemas, detail) => ({
+    query: schemas.query.schema,
+    response: schemas.response.schema,
+    detail,
+  }));
   return app.get(
     operation.path,
     {
