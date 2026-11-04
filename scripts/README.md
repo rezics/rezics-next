@@ -279,7 +279,10 @@ already admitted physical check-host run because credentials cannot be relocated
 Root typecheck preserves every compiler diagnostic with its file and line. Database setup or cleanup failure, check-host
 loss, timeout and compiler launch failure without diagnostics are reported as infrastructure or execution results,
 never as type errors without diagnostics. The local prelanding cache is copy-on-write from the dev commit to the
-candidate commit and includes compiler, lockfile, configuration and Kernel/Auth migration inputs.
+candidate commit and includes compiler, lockfile, Reylo configuration, Kernel/Auth SQL sources and migrations.
+
+Decision: Web's public typecheck delegates workspace selection, placement and the shared migrated compiler database to
+root; root runs its `typecheck:root` entrypoint so Web compiles with its own Reylo mapper configuration.
 
 ### Controller-reserved proof binding
 

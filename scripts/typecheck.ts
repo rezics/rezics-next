@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
-// Typecheck every workspace from the repository root. One throwaway database receives the kernel and Auth
-// schemas, is shared, then removed.
-import { dirname, join, relative, resolve } from 'node:path';
+// Typecheck every workspace from the repository root. One throwaway database receives the Kernel and Auth schemas,
+// is shared by mapper-enabled projects, then removed.
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveBunCommand } from './gate.ts';
@@ -48,7 +48,7 @@ type CompilerState = {
   discard: () => void;
 };
 
-function compilerStateFingerprint(root: string): string {
+function compilerStateFingerprint(root: string, env: NodeJS.ProcessEnv): string {
   const files = new Set([
     'package.json',
     'bun.lock',
@@ -58,10 +58,28 @@ function compilerStateFingerprint(root: string): string {
     'services/kernel/scripts/typecheck.ts',
     'services/auth/scripts/database.ts',
   ]);
-  for (const glob of ['services/kernel/db/**/migrations/*.sql', 'services/auth/db/**/migrations/*.sql'])
+  for (const glob of [
+    'services/kernel/db/**/migrations/*.sql',
+    'services/auth/db/**/migrations/*.sql',
+    'services/kernel/src/**/*.sql',
+    'services/auth/src/**/*.sql',
+  ])
     for (const file of new Bun.Glob(glob).scanSync({ cwd: root })) files.add(file);
 
   const hash = createHash('sha256').update(Bun.version).update('\0').update(Bun.revision);
+  const reyloConfig = env.REYLO_CONFIG ?? '';
+  hash.update('\0REYLO_CONFIG\0').update(reyloConfig).update('\0');
+  if (reyloConfig) {
+    const configured = resolve(root, 'services/kernel', reyloConfig);
+    const local = relative(root, configured);
+    if (local !== '..' && !local.startsWith(`..${sep}`) && !isAbsolute(local) && existsSync(configured)) {
+      try {
+        if (statSync(configured).isFile()) files.add(local);
+      } catch {
+        // Compiler config validation reports invalid inputs; this fingerprint only includes readable files.
+      }
+    }
+  }
   for (const file of [...files].sort()) {
     const path = join(root, file);
     if (!existsSync(path)) continue;
@@ -83,7 +101,7 @@ function prepareCompilerState(
 
   const base = env.TYPECHECK_DEV_COMMIT!;
   const candidate = env.TYPECHECK_CANDIDATE_COMMIT!;
-  const fingerprint = compilerStateFingerprint(root);
+  const fingerprint = compilerStateFingerprint(root, env);
   const stateRoot = join(root, '.temp/typecheck/compiler-state');
   const source = join(stateRoot, base, fingerprint, 'kernel.tsbuildinfo');
   const targetDirectory = join(stateRoot, candidate, fingerprint);
@@ -282,14 +300,17 @@ async function loadWorkspaces(root: string): Promise<Workspace[]> {
       peerDependencies?: Record<string, string>;
     };
     const script = scripts?.typecheck;
+    const rootScript = scripts?.['typecheck:root'];
     const directory = join(root, dirname(manifest));
     workspaces.push({
       name: name ?? dirname(manifest),
       directory,
       command:
-        typeof script === 'string' && script.trim() !== ''
-          ? ['bun', 'run', 'typecheck']
-          : [join(root, 'node_modules/.bin/tsc'), '--noEmit', '-p', 'tsconfig.json'],
+        typeof rootScript === 'string' && rootScript.trim() !== ''
+          ? ['bun', 'run', 'typecheck:root']
+          : typeof script === 'string' && script.trim() !== ''
+            ? ['bun', 'run', 'typecheck']
+            : [join(root, 'node_modules/.bin/tsc'), '--noEmit', '-p', 'tsconfig.json'],
       hasCheck: typeof scripts?.check === 'string' && scripts.check.trim() !== '',
       dependencies: Object.entries({ ...dependencies, ...devDependencies, ...peerDependencies })
         .filter(([, version]) => version.startsWith('workspace:'))

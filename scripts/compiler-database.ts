@@ -43,23 +43,38 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
     'full_page_writes=off',
   ]);
   let removed = false;
+  let cleanupFailed = false;
+  let cleanupFailure: unknown;
   const remove = (): void => {
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
-    if (removed) return;
+    if (removed) {
+      if (cleanupFailed) throw cleanupFailure;
+      return;
+    }
     removed = true;
     try {
       docker(['rm', '-f', '-v', container]);
     } catch (error) {
-      console.error(error);
+      cleanupFailed = true;
+      cleanupFailure = error;
+      throw error;
     }
   };
   const onSigint = (): void => {
-    remove();
+    try {
+      remove();
+    } catch (error) {
+      console.error(error);
+    }
     process.exit(130);
   };
   const onSigterm = (): void => {
-    remove();
+    try {
+      remove();
+    } catch (error) {
+      console.error(error);
+    }
     process.exit(143);
   };
   process.on('SIGINT', onSigint);
@@ -72,7 +87,15 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
     migrateAuth(url);
     return { url, remove };
   } catch (error) {
-    remove();
+    try {
+      remove();
+    } catch (cleanupError) {
+      const setup = error instanceof Error ? error.message : String(error);
+      const cleanup = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+      throw new Error(`Compiler database setup failed (${setup}); cleanup could not be proven (${cleanup})`, {
+        cause: error,
+      });
+    }
     throw error;
   }
 }

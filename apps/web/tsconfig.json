@@ -3,8 +3,9 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "resolveJsonModule": true,
-    "types": ["vite/client", "@cloudflare/workers-types"]
+    "types": ["bun", "vite/client", "@cloudflare/workers-types"]
   },
+  "contentMappers": [{ "package": "reylo", "extensions": [".sql"] }],
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
