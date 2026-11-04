@@ -237,7 +237,16 @@ changed, or a later native read stops preparing or unavailable. No provisional B
 escapes those paths, and no membership I/O follows native revalidation.
 
 The single-prefix matcher uses the same bounded scanner and finalization. This internal Boolean
-port accepts only concept leaves; callers must use the current native owner for other conditions.
+port accepts concept leaves directly. An optional current-native resolver composes other catalogue
+and owner conditions through the same canonical Boolean plan. Without that resolver, other conditions
+are rejected before native I/O. All requests are copied before any resolver runs, and a missing
+condition leaves the attempt preparing before any reads. Each native owner must admit, authorize and
+reserve its complete finite read and revalidation work. Native true, false and unknown evidence
+participates in the same expression, with no short circuit around rejected-witness revalidation.
+
+Decision: mixed native conditions resolve before dispatch and return attempt-local revalidators that
+run after every concept membership read; they never introduce independent concept-leaf attempts.
+
 It retains no permissions or public cursor. Native all-pool reservations, retained ownership of
 larger prefixes, universal Search dispatch and the localized browsing journey remain required
 before public activation. The live useful-page owner interface remains unchanged.

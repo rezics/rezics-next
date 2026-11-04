@@ -10,7 +10,11 @@ import {
 } from './concept-browse.ts';
 import type { IndexedStatement, RelationFacetMatch } from './source.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { compileCurrentFilter, currentConceptStatementsMatch } from './current-filter-plan.ts';
+import {
+  compileCurrentOwnerFilter,
+  currentConceptStatementsMatch,
+  type CurrentNativeLeaf,
+} from './current-filter-plan.ts';
 
 export type ConceptStatementRequest = Readonly<{
   subject: string;
@@ -313,10 +317,55 @@ function ownConceptStatementCut(cut: ConceptStatementCut): ConceptStatementCut {
   return { source: cut.source, store: cut.store, state: structuredClone(cut.state) };
 }
 
-/** Native concept-only Boolean conditions. Release admission stays with the native reader.
+/** A non-concept condition is resolved by its current native owner. The request is copied and
+ * frozen before any resolver runs. Admission, authorization and finite work reservations remain
+ * with that owner; neither an index match nor a retained observation supplies current evidence.
+ */
+export type ConceptNativeConditionRequest = Readonly<{
+  partition: number;
+  subject: string;
+  leaf: CurrentNativeLeaf;
+  spoilerThreshold?: SpoilerThreshold;
+}>;
+export type ConceptNativeConditionRead =
+  | Readonly<{
+      status: 'current';
+      match: RelationFacetMatch;
+      /** Revalidate even a rejected condition, after every leaf's membership work. This must
+       * only recheck native evidence; it cannot perform more retained membership reads.
+       */
+      revalidate(): Promise<'current' | 'changed' | 'unavailable'>;
+    }>
+  | Readonly<{ status: 'preparing' | 'unavailable' | 'changed' }>;
+export type ConceptNativeCondition = Readonly<{
+  /** The owner reserves the complete read and revalidation before performing native I/O. */
+  read(): Promise<ConceptNativeConditionRead>;
+}>;
+export type ConceptNativeConditionResolver = (
+  request: ConceptNativeConditionRequest,
+) => ConceptNativeCondition | null;
+
+type AdmittedConceptCondition =
+  | Readonly<{ kind: 'concept'; request: ConceptStatementRequest; cut: ConceptStatementCut | null }>
+  | Readonly<{ kind: 'native'; condition: ConceptNativeCondition | null }>;
+
+function freezeNativeRequest(request: ConceptNativeConditionRequest): ConceptNativeConditionRequest {
+  // Includes nested range, qualifier and private-owner selections, not just the leaf wrapper.
+  function freeze(value: unknown): void {
+    if (value === null || typeof value !== 'object') return;
+    for (const child of Object.values(value)) freeze(child);
+    Object.freeze(value);
+  }
+  const owned = structuredClone(request);
+  freeze(owned);
+  return owned;
+}
+
+/** Native Boolean conditions. Release admission stays with each native owner.
  * Uses the canonical current interpreter and one attempt allowance across deduplicated
- * leaves. Every cut is resolved before I/O; every visited native window is revalidated after
- * all leaves' membership work, including rejected candidates and alternatives already true.
+ * concept leaves. Every cut and other native condition is resolved before I/O; every visited
+ * witness is revalidated after all leaves' membership work, including rejected candidates and
+ * alternatives already true. Without a native resolver this remains a concept-only port.
  * This internal port does not activate universal Search or reserve native all-pool work.
  */
 export async function matchNativeConceptFilter(
@@ -325,43 +374,90 @@ export async function matchNativeConceptFilter(
   input: Readonly<{ subject: string; filter: FilterDocument; spoilerThreshold?: SpoilerThreshold }>,
   resolveCut: (request: ConceptStatementRequest) => ConceptStatementCut | null,
   allowance: ConceptStatementPrefixAllowance,
+  resolveNative?: ConceptNativeConditionResolver,
 ): Promise<ConceptStatementPrefixResult> {
   const attempt = new ConceptStatementAttempt(allowance);
-  const plan = compileCurrentFilter(parseFilter(input.filter));
-  // Admit and copy the entire request before calling even a synchronous cut resolver.
-  const requests = plan.leaves.map((clause) => {
-    if (clause.facet !== 'statement' || !('values' in clause) || !clause.concept || clause.inverse)
+  const plan = compileCurrentOwnerFilter(parseFilter(input.filter));
+  const subject = input.subject,
+    spoilerThreshold = input.spoilerThreshold;
+  const route = routeOf(subject);
+  if (
+    !Number.isInteger(partition) ||
+    partition < 0 ||
+    partition >= 4096 ||
+    route === null ||
+    partitionOf(route) !== partition ||
+    (spoilerThreshold !== undefined && ![0, 1, 2].includes(spoilerThreshold))
+  )
+    throw new TypeError('Invalid concept statement request');
+  // Admit and copy the entire expression before calling even a synchronous resolver.
+  const requests = plan.leaves.map((leaf) => {
+    const clause = leaf.kind === 'catalogue' ? leaf.clause : null;
+    if (clause?.facet === 'statement' && 'values' in clause && clause.concept && !clause.inverse)
+      return {
+        kind: 'concept' as const,
+        request: conceptStatementRequest(
+          partition,
+          {
+            subject,
+            selection: {
+              property: clause.property,
+              concept: clause.values[0]!,
+              scheme: clause.concept.scheme,
+              ...(clause.concept.includeChildren === undefined
+                ? {}
+                : { includeChildren: clause.concept.includeChildren }),
+            },
+            ...(clause.qualifiers === undefined ? {} : { qualifiers: clause.qualifiers }),
+            ...(spoilerThreshold === undefined ? {} : { spoilerThreshold }),
+          },
+          null,
+          attempt.windowLimit(),
+        ),
+      };
+    if (!resolveNative)
       throw new TypeError('Native concept conditions require scheme-bound concept leaves');
-    return conceptStatementRequest(
-      partition,
-      {
-        subject: input.subject,
-        selection: {
-          property: clause.property,
-          concept: clause.values[0]!,
-          scheme: clause.concept.scheme,
-          includeChildren: clause.concept.includeChildren,
-        },
-        qualifiers: clause.qualifiers,
-        spoilerThreshold: input.spoilerThreshold,
-      },
-      null,
-      attempt.windowLimit(),
-    );
+    return {
+      kind: 'native' as const,
+      request: freezeNativeRequest({
+        partition,
+        subject,
+        leaf,
+        ...(spoilerThreshold === undefined ? {} : { spoilerThreshold }),
+      }),
+    };
   });
-  const cuts = requests.map((request) => {
-    const cut = resolveCut(request);
-    return cut === null ? null : ownConceptStatementCut(cut);
+  const conditions: AdmittedConceptCondition[] = requests.map((entry) => {
+    if (entry.kind === 'native') {
+      const native = resolveNative!(entry.request);
+      // Copy the operation too; a later resolver cannot replace an earlier owner's read.
+      const read = native?.read.bind(native);
+      return { kind: 'native', condition: read ? { read } : null };
+    }
+    const cut = resolveCut(entry.request);
+    return { ...entry, cut: cut === null ? null : ownConceptStatementCut(cut) };
   });
-  if (cuts.some((cut) => cut === null)) return attempt.result('preparing');
-  const admittedCuts = cuts as ConceptStatementCut[];
+  if (conditions.some((entry) => (entry.kind === 'concept' ? entry.cut === null : entry.condition === null)))
+    return attempt.result('preparing');
+  const admittedCuts = conditions.flatMap((entry) => (entry.kind === 'concept' ? [entry.cut!] : []));
   const matches: RelationFacetMatch[] = [];
   let complete = true;
-  for (const [index, request] of requests.entries()) {
-    const scanned = await scanConceptStatementPrefix(reader, admittedCuts[index]!, partition, request, attempt);
-    if (scanned.status !== 'current') return attempt.abandon(scanned.status, admittedCuts);
-    matches.push(scanned.match);
-    complete &&= scanned.complete;
+  for (const entry of conditions) {
+    if (entry.kind === 'concept') {
+      const scanned = await scanConceptStatementPrefix(reader, entry.cut!, partition, entry.request, attempt);
+      if (scanned.status !== 'current') return attempt.abandon(scanned.status, admittedCuts);
+      matches.push(scanned.match);
+      complete &&= scanned.complete;
+    } else {
+      const read = await entry.condition!.read();
+      if (read.status !== 'current')
+        return attempt.abandon(read.status === 'changed' ? 'restart' : read.status, admittedCuts);
+      if (![true, false, 'not_proven'].includes(read.match)) return attempt.abandon('restart', admittedCuts);
+      matches.push(read.match);
+      complete &&= read.match !== 'not_proven';
+      const revalidate = read.revalidate.bind(read);
+      attempt.validators.push(revalidate);
+    }
   }
   const current = await attempt.revalidate(admittedCuts);
   if (current === 'not_proven') return attempt.result('current');

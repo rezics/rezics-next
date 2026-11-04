@@ -3,6 +3,7 @@ import { newId } from '../../src/route/route.ts';
 import type { FilterDocument } from '@rezics/filter';
 import {
   matchNativeConceptFilter,
+  type ConceptNativeConditionResolver,
   type ConceptStatementCut,
   type ConceptStatementReader,
 } from '../../src/search/concept-browse-statements.ts';
@@ -167,4 +168,122 @@ test('missing or lost retained cuts preserve unknown, and unsupported leaves are
     complete: false,
   });
   expect(lost.validations).toEqual([0]);
+});
+
+test('mixed native conditions use one deduplicated Boolean plan and finalize after all concept membership', async () => {
+  const f = fixture();
+  let reads = 0;
+  const type: FilterDocument = { type: { in: ['schema:Book'] } };
+  const resolve: ConceptNativeConditionResolver = (request) => {
+    expect(request).toMatchObject({ subject, partition: 0, spoilerThreshold: 0 });
+    expect(Object.isFrozen(request.leaf)).toBe(true);
+    expect(request.leaf.kind === 'catalogue' && Object.isFrozen(request.leaf.clause)).toBe(true);
+    return {
+      read: async () => {
+        reads++;
+        return {
+          status: 'current',
+          match: false,
+          revalidate: async () => {
+            expect(f.reads).toEqual([false, true]);
+            return 'current';
+          },
+        };
+      },
+    };
+  };
+  expect(
+    await matchNativeConceptFilter(
+      f.reader,
+      0,
+      {
+        subject,
+        spoilerThreshold: 0,
+        filter: { and: [{ not: type }, { not: condition(false) }, condition(true), { not: type }] },
+      },
+      () => f.cut,
+      { windows: 2, rows: 128 },
+      resolve,
+    ),
+  ).toMatchObject({ status: 'current', match: true, complete: true, windows: 2 });
+  expect(reads).toBe(1);
+  expect(f.validations).toEqual([0, 1]);
+});
+
+test('a rejected native condition changing during later concept membership restarts every cut', async () => {
+  const f = fixture();
+  expect(
+    await matchNativeConceptFilter(
+      f.reader,
+      0,
+      { subject, filter: { or: [{ type: { in: ['schema:Book'] } }, condition(true)] } },
+      () => f.cut,
+      { windows: 1, rows: 64 },
+      () => ({
+        read: async () => ({
+          status: 'current',
+          match: false,
+          revalidate: async () => (f.reads.length ? 'changed' : 'current'),
+        }),
+      }),
+    ),
+  ).toMatchObject({ status: 'restart', match: 'not_proven', complete: false });
+  expect(f.retired()).toBeGreaterThan(0);
+});
+
+test('missing, incomplete or unavailable native evidence cannot satisfy mixed exclusion', async () => {
+  for (const evidence of ['missing', 'unknown', 'unavailable'] as const) {
+    const f = fixture();
+    const resolve: ConceptNativeConditionResolver = () =>
+      evidence === 'missing'
+        ? null
+        : {
+            read: async () =>
+              evidence === 'unavailable'
+                ? { status: 'unavailable' }
+                : { status: 'current', match: 'not_proven', revalidate: async () => 'current' },
+          };
+    expect(
+      await matchNativeConceptFilter(
+        f.reader,
+        0,
+        { subject, filter: { and: [condition(true), { not: { type: { in: ['schema:Book'] } } }] } },
+        () => f.cut,
+        { windows: 1, rows: 64 },
+        resolve,
+      ),
+    ).toMatchObject({
+      status: evidence === 'missing' ? 'preparing' : evidence === 'unavailable' ? 'unavailable' : 'current',
+      match: 'not_proven',
+      complete: false,
+    });
+    if (evidence === 'missing') expect(f.reads).toEqual([]);
+  }
+});
+
+test('interrupted mixed traversal revalidates rejected witnesses in either native owner', async () => {
+  const type: FilterDocument = { type: { in: ['schema:Book'] } };
+  for (const nativeFirst of [false, true]) {
+    const f = fixture();
+    const reader: ConceptStatementReader = async (...args) => {
+      if (nativeFirst) return { status: 'unavailable' };
+      const read = await f.reader(...args);
+      return read.status === 'current' ? { ...read, revalidate: async () => 'changed' as const } : read;
+    };
+    expect(
+      await matchNativeConceptFilter(
+        reader,
+        0,
+        { subject, filter: { or: nativeFirst ? [type, condition(true)] : [condition(false), type] } },
+        () => f.cut,
+        { windows: 1, rows: 64 },
+        () => ({
+          read: async () => nativeFirst
+            ? { status: 'current', match: false, revalidate: async () => 'changed' }
+            : { status: 'unavailable' },
+        }),
+      ),
+    ).toMatchObject({ status: 'restart', match: 'not_proven', complete: false });
+    expect(f.retired()).toBeGreaterThan(0);
+  }
 });
