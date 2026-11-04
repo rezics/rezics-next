@@ -17,7 +17,9 @@ const definitions = () =>
       'schema:Book': { bases: ['schema:CreativeWork'], facets: [property] },
       'skos:Concept': { bases: [], facets: [] },
     },
-    properties: { [property]: { datatype: 'wikibase-item', labels: { en: 'Themes' } } },
+    properties: {
+      [property]: { datatype: 'wikibase-item', targets: ['skos:Concept'], labels: { en: 'Themes' } },
+    },
   }) as unknown as Pick<Release, 'types' | 'properties'>;
 
 const uuid = (index: number) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;

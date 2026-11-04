@@ -115,7 +115,7 @@ export function SubjectExploreSlot({
   );
 }
 
-export { SubjectConceptTags } from './showcase-work/tags-view';
+export { WorkTagReading as SubjectConceptTags } from '../catalogue/work-tag-reading/entry';
 
 /** Additive Organization companion; no extra subject fetch and no View-enum widening. */
 export function OrganizationHistorySlot({
