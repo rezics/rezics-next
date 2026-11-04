@@ -27,6 +27,7 @@ const { rememberContribution, restoreContributionRecovery, contributionReturnOcc
 const { ContributionAdvicePresentation, ContributionWatch } =
   await import('../src/accounts/public-profile/contribution-actions/presentation');
 const { ContributionReaction } = await import('../src/accounts/public-profile/contribution-actions/reaction');
+const { m } = await import('../src/paraglide/messages.js');
 const { originalContributionReference, contributionCommandTarget, contributionOperationAdvice } =
   await import('../src/accounts/public-profile/contribution-actions/advice');
 type NativeAdvice = import('../src/accounts/public-profile/contribution-actions/advice').NativeContributionAdvice;
@@ -722,7 +723,7 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
       await paint({ ...source }, 2);
       expect(reads).toBe(0);
       expect(commands).toHaveLength(1);
-      const retry = [...node.querySelectorAll('button')].find((button) => button.textContent === 'Retry');
+      const retry = [...node.querySelectorAll('button')].find((button) => button.textContent === m.editorial_retry());
       expect(retry).toBeDefined();
       await act(async () => retry!.click());
       expect(commands).toHaveLength(2);
