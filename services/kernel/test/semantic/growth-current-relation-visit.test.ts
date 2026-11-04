@@ -111,7 +111,7 @@ test('current relation key reads stay fixed across unrelated Subjects and obsole
   const routeValue = routeOf(owner)!;
   let unrelated = 0;
   let obsolete = 0;
-  const measures: number[][] = [];
+  const measures: (readonly [number, number])[] = [];
   for (const scale of [64, 512, 4096]) {
     const subjectIds = Array.from({ length: scale - unrelated }, () => newId(routeValue));
     if (subjectIds.length) {
@@ -180,7 +180,7 @@ test('current relation key reads stay fixed across unrelated Subjects and obsole
     await db.admin.query('ANALYZE semantic.fact');
     await db.admin.query('ANALYZE semantic.revision');
 
-    const measure = async (slot?: string) => {
+    const measure = async (slot?: string): Promise<readonly [number, number]> => {
       const measured = await capture(db, () =>
         withReadTransaction(db.pool, (client) =>
           currentRelationFacts(client, routeKey, [
@@ -199,8 +199,10 @@ test('current relation key reads stay fixed across unrelated Subjects and obsole
       );
       expect(measured.value.get(key)?.statement_id).toBe(current.statement_id);
       assertBound(measured.capture, scale);
-      return [measured.capture.plans.flatMap(nodes).filter((node) => node['Relation Name'] === 'subject').reduce((n, node) => n + examined(node), 0),
-        measured.capture.plans.flatMap(nodes).filter((node) => node['Relation Name'] === 'fact').reduce((n, node) => n + examined(node), 0)];
+      return [
+        measured.capture.plans.flatMap(nodes).filter((node) => node['Relation Name'] === 'subject').reduce((n, node) => n + examined(node), 0),
+        measured.capture.plans.flatMap(nodes).filter((node) => node['Relation Name'] === 'fact').reduce((n, node) => n + examined(node), 0),
+      ];
     };
     measures.push(await measure(current.slot_id!));
     measures.push(await measure());
