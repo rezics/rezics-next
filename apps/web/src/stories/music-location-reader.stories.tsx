@@ -9,12 +9,14 @@ import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
-type Scenario = MusicLocationExample | 'retained-failed-navigation' | 'current-refresh';
+type Scenario = MusicLocationExample | 'retained-failed-navigation' | 'current-refresh' | 'retired-reading';
 function MusicLocationStory({ scenario = 'admitted-place' }: { scenario?: Scenario }) {
   const locale = getLocale();
   const [recovery, setRecovery] = useState<{ generation: number; stream?: string | undefined }>({ generation: 0 });
   const base =
-    scenario === 'retained-failed-navigation' || scenario === 'current-refresh' ? 'admitted-place' : scenario;
+    scenario === 'retained-failed-navigation' || scenario === 'current-refresh' || scenario === 'retired-reading'
+      ? 'admitted-place'
+      : scenario;
   const fixture = useMemo(() => musicLocationExample(base, locale), [base, locale, recovery.generation]);
   const transport = useMemo<MusicLocationTransport>(
     () => async (address) => {
@@ -36,7 +38,7 @@ function MusicLocationStory({ scenario = 'admitted-place' }: { scenario?: Scenar
             subject={fixture.public}
             context={fixture.address.context}
             source={fixture.source}
-            reader={null}
+            reader={scenario === 'retired-reading' ? '00000000-0000-4000-8000-000000000099' : null}
             locale={locale}
             transport={transport}
             refresh={async (stream) => setRecovery({ generation: recovery.generation + 1, stream })}
@@ -101,3 +103,5 @@ export const CurrentSubjectRefresh: Story = {
     await expect(canvas.getByRole('button', { name: m.music_location_refresh() })).toBeVisible();
   },
 };
+
+export const RetiredReading: Story = { args: { scenario: 'retired-reading' } };
