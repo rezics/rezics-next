@@ -129,6 +129,7 @@ function RatingsScreen() {
     cursor: value.cursor,
     locale: 'en',
     source: 'rating.own_votes_page/v1',
+    admissionCurrent: () => true,
     eligible: () => true,
     canRead: () => true,
     validateResult: (result) => {
