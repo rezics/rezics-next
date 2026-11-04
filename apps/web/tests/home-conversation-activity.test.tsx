@@ -16,7 +16,9 @@ function card(activity: unknown) {
 
 test('Home keeps absent activity distinct from withheld after a current card', () => {
   const current = card({
-    state: 'current', cohort: 'public', count: { kind: 'exact', value: 7 },
+    state: 'current',
+    cohort: 'public',
+    count: { kind: 'exact', value: 7 },
     lastActivityAt: '2026-11-04T00:00:00.000Z',
   });
   expect(current.html).toContain('Replies: 7');
