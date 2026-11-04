@@ -189,7 +189,7 @@ test('supported departure restores only the exact sale on the original admitted 
   const stay = (event: Event) => event.preventDefault();
   host.addEventListener('click', stay);
   const depart = async (path: string) => {
-    const link = [...host.querySelectorAll<HTMLAnchorElement>('#creator-sale-inspection a')].find(
+    const link = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
       (anchor) => anchor.getAttribute('href') === path,
     )!;
     await act(async () =>

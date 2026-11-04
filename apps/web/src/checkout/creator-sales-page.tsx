@@ -64,12 +64,22 @@ export function CreatorSalesPage({
         <a
           className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
           href={`/${locale}/creator/statements`}
+          onClick={(event) => {
+            if (!reading.sale || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+              return;
+            if (!reading.prepareDeparture(event.currentTarget.getAttribute('href') ?? '')) event.preventDefault();
+          }}
         >
           {m.statements_heading()}
         </a>
         <a
           className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
           href={`/${locale}/creator/offers`}
+          onClick={(event) => {
+            if (!reading.sale || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+              return;
+            if (!reading.prepareDeparture(event.currentTarget.getAttribute('href') ?? '')) event.preventDefault();
+          }}
         >
           {m.creator_offers_heading()}
         </a>

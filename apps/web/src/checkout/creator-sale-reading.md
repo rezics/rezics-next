@@ -76,7 +76,7 @@ The terms copy is one observation, never a receipt, payout, statement match or r
 kind retires feedback; changing the source or selection retires every clipboard completion and expanded detail.
 
 Departure capture stays in the existing mounted reader and contains source identity, locale, native cursor, selected
-order ID and validated destination. Only the exact localized offer, Subject overview and statement-list addresses
+order ID and validated destination. Only the exact localized offer, Subject overview, creator offer-list and statement-list addresses
 are supported, with no extra search or fragment. Browser page suspension invalidates pending selection effects.
 On same-document return, the original admitted source and exact order must still exist at the original address.
 A full reload, replaced observation, different account, locale/address or visit discards the capture and requires
