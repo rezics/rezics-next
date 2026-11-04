@@ -100,6 +100,17 @@ export function rootTypecheckCommand(changed: readonly string[]): string[] {
   return ['env', `TYPECHECK_CHANGED=${changed.join('\n')}`, 'bun', 'scripts/typecheck.ts'];
 }
 
+/** Select the policy boot command when any changed path matches its trigger patterns. */
+export function landingBootCommand(
+  changed: readonly string[],
+  boot: IntegrationCheck | undefined,
+  policy = defaultPolicy.brief,
+): string[] | undefined {
+  if (!boot?.command.length || !boot.paths.length) return undefined;
+  if (!changed.some((path) => matchesPath(path, boot.paths, policy))) return undefined;
+  return [...boot.command];
+}
+
 function compilerInfrastructureFailure(output: string, timedOut: boolean): boolean {
   return (
     timedOut ||
@@ -1322,6 +1333,10 @@ export type TrainOptions = {
   affectedTests?: import('./types.ts').AffectedTestCheck[];
   /** The mandatory direct root typecheck used before a dev ref advance. */
   runTypecheck?: GateRunner;
+  /** Path-selected start-up guard run after the root typecheck on a combined dev candidate. */
+  devLandingBoot?: IntegrationCheck;
+  /** Optional injected runner for the landing boot check; production uses a two-minute process group. */
+  runBootCheck?: GateRunner;
   /** Checks for landings into dev; a function is called for every landing, so a configuration change applies at once. */
   integrationChecks?: IntegrationCheck[] | (() => IntegrationCheck[]);
   /** Batched dev landings; absent integration settings retain one-at-a-time behavior. */
@@ -1468,36 +1483,98 @@ export class MergeTrain {
   private readonly workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
 
+  private configuredLandingBoot(): IntegrationCheck | undefined {
+    if (this.options.devLandingBoot !== undefined) {
+      const boot = this.options.devLandingBoot;
+      return boot.paths.length && boot.command.length ? boot : undefined;
+    }
+    if (process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1') return undefined;
+    const boot = defaults.devLandingBoot as IntegrationCheck;
+    return boot.paths.length && boot.command.length ? boot : undefined;
+  }
+
   private async checkDevCandidate(
     tree: string,
     base: string,
     candidate: string,
     logPath: string,
-  ): Promise<{ command: string[]; result: GateResult }> {
-    const command = rootTypecheckCommand(changedFiles(tree, base, this.options.policy?.merge));
-    // With devPrelandingTypecheck off, dev lands without a compiler run; the verifier checks dev after the merge.
+  ): Promise<{
+    command: string[];
+    result: GateResult;
+    kind: 'typecheck' | 'boot';
+    durationMs?: number;
+    triggerPaths?: readonly string[];
+  }> {
+    const policy = this.options.policy ?? defaultPolicy;
+    const changed = changedFiles(tree, base, this.options.policy?.merge);
+    const command = rootTypecheckCommand(changed);
+    const passed = {
+      command,
+      result: { passed: true, output: '', timedOut: false } as GateResult,
+      kind: 'typecheck' as const,
+    };
     if (this.options.integration?.devPrelandingTypecheck === false) {
       appendFileSync(
         logPath,
         'Prelanding typecheck skipped (devPrelandingTypecheck off); dev is verified after the merge\n',
       );
-      return { command, result: { passed: true, output: '', timedOut: false } };
+    } else {
+      const run =
+        this.options.runTypecheck ??
+        this.options.runGate ??
+        processGroupRunner(
+          this.options.integration?.gateTimeoutMs,
+          this.options.stateDirectory,
+          process.env,
+          undefined,
+          this.options.policy?.merge,
+        );
+      for (let attempt = 0; attempt < policy.integration.typecheckAttempts; attempt++) {
+        appendFileSync(logPath, `$ ${command.join(' ')} (required root typecheck on ${candidate}, dev ${base})\n`);
+        let result: GateResult;
+        try {
+          result = await run(command, tree, logPath);
+        } catch (error) {
+          result = {
+            passed: false,
+            output: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+            timedOut: false,
+          };
+        }
+        assertCandidateIntegrity(
+          tree,
+          candidate,
+          'dev root typecheck',
+          logPath,
+          this.options.runCandidateGit,
+          this.options.policy?.integration,
+        );
+        if (
+          !compilerInfrastructureFailure(result.output, result.timedOut) ||
+          attempt + 1 >= policy.integration.typecheckAttempts
+        ) {
+          if (!result.passed) return { command, result, kind: 'typecheck' };
+          passed.result = result;
+          break;
+        }
+        appendFileSync(logPath, 'Root typecheck infrastructure failure; retrying once on the same candidate\n');
+      }
     }
-    const run =
-      this.options.runTypecheck ??
-      this.options.runGate ??
-      processGroupRunner(
-        this.options.integration?.gateTimeoutMs,
-        this.options.stateDirectory,
-        process.env,
-        undefined,
-        this.options.policy?.merge,
-      );
-    for (let attempt = 0; attempt < (this.options.policy ?? defaultPolicy).integration.typecheckAttempts; attempt++) {
-      appendFileSync(logPath, `$ ${command.join(' ')} (required root typecheck on ${candidate}, dev ${base})\n`);
+    const boot = this.configuredLandingBoot();
+    const bootCommand = landingBootCommand(changed, boot, policy.brief);
+    if (!boot || !bootCommand) return passed;
+    const timeout = policy.integration.bootCheckTimeoutMs;
+    const runBoot =
+      this.options.runBootCheck ??
+      (this.options.runTypecheck ? undefined : this.options.runGate) ??
+      processGroupRunner(timeout, this.options.stateDirectory, process.env, undefined, this.options.policy?.merge);
+    let durationMs = 0;
+    for (let attempt = 0; attempt < policy.integration.typecheckAttempts; attempt++) {
+      const started = Date.now();
+      appendFileSync(logPath, `$ ${bootCommand.join(' ')} (required boot check on ${candidate}, dev ${base})\n`);
       let result: GateResult;
       try {
-        result = await run(command, tree, logPath);
+        result = await runBoot(bootCommand, tree, logPath);
       } catch (error) {
         result = {
           passed: false,
@@ -1505,22 +1582,27 @@ export class MergeTrain {
           timedOut: false,
         };
       }
+      durationMs = Date.now() - started;
+      appendFileSync(
+        logPath,
+        `Boot check ${result.passed ? 'passed' : 'failed'} in ${durationMs}ms${result.timedOut ? ' (timed out)' : ''}\n`,
+      );
       assertCandidateIntegrity(
         tree,
         candidate,
-        'dev root typecheck',
+        'dev boot check',
         logPath,
         this.options.runCandidateGit,
         this.options.policy?.integration,
       );
       if (
         !compilerInfrastructureFailure(result.output, result.timedOut) ||
-        attempt + 1 >= (this.options.policy ?? defaultPolicy).integration.typecheckAttempts
+        attempt + 1 >= policy.integration.typecheckAttempts
       )
-        return { command, result };
-      appendFileSync(logPath, 'Root typecheck infrastructure failure; retrying once on the same candidate\n');
+        return { command: bootCommand, result, kind: 'boot', durationMs, triggerPaths: boot.paths };
+      appendFileSync(logPath, 'Boot check infrastructure failure; retrying once on the same candidate\n');
     }
-    throw new Error('Unreachable root typecheck retry state');
+    throw new Error('Unreachable boot check retry state');
   }
 
   async run(): Promise<void> {
@@ -2103,8 +2185,9 @@ export class MergeTrain {
           };
         }
 
-        // The final rebased tree includes conflict resolution and formatting. It receives the one mandatory
-        // prelanding typecheck; other verification runs after integration in the independent verifier.
+        // The final rebased tree includes conflict resolution and formatting. It receives the mandatory
+        // prelanding typecheck, then the policy boot check when changed paths match; other verification
+        // runs after integration in the independent verifier.
         const finalCandidate = prepared[prepared.length - 1]!.candidate;
         this.git(trainTree, 'reset', '--hard', prepared[prepared.length - 1]!.candidate);
         if (
@@ -2114,11 +2197,19 @@ export class MergeTrain {
         )
           installShared(trainTree, undefined, undefined, this.options.policy);
         const batchLog = logPaths.get(prepared[0]!.entry.id)!;
-        const { command, result: checked } = await this.checkDevCandidate(trainTree, base, finalCandidate, batchLog);
+        const {
+          command,
+          result: checked,
+          kind,
+          durationMs,
+          triggerPaths,
+        } = await this.checkDevCandidate(trainTree, base, finalCandidate, batchLog);
         for (const member of prepared)
           appendFileSync(
             member.result.logPath,
-            `Root typecheck ${checked.passed ? 'passed' : 'failed'}${checked.timedOut ? ' (timed out)' : ''}\n${checked.output}`,
+            kind === 'boot'
+              ? `Boot check ${checked.passed ? 'passed' : 'failed'} in ${durationMs ?? 0}ms${checked.timedOut ? ' (timed out)' : ''}\n${checked.output}`
+              : `Root typecheck ${checked.passed ? 'passed' : 'failed'}${checked.timedOut ? ' (timed out)' : ''}\n${checked.output}`,
           );
         let staleAfterGate: LandingEntry | undefined;
         for (const member of pending) {
@@ -2141,11 +2232,21 @@ export class MergeTrain {
           continue;
         }
         if (!checked.passed) {
-          const output = checked.output || 'Root typecheck failed without compiler output';
-          const namedOwners = prepared.filter((member) =>
+          const output =
+            checked.output ||
+            (kind === 'boot' ? 'Boot check failed without output' : 'Root typecheck failed without compiler output');
+          const scoped =
+            kind === 'boot' && triggerPaths?.length
+              ? prepared.filter((member) =>
+                  member.result.changedFiles.some((path) =>
+                    matchesPath(path, triggerPaths, (this.options.policy ?? defaultPolicy).brief),
+                  ),
+                )
+              : prepared;
+          const namedOwners = scoped.filter((member) =>
             member.result.changedFiles.some((path) => compilerOutputMatchesPath(output, trainTree, path)),
           );
-          const workspaceOwners = prepared.filter((member) =>
+          const workspaceOwners = scoped.filter((member) =>
             member.result.changedFiles.some((file) => {
               let directory = join(trainTree, file);
               while (directory.startsWith(`${trainTree}/`) && directory !== trainTree) {
@@ -2162,8 +2263,15 @@ export class MergeTrain {
               return false;
             }),
           );
-          const owners = namedOwners.length ? namedOwners : workspaceOwners.length ? workspaceOwners : prepared;
+          const owners = namedOwners.length
+            ? namedOwners
+            : workspaceOwners.length
+              ? workspaceOwners
+              : scoped.length
+                ? scoped
+                : prepared;
           const ownerIds = new Set(owners.map((member) => member.entry.id));
+          const required = kind === 'boot' ? 'Required boot check failed' : 'Required root typecheck failed';
           for (const member of prepared) {
             if (!ownerIds.has(member.entry.id)) {
               deferred.add(member.entry.id);
@@ -2173,7 +2281,7 @@ export class MergeTrain {
             member.result.firstFailure = firstFailure(output, this.options.policy?.merge);
             member.result.failedCommand = [...command];
             member.result.timedOut = checked.timedOut;
-            appendFileSync(member.result.logPath, `\nRequired root typecheck failed:\n${output}\n`);
+            appendFileSync(member.result.logPath, `\n${required}:\n${output}\n`);
             outcomes.set(member.entry.id, member.result);
           }
           for (const [id, outcome] of localOutcomes) outcomes.set(id, outcome);
@@ -3111,7 +3219,8 @@ export class MergeTrain {
         }
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
         const directDevLanding = integratesIntoDev && !stabilize;
-        // The root compiler guard is mandatory even when the optional landing-check setting is disabled.
+        // The root compiler guard, and the policy boot check when paths match, stay mandatory even when
+        // the optional landing-check setting is disabled.
         const skipDevChecks = directDevLanding;
         if (directDevLanding) {
           stage = 'gate';
@@ -3121,16 +3230,21 @@ export class MergeTrain {
             existsSync(join(trainTree, 'package.json'))
           )
             installShared(trainTree, undefined, undefined, this.options.policy);
-          const { command, result: checked } = await this.checkDevCandidate(trainTree, base, candidate, logPath);
+          const { command, result: checked, kind } = await this.checkDevCandidate(trainTree, base, candidate, logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
           if (!checked.passed) {
-            const output = checked.output || 'Root typecheck failed without compiler output';
+            const output =
+              checked.output ||
+              (kind === 'boot' ? 'Boot check failed without output' : 'Root typecheck failed without compiler output');
             result.stage = 'gate';
             result.timedOut = checked.timedOut;
             result.firstFailure = firstFailure(output, this.options.policy?.merge);
             result.failedCommand = command;
-            appendFileSync(logPath, `\nRequired root typecheck failed:\n${output}\n`);
+            appendFileSync(
+              logPath,
+              `\nRequired ${kind === 'boot' ? 'boot check' : 'root typecheck'} failed:\n${output}\n`,
+            );
             if (workspace) {
               const owners = sharedTasks.filter((task) =>
                 taskChangedPaths(task, tip, this.options.policy?.merge).some((path) =>
@@ -3685,9 +3799,10 @@ export class MergeTrain {
     output: string,
     candidate: string,
     logPath: string,
+    label = 'root typecheck',
   ): void {
     const summary =
-      `Task ${taskId} could not advance dev candidate ${candidate}: root typecheck command ${command.join(' ')} failed. ` +
+      `Task ${taskId} could not advance dev candidate ${candidate}: ${label} command ${command.join(' ')} failed. ` +
       `Compiler output: ${output.slice(-(this.options.policy ?? defaultPolicy).controlPlane.diagnosticCharacters)}. Full log: ${logPath}`.replace(
         /[\r\n]+/g,
         ' ',
@@ -3827,12 +3942,16 @@ export class MergeTrain {
             existsSync(join(tree, 'package.json'))
           )
             installShared(tree, undefined, undefined, this.options.policy);
-          const { command, result } = await this.checkDevCandidate(tree, targetHead, commit, logPath);
+          const { command, result, kind } = await this.checkDevCandidate(tree, targetHead, commit, logPath);
           if (!result.passed) {
-            const output = result.output || 'Root typecheck failed without compiler output';
-            appendFileSync(logPath, `Required root typecheck failed before advancing ${targetBranch}:\n${output}\n`);
-            if (owner) this.notifyDevTypecheckFailure(owner.taskId, owner.managerId, command, output, commit, logPath);
-            return { error: `Root typecheck failed before advancing ${targetBranch}: ${output}` };
+            const label = kind === 'boot' ? 'boot check' : 'root typecheck';
+            const output =
+              result.output ||
+              (kind === 'boot' ? 'Boot check failed without output' : 'Root typecheck failed without compiler output');
+            appendFileSync(logPath, `Required ${label} failed before advancing ${targetBranch}:\n${output}\n`);
+            if (owner)
+              this.notifyDevTypecheckFailure(owner.taskId, owner.managerId, command, output, commit, logPath, label);
+            return { error: `${kind === 'boot' ? 'Boot check' : 'Root typecheck'} failed before advancing ${targetBranch}: ${output}` };
           }
         }
         this.options.beforePromotionAdvance?.();
@@ -4016,11 +4135,14 @@ export class MergeTrain {
         )
           installShared(trainTree, undefined, undefined, this.options.policy);
         try {
-          const { command, result } = await this.checkDevCandidate(trainTree, expected, merged, logPath);
+          const { command, result, kind } = await this.checkDevCandidate(trainTree, expected, merged, logPath);
           if (!result.passed) {
-            const output = result.output || 'Root typecheck failed without compiler output';
-            appendFileSync(logPath, `Required root typecheck failed before advancing ${devBranch}:\n${output}\n`);
-            this.notifyDevTypecheckFailure(taskId, managerId, command, output, merged, logPath);
+            const label = kind === 'boot' ? 'boot check' : 'root typecheck';
+            const output =
+              result.output ||
+              (kind === 'boot' ? 'Boot check failed without output' : 'Root typecheck failed without compiler output');
+            appendFileSync(logPath, `Required ${label} failed before advancing ${devBranch}:\n${output}\n`);
+            this.notifyDevTypecheckFailure(taskId, managerId, command, output, merged, logPath, label);
             return;
           }
         } catch (error) {

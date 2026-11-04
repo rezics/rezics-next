@@ -90,16 +90,17 @@ resumes reconnect and concurrent worktrees never share a server; a Web task also
 endpoints as MCP servers on fresh launches and resumes. The account's own MCP servers, such as the browser and
 Playwright, stay enabled; consultations still ignore the account configuration.
 
-The dev landing train runs exactly one mandatory root typecheck on each final candidate: once for a combined batch or
-once for an individual landing. It does not run affected, sibling, acceptance, native, import or page-story checks
-before dev advances. Those checks run through the independent verifier after integration. Promotion runs the full
-gate on the candidate before advancing `main`.
+The dev landing train runs one mandatory root typecheck on each final candidate, then the policy boot check when the
+batch's changed paths match `devLandingBoot.paths`: once for a combined batch or once for an individual landing. It
+does not run affected, sibling, acceptance, native, import or page-story checks before dev advances. Those checks run
+through the independent verifier after integration. Promotion runs the full gate on the candidate before advancing
+`main`.
 
 Batching avoids repeating the same typecheck and affected checks for every worker in the batch. Historical check counts
 and costs are recorded in [the check cost report](../../docs/research/check-cost.md).
 
-Every landing command runs in its own process group, including the mandatory typecheck, acceptance, integration,
-affected, sibling and derived regeneration commands. The train gives the group a bounded graceful shutdown before
+Every landing command runs in its own process group, including the mandatory typecheck, the policy boot check,
+acceptance, integration, affected, sibling and derived regeneration commands. The train gives the group a bounded graceful shutdown before
 forcing any remaining processes to exit. Control-plane tests set affected checks explicitly; when omitted, train
 fixtures use no affected or sibling checks and never inherit the repository's live check defaults.
 
@@ -280,12 +281,15 @@ stops processes merely because their working directory is shared. Frozen accepta
 protection and controller commits; undeclared risk areas remain closed.
 
 When a worker finishes, the train captures the workspace branch head and merges it with dev in the train's own
-worktree. Before advancing dev, it runs exactly one direct root typecheck on the final combined candidate, including
-any conflict resolution and formatting. `TYPECHECK_CHANGED` contains the actual paths from the batch base to that
-candidate. This guard is mandatory for single, shared-workspace and batched landings, including when
-`integration.devLandingChecks` is false. A compiler failure leaves dev unchanged and returns its full diagnostic to
-the affected task; unrelated batch members remain queued. A passing check advances dev with the expected-head check.
-Source commits remain intact. Each task's trailer commits determine which changes belong to it and whether all its
+worktree. Before advancing dev, it runs one direct root typecheck on the final combined candidate, including any
+conflict resolution and formatting, then the `devLandingBoot` command when those changed paths match its trigger
+patterns. `TYPECHECK_CHANGED` contains the actual paths from the batch base to that candidate. Both guards are
+mandatory for single, shared-workspace and batched landings, including when `integration.devLandingChecks` is false.
+A compiler or boot failure leaves dev unchanged and returns its first failing entry to the affected task; unrelated
+batch members remain queued. The boot check records its duration in the landing log. It is landing-time, not
+asynchronous: the command is the start-up and readiness tests in `services/kernel/test/boot`, under
+`policy.integration.bootCheckTimeoutMs` (two minutes). Duration is measured per batch in that log. A passing check
+advances dev with the expected-head check. Source commits remain intact. Each task's trailer commits determine which changes belong to it and whether all its
 commits are on dev; those tasks become integrated. A task with no trailer commits cannot finish by claiming a peer's
 work. Main promotion retains its existing workflow.
 
@@ -490,6 +494,8 @@ protocol or representation meaning; they are not operator limits.
 | `integration.managerLimits.turnsWithoutDecision`      | `10`                        | Manager turns allowed without a decision.                                                                                                                                                   |
 | `integration.managerLimits.wallMs`                    | `43200000`                  | Manager session wall deadline (ms).                                                                                                                                                         |
 | `integration.devPrelandingTypecheck`                  | `false`                     | Run the dev compiler guard before landing.                                                                                                                                                  |
+| `devLandingBoot.paths`                                | kernel, auth, packages      | Changed-path patterns that select the landing boot check.                                                                                                                                   |
+| `devLandingBoot.command`                              | `bun test services/kernel/test/boot` | Start-up and readiness command run after the root typecheck on the combined candidate.                                                                                               |
 | `codex.compactTokens.sol`                             | `160000`                    | Sol context compaction token threshold.                                                                                                                                                     |
 | `codex.compactTokens.luna`                            | `200000`                    | Luna context compaction token threshold.                                                                                                                                                    |
 | `codex.solContextWindow`                              | `500000`                    | Sol context window tokens.                                                                                                                                                                  |
@@ -754,6 +760,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.integration.checkTimeoutMs`                   | `600000`                    | Default integration check deadline when no runner is injected (ms).                                                                                                                         |
 | `policy.integration.affectedTransportAttempts`        | `2`                         | Affected-check attempts after check-host transport failure.                                                                                                                                 |
 | `policy.integration.typecheckAttempts`                | `2`                         | Required dev typecheck attempts after compiler infrastructure failure.                                                                                                                      |
+| `policy.integration.bootCheckTimeoutMs`               | `120000`                    | Landing boot-check deadline (ms); two minutes for start-up and readiness on the combined candidate.                                                                                         |
 | `policy.integration.advanceAttempts`                  | `5`                         | Attempts to merge into a branch while its target ref moves.                                                                                                                                 |
 | `policy.controlPlane.devLeaseWaitMs`                  | `30000`                     | Default and maximum asynchronous dev-lane wait for a control-plane release (ms).                                                                                                            |
 | `policy.controlPlane.pollMs`                          | `50`                        | Control-plane dev-lane wait and ordinary proof interruption polling interval (ms).                                                                                                          |
@@ -1298,10 +1305,11 @@ created 69,426 `node_modules` entries per private install (median 4.956 s) versu
 0.016 s), after building one shared store.
 
 Workers run their task acceptance command once after their last relevant edit. Each single, shared-workspace or batch
-dev landing receives one mandatory direct root typecheck on its final candidate. Conflict resolution and formatting
-are included in the checked tree. No affected, sibling, acceptance, native, import, or page-story validation runs
-before the dev ref advances. Infrastructure failures may retry the same compiler command once; compiler errors leave
-dev unchanged and go to their owner. Promotion continues to run the full gate.
+dev landing receives one mandatory direct root typecheck on its final candidate, then `devLandingBoot.command` when
+changed paths match `devLandingBoot.paths`. Conflict resolution and formatting are included in the checked tree. No
+affected, sibling, acceptance, native, import, or page-story validation runs before the dev ref advances.
+Infrastructure failures may retry the same compiler or boot command once; product errors leave dev unchanged and go
+to their owner. Promotion continues to run the full gate.
 
 `bootSmoke.tests` lists repository boot tests the verifier runs on each newest `dev` head before those queued checks;
 absent files are skipped. `verifierChecks` is the canonical `{ paths: string[], command: string[] }` selection for checks that run after dev
@@ -1311,8 +1319,8 @@ inputs to this verifier when `verifierChecks` is not explicitly set; `bun instal
 excluded. An explicit `verifierChecks` array replaces those legacy selections. `siblingTests.command` selects sibling
 tests after integration, excluding spec-tree files. Discovery uses the shared `siblingTestFiles` selection of existing
 `.test`/`.spec` JS/TS module and JSX files beside the source and in workspace test directories, and still places a
-`bun test` command in the workspace that owns those files. These settings cannot disable or add work to the mandatory
-prelanding typecheck.
+`bun test` command in the workspace that owns those files. These settings cannot disable the mandatory prelanding
+typecheck. The landing boot check's paths and command come from `devLandingBoot`, not from call sites.
 
 Main and stabilize train checks retain their existing baseline behavior. They compare recorded failing files with the
 integration base, reuse a result for the same base and command, or run a separate base-worktree check. Failing files
@@ -1459,8 +1467,9 @@ non-control-plane brief with `target: stabilize` starts and retries from that br
 while the branch does not exist. The train rebases such a task onto the branch, runs the existing stabilize-lane
 checks, and compare-and-swap advances the branch. It then merges that new head into the integration branch with
 `git merge --no-ff` in a train worktree, retrying up to five times if the integration branch moves. Before compare-
-and-swap advancing dev, the train runs the mandatory root typecheck on the exact merged candidate. A compiler failure
-leaves dev unchanged and reports the diagnostic to the task owner. Task acceptance and other configured verification
+and-swap advancing dev, the train runs the mandatory root typecheck on the exact merged candidate, then the policy
+boot check when changed paths match. A compiler or boot failure leaves dev unchanged and reports the diagnostic to
+the task owner. Task acceptance and other configured verification
 run after integration. A merge conflict aborts only that merge: the stabilize branch and the task stay integrated at
 the stabilize commit, and the task's manager and the supermanager receive an inbox notice naming the task, the commit
 and the conflicting files. `goal retarget <task> stabilize` sets `target` on a task that is not integrated, merged or
