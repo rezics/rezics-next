@@ -66,3 +66,73 @@ retry loop repeats IO. Pending paths are prefixes of these finite paths. These a
 consumer bounds; they do not claim the absent producer's SQL/index/trigger bounds.
 The concrete producer must compose its documented per-call bounds with these finite
 multiplicities. No quote, prepaid balance or runtime dispatch allowance is required.
+
+## Native retained-page journal
+
+Decision: preserve the retained consumer API and implement its native replay storage as
+an additive transaction-local journal; connect the absent producer through
+`IdentityRatingJournalProducer`, without importing its incompatible replacement consumer.
+
+`identity-rating-journal.ts` supplies durable selected pages, receipts, acknowledgement
+checkpoints and compact terminal replay evidence. It requires a live native command.
+The producer's existing wrapper admits and locks once, then passes the whole normalized
+selection to its read-only `assertHeldAdmission` in that same transaction. Its sole
+`applySelectedPage` writer is called only when no native receipt exists. Persisted
+ownership uses `core.partition.node` and its monotonic `epoch`; selected owner fields
+must match them. The root never updates its owner incarnation and cannot revive after
+reclamation. Moving away and back therefore cannot authorize terminal replay.
+
+Acknowledgement and the producer's frontier advancement belong in the same transaction.
+The journal retains the actual native frontier, phase, revision and selected-page digest,
+never a scheduler ordinal. Its checkpoint wins over lost caller replies. Exact selection
+uses the full scope digest and page digest and compares the entire scope and binding.
+An acknowledged old page cannot rewind progress. A unique partial index admits at most
+one unacknowledged selection per scope. Native empty pages follow the ordinary effect
+and receipt path; producer failures roll back the page and never certify an empty result.
+
+Journal reclamation is only the final retained-copy stage. The producer must first
+finish its provenance, event, obligation and receipt inventories and prove removal of
+the final real reference under its held reference fence in the same transaction.
+`reclaimIdentityRatingJournalPages` keeps the terminal selection through every bounded
+deletion page. The final deletion and compact tombstone commit atomically, so loss of
+that reply is recoverable without reading deleted payload. The journal does not claim
+that its page count is the producer's reference inventory. Accounts' combined erasure
+and historical redirect flattening remain separate outcomes.
+
+### Static journal bounds
+
+There are two tables, each with a full-key primary index. Page insertion also maintains
+one partial unique index on the scope for unacknowledged pages; its foreign key probes
+one journal root. There are no triggers or cascades. Scope keys are fixed SHA-256 text,
+with full JSON comparison after lookup. A selection uses the consumer's 65,536-byte
+array encoding limit. Its stored object representation adds at most 64 sets of fixed
+field names plus fixed page names (less than 8,192 bytes); 131,072 bytes allows SQL
+JSONB whitespace and encoding. Root scope, binding, receipt and checkpoint encodings
+have enforced 4,096/16,384/8,192/32,768-byte ceilings respectively. They contain only
+the adapter's bounded fields. Whole rows and constant-width indexes are finite.
+
+Commit uses at most five journal statements: one owner lock, root insert, root lock,
+receipt seek and page insert. Producer application is an independently composed
+cost. Including conflict, uniqueness and foreign-key probes, the journal examines
+at most eight rows, writes at most two rows and inserts at most three index
+entries. Receipt conflict/replay is its four-statement prefix and never repeats
+producer application. Acknowledgement uses at most five
+statements, examines at most five rows and updates two rows; it removes at most one
+partial-index entry. Checkpoint read and terminal verification use two statements
+and at most two rows. Exact page replay uses three statements and at most three rows.
+
+Cleanup uses at most six journal statements: owner/root locks, an indexed ordered
+65-row seek excluding at most one terminal row, deletion of at most 64 selected keys,
+one terminal-key deletion and one root update. It examines at most 134 rows,
+deletes at most 65 page rows, updates one root and removes at most 130 index entries.
+It returns `continuing` after the first 64 when more remain. Reclaimed replay uses the
+two-lock prefix. Final-reference verification is an additional producer cost on each
+nonterminal cleanup invocation. Failures terminate without a local retry loop.
+For the consumer's 43-call ceiling a conservative journal allowance is
+`43 * 6 = 258` statements and `43 * 134 = 5,762` examined rows, plus the separately
+derived producer selection, effect, admission and reference-verification bounds.
+No runtime quote, funding ticket, balance or dispatch allowance is accepted.
+
+Native producer caller installation, all other cleanup inventories and their composed
+SQL/index bounds remain required before native end-to-end acceptance. This journal
+does not activate an alternative vote writer or change moderation authorization.
