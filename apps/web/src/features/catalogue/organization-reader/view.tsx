@@ -10,7 +10,7 @@ import { connectionReturnHref, subjectVisitReturn, withSubjectVisitReturn } from
 import { catalogueEntries } from '../catalogue-entry';
 import { ProfileSourceList } from '../music-reader-view';
 import { profileSourceRecords } from '../music-reader';
-import { organizationHistory, type OrganizationCurrent, type OrganizationFact } from './index';
+import { organizationHistory, type OrganizationReading, type OrganizationFact } from './index';
 import { useOrganizationEpisode, type OrganizationEpisode } from './reading/episode';
 import { OrganizationValue, organizationControl as control } from './reading/value';
 
@@ -21,7 +21,7 @@ type Selection = {
   opener: HTMLButtonElement;
   keyboard: boolean;
 };
-type Presentation = { read: OrganizationCurrent; locale: string; documents?: unknown; link: PageLink };
+type Presentation = { read: OrganizationReading; locale: string; documents?: unknown; link: PageLink };
 
 /** Evidence is always attached to the inspected original assertion, never a similarly titled row. */
 function Evidence({ fact, presentation }: { fact: OrganizationFact; presentation: Presentation }) {
@@ -96,7 +96,7 @@ export function OrganizationReader({
   currentHref,
   returnTo,
 }: {
-  read: OrganizationCurrent;
+  read: OrganizationReading;
   locale: string;
   source?: object;
   reader?: string | null;
@@ -268,7 +268,7 @@ function OrganizationFacts({
   currentHref,
   returnTo,
 }: {
-  read: OrganizationCurrent;
+  read: OrganizationReading;
   locale: string;
   link: PageLink;
   realm?: string | undefined;

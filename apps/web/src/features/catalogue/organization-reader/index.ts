@@ -5,6 +5,9 @@ import { peopleAgentType, peopleBiographyGroups } from '../people-biography';
 import { producerHistoryStreams, producerHistoryUnreleased } from '../producer-history';
 
 export type OrganizationCurrent = Extract<PeopleRead, { ok: true }> & { public: SubjectRead };
+export type OrganizationReading = Pick<OrganizationCurrent, 'public'> & {
+  release: Pick<OrganizationCurrent['release'], 'types' | 'properties'>;
+};
 export type OrganizationFact = SubjectRead['subject']['statements'][string][number];
 export type OrganizationField = {
   id: string;
@@ -23,7 +26,7 @@ export const organizationBounds = {
 };
 
 /** The public response is the evidence. Neither dates nor names manufacture an edge. */
-export function organizationHistory(read: OrganizationCurrent, locale: string) {
+export function organizationHistory(read: OrganizationReading, locale: string) {
   const { release, public: current } = read;
   const type = current.subject.type;
   if (peopleAgentType(release, type) !== 'schema:Organization') return;
@@ -90,20 +93,24 @@ export function organizationHistory(read: OrganizationCurrent, locale: string) {
   };
 }
 
-/** Admit a bounded current observation before mounting document or evidence readers. */
-export function organizationCurrent(read: PeopleRead, id: string, context: string): OrganizationCurrent | undefined {
+/** Admit the released composition pair without manufacturing a complete native release envelope. */
+export function organizationAdmission(read: OrganizationReading, id: string, context: string): boolean {
   if (
-    !read.ok ||
-    !read.public ||
     read.public.subject.id !== id ||
     read.public.subject.context !== context ||
     peopleAgentType(read.release, read.public.subject.type) !== 'schema:Organization'
   )
-    return;
+    return false;
   try {
-    if (new TextEncoder().encode(JSON.stringify(read.public)).byteLength > organizationBounds.bytes) return;
+    return new TextEncoder().encode(JSON.stringify(read.public)).byteLength <= organizationBounds.bytes;
   } catch {
-    return;
+    return false;
   }
+}
+
+/** Admit a bounded current observation before mounting document or evidence readers. */
+export function organizationCurrent(read: PeopleRead, id: string, context: string): OrganizationCurrent | undefined {
+  if (!read.ok || !read.public || !organizationAdmission({ public: read.public, release: read.release }, id, context))
+    return;
   return { ...read, public: read.public };
 }

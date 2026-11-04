@@ -6,7 +6,7 @@ import { PlainLink, type PageLink } from '../../pages/shared';
 import { subjectHref } from '../../../subject/subject-href';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import { m } from '../../../paraglide/messages.js';
-import { organizationCurrent, type OrganizationCurrent } from './index';
+import { organizationAdmission, organizationCurrent, type OrganizationCurrent } from './index';
 import { OrganizationReader } from './view';
 import { useOrganizationEpisode } from './reading/episode';
 
@@ -43,7 +43,7 @@ export function OrganizationOverview({
   realm?: string | undefined;
   link?: PageLink | undefined;
   public?: SubjectRead | undefined;
-  release?: Release | undefined;
+  release?: Pick<Release, 'types' | 'properties'> | undefined;
   documents?: unknown;
   preferences?: Reader;
   currentHref?: string | undefined;
@@ -57,19 +57,8 @@ export function OrganizationOverview({
   );
   const admitted = useMemo(
     () =>
-      composed && release
-        ? organizationCurrent(
-            {
-              ok: true,
-              public: composed,
-              release,
-              work: null,
-              profiles: [],
-              credits: [],
-            },
-            id,
-            context,
-          )
+      composed && release && organizationAdmission({ public: composed, release }, id, context)
+        ? { public: composed, release }
         : undefined,
     [composed, release, id, context],
   );
