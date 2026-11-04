@@ -35,7 +35,7 @@ export function creditVisit(value: OverviewValue, node: string, section: Section
     propertyLabel: (property && value.relations[property]?.forwardLabel) || property || '', realm: value.realm };
 }
 
-function snak(value: unknown): value is Snak {
+function snak(value: unknown): value is Snak & Record<string, unknown> {
   return isRecord(value) && isRecord(value.property) && typeof value.property.id === 'string' &&
     typeof value.property.data_type === 'string' && isRecord(value.value) && typeof value.value.type === 'string';
 }

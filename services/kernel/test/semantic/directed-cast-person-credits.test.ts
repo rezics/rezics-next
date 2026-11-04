@@ -186,8 +186,6 @@ test('qualified and plain credits retain separate original assertions, citations
   const concealed = { ...assertion, references: [{ parts: [
     { property: { id: 'wdt:P248', data_type: 'wikibase-item' }, value: { type: 'value', content: character.id } },
   ] }] };
-  const disclosed = disclosedRelationStatement(concealed, new Map([[actor.id, {
-    id: actor.id, type: 'schema:Person', label: { value: 'Inspection actor', language: 'en' },
-  }]]));
+  const disclosed = disclosedRelationStatement(concealed, new Map([[actor.id, page.body.links[0].related[actor.id]]]));
   expect(disclosed?.references).toEqual([]);
 });
