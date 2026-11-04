@@ -1,6 +1,6 @@
 /** Explicit loopback-only development composition. Never imported by production entrypoints. */
 import { randomBytes, randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
@@ -95,6 +95,20 @@ export async function developmentKeys(directory = state): Promise<DevelopmentKey
     return JSON.parse(await readFile(file, 'utf8')) as DevelopmentKeys;
   }
   return keys;
+}
+
+/** Journals contain native IDs from the deleted database; retain them outside the next seed's active path. */
+export async function retireDevelopmentSeedState(repository = root): Promise<string | undefined> {
+  const archives = resolve(repository, '.temp/local-stack/seed-archives');
+  await mkdir(archives, { recursive: true, mode: 0o700 });
+  const archived = resolve(archives, randomUUID());
+  try {
+    await rename(resolve(repository, '.temp/cross-media-seed'), archived);
+    return archived;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return undefined;
+  }
 }
 
 export async function kernelEnvironment(): Promise<Record<string, string>> {
@@ -530,7 +544,11 @@ async function start() {
 if (import.meta.main) {
   try {
     const action = process.argv[2];
-    if (action === 'setup' || action === 'reset') await setup();
+    if (action === 'setup') await setup();
+    else if (action === 'reset') {
+      await retireDevelopmentSeedState();
+      await setup();
+    }
     else if (action === 'host') await serveHost();
     else if (action === 'persona') {
       const composition = await assemble();

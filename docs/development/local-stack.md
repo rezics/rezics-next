@@ -78,7 +78,8 @@ task dev:reset
 ```
 
 This explicitly deletes the configured local PostgreSQL container and volume, including both development databases,
-then migrates fresh databases. It keeps generated keys and the OpenSearch volume. Re-run `task dev`; the persona and
+then migrates fresh databases. It keeps generated keys and the OpenSearch volume. It retires the active local importer journals under
+`.temp/local-stack/seed-archives/`, preserving their contents while the next seed starts without old native UUIDs. Re-run `task dev`; the persona and
 public-read openings are rebuilt. This command is destructive: use it only for your own development stack, never a
 shared database. It never prunes Docker. Normal `dev:infra` never resets data automatically.
 
