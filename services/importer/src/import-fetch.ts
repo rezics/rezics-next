@@ -286,6 +286,131 @@ async function boundedResponse(response: Response, limit: number, signal: AbortS
   }
 }
 
+/** Public, read-only JSON transport sharing the importer's response and retry bounds. */
+export function createBoundedPublicGet(options: {
+  origin: string;
+  pathPrefix: string;
+  fetch?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+  schedule?: (callback: () => void, ms: number) => () => void;
+  maxAttempts?: number;
+  maxResponseBytes?: number;
+  maxWaitMs?: number;
+  maxTotalWaitMs?: number;
+  deadlineMs?: number;
+}): (url: string, signal?: AbortSignal) => Promise<Response> {
+  const origin = new URL(options.origin);
+  if (
+    origin.protocol !== 'https:' ||
+    origin.username ||
+    origin.password ||
+    origin.pathname !== '/' ||
+    origin.search ||
+    origin.hash ||
+    !options.pathPrefix.startsWith('/') ||
+    options.pathPrefix.includes('..')
+  )
+    throw new TypeError('Expected a bounded HTTPS read origin and path');
+  const maxAttempts = boundedSetting(options.maxAttempts, MAX_IMPORT_ATTEMPTS, MAX_IMPORT_ATTEMPTS, 1);
+  const maxResponseBytes = boundedSetting(
+    options.maxResponseBytes,
+    MAX_IMPORT_RESPONSE_BYTES,
+    MAX_IMPORT_RESPONSE_BYTES,
+  );
+  const maxWaitMs = boundedSetting(options.maxWaitMs, MAX_IMPORT_WAIT_MS, MAX_IMPORT_WAIT_MS);
+  const maxTotalWaitMs = boundedSetting(options.maxTotalWaitMs, MAX_IMPORT_TOTAL_WAIT_MS, MAX_IMPORT_TOTAL_WAIT_MS);
+  const deadlineMs = boundedSetting(options.deadlineMs, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_DEADLINE_MS, 1);
+  const upstream = options.fetch ?? globalThis.fetch;
+  const now = options.now ?? Date.now;
+  const schedule = options.schedule ?? nativeSchedule;
+  const sleep = (ms: number, signal: AbortSignal) =>
+    abortable(signal, () => (options.sleep ? options.sleep(ms) : timerSleep(ms, signal, schedule)));
+
+  return async (input, caller) => {
+    const url = new URL(input);
+    if (
+      url.origin !== origin.origin ||
+      !url.pathname.startsWith(options.pathPrefix) ||
+      url.username ||
+      url.password ||
+      url.hash
+    )
+      throw new TypeError('Public reads must target the configured origin and path');
+    caller?.throwIfAborted();
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const aborted = () => controller.abort(caller?.reason);
+    caller?.addEventListener('abort', aborted, { once: true });
+    const deadline = now() + deadlineMs;
+    let clearDeadline: (() => void) | undefined;
+    try {
+      clearDeadline = schedule(
+        () => controller.abort(new DOMException('Public read deadline exceeded', 'TimeoutError')),
+        deadlineMs,
+      );
+      const request = new Request(url.href, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        redirect: 'error',
+        signal,
+      });
+      let scheduledWait = 0;
+      for (let attempt = 1; ; attempt++) {
+        signal.throwIfAborted();
+        let response: Response;
+        try {
+          response = await abortable(signal, () => upstream(new Request(request)));
+        } catch (error) {
+          signal.throwIfAborted();
+          const delay = backoff(attempt);
+          if (attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait) throw error;
+          scheduledWait += delay;
+          await sleep(delay, signal);
+          continue;
+        }
+        const receivedAt = now();
+        const adaptable = response.status === 429 || response.status === 503;
+        const hint = adaptable ? retryAfter(response, receivedAt) : undefined;
+        let buffered = false;
+        let overload = response.status === 429;
+        if (response.status === 503 && hint !== undefined) {
+          response = await boundedResponse(response, maxResponseBytes, signal);
+          buffered = true;
+          const problem: unknown = await abortable(signal, () =>
+            response.clone().json().catch(() => null),
+          );
+          overload =
+            typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true;
+        }
+        const notBefore = overload ? hint : undefined;
+        const delay =
+          notBefore === null ? null : notBefore === undefined ? backoff(attempt) : Math.max(0, notBefore - now());
+        const stopped = (): boolean =>
+          delay === null ||
+          delay > maxWaitMs ||
+          delay > maxTotalWaitMs - scheduledWait ||
+          (notBefore !== undefined && now() + delay >= deadline);
+        if (
+          attempt === maxAttempts ||
+          !(response.status === 429 || (response.status >= 500 && response.status <= 599)) ||
+          stopped()
+        )
+          return buffered ? response : boundedResponse(response, maxResponseBytes, signal);
+        if (delay === null) return buffered ? response : boundedResponse(response, maxResponseBytes, signal);
+        scheduledWait += delay;
+        await abortable(signal, () => cancel(response.body));
+        await sleep(delay, signal);
+      }
+    } finally {
+      caller?.removeEventListener('abort', aborted);
+      clearDeadline?.();
+    }
+  };
+}
+
 /** Transport for createKernelClient; session state and write validation remain with the client/server. */
 export function createImportFetch(options: ImportHttpOptions): typeof fetch {
   const origin = new URL(options.origin);

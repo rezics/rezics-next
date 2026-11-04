@@ -7,6 +7,8 @@ import { vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
+import type { CrossMediaMediaOutcome } from './showcase-media.ts';
+import { validAvailableCover } from './showcase-media.ts';
 
 export const showcaseLimits = Object.freeze({
   records: 768,
@@ -91,7 +93,34 @@ export type ShowcaseOmission = Readonly<{
     | 'candidate-ack-missing'
     | 'candidate-limit'
     | 'vocabulary-binding-missing'
-    | 'source-claim-withheld';
+    | 'source-claim-withheld'
+    | 'cover-source-absent'
+    | 'cover-source-unavailable'
+    | 'cover-pending'
+    | 'cover-rejected'
+    | 'cover-fenced'
+    | 'cover-candidate-missing'
+    | 'cover-not-public';
+}>;
+
+export type ShowcaseMediaRecord = Readonly<{
+  sourceAlias: string;
+  sourceKey: string;
+  sourceUri: string;
+  sourceRevision: string;
+  archiveDigest: string;
+  responseDigest?: string;
+  etag?: string;
+  sourceUrl?: string;
+  status: CrossMediaMediaOutcome['status'];
+  containerId: string | null;
+  mediaId?: string;
+  credit?: CrossMediaMediaOutcome['credit'];
+  provenance?: CrossMediaMediaOutcome['provenance'];
+  candidateId?: string;
+  candidateDigest?: string;
+  readHandoff?: { subjectId: string; readerRoute: string; property: 'schema:image'; value: string };
+  gap?: string;
 }>;
 
 export type ShowcaseManifest = Readonly<{
@@ -99,6 +128,7 @@ export type ShowcaseManifest = Readonly<{
   digest: string;
   records: readonly ShowcaseRecord[];
   vocabulary: readonly ShowcaseVocabularyRecord[];
+  media: readonly ShowcaseMediaRecord[];
   omissions: readonly ShowcaseOmission[];
 }>;
 
@@ -121,6 +151,7 @@ export function showcasePlanDigest(plan: CrossMediaPlan): string {
     credits: plan.credits,
     memberships: plan.members,
     relationSnapshotDigest: plan.relationSnapshotDigest,
+    coverSources: plan.coverSources ?? [],
   });
 }
 
@@ -180,6 +211,7 @@ function selectedEnvelopes(
   plan: CrossMediaPlan,
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>,
   requirements: readonly ShowcaseVocabularyRequirement[],
+  mediaOutcomes: readonly CrossMediaMediaOutcome[],
 ): Set<string> {
   const allowed = new Set<string>();
   for (const provider of ['bangumi', 'vndb'] as const) {
@@ -188,9 +220,12 @@ function selectedEnvelopes(
       converterRevision: entityRevision,
     });
     for (const row of [...plan.records[provider], ...plan.entities[provider]]) {
+      const context = provider === 'bangumi'
+        ? showcaseMediaContext({ plan, outcomes: mediaOutcomes, alias: aliases[provider], externalId: row.key })
+        : undefined;
       const converted = registration.convert(
         { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
-        { source: aliases[provider] },
+        { source: aliases[provider], ...(context ?? {}) },
       );
       for (const command of converted.proposals) allowed.add(envelopeKey(command.source));
     }
@@ -233,12 +268,67 @@ function selectedEnvelopes(
   return allowed;
 }
 
+/** Return media IDs only for an exact available cover receipt attached to this selected record. */
+export function showcaseMediaContext(input: {
+  plan: CrossMediaPlan;
+  outcomes: readonly CrossMediaMediaOutcome[];
+  alias: string;
+  externalId: string;
+  containerId?: string;
+}): { subjectId: string; mediaIds: Record<string, string> } | undefined {
+  const row = [...input.plan.records.bangumi, ...input.plan.entities.bangumi].find(
+    (candidate) => candidate.key === input.externalId,
+  );
+  const outcome = input.outcomes.find(
+    (candidate) => candidate.sourceAlias === input.alias && candidate.externalId === input.externalId,
+  );
+  const receipt = input.plan.coverSources?.find(
+    (candidate) => candidate.sourceAlias === input.alias && candidate.externalId === input.externalId,
+  );
+  const sourceUrl = (row?.payload as { images?: { large?: unknown } } | undefined)?.images?.large;
+  if (
+    !row ||
+    typeof sourceUrl !== 'string' ||
+    !outcome ||
+    !receipt ||
+    outcome.status !== 'available' ||
+    outcome.sourceStatus !== 'available' ||
+    !outcome.containerId ||
+    (input.containerId !== undefined && outcome.containerId !== input.containerId) ||
+    !validAvailableCover({
+      source: outcome,
+      recordKey: row.key,
+      sourceAlias: input.alias,
+      sourceRevision: row.revision ?? 'unversioned',
+      archiveDigest: receipt.archiveDigest,
+      containerId: outcome.containerId,
+      mediaId: outcome.mediaId,
+      sourceUrl,
+    }) ||
+    receipt.endpoint !== outcome.endpoint ||
+    receipt.responseDigest !== outcome.responseDigest ||
+    receipt.sourceUrl !== outcome.sourceUrl ||
+    outcome.provenance?.source !== input.alias ||
+    outcome.provenance.external_id !== row.key ||
+    outcome.provenance.record_revision !== (row.revision ?? 'unversioned') ||
+    outcome.provenance.field_group !== 'cover' ||
+    outcome.provenance.converter_revision.length === 0 ||
+    outcome.credit?.rightsHolder !== '(c) rights holder' ||
+    outcome.credit.via.name !== 'Bangumi' ||
+    outcome.credit.via.url !== `https://bgm.tv/subject/${row.key}` ||
+    outcome.credit.license !== 'LicenseRef-unknown'
+  )
+    return undefined;
+  return { subjectId: outcome.containerId, mediaIds: { [sourceUrl]: outcome.mediaId! } };
+}
+
 /** Build a finite publication intent only from selected source records and acknowledged native proposals. */
 export function buildShowcaseManifest(input: {
   plan: CrossMediaPlan;
   readings: readonly CrossMediaReading[];
   acknowledgements: readonly ShowcaseAcknowledgement[];
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
+  mediaOutcomes?: readonly CrossMediaMediaOutcome[];
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
 }): ShowcaseManifest {
   const { plan, readings, acknowledgements, aliases } = input;
@@ -275,7 +365,8 @@ export function buildShowcaseManifest(input: {
     }
     vocabularyRequirements.push(requirement);
   }
-  const allowedSources = selectedEnvelopes(plan, aliases, vocabularyRequirements);
+  const mediaOutcomes = input.mediaOutcomes ?? [];
+  const allowedSources = selectedEnvelopes(plan, aliases, vocabularyRequirements, mediaOutcomes);
 
   const records: ShowcaseRecord[] = [];
   let remainingCandidates: number = showcaseLimits.candidates;
@@ -284,10 +375,19 @@ export function buildShowcaseManifest(input: {
     const alias = aliases[provider];
     const reading = readingIndex.get(`${provider}\0${row.key}`);
     const subject = currentSubject(reading);
+    const mediaContext = provider === 'bangumi'
+      ? showcaseMediaContext({
+          plan,
+          outcomes: mediaOutcomes,
+          alias,
+          externalId: row.key,
+          ...(subject?.id ? { containerId: subject.id } : {}),
+        })
+      : undefined;
     const registration = createSourceRegistration(provider, { source: alias, converterRevision: entityRevision });
     const conversion = registration.convert(
       { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
-      { source: alias },
+      { source: alias, ...(mediaContext ?? {}) },
     );
     const bootstrap = conversion.proposals.find((command) => command.op === 'create');
     const member = memberIndex.get(`${provider}\0${row.key}`);
@@ -335,6 +435,52 @@ export function buildShowcaseManifest(input: {
       assertions: sourceAssertions,
     });
   }
+
+  const media: ShowcaseMediaRecord[] = [];
+  for (const outcome of mediaOutcomes.slice(0, 256)) {
+    const record = records.find(
+      (candidate) => candidate.sourceAlias === outcome.sourceAlias && candidate.sourceKey === outcome.externalId,
+    );
+    const cover = record?.assertions.find((assertion) => assertion.property === 'schema:image');
+    let gap: string | undefined;
+    if (outcome.status === 'absent') gap = 'cover-source-absent';
+    else if (outcome.status === 'pending') gap = 'cover-pending';
+    else if (outcome.status === 'rejected') gap = 'cover-rejected';
+    else if (outcome.status === 'fenced') gap = 'cover-fenced';
+    else if (outcome.status === 'unavailable') gap = outcome.code ?? 'cover-source-unavailable';
+    else if (!cover) gap = 'cover-candidate-missing';
+    if (gap) {
+      const code: ShowcaseOmission['code'] =
+        gap === 'cover-source-absent' ||
+        gap === 'cover-pending' ||
+        gap === 'cover-rejected' ||
+        gap === 'cover-fenced' ||
+        gap === 'cover-candidate-missing' ||
+        gap === 'cover-not-public'
+          ? gap
+          : 'cover-source-unavailable';
+      omissions.push({ provider: 'bangumi', sourceKey: outcome.externalId, code });
+    }
+    media.push({
+      sourceAlias: outcome.sourceAlias,
+      sourceKey: outcome.externalId,
+      sourceUri: outcome.endpoint,
+      sourceRevision: outcome.sourceRevision,
+      archiveDigest: outcome.archiveDigest,
+      ...(outcome.responseDigest ? { responseDigest: outcome.responseDigest } : {}),
+      ...(outcome.etag ? { etag: outcome.etag } : {}),
+      ...(outcome.sourceUrl ? { sourceUrl: outcome.sourceUrl } : {}),
+      status: outcome.status,
+      containerId: outcome.containerId,
+      ...(outcome.mediaId ? { mediaId: outcome.mediaId } : {}),
+      ...(outcome.credit ? { credit: outcome.credit } : {}),
+      ...(outcome.provenance ? { provenance: outcome.provenance } : {}),
+      ...(cover ? { candidateId: cover.candidateId, candidateDigest: cover.candidateDigest } : {}),
+      ...(gap ? { gap } : {}),
+    });
+  }
+  if (mediaOutcomes.length > 256)
+    omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'cover-source-unavailable' });
 
   const vocabulary: ShowcaseVocabularyRecord[] = [];
   for (const requirement of vocabularyRequirements) {
@@ -415,8 +561,9 @@ export function buildShowcaseManifest(input: {
       schemeId: record.schemeId,
       assertions: record.assertions.map(({ candidateId, candidateDigest }) => ({ candidateId, candidateDigest })),
     })),
+    media,
   });
-  return { version: 1, digest, records, vocabulary, omissions };
+  return { version: 1, digest, records, vocabulary, media, omissions };
 }
 
 function kindFromType(type: string): ShowcaseKind {

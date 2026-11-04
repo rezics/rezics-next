@@ -14,18 +14,23 @@ import {
   type ShowcaseManifest,
   type ShowcaseRecord,
   type ShowcaseVocabularyRequirement,
+  showcaseMediaContext,
 } from './showcase-manifest.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { subjectSlug } from '@rezics/definitions/slug';
+import { safeSourceUrl } from '../../../packages/conversion/src/support.ts';
+import type { BangumiCoverSource, BangumiCoverSourceJournal, CrossMediaMediaOutcome } from './showcase-media.ts';
+import { validAvailableCover } from './showcase-media.ts';
 
 type ImportTransport = ReturnType<typeof createImportTransport>;
 export type ShowcaseReviewPort = Pick<
   ImportTransport,
   'readReviewedSubject' | 'reviewedCandidates' | 'acceptReviewedCandidate' | 'adoptReviewedCandidates'
->;
+> &
+  Partial<Pick<ImportTransport, 'fence'>>;
 
 type JournalCommandRow = {
   command_key: string;
@@ -55,7 +60,7 @@ function successResult(
 }
 
 /** Durable, local-only journal for exact source commands and separately authorized review actions. */
-export class ShowcaseJournal {
+export class ShowcaseJournal implements BangumiCoverSourceJournal {
   readonly #db: Database;
 
   constructor(path: string) {
@@ -75,6 +80,13 @@ export class ShowcaseJournal {
       CREATE TABLE IF NOT EXISTS showcase_intent (
         intent_digest TEXT PRIMARY KEY,
         intent_json TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS showcase_cover_source (
+        source_alias TEXT NOT NULL,
+        external_id TEXT NOT NULL,
+        archive_digest TEXT NOT NULL,
+        source_json TEXT NOT NULL,
+        PRIMARY KEY(source_alias,external_id,archive_digest)
       ) STRICT;
       CREATE TABLE IF NOT EXISTS showcase_action (
         action_key TEXT PRIMARY KEY,
@@ -215,6 +227,24 @@ export class ShowcaseJournal {
           candidateDigest,
         })),
       })),
+      media: manifest.media.map((record) => ({
+        sourceAlias: record.sourceAlias,
+        sourceKey: record.sourceKey,
+        sourceRevision: record.sourceRevision,
+        archiveDigest: record.archiveDigest,
+        responseDigest: record.responseDigest ?? null,
+        etag: record.etag ?? null,
+        sourceUrl: record.sourceUrl ?? null,
+        status: record.status,
+        containerId: record.containerId,
+        mediaId: record.mediaId ?? null,
+        credit: record.credit ?? null,
+        provenance: record.provenance ?? null,
+        candidateId: record.candidateId ?? null,
+        candidateDigest: record.candidateDigest ?? null,
+        readHandoff: record.readHandoff ?? null,
+        gap: record.gap ?? null,
+      })),
     };
     const body = json(intent);
     const prior = this.#db
@@ -225,6 +255,41 @@ export class ShowcaseJournal {
       return;
     }
     this.#db.query('INSERT INTO showcase_intent(intent_digest,intent_json) VALUES(?,?)').run(manifest.digest, body);
+  }
+
+  coverSource(sourceAlias: string, externalId: string, archiveDigest: string): BangumiCoverSource | null {
+    const row = this.#db
+      .query<{ source_json: string }, [string, string, string]>(
+        'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=?',
+      )
+      .get(sourceAlias, externalId, archiveDigest);
+    return row ? (JSON.parse(row.source_json) as BangumiCoverSource) : null;
+  }
+
+  sealCoverSource(source: BangumiCoverSource): BangumiCoverSource {
+    if (
+      source.sourceAlias !== 'bangumi_cross_media' ||
+      !/^[1-9][0-9]*$/u.test(source.externalId) ||
+      !/^[0-9a-f]{64}$/u.test(source.archiveDigest) ||
+      !['available', 'absent'].includes(source.sourceStatus) ||
+      source.endpoint !== `https://api.bgm.tv/v0/subjects/${source.externalId}` ||
+      !/^[0-9a-f]{64}$/u.test(source.responseDigest ?? '') ||
+      (source.etag !== undefined && (source.etag.length > 256 || !/^[\x20-\x7e]*$/u.test(source.etag))) ||
+      (source.sourceStatus === 'available' &&
+        (!source.sourceUrl || !/^https:\/\/lain\.bgm\.tv\//u.test(source.sourceUrl)))
+    )
+      throw new TypeError('Invalid Bangumi cover source receipt');
+    if (source.sourceStatus === 'available') safeSourceUrl(source.sourceUrl!, ['lain.bgm.tv']);
+    const body = json(source);
+    const prior = this.coverSource(source.sourceAlias, source.externalId, source.archiveDigest);
+    if (prior) {
+      if (json(prior) !== body) throw new TypeError('Bangumi cover source changed under the same archive digest');
+      return prior;
+    }
+    this.#db
+      .query('INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,source_json) VALUES(?,?,?,?)')
+      .run(source.sourceAlias, source.externalId, source.archiveDigest, body);
+    return source;
   }
 
   close(): void {
@@ -368,6 +433,118 @@ function proseOrImage(property: string): boolean {
   );
 }
 
+function admittedCoverMedia(
+  plan: CrossMediaPlan,
+  outcomes: readonly CrossMediaMediaOutcome[],
+  record: ShowcaseRecord,
+  assertion: ShowcaseAssertion,
+): CrossMediaMediaOutcome | undefined {
+  if (
+    record.provider !== 'bangumi' ||
+    record.kind !== 'work' ||
+    assertion.property !== 'schema:image' ||
+    !record.subjectId ||
+    record.sourceUri !== `https://bgm.tv/subject/${record.sourceKey}` ||
+    assertion.statement.value.type !== 'value'
+  )
+    return undefined;
+  const outcome = outcomes.find(
+    (item) => item.sourceAlias === record.sourceAlias && item.externalId === record.sourceKey,
+  );
+  const receipt = plan.coverSources?.find(
+    (item) => item.sourceAlias === record.sourceAlias && item.externalId === record.sourceKey,
+  );
+  const imageUrl = (plan.records.bangumi.find((row) => row.key === record.sourceKey)?.payload as
+    | { images?: { large?: unknown } }
+    | undefined)?.images?.large;
+  if (
+    !outcome ||
+    !receipt ||
+    outcome.status !== 'available' ||
+    outcome.sourceStatus !== 'available' ||
+    outcome.containerId !== record.subjectId ||
+    !validAvailableCover({
+      source: outcome,
+      recordKey: record.sourceKey,
+      sourceAlias: record.sourceAlias,
+      sourceRevision: record.sourceRevision,
+      archiveDigest: receipt.archiveDigest,
+      containerId: record.subjectId,
+      mediaId: outcome.mediaId,
+      sourceUrl: typeof imageUrl === 'string' ? imageUrl : undefined,
+    }) ||
+    receipt.endpoint !== outcome.endpoint ||
+    receipt.responseDigest !== outcome.responseDigest ||
+    receipt.sourceUrl !== outcome.sourceUrl ||
+    assertion.source.source !== record.sourceAlias ||
+    assertion.source.external_id !== record.sourceKey ||
+    assertion.source.record_revision !== record.sourceRevision ||
+    assertion.source.digest !== record.semanticDigest ||
+    assertion.source.converter_revision !== record.converterRevision ||
+    assertion.source.field_group !== 'cover' ||
+    assertion.statement.value.content !== outcome.mediaId ||
+    outcome.provenance?.source !== record.sourceAlias ||
+    outcome.provenance.external_id !== record.sourceKey ||
+    outcome.provenance.record_revision !== record.sourceRevision ||
+    outcome.provenance.converter_revision !== record.converterRevision ||
+    outcome.provenance.digest !== record.semanticDigest ||
+    outcome.provenance.field_group !== 'cover' ||
+    outcome.credit?.rightsHolder !== '(c) rights holder' ||
+    outcome.credit.via.name !== 'Bangumi' ||
+    outcome.credit.via.url !== record.sourceUri ||
+    outcome.credit.license !== 'LicenseRef-unknown' ||
+    outcome.credit.obligations.length !== 0 ||
+    !assertion.citations.includes(record.sourceUri) ||
+    !assertion.citations.includes(outcome.sourceUrl!) ||
+    !outcome.provenance.references.some((reference) =>
+      reference.parts.some((part) => part.value === record.sourceUri),
+    ) ||
+    !outcome.provenance.references.some((reference) =>
+      reference.parts.some((part) => part.value === outcome.sourceUrl),
+    )
+  )
+    return undefined;
+  return outcome;
+}
+
+async function currentCoverFence(
+  review: ShowcaseReviewPort,
+  source: Pick<CrossMediaMediaOutcome, 'sourceAlias' | 'externalId'>,
+): Promise<'open' | 'fenced' | 'unavailable'> {
+  if (!review.fence) return 'unavailable';
+  try {
+    const current = await review.fence({ source: source.sourceAlias, externalId: source.externalId, fieldGroup: 'cover' });
+    if (current.fenced) return 'fenced';
+    return current.securityRevision === null ? 'open' : 'unavailable';
+  } catch {
+    return 'unavailable';
+  }
+}
+
+async function currentCoverOutcomes(
+  result: CrossMediaSeedResult,
+  review: ShowcaseReviewPort,
+): Promise<CrossMediaMediaOutcome[]> {
+  const output: CrossMediaMediaOutcome[] = [];
+  for (const outcome of result.mediaOutcomes) {
+    if (outcome.status !== 'available') {
+      output.push(outcome);
+      continue;
+    }
+    const state = await currentCoverFence(review, outcome);
+    if (state === 'open') output.push(outcome);
+    else {
+      const { mediaId: _mediaId, mediaKey: _mediaKey, credit: _credit, provenance: _provenance, ...source } = outcome;
+      output.push({
+        ...source,
+        status: state === 'fenced' ? 'fenced' : 'unavailable',
+        ...(state === 'fenced' ? {} : { code: 'cover-fence-unavailable' as const }),
+      });
+    }
+  }
+  return output;
+}
+
 function admittedTextRights(record: ShowcaseRecord, assertion: ShowcaseAssertion): boolean {
   const rights = assertion.rights;
   return (
@@ -498,9 +675,18 @@ async function resolveLegacyCandidates(input: {
     if (!id) continue;
     const alias = input.aliases[provider];
     const registration = createSourceRegistration(provider, { source: alias, converterRevision: entityRevision });
+    const mediaContext = provider === 'bangumi'
+      ? showcaseMediaContext({
+          plan: input.plan,
+          outcomes: input.result.mediaOutcomes,
+          alias,
+          externalId: row.key,
+          containerId: id,
+        })
+      : undefined;
     const converted = registration.convert(
       { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
-      { source: alias, subjectId: id },
+      { source: alias, subjectId: id, ...(mediaContext ?? {}) },
     );
     for (const command of converted.proposals) {
       if (command.op !== 'propose' || known.has(command.key)) continue;
@@ -558,21 +744,25 @@ export async function publishShowcase(input: {
   publicClient: PublicBulkClient;
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
 }): Promise<ShowcasePublicationResult> {
+  const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
+  const result = { ...input.result, mediaOutcomes };
   const recovered = await resolveLegacyCandidates({
     plan: input.plan,
-    result: input.result,
+    result,
     aliases: input.aliases,
     review: input.review,
     existing: input.journal.acknowledgedCommands(),
   });
-  const manifest = buildShowcaseManifest({
+  let manifest = buildShowcaseManifest({
     plan: input.plan,
     readings: input.result.readings,
     acknowledgements: recovered.acknowledgements,
     aliases: input.aliases,
+    mediaOutcomes,
     ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
   });
   input.journal.sealIntent(manifest);
+  const initialIntentDigest = manifest.digest;
 
   const omissions = [
     ...manifest.omissions.map((item) => ({ ...item, code: item.code })),
@@ -580,13 +770,13 @@ export async function publishShowcase(input: {
   ].slice(0, showcaseLimits.omissions);
   if (!manifest.records.length && !manifest.vocabulary.length)
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'source-read-missing' });
-  if (input.result.status === 'imported-with-gaps')
+  if (result.status === 'imported-with-gaps')
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'source-claim-withheld' });
-  for (const gap of input.result.gaps.slice(0, showcaseLimits.omissions))
+  for (const gap of result.gaps.slice(0, showcaseLimits.omissions))
     omissions.push({ provider: gap.source, sourceKey: safeGapKey(gap.record), code: 'source-claim-withheld' });
-  for (const unresolved of input.result.unresolved.slice(0, showcaseLimits.omissions))
+  for (const unresolved of result.unresolved.slice(0, showcaseLimits.omissions))
     omissions.push({ provider: 'bangumi', sourceKey: unresolved.holder, code: 'source-claim-withheld' });
-  if (input.result.creditGaps.length || input.result.characterDiagnostics.length)
+  if (result.creditGaps.length || result.characterDiagnostics.length)
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'source-claim-withheld' });
   const typeById = new Map<string, string>();
   for (const record of manifest.records)
@@ -624,6 +814,7 @@ export async function publishShowcase(input: {
   const pageCache = new Map<string, CandidatePage>();
   const validated = new Map<string, CandidateRead>();
   const blockedSubjects = new Set<string>();
+  const blockedCoverCandidates = new Set<string>();
   const vocabularyById = new Map(manifest.vocabulary.map((record) => [record.subjectId, record]));
   for (const record of manifest.records) {
     if (!record.subjectId || recordHasSourceIdentity(record)) continue;
@@ -671,10 +862,20 @@ export async function publishShowcase(input: {
       continue;
     }
     if (blockedSubjects.has(id)) continue;
-    if (
-      proseOrImage(assertion.property) &&
-      (assertion.property === 'schema:image' || !admittedTextRights(record, assertion))
-    ) {
+    if (assertion.property === 'schema:image') {
+      const outcome = admittedCoverMedia(input.plan, mediaOutcomes, record, assertion);
+      if (!outcome) {
+        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'cover-source-unavailable' });
+        blockedCoverCandidates.add(assertion.candidateId);
+        continue;
+      }
+      const state = await currentCoverFence(input.review, outcome);
+      if (state !== 'open') {
+        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable' });
+        blockedCoverCandidates.add(assertion.candidateId);
+        continue;
+      }
+    } else if (proseOrImage(assertion.property) && !admittedTextRights(record, assertion)) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'content-rights-not-admitted' });
       continue;
     }
@@ -686,7 +887,11 @@ export async function publishShowcase(input: {
           if (parsed.protocol !== 'https:') return true;
           const host = parsed.hostname.toLowerCase();
           return record.provider === 'bangumi'
-            ? host !== 'bgm.tv' && host !== 'bangumi.tv' && host !== 'www.bgm.tv' && host !== 'www.bangumi.tv'
+            ? host !== 'bgm.tv' &&
+                host !== 'bangumi.tv' &&
+                host !== 'www.bgm.tv' &&
+                host !== 'www.bangumi.tv' &&
+                !(assertion.property === 'schema:image' && host === 'lain.bgm.tv')
             : host !== 'vndb.org' && !host.endsWith('.vndb.org');
         } catch {
           return true;
@@ -736,7 +941,22 @@ export async function publishShowcase(input: {
   const stoppedSubjects = new Set<string>();
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
-    if (!id || !validated.has(assertion.candidateId) || stoppedSubjects.has(id)) continue;
+    if (
+      !id ||
+      !validated.has(assertion.candidateId) ||
+      stoppedSubjects.has(id) ||
+      blockedCoverCandidates.has(assertion.candidateId)
+    )
+      continue;
+    if (assertion.property === 'schema:image') {
+      const outcome = admittedCoverMedia(input.plan, mediaOutcomes, record, assertion);
+      const state = outcome ? await currentCoverFence(input.review, outcome) : 'unavailable';
+      if (state !== 'open') {
+        blockedCoverCandidates.add(assertion.candidateId);
+        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable' });
+        continue;
+      }
+    }
     const candidate = validated.get(assertion.candidateId)!;
     const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
     const key = actionKey('accept', assertion.candidateId, assertion.candidateDigest);
@@ -752,14 +972,20 @@ export async function publishShowcase(input: {
     } catch (error) {
       input.journal.refuseAction(key, errorCode(error));
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: errorCode(error) });
-      stoppedSubjects.add(id);
+      if (assertion.property !== 'schema:image') stoppedSubjects.add(id);
     }
   }
 
   const grouped = new Map<string, { record: ShowcaseRecord; property: string; ids: Set<string> }>();
   for (const { record, assertion } of assertions) {
     const id = record.subjectId;
-    if (!id || !validated.has(assertion.candidateId) || stoppedSubjects.has(id)) continue;
+    if (
+      !id ||
+      !validated.has(assertion.candidateId) ||
+      stoppedSubjects.has(id) ||
+      blockedCoverCandidates.has(assertion.candidateId)
+    )
+      continue;
     const key = groupKey(id, assertion.property);
     const group = grouped.get(key) ?? { record, property: assertion.property, ids: new Set<string>() };
     group.ids.add(assertion.candidateId);
@@ -781,6 +1007,17 @@ export async function publishShowcase(input: {
   for (const [key, group] of grouped) {
     const [id] = key.split('\0');
     if (!id || stoppedSubjects.has(id)) continue;
+    if (group.property === 'schema:image') {
+      const assertion = assertions.find(
+        (entry) => entry.record.subjectId === id && entry.assertion.property === 'schema:image' && group.ids.has(entry.assertion.candidateId),
+      );
+      const outcome = assertion && admittedCoverMedia(input.plan, mediaOutcomes, group.record, assertion.assertion);
+      const state = outcome ? await currentCoverFence(input.review, outcome) : 'unavailable';
+      if (state !== 'open') {
+        omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable' });
+        continue;
+      }
+    }
     let page: CandidatePage;
     try {
       page = await candidatePage({ review: input.review, id, property: group.property }, pageCache);
@@ -790,7 +1027,7 @@ export async function publishShowcase(input: {
         sourceKey: group.record.sourceKey,
         code: 'adoption-current-read-unavailable',
       });
-      stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedSubjects.add(id);
       continue;
     }
     const previous = page.adoption;
@@ -801,7 +1038,7 @@ export async function publishShowcase(input: {
         sourceKey: group.record.sourceKey,
         code: 'adoption-selection-unavailable',
       });
-      stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedSubjects.add(id);
       continue;
     }
     const selections = new Map<string, 'normal' | 'preferred'>();
@@ -814,7 +1051,7 @@ export async function publishShowcase(input: {
         sourceKey: group.record.sourceKey,
         code: 'adoption-selection-bounded',
       });
-      stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedSubjects.add(id);
       continue;
     }
     const dependencyIds = new Set<string>();
@@ -869,7 +1106,7 @@ export async function publishShowcase(input: {
       }
     }
     if (!dependencyReady) {
-      stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedSubjects.add(id);
       continue;
     }
     const body = {
@@ -895,7 +1132,7 @@ export async function publishShowcase(input: {
     } catch (error) {
       input.journal.refuseAction(action, errorCode(error));
       omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: errorCode(error) });
-      stoppedSubjects.add(id);
+      if (group.property !== 'schema:image') stoppedSubjects.add(id);
     }
   }
 
@@ -908,6 +1145,11 @@ export async function publishShowcase(input: {
     kind: string;
     assertions: { candidateId: string; property: string; digest: string }[];
   }[] = [];
+  const finalMediaOutcomes = [...mediaOutcomes];
+  const readHandoffs = new Map<
+    string,
+    { subjectId: string; readerRoute: string; property: 'schema:image'; value: string }
+  >();
   const publicRecords = [
     ...manifest.records,
     ...manifest.vocabulary.map((record) => ({
@@ -934,12 +1176,46 @@ export async function publishShowcase(input: {
       continue;
     }
     const publicSubject = read.subject as { statements?: Record<string, unknown[]> } | undefined;
+    const imageAssertion = record.assertions.find((assertion) => assertion.property === 'schema:image');
+    let imagePublishable = false;
+    let cover: CrossMediaMediaOutcome | undefined;
+    if (imageAssertion) {
+      cover = admittedCoverMedia(input.plan, finalMediaOutcomes, record, imageAssertion);
+      const state = cover ? await currentCoverFence(input.review, cover) : 'unavailable';
+      if (state === 'open') imagePublishable = true;
+      else {
+        const index = finalMediaOutcomes.findIndex(
+          (outcome) => outcome.sourceAlias === record.sourceAlias && outcome.externalId === record.sourceKey,
+        );
+        if (index >= 0) {
+          const { mediaId: _mediaId, mediaKey: _mediaKey, credit: _credit, provenance: _provenance, ...source } =
+            finalMediaOutcomes[index]!;
+          finalMediaOutcomes[index] = {
+            ...source,
+            status: state === 'fenced' ? 'fenced' : 'unavailable',
+            ...(state === 'fenced' ? {} : { code: 'cover-fence-unavailable' }),
+          };
+        }
+        omissions.push({
+          provider: record.provider,
+          sourceKey: record.sourceKey,
+          code: state === 'fenced' ? 'cover-fenced' : 'cover-source-unavailable',
+        });
+      }
+    }
     const visible = record.assertions.filter((assertion) => {
       if (!validated.has(assertion.candidateId)) return false;
       const rows = publicSubject?.statements?.[assertion.property] ?? [];
       return rows.some((row) => statementOnPublicRead(row, assertion.statement));
     });
-    if (visible.length !== record.assertions.length) {
+    const imageVisible =
+      imagePublishable && !!imageAssertion && visible.some((assertion) => assertion.candidateId === imageAssertion.candidateId);
+    const reportable = visible.filter((assertion) => assertion.property !== 'schema:image' || imageVisible);
+    const required = record.assertions.filter((assertion) => assertion.property !== 'schema:image' || imageVisible);
+    if (imageAssertion && imagePublishable && !imageVisible) {
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'cover-not-public' });
+    }
+    if (reportable.length !== required.length) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'selected-facts-not-public' });
       continue;
     }
@@ -952,6 +1228,14 @@ export async function publishShowcase(input: {
       Object.values(publicIdentity?.labels ?? {})[0] ??
       'subject';
     const route = `/subjects/${record.subjectId}/${subjectSlug(label)}`;
+    if (imageVisible && imageAssertion && cover) {
+      readHandoffs.set(`${record.sourceAlias}\0${record.sourceKey}`, {
+        subjectId: record.subjectId,
+        readerRoute: route,
+        property: 'schema:image',
+        value: cover.mediaId!,
+      });
+    }
     published.push({
       provider: record.provider,
       sourceKey: record.sourceKey,
@@ -959,13 +1243,49 @@ export async function publishShowcase(input: {
       nativeType: record.nativeType,
       readerRoute: route,
       kind: record.kind,
-      assertions: visible.map(({ candidateId, property, candidateDigest }) => ({
+      assertions: reportable.map(({ candidateId, property, candidateDigest }) => ({
         candidateId,
         property,
         digest: candidateDigest,
       })),
     });
   }
+
+  const finalManifest = buildShowcaseManifest({
+    plan: input.plan,
+    readings: input.result.readings,
+    acknowledgements: recovered.acknowledgements,
+    aliases: input.aliases,
+    mediaOutcomes: finalMediaOutcomes,
+    ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
+  });
+  const finalMedia = finalManifest.media.map((item) => {
+    const handoff = readHandoffs.get(`${item.sourceAlias}\0${item.sourceKey}`);
+    if (handoff) {
+      const { gap: _gap, ...record } = item;
+      return { ...record, readHandoff: handoff };
+    }
+    if (item.status === 'available' && item.candidateId)
+      return { ...item, gap: 'cover-not-public' };
+    return item;
+  });
+  const finalOmissions = [
+    ...finalManifest.omissions,
+    ...finalMedia
+      .filter((item) => item.gap === 'cover-not-public')
+      .map((item) => ({ provider: 'bangumi' as const, sourceKey: item.sourceKey, code: 'cover-not-public' as const })),
+  ].slice(0, showcaseLimits.omissions);
+  manifest =
+    JSON.stringify(finalMedia) === JSON.stringify(finalManifest.media)
+      ? finalManifest
+      : {
+          ...finalManifest,
+          digest: showcaseDigest({ baseDigest: finalManifest.digest, media: finalMedia }),
+          media: finalMedia,
+          omissions: finalOmissions,
+        };
+  if (manifest.digest !== initialIntentDigest) input.journal.sealIntent(manifest);
+  for (const omission of manifest.omissions) omissions.push(omission);
 
   const uniqueOmissions = [
     ...new Map(omissions.map((item) => [`${item.provider}\0${item.sourceKey}\0${item.code}`, item])).values(),
