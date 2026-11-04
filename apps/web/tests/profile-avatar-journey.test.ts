@@ -611,12 +611,12 @@ test('lost site reservation acknowledgement retries the original key and body on
       'avatar',
       profile().accountId,
     );
-    await expect(uploadAvatar(profile().accountId, selected, new AbortController().signal, intent)).rejects.toMatchObject(
-      { reason: 'unavailable', mediaId: undefined },
-    );
-    await expect(uploadAvatar(profile().accountId, selected, new AbortController().signal, intent)).rejects.toMatchObject(
-      { reason: 'unavailable' },
-    );
+    await expect(
+      uploadAvatar(profile().accountId, selected, new AbortController().signal, intent),
+    ).rejects.toMatchObject({ reason: 'unavailable', mediaId: undefined });
+    await expect(
+      uploadAvatar(profile().accountId, selected, new AbortController().signal, intent),
+    ).rejects.toMatchObject({ reason: 'unavailable' });
     expect(posts).toHaveLength(2);
     expect(posts[0]?.key).toBe(JSON.stringify(intent.key));
     expect(posts[1]).toEqual(posts[0]);

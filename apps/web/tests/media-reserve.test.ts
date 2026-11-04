@@ -135,12 +135,14 @@ const fake = Bun.serve({
       } catch {
         return failure(400, 'invalid_request');
       }
-      if (typeof parsed !== 'string' || parsed.length < 1 || parsed.length > 255) return failure(400, 'invalid_request');
+      if (typeof parsed !== 'string' || parsed.length < 1 || parsed.length > 255)
+        return failure(400, 'invalid_request');
       const input = body as Record<string, unknown>;
       const replay = [...reservations.values()].find(
         (media) => media.reservationRequestId === parsed && media.uploaderId === sub,
       );
-      if (replay) return Response.json({ media: replay }, { status: 201, headers: { location: `/v1/media/${replay.id}` } });
+      if (replay)
+        return Response.json({ media: replay }, { status: 201, headers: { location: `/v1/media/${replay.id}` } });
       const id = randomUUID();
       const future = input.newThread as { idempotencyKey?: string } | undefined;
       const media: Reservation = {
