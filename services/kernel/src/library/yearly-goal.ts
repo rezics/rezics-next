@@ -65,10 +65,7 @@ export function validateYearlyCompletionGoalChange(value: unknown): YearlyComple
 
 function isMissingInstallation(error: unknown): boolean {
   return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error.code === '42P01' || error.code === '42703')
+    typeof error === 'object' && error !== null && 'code' in error && (error.code === '42P01' || error.code === '42703')
   );
 }
 
@@ -150,11 +147,7 @@ export function createYearlyCompletionGoalReads(dependencies: { pool: Pool }) {
 
 class TargetInstallationUnavailableError extends Error {}
 
-export function createYearlyCompletionGoalCommands(dependencies: {
-  pool: Pool;
-  access?: Access;
-  clock?: KernelClock;
-}) {
+export function createYearlyCompletionGoalCommands(dependencies: { pool: Pool; access?: Access; clock?: KernelClock }) {
   const runner = createLibraryCommandRunner(dependencies);
   return {
     async change(actor: Actor, input: YearlyCompletionGoalChange, requestKey: string) {

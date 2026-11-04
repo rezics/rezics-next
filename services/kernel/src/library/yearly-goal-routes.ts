@@ -82,10 +82,7 @@ const readResponse = t.Object(
     viewer: t.Object(
       {
         state: t.Literal('owner'),
-        actions: t.Object(
-          { editTarget: action, clearTarget: action, navigateYear: availableAction },
-          closed,
-        ),
+        actions: t.Object({ editTarget: action, clearTarget: action, navigateYear: availableAction }, closed),
       },
       closed,
     ),
@@ -148,9 +145,7 @@ function targetActions(value: YearlyCompletionGoalTargetRead) {
   return {
     editTarget: { allowed: true as const },
     clearTarget:
-      value.state === 'set'
-        ? { allowed: true as const }
-        : { allowed: false as const, reason: 'no_target' as const },
+      value.state === 'set' ? { allowed: true as const } : { allowed: false as const, reason: 'no_target' as const },
   };
 }
 
@@ -212,7 +207,9 @@ export function yearlyCompletionGoalRoutes(
         const owner = requireAccount(actor);
         return admission.run('normal', job, async () => {
           const currentTarget = await reads.target(owner, query.year, job.deadline, request.signal);
-          let progress: { state: 'available'; summary: ReportedYearSummary } | { state: 'unavailable'; reason: 'summary_unavailable' };
+          let progress:
+            | { state: 'available'; summary: ReportedYearSummary }
+            | { state: 'unavailable'; reason: 'summary_unavailable' };
           try {
             progress = {
               state: 'available',
@@ -225,7 +222,10 @@ export function yearlyCompletionGoalRoutes(
           const result = {
             year: query.year,
             metric: YEARLY_COMPLETION_GOAL_METRIC,
-            viewer: { state: 'owner' as const, actions: { ...targetActions(currentTarget), navigateYear: { allowed: true as const } } },
+            viewer: {
+              state: 'owner' as const,
+              actions: { ...targetActions(currentTarget), navigateYear: { allowed: true as const } },
+            },
             target: currentTarget,
             progress,
           };
