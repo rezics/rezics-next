@@ -68,10 +68,19 @@ BEGIN
   END IF;
   RETURN NULL;
 END; $$;
-CREATE TRIGGER entry_shelf_title_population AFTER INSERT OR DELETE OR UPDATE ON library.entry
+CREATE TRIGGER entry_shelf_title_population AFTER INSERT OR DELETE ON library.entry
   FOR EACH ROW EXECUTE FUNCTION library.advance_shelf_title_population();
+CREATE TRIGGER entry_shelf_title_population_update AFTER UPDATE ON library.entry
+  FOR EACH ROW WHEN (
+    (OLD.route,OLD.account_id,OLD.subject_id,OLD.incarnation_id,OLD.transaction_id,OLD.state,OLD.type_id,
+      OLD.type_source_id,OLD.type_source_partition,OLD.type_source_epoch,OLD.type_source_position)
+    IS DISTINCT FROM
+    (NEW.route,NEW.account_id,NEW.subject_id,NEW.incarnation_id,NEW.transaction_id,NEW.state,NEW.type_id,
+      NEW.type_source_id,NEW.type_source_partition,NEW.type_source_epoch,NEW.type_source_position)
+  ) EXECUTE FUNCTION library.advance_shelf_title_population();
 
 -- migrate:down
+DROP TRIGGER entry_shelf_title_population_update ON library.entry;
 DROP TRIGGER entry_shelf_title_population ON library.entry;
 DROP FUNCTION library.advance_shelf_title_population();
 DROP TABLE library.shelf_title_key;

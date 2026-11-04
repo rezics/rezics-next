@@ -42,6 +42,15 @@ async function readHead(client: Client, owner: ShelfOwner, lock = false) {
   return rows[0] ?? null;
 }
 
+async function readCandidates(client: Client, owner: ShelfOwner, after: string | null) {
+  return (await client.query<Candidate>(
+    `SELECT subject_id,incarnation_id,transaction_id,state,type_id FROM library.entry
+     WHERE route=$1 AND account_id=$2::uuid${after === null ? '' : ' AND subject_id>$3::uuid'}
+     ORDER BY subject_id LIMIT 101`,
+    [owner.route, owner.accountId, ...(after === null ? [] : [after])],
+  )).rows;
+}
+
 /** Exact batched coverage is required; absence of identity must never become an invented missing title. */
 export function shelfTitleObservations(ids: readonly string[], entries: readonly ShelfTitleLabels[]) {
   const observations = new Map(entries.map((row) => [row.subjectId, row]));
@@ -78,12 +87,7 @@ export function createShelfTitlePreparation(deps: {
             const basis = await currentShelfTitleBasis(deps.titleSource, owner, languages, actor);
             const head = await withConnection(deps.pool, (client) => readHead(client, owner));
             const candidates = head?.phase === 'build' && head.policy === policy && head.source_basis === basis
-              ? await withConnection(deps.pool, async (client) => (await client.query<Candidate>(
-                  `SELECT subject_id,incarnation_id,transaction_id,state,type_id FROM library.entry
-                   WHERE route=$1 AND account_id=$2::uuid AND ($3::uuid IS NULL OR subject_id>$3::uuid)
-                   ORDER BY subject_id LIMIT 101`,
-                  [owner.route, owner.accountId, head.after_subject_id],
-                )).rows)
+              ? await withConnection(deps.pool, (client) => readCandidates(client, owner, head.after_subject_id))
               : [];
             const selected = candidates.slice(0, 100);
             const labels = selected.length ? await deps.titleSource.labels(
@@ -131,31 +135,26 @@ export function createShelfTitlePreparation(deps: {
                phase='cleanup',after_subject_id=NULL`,
             [owner.route, owner.accountId, newId(owner.route), population, policy, input.basis],
           );
-          return { value: pending };
+          return { value: pending, events: [] };
         }
-        if (head.phase === 'ready') return { value: { installation: 'installed' as const, prepared: 0 } };
+        if (head.phase === 'ready') return { value: { installation: 'installed' as const, prepared: 0 }, events: [] };
         if (head.phase === 'cleanup') {
           const removed = await cleanupShelfTitleKeys(tx, owner);
           if (removed < 100) await tx.query(
             `UPDATE library.shelf_title_head SET phase='build' WHERE route=$1 AND account_id=$2::uuid`,
             [owner.route, owner.accountId],
           );
-          return { value: pending };
+          return { value: pending, events: [] };
         }
         // A concurrent page, population edit or replacement build cannot advance this captured frontier.
-        if (JSON.stringify(head) !== JSON.stringify(input.head)) return { value: pending };
+        if (JSON.stringify(head) !== JSON.stringify(input.head)) return { value: pending, events: [] };
         if (input.rows.some((row) => row.incarnation_id === null || row.type_id === null))
           throw new ShelfReadUnavailableError('complete native Entry incarnation and type maintenance');
         // Exactly the bounded captured Entry versions must remain at this frontier; no per-Subject reads.
-        const current = await tx.query<Candidate>(
-          `SELECT subject_id,incarnation_id,transaction_id,state,type_id FROM library.entry
-           WHERE route=$1 AND account_id=$2::uuid AND ($3::uuid IS NULL OR subject_id>$3::uuid)
-           ORDER BY subject_id LIMIT 101`,
-          [owner.route, owner.accountId, head.after_subject_id],
-        );
-        if (JSON.stringify(current.rows.slice(0, 100)) !== JSON.stringify(input.rows.map(
+        const current = await readCandidates(tx, owner, head.after_subject_id);
+        if (JSON.stringify(current.slice(0, 100)) !== JSON.stringify(input.rows.map(
           ({ source_id: _source, source_basis: _basis, missing: _missing, key: _key, ...entry }) => entry,
-        )) || (current.rows.length > 100) !== input.more) return { value: pending };
+        )) || (current.length > 100) !== input.more) return { value: pending, events: [] };
         if (input.rows.length) await tx.query(
           `INSERT INTO library.shelf_title_key(route,account_id,subject_id,generation,incarnation_id,
              transaction_id,state,type_id,source_id,source_basis,missing,key)
@@ -173,7 +172,7 @@ export function createShelfTitlePreparation(deps: {
           [owner.route, owner.accountId, input.rows.at(-1)?.subject_id ?? head.after_subject_id,
             input.more ? 'build' : 'ready'],
         );
-        return { value: { installation: input.more ? 'pending' as const : 'installed' as const, prepared: input.rows.length } };
+        return { value: { installation: input.more ? 'pending' as const : 'installed' as const, prepared: input.rows.length }, events: [] };
       },
     );
     return result.value;
