@@ -53,7 +53,7 @@ const listPresentations = Object.fromEntries(
     parseListPresentation(Object.entries(definitions.release.types).find(([id]) => id === type)?.[1].listPresentation)!,
   ]),
 );
-const source = `/collections/${id(1)}?cursor=same-page&type=schema%3ABook&f.schema%3Agenre=fiction`;
+const source = `/collections/${id(1)}?cursor=same-page`;
 
 function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | 'grid'; unavailable?: boolean }) {
   const [replaced, replace] = useState(false);
