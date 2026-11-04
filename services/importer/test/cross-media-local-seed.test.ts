@@ -90,6 +90,11 @@ test('development seed fetches the shared cache once and passes the local person
     expect(option('--client')).toBe('local-cli');
     expect(option('--vndb-character-vocabulary')).toBe('/shared/vocabulary.json');
     expect(args).not.toContain('--vndb-credit-bindings');
+    expect(developmentShowcaseSelection).toMatchObject({
+      bangumi: [10380, 84148, 51],
+      vndb: ['v2002', 'v4'],
+      includeReleases: true,
+    });
     expect(passedOptions).toMatchObject({ selection: developmentShowcaseSelection });
   } finally {
     await rm(keyDirectory, { recursive: true, force: true });

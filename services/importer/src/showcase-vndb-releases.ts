@@ -104,6 +104,7 @@ export async function collectSelectedVndbReleaseFacts(
   tables: CrossMediaTables,
   plan: CrossMediaPlan,
 ): Promise<{ facts: VndbReleaseFacts; gaps: CrossMediaGap[] }> {
+  if (plan.releaseFacts) return { facts: plan.releaseFacts, gaps: [] };
   const works = selectedKeys(plan, 'work');
   const releases = selectedKeys(plan, 'release');
   const facts: VndbReleaseFacts = { works: new Map(), releases: new Map() };

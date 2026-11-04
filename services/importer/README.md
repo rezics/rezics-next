@@ -1669,9 +1669,9 @@ actual source-statistic API effects; neither local table success nor pure conver
 
 ### Import authored VNDB release dates and completeness
 
-- Touches: one bounded authored VNDB COPY set (cap 64 works and 64 releases) plus current native scheme/concept point reads, the existing seed/importer caller and ordinary public batch/fence/candidate commands. A source release stays one native release; platform and language lists do not form a Cartesian product.
-- Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, with the existing per-record converter, candidate (≤300) and journal budgets. Vocabulary bindings are re-read on each convert so unchanged dump bytes cannot hide missing or retracted Concepts. Completeness remains a review gap on `wdt:P31`; supersession is not proposed.
-- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+- Touches: the retained finite development selection (2 VNDB works), both actual ends of selected `releases_supersedes` rows, their release titles, work memberships and metadata, current native Release point reads, the existing seed/importer caller and ordinary cited graph proposal/journal path. A source release stays one native release; platform and language lists do not form a Cartesian product.
+- Bound: O((W+R) log S) indexed importer work for admitted works W and at most 64 release endpoints R, with supersession depth 8 and at most 128 relation rows. Source scans cap `vn` at 100,000 rows/64 MiB, `releases_vn` at 500,000 rows/64 MiB per pass (at most two passes), `releases_supersedes` at 100,000 rows/16 MiB, and release/title/platform/media tables at their existing fixed row and byte caps. Each bound release UUID gets at most one current native read per seed attempt; reads are not cached across users or revocation. Existing per-record converter, candidate (≤300) and journal budgets remain. Completeness remains a review gap on `wdt:P31`.
+- Growth check: `tests/vndb-release-fidelity.test.ts` covers selected endpoint acquisition, directed source evidence, current native descriptor checks, and exact unknown-send retry; `test/cross-media-local-seed.test.ts` pins the finite default selection. Existing importer reconciliation and native sourced-write suites retain their units. The native acceptance and independent public publication remain integration-owned; this attempt does not establish either outcome or add a PostgreSQL growth series.
 
 ### Publish selected-family VNDB release dates and states
 
@@ -2167,9 +2167,17 @@ or unsupported cases remain omissions without an unqualified graph fallback.
 Exact unresolved values and descriptor admission failures are returned both as
 `sourceVocabularyGaps` and structured conversion diagnostics, including provider,
 source path, code or endpoint, required profile and property where applicable.
-VNDB release supersession remains a release-to-release `wdt:P155` gap while the
-released VNDB Release profile lacks that property. The production release-fidelity
-operator now supplies `release-date`, `development-status` and `release-work` rows
+VNDB release supersession uses the released `rezics:releaseSupersedes` binding for
+the exact outgoing COPY row `releases_supersedes.id -> rid`, after bounded selected
+endpoint acquisition and current native Release descriptor checks. Both release
+identities and field citations remain in the graph proposal evidence; chronology,
+organization replacement, reverse rows and missing rows do not imply supersession.
+Unknown native sends retain their sealed command and key for retry. Proposal
+acknowledgement does not establish independent public selection or publication.
+Decision: follow only authored outgoing `id -> rid` rows reachable from release
+memberships of the finite selected work family; do not infer inverse or date/title
+replacement edges.
+The production release-fidelity operator now supplies `release-date`, `development-status` and `release-work` rows
 from authored COPY `releases.released`, `vn.devstatus` and `releases_vn.rtype`.
 The default selected-family seed uses the same coordinator through
 [`showcase-vndb-releases.ts`](src/showcase-vndb-releases.ts): it collects facts
