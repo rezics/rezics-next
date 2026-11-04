@@ -52,6 +52,7 @@ function Operand({
   onSelect,
   onRemove,
   onReady,
+  retryMetadata,
 }: {
   kind: 'work' | 'role';
   ids: readonly string[];
@@ -61,6 +62,7 @@ function Operand({
   onSelect(id: string): void;
   onRemove(index: number): void;
   onReady(ready: boolean): void;
+  retryMetadata(): void;
 }) {
   const opts = options(context.locale);
   const label = kind === 'work' ? m.character_person_works({}, opts) : m.character_person_role({}, opts);
@@ -183,7 +185,9 @@ function Operand({
           type="button"
           className="text-sm underline"
           onClick={() => {
-            if (reader.current()) setRetry((value) => value + 1);
+            if (!reader.current()) return;
+            if (error instanceof ConditionEntityLookupError && error.failure === 'restart') retryMetadata();
+            else setRetry((value) => value + 1);
           }}
         >
           {m.character_person_retry({}, opts)}
@@ -259,6 +263,7 @@ export function CharacterPersonSelectionFields({
         reader={reader}
         onSelect={(id) => onChange(editCharacterPersonSelection(value, { kind: 'work', id }))}
         onRemove={(index) => onChange(editCharacterPersonSelection(value, { kind: 'remove-work', index }))}
+        retryMetadata={retryMetadata}
         onReady={setWorksReady}
       />
       <p className="text-sm text-muted-foreground">{m.character_person_role_help({}, opts)}</p>
@@ -270,6 +275,7 @@ export function CharacterPersonSelectionFields({
         reader={reader}
         onSelect={(id) => onChange(editCharacterPersonSelection(value, { kind: 'role', id }))}
         onRemove={() => onChange({ ...value, role: '' })}
+        retryMetadata={retryMetadata}
         onReady={setRoleReady}
       />
       {value.works.length > 0 && metadata && metadata.roleTargets[mode].length === 0 && (

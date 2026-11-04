@@ -264,13 +264,9 @@ export function CharacterPersonSearchPage({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  const currentMetadata = metadata.isError || metadata.isFetching ? undefined : (metadata.data ?? undefined);
   const selected = parsed.search.works.length > 0 || !!parsed.search.role;
-  const enabled =
-    reader.ready &&
-    !parsed.error &&
-    !dirty &&
-    selectionReady &&
-    (!selected || (!!metadata.data && !metadata.isFetching));
+  const enabled = reader.ready && !parsed.error && !dirty && selectionReady && (!selected || !!currentMetadata);
   const query = useQuery({
     ...characterPersonQueryOptions(locale, parsed.search, `${principal}:${reader.identity}`, reader.current),
     enabled,
@@ -292,7 +288,7 @@ export function CharacterPersonSearchPage({
         form={parsed.form ?? searchForm(parsed.search)}
         locale={locale}
         reader={reader}
-        metadata={metadata.data ?? undefined}
+        metadata={currentMetadata}
         preparing={metadata.isFetching}
         retryMetadata={() => {
           void metadata.refetch();
@@ -319,7 +315,7 @@ export function CharacterPersonSearchPage({
       ) : (
         <DiscoveryResults state={state} locale={locale} restartHref={restartHref} />
       )}
-      {!dirty && ['unavailable', 'not-ready', 'restart'].includes(state.status) && (
+      {!dirty && ['unavailable', 'not-ready'].includes(state.status) && (
         <button
           type="button"
           className={buttonVariants({ variant: 'outline' })}
