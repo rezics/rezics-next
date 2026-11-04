@@ -55,8 +55,8 @@ export const executeClassificationIntent = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const session = await prepareNativeClient();
-      return session.client ? session.client.execute(data) : { kind: 'denied' as const };
-    } catch { return { kind: 'uncertain' as const }; }
+      return session.client ? session.client.execute(data) : { kind: session.subject ? 'unavailable' as const : 'denied' as const };
+    } catch { return { kind: 'unavailable' as const }; }
   });
 
 export const reviewClassificationIntent = createServerFn({ method: 'POST' })

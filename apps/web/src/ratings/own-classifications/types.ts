@@ -41,5 +41,5 @@ type SubjectClient = ReturnType<KernelClient['subjects']>;
 type AssociationClient = ReturnType<SubjectClient['classification-associations']>;
 export type ClassificationOwnState = NonNullable<Awaited<ReturnType<AssociationClient['assessment']['get']>>['data']>;
 export type ClassificationSetBody = Parameters<AssociationClient['assessment']['put']>[0];
-export type ClassificationCommandResult = { kind: 'acknowledged' | 'uncertain' | 'stale' | 'denied' };
+export type ClassificationCommandResult = { kind: 'acknowledged' | 'uncertain' | 'stale' | 'denied' | 'unavailable' };
 export type ClassificationReview = { kind: 'current'; own: ClassificationOwnState } | { kind: 'unavailable' };

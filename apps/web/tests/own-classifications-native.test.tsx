@@ -39,7 +39,9 @@ test('installed native receiver preserves selected frontier, original advice and
   expect(retry!.url).toBe(first!.url);
   expect(new URL(retry!.url).searchParams.get('expectedRevision')).toBe('1');
   expect([...retry!.headers]).toEqual([...first!.headers]);
-  expect(await retry!.text()).toBe(await first!.text());
+  const serialized = await retry!.text();
+  expect(serialized).toBe(await first!.text());
+  expect(serialized).toBe(intent.serializedBody!);
   expect(retry!.headers.get('idempotency-key')).toBe(JSON.stringify(intent.key));
   expect(intent.path).toBe(classificationRow().actions.set!);
   expect(Object.isFrozen(intent.body)).toBe(true);

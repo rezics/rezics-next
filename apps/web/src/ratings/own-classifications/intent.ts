@@ -13,6 +13,7 @@ const schema = v.strictObject({
   credential: digest, observation: digest, locale: v.pipe(v.string(), v.minLength(1), v.maxLength(35)),
   readback: v.nullable(v.pipe(v.string(), v.maxLength(256))),
   body: v.nullable(v.strictObject({ assessment: v.picklist(['support', 'oppose']), falsePositive: v.boolean() })),
+  serializedBody: v.nullable(v.pipe(v.string(), v.maxLength(128))),
 });
 export type ClassificationIntent = Readonly<v.InferOutput<typeof schema>>;
 
@@ -46,6 +47,7 @@ export function captureClassificationIntent(
     key: createModerationIntent().keyFor([read.observation, classificationPair(row), method, body]),
     csrfToken, credential: read.credential, observation: read.observation, locale: read.locale,
     readback: row.actions.readback, body: body ? Object.freeze({ ...body }) : null,
+    serializedBody: body ? JSON.stringify({ assessment: body.assessment, falsePositive: body.falsePositive }) : null,
   };
   return parseClassificationIntent(intent);
 }
@@ -55,7 +57,8 @@ export function parseClassificationIntent(value: unknown): ClassificationIntent 
   const base = classificationAssessmentPath(intent);
   if (intent.path !== `${base}?expectedRevision=${intent.precondition}` ||
     (intent.readback !== null && intent.readback !== base) ||
-    (intent.method === 'PUT' ? intent.body === null || intent.readback === null : intent.body !== null))
+    (intent.method === 'PUT' ? intent.body === null || intent.readback === null : intent.body !== null) ||
+    (intent.body === null ? intent.serializedBody !== null : JSON.stringify(intent.body) !== intent.serializedBody))
     throw new Error('Invalid exact classification command');
   return Object.freeze({ ...intent, body: intent.body ? Object.freeze({ ...intent.body }) : null });
 }

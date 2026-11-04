@@ -103,6 +103,9 @@ export async function createOwnClassificationClient(input: {
           return { kind: 'acknowledged' };
         if (response.status === 409 || response.status === 404) return { kind: 'stale' };
         if (response.status === 401 || response.status === 403) return { kind: 'denied' };
+        const problem = response.error?.value;
+        if (problem && typeof problem === 'object' && 'effect_status' in problem && problem.effect_status === 'not_applied')
+          return { kind: 'unavailable' };
         return { kind: 'uncertain' };
       } catch { return { kind: 'uncertain' }; }
     },

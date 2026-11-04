@@ -116,7 +116,8 @@ export function ClassificationEditor({ row, commands, isCurrent, refresh, onProt
     </div> : null}
     {feedback ? <p role="status">{feedback === 'uncertain' ? m.subject_classification_assessment_uncertain({}, options) :
       feedback === 'acknowledged' ? m.own_classifications_acknowledged({}, options) :
-      feedback === 'stale' ? m.subject_classification_assessment_conflict({}, options) : m.subject_classification_assessment_denied({}, options)}</p> : null}
+      feedback === 'stale' ? m.subject_classification_assessment_conflict({}, options) :
+      feedback === 'unavailable' ? m.subject_classification_assessment_unavailable({}, options) : m.subject_classification_assessment_denied({}, options)}</p> : null}
     {feedback === 'uncertain' ? <div className="flex flex-wrap gap-3">
       <Button className="min-h-11" disabled={busy} onClick={() => void send(original.current!.method, true)}>{m.subject_classification_assessment_retry({}, options)}</Button>
       {original.current?.readback ? <Button className="min-h-11" disabled={busy} onClick={() => void inspectCurrent()}>{m.own_classifications_readback({}, options)}</Button> : null}
