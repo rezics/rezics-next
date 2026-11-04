@@ -277,8 +277,8 @@ silently truncating them. The main caps are:
 - VNDB: 64 KiB projection, at most 64 titles, 64 alias lines, and 32 external
   links; at most 162 commands (1 identifier + 64 names + 64 alternate names +
   32 URLs + 1 original language). A VideoGameRelease title projection reuses
-  those title/alias/byte caps and at most 129 commands (1 identifier + 64 names
-  - 64 Romanized alternate names).
+  those title/alias/byte caps and at most 162 commands (1 identifier + 64 names
+  + 64 Romanized alternate names + 32 URLs + 1 GTIN).
 - Open Library: 2 MiB projection, at most 64 entries per collection and 64
   combined author/work relations, at most 1 MiB of unlicensed prose retained as
   metadata, and at most 100 commands.
@@ -343,6 +343,22 @@ on this table and does not inherit the `vn_titles` empty-cell decision. Title
 language is not a whole-release `schema:inLanguage` fact. Scalar `{id,title}`
 payloads remain the untagged legacy envelope for sealed journals. Date, status
 and completeness stay on the release-fidelity vocabulary path.
+
+### VNDB release barcodes
+
+`cross-media-entities@4` keeps the COPY `releases.gtin` cell in the sanitized
+projection. Admitted values are the exact decimal spelling that matches the
+released `schema:gtin` lexical contract (8 or 12–14 digits). Dump unknown `0`,
+null, malformed, unsupported-length and unsafe JavaScript numbers are withheld
+as diagnostics and never become a padded barcode, ISBN, catalog number or
+`schema:sameAs`. The JSON API's nullable string is not the dump encoding: COPY
+bigint cells stay text, and a distinction already lost as an integer is not
+guessed back. Barcode equality does not merge releases. The ordinary entity
+converter and the release-fidelity operator emit one `schema:gtin` fact on the
+existing `facts` group.
+
+Decision: dump COPY `gtin` is a bigint decimal cell with unknown sentinel `0`;
+admitted values keep that spelling under the released 8 or 12–14 digit contract.
 
 ### VNDB staff preferred and additional source names
 
