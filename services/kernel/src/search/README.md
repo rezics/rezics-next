@@ -1989,3 +1989,33 @@ future released identities are recognized by this reader, but no album is promot
 association is synthesized. Current Edition, VideoGameRelease and AnimeRelease producers supply real release
 identity today. The separate Web homonym journey must consume the generated field; its mounted receiving and
 navigation acceptance remains an integration check, not evidence supplied by source review or native tests.
+
+### Public document text consumer
+
+Decision: public document text uses the existing presentation reference selector and only native public text-profile
+bodies; block/media recipes remain explicitly unsupported until their owner admits plain-text extraction.
+
+`document-text.ts` supplies the bounded consumer and final excerpt verification seam. It does not activate a search
+field, change a generation, or implement a Content publisher. A missing native public producer is `unavailable`.
+The producer must admit public text rights independently of Subject visibility; an authenticated document read alone
+is insufficient. It must enforce the 2 MiB native source-byte ceiling before fetching/materializing, retain the
+Subject observation/reference identity, and revalidate both native selection and document rights after assembly.
+A false final fence discards the whole projection. Native document erasure never returns an indexed excerpt.
+
+Configured properties use `pageDocumentReferences`, including its rank/language/candidate tie rules. At most eight
+properties/references are admitted before body dispatch. Each independent body retains its actual language, exact
+candidate/document/digest/revision and an extraction fingerprint; text is never concatenated across documents.
+The extraction identity versions a Search transformation, not a new native document recipe. A UTF-8 prefix is
+`partial`, not complete coverage. Unsupported, preparing and unavailable dependencies remain distinct from a complete
+selection with no bodies. Only an engine-approved original-source window may enter final verification; this seam
+does not implement query matching, normalize engine offsets or trust highlighted HTML.
+
+Finite Cost: eight full-key native body reads at most, sequentially, each at most 2 MiB; at most 16 MiB source bytes
+examined per projection, one bounded retained body at a time, 64 KiB extracted text per Subject and 96 KiB serialized
+extraction metadata/text. Final disclosure re-reads one exact native reference (2 MiB), reproduces its prefix,
+compares the extraction identity, assembles at most 240 Unicode code points and fences again. The owner supplies
+both currentness probes at its declared indexed native bounds. These consumer limits establish no upstream SQL
+bound or engine-growth proof by themselves. The native producer, generation/relay integration, shared field selector,
+engine window receiver and mounted Web delivery remain required before advertising supported coverage. Destinations
+are admitted Subject/document entries; no chapter, occurrence or fragment is inferred from offsets. Public DTOs
+contain no reader state or full indexed text.
