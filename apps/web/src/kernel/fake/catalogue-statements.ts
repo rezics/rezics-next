@@ -2,7 +2,7 @@ import { createKernelClient } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { candidateFixture, candidateProperty } from './subject-candidates';
 import definitions from '../recorded/definitions-release.json';
-import { readCandidates, selectCandidate, type CandidateRead } from '../../subject/candidates';
+import { readCandidates, selectCandidate, type CandidateRead, type CandidateViewerActions } from '../../subject/candidates';
 import {
   readStatementEditor,
   proposeStatement,
@@ -110,7 +110,7 @@ export function statementFixture(scenario: StatementScenario = 'ready', locale =
     return base.fetcher(request);
   }) as typeof fetch;
   const client = createKernelClient('https://statements.test', { fetch: fetcher });
-  const actions = {
+  const actions: CandidateViewerActions = {
     subject: {
       state: 'available',
       actions: [{ action: 'subject:read', operations: ['subject.list_candidates'] }],
@@ -123,7 +123,7 @@ export function statementFixture(scenario: StatementScenario = 'ready', locale =
         { action: 'context:adopt', operations: ['subject.adopt'] },
       ],
     },
-  } as const;
+  };
   const editor = {
     read: async () => {
       const result = await readStatementEditor(client, address);
