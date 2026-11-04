@@ -15,6 +15,7 @@ const terminal = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
 const target = 'b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2';
 const question = 'd4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4';
 const secondTarget = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
+const receiptTrace: string[] = [];
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -121,6 +122,7 @@ function RatingsScreen() {
   const heading = useRef<HTMLHeadingElement>(null);
   const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
   const receipt = useOwnVotesReturnReceipt(historyKey, value.cursor, 'en');
+  receiptTrace.push(`${historyKey}:${receipt?.phase ?? 'none'}`);
   const [outcome, setOutcome] = useState<OwnVotesReturnOutcome | null>(null);
   const owner = (): OwnVotesReturnOwner => ({
     visitKey: 'journey',
@@ -203,6 +205,12 @@ async function setup(
 ) {
   const history = createMemoryHistory({ initialEntries: ['/library/ratings'] });
   const router = createRouter({ routeTree, history });
+  const routeTrace: string[] = [];
+  router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
+    const key = (location: typeof toLocation | undefined) =>
+      location && typeof location.state.key === 'string' ? location.state.key : 'none';
+    routeTrace.push(`${fromLocation?.pathname ?? 'none'}:${key(fromLocation)}>${toLocation.pathname}:${key(toLocation)}`);
+  });
   await router.load();
   const outside = window.document.createElement('button');
   outside.textContent = 'Other page control';
@@ -272,6 +280,7 @@ async function setup(
     outside,
     window,
     router,
+    routeTrace,
     calls,
     refreshCount,
     refreshCursors,
@@ -347,6 +356,8 @@ test('mounted journey keeps zero and original key, confirms exact readback, open
     );
     expect(view.host.textContent).toContain('Subject reader');
     await back(view);
+    if (view.refreshCount.value !== 1)
+      throw new Error(JSON.stringify({ routeTrace: view.routeTrace, receiptTrace, location: view.router.state.location }));
     expect(view.refreshCount.value).toBe(1);
     expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
     expect(view.window.document.activeElement).toBe(
