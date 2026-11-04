@@ -701,8 +701,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
               disabled={pending}
               aria-busy={pending}
               onClick={() => {
-                const action = retryRead.current;
-                if (action) readPage(action);
+                readPage(retryRead.current ?? (() => loadPageSession()));
               }}
             >
               {m.auth_account_delete_retry()}
