@@ -164,6 +164,11 @@ test('served discovery selects a direct Board or independent Global queue, inspe
   const host = document.createElement('main');
   document.body.replaceChildren(host);
   const root = createRoot(host);
+  const canonical = (href: string) => {
+    const url = new URL(href, 'https://site.test');
+    url.searchParams.sort();
+    return url.pathname + url.search;
+  };
   const button = (label: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === label)!;
   const follow = async (link: HTMLAnchorElement) => {
     const url = deLocalizeUrl(new URL(link.href));
@@ -181,6 +186,7 @@ test('served discovery selects a direct Board or independent Global queue, inspe
       await router.load();
     });
     expect(host.textContent).toContain('Direct Board');
+    const initialDirectoryReads = calls.filter((call) => call.startsWith('directory:')).length;
     const select = host.querySelector<HTMLButtonElement>(
       '[aria-label="Direct Board: ' + m.moderation_workbench_queue_reports() + '"]',
     )!;
@@ -192,15 +198,15 @@ test('served discovery selects a direct Board or independent Global queue, inspe
       directoryCursor: original.directoryCursor,
     });
     await act(() => button(m.threads_next_page()).click());
-    const queueLocation = router.state.location.href;
+    const queueLocation = canonical(router.state.location.href);
     await follow(host.querySelector<HTMLAnchorElement>('a[href*="/moderation/cases/"]')!);
     expect(inspected).toEqual(['exact-report']);
     expect(host.querySelector('article')).not.toBeNull();
     await follow(host.querySelector<HTMLAnchorElement>('a[href*="/moderation/workbench?"]')!);
-    expect(router.state.location.href).toBe(queueLocation);
+    expect(canonical(router.state.location.href)).toBe(queueLocation);
     await act(() => button(m.moderation_directory_return()).click());
     expect(calls.filter((call) => call.startsWith('directory:'))).toEqual(
-      Array(2).fill('directory:opaque:/+frontier=:original-filter'),
+      Array(initialDirectoryReads + 1).fill('directory:opaque:/+frontier=:original-filter'),
     );
     const globalButton = host.querySelector<HTMLButtonElement>(
       '[aria-label="Global catalogue: ' + m.moderation_workbench_queue_resolved() + '"]',
@@ -213,6 +219,20 @@ test('served discovery selects a direct Board or independent Global queue, inspe
       directoryCursor: original.directoryCursor,
     });
     await act(() => button(m.moderation_directory_return()).click());
+    expect(host.textContent).toContain('Direct Board');
+    await act(async () => {
+      router.history.back();
+      await router.load();
+    });
+    expect(router.state.location.search).toMatchObject({
+      scope: 'catalogue',
+      queue: 'resolved',
+      directoryCursor: original.directoryCursor,
+    });
+    await act(async () => {
+      router.history.forward();
+      await router.load();
+    });
     expect(host.textContent).toContain('Direct Board');
     delete source.directory;
     await act(() => router.invalidate({ sync: true }));
