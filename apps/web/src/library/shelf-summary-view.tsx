@@ -153,7 +153,7 @@ export function ShelfSummaryFirstUseLinks({ locale }: { locale: string }) {
         <Exposure operation="library_entry.put">
           <nav aria-label={m.library_summary_first_use_imports({}, { locale: messageLocale })}>
             <ul className="flex flex-wrap justify-center gap-2">
-              {firstUseImports.map((destination) => (
+              {firstUseImports.map((destination) =>
                 typeof destination.href === 'string' ? (
                   <li key={destination.id}>
                     <a className={target} href={`/${locale}${destination.href}`}>
@@ -162,8 +162,8 @@ export function ShelfSummaryFirstUseLinks({ locale }: { locale: string }) {
                         : destination.label({ locale: messageLocale, pathname: destination.href })}
                     </a>
                   </li>
-                ) : null
-              ))}
+                ) : null,
+              )}
             </ul>
           </nav>
         </Exposure>
