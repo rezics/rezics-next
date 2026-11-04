@@ -28,7 +28,17 @@ const row: VndbRow = {
     baseline: null,
   },
   decision: null,
-  fieldsTreatment: { state: 'review', other: 'retain' },
+  scoreDecision: null,
+  consumptionDateReview: null,
+  consumptionDateOutcome: null,
+  nativeScore: {
+    question: null,
+    currentVote: { state: 'unavailable' },
+    sourceReason: 'private source',
+    exactUnits: null,
+    admission: { status: 'unavailable', reason: 'native-question-unavailable' },
+  },
+  fieldsTreatment: { state: 'review', score: 'private source', other: 'retain' },
 };
 async function snapshot(results: boolean) {
   const unavailable = async () => ({ kind: 'unavailable' as const, status: 503 });
