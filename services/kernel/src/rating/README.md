@@ -404,9 +404,9 @@ entry changes no shared writer or authorization contract.
   it does not establish physical index or nested Access bounds, so nested authorities and examined prefixes remain
   chargeable growth inputs.
 - **Growth check:** `test/rating/question-management-journey.test.ts` pins empty and 20-row continuation, the exact
-  retired selection, independent caption/lifecycle heads, and loss of current authority. Independent unrelated
-  questions, revisions, votes and authority at 256/1024/4096 with full nested physical accounting remain outstanding;
-  Global directory measurements do not establish this composition's native growth result.
+  retired selection, independent caption/lifecycle heads, and loss of current authority. Its measured native
+  management read grows unrelated questions, caption revisions, votes and authority independently at 256/1024/4096;
+  rows, statements, blocks, backend reuse, Access work and physical access paths are accounted together.
 
 ### Question caption maintenance
 
