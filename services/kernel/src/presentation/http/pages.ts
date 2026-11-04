@@ -40,7 +40,13 @@ import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { semanticPageView } from '../semantic-page.ts';
+import {
+  characterWorkIdentityOverlay,
+  readSubjectPageViewer,
+  semanticPageView,
+  type CharacterWorkIdentityOverlay,
+  type SubjectPageViewer,
+} from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -434,8 +440,16 @@ export function pageRoutes<App>(
           ? Object.keys(initialSubject.subject.statements)
           : [];
       const plannedDocuments = documentRead(resolved.document, subject?.id ?? null, properties, selected?.context.id);
+      const viewer = subject
+        ? await admission.run('normal', job, () =>
+            readSubjectPageViewer(authority.deps.access, actor, { pool, deadline: job.deadline }, subject.id),
+          )
+        : undefined;
       return pageAnswer({
         release: (await activeRelease(pool))?.release,
+        ...(viewer ? { viewer } : {}),
+        locale: languages?.[0] ?? 'en',
+        subjectType: subject?.type,
         continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
         ...(selected ? { context: selected.context } : {}),
         ...(selected || plannedDocuments
@@ -520,6 +534,10 @@ async function pageAnswer(input: {
   continuation?: PageContinuation;
   finalGuard?: (session: string | null) => Promise<string | null>;
   resolveBuiltin: NonNullable<Parameters<typeof readPage>[0]['resolveBuiltin']>;
+  overlay?: CharacterWorkIdentityOverlay;
+  viewer?: SubjectPageViewer;
+  locale?: string;
+  subjectType?: string;
 }): Promise<Response> {
   const violations = validateDocumentFilters(
     platformRegistry,
@@ -647,6 +665,11 @@ async function pageAnswer(input: {
         : result;
   }
 
+  const overlay =
+    input.overlay ??
+    (input.release && input.subjectType
+      ? characterWorkIdentityOverlay(input.release, input.subjectType, input.locale ?? 'en')
+      : undefined);
   return respond(
     200,
     {
@@ -659,6 +682,8 @@ async function pageAnswer(input: {
       document: input.resolved.document,
       ...(input.views === null ? {} : { views: input.views }),
       reads,
+      ...(overlay ? { meanings: overlay.meanings, unavailable: overlay.unavailable } : {}),
+      ...(input.viewer ? { viewer: input.viewer } : {}),
     },
     readSession,
     true,

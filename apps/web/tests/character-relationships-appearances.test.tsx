@@ -15,8 +15,11 @@ import {
 } from '../src/kernel/fake/character-relationships';
 import { associationCorrection } from '../src/features/catalogue/character-relationships/correction';
 import {
+  appearanceAgeProperty,
   appearanceProperty,
+  appearanceRoleProperty,
   characterAssociationStreams,
+  identityProperty,
   unavailableConfigurations,
 } from '../src/features/catalogue/character-relationships/reading';
 import { characterType } from '../src/features/catalogue/character-profile';
@@ -80,15 +83,33 @@ async function withHost(run: (host: HTMLElement, render: (node: ReactNode) => Pr
   }
 }
 
-test('bundled Character Type names unreleased age, main-character linkage and relationship properties', () => {
-  const unavailable = unavailableConfigurations(bundledRelease).map((item) => item.id);
-  expect(unavailable).toContain('age-at-appearance');
-  expect(unavailable).toContain('main-character-linkage');
-  expect(unavailable).toContain('character-relationship');
+test('bundled Character Type admits identity, appearance age and character relationships', () => {
+  expect(unavailableConfigurations(bundledRelease)).toEqual([]);
   const streams = characterAssociationStreams(bundledRelease, characterType, 'en', characterRelationshipsId);
   expect(streams.some((stream) => stream.kind === 'appearance' && stream.property === appearanceProperty)).toBe(true);
   expect(streams.some((stream) => stream.kind === 'voice')).toBe(true);
-  expect(streams.some((stream) => stream.kind === 'relationship')).toBe(false);
+  const identity = streams.find((stream) => stream.property === identityProperty);
+  expect(identity).toMatchObject({ kind: 'relationship', direction: 'forward' });
+  expect(streams.some((stream) => stream.kind === 'relationship' && stream.property === 'wdt:P26')).toBe(true);
+  expect(streams.some((stream) => stream.property === appearanceRoleProperty)).toBe(false);
+  const old = structuredClone(bundledRelease);
+  delete old.properties[identityProperty];
+  delete old.properties[appearanceAgeProperty];
+  delete old.properties['wdt:P26'];
+  delete old.properties['wdt:P3373'];
+  delete old.properties['wdt:P22'];
+  delete old.properties['wdt:P25'];
+  delete old.properties['wdt:P451'];
+  delete old.properties['rezics:characterRival'];
+  old.properties[appearanceProperty] = {
+    ...old.properties[appearanceProperty]!,
+    qualifiers: old.properties[appearanceProperty]!.qualifiers.filter((id) => id !== appearanceAgeProperty),
+  };
+  expect(unavailableConfigurations(old).map((item) => item.id).sort()).toEqual([
+    'age-at-appearance',
+    'character-relationship',
+    'main-character-linkage',
+  ]);
 });
 
 test('directed relationship, age-by-work, role, spoiler, vanished, unreadable and correction stay on the selected slot', async () => {
@@ -115,8 +136,8 @@ test('directed relationship, age-by-work, role, spoiler, vanished, unreadable an
     return [row.holder, qualifier?.value.type === 'value' ? qualifier.value.content : undefined] as const;
   });
   expect(amounts).toEqual([
-    [appearanceWorkA, { amount: '+16', unit: '1' }],
-    [appearanceWorkB, { amount: '+18', unit: '1' }],
+    [appearanceWorkA, { amount: '+16', unit: ages.ageUnit }],
+    [appearanceWorkB, { amount: '+18', unit: ages.ageUnit }],
   ]);
   expect(ageRead.public.subject.statements[ages.ageProperty]).toBeUndefined();
 
@@ -243,5 +264,100 @@ test('directed relationship, age-by-work, role, spoiler, vanished, unreadable an
     expect(
       [...host.querySelectorAll('button')].some((button) => button.textContent === m.character_relationships_correct()),
     ).toBe(true);
+  });
+});
+
+test('admitted identity stays distinct from the protagonist role, and unsupported or withheld controls stay named', async () => {
+  const identity = characterRelationshipsFixture('identity');
+  const identityRead = await identity.transport.read(`forward:${identityProperty}`);
+  if (!identityRead.ok || !identityRead.stream) throw new Error('Expected identity stream');
+  expect(identityRead.stream).toMatchObject({ kind: 'relationship', property: identityProperty, direction: 'forward' });
+  expect(identityRead.unavailable.map((item) => item.id)).not.toContain('main-character-linkage');
+  expect(identityRead.rows[0]?.statement?.property.id).toBe(identityProperty);
+  expect(identityRead.rows[0]?.statement?.qualifiers.some((part) => part.property.id === appearanceRoleProperty)).toBe(
+    false,
+  );
+
+  const roles = characterRelationshipsFixture('appearances');
+  const roleRead = await roles.transport.read();
+  if (!roleRead.ok || !roleRead.stream) throw new Error('Expected appearance stream');
+  expect(roleRead.stream.kind).toBe('appearance');
+  expect(roleRead.stream.property).toBe(appearanceProperty);
+  expect(roleRead.rows[0]?.statement?.qualifiers.some((part) => part.property.id === appearanceRoleProperty)).toBe(true);
+  expect(roleRead.rows[0]?.statement?.property.id).not.toBe(identityProperty);
+
+  const unsupported = characterRelationshipsFixture('unreleased');
+  const unsupportedRead = await unsupported.transport.read();
+  if (!unsupportedRead.ok) throw new Error('Expected unreleased configuration');
+  expect(unsupportedRead.unavailable.map((item) => item.id).sort()).toEqual([
+    'age-at-appearance',
+    'character-relationship',
+    'main-character-linkage',
+  ]);
+
+  const withheld = characterRelationshipsFixture('withheld');
+  const withheldRead = await withheld.transport.read(`forward:${identityProperty}`);
+  if (!withheldRead.ok) throw new Error('Expected withheld identity target');
+  expect(withheldRead.rows[0]?.summary).toBeNull();
+  expect(associationCorrection(withheldRead.rows[0]!, withheldRead.stream!)).toBeDefined();
+
+  const denied = characterRelationshipsFixture('denied');
+  const deniedRead = await denied.transport.read();
+  expect(deniedRead).toEqual({ ok: false, reason: 'denied' });
+
+  const { m } = await import('../src/paraglide/messages.js');
+  const { CharacterRelationshipsView } = await import('../src/features/catalogue/character-relationships/view');
+  await withHost(async (host, render) => {
+    await render(
+      h(CharacterRelationshipsView, {
+        id: identity.id,
+        locale: 'en',
+        transport: identity.transport,
+        search: identity.search,
+        initial: identityRead,
+      }),
+    );
+    expect(host.textContent).toContain(m.character_relationships_kind_relationship());
+    expect(host.textContent).toContain(m.character_relationships_direction_forward());
+    expect(host.textContent).not.toContain(m.character_relationships_main_unreleased());
+
+    await render(
+      h(CharacterRelationshipsView, {
+        id: unsupported.id,
+        locale: 'en',
+        transport: unsupported.transport,
+        search: unsupported.search,
+        initial: unsupportedRead,
+      }),
+    );
+    expect(host.textContent).toContain(m.character_relationships_age_unreleased());
+    expect(host.textContent).toContain(m.character_relationships_main_unreleased());
+    expect(host.textContent).toContain(m.character_relationships_relation_unreleased());
+
+    await render(
+      h(CharacterRelationshipsView, {
+        id: withheld.id,
+        locale: 'en',
+        transport: withheld.transport,
+        search: withheld.search,
+        initial: withheldRead,
+      }),
+    );
+    expect(host.textContent).toContain(m.character_relationships_vanished());
+
+    await render(
+      h(CharacterRelationshipsView, {
+        id: denied.id,
+        locale: 'en',
+        transport: denied.transport,
+        search: denied.search,
+        initial: deniedRead,
+        signedIn: false,
+      }),
+    );
+    expect(host.textContent).toContain(m.candidate_denied());
+    expect(
+      [...host.querySelectorAll('button')].some((button) => button.textContent === m.character_relationships_correct()),
+    ).toBe(false);
   });
 });
