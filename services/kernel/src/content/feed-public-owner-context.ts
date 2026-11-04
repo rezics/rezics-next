@@ -95,7 +95,7 @@ export async function prepareFeedPublicOwnerContext(
   }
 
   const selectedIds = [...new Set(following.map(({ id }) => id))];
-  let accounts: ReadonlyMap<string, AccountDiscoverySummary> = new Map();
+  let accounts: ReadonlyMap<string, AccountDiscoverySummary | null> = new Map();
   let accountsAvailable = true;
   if (selectedIds.length) {
     try {
