@@ -21,13 +21,7 @@ const strings = (maximum: number) =>
 /** Validated URL search params. Unknown keys are kept only as facet-shaped values and selected below. */
 export const searchParams = v.objectWithRest(
   {
-    q: v.optional(
-      v.pipe(
-        v.string(),
-        v.check((text) => new TextEncoder().encode(text).length <= 512),
-      ),
-      '',
-    ),
+    q: v.optional(v.string(), ''),
     type: v.optional(v.pipe(v.string(), v.maxLength(128))),
     cursor: v.optional(v.pipe(v.string(), v.maxLength(4864))),
     kinds: v.optional(strings(FILTER_LIMITS.in)),
@@ -37,10 +31,10 @@ export const searchParams = v.objectWithRest(
         v.check((tags) => tags.every((tag) => /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(tag) && tag.length <= 35)),
       ),
     ),
-    condition: v.optional(v.pipe(v.string(), v.maxLength(32768))),
+    condition: v.optional(v.string()),
     filter: v.optional(
       v.union([
-        v.pipe(v.string(), v.maxLength(16384)),
+        v.string(),
         v.pipe(v.array(v.pipe(v.string(), v.maxLength(16384))), v.maxLength(8)),
       ]),
     ),
@@ -93,12 +87,17 @@ function filterInputsFromSearch(search: Record<string, unknown>): {
   const ranges: Record<string, FilterRange> = Object.create(null);
   let condition: FilterDocument | undefined;
   let invalidInput: InvalidSearchInput | undefined;
+  if (typeof search.q === 'string' && new TextEncoder().encode(search.q).length > 512)
+    invalidInput = { key: 'q', value: search.q };
+  if (typeof search.filter === 'string' && new TextEncoder().encode(search.filter).length > 16384)
+    invalidInput ??= { key: 'filter', value: search.filter };
   const invalid = (key: string, value: unknown) => {
     invalidInput ??= { key, value: printableSearchValue(value) };
   };
 
   if (search.condition !== undefined) {
-    if (typeof search.condition !== 'string') invalid('condition', search.condition);
+    if (typeof search.condition === 'string' && new TextEncoder().encode(search.condition).length > 16384) invalid('condition', search.condition);
+    else if (typeof search.condition !== 'string') invalid('condition', search.condition);
     else {
       try {
         condition = parseFilter(JSON.parse(search.condition));

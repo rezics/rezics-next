@@ -16,10 +16,10 @@ export function unavailableQueryShare(reason: QueryShare['reason'], action: Quer
 
 /** Called only after ordinary native execution admits this exact request. No principal or continuation is copied. */
 export function prepareQueryShare(
-  request: { text?: string; filter?: unknown; languages?: string[]; sort?: string; population?: unknown; spaceId?: string },
+  request: { text?: string; filter?: unknown; languages?: string[]; sort?: string; population?: unknown; spaceId?: string; work?: string; spoilerThreshold?: number; representation?: string },
   labels: Record<string, Record<string, string>> = {},
 ): QueryShare {
-  if (request.population !== undefined || request.spaceId !== undefined) return unavailableQueryShare('private_context');
+  if (request.population !== undefined || request.spaceId !== undefined || request.work !== undefined || request.spoilerThreshold !== undefined || request.representation === 'release-groups-v1') return unavailableQueryShare('private_context');
   const raw = JSON.stringify(request.filter ?? null);
   if (bytes(raw) > QUERY_SHARE_LIMITS.documentBytes) return unavailableQueryShare('oversized');
   let filter;
@@ -73,7 +73,7 @@ export function prepareQueryShare(
   }
   for (const language of document.languages) params.append('language', language);
   if (document.sort === 'rating') params.set('sort', document.sort);
-  else if (document.sort && document.sort !== 'relevance' && document.sort !== 'name') return unavailableQueryShare('unsupported');
+  else if ((document.sort === 'name' && document.text) || (document.sort && document.sort !== 'relevance' && document.sort !== 'name')) return unavailableQueryShare('unsupported');
   const parameters = params.toString();
   if (bytes(JSON.stringify(document)) > QUERY_SHARE_LIMITS.documentBytes || bytes(parameters) + 128 > QUERY_SHARE_LIMITS.urlBytes)
     return unavailableQueryShare('oversized');

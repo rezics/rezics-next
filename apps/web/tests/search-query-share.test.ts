@@ -22,6 +22,8 @@ test('same-origin localized link reopens full text, kinds, languages and Boolean
 test('unavailable preparation, malformed references and oversized links preserve recovery without widening', () => {
   expect(parseQueryShare({ document: {} }).action).toBe('unavailable');
   expect(searchLoaderDeps({ filter: '{broken' }).invalidInput?.key).toBe('filter');
+  expect(searchLoaderDeps({ q: 'x'.repeat(513) }).invalidInput?.key).toBe('q');
+  expect(searchLoaderDeps({ condition: 'x'.repeat(16385) }).invalidInput?.key).toBe('condition');
   const share = parseQueryShare({ action: 'allowed', reason: 'ready', document: { text: '', filter: null, languages: [], sort: null }, parameters: 'q=' + 'x'.repeat(8192), selections: [] });
   expect(queryShareUrl('https://example.com', 'en', share)).toBeNull();
 });
