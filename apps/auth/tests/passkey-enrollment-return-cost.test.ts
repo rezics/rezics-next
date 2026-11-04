@@ -20,16 +20,20 @@ afterAll(() => {
 });
 
 test('acknowledged history return and dismissal add no registration calls', async () => {
+  let ceremonies = 0;
   Object.defineProperty(navigator, 'credentials', {
     configurable: true,
     value: {
-      create: async () => ({
-        id: 'browser-credential',
-        rawId: new ArrayBuffer(1),
-        type: 'public-key',
-        getClientExtensionResults: () => ({}),
-        response: { attestationObject: new ArrayBuffer(1), clientDataJSON: new ArrayBuffer(1) },
-      } as unknown as Credential),
+      create: async () => {
+        ceremonies++;
+        return {
+          id: 'browser-credential',
+          rawId: new ArrayBuffer(1),
+          type: 'public-key',
+          getClientExtensionResults: () => ({}),
+          response: { attestationObject: new ArrayBuffer(1), clientDataJSON: new ArrayBuffer(1) },
+        } as unknown as Credential;
+      },
     },
   });
   const reads: ReturnType<typeof Promise.withResolvers<SecurityLoadResult>>[] = [];
@@ -68,8 +72,10 @@ test('acknowledged history return and dismissal add no registration calls', asyn
   await flush(() => reads[0]!.resolve({ kind: 'failure', message: 'Inventory unavailable.' }));
   expect(ui.host.textContent).toContain(m.auth_security_passkey_history_acknowledged());
 
-  window.dispatchEvent(new Event('pagehide'));
-  window.dispatchEvent(new Event('pageshow'));
+  await flush(() => {
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('pageshow'));
+  });
   expect(reads).toHaveLength(2);
   await flush(() => reads[1]!.resolve(initial));
   expect(ui.host.textContent).toContain(m.auth_security_passkey_history_acknowledged());
@@ -78,4 +84,5 @@ test('acknowledged history return and dismissal add no registration calls', asyn
   expect(reads).toHaveLength(2);
   expect(ui.calls.filter(({ path }) => path === '/passkeys/register/options')).toHaveLength(1);
   expect(ui.calls.filter(({ path }) => path === '/passkeys/register')).toHaveLength(1);
+  expect(ceremonies).toBe(1);
 });

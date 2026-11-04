@@ -122,10 +122,14 @@ function enrollmentStory(config: StoryConfig) {
     play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
       const previousFetch = globalThis.fetch;
       let releaseRegistration: ((response: Response) => void) | undefined;
+      let optionsCalls = 0;
       let registrationCalls = 0;
       globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
-        if (url.pathname === '/passkeys/register/options') return Response.json(optionBody);
+        if (url.pathname === '/passkeys/register/options') {
+          optionsCalls++;
+          return Response.json(optionBody);
+        }
         if (url.pathname === '/passkeys/register') {
           registrationCalls++;
           if (config.registration === 'unknown')
@@ -166,7 +170,8 @@ function enrollmentStory(config: StoryConfig) {
           window.dispatchEvent(new PageTransitionEvent('pagehide'));
           window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
           await waitFor(() => canvasElement.textContent?.includes(m.auth_security_passkey_history_acknowledged()));
-          if (registrationCalls !== 1 || reads !== 2) throw new Error('Cached return repeated registration or readback');
+          if (optionsCalls !== 1 || registrationCalls !== 1 || reads !== 2)
+            throw new Error('Cached return repeated registration or readback');
         } else if (config.next === 'dismiss') {
           (await waitFor(() => button(canvasElement, m.auth_security_passkey_dismiss_history()))).click();
           await waitFor(() => !canvasElement.querySelector('[data-passkey-enrollment-history]'));
