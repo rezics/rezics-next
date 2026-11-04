@@ -25,7 +25,8 @@ export async function runDevelopmentSeed(
   const account = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT', env);
   const client = requiredEnvironment('REZICS_DEV_PERSONA_CLIENT', env);
   const auth = requiredEnvironment('AUTH_ORIGIN', env);
-  const api = env.KERNEL_ORIGIN || `http://127.0.0.1:${env.KERNEL_PORT || '4100'}`;
+  const api = env.KERNEL_ORIGIN || 'http://127.0.0.1:' + (env.KERNEL_PORT || '4100');
+  const characterVocabulary = env.REZICS_DEV_VNDB_CHARACTER_VOCABULARY?.trim();
   const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();
   const root = options.root ?? resolve(import.meta.dir, '../..');
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
@@ -44,33 +45,33 @@ export async function runDevelopmentSeed(
     path: catalogueState,
     port: createImportTransport({ origin: api, tokenProvider }),
   });
-  await (options.runSeed ?? runCrossMediaSeedCli)(
-    [
-      '--bangumi',
-      dumps.bangumi,
-      '--vndb',
-      dumps.vndb,
-      '--state',
-      state,
-      '--showcase-state',
-      showcase,
-      '--result',
-      result,
-      '--api',
-      api,
-      '--auth',
-      auth,
-      '--account-key',
-      accountKey,
-      '--account',
-      account,
-      '--client',
-      client,
-    ],
-    { episodeCatalogueSubjects: reviewedCatalogue.subjects },
-  );
+  const args = [
+    '--bangumi',
+    dumps.bangumi,
+    '--vndb',
+    dumps.vndb,
+    '--state',
+    state,
+    '--showcase-state',
+    showcase,
+    '--result',
+    result,
+    '--api',
+    api,
+    '--auth',
+    auth,
+    '--account-key',
+    accountKey,
+    '--account',
+    account,
+    '--client',
+    client,
+  ];
+  if (characterVocabulary) args.push('--vndb-character-vocabulary', characterVocabulary);
+  await (options.runSeed ?? runCrossMediaSeedCli)(args, {
+    episodeCatalogueSubjects: reviewedCatalogue.subjects,
+  });
 }
-
 if (import.meta.main) {
   try {
     const args = Bun.argv.slice(2);

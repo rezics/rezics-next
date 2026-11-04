@@ -1173,6 +1173,46 @@ The authored focused scenarios are:
 The Kernel scenario is authored but its native execution is deferred to the
 controller after integration. This entry records no native pass receipt.
 
+## VNDB character traits and selected work appearances
+
+Decision: vocabulary profile UUIDs are lookup hints only; the publication worker emits them after acknowledgement, and the importer rereads each selected Scheme and Concept from current public state before use.
+
+The default VNDB family path now verifies and acquires trait dictionaries,
+parent rows, character-trait associations, and character/work appearance rows.
+Its provider adapter returns finite `requirements.terms` and `requirements.parents`
+for the common showcase manifest, then composes only selected current source
+bindings through the existing VNDB reader. Supported character traits become
+qualified `schema:keywords` facts, and source-evidenced work appearances become
+`schema:character` facts with the exact role Concept and spoiler qualifier.
+Source identities remain provider-specific. Lie, unsupported or missing
+qualifiers, unsupported roles, and release-scoped associations remain gaps.
+The development seed accepts the publication-worker profile at
+`REZICS_DEV_VNDB_CHARACTER_VOCABULARY`; it contains `traits.schemeId`,
+`traits.concepts[{code,id}]`, `roles.schemeId`, and
+`roles.concepts[{code,id}]`. These IDs carry no authority without current
+adopted public source evidence. The common publisher consumes
+`characterVocabulary.requirements` and returns `traits.schemeId`,
+`traits.concepts[{code,id}]`, `roles.schemeId`, and
+`roles.concepts[{code,id}]` after native command acknowledgement. Profile
+production is the remaining seam owned by the common publication worker.
+
+Authored focused scenarios:
+
+- `default selected-family planning closes only evidenced VNDB character vocabulary and current bindings` in the importer workspace.
+- `selected character traits and appearances use current adopted vocabulary and retain identity on refresh` in the Kernel workspace. It uses actual current Scheme and Concept reads, independent acceptance/adoption, and public subject reads; an adopted Concept in the wrong Scheme withholds only that trait.
+
+The focused scenarios make no physical-growth claim. The Kernel test is
+controller-owned after integration; no native pass is recorded here.
+
+- Touches: at most 64 selected works, 64 trait associations, 64 appearance
+  associations, 256 selected parent edges at depth 12, and exact current reads
+  for selected vocabulary IDs.
+- Bound: archive rows stream, selected vocabulary and diagnostic state stay
+  capped, and no label scan or cross-provider character equivalence is used.
+- Growth check: the importer test covers default planning and binding
+  composition; the Kernel scenario covers accepted/adopted current facts,
+  citations, qualifiers, and identity retention after source refresh.
+
 ## Bangumi person biographies
 
 Authored source rows selected by a real `subject-persons` credit reach the

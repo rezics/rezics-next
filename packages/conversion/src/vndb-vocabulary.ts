@@ -37,7 +37,8 @@ const creditProperties: Readonly<Record<string, string>> = {
   staff: 'schema:contributor',
 };
 const releaseTypes = new Set(['complete', 'partial', 'trial']);
-const appearanceRoles = new Set(['main', 'primary', 'side', 'appears']);
+export const vndbAppearanceRoleCodes = Object.freeze(['main', 'primary', 'side', 'appears'] as const);
+const appearanceRoles = new Set<string>(vndbAppearanceRoleCodes);
 export const vndbAppearanceRoleSchemeUri = 'https://rezics.com/schemes/vndb/character-roles';
 
 function conceptIdentity(value: ResolvedConcept): NativeIdentity {
