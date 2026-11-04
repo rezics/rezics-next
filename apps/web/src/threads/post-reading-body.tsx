@@ -197,9 +197,9 @@ export function ThreadPostReadingBody({
   documentMedia?: ThreadDocumentMedia | undefined;
   mentions: ThreadDocumentMentionPage | null;
   pageIndex: number;
-  pageQueryKey?: QueryKey;
-  mentionPageCurrent?: boolean;
-  onMentionRetry?: () => Promise<unknown>;
+  pageQueryKey?: QueryKey | undefined;
+  mentionPageCurrent?: boolean | undefined;
+  onMentionRetry?: (() => Promise<unknown>) | undefined;
   locale?: string;
   readerIdentity?: unknown;
   isReaderCurrent?: () => boolean;
