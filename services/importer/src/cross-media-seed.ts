@@ -2720,16 +2720,72 @@ export async function runCrossMediaSeedCli(
       },
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
-    const { importShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
+    const {
+      importShowcaseTags,
+      knownShowcaseTagBindings,
+      parseShowcaseTagKnownBindings,
+      prepareShowcaseVndbPublicTagVocabulary,
+      readShowcaseVndbPublicTagVocabulary,
+    } = await import('./showcase-tags.ts');
+    const selectedVids = plan.members
+      .filter((member) => member.source === 'vndb' && member.kind === 'work')
+      .map((member) => member.key);
     let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
+    let tagVocabularyRequirements: Awaited<
+      ReturnType<typeof prepareShowcaseVndbPublicTagVocabulary>
+    >['requirements'] = [];
     if (tagBindingsPath) {
       const bytes = await readFile(tagBindingsPath);
       ensure(bytes.byteLength <= 256 * 1024, 'VNDB public tag bindings exceed the configuration limit');
       knownTagBindings = parseShowcaseTagKnownBindings(JSON.parse(bytes.toString('utf8')));
+    } else if (journal && publicClient) {
+      const schemes = await prepareShowcaseVndbPublicTagVocabulary({
+        tables: input,
+        selectedVids,
+        plan: publicationPlan,
+        port,
+        journal,
+        stage: 'schemes',
+      });
+      if (schemes.requirements.length)
+        await publishShowcase({
+          plan: publicationPlan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review: importPort,
+          publicClient,
+          vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...schemes.requirements],
+        });
+      const concepts = await prepareShowcaseVndbPublicTagVocabulary({
+        tables: input,
+        selectedVids,
+        plan: publicationPlan,
+        port,
+        journal,
+        stage: 'concepts',
+      });
+      if (concepts.requirements.length)
+        await publishShowcase({
+          plan: publicationPlan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review: importPort,
+          publicClient,
+          vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...concepts.requirements],
+        });
+      tagVocabularyRequirements = concepts.requirements;
+      knownTagBindings = knownShowcaseTagBindings(
+        await readShowcaseVndbPublicTagVocabulary({
+          tables: input,
+          selectedVids,
+          plan: publicationPlan,
+          port,
+          journal,
+        }),
+      );
     }
-    const selectedVids = plan.members
-      .filter((member) => member.source === 'vndb' && member.kind === 'work')
-      .map((member) => member.key);
     const publicTags = await importShowcaseTags({
       tables: input,
       selectedVids,
@@ -2756,7 +2812,11 @@ export async function runCrossMediaSeedCli(
         journal,
         review: importPort,
         publicClient,
-        vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...schemes.requirements],
+        vocabularyRequirements: [
+          ...(result.creditVocabularyRequirements ?? []),
+          ...tagVocabularyRequirements,
+          ...schemes.requirements,
+        ],
       });
       const concepts = await prepareShowcaseBangumiCharacterVocabulary({
         plan: publicationPlan,
@@ -2771,7 +2831,11 @@ export async function runCrossMediaSeedCli(
         journal,
         review: importPort,
         publicClient,
-        vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...concepts.requirements],
+        vocabularyRequirements: [
+          ...(result.creditVocabularyRequirements ?? []),
+          ...tagVocabularyRequirements,
+          ...concepts.requirements,
+        ],
       });
       bangumiVocabularyRequirements = concepts.requirements;
       const currentCharacterBindings = await readShowcaseBangumiCharacterVocabulary({
@@ -2861,7 +2925,7 @@ export async function runCrossMediaSeedCli(
     });
     const separator = String.fromCharCode(0);
     const readings = new Map<string, (typeof result.readings)[number]>();
-    for (const reading of [...result.readings, ...characterResult.readings])
+    for (const reading of [...result.readings, ...publicTags.readings, ...characterResult.readings])
       readings.set(reading.source + separator + reading.externalId, reading);
     const members = new Map<string, (typeof result.members)[number]>();
     for (const member of [...result.members, ...characterResult.members]) {
@@ -2955,6 +3019,7 @@ export async function runCrossMediaSeedCli(
     const vocabularyRequirements = [
       ...(result.creditVocabularyRequirements ?? []),
       ...(bangumiVocabularyRequirements ?? []),
+      ...tagVocabularyRequirements,
     ];
     if (journal && publicClient)
       showcase = await publishShowcase({

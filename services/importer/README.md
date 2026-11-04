@@ -1711,9 +1711,9 @@ actual source-statistic API effects; neither local table success nor pure conver
 
 ### Default VNDB public-tag showcase seed
 
-- Touches: streamed `tags`, `tags_parents` and `tags_vn` COPY rows for the selected family, at most 1024 parent edges and 8 closure steps, current disclosed scheme/concept point reads, and the existing public-tag coordinator/seed caller. Individual user ids, notes and votes stay unprojected.
-- Bound: O(file bytes) stream plus O((W+T+A+P) log R) importer work for selected works W, closed dictionary T≤512, associations A≤256 and parent edges P≤1024, with one explicit weight-contract gap for the journey. Unrelated VN/tag rows are not materialized. No catalogue scan or vote aggregate.
-- Growth check: `tests/showcase-tags.test.ts` covers selected versus unrelated rows, unsupported/qualified associations, taxonomy-closure gaps and refresh identity. The connected native file `services/kernel/test/imports/showcase-tags.test.ts` is registered and not executed in this attempt.
+- Touches: streamed `tags`, `tags_parents` and `tags_vn` COPY rows for the selected family, at most 1024 parent edges and 8 closure steps, dictionary ConceptScheme/Concept create and `schema:url`/`skos:inScheme` proposals through the existing importer and showcase journal, current disclosed scheme/concept point reads, admitted `schema:genre` work associations, and the common publishShowcase accept/adopt/public-read path. Individual user ids, notes and votes stay unprojected.
+- Bound: O(file bytes) stream plus O((W+T+A+P+V) log R) importer work for selected works W, closed dictionary T≤512, associations A≤256, parent edges P≤1024 and vocabulary records V≤512. Dictionary schemes publish before Concepts; current type/`schema:url`/`skos:inScheme` is reread before association admission. Deduplicated current reads stay inside their existing freshness lifetime. One explicit weight-contract gap remains because Kana ratings belong to the aggregate-weight owner. Unrelated VN/tag rows are not materialized. No catalogue scan or vote aggregate.
+- Growth check: `tests/showcase-tags.test.ts` covers selected versus unrelated rows, unsupported/qualified associations, default dictionary publication without a UUID file, taxonomy-closure overflow, retracted scheme withholding and refresh identity. The connected native file `services/kernel/test/imports/showcase-tags.test.ts` is registered and not executed in this attempt.
 
 ### Default Bangumi novel/book showcase seed
 
@@ -2258,14 +2258,19 @@ from the same checksum-verified current VNDB archive and runs
 [`showcase-tags.ts`](src/showcase-tags.ts) after the selected-family import.
 That adapter streams only the selected VN associations, closes their tag
 parents inside the dictionary cap, and feeds the existing public-tag
-coordinator. Optional `--vndb-public-tag-bindings` names currently known
-scheme/concept UUIDs; adopted usable bindings are those the current public
-read actually discloses. Publication consumes the finite vocabulary records
-and exact source URIs from this adapter; it does not invent another tag
-publisher. Decision: `tags_vn.vote` remains the public-association admission
-filter (integer 1–3). It is not native weight. Public VNDB `tags.rating` is
-absent from acquired COPY tables, and `rezics:sourceTagWeight` is not a
-released qualifier, so the journey keeps one bounded weight gap. Parent
+coordinator. Default `task seed:dev` publishes selected dictionary
+ConceptScheme records, then Concepts, through the current importer and the
+common journal, rereads current native type/`schema:url`/`skos:inScheme`, and
+only then admits exact work associations. Optional `--vndb-public-tag-bindings`
+remains an explicit UUID override; adopted usable bindings are those the
+current public read actually discloses. Publication consumes the finite
+vocabulary records and exact source URIs from this adapter; it does not invent
+another tag publisher. Concept labels use the exact `tags.name` (ja when kana
+is present, zh-Hant when Han is present without kana, otherwise en) and never
+a minted translation. Decision: `tags_vn.vote` remains the public-association
+admission filter (integer 1–3). It is not native weight. Public VNDB
+`tags.rating` and released `rezics:sourceTagWeight` belong to the
+aggregate-weight owner, so this journey keeps one bounded weight gap. Parent
 `tags_parents` edges stay review gaps until Semantic admits `skos:broader`
 for these source Concepts.
 

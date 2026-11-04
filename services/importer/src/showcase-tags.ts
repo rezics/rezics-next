@@ -1,11 +1,30 @@
-import { bundledDigest } from '@rezics/definitions/bundled';
-import type { SourceVocabularyBindings } from '@rezics/conversion';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import {
+  BATCH_LIMIT,
+  checkBatchWrite,
+  type BatchCommand,
+  type BatchReference,
+  type BatchStatement,
+} from '@rezics/definitions/bulk';
+import type { SourceVocabularyBindings } from '@rezics/conversion';
+import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import {
+  commandKey,
+  sourceDigest,
+  sourceEnvelope,
   vndbPublicTagConceptUri,
   vndbPublicTagScheme,
+  vndbPublicTagTaxonomy,
   type VndbPublicTagCategory,
 } from '../../../packages/conversion/src/support.ts';
-import type { CrossMediaGap, CrossMediaPort, CrossMediaTables } from './cross-media-seed.ts';
+import type { CrossMediaGap, CrossMediaPlan, CrossMediaPort, CrossMediaTables } from './cross-media-seed.ts';
+import {
+  showcaseDigest,
+  showcaseLimits,
+  showcaseVocabularyExternalId,
+  type ShowcaseVocabularyRequirement,
+} from './showcase-manifest.ts';
+import type { ShowcaseJournal } from './showcase-publication.ts';
 import {
   importVndbPublicTags,
   planVndbPublicTags,
@@ -439,6 +458,386 @@ export async function importShowcaseTags(input: {
     truncated: planned.truncated,
     bindings,
   };
+}
+
+const adapterRevision = 'vndb-public-tag-vocabulary@1';
+const schemeCitation = 'https://vndb.org/tags';
+
+type TagLabelLanguage = 'en' | 'ja' | 'zh-Hant';
+type TagDictionaryNeed = {
+  ownerKey: string;
+  truncated: boolean;
+  diagnostics: CrossMediaGap[];
+  associated: ReadonlySet<string>;
+  schemes: { category: VndbPublicTagCategory; uri: string; citation: string }[];
+  concepts: {
+    category: VndbPublicTagCategory;
+    code: string;
+    uri: string;
+    citation: string;
+    labels: Partial<Record<TagLabelLanguage, string>>;
+  }[];
+};
+
+export type ShowcaseVndbPublicTagVocabulary = {
+  requirements: ShowcaseVocabularyRequirement[];
+  bindings: SourceVocabularyBindings;
+  diagnostics: CrossMediaGap[];
+  truncated: boolean;
+};
+
+function categoryFromTaxonomy(taxonomy: string): VndbPublicTagCategory | undefined {
+  if (taxonomy === vndbPublicTagTaxonomy('cont')) return 'cont';
+  if (taxonomy === vndbPublicTagTaxonomy('ero')) return 'ero';
+  if (taxonomy === vndbPublicTagTaxonomy('tech')) return 'tech';
+  return undefined;
+}
+
+function sourceNameLanguage(name: string): TagLabelLanguage {
+  if (/[\u3040-\u30ff]/u.test(name)) return 'ja';
+  if (/\p{Script=Han}/u.test(name)) return 'zh-Hant';
+  return 'en';
+}
+
+function sourceNameLabels(name: unknown): Partial<Record<TagLabelLanguage, string>> | undefined {
+  if (typeof name !== 'string' || name.length < 1 || name.length > 250 || name.trim() !== name) return;
+  return { [sourceNameLanguage(name)]: name };
+}
+
+function vocabularyKey(category: VndbPublicTagCategory, code?: string): string {
+  return code === undefined ? vndbPublicTagTaxonomy(category) : `${vndbPublicTagTaxonomy(category)}:${code}`;
+}
+
+function ownerKeyFor(plan: CrossMediaPlan, selectedVids: readonly string[]): string | undefined {
+  const selected = new Set(selectedVids);
+  return [...plan.records.vndb, ...plan.entities.vndb].find((row) => selected.has(row.key))?.key;
+}
+
+async function selectedTagNeed(input: {
+  tables: CrossMediaTables;
+  selectedVids: readonly string[];
+  plan: CrossMediaPlan;
+}): Promise<TagDictionaryNeed | undefined> {
+  const ownerKey = ownerKeyFor(input.plan, input.selectedVids);
+  if (!ownerKey) return;
+  const projected = await projectShowcaseTagTables(input.tables, input.selectedVids);
+  const planned = await planVndbPublicTags(projected.tables);
+  const associated = new Set(planned.admitted.map((row) => row.tag));
+  const names = new Map<string, unknown>();
+  for await (const row of projected.tables.rows('vndb', 'tags')) {
+    if (typeof row.id === 'string') names.set(row.id, row.name);
+  }
+  const schemes = new Map<VndbPublicTagCategory, { category: VndbPublicTagCategory; uri: string; citation: string }>();
+  const concepts: TagDictionaryNeed['concepts'] = [];
+  for (const tag of [...projected.dictionary.values()].sort((left, right) => left.id.localeCompare(right.id))) {
+    const labels = sourceNameLabels(names.get(tag.id));
+    if (!labels) {
+      projected.gaps.push(safeTagRow('tags', { id: tag.id, cat: tag.category }, 'Invalid VNDB tag dictionary row'));
+      continue;
+    }
+    if (!schemes.has(tag.category))
+      schemes.set(tag.category, {
+        category: tag.category,
+        uri: vndbPublicTagScheme(tag.category),
+        citation: schemeCitation,
+      });
+    concepts.push({
+      category: tag.category,
+      code: tag.id,
+      uri: vndbPublicTagConceptUri(tag.category, tag.id),
+      citation: vndbRecordUrl(tag.id),
+      labels,
+    });
+  }
+  return {
+    ownerKey,
+    truncated: projected.truncated,
+    diagnostics: mergeGaps(projected.gaps),
+    associated,
+    schemes: [...schemes.values()].sort((left, right) => left.category.localeCompare(right.category)),
+    concepts,
+  };
+}
+
+function sourceFor(sourceKey: string, uri: string, citations: readonly string[]) {
+  return sourceEnvelope(
+    {
+      source: 'vndb_cross_media',
+      external_id: showcaseVocabularyExternalId(sourceKey),
+      record_revision: null,
+      converter_revision: adapterRevision,
+      digest: sourceDigest({ sourceKey, uri, citations, adapterRevision }),
+    },
+    'facts',
+  );
+}
+
+function references(uri: string, citation: string): BatchReference[] {
+  return [
+    {
+      parts: [uri, citation].map((content) => ({
+        property: { id: 'schema:url' },
+        value: { type: 'value' as const, content },
+      })),
+    },
+  ];
+}
+
+function requirementFor(
+  ownerKey: string,
+  sourceKey: string,
+  sourceUri: string,
+  citation: string,
+  nativeType: 'skos:ConceptScheme' | 'skos:Concept',
+  schemeId?: string,
+): ShowcaseVocabularyRequirement {
+  return {
+    provider: 'vndb',
+    ownerKey,
+    sourceKey,
+    source: sourceFor(sourceKey, sourceUri, [sourceUri, citation]),
+    sourceUri,
+    nativeType,
+    ...(schemeId ? { schemeId } : {}),
+  };
+}
+
+function vocabularyCommands(input: {
+  sourceKey: string;
+  sourceUri: string;
+  citation: string;
+  nativeType: 'skos:ConceptScheme' | 'skos:Concept';
+  labels: Record<string, string>;
+  schemeId?: string;
+  subjectId?: string;
+}): BatchCommand[] {
+  const source = sourceFor(input.sourceKey, input.sourceUri, [input.sourceUri, input.citation]);
+  const create: BatchCommand = {
+    op: 'create',
+    key: `vndb-public-tag-vocabulary:${commandKey([JSON.stringify(source), 'create', input.nativeType, JSON.stringify(input.labels)])}`,
+    source,
+    subject: { type: input.nativeType, labels: input.labels },
+  };
+  if (!input.subjectId) return [create];
+  const statements: BatchStatement[] = [
+    {
+      property: { id: 'schema:url' },
+      value: { type: 'value', content: input.sourceUri },
+      references: references(input.sourceUri, input.citation),
+    },
+  ];
+  if (input.nativeType === 'skos:Concept' && input.schemeId) {
+    statements.push({
+      property: { id: 'skos:inScheme' },
+      value: { type: 'value', content: input.schemeId },
+      references: references(input.sourceUri, input.citation),
+    });
+  }
+  return statements.map((statement) => ({
+    op: 'propose' as const,
+    key: `vndb-public-tag-vocabulary:${commandKey([JSON.stringify(source), input.subjectId, 'propose', JSON.stringify(statement)])}`,
+    source,
+    subject: input.subjectId!,
+    statement,
+  }));
+}
+
+function ackedTagCreates(journal: ShowcaseJournal): Map<string, string> {
+  return new Map(
+    journal
+      .acknowledgedCommands()
+      .flatMap((ack) =>
+        ack.command.op === 'create' &&
+        ack.subjectId &&
+        ack.command.source.source === 'vndb_cross_media' &&
+        ack.command.source.converter_revision === adapterRevision
+          ? [[ack.command.source.external_id, ack.subjectId] as const]
+          : [],
+      ),
+  );
+}
+
+async function sendMissingTagCommands(input: {
+  port: Pick<CrossMediaPort, 'batch'>;
+  journal: ShowcaseJournal;
+  commands: readonly BatchCommand[];
+}): Promise<void> {
+  const acknowledged = new Map(input.journal.acknowledgedCommands().map((ack) => [ack.command.key, ack.commandDigest]));
+  const commands = input.commands.filter((command) => {
+    const digest = acknowledged.get(command.key);
+    if (digest === undefined) return true;
+    if (digest !== showcaseDigest(command))
+      throw new TypeError('VNDB public tag vocabulary ACK changed its command body');
+    return false;
+  });
+  for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
+    const page = commands.slice(offset, offset + BATCH_LIMIT);
+    if (checkBatchWrite({ commands: [...page] }, bundledRelease).length)
+      throw new TypeError('VNDB public tag vocabulary commands failed portable validation');
+    await input.port.batch({ commands: [...page] });
+  }
+}
+
+/** Map journal-acknowledged tag identities into the existing known-binding file shape. */
+export function knownShowcaseTagBindings(bindings: SourceVocabularyBindings): VndbPublicTagKnownBindings {
+  const schemes: VndbPublicTagKnownBindings['schemes'][number][] = [];
+  for (const scheme of bindings.schemes) {
+    const category = categoryFromTaxonomy(scheme.taxonomy);
+    if (category) schemes.push({ category, id: scheme.id });
+  }
+  const concepts: VndbPublicTagKnownBindings['concepts'][number][] = [];
+  for (const concept of bindings.concepts) {
+    const category = categoryFromTaxonomy(concept.taxonomy);
+    if (category) concepts.push({ category, code: concept.code, id: concept.id });
+  }
+  return { schemes, concepts };
+}
+
+function identityKnownBindings(need: TagDictionaryNeed, journal: ShowcaseJournal): VndbPublicTagKnownBindings {
+  const creates = ackedTagCreates(journal);
+  const schemes = need.schemes.flatMap((entry) => {
+    const id = creates.get(showcaseVocabularyExternalId(vocabularyKey(entry.category)));
+    return id ? [{ category: entry.category, id }] : [];
+  });
+  const concepts = need.concepts.flatMap((entry) => {
+    const id = creates.get(showcaseVocabularyExternalId(vocabularyKey(entry.category, entry.code)));
+    return id ? [{ category: entry.category, code: entry.code, id }] : [];
+  });
+  return { schemes, concepts };
+}
+
+/** Stage only dictionary schemes then Concepts demanded by selected public-tag rows. */
+export async function prepareShowcaseVndbPublicTagVocabulary(input: {
+  tables: CrossMediaTables;
+  selectedVids: readonly string[];
+  plan: CrossMediaPlan;
+  port: Pick<CrossMediaPort, 'batch' | 'readReviewedSubject'>;
+  journal: ShowcaseJournal;
+  stage: 'schemes' | 'concepts';
+}): Promise<ShowcaseVndbPublicTagVocabulary> {
+  const need = await selectedTagNeed(input);
+  if (!need)
+    return {
+      requirements: [],
+      bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+      diagnostics: [],
+      truncated: false,
+    };
+  const schemeCommands = need.schemes.flatMap((entry) =>
+    vocabularyCommands({
+      sourceKey: vocabularyKey(entry.category),
+      sourceUri: entry.uri,
+      citation: entry.citation,
+      nativeType: 'skos:ConceptScheme',
+      labels: { en: entry.category },
+    }),
+  );
+  if (schemeCommands.length)
+    await sendMissingTagCommands({ port: input.port, journal: input.journal, commands: schemeCommands });
+  const schemeCreates = ackedTagCreates(input.journal);
+  const schemeProposals = need.schemes.flatMap((entry) => {
+    const subjectId = schemeCreates.get(showcaseVocabularyExternalId(vocabularyKey(entry.category)));
+    return subjectId
+      ? vocabularyCommands({
+          sourceKey: vocabularyKey(entry.category),
+          sourceUri: entry.uri,
+          citation: entry.citation,
+          nativeType: 'skos:ConceptScheme',
+          labels: { en: entry.category },
+          subjectId,
+        })
+      : [];
+  });
+  if (schemeProposals.length)
+    await sendMissingTagCommands({ port: input.port, journal: input.journal, commands: schemeProposals });
+  const schemeRequirements = need.schemes.map((entry) =>
+    requirementFor(need.ownerKey, vocabularyKey(entry.category), entry.uri, entry.citation, 'skos:ConceptScheme'),
+  );
+  if (input.stage === 'schemes')
+    return {
+      requirements: schemeRequirements,
+      bindings: await readVndbPublicTagBindings(input.port, identityKnownBindings(need, input.journal)),
+      diagnostics: need.diagnostics,
+      truncated: need.truncated,
+    };
+
+  const current = await readVndbPublicTagBindings(input.port, identityKnownBindings(need, input.journal));
+  const currentSchemes = new Map(
+    current.schemes.flatMap((entry) => {
+      const category = categoryFromTaxonomy(entry.taxonomy);
+      return category ? [[category, entry.id] as const] : [];
+    }),
+  );
+  const budget = Math.max(0, showcaseLimits.vocabulary - schemeRequirements.length);
+  const admittedConcepts = need.concepts.filter((entry) => currentSchemes.has(entry.category));
+  const associatedConcepts = admittedConcepts.filter((entry) => need.associated.has(entry.code));
+  const parentConcepts = admittedConcepts.filter((entry) => !need.associated.has(entry.code));
+  const conceptEntries = [...associatedConcepts, ...parentConcepts].slice(0, budget);
+  const truncated = need.truncated || admittedConcepts.length > conceptEntries.length;
+  const conceptCommands = conceptEntries.flatMap((entry) =>
+    vocabularyCommands({
+      sourceKey: vocabularyKey(entry.category, entry.code),
+      sourceUri: entry.uri,
+      citation: entry.citation,
+      nativeType: 'skos:Concept',
+      labels: entry.labels as Record<string, string>,
+    }),
+  );
+  if (conceptCommands.length)
+    await sendMissingTagCommands({ port: input.port, journal: input.journal, commands: conceptCommands });
+  const conceptCreates = ackedTagCreates(input.journal);
+  const conceptProposals = conceptEntries.flatMap((entry) => {
+    const subjectId = conceptCreates.get(showcaseVocabularyExternalId(vocabularyKey(entry.category, entry.code)));
+    const schemeId = currentSchemes.get(entry.category);
+    return subjectId && schemeId
+      ? vocabularyCommands({
+          sourceKey: vocabularyKey(entry.category, entry.code),
+          sourceUri: entry.uri,
+          citation: entry.citation,
+          nativeType: 'skos:Concept',
+          labels: entry.labels as Record<string, string>,
+          schemeId,
+          subjectId,
+        })
+      : [];
+  });
+  if (conceptProposals.length)
+    await sendMissingTagCommands({ port: input.port, journal: input.journal, commands: conceptProposals });
+  const conceptRequirements = conceptEntries.map((entry) =>
+    requirementFor(
+      need.ownerKey,
+      vocabularyKey(entry.category, entry.code),
+      entry.uri,
+      entry.citation,
+      'skos:Concept',
+      currentSchemes.get(entry.category),
+    ),
+  );
+  const blocked = need.schemes
+    .filter((entry) => !currentSchemes.has(entry.category))
+    .map((entry) =>
+      safeTagRow('tags', { cat: entry.category }, 'VNDB public tag scheme is not current for native writes'),
+    );
+  const bindings = await readVndbPublicTagBindings(input.port, identityKnownBindings(need, input.journal));
+  return {
+    requirements: [...schemeRequirements, ...conceptRequirements],
+    bindings,
+    diagnostics: mergeGaps([...need.diagnostics, ...blocked]),
+    truncated,
+  };
+}
+
+/** Resolve only journal-acknowledged UUIDs after exact current public vocabulary checks. */
+export async function readShowcaseVndbPublicTagVocabulary(input: {
+  tables: CrossMediaTables;
+  selectedVids: readonly string[];
+  plan: CrossMediaPlan;
+  port: Pick<CrossMediaPort, 'readReviewedSubject'>;
+  journal: ShowcaseJournal;
+}): Promise<SourceVocabularyBindings> {
+  const need = await selectedTagNeed(input);
+  if (!need) return { releaseDigest: bundledDigest, schemes: [], concepts: [] };
+  return readVndbPublicTagBindings(input.port, identityKnownBindings(need, input.journal));
 }
 
 export type { VndbPublicTagKnownBindings };

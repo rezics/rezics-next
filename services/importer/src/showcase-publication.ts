@@ -665,7 +665,6 @@ function recordHasSourceIdentity(record: ShowcaseRecord): boolean {
 function sourceCitationMatchesRecord(record: ShowcaseRecord, citation: string): boolean {
   if (!record.sourceUri) return false;
   if (citation === record.sourceUri) return true;
-  if (record.provider !== 'bangumi' || record.kind !== 'work') return false;
   try {
     const source = new URL(record.sourceUri);
     const cited = new URL(citation);
@@ -676,12 +675,19 @@ function sourceCitationMatchesRecord(record: ShowcaseRecord, citation: string): 
       cited.search !== source.search
     )
       return false;
-    const staffPrefix = `#/subject-persons/${record.sourceKey}/`;
-    const voicePrefix = `#/person-characters/${record.sourceKey}/`;
-    return (
-      (cited.hash.startsWith(staffPrefix) && /^[1-9][0-9]*\/position$/u.test(cited.hash.slice(staffPrefix.length))) ||
-      (cited.hash.startsWith(voicePrefix) && /^[1-9][0-9]*\/[1-9][0-9]*$/u.test(cited.hash.slice(voicePrefix.length)))
-    );
+    if (record.provider === 'bangumi' && record.kind === 'work') {
+      const staffPrefix = `#/subject-persons/${record.sourceKey}/`;
+      const voicePrefix = `#/person-characters/${record.sourceKey}/`;
+      return (
+        (cited.hash.startsWith(staffPrefix) && /^[1-9][0-9]*\/position$/u.test(cited.hash.slice(staffPrefix.length))) ||
+        (cited.hash.startsWith(voicePrefix) && /^[1-9][0-9]*\/[1-9][0-9]*$/u.test(cited.hash.slice(voicePrefix.length)))
+      );
+    }
+    if (record.provider === 'vndb' && record.kind === 'work') {
+      const prefix = `#/tags_vn/${record.sourceKey}/`;
+      return cited.hash.startsWith(prefix) && /^g[1-9][0-9]{0,9}\/tag$/u.test(cited.hash.slice(prefix.length));
+    }
+    return false;
   } catch {
     return false;
   }
