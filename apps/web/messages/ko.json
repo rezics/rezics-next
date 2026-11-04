@@ -7939,5 +7939,7 @@
   "discovery_score_signed_out": "이 대상을 평가하려면 로그인하세요.",
   "discovery_score_unsupported": "이 대상은 이 평가 질문을 지원하지 않습니다.",
   "discovery_score_concealed": "이 사용자에게 평가 작업이 공개되지 않았습니다.",
-  "discovery_score_unavailable": "평가 작업을 사용할 수 없습니다."
+  "discovery_score_unavailable": "평가 작업을 사용할 수 없습니다.",
+  "thread_page_invalid_cursor": "이 페이지 링크가 유효하지 않거나 만료되었습니다. 첫 페이지에서 계속하세요.",
+  "thread_page_restart": "첫 페이지 열기"
 }

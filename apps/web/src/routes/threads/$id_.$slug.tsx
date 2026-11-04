@@ -53,6 +53,7 @@ import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReading, type ThreadReadingPage } from '../../threads/thread-reading';
 import { threadPageOperation, threadPageViewerMatches } from '../../threads/thread-page-advice';
 import type { ThreadPageObservation } from '../../threads/thread-page';
+import { ThreadPageError } from '../../threads/thread-page-error';
 import { ThreadWatch } from '../../threads/thread-watch';
 import { boardReadingHref, parseBoardReadingReturn } from '../../threads/board-reading';
 import { PageHeading } from '../../shell/page-heading';
@@ -121,6 +122,11 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
   },
   head: ({ loaderData }) => (loaderData ? threadPageHead(loaderData) : { meta: [{ title: m.threads_untitled() }] }),
   component: ThreadPage,
+  errorComponent: ({ error }) => {
+    const { id } = Route.useParams();
+    const router = useRouter();
+    return <ThreadPageError error={error} threadId={id} retry={() => void router.invalidate()} />;
+  },
 });
 
 export function ThreadReadingHeader({
@@ -543,6 +549,8 @@ export function copyThreadPostLink(post: Pick<ThreadPost, 'id' | 'threadId'>): P
 export function ThreadReadingPost({
   post,
   composed,
+  reactionFieldsAvailable = true,
+  reactionViewerAvailable = true,
   readAuthority,
   authors,
   mentions,
@@ -571,6 +579,8 @@ export function ThreadReadingPost({
 }: {
   post: ThreadPost;
   composed?: ThreadPageObservation | undefined;
+  reactionFieldsAvailable?: boolean;
+  reactionViewerAvailable?: boolean;
   readAuthority?: object | undefined;
   authors: PageAuthors;
   mentions: DocumentMentions;
@@ -601,7 +611,7 @@ export function ThreadReadingPost({
   const canReact = !composed || (composedViewerCurrent &&
     threadPageOperation(composed, target, `${target.kind}.set_reaction`, post) === 'available' &&
     threadPageOperation(composed, target, `${target.kind}.clear_reaction`, post) === 'available');
-  const reactionsAvailable = !composed || composed.currentness.reactions === 'current';
+  const reactionsAvailable = reactionFieldsAvailable && (!composed || composed.currentness.reactions === 'current');
   const [editing, setEditing] = useState(false);
   const [editKey, setEditKey] = useState('');
   const [restoreError, setRestoreError] = useState('');
@@ -966,7 +976,7 @@ export function ThreadReadingPost({
             counts,
             value,
             onMutation,
-            personalReady: personalReady && canReact,
+            personalReady: personalReady && canReact && reactionViewerAvailable,
             ...(composed ? { sourceWatermark: composed.reactionsAsOf } : {}),
             settleWithRead: false,
             reactionOrigin: { key: String(lifetime.id), reader: viewerId ?? null, isCurrent: () => current() },

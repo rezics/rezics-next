@@ -7939,5 +7939,7 @@
   "discovery_score_signed_out": "Melde dich an, um dieses Subjekt zu bewerten.",
   "discovery_score_unsupported": "Dieses Subjekt unterstützt diese Bewertungsfrage nicht.",
   "discovery_score_concealed": "Bewertungsaktionen sind für diesen Nutzer nicht freigegeben.",
-  "discovery_score_unavailable": "Bewertungsaktionen sind nicht verfügbar."
+  "discovery_score_unavailable": "Bewertungsaktionen sind nicht verfügbar.",
+  "thread_page_invalid_cursor": "Dieser Seitenlink ist ungültig oder veraltet. Öffne die erste Seite, um fortzufahren.",
+  "thread_page_restart": "Erste Seite öffnen"
 }

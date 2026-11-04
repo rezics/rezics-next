@@ -7939,5 +7939,7 @@
   "discovery_score_signed_out": "この対象を評価するにはログインしてください。",
   "discovery_score_unsupported": "この対象はこの評価項目に対応していません。",
   "discovery_score_concealed": "この閲覧者には評価操作が公開されていません。",
-  "discovery_score_unavailable": "評価操作を利用できません。"
+  "discovery_score_unavailable": "評価操作を利用できません。",
+  "thread_page_invalid_cursor": "このページのリンクは無効か、有効期限が切れています。最初のページから続けてください。",
+  "thread_page_restart": "最初のページを開く"
 }

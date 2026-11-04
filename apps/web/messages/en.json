@@ -8014,5 +8014,7 @@
   "discovery_score_signed_out": "Sign in to rate this Subject.",
   "discovery_score_unsupported": "This Subject does not support this rating question.",
   "discovery_score_concealed": "Score actions are not exposed to this reader.",
-  "discovery_score_unavailable": "Score actions are unavailable."
+  "discovery_score_unavailable": "Score actions are unavailable.",
+  "thread_page_invalid_cursor": "This page link is invalid or out of date. Open the first page to continue.",
+  "thread_page_restart": "Open the first page"
 }

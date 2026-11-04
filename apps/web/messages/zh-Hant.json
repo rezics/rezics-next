@@ -7939,5 +7939,7 @@
   "discovery_score_signed_out": "登入後即可為此對象評分。",
   "discovery_score_unsupported": "此對象不支援這項評分問題。",
   "discovery_score_concealed": "此使用者無法使用評分操作。",
-  "discovery_score_unavailable": "評分操作暫時無法使用。"
+  "discovery_score_unavailable": "評分操作暫時無法使用。",
+  "thread_page_invalid_cursor": "此頁面連結無效或已過期。請從第一頁繼續。",
+  "thread_page_restart": "開啟第一頁"
 }

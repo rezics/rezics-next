@@ -565,3 +565,24 @@ lifetime. Replacing the account, document, revision or admitted snapshot retires
 The whole-body disclosure owner stays in front of the reading body, and the original spoiler controls remain the
 only authority for inline disclosure. Plain reading and ordinary links still render without JavaScript or if the
 optional References visit cannot hydrate.
+
+## Composed current thread page
+
+The existing visit consumes `KernelClient.threads({id})['reading-page'].get` and derives its DTO from that method.
+The opening identity, bounded native reply order and opaque continuation stay intact. The composed author map contains
+only identities disclosed by available posts; unavailable authors remain unknown without a second account batch.
+Erased and withheld rows gain no author, date or document fields. Mentions, document media, Subjects and Board/Realm
+context retain their separate reads where this DTO supplies no replacement.
+
+Decision: Replace the thread byline account batch with composed authors; the no-slug, no-media, no-Subject cohort now
+uses K2/D1 (page plus Board context) instead of the retained split-reader K4/D1 baseline, with at most 21 disclosed
+posts and authors, independent of unrelated content growth. Board receiving retains its own cost and author contract.
+
+Exact reference IDs, source revisions and operation states gate the existing reaction, reply and watch controls.
+Source currentness is separate from action availability and from `reactionsAsOf`; a null watermark supplies no
+checkpoint certificate. Slow-mode advice is displayed by the existing eligibility owner without a replacement
+status read, clock-based permission or command engine. Unavailable advice stays unavailable. Existing write outcomes,
+idempotency operands, readback and historical-reader/browser-writing recovery keep their owners.
+The existing page admission retires the composed observations with authors, media and focus on viewer, credentials,
+locale, route, connection or source replacement. Anonymous SSR remains anonymous. Prepared page examples establish
+DTO closure and consumer behavior only; Content's native disclosure/growth cases and rendered acceptance remain deferred.

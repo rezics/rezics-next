@@ -1892,3 +1892,43 @@ test('an old expected-slug redirect is not remembered or navigated after the rou
     await page.dispose();
   }
 });
+
+test('mounted composed advice keeps denied actions inert, seeds watch and slow mode, and retires with its viewer', async () => {
+  const { authoredReadingPage } = await import('../src/kernel/fake/thread-reading-page');
+  for (const allowed of [false, true]) {
+    const threadId = id(810 + Number(allowed));
+    const route = await mountRoute({ threadId, mode: 'session', session: signedIn(), strict: false });
+    try {
+      const page = pageFor(threadId, { privateRead: true });
+      const composed = authoredReadingPage({ ...page.thread, viewerReaction: 'like' });
+      composed.viewer = { kind: 'account', id: viewerId };
+      composed.actions = { state: 'current', retryable: false, reply: { state: allowed ? 'available' : 'denied' }, references: [{
+        type: 'content.thread', id: threadId, state: 'current', operations: [
+          { action: 'reaction:set', operationId: 'thread.set_reaction', state: allowed ? 'available' : 'denied' },
+          { action: 'reaction:set', operationId: 'thread.clear_reaction', state: allowed ? 'available' : 'denied' },
+          { action: 'thread:watch', operationId: 'thread.unwatch', state: 'available' },
+        ],
+      }] };
+      composed.watch = { state: 'current', watching: true };
+      composed.slowMode = { state: 'current', intervalSeconds: 60, retryAt: null, nextEligibleAt: null, canChange: false, exempt: false, admissionState: 'pending', retryAfterSeconds: 0 };
+      composed.currentness = { ...composed.currentness, actions: 'current', watch: 'current', slowMode: 'current' };
+      page.thread = composed.thread;
+      page.composed = composed;
+      page.authors = { [viewerId]: { id: viewerId, displayName: 'Composed private author', handle: null, avatar: null } };
+      await route.settlePage(0, page);
+      await route.settlePersonal(0, personalFor(threadId, id(41)));
+      expect(route.host.textContent).toContain('Composed private author');
+      expect(route.host.textContent).toContain(m.thread_watch_watching());
+      expect(route.host.textContent).toContain(m.slow_mode_preparing());
+      const reply = route.host.querySelector<HTMLButtonElement>('button[data-slot="feed-reply-action"]');
+      expect(reply?.disabled).toBe(!allowed);
+      const votes = route.host.querySelectorAll<HTMLButtonElement>('[data-slot="vote-control"] button');
+      if (!allowed) for (const button of votes) expect(button.disabled).toBe(true);
+      await act(async () => route.client.setQueryData(sessionQuery.queryKey, signedIn('replaced-composed-csrf')));
+      expect(route.host.textContent).not.toContain('Composed private author');
+      expect(route.host.textContent).not.toContain(m.thread_watch_watching());
+    } finally {
+      await route.dispose();
+    }
+  }
+});

@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { DocumentMentions } from '@rezics/ui/document-body';
+import { boardProblemCode } from './board-reading';
 import { readDocumentMentions } from '../kernel/mentions';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
@@ -40,6 +41,16 @@ export type LoadedThreadPage = {
   verification: VerificationConfig;
   linkedPostUnavailable?: boolean;
 };
+
+export class ThreadPageCursorError extends Error {
+  readonly code = 'invalid_cursor';
+  readonly name = 'ThreadPageCursorError';
+}
+
+export function isThreadPageCursorError(error: unknown): boolean {
+  return error instanceof ThreadPageCursorError || (!!error && typeof error === 'object' &&
+    'name' in error && error.name === 'ThreadPageCursorError' && 'code' in error && error.code === 'invalid_cursor');
+}
 
 function checkRead<T>(result: { error?: unknown; status?: number; data?: T | null }, resource: string): NonNullable<T> {
   if (result.error) {
@@ -122,9 +133,14 @@ export async function loadThreadPage(
   }
   readingPageRead ??= readReadingPage();
   const readingPageResult = await readingPageRead;
+  if (readingPageResult.status === 400 && boardProblemCode(readingPageResult.error) === 'invalid_cursor')
+    throw new ThreadPageCursorError('invalid_cursor');
   const readingPage = checkRead<ReadingPage>(readingPageResult, 'thread reading page');
   const thread = readingPage.thread;
-  if (thread.id !== data.id) throw notFound();
+  if (thread.id !== data.id || readingPage.target.threadId !== data.id || readingPage.target.boardId !== thread.boardId)
+    throw notFound();
+  if (readingPage.viewer.kind === 'account' && (!authorization || readingPage.viewer.id !== viewerId))
+    throw new Error('Kernel thread reading page viewer changed');
   if (data.expectedSlug !== undefined && !sameThreadSlug(data.expectedSlug, thread.title))
     return { redirect: { id: thread.id, title: threadTitle(thread) } };
   const posts: LoadedThreadPage['posts'] = {

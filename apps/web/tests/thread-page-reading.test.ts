@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
+import type { ReadingPage } from '../src/threads/thread-page';
 import { loadThreadPage } from '../src/threads/thread-page';
 
 const threadId = '11111111-1111-4111-8111-111111111111';
@@ -11,7 +13,7 @@ const replyId = '55555555-5555-4555-8555-555555555555';
 
 test('the Web receiver maps the mounted page while preserving a selected reply and its local text', async () => {
   const createdAt = '2026-11-04T00:00:00.000Z';
-  const opening = {
+  const opening: Extract<ReadingPage['thread']['firstPost'], { availability: 'available' }> = {
     id: openingId,
     threadId,
     route: 0,
@@ -31,7 +33,7 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     revisionId: '66666666-6666-4666-8666-666666666666',
     body: fromPlainText('Opening text stays local', 'blocks'),
   };
-  const reply = {
+  const reply: typeof opening = {
     ...opening,
     id: replyId,
     route: 1,
@@ -40,8 +42,7 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     sha256: 'reply-digest',
     body: fromPlainText('Reply text stays local', 'blocks'),
   };
-  const response = {
-    thread: {
+  const response = authoredReadingPage({
       id: threadId,
       route: 0,
       authorId,
@@ -55,9 +56,7 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
       availability: 'available',
       createdAt,
       firstPost: opening,
-    },
-    replies: { items: [reply], next: null },
-  };
+    }, [reply], [{ id: authorId, displayName: 'Disclosed author', handle: null, avatar: null }]);
   const paths: string[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
@@ -75,15 +74,31 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     new Request(`https://web.test/threads/${threadId}/a-reading-page`),
     {},
     { id: threadId, post: replyId },
-    {} as never,
+    { sitekey: '', scriptUrl: '' },
   );
 
   expect(paths.some((path) => path.endsWith(`/posts/${replyId}/location`))).toBe(true);
   expect(paths).toContain(`/v1/threads/${threadId}/reading-page?cursor=selected-reply-cursor`);
   expect(page).toMatchObject({ linkedPostUnavailable: false, thread: { id: threadId } });
-  expect(page.posts.posts.map(({ id, revisionId }) => [id, revisionId])).toEqual([
+  expect(page.posts.posts.map((post) => [post.id, 'revisionId' in post ? post.revisionId : undefined])).toEqual([
     [openingId, opening.revisionId],
     [replyId, reply.revisionId],
   ]);
   expect(page.posts.posts.map(({ body }) => body)).toEqual([opening.body, reply.body]);
+  expect(page.authors?.[authorId]).toEqual(response.authors.items[0]);
+  expect(page.composed).toMatchObject({ currentness: response.currentness, actions: response.actions, reactionsAsOf: null });
+  expect(paths.some((path) => path.startsWith('/v1/accounts'))).toBe(false);
+
+  // Safe native tombstones disclose no substitute author or timestamp, and sparse pages retain continuation.
+  response.replies = { items: [
+    { id: replyId, threadId, route: 1, parentId: openingId, availability: 'withheld', removed: true, body: null, sha256: null },
+    { id: '88888888-8888-4888-8888-888888888888', threadId, route: 2, parentId: openingId, availability: 'erased', removed: true, body: null, sha256: null },
+  ], next: 'sparse-next' };
+  response.authors = { state: 'unavailable', retryable: true, items: [] };
+  response.currentness.authors = 'unavailable';
+  const unavailable = await loadThreadPage(client, new Request('https://web.test/'), {}, { id: threadId }, { sitekey: '', scriptUrl: '' }, 'anonymous');
+  expect(unavailable.authors).toBeNull();
+  expect(unavailable.posts.next).toBe('sparse-next');
+  expect(unavailable.posts.posts.slice(1)).toEqual(response.replies.items);
+  expect(unavailable.posts.posts[0]?.body).toEqual(opening.body);
 });

@@ -7939,5 +7939,7 @@
   "discovery_score_signed_out": "登录后即可为此对象评分。",
   "discovery_score_unsupported": "此对象不支持这项评分问题。",
   "discovery_score_concealed": "此用户无法使用评分操作。",
-  "discovery_score_unavailable": "评分操作暂时不可用。"
+  "discovery_score_unavailable": "评分操作暂时不可用。",
+  "thread_page_invalid_cursor": "此页面链接无效或已过期。请从第一页继续。",
+  "thread_page_restart": "打开第一页"
 }

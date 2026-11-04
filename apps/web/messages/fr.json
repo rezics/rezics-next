@@ -7939,5 +7939,7 @@
   "discovery_score_signed_out": "Connectez-vous pour noter ce sujet.",
   "discovery_score_unsupported": "Ce sujet ne prend pas en charge cette question de notation.",
   "discovery_score_concealed": "Les actions de notation ne sont pas accessibles à ce lecteur.",
-  "discovery_score_unavailable": "Les actions de notation sont indisponibles."
+  "discovery_score_unavailable": "Les actions de notation sont indisponibles.",
+  "thread_page_invalid_cursor": "Ce lien de page est invalide ou a expiré. Ouvrez la première page pour continuer.",
+  "thread_page_restart": "Ouvrir la première page"
 }

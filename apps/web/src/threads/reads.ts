@@ -298,26 +298,7 @@ export const readPostHistory = createServerFn({ method: 'GET' })
 export const readThreadPage = createServerFn({ method: 'GET' })
   .validator(validatePageInput)
   .handler(
-    async ({
-      data,
-    }): Promise<
-      | {
-          thread: Thread['thread'];
-          board?: Board['board'];
-          realm?: BoardRealm;
-          posts: PostPage;
-          mentions: DocumentMentions;
-          viewerId?: string;
-          verification: VerificationConfig;
-          authors: PageAuthors;
-          subjects: ThreadSubject[];
-          provenanceSubjects: ThreadSubject[];
-          documentMedia?: ThreadDocumentMedia;
-          now: string;
-          linkedPostUnavailable?: boolean;
-        }
-      | ThreadSlugRedirect
-    > => {
+    async ({ data }): Promise<import('./thread-reading').ThreadReadingPage | ThreadSlugRedirect> => {
       setResponseHeader('cache-control', 'private, no-store');
       const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
       const request = getRequest();

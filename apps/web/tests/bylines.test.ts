@@ -1,3 +1,5 @@
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
+import type { ReadingPage } from '../src/threads/thread-page';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -166,6 +168,16 @@ const fake = Bun.serve({
     if (url.pathname === `/v1/boards/${boardId}`)
       return json({ board: { ...metadata, id: boardId, title: 'Reading room', availability: 'available' } });
     if (url.pathname === `/v1/boards/${boardId}/threads`) return json({ threads, next: null });
+    if (url.pathname.endsWith('/reading-page')) {
+      const failed = url.pathname.includes(failedThreadId);
+      const selected = failed ? failedPosts : posts;
+      const source = failed ? { ...threads[0], id: failedThreadId, authorId: authors.failure, title: 'Identity failure', firstPost: failedPosts[0] } : threads[0];
+      const page = authoredReadingPage({ ...source, kind: 'discussion' } as ReadingPage['thread'], selected.slice(1) as ReadingPage['replies']['items'], [...accounts.values()].map((account) => ({
+        id: account.id, displayName: account.displayName, handle: account.handle, avatar: null,
+      })));
+      if (failed) { page.authors = { state: 'unavailable', retryable: true, items: [] }; page.currentness.authors = 'unavailable'; }
+      return json(page);
+    }
     if (url.pathname === `/v1/threads/${threadId}`) return json({ thread: threads[0] });
     if (url.pathname === `/v1/threads/${threadId}/posts`) return json({ posts, next: null });
     if (url.pathname === `/v1/threads/${failedThreadId}`)
@@ -307,13 +319,12 @@ test(
   timeout,
 );
 
-test('a page reads all of its authors in one request, whatever the number of posts', async () => {
+test('a thread page receives composed authors without an account batch', async () => {
   calls.length = 0;
   const page = await open(`/en/threads/${threadId}`);
   try {
     const identity = calls.filter((call) => call.path === '/v1/accounts');
-    expect(identity).toHaveLength(1);
-    expect(identity[0]?.ids).toEqual([authors.alice, authors.bob, authors.deleted, authors.unknown]);
+    expect(identity).toHaveLength(0);
   } finally {
     await page.context().close();
   }
@@ -323,8 +334,8 @@ test(
   'a deleted or unknown author is shown without a handle',
   async () => {
     for (const [locale, deleted, unknown] of [
-      ['en', 'Deleted account', 'Unknown account'],
-      ['ja', '削除されたアカウント', '不明なアカウント'],
+      ['en', 'Unknown account', 'Unknown account'],
+      ['ja', '不明なアカウント', '不明なアカウント'],
     ] as const) {
       const page = await open(`/${locale}/threads/${threadId}`);
       try {

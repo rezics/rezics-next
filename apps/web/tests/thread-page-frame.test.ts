@@ -1,3 +1,5 @@
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
+import type { ReadingPage } from '../src/threads/thread-page';
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { loadThreadPage } from '../src/threads/thread-page';
@@ -16,13 +18,14 @@ test('reads the thread board once regardless of post count and tolerates a missi
         fetch: async (input, init) => {
           const path = new URL(new Request(input, init).url).pathname;
           calls.push(path);
+          if (path.endsWith('/reading-page')) return Response.json(authoredReadingPage(thread.thread as ReadingPage['thread'], posts.posts.slice(0, count).filter((post) => post.id !== thread.thread.firstPost.id) as ReadingPage['replies']['items'], []));
           if (path.endsWith('/posts')) return Response.json({ ...posts, posts: posts.posts.slice(0, count) });
           if (path.includes('/boards/')) return missing ? new Response(null, { status: 404 }) : Response.json(board);
           return Response.json(thread);
         },
       });
       const page = await loadThreadPage(client, request, {}, { id: thread.thread.id }, verification);
-      expect(calls).toHaveLength(3);
+      expect(calls).toHaveLength(2);
       expect(calls.filter((path) => path.endsWith(`/boards/${thread.thread.boardId}`))).toHaveLength(1);
       expect(page.board?.title).toBe(missing ? undefined : board.board.title);
     }
