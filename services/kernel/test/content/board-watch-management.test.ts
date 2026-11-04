@@ -385,31 +385,42 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   const spaceRevision = newId(route);
   const realmRevision = newId(route);
   const context = newId(route);
-  await f.db.admin.query(
-    `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
-     VALUES($1,$2,'active',$3,clock_timestamp(),$4)`,
-    [route, space, spaceRevision, f.accounts.recipient],
-  );
-  await f.db.admin.query(
-    `INSERT INTO community.space_revision(route,space_id,revision_id,title,summary,created_at,author)
-     VALUES($1,$2,$3,'Watch space','',clock_timestamp(),$4)`,
-    [route, space, spaceRevision, f.accounts.recipient],
-  );
-  await f.db.admin.query(
-    `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
-     VALUES($1,$2,$3,'active','public',$4,$5,clock_timestamp(),$6)`,
-    [route, realm, space, context, realmRevision, f.accounts.recipient],
-  );
-  await f.db.admin.query(
-    `INSERT INTO community.realm_revision(route,realm_id,revision_id,title,summary,visibility,context_id,created_at,author)
-     VALUES($1,$2,$3,'Watch realm','','public',$4,clock_timestamp(),$5)`,
-    [route, realm, realmRevision, context, f.accounts.recipient],
-  );
-  await f.db.admin.query(
-    `INSERT INTO content.board(route,board_id,subject_id,title,realm_id,visibility,security_revision,recorded_transaction_id)
-     VALUES($1,$2,$3,'Realm watch board',$4,'published',1,$5)`,
-    [route, secondaryBoard, newId(route), realm, crypto.randomUUID()],
-  );
+  const setup = await f.db.admin.connect();
+  try {
+    await setup.query('BEGIN');
+    await setup.query('SET CONSTRAINTS ALL DEFERRED');
+    await setup.query(
+      `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+       VALUES($1,$2,'active',$3,clock_timestamp(),$4)`,
+      [route, space, spaceRevision, f.accounts.recipient],
+    );
+    await setup.query(
+      `INSERT INTO community.space_revision(route,space_id,revision_id,title,summary,created_at,author)
+       VALUES($1,$2,$3,'Watch space','',clock_timestamp(),$4)`,
+      [route, space, spaceRevision, f.accounts.recipient],
+    );
+    await setup.query(
+      `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
+       VALUES($1,$2,$3,'active','public',$4,$5,clock_timestamp(),$6)`,
+      [route, realm, space, context, realmRevision, f.accounts.recipient],
+    );
+    await setup.query(
+      `INSERT INTO community.realm_revision(route,realm_id,revision_id,title,summary,visibility,context_id,created_at,author)
+       VALUES($1,$2,$3,'Watch realm','','public',$4,clock_timestamp(),$5)`,
+      [route, realm, realmRevision, context, f.accounts.recipient],
+    );
+    await setup.query(
+      `INSERT INTO content.board(route,board_id,subject_id,title,realm_id,visibility,security_revision,recorded_transaction_id)
+       VALUES($1,$2,$3,'Realm watch board',$4,'published',1,$5)`,
+      [route, secondaryBoard, newId(route), realm, crypto.randomUUID()],
+    );
+    await setup.query('COMMIT');
+  } catch (error) {
+    await setup.query('ROLLBACK');
+    throw error;
+  } finally {
+    setup.release();
+  }
   await f.accounts.grant(reader, 'realm:read', { route, id: realm });
   await f.accounts.grant(reader, 'realm:participate', { route, id: realm });
   await f.accounts.grant(reader, 'board:read', { route, id: secondaryBoard });

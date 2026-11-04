@@ -388,7 +388,7 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
         prepare,
         async warmup() {
           await prepare();
-          return operation();
+          return undefined;
         },
         operation,
       });
