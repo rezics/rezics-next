@@ -477,7 +477,6 @@ test('malformed and opposite-state responses remain uncertain and retry the exac
   for (const mutationResponse of ['malformed', 'opposite-state'] as const) {
     const f = await classificationFixture({ mutationResponse });
     try {
-      f.hideNextConfirmationAfterWrite();
       expect((await f.run()).status).toBe('bulk-failed');
       expect(f.writes).toHaveLength(1);
       const sealed = f.writes[0]!;
