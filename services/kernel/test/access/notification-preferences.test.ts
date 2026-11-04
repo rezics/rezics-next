@@ -2,7 +2,7 @@ import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { clientDeclarations, committedDeclarations } from '../../scripts/client.ts';
 import { notificationAllowed } from '../../src/access/index.ts';
-import { createPreferenceCommands } from '../../src/access/preferences.ts';
+import { createPreferenceCommands, projectPreferencePage } from '../../src/access/preferences.ts';
 import {
   DEFAULT_NOTIFICATIONS,
   NOTIFICATION_KINDS,
@@ -126,6 +126,7 @@ test('a mandatory or unknown kind in a patch is refused with 400 and changes not
     shelf: {},
     notifications: DEFAULT_NOTIFICATIONS,
     version: 0,
+    page: projectPreferencePage({ notifications: DEFAULT_NOTIFICATIONS, version: 0 }),
   });
   await call(person, { expectedVersion: 0, notifications: allOff });
   const before = (await stored(person.accountId)).rows;

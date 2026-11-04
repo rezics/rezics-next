@@ -1115,7 +1115,12 @@ export {
   createPreferenceCommands,
   readAccountPreferences,
   notificationAllowed,
+  projectPreferencePage,
+  withPreferencePage,
   DEFAULT_ACCOUNT_PREFERENCES,
   type AccountPreferences,
   type PreferenceChange,
+  type PreferencePage,
+  type PreferencePageAction,
+  type PreferencePageKind,
 } from './preferences.ts';

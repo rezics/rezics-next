@@ -1,4 +1,4 @@
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, PreferencePage, PreferencePageAction, PreferencePageKind } from '@rezics/client';
 import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { CollectionVisibility } from '../library/reads';
@@ -74,6 +74,7 @@ export type ReadingPreferences = {
 };
 export type NotificationPreferences = Record<string, boolean>;
 export type NotificationPatch = Record<string, boolean | null> | null;
+export type { PreferencePage, PreferencePageAction, PreferencePageKind };
 export type NativePreferenceFailure = {
   status: number | null;
   code?: string;
@@ -90,6 +91,7 @@ export type SettingsPage =
       readonly accountId?: string | null;
       preferences: ReadingPreferences;
       notifications?: NotificationPreferences;
+      page?: PreferencePage;
       csrfToken?: string | null;
       securityHref: string | null;
       renameAccount?: AccountRenameNavigation | null;
@@ -218,10 +220,11 @@ export type NotificationChange = {
 };
 
 export type NotificationWriteResult =
-  | { ok: true; notifications: NotificationPreferences; version: number }
+  | { ok: true; notifications: NotificationPreferences; version: number; page: PreferencePage }
   | {
       ok: false;
       reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'preparing' | 'unavailable';
+      page?: PreferencePage;
       failure?: NativePreferenceFailure;
     };
 
@@ -412,7 +415,62 @@ function present(preferences: unknown): ReadingPreferences | undefined {
   };
 }
 
-function presentNotifications(value: unknown): NotificationPreferences | undefined {
+function presentPageKind(value: unknown): PreferencePageKind | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.kind !== 'string' ||
+    !/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(value.kind) ||
+    typeof value.optional !== 'boolean' ||
+    typeof value.default !== 'boolean' ||
+    typeof value.enabled !== 'boolean' ||
+    (!value.optional && !value.enabled)
+  )
+    return undefined;
+  return { kind: value.kind, optional: value.optional, default: value.default, enabled: value.enabled };
+}
+
+function presentPageAction(value: unknown): PreferencePageAction | undefined {
+  if (
+    !isRecord(value) ||
+    (value.name !== 'edit' && value.name !== 'reset') ||
+    !Number.isSafeInteger(value.expectedVersion) ||
+    (value.expectedVersion as number) < 0
+  )
+    return undefined;
+  return { name: value.name, expectedVersion: value.expectedVersion as number };
+}
+
+/** The native catalogue projection, or `undefined` when it is missing or not a closed page. */
+export function presentPreferencePage(value: unknown, version?: number): PreferencePage | undefined {
+  if (!isRecord(value) || !Array.isArray(value.kinds) || value.kinds.length < 1 || value.kinds.length > 32)
+    return undefined;
+  if (!Array.isArray(value.actions) || value.actions.length > 2) return undefined;
+  const pageVersion = Number.isSafeInteger(value.version) ? (value.version as number) : version;
+  if (pageVersion === undefined || pageVersion < 0) return undefined;
+  const kinds = value.kinds.map(presentPageKind);
+  const actions = value.actions.map(presentPageAction);
+  if (kinds.some((entry) => !entry) || actions.some((entry) => !entry)) return undefined;
+  const presentedKinds = kinds as PreferencePageKind[];
+  if (new Set(presentedKinds.map((entry) => entry.kind)).size !== presentedKinds.length) return undefined;
+  const presentedActions = actions as PreferencePageAction[];
+  if (new Set(presentedActions.map((entry) => entry.name)).size !== presentedActions.length) return undefined;
+  if (presentedActions.some((entry) => entry.expectedVersion !== pageVersion)) return undefined;
+  return { version: pageVersion, kinds: presentedKinds, actions: presentedActions };
+}
+
+export function optionalNotifications(page: PreferencePage): NotificationPreferences {
+  return Object.fromEntries(page.kinds.filter((entry) => entry.optional).map((entry) => [entry.kind, entry.enabled]));
+}
+
+export function preferencePageAllows(page: PreferencePage, name: PreferencePageAction['name']): boolean {
+  return page.actions.some((action) => action.name === name);
+}
+
+function presentNotifications(value: unknown, page?: PreferencePage): NotificationPreferences | undefined {
+  if (page) {
+    const notifications = optionalNotifications(page);
+    return Object.keys(notifications).length > 0 ? notifications : undefined;
+  }
   if (
     !isRecord(value) ||
     typeof value.reply !== 'boolean' ||
@@ -421,6 +479,20 @@ function presentNotifications(value: unknown): NotificationPreferences | undefin
   )
     return undefined;
   return { ...value } as NotificationPreferences;
+}
+
+function pageFrom(value: unknown, version?: number): PreferencePage | undefined {
+  if (!isRecord(value)) return undefined;
+  const problem = isRecord(value.value) ? value.value : isRecord(value.problem) ? value.problem : value;
+  const page = problem.page ?? value.page;
+  const pageVersion =
+    version ??
+    (isRecord(page) && Number.isSafeInteger(page.version)
+      ? (page.version as number)
+      : Number.isSafeInteger(value.version)
+        ? (value.version as number)
+        : undefined);
+  return presentPreferencePage(page, pageVersion);
 }
 
 /** The Auth site owns password, passkeys and sessions; the settings page only links to them. */
@@ -453,13 +525,14 @@ export async function loadSettingsPage(
         securityHref: securityHref(sessionEnv),
       };
     }
-    const data = result.data as ReadingPreferences & { notifications?: unknown };
-    const notifications = presentNotifications(data.notifications);
+    const data = result.data as ReadingPreferences & { notifications?: unknown; page?: unknown };
+    const page = pageFrom(data, preferences.version);
+    const notifications = page ? optionalNotifications(page) : undefined;
     return {
       signedIn: true,
       accountId,
       preferences,
-      ...(notifications ? { notifications } : {}),
+      ...(page && notifications ? { notifications, page } : {}),
       securityHref: securityHref(sessionEnv),
     };
   } catch (error) {
@@ -527,18 +600,22 @@ export async function changeNotifications(
       } as { 'idempotency-key': string; 'content-type': string },
     });
     if (!result.error && result.data) {
-      const data = result.data as ReadingPreferences & { notifications?: unknown };
-      const notifications = presentNotifications(data.notifications);
+      const data = result.data as ReadingPreferences & { notifications?: unknown; page?: unknown };
       const preferences = present(data);
-      if (!notifications || !preferences)
+      const page = pageFrom(data, preferences?.version);
+      const notifications = page ? optionalNotifications(page) : undefined;
+      if (!notifications || !preferences || !page)
         return {
           ok: false,
           reason: 'unavailable',
           failure: failureDetails(result.data, result.status, result.headers),
         };
-      return { ok: true, notifications, version: preferences.version };
+      return { ok: true, notifications, version: preferences.version, page };
     }
-    return writeFailure(failureDetails(result.error, statusOf(result), result.headers));
+    const failure = failureDetails(result.error, statusOf(result), result.headers);
+    const page = pageFrom(result.error, undefined);
+    const refused = writeFailure(failure);
+    return page ? { ...refused, page } : refused;
   } catch (error) {
     const failure = failureDetails(error);
     if (error instanceof MediaProblem && error.problem.code === 'forbidden')

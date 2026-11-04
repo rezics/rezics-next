@@ -42,6 +42,11 @@ export type {
   WatchManagementViewer,
 } from './kernel/content/watch-management-contract';
 export type {
+  PreferencePage,
+  PreferencePageAction,
+  PreferencePageKind,
+} from './kernel/access/preference-page';
+export type {
   RealmClaimReviewApprovalAdvice,
   RealmClaimReviewClaimant,
   RealmClaimReviewInspection,

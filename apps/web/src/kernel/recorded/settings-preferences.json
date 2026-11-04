@@ -1,8 +1,22 @@
 {
   "shelf": {},
-  "notifications": { "reply": true, "mention": true },
+  "notifications": { "reply": true, "mention": true, "thread_watch": true, "board_activity": true },
   "spoilerLevel": 1,
   "suitability": "blur",
   "version": 1,
+  "page": {
+    "version": 1,
+    "kinds": [
+      { "kind": "reply", "optional": true, "default": true, "enabled": true },
+      { "kind": "mention", "optional": true, "default": true, "enabled": true },
+      { "kind": "thread_watch", "optional": true, "default": true, "enabled": true },
+      { "kind": "board_activity", "optional": true, "default": true, "enabled": true },
+      { "kind": "moderation_decision", "optional": false, "default": true, "enabled": true }
+    ],
+    "actions": [
+      { "name": "edit", "expectedVersion": 1 },
+      { "name": "reset", "expectedVersion": 1 }
+    ]
+  },
   "status": 200
 }

@@ -4,11 +4,13 @@ import type {
   NotificationPatch,
   NotificationPreferences,
   NotificationWriteResult,
+  PreferencePage,
   SettingsPage,
 } from './preferences';
+import { optionalNotifications, preferencePageAllows } from './preferences';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 
-type Snapshot = { notifications: NotificationPreferences; version: number };
+type Snapshot = { notifications: NotificationPreferences; version: number; page: PreferencePage };
 type Attempt = { input: NotificationChange; draft: NotificationPreferences };
 export type NotificationEditorState = {
   known: Snapshot;
@@ -33,6 +35,26 @@ export function sameNotifications(a: NotificationPreferences, b: NotificationPre
   return Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([key, value]) => b[key] === value);
 }
 
+export function admittedOptionalKind(page: PreferencePage, kind: string): boolean {
+  return page.kinds.some((entry) => entry.kind === kind && entry.optional);
+}
+
+/** Keep only kinds the current page still admits; a removed or compulsory kind is never replayed as a new edit. */
+export function admittedNotificationPatch(intent: NotificationPatch, page: PreferencePage): NotificationPatch | undefined {
+  if (intent === null) return preferencePageAllows(page, 'reset') ? null : undefined;
+  if (!intent) return undefined;
+  const next = Object.fromEntries(
+    Object.entries(intent).filter(
+      (entry): entry is [string, boolean] => admittedOptionalKind(page, entry[0]) && typeof entry[1] === 'boolean',
+    ),
+  );
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function snapshotFrom(page: PreferencePage): Snapshot {
+  return { notifications: optionalNotifications(page), version: page.version, page };
+}
+
 export function notificationsNeedNavigationDecision(state: NotificationEditorState): boolean {
   return (
     state.pending !== null || state.intent !== undefined || !sameNotifications(state.known.notifications, state.draft)
@@ -50,16 +72,17 @@ export class NotificationEditor {
   };
   private live = () => !this.disposed && this.isCurrent();
   constructor(
-    initial: Snapshot,
+    initial: PreferencePage,
     private io: NotificationEditorIO,
     initialFailed = false,
     private sharedVersion: () => number = () => initial.version,
     private isCurrent: () => boolean = () => true,
     private canWrite: () => boolean = isCurrent,
   ) {
+    const known = snapshotFrom(initial);
     this.state = {
-      known: { ...initial, notifications: { ...initial.notifications } },
-      draft: { ...initial.notifications },
+      known,
+      draft: { ...known.notifications },
       pending: null,
       intent: undefined,
       phase: initialFailed ? 'failed' : 'idle',
@@ -95,8 +118,33 @@ export class NotificationEditor {
     this.update({ known });
     if (this.live()) this.io.confirmed?.(known.version);
   }
+  private adoptPage(page: PreferencePage, preserveDraft: boolean, phase: NotificationEditorState['phase']) {
+    const known = snapshotFrom(page);
+    const draft = preserveDraft
+      ? Object.fromEntries(
+          Object.entries(known.notifications).map(([kind, enabled]) => [
+            kind,
+            kind in this.state.draft ? this.state.draft[kind]! : enabled,
+          ]),
+        )
+      : { ...known.notifications };
+    const intent = admittedNotificationPatch(this.state.intent, page);
+    const edited = intent !== undefined || !sameNotifications(draft, known.notifications);
+    this.confirm(known);
+    this.update({
+      pending: null,
+      draft,
+      intent,
+      phase: edited ? 'review' : phase === 'conflict' ? 'idle' : phase,
+      reason: undefined,
+      failure: undefined,
+      readOrigin: null,
+    });
+  }
   async edit(kind: string, enabled: boolean, version: number) {
     if (!this.live() || !this.canWrite()) return;
+    if (!preferencePageAllows(this.state.known.page, 'edit') || !admittedOptionalKind(this.state.known.page, kind))
+      return;
     if (!(kind in this.state.draft)) return;
     if (this.state.intent === undefined && this.state.draft[kind] === enabled) return;
     this.minimumVersion(version);
@@ -116,6 +164,7 @@ export class NotificationEditor {
   }
   async restore(version: number) {
     if (!this.live() || !this.canWrite()) return;
+    if (!preferencePageAllows(this.state.known.page, 'reset')) return;
     this.minimumVersion(version);
     if (
       this.state.pending ||
@@ -146,9 +195,12 @@ export class NotificationEditor {
       this.update({ phase: 'conflict', readOrigin: null, reason: undefined, failure: undefined });
       return;
     }
+    const admitted = admittedNotificationPatch(notifications, this.state.known.page);
+    if (admitted === undefined) return;
+    if (!preferencePageAllows(this.state.known.page, admitted === null ? 'reset' : 'edit')) return;
     const input = Object.freeze({
       expectedVersion: this.state.known.version,
-      notifications: notifications === null ? null : Object.freeze({ ...notifications }),
+      notifications: admitted === null ? null : Object.freeze({ ...admitted }),
       idempotencyKey: crypto.randomUUID(),
     });
     this.update({ pending: { input, draft: { ...this.state.draft } }, phase: 'saving', failure: undefined });
@@ -174,6 +226,10 @@ export class NotificationEditor {
       return;
     }
     if (!result.ok) {
+      if (result.reason === 'conflict' && result.page) {
+        this.adoptPage(result.page, true, 'conflict');
+        return;
+      }
       if (
         result.reason === 'unavailable' ||
         result.reason === 'preparing' ||
@@ -197,16 +253,22 @@ export class NotificationEditor {
       this.update({ phase: 'uncertain', reason: 'unavailable' });
       return;
     }
-    const receipt = { notifications: result.notifications, version: result.version };
+    const receipt = { notifications: result.notifications, version: result.version, page: result.page };
     if (!recovering) {
       const edited = !sameNotifications(this.state.draft, attempt.draft);
       const stale = receipt.version < this.minimumVersion();
       // This command is confirmed, but a later shared version makes its values historical.
       this.confirm(receipt);
+      const draft = Object.fromEntries(
+        Object.entries(receipt.notifications).map(([kind, enabled]) => [
+          kind,
+          edited && kind in this.state.draft ? this.state.draft[kind]! : enabled,
+        ]),
+      );
       this.update({
         pending: null,
-        draft: edited ? this.state.draft : { ...receipt.notifications },
-        intent: stale || edited ? this.state.intent : undefined,
+        draft,
+        intent: stale || edited ? admittedNotificationPatch(this.state.intent, receipt.page) : undefined,
         phase: stale ? 'conflict' : edited ? 'review' : 'saved',
       });
       return;
@@ -226,19 +288,10 @@ export class NotificationEditor {
       this.update({ phase: 'uncertain', reason: 'unavailable' });
       return;
     }
-    this.confirm(current);
     const edited = !sameNotifications(this.state.draft, attempt.draft);
     const matches =
       current.version === receipt.version && sameNotifications(current.notifications, receipt.notifications);
-    this.update({
-      pending: null,
-      draft: edited ? this.state.draft : { ...receipt.notifications },
-      intent: matches && !edited ? undefined : this.state.intent,
-      phase: matches && !edited ? 'saved' : 'review',
-      reason: undefined,
-      failure: undefined,
-      readOrigin: null,
-    });
+    this.adoptPage(current.page, edited, matches && !edited ? 'saved' : 'review');
   }
   private async readCurrent(): Promise<Snapshot | null> {
     if (!this.live()) return null;
@@ -248,6 +301,7 @@ export class NotificationEditor {
       if (
         !page.signedIn ||
         !('preferences' in page) ||
+        !page.page ||
         !page.notifications ||
         !Number.isSafeInteger(page.preferences.version) ||
         page.preferences.version < this.minimumVersion()
@@ -266,7 +320,7 @@ export class NotificationEditor {
         });
         return null;
       }
-      return { notifications: { ...page.notifications }, version: page.preferences.version };
+      return snapshotFrom(page.page);
     } catch {
       this.update({ reason: 'unavailable', failure: undefined });
       return null;
@@ -294,14 +348,7 @@ export class NotificationEditor {
       this.update({ phase: 'failed', ...(!current ? {} : { reason: 'unavailable', failure: undefined }) });
       return;
     }
-    const edited = preserve || this.state.draft !== draftAtRead;
-    this.confirm(current);
-    this.update({
-      draft: edited ? this.state.draft : { ...current.notifications },
-      phase: edited ? 'review' : 'idle',
-      readOrigin: null,
-      reason: undefined,
-    });
+    this.adoptPage(current.page, preserve || this.state.draft !== draftAtRead, 'idle');
   }
   useCurrent() {
     if (!this.live()) return;

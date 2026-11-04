@@ -4,6 +4,7 @@ import { act, createElement, StrictMode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import * as start from '../.storybook/react-start';
+import { settingsPreferencePage } from '../src/kernel/fake/settings-notifications';
 import { NotificationEditor } from '../src/settings/notification-recovery';
 import { CollectionPrivacyEditor, CollectionPrivacyPager } from '../src/settings/collection-privacy-recovery';
 import {
@@ -37,12 +38,14 @@ const { SettingsNavigationDrafts } = await import('../src/settings/reading-navig
 const { m } = await import('../src/paraglide/messages.js');
 
 const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'original-token' };
+const notifications = { reply: true, mention: false };
 const page = {
   signedIn: true as const,
   accountId: 'alice',
   securityHref: null,
   preferences: { spoilerLevel: 2 as const, suitability: 'show' as const, version: 4 },
-  notifications: { reply: true, mention: false },
+  notifications,
+  page: settingsPreferencePage(notifications, 4),
 };
 const collection = { id: 'owned', title: 'Reading', visibility: 'private' as const, revision: 7 };
 const empty: VerificationSnapshot = {
@@ -171,7 +174,7 @@ for (const [name, transition] of Object.entries(transitions)) {
         h.owner.isCurrent,
       );
       const notification = new NotificationEditor(
-        { notifications: page.notifications, version: 4 },
+        page.page,
         preferences.notifications,
         false,
         () => confirmed,

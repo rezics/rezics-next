@@ -6,6 +6,17 @@ Applicant verification requests use the same ten-second account budget, includin
 
 **Decision:** Private verification status uses owner verification authority for request and withdraw advice; a missing authority handle returns the latest request with empty viewerActions and never treats that read as no request.
 
+## Notifications
+
+The signed-in Settings notifications section reads the Access preference `page`: current optional kinds, compulsory
+notices as explained policy, honest defaults, and admitted `edit`/`reset` actions with the current version. The
+catalogue is the authority; the page does not invent kinds, title-case unknown keys, or promise email or push. Watch
+subscriptions stay at `/settings#watches`. Conflict reloads the current page and version; a still-valid draft needs
+review and never replays a removed or compulsory kind. A missing page renders unavailable rather than default-enabled
+values. Session change clears private policy and draft. Uncertain saves keep the original patch and key.
+
+**Decision:** A successful self-read advertises edit and reset; PATCH still checks `account:update` at command time.
+
 ## Watches
 
 `/settings#watches` is the existing private destination for a signed-in viewer. It reads one replaceable page for the selected `thread` or `board` kind through the generated `accounts({accountId}).watches.get` operation, with the exact opaque cursor and a limit of 20. The page supplies the current viewer, page-level remove advice and the command identity for each row. Available rows link through existing localized thread or board routes. A withheld row omits target identity, title and destination; removal still uses the owned subscription command when advice is available.

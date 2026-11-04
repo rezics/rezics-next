@@ -3,6 +3,7 @@ import { useEffect, useState, type ComponentProps } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { notificationName } from '../settings/notifications';
+import { settingsPreferencePage } from '../kernel/fake/settings-notifications';
 import type {
   NotificationChange,
   NotificationPreferences,
@@ -34,7 +35,12 @@ function gate() {
 /** Local scheduling only; the page still owns its session guards, editors and shared version. */
 function controlledPreferences() {
   let preferences: ReadingPreferences = { spoilerLevel: 0, suitability: 'blur', version: 1 };
-  let notifications: NotificationPreferences = { reply: true, mention: true, weekly_digest: true };
+  let notifications: NotificationPreferences = {
+    reply: true,
+    mention: true,
+    thread_watch: true,
+    board_activity: true,
+  };
   let loseNext = true;
   let heldRead: ReturnType<typeof gate> | undefined;
   let heldWrite: ReturnType<typeof gate> | undefined;
@@ -48,6 +54,7 @@ function controlledPreferences() {
     securityHref: null,
     preferences: { ...preferences },
     notifications: { ...notifications },
+    page: settingsPreferencePage(notifications, preferences.version),
   });
   const reads: ReturnType<typeof current>[] = [];
   const io: PreferenceIO = {
@@ -74,10 +81,15 @@ function controlledPreferences() {
       commands.push({ input, key: idempotencyKey, body: JSON.stringify(body), token });
       const receipt = receipts.get(idempotencyKey);
       if (receipt) return receipt;
-      if (input.expectedVersion !== preferences.version) return { ok: false, reason: 'conflict' };
+      if (input.expectedVersion !== preferences.version)
+        return {
+          ok: false,
+          reason: 'conflict',
+          page: settingsPreferencePage(notifications, preferences.version),
+        };
       notifications =
         input.notifications === null
-          ? { reply: true, mention: true, weekly_digest: true }
+          ? { reply: true, mention: true, thread_watch: true, board_activity: true }
           : {
               ...notifications,
               ...Object.fromEntries(
@@ -91,6 +103,7 @@ function controlledPreferences() {
         ok: true,
         notifications: { ...notifications },
         version: preferences.version,
+        page: settingsPreferencePage(notifications, preferences.version),
       };
       receipts.set(idempotencyKey, result);
       const held = heldWrite;
@@ -164,7 +177,7 @@ export const SharedVersionRecovery: Story = {
     const fixture = compositions.get(canvasElement.querySelector('[data-notification-version-story]')!)!;
     const reply = () => notices.getByRole('switch', { name: m.settings_notification_reply() });
     const mention = () => notices.getByRole('switch', { name: m.settings_notification_mention() });
-    const digest = () => notices.getByRole('switch', { name: notificationName('weekly_digest') });
+    const digest = () => notices.getByRole('switch', { name: notificationName('thread_watch') });
     const reload = () => notices.getByRole('button', { name: m.settings_reload() });
     const save = () => notices.getByRole('button', { name: m.settings_notifications_save_draft() });
     const retry = () => notices.getByRole('button', { name: m.settings_notifications_retry_original() });
@@ -211,7 +224,7 @@ export const SharedVersionRecovery: Story = {
     const baseline = fixture.current().preferences.version;
     await versionFields(baseline);
 
-    fixture.concurrent({ reply: true, weekly_digest: false });
+    fixture.concurrent({ reply: true, thread_watch: false });
     await advanceReading(1);
     const writesBefore = fixture.commands.length;
     await userEvent.click(save());
@@ -242,7 +255,7 @@ export const SharedVersionRecovery: Story = {
     await versionFields(reviewedVersion);
     const review = notices.getByText(m.settings_notifications_review_title()).closest('[role="alert"]')!;
     await expect(review).toHaveTextContent(`${m.settings_notification_reply()}: ${m.settings_notifications_on()}`);
-    await expect(review).toHaveTextContent(`${notificationName('weekly_digest')}: ${m.settings_notifications_off()}`);
+    await expect(review).toHaveTextContent(`${notificationName('thread_watch')}: ${m.settings_notifications_off()}`);
     await expect(digest()).toBeChecked(); // Local intent is independent of the current-value list.
 
     // A definite older write receipt clears its command, but must require another current read.
@@ -251,14 +264,14 @@ export const SharedVersionRecovery: Story = {
     const deliberate = fixture.commands.at(-1)!;
     await expect(deliberate.input).toEqual({
       expectedVersion: reviewedVersion,
-      notifications: { reply: false, mention: false, weekly_digest: true },
+      notifications: { reply: false, mention: false, thread_watch: true },
       idempotencyKey: deliberate.key,
     });
     await expect(deliberate.key).not.toBe(original.key);
     const receiptVersion = fixture.current().preferences.version;
     try {
       await notices.findByText(m.settings_saving());
-      fixture.concurrent({ weekly_digest: false });
+      fixture.concurrent({ thread_watch: false });
       await advanceReading(0);
     } finally {
       releaseWrite();
@@ -311,7 +324,7 @@ export const SharedVersionRecovery: Story = {
     await notices.findByText(m.settings_saved());
     await expect(fixture.commands.at(-1)!.input).toMatchObject({
       expectedVersion: finalBaseline,
-      notifications: { reply: true, mention: true, weekly_digest: false },
+      notifications: { reply: true, mention: true, thread_watch: false },
     });
     await expect(fixture.commands.at(-1)!.key).not.toBe(uncertain.key);
     for (const command of fixture.commands) await expect(command.token).toBe('story-csrf-token');

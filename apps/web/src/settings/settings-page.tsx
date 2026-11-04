@@ -278,10 +278,10 @@ function SettingsSections({
     notifications:
       'preferences' in page ? (
         <section id="notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-6">
-          {page.notifications ? (
+          {page.page && page.notifications ? (
             <NotificationsCard
               key={csrfToken}
-              initial={page.notifications}
+              initial={page.page}
               version={version}
               csrfToken={csrfToken}
               io={io.notifications}

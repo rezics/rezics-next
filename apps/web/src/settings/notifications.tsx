@@ -2,7 +2,7 @@ import { useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from '
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
-import { Field, FieldContent, FieldGroup, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { WatchNotificationGuide } from './watch-notification-guide';
@@ -12,7 +12,8 @@ import {
   notificationsNeedNavigationDecision,
   type NotificationEditorIO,
 } from './notification-recovery';
-import type { NotificationPreferences } from './preferences';
+import type { PreferencePage } from './preferences';
+import { preferencePageAllows } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';
 import { useSettingsNavigationDraft } from './reading-navigation';
 
@@ -23,12 +24,10 @@ const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whit
 export function notificationName(kind: string): string {
   if (kind === 'reply') return m.settings_notification_reply();
   if (kind === 'mention') return m.settings_notification_mention();
-  if (kind === 'board_activity') return m.inbox_kind_board_activity();
-  return kind
-    .split(/[_-]+/)
-    .filter(Boolean)
-    .map((word) => word[0]!.toLocaleUpperCase() + word.slice(1))
-    .join(' ');
+  if (kind === 'thread_watch') return m.settings_notification_thread_watch();
+  if (kind === 'board_activity') return m.settings_notification_board_activity();
+  if (kind === 'moderation_decision') return m.settings_notification_moderation_decision();
+  return kind;
 }
 
 export function NotificationsCard({
@@ -40,7 +39,7 @@ export function NotificationsCard({
   onVersionChange,
   io,
 }: {
-  initial: NotificationPreferences;
+  initial: PreferencePage;
   version: number;
   csrfToken: string | null;
   action: string;
@@ -58,7 +57,7 @@ export function NotificationsCard({
   const [editor] = useState(
     () =>
       new NotificationEditor(
-        { notifications: initial, version },
+        initial,
         io ?? {
           save: (data) => saveNotifications({ data, headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
           read: () => readSettingsPage(),
@@ -93,7 +92,10 @@ export function NotificationsCard({
   const readFailed = state.readOrigin !== null && (state.phase === 'failed' || state.phase === 'uncertain');
   const needsReload = !readFailed && (state.phase === 'conflict' || state.phase === 'failed');
   const localEdit = !!state.pending || readFailed || ['conflict', 'review', 'reloading'].includes(state.phase);
-  const rowDisabled = disabled || (waiting && !localEdit);
+  const rowDisabled = disabled || (waiting && !localEdit) || !preferencePageAllows(state.known.page, 'edit');
+  const restoreDisabled =
+    waiting || disabled || !!state.pending || state.phase === 'conflict' || readFailed || !preferencePageAllows(state.known.page, 'reset');
+  const compulsory = state.known.page.kinds.filter((entry) => !entry.optional);
   const waitDescription = waiting ? `${ids}-retry-wait` : undefined;
 
   return (
@@ -118,6 +120,7 @@ export function NotificationsCard({
                 const id = `${ids}-${encodeURIComponent(kind)}`;
                 const formId = `${id}-form`;
                 const name = notificationName(kind);
+                const policy = state.known.page.kinds.find((entry) => entry.kind === kind);
                 return (
                   <form
                     key={kind}
@@ -140,6 +143,13 @@ export function NotificationsCard({
                       <Field orientation="horizontal" className="min-h-11">
                         <FieldContent className="min-w-0">
                           <FieldTitle className="max-w-full wrap-anywhere">{name}</FieldTitle>
+                          {policy ? (
+                            <FieldDescription>
+                              {policy.default
+                                ? m.settings_notifications_default_on()
+                                : m.settings_notifications_default_off()}
+                            </FieldDescription>
+                          ) : null}
                         </FieldContent>
                         {/* Only one control is mounted; the shared Switch owns its form input after hydration. */}
                         {hydrated ? (
@@ -210,7 +220,7 @@ export function NotificationsCard({
                   type="submit"
                   form={`${ids}-restore-form`}
                   variant="outline"
-                  disabled={waiting || disabled || !!state.pending || state.phase === 'conflict' || readFailed}
+                  disabled={restoreDisabled}
                   aria-describedby={waitDescription}
                 >
                   {m.settings_notifications_restore()}
@@ -380,7 +390,19 @@ export function NotificationsCard({
               {m.settings_reload()}
             </Button>
           ) : null}
-          <p className="text-sm text-muted-foreground">{m.settings_notifications_mandatory()}</p>
+          {compulsory.length > 0 ? (
+            <aside className="space-y-2 text-sm text-muted-foreground" aria-label={m.settings_notifications_policy_heading()}>
+              <h3 className="font-medium text-foreground">{m.settings_notifications_policy_heading()}</h3>
+              <ul className="space-y-1">
+                {compulsory.map((entry) => (
+                  <li key={entry.kind}>{notificationName(entry.kind)}</li>
+                ))}
+              </ul>
+              <p>{m.settings_notifications_mandatory()}</p>
+            </aside>
+          ) : (
+            <p className="text-sm text-muted-foreground">{m.settings_notifications_mandatory()}</p>
+          )}
         </div>
       </CardContent>
     </Card>
