@@ -23,7 +23,6 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     href: '/moderation/reports',
     match: 'exact',
     signedIn: true,
-    operation: 'report.own_history',
     label: ({ locale }) => m.reporter_history_heading({}, { locale }),
     icon: Flag,
   },

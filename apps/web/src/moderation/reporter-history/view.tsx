@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { operationIsAdmitted } from '../../kernel/exposure';
 import { viewerExposureLifetime, viewerExposureQuery } from '../../kernel/viewer-exposure';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
@@ -53,11 +52,8 @@ function useReporterHistoryAccess(): Access {
   if (session.state !== 'signed-in') return { state: 'denied', identity };
   if (exposure.status === 'error') return { state: 'unavailable', identity };
   if (exposure.status !== 'success' || !observation) return { state: 'loading', identity };
-  const admitted =
-    observation.subject === session.subject &&
-    exposure.data?.subject === session.subject &&
-    operationIsAdmitted('report.own_history', exposure.data.admitted);
-  return { state: admitted ? 'ready' : 'denied', identity };
+  const currentSession = observation.subject === session.subject && exposure.data?.subject === session.subject;
+  return { state: currentSession ? 'ready' : 'denied', identity };
 }
 
 export function ReporterHistoryCurrent(props: {

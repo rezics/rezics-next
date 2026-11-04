@@ -1,28 +1,10 @@
-/** Minimal public-wire consumer seam for report.own_history, pending shared publication.
- * This module deliberately imports no private producer or generated declaration. */
-export type ReporterHistoryQuery = Readonly<{ cursor?: string; reportId?: string }>;
-type Action = Readonly<{ method: 'GET'; href: string }>;
-export type ReporterHistoryEntry = Readonly<{
-  id: string;
-  target: { kind: 'board' | 'thread' | 'post' | 'subject' | 'realm' | 'space'; id: string };
-  revisionId: string | null;
-  reason: string;
-  evidence: string | null;
-  createdAt: string;
-  outcome: 'actioned' | 'dismissed' | null;
-  resolvedAt: string | null;
-  targetSummary: { state: 'available'; label: string | null; href: string } | { state: 'unavailable' };
-  viewer: { ownsReport: true };
-  actions: { open: Action; follow: Action; target: Action | null };
-}>;
-type PageFields = Readonly<{
-  entries: readonly ReporterHistoryEntry[];
-  selectedReportId: string | null;
-  nextCursor: string | null;
-  retry: { cursor: string | null };
-  viewer: { kind: 'reporter' };
-}>;
-export type ReporterHistoryPage = PageFields & ({ state: 'ready' } | { state: 'preparing' });
+import type { Kernel } from '@rezics/client';
+
+type ReporterHistoryRoute = Kernel['~Routes']['v1']['reports']['me']['get'];
+export type ReporterHistoryQuery = ReporterHistoryRoute['query'];
+export type ReporterHistoryPage = ReporterHistoryRoute['response'][200];
+export type ReporterHistoryEntry = ReporterHistoryPage['entries'][number];
+type Action = ReporterHistoryEntry['actions']['open'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function invalid(): never {
   throw new Error('Invalid own report history response');

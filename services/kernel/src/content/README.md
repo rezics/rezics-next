@@ -366,12 +366,13 @@ A changed-outcome page returns 503 with existing problem `code: "dependency_unav
 An incomplete cut returns the same page envelope with `state: "preparing"`, no raw entries or advanced
 cursor, and an optional permitted exact selection. It must not be presented as a complete empty inventory.
 
-No current Web consumer/head is integrated with this route. The existing Web report owner retains the
-interface. Phone/desktop inspection, a real follow/open action and failed-page recovery remain consumer
-acceptance after integration. Realm summaries use current Realm reads and link to `/v1/realms/{id}`; Space
-summaries use the current Space reader and link to `/v1/spaces/{id}`. Post labels use the compact native
-header disclosure, including every readable reply ancestor, without loading post bodies solely for a label.
-Connected installation/race/three-scale evidence remains controller acceptance.
+The Web Reports route consumes this endpoint through the installed generated client, retains one replacement page,
+confirms an exact selected report and returns through its fixed localized status link. The native page remains
+bearer-authenticated, account-owned and private/no-store; no viewer operation grant is required. Realm summaries use
+current Realm reads and link to `/v1/realms/{id}`; Space summaries use the current Space reader and link to
+`/v1/spaces/{id}`. Post labels use the compact native header disclosure, including every readable reply ancestor,
+without loading post bodies solely for a label. Mounted native execution, installation/race/three-scale evidence and
+phone/desktop consumer review remain controller acceptance.
 
 The installed Community target variants use the same closed entry shape as the populated example above:
 

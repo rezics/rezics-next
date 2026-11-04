@@ -56,46 +56,38 @@ test('exact selection and concealed targets remain independent from sparse conti
     expect(() => reporterHistoryPage(invalid, { cursor: 'original', reportId: id })).toThrow();
 });
 
-test('the local consumer seam sends one own-endpoint read with exact opaque operands and native provenance', async () => {
-  const calls: Array<{ url: string; init?: RequestInit }> = [];
-  const send = (async (url: string | URL | Request, init?: RequestInit) => {
-    calls.push({ url: String(url), init });
-    return new Response(JSON.stringify(page), { headers: { 'rezics-session-token': 'opaque-anchor' } });
-  }) as typeof fetch;
-  const result = await loadReporterHistory(
-    'https://kernel.test',
-    'Bearer private',
-    { cursor: 'original', reportId: id },
-    send,
-  );
+test('the generated own-history callable preserves exact operands, no-store reads and opaque native provenance', async () => {
+  const calls: Array<{ query: unknown; fetch?: unknown }> = [];
+  const success = {
+    data: page,
+    error: null,
+    response: new Response(null, { headers: { 'rezics-session-token': 'opaque-anchor' } }),
+    status: 200,
+  };
+  const ownHistoryClient = (result: unknown) => {
+    const reports = Object.assign(() => undefined, {
+      me: {
+        get: async (input: { query: unknown; fetch?: unknown }) => {
+          calls.push(input);
+          return result;
+        },
+      },
+    });
+    return { reports } as unknown as Parameters<typeof loadReporterHistory>[0];
+  };
+  const result = await loadReporterHistory(ownHistoryClient(success), { cursor: 'original', reportId: id });
   expect(result.state).toBe('loaded');
   expect(calls).toHaveLength(1);
-  const url = new URL(calls[0]!.url);
-  expect(url.pathname).toBe('/v1/reports/me');
-  expect([...url.searchParams]).toEqual([
-    ['cursor', 'original'],
-    ['reportId', id],
-  ]);
-  expect(calls[0]!.init).toMatchObject({ cache: 'no-store', headers: { authorization: 'Bearer private' } });
+  expect(calls[0]!.query).toEqual({ cursor: 'original', reportId: id });
+  expect(calls[0]!.fetch).toMatchObject({ cache: 'no-store' });
   expect(JSON.stringify(result)).not.toContain('opaque-anchor');
-  expect(
-    (
-      await loadReporterHistory(
-        'https://kernel.test',
-        'Bearer private',
-        {},
-        (async () => new Response('{}', { status: 403 })) as typeof fetch,
-      )
-    ).state,
-  ).toBe('denied');
-  expect(
-    (
-      await loadReporterHistory(
-        'https://kernel.test',
-        'Bearer private',
-        {},
-        (async () => new Response(JSON.stringify({ code: 'invalid_cursor' }), { status: 400 })) as typeof fetch,
-      )
-    ).state,
-  ).toBe('expired');
+  const denied = ownHistoryClient({ data: undefined, error: { value: {} }, response: new Response(null), status: 403 });
+  expect((await loadReporterHistory(denied, {})).state).toBe('denied');
+  const expired = ownHistoryClient({
+    data: undefined,
+    error: { value: { code: 'invalid_cursor' } },
+    response: new Response(null),
+    status: 400,
+  });
+  expect((await loadReporterHistory(expired, {})).state).toBe('expired');
 });
