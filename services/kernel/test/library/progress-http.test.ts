@@ -44,14 +44,16 @@ async function request(
   path: string,
   body?: unknown,
   requestKey?: string,
+  context: { origin?: string; language?: string } = {},
 ) {
   const headers: Record<string, string> = {};
   const account = as === 'owner' ? owner : as === 'other' ? other : as === 'suspended' ? suspended : null;
   if (account) headers.authorization = `Bearer ${credentials.get(account)!}`;
   if (method !== 'GET') headers['idempotency-key'] = requestKey ?? key();
   if (body !== undefined) headers['content-type'] = 'application/json';
+  if (context.language !== undefined) headers['accept-language'] = context.language;
   const response = await app.handle(
-    new Request(`https://kernel.test${path}`, {
+    new Request(`${context.origin ?? 'https://kernel.test'}${path}`, {
       method,
       headers,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -198,6 +200,7 @@ test('progress HTTP mounts each reading progress operation with its gate exposur
   const operationIds = [
     'progress_session.create',
     'progress_session.list',
+    'progress_session.discovery',
     'progress_session.read',
     'progress_session.record',
     'progress_session.complete',
@@ -566,4 +569,134 @@ test('a record request with one added id and one hundred removed ids answers 400
   expect(result.response.status).toBe(400);
   expect(result.body.code).toBe('invalid_request');
   expect(await authoritativeProgressRows()).toEqual(before);
+});
+
+test('owner discovery pages exact occurrences across subjects and rejects stale or foreign cursors', async () => {
+  const firstSubject = await createSubject();
+  const secondSubject = await createSubject();
+  const first = await start(firstSubject, 'scalar_amount', 'minute');
+  const repeat = await start(firstSubject, 'cursor_position', 'page');
+  const otherSubject = await start(secondSubject, 'completed_units', 'episode');
+  const completed = await request('owner', 'POST', `/v1/progressSessions/${repeat.id}:complete`, {
+    revision: repeat.revision,
+  });
+  expect(completed.response.status).toBe(200);
+
+  const occurrences: Record<string, any>[] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await request(
+      'owner',
+      'GET',
+      `/v1/progressSessionDiscovery?limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+    );
+    expect(result.response.status).toBe(200);
+    expect(result.body.viewerState).toBe('signed_in');
+    occurrences.push(...result.body.progressSessions);
+    cursor = result.body.next ?? undefined;
+  } while (cursor);
+
+  expect(occurrences.map((row) => row.id)).toHaveLength(3);
+  expect(new Set(occurrences.map((row) => row.id))).toEqual(new Set([first.id, repeat.id, otherSubject.id]));
+  expect(occurrences.find((row) => row.id === repeat.id)?.allowedActions.complete).toEqual({
+    allowed: false,
+    reason: 'session_not_active',
+  });
+  const subjectMode = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?subjectId=${firstSubject}&mode=cursor_position`,
+  );
+  expect(subjectMode.response.status).toBe(200);
+  expect(subjectMode.body.progressSessions.map((row: Record<string, unknown>) => row.id)).toEqual([repeat.id]);
+  const statePage = await request('owner', 'GET', '/v1/progressSessionDiscovery?state=completed');
+  expect(statePage.body.progressSessions.map((row: Record<string, unknown>) => row.id)).toEqual([repeat.id]);
+  const profileEmpty = await request(
+    'owner',
+    'GET',
+    '/v1/progressSessionDiscovery?profileId=00000000-0000-4000-8000-000000000099',
+  );
+  expect(profileEmpty).toMatchObject({ response: { status: 200 }, body: { progressSessions: [], next: null } });
+  const retainedPin = await db.admin.query<{ profileId: string }>(
+    'SELECT library_profile_pin ->> \'profileId\' AS "profileId" FROM library.progress_session WHERE route=$1 AND session_id=$2',
+    [accountRoute, first.id],
+  );
+  expect(retainedPin.rows[0]?.profileId).toBeString();
+  const byRetainedProfile = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?profileId=${encodeURIComponent(retainedPin.rows[0]!.profileId)}`,
+  );
+  expect(byRetainedProfile.response.status).toBe(200);
+  expect(byRetainedProfile.body.progressSessions.map((row: Record<string, unknown>) => row.id)).toContain(first.id);
+
+  const firstPage = await request('owner', 'GET', '/v1/progressSessionDiscovery?limit=1');
+  expect(typeof firstPage.body.next).toBe('string');
+  const changedPredicate = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&mode=cursor_position&cursor=${encodeURIComponent(firstPage.body.next)}`,
+  );
+  expect(changedPredicate.response.status).toBe(400);
+  expect(changedPredicate.body.code).toBe('invalid_cursor');
+  const changedLanguage = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+    undefined,
+    undefined,
+    { language: 'ja' },
+  );
+  expect(changedLanguage.response.status).toBe(400);
+  const changedOrigin = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+    undefined,
+    undefined,
+    { origin: 'https://other.test' },
+  );
+  expect(changedOrigin.response.status).toBe(400);
+  const foreign = await request(
+    'other',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+  );
+  expect(foreign.response.status).toBe(400);
+  expect(foreign.body.code).toBe('invalid_cursor');
+
+  await start(firstSubject, 'scalar_amount', 'chapter');
+  const membershipChanged = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+  );
+  expect(membershipChanged.response.status).toBe(409);
+  expect(membershipChanged.body.code).toBe('stale_cursor');
+  const deletionPage = await request('owner', 'GET', '/v1/progressSessionDiscovery?limit=1');
+  await db.admin.query('DELETE FROM library.progress_session WHERE route=$1 AND session_id=$2', [
+    accountRoute,
+    deletionPage.body.progressSessions[0].id,
+  ]);
+  const deletedAnchor = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(deletionPage.body.next)}`,
+  );
+  expect(deletedAnchor.response.status).toBe(409);
+  expect(deletedAnchor.body.code).toBe('stale_cursor');
+
+  const active = occurrences.find((row) => row.id === otherSubject.id)!;
+  const retired = await request('owner', 'POST', `/v1/progressSessions/${active.id}:retire`, {
+    revision: active.revision,
+  });
+  expect(retired.response.status).toBe(200);
+  const withoutRetired = await request('owner', 'GET', '/v1/progressSessionDiscovery');
+  expect(withoutRetired.body.progressSessions.map((row: Record<string, unknown>) => row.id)).not.toContain(active.id);
+  await db.admin.query(
+    "UPDATE library.progress_session SET state='active', revision=revision+1 WHERE route=$1 AND session_id=$2",
+    [accountRoute, active.id],
+  );
+  const restored = await request('owner', 'GET', '/v1/progressSessionDiscovery?mode=completed_units');
+  expect(restored.body.progressSessions.map((row: Record<string, unknown>) => row.id)).toContain(active.id);
 });

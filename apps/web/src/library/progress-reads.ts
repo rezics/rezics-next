@@ -1,5 +1,4 @@
 import { progressDecimalPattern as decimal } from './progress-decimal-input';
-import { isNotFound } from '@tanstack/react-router';
 import { progressAddressIssue, ProgressAddressError, type ProgressAddressField } from './progress-address';
 import type { ProgressChoices, ProgressInputRules as ProfileProgressInputRules } from './progress-profile';
 import type { ProgressLabelInput } from './progress-label';
@@ -9,7 +8,6 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import {
   libraryFullQuery,
-  libraryListQuery,
   readLibraryResult,
   StaleCursorError,
   subjectOf as presentSubject,
@@ -32,6 +30,9 @@ export type ProgressState = 'active' | 'completed' | 'abandoned';
 export type NativeProgressSession = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['progressSessions']>['get']>>['data']
 >['progressSession'];
+export type NativeProgressDiscovery = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['progressSessionDiscovery']>['get']>>['data']
+>;
 /** The current page has no retired-session state; never relabel native retirement as active. */
 export function supportedProgressState(state: NativeProgressSession['state']): ProgressState {
   if (state === 'retired') throw new Error('Retired progress sessions are unavailable in this consumer');
@@ -212,12 +213,24 @@ export type ProgressSessionCore = Pick<
   subject: LibrarySubject | null;
   versionSubject: LibrarySubject | null;
   measures?: ProgressMeasureView[];
+  allowedActions?: {
+    open: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+    edit: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+    complete: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+    abandon: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+  };
 };
 
 export type ProgressIndex = {
   signedIn: boolean;
+  viewerState?: 'signed_in' | 'signed_out' | 'account_retired' | 'unavailable';
   addressIssue?: ProgressAddressField;
   subjectId: string;
+  state?: string;
+  mode?: string;
+  profileId?: string;
+  emptyKind?: 'owner-empty' | 'filtered-empty';
+  staleContinuation?: boolean;
   selectedSubject: LibrarySubject | null;
   progressChoices?: ProgressChoices;
   choicesUnavailable?: boolean;
@@ -490,13 +503,53 @@ async function bearer(request: Request, env: Partial<SessionEnv>): Promise<strin
   return viewerCredential(request);
 }
 
-async function readList(client: KernelClient, subjectId: string, authorization: string, cursor?: string) {
-  const result = await client.progressSessions.get({
-    query: { ...libraryListQuery(cursor), subjectId },
+function discoveryState(value: string | undefined): 'active' | 'completed' | 'abandoned' | undefined {
+  if (value === 'active' || value === 'completed' || value === 'abandoned') return value;
+  return undefined;
+}
+
+function discoveryMode(value: string | undefined): ProgressMode | undefined {
+  if (value === 'scalar_amount' || value === 'cursor_position' || value === 'completed_units') return value;
+  return undefined;
+}
+
+async function readDiscovery(
+  client: KernelClient,
+  filter: { subjectId?: string; state?: string; mode?: string; profileId?: string },
+  authorization: string,
+  cursor?: string,
+): Promise<NativeProgressDiscovery> {
+  const state = discoveryState(filter.state);
+  const mode = discoveryMode(filter.mode);
+  const result = await client.progressSessionDiscovery.get({
+    query: {
+      limit: 20,
+      ...(filter.subjectId === undefined ? {} : { subjectId: filter.subjectId }),
+      ...(state === undefined ? {} : { state }),
+      ...(mode === undefined ? {} : { mode }),
+      ...(filter.profileId === undefined ? {} : { profileId: filter.profileId }),
+      ...(cursor === undefined ? {} : { cursor }),
+    },
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  return readAddressData<{ progressSessions: RawSession[]; next: string | null }>(result, 'cursor');
+  const status = callStatus(result);
+  const problem = callBody(result.error);
+  if (status === 401) throw new ProgressViewerReadError('signed_out');
+  if (status === 403) {
+    const code = typeof problem === 'object' && problem !== null && 'code' in problem ? problem.code : undefined;
+    throw new ProgressViewerReadError(
+      code === 'account_retired' || code === 'account_suspended' ? 'account_retired' : 'unavailable',
+    );
+  }
+  if (status === 404 || status === 503) throw new ProgressViewerReadError('unavailable');
+  return readAddressData<NativeProgressDiscovery>(result, 'cursor');
+}
+
+class ProgressViewerReadError extends Error {
+  constructor(readonly state: 'signed_out' | 'account_retired' | 'unavailable') {
+    super('Progress discovery viewer is unavailable');
+  }
 }
 
 /** Resolve the one subject named by the page when no listed session embeds it. */
@@ -562,52 +615,97 @@ export async function loadProgressIndex(
   client: KernelClient,
   request: Request,
   env: Partial<SessionEnv>,
-  input: { subjectId?: string; cursor?: string },
+  input: { subjectId?: string; state?: string; mode?: string; profileId?: string; cursor?: string },
 ): Promise<ProgressIndex> {
   const authorization = await bearer(request, env);
   const idempotencyKey = crypto.randomUUID();
   const subjectId = input.subjectId ?? '';
   const addressIssue = progressAddressIssue(input);
-  if (!authorization || addressIssue || !subjectId) {
+  if (!authorization || addressIssue) {
     return {
       signedIn: authorization !== null,
+      viewerState: addressIssue ? 'signed_in' : authorization ? 'unavailable' : 'signed_out',
       ...(addressIssue ? { addressIssue } : {}),
       subjectId,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
       selectedSubject: null,
       sessions: [],
       next: null,
+      ...(addressIssue ? { emptyKind: 'filtered-empty' as const } : {}),
       idempotencyKey,
     };
   }
-  const load = (cursor?: string) => readList(client, subjectId, authorization, cursor);
-  let page: { progressSessions: RawSession[]; next: string | null };
+  const filter = {
+    ...(subjectId ? { subjectId } : {}),
+    ...(input.state === undefined ? {} : { state: input.state }),
+    ...(input.mode === undefined ? {} : { mode: input.mode }),
+    ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+  };
+  let page: NativeProgressDiscovery;
   try {
-    page = await load(input.cursor);
+    page = await readDiscovery(client, filter, authorization, input.cursor);
   } catch (error) {
-    if (error instanceof ProgressAddressError || isNotFound(error))
+    if (error instanceof ProgressAddressError)
       return {
         signedIn: true,
         subjectId,
+        ...(input.state === undefined ? {} : { state: input.state }),
+        ...(input.mode === undefined ? {} : { mode: input.mode }),
+        ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
         addressIssue: error instanceof ProgressAddressError ? error.field : 'subjectId',
+        selectedSubject: null,
+        sessions: [],
+        next: null,
+        emptyKind: subjectId || input.state || input.mode || input.profileId ? 'filtered-empty' : 'owner-empty',
+        idempotencyKey,
+      };
+    if (error instanceof ProgressViewerReadError)
+      return {
+        signedIn: error.state !== 'signed_out',
+        viewerState: error.state,
+        subjectId,
+        ...(input.state === undefined ? {} : { state: input.state }),
+        ...(input.mode === undefined ? {} : { mode: input.mode }),
+        ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
         selectedSubject: null,
         sessions: [],
         next: null,
         idempotencyKey,
       };
-    if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
-    page = await load();
+    if (!(error instanceof StaleCursorError)) throw error;
+    return {
+      signedIn: true,
+      subjectId,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+      selectedSubject: subjectId ? await readSelectedSubject(client, subjectId, authorization) : null,
+      sessions: [],
+      next: null,
+      staleContinuation: true,
+      idempotencyKey,
+    };
   }
-  const sessions = page.progressSessions.map((session) => presentSession(session));
+  const sessions = page.progressSessions.map((session) => ({
+    ...presentSession(session, session.presentation),
+    allowedActions: session.allowedActions,
+  }));
   const selectedSubject =
     sessions.find((session) => session.subjectId === subjectId)?.subject ??
-    (await readSelectedSubject(client, subjectId, authorization));
+    (subjectId ? await readSelectedSubject(client, subjectId, authorization) : null);
   return {
     signedIn: true,
+    viewerState: page.viewerState,
     subjectId,
+    ...(input.state === undefined ? {} : { state: input.state }),
+    ...(input.mode === undefined ? {} : { mode: input.mode }),
+    ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
     selectedSubject,
-    ...(!selectedSubject && !sessions.length ? { addressIssue: 'subjectId' as const } : {}),
     sessions,
     next: page.next,
+    ...(sessions.length ? {} : { emptyKind: subjectId || input.state || input.mode || input.profileId ? 'filtered-empty' as const : 'owner-empty' as const }),
     idempotencyKey,
   };
 }

@@ -22,13 +22,18 @@ export function ProgressAddressCorrection({
   const router = useRouter();
   const labels = {
     subjectId: m.library_progress_address_subject(),
+    state: m.library_progress_discovery_state_filter(),
+    mode: m.library_progress_discovery_mode_filter(),
+    profileId: m.library_progress_discovery_profile_filter(),
     cursor: m.library_progress_address_cursor(),
     id: m.library_progress_address_session(),
     changes: m.library_progress_address_changes(),
     units: m.library_progress_address_units(),
     logs: m.library_progress_address_logs(),
   };
-  const fields: ProgressAddressField[] = 'id' in address ? ['id', 'changes', 'units', 'logs'] : ['subjectId', 'cursor'];
+  const fields: ProgressAddressField[] = 'id' in address
+    ? ['id', 'changes', 'units', 'logs']
+    : ['subjectId', 'state', 'mode', 'profileId', 'cursor'];
   const navigate = (field: ProgressAddressField, replacement?: string) => {
     const next = correctProgressAddress(address, field, replacement);
     if ('id' in next) {
