@@ -254,6 +254,8 @@ old identity, preview, image and destination. Reader/session/source retirement s
 
 ### Native handoffs
 
+Decision: signed-in Home Thread/Post reactions require native per-row action advice; targets, counts and viewer selection do not grant permission, and Home does not read permissions per card.
+
 - Content supplies author and excerpt on its installed thread/post summary. The current FeedAuthor has no deletion
   discriminator: web cannot distinguish deleted from unknown when no identity is delivered.
 - Semantic summaries supply kind, selected label and cover, but no work credits, publication time, excerpt, ratings

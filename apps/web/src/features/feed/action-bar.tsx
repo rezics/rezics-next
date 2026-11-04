@@ -33,7 +33,12 @@ import type { FeedItem, FeedPage } from '../pages/home-feed-read';
 import { homeFeedDestination, homeFeedTitle } from '../pages/home-feed-destination';
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
-import { homeFeedReaction, homeFeedSubjectReactionProjection } from './home-feed-reaction';
+import {
+  homeFeedReaction,
+  homeFeedReactionStatus,
+  homeFeedSubjectReactionProjection,
+  type HomeFeedReactionStatus,
+} from './home-feed-reaction';
 import { admittedFeedWorkId } from './home-work-library/contract';
 import { HomeWorkLibraryAction } from './home-work-library/view';
 import { HomePublicOwnerActions } from './home-public-owner/view';
@@ -49,6 +54,7 @@ export type FeedActionBarProps = {
   replyCount?: number | Readonly<{ kind: 'exact' | 'lower-bound'; value: number }> | undefined;
   /** Existing reaction engine presentation; feed cards keep their vote layout unless a caller opts in. */
   reactionPresentation?: 'chips' | 'vote' | 'vote-plain' | undefined;
+  reactionStatus?: HomeFeedReactionStatus | undefined;
   plain?: boolean | undefined;
   /** Detail pages retain the existing reply-intent owner. */
   reply?: { onReply(): void; disabled?: boolean } | { href: string } | undefined;
@@ -102,6 +108,7 @@ function subjectReactionFallback(
   const viewerKnown = current() && viewer?.state === 'available';
   const selected = viewerKnown ? viewer.kind : undefined;
   const signIn = `/${locale}/auth/sign-in?return_to=${encodeURIComponent(href ?? `/${locale}/`)}`;
+  const signInAllowed = !signedIn && source?.action === 'sign_in' && current();
   const format = (kind: string) => {
     const raw = knownValues?.[kind];
     const count =
@@ -133,7 +140,7 @@ function subjectReactionFallback(
               </span>
             </>
           );
-          return signedIn || !href ? (
+          return signedIn || !href || !signInAllowed ? (
             <Button
               key={kind}
               type="button"
@@ -223,6 +230,7 @@ export function HomeFeedActions({
     reactionsAsOf,
     hasReactionFreshness,
   });
+  const reactionStatus = homeFeedReactionStatus(item, { signedIn, reaction });
   const target =
     destination.kind === 'thread' || destination.kind === 'subject'
       ? { kind: destination.kind, id: destination.id }
@@ -236,6 +244,7 @@ export function HomeFeedActions({
       title={homeFeedTitle(item, locale)}
       signedIn={signedIn}
       reaction={reaction}
+      reactionStatus={reactionStatus}
       reactionPresentation={kind === 'subject' ? 'chips' : undefined}
       subjectReactionProjection={homeFeedSubjectReactionProjection(item)}
       subjectTarget={kind === 'subject'}
@@ -293,6 +302,7 @@ export function FeedActionBar(props: FeedActionBarProps) {
     props.reaction?.target,
     JSON.stringify(props.subjectReactionProjection ?? null),
     props.subjectTarget ?? false,
+    props.reactionStatus ?? null,
     revision,
     provider.visit,
   ]);
@@ -315,6 +325,7 @@ function ActionVisit({
   title,
   signedIn,
   reaction,
+  reactionStatus,
   replyCount,
   reactionPresentation,
   plain,
@@ -608,6 +619,25 @@ function ActionVisit({
             />
           ))
         : null}
+      {reactionStatus ? (
+        <div data-slot="feed-reaction-admission" className="basis-full min-w-0 text-sm text-muted-foreground">
+          <p>{reactionStatus === 'denied' ? m.reaction_forbidden({}, options) : m.reaction_unavailable({}, options)}</p>
+          {reactionStatus === 'unavailable' && onRetry && (!subjectTarget || reaction) ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={actionClass}
+              disabled={pageBusy}
+              onClick={() => {
+                if (!pageBusy && isCurrent()) onRetry();
+              }}
+            >
+              {m.subject_section_retry({}, options)}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {feedback ? (
         <div className="basis-full min-w-0 space-y-2 text-sm">
           <p id={descriptionId} role="status">

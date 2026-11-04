@@ -124,6 +124,31 @@ test.each([1, 10, 20])(
   },
 );
 
+test('signed-in Home keeps Content reaction facts visible but disables writes without native action advice', async () => {
+  const source = row(0);
+  const item: FeedItem = {
+    ...source,
+    summary: {
+      ...source.summary,
+      reactionTarget: { targetKind: 'thread', targetId: id },
+      reactions: { upvote: 2, like: 1 },
+      viewerReaction: null,
+    },
+  };
+  await paint(
+    <HomeFeed
+      result={{ state: 'ready', page: { ...result.page, feedItems: [item], reactionsAsOf: { epoch: 1, position: '2' } } }}
+      locale="en"
+      signedIn
+    />,
+  );
+  expect(host.querySelector('[data-slot="feed-reaction-admission"]')?.textContent).toContain(m.reaction_unavailable());
+  const controls = host.querySelector('[data-slot="reactions"]');
+  expect(controls).not.toBeNull();
+  expect(controls?.querySelectorAll('button:not([disabled])')).toHaveLength(0);
+  expect(nativeFetch).not.toHaveBeenCalled();
+});
+
 test('a Home baseline retires across session, request, provider and route incarnations', async () => {
   const baseline = { ...result, page: { ...result.page } };
   let latestOrigin: ReturnType<typeof useHomeReactionCurrentness>['origin'] | undefined;

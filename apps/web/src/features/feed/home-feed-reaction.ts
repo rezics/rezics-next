@@ -83,5 +83,27 @@ export function homeFeedReaction(
     value: input.signedIn && 'viewerReaction' in summary ? (summary.viewerReaction ?? null) : null,
     ...(input.origin ? { reactionOrigin: input.origin } : {}),
     sourceWatermark: input.reactionsAsOf,
+    // The installed Content feed projection carries no native action advice. Keep its
+    // disclosed counts and selection visible, but do not treat them as permission.
+    personalReady: !input.signedIn,
   };
+}
+
+export type HomeFeedReactionStatus = 'denied' | 'unavailable';
+
+/** Describe missing or refused native advice without inferring permission from counts. */
+export function homeFeedReactionStatus(
+  item: FeedItem,
+  input: { signedIn: boolean; reaction: FeedReaction | undefined },
+): HomeFeedReactionStatus | undefined {
+  if (item.destination.kind === 'thread' || item.destination.kind === 'post')
+    return input.signedIn ? 'unavailable' : undefined;
+  if (item.destination.kind !== 'subject') return;
+
+  const projection = record(homeFeedSubjectReactionProjection(item));
+  const action = projection?.action;
+  if (action === 'denied') return 'denied';
+  if (input.signedIn && (action !== 'allowed' || !input.reaction)) return 'unavailable';
+  if (!input.signedIn && action !== 'sign_in') return 'unavailable';
+  return;
 }
