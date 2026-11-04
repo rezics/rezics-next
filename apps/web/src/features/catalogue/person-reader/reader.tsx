@@ -257,7 +257,7 @@ export function ProfileDefinitions({
   release,
   children,
 }: {
-  load?: PersonDefinitionsLoader;
+  load?: PersonDefinitionsLoader | undefined;
   locale: string;
   release?: PersonDefinitions | undefined;
   children: (release: PersonDefinitions) => ReactNode;
@@ -316,7 +316,7 @@ export function PersonOverview({
 }: Omit<Reading, 'release'> & {
   source: object;
   viewer: string | null;
-  load?: PersonDefinitionsLoader;
+  load?: PersonDefinitionsLoader | undefined;
   release?: PersonDefinitions | undefined;
 }) {
   const lifetime = useSubjectCommunityReading({
