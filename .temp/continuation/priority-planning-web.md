@@ -36,7 +36,7 @@
 }
 ---
 
-Finish the Web receiving journey after the retained Content publisher installs the generated contract requested in the commerce handoff. Use the existing Library shelf and shared item family. Connect the existing `@rezics/client` `KernelClient.libraryEntries` seam to native priority order, explicit ascending/descending controls, current status/type filters, URL state, and cursor reset on query changes. Render the returned 1–100 rank beside retained rows and label null as Unranked; do not calculate a second local ordering.
+Finish the Web receiving journey after the retained Content publisher installs the generated contract requested in the commerce handoff. Use the existing Library shelf and shared item family. Connect the existing `@rezics/client` `KernelClient.libraryEntries` seam to native priority order, opening ascending so rank 1 leads, explicit ascending/descending controls, current status/type filters, URL state, and cursor reset on query changes. Render the returned 1–100 rank beside retained rows and label null as Unranked; do not calculate a second local ordering.
 
 Reuse the current rich private-entry annotation editor and its action/review flow. Submit the expected annotation revision, exact Entry incarnation, originating account lifetime, and existing command operands. Preserve note and source operands on rank change or clear. Keep the original request key and intent when acknowledgement is uncertain; on a definitive stale or currentness conflict, require fresh review. Fence late reads and writes after subject, query, or account navigation/retirement so they cannot alter or disclose a different visit's rows.
 
