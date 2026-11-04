@@ -51,6 +51,15 @@ describe("documentation budgets and registry", () => {
     expect(output(result)).toContain("budget-cap | docs/development/oversized.md | size 9 bytes exceeds cap 8 bytes | remedy:");
   });
 
+  test("uses the more specific capability-file budget", async () => {
+    write("docs/goals/feature.capabilities.md", "x".repeat(13_000));
+    write("docs/budgets.json", JSON.stringify({ version: 1, budgets: [
+      { path: "docs/goals/*.md", kind: "file", bytes: 12_000 },
+      { path: "docs/goals/*.capabilities.*", kind: "file", bytes: 40_000 },
+    ] }));
+    expect((await runDocsCheck(root)).exitCode).toBe(0);
+  });
+
   test("rejects growth above a baseline entry", async () => {
     write("docs/development/large.md", "1234");
     write("docs/budgets.json", JSON.stringify({ version: 1, budgets: [{ path: "docs/development/*.md", kind: "file", bytes: 2 }] }));
@@ -91,6 +100,9 @@ describe("documentation budgets and registry", () => {
     expect(lowered.exitCode, output(lowered)).toBe(0);
     expect(output(lowered)).toContain("baseline-lowered | docs/large.md | size lowered to 5 bytes");
     expect(JSON.parse(readFileSync(path.join(root, "docs/budgets-baseline.json"), "utf8")).entries[0].bytes).toBe(5);
+    rmSync(path.join(root, "docs/large.md"));
+    expect(output(await runDocsCheck(root))).toContain("budget-shrank | docs/large.md | size 0 bytes is below baseline 5 bytes");
+    expect(output(await runDocsCheck(root, ["--update-baseline"]))).toContain("baseline-lowered | docs/large.md | size lowered to 0 bytes");
   });
 });
 
@@ -125,11 +137,19 @@ describe("documentation links and owner rules", () => {
     expect(output(result)).toContain("owner-temp-path | docs/development/owner.md");
   });
 
+  test("checks generated blocks against their source bytes", async () => {
+    write("scripts/render.txt", "current render\n");
+    write("docs/development/generated.md", "<!-- generated: scripts/render.txt -->\nstale render\n<!-- /generated -->\n");
+    expect(output(await runDocsCheck(root))).toContain("generated-block | docs/development/generated.md | render from scripts/render.txt differs from the block");
+  });
+
   test("detects a newly tracked temporary file", async () => {
     write(".temp/new.md", "temporary\n");
     execFileSync("git", ["add", ".temp/new.md"], { cwd: root });
     const result = await runDocsCheck(root);
     expect(output(result)).toContain("tracked-temp | .temp/new.md | newly tracked temporary file | remedy:");
+    commit();
+    expect(output(await runDocsCheck(root))).toContain("tracked-temp | .temp/new.md | newly tracked temporary file | remedy:");
   });
 });
 
