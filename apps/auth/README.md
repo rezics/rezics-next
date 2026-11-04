@@ -649,6 +649,7 @@ Sign-up makes no kernel reads. A successful submit is one browser `POST /signup`
 - **Touches:** one bounded `POST /recovery/page` per review or Retry; an exact retained account or management continuation adds one bounded `GET /session`. Deliberate Continue repeats those same reads and uses the existing exact local return-marker transition before navigation.
 - **Bound:** at most 1 recovery-page read and 1 exact session read per review attempt, 0 kernel reads, 0 authentication or account-command requests. A separate password confirmation uses 1 Auth request; a fresh passkey confirmation uses the existing 2.
 - **Recovery:** current advice and exact continuation selectors determine whether Continue is offered. Unavailable, stale or replaced reads never restore former account detail or erase an unknown send.
+- **Decision:** after a failed explicit Continue recheck, fresh authentication stays hidden until deliberate Retry obtains current advice.
 
 ### Passkey list
 
