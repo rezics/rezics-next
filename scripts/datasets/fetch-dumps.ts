@@ -61,6 +61,7 @@ export const VNDB_DUMP_TABLES = [
   'vn_anime',
   'vn_relations',
   'vn_seiyuu',
+  'vn_extlinks',
   'vn_staff',
   'vn_titles',
 ];
