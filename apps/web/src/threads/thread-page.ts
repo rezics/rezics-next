@@ -1,4 +1,4 @@
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, ReadingPageResponse } from '@rezics/client';
 import type { DocumentMentions } from '@rezics/ui/document-body';
 import { readDocumentMentions } from '../kernel/mentions';
 import { notFound } from '@tanstack/react-router';
@@ -15,19 +15,6 @@ type BoardResource = ReturnType<KernelClient['boards']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'];
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
-/** Temporary narrow seam until the complete Kernel client declarations publish this mounted route. */
-type ReadingPage = {
-  thread: Thread['thread'];
-  replies: { items: PostPage['posts']; next: PostPage['next'] };
-};
-type ReadingPageClient = ThreadResource & {
-  'reading-page': {
-    get(options: {
-      query?: { cursor?: string };
-      headers?: { authorization: string };
-    }): Promise<{ error?: unknown; status?: number; data?: ReadingPage | null }>;
-  };
-};
 export type ThreadPost = PostPage['posts'][number];
 
 type PageInput = { id: string; cursor?: string; post?: string };
@@ -45,17 +32,6 @@ export type LoadedThreadPage = {
   viewerId?: string;
   verification: VerificationConfig;
   linkedPostUnavailable?: boolean;
-};
-
-/** Consumer seam for the native locator until the controller regenerates the client. */
-type PostLocator = (params: { postId: string }) => {
-  location: {
-    get(options: { headers?: { authorization: string }; fetch: { cache: 'no-store' } }): Promise<{
-      error?: unknown;
-      status?: number;
-      data?: { cursor: string | null } | null;
-    }>;
-  };
 };
 
 function checkRead<T>(result: { error?: unknown; status?: number; data?: T | null }, resource: string): NonNullable<T> {
@@ -107,7 +83,7 @@ export async function loadThreadPage(
   const readReadingPage = async () => {
     let cursor = data.cursor;
     if (data.post !== undefined) {
-      const posts = client.threads({ id: data.id }).posts as unknown as PostLocator;
+      const posts = client.threads({ id: data.id }).posts;
       const result = await posts({ postId: data.post }).location.get({
         ...(authorization ? { headers: { authorization } } : {}),
         fetch: { cache: 'no-store' },
@@ -126,7 +102,7 @@ export async function loadThreadPage(
       ...(cursor === undefined ? {} : { query: { cursor } }),
       ...(authorization ? { headers: { authorization } } : {}),
     };
-    const threadClient = client.threads({ id: data.id }) as ReadingPageClient;
+    const threadClient = client.threads({ id: data.id });
     return threadClient['reading-page'].get(options);
   };
   let readingPageRead = data.expectedSlug === undefined ? readReadingPage() : undefined;
@@ -141,7 +117,7 @@ export async function loadThreadPage(
   }
   readingPageRead ??= readReadingPage();
   const readingPageResult = await readingPageRead;
-  const readingPage = checkRead<ReadingPage>(readingPageResult, 'thread reading page');
+  const readingPage = checkRead<ReadingPageResponse>(readingPageResult, 'thread reading page');
   const thread = readingPage.thread;
   if (thread.id !== data.id) throw notFound();
   if (data.expectedSlug !== undefined && !sameThreadSlug(data.expectedSlug, thread.title))

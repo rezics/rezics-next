@@ -3745,3 +3745,5 @@ fail closed for retry.
   hydration. It reserves 32 KiB per author and 16 KiB per reaction target; source bodies and every nested native
   query remain charged even though they are not serialized in this projection. Cross-home observations are
   independent. A later command remains the final authority check.
+
+Decision: public reading, watch inventory, ban review, publication preparation and classification receivers use the emitted mounted route declarations; client-only route mirrors are removed when source publication is available.
