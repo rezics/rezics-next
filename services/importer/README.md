@@ -1733,6 +1733,10 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: O((V+S+C) log R) indexed importer work for admitted works V≤8, staff S and characters C, with sequential entity-then-work conversion so person identities exist before credit proposals. Existing per-record converter, candidate (≤300) and journal budgets apply. Vocabulary bindings are re-read on each convert so unchanged source bytes cannot hide missing or retracted detailed-role availability. Unknown roles, missing aliases, non-person staff kinds and unadmitted credited spelling withhold the whole credit.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+Selected-family planning records an invalid optional website as a bounded source gap and removes only that
+join from the converter input. Valid sibling links and the source entity remain eligible. The converter
+continues to enforce the same public HTTPS citation policy; no invalid URL becomes a native fact.
+
 ### Carry exact VNDB credits through the normal selected-family seed
 
 Decision: Read staff-role bindings from current adopted Concept facts; keep the existing coarse VN staff edge only when its precise role binding is unavailable, and always require a bound character for a voice credit.

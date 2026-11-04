@@ -54,7 +54,7 @@ function familyTables(extra: Record<string, Record<string, unknown>[]> = {}): Cr
       { id: 4, site: 'website', value: 'https://example.org/release' },
       { id: 5, site: 'website', value: 'https://example.org/unselected' },
       { id: 6, site: 'wikidata', value: 'Q1' },
-      { id: 8, site: 'bangumi', value: 'https://bgm.tv/subject/1' },
+      { id: 8, site: 'website', value: 'https://bgm.tv/subject/1' },
     ],
     ...extra,
   };
@@ -121,6 +121,29 @@ test('production seed joins selected staff, producer and release websites withou
   ).toBe(false);
 });
 
+test('invalid optional website citations do not discard valid links or stop the selected family', async () => {
+  const plan = await planCrossMediaSeed(
+    familyTables({
+      'vndb/extlinks': [
+        { id: 1, site: 'website', value: 'https://example.org/shared' },
+        { id: 2, site: 'website', value: 'http://example.org/legacy' },
+        { id: 4, site: 'website', value: 'https://example.org/release' },
+        { id: 8, site: 'website', value: 'https://example.org:443/explicit-port' },
+      ],
+    }),
+  );
+  expect(plan.entities.vndb.find((row) => row.key === 's4')?.payload).toMatchObject({
+    staff_extlinks: [{ id: 's4', link: 1 }],
+    extlinks: [{ id: 1, site: 'website', value: 'https://example.org/shared' }],
+  });
+  expect(plan.records.vndb.find((row) => row.key === 'v1')?.payload).not.toHaveProperty('extlinks');
+  expect(
+    plan.gaps
+      .filter((gap) => gap.reason === 'Invalid external website URL; omitted from native facts')
+      .map((gap) => gap.record.id),
+  ).toEqual([2, 8]);
+});
+
 test('COPY headers keep integer link keys, overflow fails, and unsupported sites stay diagnostics', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'vndb-entity-websites-copy-'));
   try {
@@ -161,6 +184,7 @@ test('COPY headers keep integer link keys, overflow fails, and unsupported sites
       releases_vn: ['id\tvid\trtype', 'r1\tv1\tcomplete'],
       releases_producers: ['id\tpid\tdeveloper\tpublisher', 'r1\tp1\tt\tf'],
       producers: ['id\ttype\tname', 'p1\tco\tAuthored producer'],
+      producers_relations: ['id\tpid\trelation', ''],
       staff_extlinks: ['id\tlink', 's4\t1\ns4\t6'],
       producers_extlinks: ['id\tlink', 'p1\t1'],
       releases_extlinks: ['id\tlink', ''],
@@ -169,6 +193,8 @@ test('COPY headers keep integer link keys, overflow fails, and unsupported sites
       vn_seiyuu: ['id\tcid\taid\tnote', ''],
       chars_vns: ['id\tvid\trole', ''],
       chars: ['id\tname', ''],
+      chars_names: ['id\tlang\tname\tlatin', ''],
+      chars_alias: ['id\tspoil\tname\tlatin', ''],
       vn_anime: ['id\taid', ''],
       releases_supersedes: ['id\trid', ''],
       releases_titles: ['id\ttitle', ''],
@@ -222,7 +248,11 @@ test('COPY headers keep integer link keys, overflow fails, and unsupported sites
   const missing = familyTables({
     'vndb/staff_extlinks': [{ id: 's4', link: 99 }],
   });
-  await expect(planCrossMediaSeed(missing)).rejects.toThrow();
+  expect(
+    (await planCrossMediaSeed(missing)).gaps.some(
+      (gap) => gap.reason === 'Missing selected VNDB external-link dictionary row',
+    ),
+  ).toBe(true);
   const unresolvedOwner = familyTables({
     'vndb/staff_extlinks': [{ id: 's99', link: 7 }],
     'vndb/extlinks': [{ id: 7, site: 'website', value: 'https://example.org/unresolved' }],

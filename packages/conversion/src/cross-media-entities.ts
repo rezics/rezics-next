@@ -1325,7 +1325,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       labels: names.labels,
       identifier: expected,
       ...(names.nameFacts ? { nameFacts: names.nameFacts } : {}),
-      maxCommands: vndbStaffNameLimits.maxCommands,
+      maxCommands: vndbStaffNameLimits.maxCommands + vndbLimits.maxLinks,
       diagnostics: names.diagnostics,
     };
   }
