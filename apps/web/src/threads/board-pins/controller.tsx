@@ -2,17 +2,6 @@ import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@rezics/ui/shadcn/alert-dialog';
-import {
   createElement,
   useContext,
   useEffect,
@@ -489,16 +478,23 @@ export function BoardPinThreadControls({
   onRefresh(): void;
 }): ReactNode {
   const [pending, setPending] = useState<BoardPinAction | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const statusRef = useRef<HTMLSpanElement>(null);
+  const previousPending = useRef<BoardPinAction | null>(null);
   const action: BoardPinAction | null = row ? (row.pinned ? 'unpin' : 'pin') : null;
   const actionable = Boolean(row && action && management === 'allowed' && sender && row.actions.includes(action));
   const blocked = status !== undefined && status.state !== 'applied';
   useEffect(() => {
-    if (!actionable || blocked) {
-      setDialogOpen(false);
+    if (!actionable || blocked || (pending !== null && pending !== action)) {
       setPending(null);
     }
-  }, [actionable, blocked]);
+  }, [actionable, action, blocked, pending]);
+  useEffect(() => {
+    if (previousPending.current && !pending) {
+      (statusRef.current ?? toggleRef.current)?.focus();
+    }
+    previousPending.current = pending;
+  }, [pending]);
   const confirmTitle = pending === 'unpin' ? m.board_pin_confirm_title_unpin() : m.board_pin_confirm_title_pin();
   const confirmBody =
     pending === 'unpin'
@@ -524,70 +520,78 @@ export function BoardPinThreadControls({
     {
       className: 'flex min-w-0 max-w-full flex-wrap items-center gap-2',
       role: 'group',
-      'data-dialog-open': dialogOpen,
       'aria-label': m.board_pin_controls({ title: discussionTitle }),
       'aria-busy': status?.state === 'submitting',
     },
-    createElement(
-      AlertDialog,
-      {
-        open: dialogOpen,
-        onOpenChange: (open: boolean) => {
-          setDialogOpen(open);
-          setPending(open ? action : null);
-        },
-      },
-      actionable && !blocked && action
-        ? createElement(
-            AlertDialogTrigger,
-            {
-              render: createElement(Button, {
+    actionable && !blocked && action
+      ? createElement(
+          Button,
+          {
+            ref: toggleRef,
+            type: 'button',
+            variant: 'outline',
+            className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
+            ...{ 'data-board-pin-focus': 'toggle' },
+            'aria-expanded': pending === action,
+            'aria-controls': `board-pin-confirm-${row!.thread.id}`,
+            onClick: () => setPending(pending === action ? null : action),
+          },
+          action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
+        )
+      : null,
+    pending && actionable && !blocked && row
+      ? createElement(
+          'div',
+          {
+            id: `board-pin-confirm-${row.thread.id}`,
+            'data-slot': 'board-pin-confirmation',
+            role: 'group',
+            'aria-labelledby': `board-pin-confirm-title-${row.thread.id}`,
+            'aria-describedby': `board-pin-confirm-description-${row.thread.id}`,
+            className: 'min-w-0 max-w-full basis-full space-y-2 rounded-md border p-3 [overflow-wrap:anywhere]',
+          },
+          createElement('h4', { id: `board-pin-confirm-title-${row.thread.id}`, className: 'font-medium' }, confirmTitle),
+          createElement(
+            'p',
+            { id: `board-pin-confirm-description-${row.thread.id}`, className: 'text-sm text-muted-foreground' },
+            confirmBody,
+          ),
+          createElement(
+            'div',
+            { className: 'flex min-w-0 flex-wrap gap-2' },
+            createElement(
+              Button,
+              {
                 type: 'button',
                 variant: 'outline',
                 className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
-                ...{ 'data-board-pin-focus': 'toggle' },
-                'aria-haspopup': 'dialog',
-                'aria-expanded': pending !== null,
-              }),
-            },
-            action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
-          )
-        : null,
-      createElement(
-        AlertDialogContent,
-        { className: 'min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] text-start' },
-        createElement(
-          AlertDialogHeader,
-          { className: 'min-w-0 place-items-stretch text-start' },
-          createElement(AlertDialogTitle, null, confirmTitle),
-          createElement(AlertDialogDescription, null, confirmBody),
-        ),
-        createElement(
-          AlertDialogFooter,
-          { className: 'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2' },
-          createElement(
-            AlertDialogCancel,
-            { className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal' },
-            m.board_pin_cancel(),
-          ),
-          createElement(
-            AlertDialogAction,
-            {
-              className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
-              onClick: () => {
-                if (!pending) return;
-                onChange(pending);
-                setPending(null);
-                setDialogOpen(false);
+                onClick: () => setPending(null),
               },
-            },
-            m.board_pin_confirm(),
+              m.board_pin_cancel(),
+            ),
+            createElement(
+              Button,
+              {
+                type: 'button',
+                className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
+                onClick: () => {
+                  const confirmed = pending;
+                  if (!confirmed) return;
+                  onChange(confirmed);
+                  setPending(null);
+                },
+              },
+              m.board_pin_confirm(),
+            ),
           ),
-        ),
-      ),
-    ),
+        )
+      : null,
     statusText
-      ? createElement('span', { role: 'status', className: 'text-sm text-muted-foreground' }, statusText)
+      ? createElement(
+          'span',
+          { ref: statusRef, role: 'status', tabIndex: -1, className: 'text-sm text-muted-foreground' },
+          statusText,
+        )
       : null,
     status?.state === 'unknown' || status?.state === 'unavailable'
       ? createElement(
