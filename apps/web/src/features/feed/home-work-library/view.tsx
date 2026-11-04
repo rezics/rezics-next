@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { LibraryBigIcon } from 'lucide-react';
 import { QueryClientContext } from '@tanstack/react-query';
-import { observeReactionSession } from '../../../threads/thread-reactions';
+import { browserObservation, type BrowserReader } from '../../../session/observation';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
 import {
@@ -16,6 +16,7 @@ type HomeWorkLibraryContextValue = { projection?: HomeWorkLibraryProjection; sig
 const HomeWorkLibraryContext = createContext<HomeWorkLibraryContextValue>({ signedIn: false, enabled: false });
 const subscribeNothing = () => () => {};
 const snapshotNothing = () => 0;
+const readerNothing = () => undefined;
 
 export function HomeWorkLibraryProvider({
   expectedScope,
@@ -37,9 +38,19 @@ export function HomeWorkLibraryProvider({
   );
   const lease = projection?.lease;
   const client = useContext(QueryClientContext);
-  const observation = useMemo(() => observeReactionSession(client), [client]);
-  const readerRevision = useSyncExternalStore(observation.subscribe, observation.snapshot, observation.serverSnapshot);
-  const admittedRevision = useMemo(() => observation.snapshot(), [observation, projection]);
+  const observation = useMemo(() => (client ? browserObservation(client) : undefined), [client]);
+  const reading = useSyncExternalStore(
+    observation?.subscribe ?? subscribeNothing,
+    observation?.getSnapshot ?? readerNothing,
+    observation?.getServerSnapshot ?? readerNothing,
+  );
+  const admission = useMemo(
+    () => ({ reader: undefined as BrowserReader | undefined, retired: false }),
+    [observation, projection],
+  );
+  if (admission.reader && (reading?.state !== 'signed-in' || reading.observation.id !== admission.reader.id))
+    admission.retired = true;
+  if (!admission.retired && !admission.reader && reading?.state === 'signed-in') admission.reader = reading.observation;
   const subscribe = useMemo(
     () => (lease ? (listener: () => void) => lease.subscribe(listener) : subscribeNothing),
     [lease],
@@ -52,10 +63,9 @@ export function HomeWorkLibraryProvider({
     signedIn &&
     projection &&
     (!client ||
-      (readerRevision === admittedRevision &&
-        observation.healthy() &&
-        observation.read()?.state === 'signed-in' &&
-        observation.read()?.subject === projection.scope.reader)) &&
+      (!admission.retired &&
+        reading?.state === 'signed-in' &&
+        reading.observation.subject === projection.scope.reader)) &&
     revision >= 0 &&
     projection.lease.isCurrent() &&
     sameHomeWorkLibraryScope(expectedScope, projection.scope) &&
