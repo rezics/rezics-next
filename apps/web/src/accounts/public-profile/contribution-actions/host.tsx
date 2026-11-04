@@ -168,6 +168,7 @@ type Visit = {
   episode: ContributionActionsEpisode | undefined;
   receiver?: ContributionActionsReceiver<unknown>;
   address?: ContributionActionsAddress;
+  operations?: Partial<Record<ContributionOperation, OperationLease<ContributionOperation>>>;
 };
 
 export function ContributionActionsHost({
@@ -321,7 +322,14 @@ export function ContributionActionsHost({
 
   const isCurrent = () => !!receiver && current.current === visit && receiver.isCurrent();
   const retry = () => (isCurrent() ? receiver!.refresh() : Promise.resolve());
-  const operation = (name: ContributionOperation) => (isCurrent() ? visit.address?.operation(name) : undefined);
+  const operation = (name: ContributionOperation) => {
+    if (!isCurrent()) return undefined;
+    const currentLease = visit.operations?.[name];
+    if (currentLease?.current()) return currentLease;
+    const nextLease = visit.address?.operation(name);
+    if (nextLease) (visit.operations ??= {})[name] = nextLease;
+    return nextLease;
+  };
   const hostValue: ContributionActionsHostValue = { input, state, isCurrent, retry, operation };
   const showReadStatus = hydrated && signedIn;
   const signInHref =
