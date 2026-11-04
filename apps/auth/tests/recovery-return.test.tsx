@@ -166,6 +166,8 @@ test('acknowledged start retains generic history; a new document without mounted
   expect(page.host.textContent).toContain('Your recovery request was accepted');
   expect(page.host.textContent).not.toContain('private@example.test');
   expect(page.host.querySelector('input')).toBeNull();
+  await flush(() => button(page.host, 'Request a new recovery link')!.click());
+  expect(document.activeElement?.id).toBe('recovery-email');
   await page.close();
   page = await setup();
   try {

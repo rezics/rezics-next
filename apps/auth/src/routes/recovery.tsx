@@ -121,7 +121,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
       focusAfterRead.current = false;
       (emailInput.current ?? document.getElementById(passwordId) ?? readStatus.current)?.focus();
     }
-  }, [page]);
+  }, [page, fresh]);
 
   useLayoutEffect(() => {
     const unload = (event: BeforeUnloadEvent) => {
