@@ -265,6 +265,7 @@ function SubjectTermsPageLive({
       authoritySnapshot?.etag,
     ],
     queryFn: async () => ({
+      scope: readScope,
       id: authoritySnapshot!.subject.id,
       etag: authoritySnapshot!.etag,
       authority: transport.readAuthority ? await transport.readAuthority() : unavailableTermsAuthority,
@@ -285,7 +286,12 @@ function SubjectTermsPageLive({
     )
       return authorityOverride.authority;
     const observed = authorityQuery.data;
-    if (observed?.id === snapshot.subject.id && observed.etag === snapshot.etag) return observed.authority;
+    if (
+      observed?.scope === readScope &&
+      observed.id === snapshot.subject.id &&
+      observed.etag === snapshot.etag
+    )
+      return observed.authority;
     return unavailableTermsAuthority;
   }
   const origin = useMemo(
