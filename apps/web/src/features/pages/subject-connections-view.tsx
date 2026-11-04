@@ -171,14 +171,18 @@ function connectionReturn(
     page.history.every((entry) => entry.page !== undefined && Number.isSafeInteger(entry.page)) &&
     page.history[page.index]?.reading === current.reading &&
     page.history[page.index]?.cursor === cursor
-      ? page.history.map((entry) => ({ cursor: entry.cursor, reading: entry.reading, page: entry.page! }))
+      ? page.history.map((entry) => ({
+          ...(entry.cursor ? { cursor: entry.cursor } : {}),
+          reading: entry.reading,
+          page: entry.page!,
+        }))
       : undefined;
   return {
     stream: current.stream.key,
     reading: current.reading,
     ...(cursor ? { cursor } : {}),
     ...(focus && holder ? { focus, holder } : {}),
-    ...(history ? { history, index: page.index } : {}),
+    ...(history && page ? { history, index: page.index } : {}),
   };
 }
 

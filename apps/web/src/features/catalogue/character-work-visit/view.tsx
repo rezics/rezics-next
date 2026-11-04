@@ -24,7 +24,7 @@ export function CharacterWorkRows({
   current: ConnectionSection;
   value: OverviewValue;
   kind: CharacterWorkKind;
-  returnWindow?: ConnectionReturnWindow;
+  returnWindow?: ConnectionReturnWindow | undefined;
 }) {
   const rows = characterWorkRows(current, value.subject!, value.locale, value.reader.spoilerLevel);
   const o = { locale: value.locale as never };
@@ -57,7 +57,7 @@ function CharacterWorkAppearance({
   current: ConnectionSection;
   value: OverviewValue;
   kind: CharacterWorkKind;
-  returnWindow?: ConnectionReturnWindow;
+  returnWindow?: ConnectionReturnWindow | undefined;
 }) {
   const o = { locale: value.locale as never };
   const returnHref = connectionReturnHref(

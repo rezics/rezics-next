@@ -9,7 +9,7 @@ const streams: ConnectionStream[] = [
   { key: 'out:wdt:P136', property: 'wdt:P136', direction: 'out', group: 'relations', label: 'Genre', forwardLabel: 'Genre', language: 'en' },
 ];
 const address = { id, locale: 'en' };
-const hash = (page: number) => String(page).repeat(64);
+const hash = (page: number) => page.toString(16).padStart(2, '0').repeat(32);
 
 function makeSection(stream: ConnectionStream, page: number, fetch: number, next?: string, status?: number): ConnectionSection {
   return {

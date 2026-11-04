@@ -288,7 +288,7 @@ export function connectionReturnWindow(hash: string): ConnectionReturnWindow | u
     ...(reading ? { reading } : {}),
     ...(cursor ? { cursor } : {}),
     ...(focus ? { focus, holder: holder! } : {}),
-    ...(history ? { history, index } : {}),
+    ...(history && index !== undefined ? { history, index } : {}),
   };
 }
 
