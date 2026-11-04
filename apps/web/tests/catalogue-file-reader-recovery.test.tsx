@@ -177,11 +177,19 @@ test('grouped metadata opens one exact association and cache, source, locale and
     await act(async () => currentInspect.click());
     const currentClose = host.querySelector<HTMLButtonElement>('[data-slot="catalogue-file-inspection"] button');
     if (!currentClose) throw new Error('Expected the current localized inspection close');
+    let lateFocus: FrameRequestCallback | undefined;
+    let frame = 0;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => {
+        lateFocus = callback;
+        return ++frame;
+      },
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', { configurable: true, value: () => {} });
     await act(async () => currentClose.click());
     await render(reader(sourceB, 'ja', 'viewer-current', jaVisit));
-    await act(async () => {
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-    });
+    await act(async () => lateFocus?.(0));
     expect(window.document.activeElement).not.toBe(currentInspect);
   });
 });

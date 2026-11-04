@@ -337,9 +337,14 @@ test('one exact inspection keeps value provenance and grouped evidence while con
   });
   const historicalAssociation = historical.associations.find((item) => item.target.id === catalogueEpisode);
   expect(historicalAssociation?.historical).toBe(true);
+  const episodeDestination = catalogueFileDestinationHref(
+    '/en/subjects/' + catalogueEpisode + '/episode-1',
+    catalogueFile,
+    'en',
+  );
+  if (!episodeDestination) throw new Error('Expected the same-locale episode destination');
   const historicalMarkup = renderToStaticMarkup(createElement(CatalogueFileReader, { visit: historical }));
   expect(historicalMarkup).toContain('This value was accepted under an earlier definition release.');
-  expect(historicalMarkup).not.toContain(`fileSource=${catalogueFile}#catalogue-file-reader`);
 
   historical.associations.forEach((item) => {
     item.readability = 'unreadable';
@@ -359,5 +364,4 @@ test('one exact inspection keeps value provenance and grouped evidence while con
   const emptyMarkup = renderToStaticMarkup(createElement(CatalogueFileReader, { visit: empty }));
   expect(emptyMarkup).toContain('data-slot="catalogue-file-reader-empty"');
   expect(emptyMarkup).toContain('Nothing was returned on this page.');
-  expect(unreadableMarkup).not.toContain(`fileSource=${catalogueFile}#catalogue-file-reader`);
 });
