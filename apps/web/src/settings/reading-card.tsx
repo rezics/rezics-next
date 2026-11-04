@@ -23,7 +23,7 @@ import type {
   ReadingPreferences,
   SpoilerLevel,
 } from './preferences';
-import { usePreferenceRetry } from './preference-failure-retry';
+import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
 import { readingNeedsNavigationDecision, useSettingsNavigationDraft } from './reading-navigation';
 import {
   ownerMayChangeReading,
@@ -73,6 +73,8 @@ type ReadingState = {
   failureOrigin?: 'read' | 'write' | undefined;
   reason?: string | undefined;
   failure?: NativePreferenceFailure | undefined;
+  readRetryAt: number;
+  commandRetryAt: number;
 };
 
 function withoutReadingAdvice(preferences: ReadingPreferences): ReadingPreferences {
@@ -103,6 +105,8 @@ export class ReadingDraftRecovery {
       phase: 'idle',
       knownCurrent: advice !== undefined,
       advice,
+      readRetryAt: 0,
+      commandRetryAt: 0,
     };
   }
   snapshot = () => this.state;
@@ -119,9 +123,15 @@ export class ReadingDraftRecovery {
   private canWrite() {
     return readingAdviceReady(this.state.advice) && ownerMayChangeReading(this.state.advice) && this.owner.canWrite();
   }
+  private readWaiting() {
+    return this.state.readRetryAt > Date.now();
+  }
+  private commandWaiting() {
+    return this.state.commandRetryAt > Date.now();
+  }
   private async send(recovering: boolean) {
     const input = this.state.pending;
-    if (!input || !this.canWrite()) return;
+    if (!input || !this.canWrite() || this.commandWaiting()) return;
     this.update({
       phase: 'saving',
       reason: undefined,
@@ -134,6 +144,8 @@ export class ReadingDraftRecovery {
     if (result.kind !== 'confirmed') {
       const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed';
       const deniedWrite = result.kind === 'rejected' && retireAdvice;
+      const readOperation = result.kind === 'uncertain' && result.operation === 'read';
+      const retryAt = preferenceRetryDeadline(result.failure?.retryAfter);
       this.update({
         known: retireAdvice ? withoutReadingAdvice(this.state.known) : this.state.known,
         advice: retireAdvice ? undefined : this.state.advice,
@@ -142,6 +154,7 @@ export class ReadingDraftRecovery {
         reason: result.reason,
         failure: result.failure,
         failureOrigin: result.kind === 'uncertain' ? result.operation : deniedWrite ? 'write' : undefined,
+        ...(readOperation ? { readRetryAt: retryAt } : { commandRetryAt: retryAt }),
       });
       return;
     }
@@ -155,11 +168,13 @@ export class ReadingDraftRecovery {
       phase: matches ? 'saved' : 'review',
       failure: undefined,
       advice: preferences.advice,
+      commandRetryAt: 0,
+      readRetryAt: recovering ? 0 : this.state.readRetryAt,
     });
     this.owner.onVersionChange(Math.max(this.owner.version(), preferences.version));
   }
   async submit() {
-    if (!this.canWrite() || this.state.pending || this.state.phase === 'reloading') return;
+    if (!this.canWrite() || this.commandWaiting() || this.state.pending || this.state.phase === 'reloading') return;
     if (this.owner.version() > this.state.known.version) {
       this.update({
         phase: 'conflict',
@@ -188,7 +203,7 @@ export class ReadingDraftRecovery {
     if (autosave && !this.state.pending) await this.submit();
   }
   async resetToNativeDefaults() {
-    if (!this.canWrite() || this.state.pending || this.state.phase === 'reloading') return;
+    if (!this.canWrite() || this.commandWaiting() || this.state.pending || this.state.phase === 'reloading') return;
     if (this.owner.version() > this.state.known.version) {
       this.update({
         phase: 'conflict',
@@ -208,8 +223,9 @@ export class ReadingDraftRecovery {
     this.update({ draft: defaults, pending: input });
     await this.send(false);
   }
-  async reload(waiting = false) {
-    if (!this.owner.canRead() || waiting || this.state.phase === 'saving' || this.state.phase === 'reloading') return;
+  async reload(_waiting?: boolean) {
+    if (!this.owner.canRead() || this.readWaiting() || this.state.phase === 'saving' || this.state.phase === 'reloading')
+      return;
     this.update({
       phase: 'reloading',
       knownCurrent: false,
@@ -228,6 +244,7 @@ export class ReadingDraftRecovery {
         reason: result.reason,
         failure: result.failure,
         failureOrigin: 'read',
+        readRetryAt: preferenceRetryDeadline(result.failure?.retryAfter),
       });
       return;
     }
@@ -241,6 +258,7 @@ export class ReadingDraftRecovery {
       failure: undefined,
       failureOrigin: undefined,
       advice: result.preferences.advice,
+      readRetryAt: 0,
     });
     this.owner.onVersionChange(Math.max(this.owner.version(), result.preferences.version));
   }
@@ -256,8 +274,8 @@ export class ReadingDraftRecovery {
       failureOrigin: undefined,
     });
   }
-  async retry(waiting = false) {
-    if (waiting || !this.canWrite() || this.state.phase !== 'uncertain') return;
+  async retry(_waiting?: boolean) {
+    if (this.readWaiting() || this.commandWaiting() || !this.canWrite() || this.state.phase !== 'uncertain') return;
     await this.send(true);
   }
 }
@@ -395,7 +413,9 @@ export function ReadingCard({
     readingNeedsNavigationDecision(state),
     () => mounted() && isCurrent() && readingNeedsNavigationDecision(editor.snapshot()),
   );
-  const waiting = usePreferenceRetry(state.failure);
+  const readWaiting = usePreferenceRetry(state.failure, state.readRetryAt);
+  const commandWaiting = usePreferenceRetry(state.failure, state.commandRetryAt);
+  const waiting = readWaiting || commandWaiting;
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const uncertain = state.pending !== null && state.phase !== 'saving';
   const readLoading = state.phase === 'reloading';
@@ -520,7 +540,7 @@ export function ReadingCard({
                 className={preferenceActionClassName}
                 type="button"
                 variant="outline"
-                disabled={busy || !mayWrite}
+                disabled={busy || !mayWrite || commandWaiting}
                 onClick={() => void editor.resetToNativeDefaults()}
               >
                 {m.settings_reading_reset()}
@@ -536,8 +556,8 @@ export function ReadingCard({
                 className={preferenceActionClassName}
                 type="button"
                 variant="outline"
-                disabled={waiting || busy}
-                onClick={() => void editor.reload(waiting)}
+                disabled={readWaiting || busy}
+                onClick={() => void editor.reload()}
               >
                 {m.settings_reload()}
               </Button>
@@ -554,6 +574,7 @@ export function ReadingCard({
           {state.phase === 'saving' ? m.settings_saving() : null}
           {state.phase === 'saved' ? m.settings_saved() : null}
         </div>
+        {waiting && !recovery ? <p role="status">{m.settings_retry_wait()}</p> : null}
         {recovery ? (
           <Alert
             role={readLoading ? 'status' : 'alert'}
@@ -604,7 +625,7 @@ export function ReadingCard({
                     type="button"
                     variant="outline"
                     disabled={waiting || busy || !mayWrite}
-                    onClick={() => void editor.retry(waiting)}
+                    onClick={() => void editor.retry()}
                   >
                     {m.settings_reading_retry_original()}
                   </Button>
@@ -613,8 +634,8 @@ export function ReadingCard({
                   className={preferenceActionClassName}
                   type="button"
                   variant="outline"
-                  disabled={waiting || busy}
-                  onClick={() => void editor.reload(waiting)}
+                  disabled={readWaiting || busy}
+                  onClick={() => void editor.reload()}
                 >
                   {m.settings_reload()}
                 </Button>
@@ -623,7 +644,7 @@ export function ReadingCard({
                     <Button
                       className={preferenceActionClassName}
                       type="button"
-                      disabled={!mayWrite || sameReading(state.known, state.draft)}
+                      disabled={!mayWrite || commandWaiting || sameReading(state.known, state.draft)}
                       onClick={() => void editor.submit()}
                     >
                       {m.settings_reading_save_draft()}
