@@ -499,7 +499,7 @@ Run `bun run --cwd packages/definitions check` from the repository root.
 ### Schema.org subject types
 
 For each concrete catalogue profile, select the narrowest Schema.org class
-that is true of its entire admitted scope. The following 25 mappings are the
+that is true of its entire admitted scope. The following 26 mappings are the
 reviewed choices for subject JSON-LD; the source research and supporting
 rationales are in [the Schema.org mapping report](../../docs/research/catalogue-schema-org-mapping.md).
 The corresponding `annotations.schema_org_type` values are a separate profile
@@ -534,6 +534,7 @@ mappings or property semantics.
 | `wd:Q2095` / Food                                  | `https://schema.org/Thing`               |
 | `schema:Recipe` / Recipe                           | `https://schema.org/Recipe`              |
 | `schema:MusicAlbum` / MusicAlbum                   | `https://schema.org/MusicAlbum`          |
+| `schema:MediaObject` / MediaObject                 | `https://schema.org/MediaObject`         |
 | `schema:Quotation` / Quotation                     | `https://schema.org/Quotation`           |
 
 Book work and its book-specific edition both use `Book` while keeping distinct
@@ -541,7 +542,7 @@ native identities. Broad fictional characters and Food use `Thing`; broad game
 releases, add-ons and story arcs use `CreativeWork`. `DefinedTerm` and
 `DefinedTermSet` apply to the classification profiles only. The remaining rows
 select the explicit native-profile classes for games, anime and manga, series,
-people, organizations, applications, recipes, music and quotations.
+people, organizations, applications, recipes, music, catalogue files and quotations.
 
 ### Public classification and genuine measurements
 

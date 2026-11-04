@@ -238,7 +238,7 @@ export function QuotationView({
   const query = useQuery({
     queryKey,
     queryFn: () => transport.read({ quote }),
-    ...(initial === undefined ? {} : { initialData: initial }),
+    ...(initial === undefined ? {} : { initialData: initial, refetchOnMount: false }),
     retry: false,
     staleTime: 0,
     gcTime: 0,
