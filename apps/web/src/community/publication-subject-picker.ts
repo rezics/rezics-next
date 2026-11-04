@@ -73,6 +73,7 @@ export function createPublicationDraft(
   const identity = (target: PublicationTarget): PublicationTarget => ({
     id: target.id,
     title: '',
+    label: '',
     labels: {},
     types: [],
     cover: null,

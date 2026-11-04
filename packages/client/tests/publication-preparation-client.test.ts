@@ -7,10 +7,20 @@ type PreparationRead = Awaited<ReturnType<PublicationPath['preparation']['get']>
 
 const preparation: RealmPublicationPreparation = {
   realm: { realmId: 'realm-1', spaceId: 'space-1', contextId: 'context-1', title: 'Realm', hostTitle: 'Space' },
-  subject: { originalId: 'subject-1', currentId: 'subject-2', presentation: { state: 'unavailable' } },
+  subject: {
+    originalId: 'subject-1',
+    currentId: 'subject-2',
+    presentation: { label: { state: 'unavailable' }, cover: { state: 'unavailable' } },
+  },
   current: { publicationId: 'publication-1', verdict: 'withdraw', decidedAt: '2026-11-04T00:00:00Z' },
   commands: {
-    publish: null,
+    publish: {
+      method: 'POST',
+      href: '/v1/realms/realm-1/publications',
+      subjectId: 'subject-1',
+      expectedHead: 'publication-1',
+      ifMatch: JSON.stringify('publication-1'),
+    },
     withdraw: {
       method: 'POST',
       href: '/v1/realms/realm-1/publications/subject-1:withdraw',

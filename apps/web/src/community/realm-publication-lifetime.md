@@ -24,7 +24,8 @@ rows remain independent of preparation failure.
 ## Native delivery boundary
 
 The installed generated `realms({realmId}).publications({subjectId}).preparation.get` now owns the response
-and optional presentation types. `readRealmPublicationPreparation` prepares the existing authenticated session,
+and optional presentation types. The obsolete Client preparation override is removed; its public DTO exports now
+alias the same generated method. `readRealmPublicationPreparation` prepares the existing authenticated session,
 uses the request signal, and invokes that method once with private, no-store response handling. The response
 stays in the mounted visit, outside query caches and persistent browser state. Preparation failures do not affect
 shelf continuation, reconciliation, membership or Board consumers.

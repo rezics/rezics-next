@@ -19,6 +19,7 @@ const terminal = '0192f3a0-6c1e-7b2a-9d4e-000000000041';
 const work = {
   id: subjectId,
   title: 'Picker disclosure',
+  label: 'Picker disclosure',
   labels: { en: 'Picker disclosure' },
   types: ['schema:Book'],
   cover: null,

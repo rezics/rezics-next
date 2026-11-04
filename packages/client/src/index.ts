@@ -158,22 +158,7 @@ type BanReviewEndpoints = Omit<ReturnType<GeneratedKernelClient['realms']>['bans
   get(options?: BanReviewGetOptions): Promise<BanReviewRead>;
 };
 type GeneratedRealmPath = ReturnType<GeneratedKernelClient['realms']>;
-type GeneratedPublicationCollection = GeneratedRealmPath['publications'];
-type GeneratedPublicationPath = ReturnType<GeneratedPublicationCollection>;
-type GeneratedPublicationRead = Awaited<ReturnType<GeneratedPublicationPath['get']>>;
-type PublicationPreparationRead = Omit<GeneratedPublicationRead, 'data'> & {
-  data: import('./kernel/community/publication-preparation.ts').RealmPublicationPreparationResponse | null;
-};
-type PublicationPreparationEndpoint = {
-  get: (...args: Parameters<GeneratedPublicationPath['get']>) => Promise<PublicationPreparationRead>;
-};
-type PublicationSubjectPath = GeneratedPublicationPath & { preparation: PublicationPreparationEndpoint };
-type PublicationsClient = Omit<GeneratedPublicationCollection, keyof Function> &
-  ((...args: Parameters<GeneratedPublicationCollection>) => PublicationSubjectPath);
-type RealmPath = Omit<GeneratedRealmPath, 'bans' | 'publications'> & {
-  bans: BanReviewEndpoints;
-  publications: PublicationsClient;
-};
+type RealmPath = Omit<GeneratedRealmPath, 'bans'> & { bans: BanReviewEndpoints };
 type RealmsClient = Omit<GeneratedKernelClient['realms'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['realms']>) => RealmPath);
 type GeneratedPostPath = ReturnType<GeneratedKernelClient['posts']>;
