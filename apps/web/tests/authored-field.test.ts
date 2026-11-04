@@ -313,18 +313,25 @@ test('a native stale rejection retains frozen draft and recovery while exact rea
   const fixture = authoredFixture('stale');
   const initial = await fixture.transport.read();
   if (!initial.ok || !initial.selected || !initial.body?.ok) throw new Error('Expected readable current text');
+  const citation = 'https://example.org/original-notes';
   const draft = {
     document: fromPlainText('A private original draft retained after rejection.'),
     language: 'en',
     licence: 'CC-BY-4.0',
-    citation: 'https://example.org/original-notes',
+    references: [
+      {
+        parts: [
+          { property: { id: 'schema:url' }, value: { type: 'value' as const, content: citation } },
+        ],
+      },
+    ],
     original: true,
   };
   let state = authoredState(initialAuthoredState(initial), { type: 'edit', property: authoredProperty, change: draft });
   const command: AuthoredCommand = {
     id: fixture.id,
     key: crypto.randomUUID(),
-    statement: authoredStatement(authoredProperty, draft.document, draft.language, draft.licence, draft.citation),
+    statement: authoredStatement(authoredProperty, draft.document, draft.language, draft.licence, draft.references),
     session: initial.session,
   };
   state = authoredState(state, { type: 'submit', command });
