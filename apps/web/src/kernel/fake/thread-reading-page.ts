@@ -38,7 +38,7 @@ export const routes: FakeRoute[] = [
       // These are the same admitted recorded documents used by the ordinary prepared thread reader.
       const recorded = Object.entries(recordings).find(
         ([key, value]) =>
-          key.startsWith('thread') &&
+          (key.startsWith('thread') || key.endsWith('-thread')) &&
           value.thread &&
           typeof value.thread === 'object' &&
           'id' in value.thread &&
