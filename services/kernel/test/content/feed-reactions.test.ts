@@ -4,14 +4,15 @@ import type { Actor } from '../../src/request/access.ts';
 import type { FeedItem } from '../../src/content/feed-contract.ts';
 import { prepareFeedReactionAdvice } from '../../src/content/feed-reaction-advice.ts';
 import { feedRoute } from '../../src/content/feed-activity.ts';
+import { newId } from '../../src/route/route.ts';
 
 test('reaction advice preserves duplicate Home occurrences and drops a post rebound to another parent', async () => {
   const pool = new Pool();
   try {
-    const threadId = crypto.randomUUID();
-    const postId = crypto.randomUUID();
-    const parentId = crypto.randomUUID();
-    const otherParentId = crypto.randomUUID();
+    const threadId = newId(0);
+    const postId = newId(0);
+    const parentId = newId(0);
+    const otherParentId = newId(0);
     const target = { targetKind: 'post', targetId: postId } as const;
     const row: FeedItem = {
       id: `following:${postId}`,
@@ -43,14 +44,16 @@ test('reaction advice preserves duplicate Home occurrences and drops a post rebo
         reactionAdvice: { target, state: 'unavailable' },
       });
 
+    const reboundPreparation = prepareFeedReactionAdvice([duplicate], contexts, { pool }, actor, Date.now() + 10_000);
+    const preparedRow = reboundPreparation.items[0];
+    if (!preparedRow) throw new Error('Prepared post card missing');
     const rebound = {
-      ...duplicate,
+      ...preparedRow,
       summary: {
-        ...duplicate.summary,
+        ...preparedRow.summary,
         parentContext: { kind: 'reply', parent: { state: 'removed', id: otherParentId } },
       },
     } satisfies FeedItem;
-    const reboundPreparation = prepareFeedReactionAdvice([duplicate], contexts, { pool }, actor, Date.now() + 10_000);
     const stale = await reboundPreparation.finish([rebound]);
     expect(stale[0]?.summary).not.toHaveProperty('reactionAdvice');
   } finally {
