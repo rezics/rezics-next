@@ -496,8 +496,9 @@ function NodeEditor({
       'statement' in value &&
       'statement' in next &&
       value.statement.property !== next.statement.property &&
-      ('range' in value.statement ? value.statement.range : undefined) !==
-        ('range' in next.statement ? next.statement.range : undefined);
+      (('range' in value.statement && value.statement.range.type === 'time') ||
+        ('range' in value.statement ? value.statement.range : undefined) !==
+          ('range' in next.statement ? next.statement.range : undefined));
     context.changeCondition(path, next, !replacesRange);
   };
   const groupOperator = 'and' in value ? 'and' : 'or' in value ? 'or' : undefined;

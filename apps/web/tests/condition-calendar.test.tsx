@@ -158,6 +158,16 @@ test('author, combine, repair, apply and reopen precise calendar conditions; sem
     });
     expect(bound('gte', '/and/0').value).toBe('-0044');
     expect(host.checkValidity()).toBe(true);
+    // A compatible property keeps its authored bounds but cannot revive a retired raw edit on return.
+    metadata.properties['ex:calendarDate'] = { ...metadata.properties['schema:datePublished']! };
+    metadata.types['schema:Book']!.facets = [...(metadata.types['schema:Book']!.facets ?? []), 'ex:calendarDate'];
+    await act(async () => render());
+    await change(bound('gte', '/and/0'), '2024-02-');
+    await change(field('/and/0/statement/property'), 'ex:calendarDate');
+    expect(bound('gte', '/and/0').value).toBe('-0044');
+    await change(field('/and/0/statement/property'), 'schema:datePublished');
+    expect(bound('gte', '/and/0').value).toBe('-0044');
+    expect(host.checkValidity()).toBe(true);
     // Existing numeric years are untouched by mounting, rerendering, or a cancelled transition.
     const numeric: FilterDocument = { statement: { property: 'schema:datePublished', range: { gte: -44, lte: 2024 } } };
     await act(async () => {
