@@ -73,7 +73,7 @@ import { createImporter, type ImporterOptions, type ImportRunResult } from './im
 import { createMediaResolver } from './media-resolver.ts';
 import type { BangumiCoverSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
-import { createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
+import { createSelectedFamilySourceRegistration, createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
 import {
@@ -2400,10 +2400,7 @@ export async function seedCrossMedia(
       extras?.sourceVocabulary,
       vocabulary?.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
     );
-    const bangumiRegistration = createSourceRegistration('bangumi', {
-      source: crossMediaAliases.bangumi,
-      converterRevision: entityRevision,
-    });
+    const bangumiRegistration = createSelectedFamilySourceRegistration('bangumi', crossMediaAliases.bangumi);
     const credits = await deliverBangumiCreatorCredits({
       alias: crossMediaAliases.bangumi,
       converterRevision: entityRevision,

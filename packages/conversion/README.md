@@ -259,7 +259,7 @@ refreshes under this revision. Unknown or invalid types still fail with
 retry keys. Platform and community tools use this same pure module; importer
 skipped-count accounting is separate.
 
-Bangumi revision `bangumi@9` converts the pinned TVAnime infobox fields
+The current Bangumi revision `bangumi@11` retains the pinned TVAnime infobox fields
 `放送开始`, `播放结束` and `话数` on type 2 through the same bound proposal
 path, preserving `bangumi@7` TVAnime name extraction. Start and end keep
 Gregorian year/month/day precision, including explicit `年月日` spellings;
@@ -278,9 +278,9 @@ access authority.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-Bangumi revision `bangumi@9` converts pinned Game infobox `游玩人数` on type 4
-through the same bound proposal path, preserving `bangumi@8` TVAnime original-run
-mapping. A single stated maximum emits only `schema:numberOfPlayers`. An
+The current `bangumi@11` converter retains the pinned Game infobox
+`游玩人数` mapping introduced with `bangumi@9` on type 4, preserving the
+TVAnime original-run mapping. A single stated maximum emits only `schema:numberOfPlayers`. An
 inclusive lower/upper range emits the upper endpoint as the exact unit-1 amount
 and the lower endpoint as `schema:minValue`. Quantity uncertainty bounds are not
 a substitute for that source range. Mode, platform, edition or other condition
@@ -1056,13 +1056,13 @@ identity; the connected native acceptance is
 
 ## Bangumi book grain
 
-The current `bangumi@10` converter dispatches type 1 Book versus BookSeries from
+The current `bangumi@11` converter dispatches type 1 Book versus BookSeries from
 the source series flag, novel platform and wiki template. Comic/manga stays
 generic Book so a novel family is never filled with manga. Type 1 cites a
 parseable `date` as `schema:datePublished` on Book or BookSeries. ISBN,
 publisher and pages stay off the work as withheld edition assertions; volume
 counts stay counts.
-Decision: type 1 Book/BookSeries dispatch remains in `bangumi@10`, preserving
+Decision: type 1 Book/BookSeries dispatch remains in `bangumi@11`, preserving
 TVAnime names, Book-template names, original-run and Game player-count while the
 same honest revision adds TVAnime work evidence. One Bangumi subject stays one
 identity; ISBN does not create a `bf:Instance`.
@@ -1073,7 +1073,7 @@ Decision: plain TVAnime `链接` values become cited `wdt:P973` facts;
 `官方网站` stays with the separate `schema:url` mapping, and the parser removes
 only horizontal template/list boundary whitespace.
 
-`bangumi@10` also consumes the exact pinned TVAnime `链接` and `Copyright`
+`bangumi@11` also consumes the exact pinned TVAnime `链接` and `Copyright`
 fields. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
 source spelling and URL bytes are kept, and the URL is never a source citation
 or identity claim. A plain notice becomes `schema:copyrightNotice` with its
@@ -1089,8 +1089,8 @@ diagnostics. The exact selected TVSeries schema bounds both URLs and notices to
 descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
-- Touches: ordinary `bangumi@10` and selected-family
-  `cross-media-entities@11+bangumi@10` publication for one TVAnime source record,
+- Touches: ordinary `bangumi@11` and selected-family
+  `cross-media-entities@11+bangumi@11` publication for one TVAnime source record,
   its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights
@@ -1100,3 +1100,24 @@ Values are rejected on overflow; none are truncated or canonicalized.
   repair. Kernel `test/imports/bangumi-work-evidence.test.ts` authors ordinary
   independent acceptance/adoption, reopen/current reads and facts-fence behavior;
   neither fixture claims a real-dump walkthrough.
+
+## Bangumi Game publication date
+
+`bangumi@11` reads only one unqualified `发行日期` occurrence from the pinned
+Game infobox. The accepted scalar grammar is the strict Gregorian `YYYY`,
+`YYYY-MM` or `YYYY-MM-DD` form; its native time representation retains source
+precision. Type-4 top-level `date`, qualified dates and duplicate fields remain
+unavailable. Other Game fields stay on their current paths.
+
+- Touches: ordinary `bangumi@11` and selected-family
+  `cross-media-entities@11+bangumi@11` publication for one source-bound
+  VideoGame, with the exact Bangumi subject citation.
+- Bound: one shared pass visits at most 64 top-level infobox fields and retains
+  at most 16 source-free omission diagnostics within existing infobox,
+  projection and command limits. No recursive wiki evaluation or linked-page
+  fetch is used.
+- Growth check: `services/importer/tests/bangumi-game-publication.test.ts`
+  covers ordinary and selected-family proposals, qualified omission and a
+  corrected partial date. The native review/adoption and read scenario is
+  `services/kernel/test/imports/bangumi-game-publication.test.ts`; execution
+  remains controller-owned.

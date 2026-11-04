@@ -11,7 +11,8 @@ import { ConversionError, type ConversionInput, type ConvertedRecord } from './i
 import { bangumiEditionFactsWithheldOnWork, parseBangumiBookInfobox } from './bangumi-book-profile.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { bangumiDiagnosticLimit, extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
-import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
+import { bangumiGamePublication } from './bangumi-game-publication.ts';
+import { bangumiGamePlayerCount, scanBangumiGameInfobox } from './bangumi-game-player-count.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -24,7 +25,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@10';
+export const converter_revision = 'bangumi@11';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
@@ -346,7 +347,9 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       invalid('/summary', 'invalid_record_summary_document_limit');
     }
   }
-  const playerCount = bangumiGamePlayerCount(record);
+  const gameInfobox = scanBangumiGameInfobox(record);
+  const playerCount = bangumiGamePlayerCount(record, gameInfobox);
+  const gamePublication = bangumiGamePublication(record, gameInfobox);
   const proposals: BatchCommand[] = [];
   const propose = (
     statement: BatchStatement,
@@ -395,6 +398,8 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         : fact(item.property, item.content);
       proposals.push(propose(statement, 'facts', item.field));
     }
+    for (const item of gamePublication.facts)
+      proposals.push(propose(fact(item.property, item.content), 'facts', item.field));
     if (document) {
       proposals.push({
         ...propose(fact('schema:abstract', { language: 'und', document }), 'summary', 'summary'),
@@ -460,6 +465,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         ),
         ...television.diagnostics,
         ...playerCount.diagnostics,
+        ...gamePublication.diagnostics,
       ]),
     ],
     coverAssets,

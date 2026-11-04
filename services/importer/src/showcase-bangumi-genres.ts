@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
 import { bangumiPublicTagScheme, reviewedReferenceKey } from '../../../packages/conversion/src/support.ts';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { createReviewedCatalogueLookup, inspectReviewedBangumiBinding } from './reviewed-catalogue.ts';
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
@@ -8,7 +7,7 @@ import { reviewedCatalogueSource } from './reviewed-catalogue.ts';
 import type { RecordBindings } from './record-bindings.ts';
 import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
 import { ImportTransportError, type ReviewedCandidatePage } from './import-client.ts';
-import { createSourceRegistration } from './source-registry.ts';
+import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import type { ShowcaseAcknowledgement, ShowcaseAssertion, ShowcaseVocabularyRecord } from './showcase-manifest.ts';
 import { showcaseDigest } from './showcase-manifest.ts';
 
@@ -157,10 +156,7 @@ export async function prepareShowcaseBangumiGenres(input: {
   }
 
   const reference = reviewedReferenceKey(bangumiPublicTagScheme, HAREM_EDITOR_TAG);
-  const registration = createSourceRegistration('bangumi', {
-    source: input.sourceAlias,
-    converterRevision: entityRevision,
-  });
+  const registration = createSelectedFamilySourceRegistration('bangumi', input.sourceAlias);
   const acknowledgements: ShowcaseAcknowledgement[] = [];
   for (const row of tagged) {
     const owner = { source: input.sourceAlias, external_id: row.key };
