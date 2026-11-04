@@ -8,6 +8,9 @@ import { pageText, linkClass, linkColor } from './shared';
 import { typeListHref, type TypeListTarget } from './type-list-model';
 import { nativeTypeListPage } from './type-list-page-admission';
 import { useSearchRetryWait } from '../../search/search-recovery-retry';
+import { subjectHref } from '../../subject/subject-href';
+import { admittedCatalogueWorkId } from '../feed/home-work-library/contract';
+import { HomeWorkLibraryAction, useHomeWorkLibraryEnabled } from '../feed/home-work-library/view';
 
 export const TypeListContext = createContext<{ target?: TypeListTarget; full?: string; cursor?: string }>({});
 
@@ -17,6 +20,7 @@ const controlClass = `${linkClass} ${linkColor} inline-flex min-h-[44px] min-w-[
 export function TypeList(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
   const { target, full, cursor } = useContext(TypeListContext);
+  const homeLibraryEnabled = useHomeWorkLibraryEnabled();
   const id = String(props.id);
   const section = value?.sections.get(id);
   const retryWaiting = useSearchRetryWait(section && !section.ok ? section.retryAt : undefined);
@@ -25,14 +29,30 @@ export function TypeList(props: Record<string, unknown>) {
   const title = pageText(props.title, value.locale);
   const options = { locale: value.locale as never };
   const page = section?.ok ? nativeTypeListPage(section.read, section.body) : undefined;
-  const items: Item[] = (page?.subjects ?? []).map((hit) => ({
-    id: hit.id,
-    label: pageText(hit.labels, value.locale),
-    notes: [],
-    gated: false,
-    type: hit.type,
-    ...(hit.summary !== null ? { summary: hit.summary } : {}),
-  }));
+  const items: Item[] = (page?.subjects ?? []).map((hit) => {
+    const label = pageText(hit.labels, value.locale);
+    const workId = homeLibraryEnabled ? admittedCatalogueWorkId({ id: hit.id, summary: hit.summary }) : undefined;
+    const href = subjectHref({ id: hit.id, label: label.text }, value.locale).href;
+    return {
+      id: hit.id,
+      label,
+      notes: [],
+      gated: false,
+      type: hit.type,
+      ...(hit.summary !== null ? { summary: hit.summary } : {}),
+      ...(workId
+        ? {
+            supportSlot: (
+              <HomeWorkLibraryAction
+                subjectId={workId}
+                href={`${href}?slot=collections`}
+                locale={value.locale}
+              />
+            ),
+          }
+        : {}),
+    };
+  });
   const href = target ? typeListHref(value.locale, target, id, full === id ? cursor : undefined) : undefined;
   const next = page?.next && target ? typeListHref(value.locale, target, id, page.next) : undefined;
   return (

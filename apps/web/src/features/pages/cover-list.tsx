@@ -120,14 +120,22 @@ function ItemCard({
       }
     />
   );
+  const cardWithSupport = item.supportSlot ? (
+    <div className="min-w-0 space-y-2">
+      {card}
+      {!item.gated ? item.supportSlot : null}
+    </div>
+  ) : (
+    card
+  );
   // Only rendered facts and the resolved presentation matter, not adapter function identity or unused facts.
   const disclosure = contentIdentity([keyFacts, listPresentation]);
   return item.gated ? (
     <SpoilerGate key={disclosure} label={value.spoilerShow} hideLabel={value.labels.spoilerHide}>
-      {card}
+      {cardWithSupport}
     </SpoilerGate>
   ) : (
-    card
+    cardWithSupport
   );
 }
 
@@ -178,7 +186,8 @@ export function CoverList({
   const cards = items.map((item) => {
     // Item has no revision field: compare its delivered content even when a statement ID is reused.
     // Count only identical occurrences, so distinct statements to the same target survive reordering.
-    const identity = contentIdentity([item, disclosure]);
+    const publicItem = Object.fromEntries(Object.entries(item).filter(([field]) => field !== 'supportSlot'));
+    const identity = contentIdentity([publicItem, disclosure]);
     const occurrence = occurrences.get(identity) ?? 0;
     occurrences.set(identity, occurrence + 1);
     const key = `${identity}:${occurrence}`;

@@ -1,4 +1,4 @@
-import { HomeCatalogue } from '../features/pages/home-catalogue';
+import { HomeCatalogue, homeCatalogueObservation } from '../features/pages/home-catalogue';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback } from 'react';
@@ -96,6 +96,9 @@ export function Home() {
       readQuestions={readQuestions}
       readQuestion={readQuestion}
       origin={loaded.origin}
+      reader={viewer?.subject ?? null}
+      credentialEpoch={viewer?.scope ?? null}
+      catalogueObservation={homeCatalogueObservation(loaded.catalogue)}
       verification={loaded.verification}
     />
   );

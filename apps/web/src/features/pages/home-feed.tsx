@@ -6,6 +6,8 @@ import { FeedResults, type FeedResultsResult } from '../feed/feed-results';
 import { homeFeedRecoveryMessages, type FeedEmptyContext } from '../feed/feed-empty-state';
 import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { HomeFeedActions } from '../feed/action-bar';
+import { HomeWorkLibraryProvider } from '../feed/home-work-library/view';
+import type { HomeWorkLibraryProjection, HomeWorkLibraryScope } from '../feed/home-work-library/contract';
 import { useHomeReactionCurrentness } from '../feed/home-reaction-currentness';
 import type { VerificationConfig } from '../../report/turnstile';
 import { createHomeKindChoices, homeKindChoice, type HomeKindsReader } from './home-feed-kinds';
@@ -313,6 +315,10 @@ export function HomeFeedConsumer({
   origin,
   catalogue,
   verification,
+  homeWorkLibrary,
+  reader,
+  credentialEpoch,
+  catalogueObservation,
 }: {
   initial: HomeFeedResult;
   locale: string;
@@ -325,6 +331,11 @@ export function HomeFeedConsumer({
   origin: string;
   catalogue?: ReactNode;
   verification?: VerificationConfig | undefined;
+  /** Optional local producer seam; no private query is started when it is absent. */
+  homeWorkLibrary?: HomeWorkLibraryProjection;
+  reader?: string | null;
+  credentialEpoch?: string | null;
+  catalogueObservation?: string;
 }) {
   const window = useState(() => createHomeFeedWindow(initial, read))[0];
   const choices = useState(() => createHomeKindChoices(readKinds))[0];
@@ -625,57 +636,87 @@ export function HomeFeedConsumer({
       window.clear();
     };
   }, [window, signedIn, locale]);
+  const privateObservation =
+    snapshot.result.state === 'ready'
+      ? JSON.stringify([
+          snapshot.result.page.asOf,
+          snapshot.result.page.feedItems.map((item) => [
+            item.id,
+            item.source,
+            item.key,
+            item.destination,
+            'id' in item.summary ? item.summary.id : null,
+            'creativeWork' in item.summary ? item.summary.creativeWork : null,
+          ]),
+          catalogueObservation ?? 'unavailable',
+        ])
+      : JSON.stringify([snapshot.result.state, snapshot.result.code, catalogueObservation ?? 'unavailable']);
+  const homeWorkLibraryScope: HomeWorkLibraryScope = {
+    reader: reader ?? '',
+    credentialEpoch: credentialEpoch ?? '',
+    source: JSON.stringify(snapshot.input),
+    observation: privateObservation,
+    locale,
+    route: '/',
+  };
   return (
-    <HomeFeed
-      result={snapshot.result}
-      catalogue={catalogue}
-      verification={verification}
-      locale={locale}
+    <HomeWorkLibraryProvider
+      expectedScope={homeWorkLibraryScope}
       signedIn={signedIn}
-      stream={snapshot.input.stream}
-      busy={snapshot.busy}
-      input={snapshot.input}
-      filterSelections={filterSelections}
-      onClearFilters={clearFilters}
-      suppressResultMessage={filterOwnsResultMessage}
-      spaceControl={
-        <HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />
-      }
-      questionControl={
-        <HomeFeedQuestionControl
-          choices={questions}
-          snapshot={questionSnapshot}
-          locale={locale}
-          selectedId={snapshot.input.ratingQuestionId}
-          onRestore={() => void restoreSelection(window.snapshot().input)}
-        />
-      }
-      kindControl={
-        <HomeFeedKindControl
-          choices={choices}
-          snapshot={kinds}
-          locale={locale}
-          onSelect={(choice) => {
-            choices.select(choice);
-            const { cursor: _cursor, kind: _kind, ...selection } = snapshot.input;
-            loadSelection({ ...selection, ...(choice ? { kind: choice.id } : {}) });
-          }}
-        />
-      }
-      onSelect={(stream) => {
-        const { cursor: _cursor, ...selection } = snapshot.input;
-        loadSelection({ ...selection, stream });
-      }}
-      onRetry={retry}
-      onRestart={() => {
-        const { cursor: _cursor, ...selection } = snapshot.input;
-        loadSelection(selection, 'replace');
-      }}
-      onNext={(cursor) => {
-        const input = { ...snapshot.input, cursor };
-        saveNavigation(input, 'push');
-        if (!loadRefusal(snapshot.input)) void window.load(input);
-      }}
-    />
+      enabled
+      projection={homeWorkLibrary}
+    >
+      <HomeFeed
+        result={snapshot.result}
+        catalogue={catalogue}
+        verification={verification}
+        locale={locale}
+        signedIn={signedIn}
+        stream={snapshot.input.stream}
+        busy={snapshot.busy}
+        input={snapshot.input}
+        filterSelections={filterSelections}
+        onClearFilters={clearFilters}
+        suppressResultMessage={filterOwnsResultMessage}
+        spaceControl={
+          <HomeFeedSpaceControl selection={spaces} snapshot={spaceSnapshot} locale={locale} origin={origin} />
+        }
+        questionControl={
+          <HomeFeedQuestionControl
+            choices={questions}
+            snapshot={questionSnapshot}
+            locale={locale}
+            selectedId={snapshot.input.ratingQuestionId}
+            onRestore={() => void restoreSelection(window.snapshot().input)}
+          />
+        }
+        kindControl={
+          <HomeFeedKindControl
+            choices={choices}
+            snapshot={kinds}
+            locale={locale}
+            onSelect={(choice) => {
+              choices.select(choice);
+              const { cursor: _cursor, kind: _kind, ...selection } = snapshot.input;
+              loadSelection({ ...selection, ...(choice ? { kind: choice.id } : {}) });
+            }}
+          />
+        }
+        onSelect={(stream) => {
+          const { cursor: _cursor, ...selection } = snapshot.input;
+          loadSelection({ ...selection, stream });
+        }}
+        onRetry={retry}
+        onRestart={() => {
+          const { cursor: _cursor, ...selection } = snapshot.input;
+          loadSelection(selection, 'replace');
+        }}
+        onNext={(cursor) => {
+          const input = { ...snapshot.input, cursor };
+          saveNavigation(input, 'push');
+          if (!loadRefusal(snapshot.input)) void window.load(input);
+        }}
+      />
+    </HomeWorkLibraryProvider>
   );
 }

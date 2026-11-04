@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
-import { CheckIcon, EllipsisIcon, LibraryBigIcon, ReplyIcon, Share2Icon } from 'lucide-react';
+import { CheckIcon, EllipsisIcon, ReplyIcon, Share2Icon } from 'lucide-react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -23,6 +23,8 @@ import { homeFeedDestination, homeFeedTitle } from '../pages/home-feed-destinati
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import { homeFeedReaction } from './home-feed-reaction';
+import { admittedFeedWorkId } from './home-work-library/contract';
+import { HomeWorkLibraryAction } from './home-work-library/view';
 
 export type FeedActionBarProps = {
   locale: string;
@@ -86,7 +88,7 @@ export function HomeFeedActions({
   const href = homeFeedDestination(item, locale);
   const kind = item.destination.kind;
   if (kind !== 'thread' && kind !== 'post' && kind !== 'subject') return children;
-  const isWork = kind === 'subject' && 'creativeWork' in item.summary && item.summary.creativeWork;
+  const workId = admittedFeedWorkId(item);
   const destination = item.destination;
   const reaction = homeFeedReaction(item, {
     signedIn,
@@ -124,7 +126,20 @@ export function HomeFeedActions({
           ? { href: `${href}${href.includes('#') ? '' : '#reply'}` }
           : undefined
       }
-      library={isWork && href ? { href: `${href}?slot=collections` } : undefined}
+      library={
+        workId && href
+          ? {
+              control: (
+                <HomeWorkLibraryAction
+                  subjectId={workId}
+                  href={`${href}?slot=collections`}
+                  locale={locale}
+                  signedIn={signedIn}
+                />
+              ),
+            }
+          : undefined
+      }
     >
       {children}
     </FeedActionBar>

@@ -188,6 +188,8 @@ export type Item = {
   /** The property a relation read found the item by, and the holder's date when the read carries one. */
   property?: string;
   date?: string;
+  /** Private Home controls are an in-memory projection and never part of a public relation identity. */
+  supportSlot?: ReactNode;
 };
 function hasMore(count: Count | undefined, returned: number): boolean {
   return count !== undefined && (count.relation === 'lower_bound' || count.value > returned);

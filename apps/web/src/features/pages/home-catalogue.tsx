@@ -46,3 +46,29 @@ export function HomeCatalogue({ result, locale }: { result?: RoutePageLoad | und
     </section>
   );
 }
+
+/** Stable public identity for the Home TypeList reads; private Library facts never enter this cache key. */
+export function homeCatalogueObservation(result?: RoutePageLoad): string {
+  if (result?.kind !== 'page') return 'unavailable';
+  const lists = result.page.document.content.flatMap((node) =>
+    isRecord(node) && node.type === 'TypeList' && isRecord(node.props) && typeof node.props.id === 'string'
+      ? [node.props.id]
+      : [],
+  );
+  return JSON.stringify(
+    [result.page.route, result.page.profile, result.page.template, lists.map((id) => {
+      const read = result.page.reads[id];
+      const body = read?.body;
+      const subjects = isRecord(body) && Array.isArray(body.subjects) ? body.subjects : [];
+      return [
+        id,
+        read?.status ?? null,
+        subjects.map((subject) =>
+          isRecord(subject)
+            ? [subject.id ?? null, subject.type ?? null, isRecord(subject.summary) ? subject.summary.creativeWork : null]
+            : null,
+        ),
+      ];
+    })],
+  );
+}
