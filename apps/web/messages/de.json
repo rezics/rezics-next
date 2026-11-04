@@ -8622,5 +8622,20 @@
   "library_collection_metadata_history_cover_none": "Kein Titelbild",
   "library_collection_metadata_history_first_page": "Erste Seite",
   "library_collection_metadata_history_next_page": "Nächste Seite",
-  "library_collection_metadata_history_return_editor": "Zurück zum Metadateneditor"
+  "library_collection_metadata_history_return_editor": "Zurück zum Metadateneditor",
+  "search_population_label": "Bewertungsgrundlage",
+  "search_population_global": "Global",
+  "search_population_selected": "Gewählte Realm-Bewertungsgrundlage",
+  "search_population_help": "Diese Auswahl legt nur die Bewertungsgrundlage fest. Sie fügt keine Filter für die Zugehörigkeit zu einem Realm oder einer Collection hinzu und entfernt keine.",
+  "search_population_order_help": "Bei Bewertung verwendet die Suche die veröffentlichten Realm-Werte zur Standardfrage innerhalb einer einzigen Objektpartition. Suchtext und alle Filter werden gemeinsam angewendet; eine geladene Vorschau wird nicht nachträglich sortiert.",
+  "search_population_ready": "Die Realm-Bewertungsreihenfolge ist für die Standardfrage und eine einzige Objektpartition bereit.",
+  "search_population_preparing": "Die Realm-Bewertungsreihenfolge wird vorbereitet. Die gewählte Grundlage und die Suchbedingungen bleiben erhalten.",
+  "search_population_unavailable": "Die Realm-Bewertungsreihenfolge ist nicht verfügbar. Die Suche hat weder eine geladene Vorschau sortiert noch die Reihenfolge durch die globale Bewertung ersetzt.",
+  "search_population_refused": "Die Suche hat diese Realm-Bewertungsanfrage abgelehnt. Die Bewertungsgrundlage ist unabhängig von der Ressourcenzugehörigkeit. Prüfe die unterstützte Realm-Auswahl oder die Suchbedingungen, oder wähle Relevanz.",
+  "search_population_generation_change": "Die Realm-Rangfolge hat sich während des Blätterns geändert. Starte mit der aktuellen Grundlage und den Filtern neu. Dies dient der Wiederherstellung, nicht der Korrektur deiner Bedingungen.",
+  "search_population_check_again": "Erneut prüfen",
+  "search_population_retry": "Diese Realm-Suche wiederholen",
+  "search_population_restart": "Dieselbe Suche neu starten",
+  "shell_client_unavailable": "Die interaktiven Bedienelemente konnten nicht geladen werden. Die Serverantwort bleibt unten verfügbar. Lade diese Seite erneut.",
+  "shell_client_reload": "Diese Seite neu laden"
 }

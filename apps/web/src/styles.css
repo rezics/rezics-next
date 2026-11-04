@@ -132,3 +132,16 @@ a:not([data-slot$='button']):is(:hover, :focus-visible) {
     display: none;
   }
 }
+
+/* Module loading can fail before client.tsx runs. Keep the native server response usable. */
+[data-client-load-recovery] {
+  display: none;
+}
+
+html[data-client-load-failed]:not([data-hydrated]) [data-client-load-recovery] {
+  display: block;
+}
+
+html[data-client-load-failed]:not([data-hydrated]) [data-session-pending] {
+  display: none;
+}

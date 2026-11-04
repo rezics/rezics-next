@@ -83,6 +83,7 @@ function useBrowserSession(): ClientSession {
 
   // Anonymous preview clients still perform their isolated session read, but cannot own or lend it.
   if (anonymous) return signedOutSession;
+  if (queryState?.status === 'error') return normalizeSessionObservation({ state: 'unavailable' });
   if (!queryState || queryState.status !== 'success') return unknownSession;
   return normalizeSessionObservation(queryState.data);
 }

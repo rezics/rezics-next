@@ -1275,6 +1275,7 @@ export function SearchPage({
           onOpenChange={(open) => {
             if (!open) closeFilters();
           }}
+          closeLabel={m.search_close_filters({}, options)}
           title={`${m.search_filters({}, options)} (${number.format(activeFilterCount)})`}
         >
           <form id="search-filters" method="get" action={`/${locale}/search`} onSubmit={submit} onClick={follow}>

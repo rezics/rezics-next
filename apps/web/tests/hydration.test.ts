@@ -101,3 +101,64 @@ test(
   },
   timeout,
 );
+
+test(
+  'localized Search recovers a failed entry import, settles a rejected session read and uses phone filters',
+  async () => {
+    const origin = await site();
+    const zh = await messages('zh-Hant');
+    const ja = await messages('ja');
+    const page = await (await context({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' })).newPage();
+    try {
+      // The captured ERR_NETWORK_CHANGED failed this exact module before hydration could start.
+      await page.route('**/src/client.tsx*', (route) => route.abort('internetdisconnected'), { times: 1 });
+      await page.goto(`${origin}/zh-Hant/search?q=Steins%3BGate`, { waitUntil: 'domcontentloaded' });
+      const recovery = page.getByRole('alert').filter({ hasText: zh.shell_client_unavailable! });
+      await recovery.waitFor();
+      expect(await page.locator('html[data-hydrated]').count()).toBe(0);
+      expect(await page.locator('header [aria-busy="true"]').isVisible()).toBe(false);
+      let rejected = 0;
+      await page.route('**/_server/**', async (route) => {
+        if (route.request().method() === 'GET') {
+          rejected++;
+          await route.abort('internetdisconnected');
+        } else await route.continue();
+      });
+      await recovery.getByRole('link', { name: zh.shell_client_reload! }).click();
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+      await page.getByRole('status').filter({ hasText: zh.shell_account_unavailable! }).waitFor();
+      expect(rejected).toBeGreaterThan(0);
+      await page
+        .locator(
+          '[data-search-recovery="closed"], [data-search-recovery="denied"], [data-search-recovery="unavailable"]',
+        )
+        .waitFor();
+      expect(await page.locator('[data-search-recovery="loading"]').count()).toBe(0);
+      const population = page.getByLabel(zh.search_population_label!, { exact: true });
+      const box = await population.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      const help = await page.locator(`[id="${await population.getAttribute('aria-describedby')}"]`).boundingBox();
+      expect(help!.y).toBeGreaterThanOrEqual(box!.y + box!.height);
+      await page.getByRole('button', { name: new RegExp(zh.search_filters!) }).click();
+      const sheet = page.getByRole('dialog');
+      await sheet.waitFor();
+      await sheet.getByRole('button', { name: zh.search_close_filters!, exact: true }).click();
+      await sheet.waitFor({ state: 'hidden' });
+      expect(await page.evaluate(() => document.activeElement?.textContent)).toContain(zh.search_filters!);
+      // A native order replacement and a locale navigation both retain the executed query.
+      await page.getByLabel(zh.search_sort_label!, { exact: true }).selectOption('rating');
+      await page.waitForURL((url) => url.searchParams.get('sort') === 'rating');
+      expect(new URL(page.url()).searchParams.get('q')).toBe('Steins;Gate');
+      const destination = new URL(page.url());
+      destination.pathname = '/ja/search';
+      await page.goto(destination.href, { waitUntil: 'domcontentloaded' });
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+      await page.getByLabel(ja.search_population_label!, { exact: true }).waitFor();
+      expect(await page.getByLabel(ja.search_sort_label!, { exact: true }).inputValue()).toBe('rating');
+      expect(new URL(page.url()).searchParams.get('q')).toBe('Steins;Gate');
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);

@@ -8622,5 +8622,20 @@
   "library_collection_metadata_history_cover_none": "无封面",
   "library_collection_metadata_history_first_page": "第一页",
   "library_collection_metadata_history_next_page": "下一页",
-  "library_collection_metadata_history_return_editor": "返回元数据编辑器"
+  "library_collection_metadata_history_return_editor": "返回元数据编辑器",
+  "search_population_label": "评分总体",
+  "search_population_global": "全站",
+  "search_population_selected": "已选的 Realm 评分总体",
+  "search_population_help": "此选项只决定采用哪个总体的评分，不会添加或移除 Realm 或 Collection 的成员筛选条件。",
+  "search_population_order_help": "选择按评分排序时，搜索会在单一条目分区内采用该 Realm 标准问题的已发布分数，同时应用搜索词与所有筛选条件，不会只对已加载的预览结果排序。",
+  "search_population_ready": "此 Realm 的评分排序已就绪，适用于标准问题与单一条目分区。",
+  "search_population_preparing": "此 Realm 的评分排序正在准备中。所选评分总体与搜索条件已保留。",
+  "search_population_unavailable": "目前无法获取此 Realm 的评分排序。搜索未对已加载的预览结果排序，也未改用全站评分。",
+  "search_population_refused": "搜索拒绝了本次 Realm 评分请求。评分总体与资源成员资格相互独立；请检查支持的 Realm 选项与搜索条件，或选择相关度排序。",
+  "search_population_generation_change": "浏览期间 Realm 排名已变更。请保留当前评分总体与筛选条件，重新开始搜索。这是恢复步骤，并不表示需要修改搜索条件。",
+  "search_population_check_again": "再次检查",
+  "search_population_retry": "重试此 Realm 搜索",
+  "search_population_restart": "重新开始相同搜索",
+  "shell_client_unavailable": "交互控件加载失败。下方仍可查看服务器响应；请重新加载此页重试。",
+  "shell_client_reload": "重新加载此页"
 }

@@ -8622,5 +8622,20 @@
   "library_collection_metadata_history_cover_none": "表紙なし",
   "library_collection_metadata_history_first_page": "最初のページ",
   "library_collection_metadata_history_next_page": "次のページ",
-  "library_collection_metadata_history_return_editor": "メタデータ編集に戻る"
+  "library_collection_metadata_history_return_editor": "メタデータ編集に戻る",
+  "search_population_label": "評価の集計対象",
+  "search_population_global": "全体",
+  "search_population_selected": "選択中の Realm の評価",
+  "search_population_help": "この選択で変わるのは評価の集計対象だけです。Realm や Collection への所属を絞り込む条件は追加・削除されません。",
+  "search_population_order_help": "評価順を選ぶと、検索は単一の項目区分内で Realm の標準質問の公開済みスコアを使います。検索語とすべての絞り込み条件を適用し、読み込み済みのプレビューだけを並べ替えることはありません。",
+  "search_population_ready": "この Realm の評価順を利用できます。標準質問と単一の項目区分に対応しています。",
+  "search_population_preparing": "この Realm の評価順を準備しています。選択した集計対象と検索条件は保持されています。",
+  "search_population_unavailable": "この Realm の評価順は利用できません。読み込み済みのプレビューの並べ替えや、全体の評価への置き換えは行っていません。",
+  "search_population_refused": "この Realm の評価リクエストは拒否されました。評価の集計対象はリソースへの所属とは別の設定です。対応する Realm や検索条件を確認するか、関連度順を選んでください。",
+  "search_population_generation_change": "閲覧中に Realm のランキングが変わりました。現在の集計対象と絞り込み条件を保ったまま検索をやり直してください。これは復旧のための操作であり、条件の修正ではありません。",
+  "search_population_check_again": "もう一度確認",
+  "search_population_retry": "この Realm 検索を再試行",
+  "search_population_restart": "同じ条件で検索をやり直す",
+  "shell_client_unavailable": "操作に必要な機能を読み込めませんでした。下にサーバーの応答を表示しています。このページを再読み込みしてお試しください。",
+  "shell_client_reload": "このページを再読み込み"
 }

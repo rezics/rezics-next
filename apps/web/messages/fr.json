@@ -8622,5 +8622,20 @@
   "library_collection_metadata_history_cover_none": "Aucune couverture",
   "library_collection_metadata_history_first_page": "Première page",
   "library_collection_metadata_history_next_page": "Page suivante",
-  "library_collection_metadata_history_return_editor": "Revenir à l’éditeur de métadonnées"
+  "library_collection_metadata_history_return_editor": "Revenir à l’éditeur de métadonnées",
+  "search_population_label": "Population des notes",
+  "search_population_global": "Globale",
+  "search_population_selected": "Population du Realm sélectionné",
+  "search_population_help": "Ce choix définit uniquement la population des notes. Il n’ajoute ni ne supprime de filtre d’appartenance à un Realm ou à une Collection.",
+  "search_population_order_help": "Le tri par note utilise les scores publiés du Realm pour la question standard dans une seule partition de sujets. La recherche applique ensemble le texte et tous les filtres ; elle ne trie pas un aperçu déjà chargé.",
+  "search_population_ready": "Le tri par note du Realm est prêt pour la question standard et une seule partition de sujets.",
+  "search_population_preparing": "Le tri par note du Realm est en préparation. La population choisie et les conditions de recherche sont conservées.",
+  "search_population_unavailable": "Le tri par note du Realm est indisponible. La recherche n’a ni trié un aperçu chargé ni remplacé cet ordre par les notes globales.",
+  "search_population_refused": "La recherche a refusé cette demande de notes du Realm. La population est indépendante de l’appartenance aux ressources ; vérifiez le Realm pris en charge ou les conditions, ou choisissez Pertinence.",
+  "search_population_generation_change": "Le classement du Realm a changé pendant la navigation. Relancez la recherche avec la population et les filtres actuels. Il s’agit d’une reprise, pas d’une correction de vos conditions.",
+  "search_population_check_again": "Vérifier à nouveau",
+  "search_population_retry": "Réessayer cette recherche de Realm",
+  "search_population_restart": "Relancer la même recherche",
+  "shell_client_unavailable": "Les commandes interactives n’ont pas pu être chargées. La réponse du serveur reste disponible ci-dessous. Rechargez cette page pour réessayer.",
+  "shell_client_reload": "Recharger cette page"
 }

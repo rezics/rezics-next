@@ -59,9 +59,9 @@ export function SearchSort({
     <form
       method="get"
       action={`/${locale}/search`}
-      className="flex max-w-full flex-wrap items-center justify-end gap-2"
+      className="grid w-full min-w-0 gap-3 sm:grid-cols-[auto_minmax(0,24rem)_auto] sm:justify-end"
     >
-      <Field orientation="horizontal" className="w-auto flex-wrap justify-end gap-2">
+      <Field orientation="vertical" className="min-w-0 gap-1">
         <FieldLabel htmlFor={sortId} className="text-sm text-muted-foreground">
           {m.search_sort_label({}, messageLocale)}
         </FieldLabel>
@@ -70,7 +70,7 @@ export function SearchSort({
           name={disabled ? undefined : 'sort'}
           disabled={disabled}
           value={sort === 'rating' ? 'rating' : ''}
-          className="h-9 shrink-0 rounded-md border border-input bg-background px-2 text-sm [&_select]:w-auto"
+          className="w-full min-w-0 [&_select]:block [&_select]:min-h-11"
           onChange={(event) => {
             void router?.navigate({
               href: searchSortHref(
@@ -94,17 +94,8 @@ export function SearchSort({
           <NativeSelectOption value="rating">{m.search_sort_rating({}, messageLocale)}</NativeSelectOption>
         </NativeSelect>
       </Field>
-      <details className="min-w-0 max-w-full text-sm text-muted-foreground">
-        <summary className="min-h-10 cursor-pointer content-center rounded-lg px-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
-          {m.search_reader_rating_help_title({}, messageLocale)}
-        </summary>
-        <p className="mt-1 px-2 text-muted-foreground">
-          {ratingPopulation
-            ? 'When Rating is selected, native Search uses the Realm’s published score for the standard question within one subject partition. It intersects the query and filters together; it does not rank a loaded preview.'
-            : m.rating_public_ordering({}, messageLocale)}
-        </p>
-      </details>
       <RatingPopulationControl
+        locale={locale}
         populations={ratingPopulations}
         selectedPopulationId={ratingPopulation}
         readiness={ratingReadiness}
@@ -145,10 +136,20 @@ export function SearchSort({
       <button
         type="submit"
         disabled={disabled}
-        className="h-9 shrink-0 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50"
+        className="min-h-11 justify-self-end rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 sm:mt-6"
       >
         {m.search_sort_submit_button({}, messageLocale)}
       </button>
+      <details className="order-last min-w-0 text-sm text-muted-foreground sm:col-span-3">
+        <summary className="min-h-11 cursor-pointer content-center rounded-lg px-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+          {m.search_reader_rating_help_title({}, messageLocale)}
+        </summary>
+        <p className="mt-1 px-2 text-muted-foreground">
+          {ratingPopulation
+            ? m.search_population_order_help({}, messageLocale)
+            : m.rating_public_ordering({}, messageLocale)}
+        </p>
+      </details>
     </form>
   );
 }

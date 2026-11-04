@@ -37,7 +37,7 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
     previous.current = { lifetime, data: withoutRecovery(query.data) };
   const data = useMemo(() => {
     const prior = previous.current?.lifetime === lifetime ? previous.current.data : undefined;
-    const state = query.data?.recovery;
+    const state = query.isError ? { status: 'unavailable' as const } : query.data?.recovery;
     if (params.cursor && prior && (query.isFetching || (state && keepsEarlierResults(state.status)))) {
       const matchingCut =
         (state?.status !== 'sparse' && state?.status !== 'exhausted') ||
@@ -51,12 +51,13 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
         };
       }
     }
+    if (query.isError && !query.isFetching) return searchUnavailablePage(params, query.data?.conditionMetadata);
     return query.data
       ? query.isFetching
         ? searchPageForRecovery(query.data, { status: 'loading' })
         : query.data
-      : searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' });
-  }, [lifetime, params, query.data, query.isFetching]);
+      : searchPageForRecovery(searchUnavailablePage(params), { status: query.isPending ? 'loading' : 'unavailable' });
+  }, [lifetime, params, query.data, query.isFetching, query.isError, query.isPending]);
   return {
     data,
     retry: () => {
