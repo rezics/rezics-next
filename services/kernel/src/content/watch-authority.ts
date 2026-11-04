@@ -56,6 +56,29 @@ export function watchAuthorization(deps: WatchDependencies, actor: Actor, deadli
   });
 }
 
+export type WatchRemoveAdvice = 'available' | 'denied';
+
+/** One current account:update observation for the whole page; never a per-row Access fetch. */
+export async function watchRemoveAdvice(
+  deps: WatchDependencies,
+  actor: Actor,
+  owner: ReturnType<typeof watchOwner>,
+  deadline: number,
+): Promise<WatchRemoveAdvice> {
+  const update = await accessCheck(
+    deps.access,
+    actor,
+    'account:update',
+    { route: owner.route, id: owner.id },
+    { pool: deps.pool, deadline },
+  );
+  return within(deadline, () =>
+    withConnection(deps.pool, async (connection) =>
+      (await update(deadlineClient(connection, deadline))) ? 'available' : 'denied',
+    ),
+  );
+}
+
 export function watchReceipt(actor: Actor, kind: string, key: string, input: unknown) {
   return {
     kind,

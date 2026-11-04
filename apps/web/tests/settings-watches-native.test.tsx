@@ -14,6 +14,7 @@ const threadRow = {
   state: 'available',
   resourceId: 'thread-1',
   title: 'Reading together',
+  command: { watchId: 'thread-watch-episode', kind: 'thread', expectedRevision: 7 },
 };
 const unavailableRow = {
   id: 'private-watch-episode',
@@ -21,14 +22,23 @@ const unavailableRow = {
   revision: 9,
   createdAt,
   state: 'unavailable',
+  command: { watchId: 'private-watch-episode', kind: 'thread', expectedRevision: 9 },
+};
+const envelope = {
+  viewer: { state: 'current' as const, accountId: 'alice' },
+  actions: { remove: 'available' as const },
 };
 
 test('watch pages strictly decode the installed kinds and conceal unavailable target identity', () => {
-  const page = decodeWatchPage({ items: [threadRow, unavailableRow], next: null }, 'thread');
+  const page = decodeWatchPage({ ...envelope, items: [threadRow, unavailableRow], next: null }, 'thread');
+  expect(page.viewer).toEqual(envelope.viewer);
+  expect(page.actions).toEqual(envelope.actions);
   expect(page.watches[0]).toMatchObject({
     subscriptionId: 'thread-watch-episode',
     kind: 'thread',
     revision: 7,
+    command: threadRow.command,
+    remove: 'available',
     target: { title: 'Reading together', href: `/${getLocale()}/threads/thread-1/reading-together` },
   });
   expect(page.watches[1]).toEqual({
@@ -36,11 +46,15 @@ test('watch pages strictly decode the installed kinds and conceal unavailable ta
     kind: 'thread',
     revision: 9,
     createdAt,
+    command: unavailableRow.command,
+    remove: 'available',
     target: null,
   });
   expect(JSON.stringify(page.watches[1])).not.toContain('resourceId');
   expect(() => decodeWatchPage({ items: [{ ...threadRow, kind: 'unknown' }], next: null }, 'thread')).toThrow();
-  expect(() => decodeWatchPage({ items: [{ ...threadRow, extra: 'untrusted' }], next: null }, 'thread')).toThrow();
+  expect(() =>
+    decodeWatchPage({ ...envelope, items: [{ ...threadRow, extra: 'untrusted' }], next: null }, 'thread'),
+  ).toThrow();
 });
 
 test('generated inventory and exact removal operations preserve kind, cursor, revision and JSON key codec', async () => {
@@ -55,6 +69,7 @@ test('generated inventory and exact removal operations preserve kind, cursor, re
       if (request.method === 'GET') {
         const kind = url.searchParams.get('kind');
         return Response.json({
+          ...envelope,
           items:
             kind === 'thread'
               ? [threadRow, unavailableRow]
@@ -67,6 +82,7 @@ test('generated inventory and exact removal operations preserve kind, cursor, re
                     state: 'available',
                     resourceId: 'board-1',
                     title: 'Books',
+                    command: { watchId: 'board-watch-episode', kind: 'board', expectedRevision: 3 },
                   },
                 ],
           next: null,
@@ -75,18 +91,21 @@ test('generated inventory and exact removal operations preserve kind, cursor, re
       return Response.json({ removed: true });
     }) as typeof fetch,
   });
-  const first = await readWatchInventoryNative(client, 'alice', 'Bearer alice', {
+  const first = await readWatchInventoryNative(client, 'alice', {
     kind: 'thread',
     limit: 20,
     cursor: null,
   });
-  const board = await readWatchInventoryNative(client, 'alice', 'Bearer alice', {
+  const board = await readWatchInventoryNative(client, 'alice', {
     kind: 'board',
     limit: 20,
     cursor: 'opaque/+cursor==',
   });
-  expect(first.watches).toHaveLength(2);
-  expect(board.watches[0]?.target?.href).toBe(`/${getLocale()}/boards/board-1`);
+  expect(first.kind).toBe('page');
+  expect(board.kind).toBe('page');
+  if (first.kind !== 'page' || board.kind !== 'page') throw new Error('expected pages');
+  expect(first.page.watches).toHaveLength(2);
+  expect(board.page.watches[0]?.target?.href).toBe(`/${getLocale()}/boards/board-1`);
   expect(new URL(requests[0]!.request.url).searchParams.toString()).toBe('kind=thread&limit=20');
   expect(new URL(requests[1]!.request.url).searchParams.get('cursor')).toBe('opaque/+cursor==');
   expect(requests.slice(0, 2).map(({ request }) => request.headers.get('authorization'))).toEqual([
@@ -101,7 +120,7 @@ test('generated inventory and exact removal operations preserve kind, cursor, re
     expectedRevision: 9,
     idempotencyKey: '01a17a3b-0884-721b-91ef-d7ffd7bb58f8',
   });
-  expect(await removeWatchNative(client, 'Bearer alice', command)).toEqual({ kind: 'removed' });
+  expect(await removeWatchNative(client, command)).toEqual({ kind: 'removed' });
   const deletion = requests[2]!;
   expect(deletion.request.method).toBe('DELETE');
   expect(new URL(deletion.request.url).pathname).toBe('/v1/accounts/alice/watches/private-watch-episode');
@@ -122,8 +141,9 @@ test('fixed 20-row watch visits release controllers and ignore unrelated invento
       state: 'available',
       resourceId: `thread-${index}`,
       title: `Thread ${index}`,
+      command: { watchId: `watch-${index}`, kind: 'thread', expectedRevision: 1 },
     }));
-    const wire = JSON.stringify({ items: serverRows.slice(0, 20), next: null });
+    const wire = JSON.stringify({ ...envelope, items: serverRows.slice(0, 20), next: null });
     for (const visits of [1, 10, 100]) {
       let requests = 0;
       let activeControllers = 0;
@@ -138,14 +158,14 @@ test('fixed 20-row watch visits release controllers and ignore unrelated invento
         }) as typeof fetch,
       });
       for (let visit = 0; visit < visits; visit++) {
-        const page = await readWatchInventoryNative(client, 'alice', 'Bearer alice', {
+        const page = await readWatchInventoryNative(client, 'alice', {
           kind: 'thread',
           limit: 20,
           cursor: null,
         });
         const controller = new WatchController(
           {
-            read: async () => ({ kind: 'page', page }),
+            read: async () => page,
             stop: async () => {
               commandAttempts++;
               return { kind: 'removed' };
@@ -184,15 +204,20 @@ test('uncertain removal retries the original command and a retired owner callbac
     kind: 'thread' as const,
     revision: 9,
     createdAt,
+    command: { watchId: 'private-watch-episode', kind: 'thread' as const, expectedRevision: 9 },
+    remove: 'available' as const,
     target: null,
   };
+  const listed = { kind: 'page' as const, page: { ...envelope, watches: [row], next: null } };
   const commands: unknown[] = [];
   const controller = new WatchController(
     {
-      read: async () => ({ kind: 'page', page: { watches: [row], next: null } }),
+      read: async () => listed,
       stop: async (command) => {
         commands.push(command);
-        return commands.length === 1 ? { kind: 'uncertain' } : { kind: 'removed' };
+        return commands.length === 1
+          ? { kind: 'uncertain' as const, problem: { status: 503, code: 'deadline_exceeded' } }
+          : { kind: 'removed' as const };
       },
     },
     {
@@ -219,7 +244,7 @@ test('uncertain removal retries the original command and a retired owner callbac
 
   const lateController = new WatchController(
     {
-      read: async () => ({ kind: 'page', page: { watches: [row], next: null } }),
+      read: async () => listed,
       stop: async (command) => {
         commands.push(command);
         return { kind: 'removed' };
@@ -243,4 +268,33 @@ test('uncertain removal retries the original command and a retired owner callbac
   await lateController.stop(row.subscriptionId);
   expect(lateController.snapshot()).toMatchObject({ retired: true, rows: [], command: null });
   expect(commands).toHaveLength(2);
+});
+
+test('native inventory keeps problem metadata for cursor restart, dependency failure and conflicted removal', async () => {
+  const answers = [
+    Response.json({ code: 'invalid_cursor', retryable: false, request_id: 'cursor-1' }, { status: 400 }),
+    Response.json({ code: 'dependency_unavailable', retryable: true, request_id: 'dep-1' }, { status: 503 }),
+    Response.json({ code: 'conflict', retryable: false, request_id: 'rev-1' }, { status: 409 }),
+  ];
+  const client = createKernelClient('http://kernel.local', {
+    headers: { authorization: 'Bearer alice' },
+    fetch: (async () => answers.shift()!) as typeof fetch,
+  });
+  expect(await readWatchInventoryNative(client, 'alice', { kind: 'thread', limit: 20, cursor: 'stale' })).toEqual({
+    kind: 'invalid_cursor',
+    problem: { status: 400, code: 'invalid_cursor', retryable: false, requestId: 'cursor-1' },
+  });
+  expect(await readWatchInventoryNative(client, 'alice', { kind: 'thread', limit: 20, cursor: 'stale' })).toEqual({
+    kind: 'unavailable',
+    problem: { status: 503, code: 'dependency_unavailable', retryable: true, requestId: 'dep-1' },
+  });
+  expect(
+    await removeWatchNative(client, {
+      accountId: 'alice',
+      watchId: 'private-watch-episode',
+      kind: 'thread',
+      expectedRevision: 9,
+      idempotencyKey: '01a17a3b-0884-721b-91ef-d7ffd7bb58f8',
+    }),
+  ).toEqual({ kind: 'conflict', problem: { status: 409, code: 'conflict', retryable: false, requestId: 'rev-1' } });
 });

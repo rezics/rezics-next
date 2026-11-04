@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { m } from '../paraglide/messages.js';
 import { useSettingsDisposal, useSettingsSessionOwner } from './settings-session-owner';
 import { useSettingsNavigationDraft } from './reading-navigation';
+import { usePreferenceRetry } from './preference-failure-retry';
 import { WatchController } from './watch-controller';
 import { readWatchInventory, removeWatchSubscription } from './actions';
 import type { WatchManagementIO } from './watch-native';
@@ -46,10 +47,36 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
   useEffect(() => {
     if (controller.snapshot().read === 'idle') void controller.first();
   }, [controller]);
+  const retryFailure = useMemo(
+    () =>
+      state.problem
+        ? { status: state.problem.status, ...(state.problem.retryAfter ? { retryAfter: state.problem.retryAfter } : {}) }
+        : undefined,
+    [state.problem],
+  );
+  const waiting = usePreferenceRetry(retryFailure);
   if (state.retired) return null;
   const reading = state.read === 'idle' || state.read === 'loading';
-  const failed = state.read === 'failed' || state.read === 'unavailable';
-  const disabled = !!state.command || !controller.canWrite();
+  const failed =
+    state.read === 'failed' ||
+    state.read === 'unavailable' ||
+    state.read === 'denied' ||
+    state.read === 'invalid_cursor';
+  const disabled = !!state.command || !controller.canRemove();
+  const readText =
+    state.read === 'denied'
+      ? m.settings_watches_denied()
+      : state.read === 'invalid_cursor'
+        ? m.settings_watches_invalid_cursor()
+        : state.read === 'unavailable'
+          ? m.settings_watches_unavailable()
+          : m.settings_watches_failed_text();
+  const writeText =
+    state.write === 'denied'
+      ? m.settings_watches_remove_denied()
+      : state.write === 'conflict'
+        ? m.settings_watches_conflict()
+        : m.settings_watches_rejected();
   return (
     <section id="watches" aria-labelledby="settings-watches-heading" className="scroll-mt-6">
       <Card>
@@ -84,9 +111,15 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
           </div>
           {state.write === 'sending' ? <p role="status">{m.settings_watches_stopping()}</p> : null}
           {state.write === 'removed' ? <p role="status">{m.settings_watches_removed()}</p> : null}
-          {state.write === 'rejected' ? (
+          {state.write === 'rejected' || state.write === 'conflict' || state.write === 'denied' ? (
             <Alert variant="destructive">
-              <AlertDescription>{m.settings_watches_rejected()}</AlertDescription>
+              <AlertDescription
+                data-response-status={state.problem?.status ?? ''}
+                data-response-code={state.problem?.code ?? ''}
+                data-retry-after={state.problem?.retryAfter}
+              >
+                {writeText}
+              </AlertDescription>
             </Alert>
           ) : null}
           {state.write === 'uncertain' ? (
@@ -114,13 +147,34 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
             <Alert variant="destructive">
               <AlertTitle>{m.settings_watches_failed_title()}</AlertTitle>
               <AlertDescription className="space-y-3">
-                <p>
-                  {state.read === 'unavailable' ? m.settings_watches_unavailable() : m.settings_watches_failed_text()}
+                <p
+                  data-response-status={state.problem?.status ?? ''}
+                  data-response-code={state.problem?.code ?? ''}
+                  data-retry-after={state.problem?.retryAfter}
+                >
+                  {readText}
                 </p>
-                <Button className={controlClass} variant="outline" onClick={() => void controller.refresh()}>
-                  {m.settings_retry()}
-                </Button>
+                {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+                {state.read === 'invalid_cursor' ? (
+                  <Button className={controlClass} variant="outline" onClick={() => void controller.first()}>
+                    {m.settings_watches_restart()}
+                  </Button>
+                ) : (
+                  <Button
+                    className={controlClass}
+                    variant="outline"
+                    disabled={waiting}
+                    onClick={() => void controller.refresh()}
+                  >
+                    {m.settings_retry()}
+                  </Button>
+                )}
               </AlertDescription>
+            </Alert>
+          ) : null}
+          {state.read === 'ready' && state.actions?.remove === 'denied' ? (
+            <Alert>
+              <AlertDescription>{m.settings_watches_remove_denied()}</AlertDescription>
             </Alert>
           ) : null}
           {state.read === 'ready' ? (

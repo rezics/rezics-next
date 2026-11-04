@@ -1,5 +1,14 @@
 import { withManagedReadDeadline } from './managed-read-deadline';
-import type { ManagedWatch, StopWatch, WatchKind, WatchManagementIO, WatchPage } from './watch-native';
+import type {
+  ManagedWatch,
+  NativeWatchProblem,
+  StopWatch,
+  WatchActions,
+  WatchKind,
+  WatchManagementIO,
+  WatchPage,
+  WatchViewer,
+} from './watch-native';
 
 export const watchPageLimit = 20;
 
@@ -11,12 +20,15 @@ type WatchOwner = {
 };
 export type WatchState = Readonly<{
   kind: WatchKind;
-  read: 'idle' | 'loading' | 'ready' | 'failed' | 'unavailable';
+  read: 'idle' | 'loading' | 'ready' | 'failed' | 'unavailable' | 'denied' | 'invalid_cursor';
   rows: readonly ManagedWatch[];
   cursor: string | null;
   next: string | null;
+  viewer: WatchViewer | null;
+  actions: WatchActions | null;
+  problem: NativeWatchProblem | null;
   command: StopWatch | null;
-  write: 'idle' | 'sending' | 'uncertain' | 'rejected' | 'removed';
+  write: 'idle' | 'sending' | 'uncertain' | 'rejected' | 'removed' | 'conflict' | 'denied';
   retired: boolean;
 }>;
 const initial: WatchState = {
@@ -25,6 +37,9 @@ const initial: WatchState = {
   rows: [],
   cursor: null,
   next: null,
+  viewer: null,
+  actions: null,
+  problem: null,
   command: null,
   write: 'idle',
   retired: false,
@@ -74,6 +89,7 @@ export class WatchController {
   };
   needsDecision = () => this.current() && this.state.command !== null;
   canWrite = () => this.current() && !!this.owner.credential();
+  canRemove = () => this.canWrite() && this.state.actions?.remove === 'available';
 
   refresh = () => this.load(this.state.cursor);
   first = () => this.load(null);
@@ -87,6 +103,9 @@ export class WatchController {
 
   private validPage(page: WatchPage) {
     return (
+      page.viewer.state === 'current' &&
+      page.viewer.accountId === this.owner.subject &&
+      (page.actions.remove === 'available' || page.actions.remove === 'denied') &&
       page.watches.length <= watchPageLimit &&
       new Set(page.watches.map((row) => row.subscriptionId)).size === page.watches.length &&
       page.watches.every(
@@ -95,6 +114,10 @@ export class WatchController {
           Number.isSafeInteger(row.revision) &&
           row.revision > 0 &&
           typeof row.createdAt === 'string' &&
+          row.command.watchId === row.subscriptionId &&
+          row.command.kind === row.kind &&
+          row.command.expectedRevision === row.revision &&
+          row.remove === page.actions.remove &&
           (row.target === null ||
             (typeof row.target.title === 'string' &&
               typeof row.target.href === 'string' &&
@@ -108,17 +131,33 @@ export class WatchController {
     const generation = ++this.generation;
     this.request = new AbortController();
     // A failed refresh cannot lend its previous rows current read or command authority.
-    this.update({ read: 'loading', rows: [], cursor, next: null, kind });
+    this.update({
+      read: 'loading',
+      rows: [],
+      cursor,
+      next: null,
+      kind,
+      viewer: null,
+      actions: null,
+      problem: null,
+    });
     try {
       const result = await withManagedReadDeadline(
         (signal) => this.io.read({ accountId: this.owner.subject, kind, limit: watchPageLimit, cursor, signal }),
         this.request.signal,
       );
       if (!this.current() || generation !== this.generation) return;
-      if (result.kind === 'unavailable') {
-        this.update({ read: 'unavailable' });
-      } else if (this.validPage(result.page)) {
-        this.update({ read: 'ready', rows: result.page.watches, next: result.page.next });
+      if (result.kind === 'page' && this.validPage(result.page)) {
+        this.update({
+          read: 'ready',
+          rows: result.page.watches,
+          next: result.page.next,
+          viewer: result.page.viewer,
+          actions: result.page.actions,
+          problem: null,
+        });
+      } else if (result.kind === 'invalid_cursor' || result.kind === 'denied' || result.kind === 'unavailable') {
+        this.update({ read: result.kind, problem: result.problem });
       } else {
         this.update({ read: 'failed' });
       }
@@ -129,12 +168,12 @@ export class WatchController {
 
   stop = async (subscriptionId: string) => {
     const row = this.state.rows.find((candidate) => candidate.subscriptionId === subscriptionId);
-    if (!this.canWrite() || this.state.read !== 'ready' || this.state.command || !row) return;
+    if (!this.canRemove() || this.state.read !== 'ready' || this.state.command || !row) return;
     const command = Object.freeze({
-      accountId: this.owner.subject,
-      watchId: row.subscriptionId,
-      kind: row.kind,
-      expectedRevision: row.revision,
+      accountId: this.state.viewer?.accountId ?? this.owner.subject,
+      watchId: row.command.watchId,
+      kind: row.command.kind,
+      expectedRevision: row.command.expectedRevision,
       idempotencyKey: crypto.randomUUID(),
     });
     this.update({ command, write: 'sending' });
@@ -158,14 +197,36 @@ export class WatchController {
           rows: this.state.rows.filter((row) => row.subscriptionId !== command.watchId || row.kind !== command.kind),
           command: null,
           write: 'removed',
+          problem: null,
         });
-      } else if (result.kind === 'rejected') {
-        this.update({ command: null, write: 'rejected', read: 'failed', rows: [], next: null });
+      } else if (result.kind === 'uncertain') {
+        this.update({ write: 'uncertain', problem: result.problem });
+      } else if (result.kind === 'denied') {
+        this.update({
+          command: null,
+          write: 'denied',
+          read: 'denied',
+          rows: [],
+          next: null,
+          viewer: null,
+          actions: null,
+          problem: result.problem,
+        });
       } else {
-        this.update({ write: 'uncertain' });
+        this.update({
+          command: null,
+          write: result.kind,
+          read: 'failed',
+          rows: [],
+          next: null,
+          viewer: null,
+          actions: null,
+          problem: result.problem,
+        });
       }
     } catch {
-      if (this.current() && this.state.command === command) this.update({ write: 'uncertain' });
+      if (this.current() && this.state.command === command)
+        this.update({ write: 'uncertain', problem: { status: null, code: null } });
     }
   }
 }

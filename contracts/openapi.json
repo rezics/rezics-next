@@ -19344,12 +19344,55 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "actions": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "remove": {
+                          "enum": [
+                            "available",
+                            "denied"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "remove"
+                      ],
+                      "type": "object"
+                    },
                     "items": {
                       "items": {
                         "anyOf": [
                           {
                             "additionalProperties": false,
                             "properties": {
+                              "command": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "expectedRevision": {
+                                    "maximum": 2147483646,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "thread",
+                                      "board"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "watchId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "watchId",
+                                  "kind",
+                                  "expectedRevision"
+                                ],
+                                "type": "object"
+                              },
                               "createdAt": {
                                 "format": "date-time",
                                 "type": "string"
@@ -19393,13 +19436,41 @@
                               "createdAt",
                               "state",
                               "resourceId",
-                              "title"
+                              "title",
+                              "command"
                             ],
                             "type": "object"
                           },
                           {
                             "additionalProperties": false,
                             "properties": {
+                              "command": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "expectedRevision": {
+                                    "maximum": 2147483646,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "thread",
+                                      "board"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "watchId": {
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "watchId",
+                                  "kind",
+                                  "expectedRevision"
+                                ],
+                                "type": "object"
+                              },
                               "createdAt": {
                                 "format": "date-time",
                                 "type": "string"
@@ -19430,7 +19501,8 @@
                               "kind",
                               "revision",
                               "createdAt",
-                              "state"
+                              "state",
+                              "command"
                             ],
                             "type": "object"
                           }
@@ -19446,9 +19518,29 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "viewer": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accountId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "current",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "accountId"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
+                    "viewer",
+                    "actions",
                     "items",
                     "next"
                   ],

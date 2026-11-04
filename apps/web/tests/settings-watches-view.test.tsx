@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Window } from 'happy-dom';
 import * as start from '../.storybook/react-start';
-import type { WatchManagementIO, WatchRead } from '../src/settings/watch-native';
+import type { ManagedWatch, WatchManagementIO, WatchRead } from '../src/settings/watch-native';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -40,24 +40,40 @@ test('the mounted private view separates inaccessible targets, uncertain removal
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
+  const envelope = {
+    viewer: { state: 'current' as const, accountId: 'alice' },
+    actions: { remove: 'available' as const },
+  };
+  const row = (
+    watch: Omit<ManagedWatch, 'command' | 'remove'> & Partial<Pick<ManagedWatch, 'command' | 'remove'>>,
+  ): ManagedWatch => ({
+    ...watch,
+    command: watch.command ?? {
+      watchId: watch.subscriptionId,
+      kind: watch.kind,
+      expectedRevision: watch.revision,
+    },
+    remove: watch.remove ?? 'available',
+  });
   let response: WatchRead = {
     kind: 'page',
     page: {
+      ...envelope,
       watches: [
-        {
+        row({
           subscriptionId: 'hidden-owner-id',
           kind: 'thread',
           revision: 8,
           createdAt: '2026-11-02T10:00:00.000Z',
           target: null,
-        },
-        {
+        }),
+        row({
           subscriptionId: 'readable-owner-id',
           kind: 'thread',
           revision: 9,
           createdAt: '2026-11-03T10:00:00.000Z',
           target: { title: 'Readable thread', href: '/threads/a/readable' },
-        },
+        }),
       ],
       next: null,
     },
@@ -69,7 +85,10 @@ test('the mounted private view separates inaccessible targets, uncertain removal
       if (fail) throw new Error('offline');
       return response;
     },
-    stop: async () => ({ kind: ++writes === 1 ? 'uncertain' : 'removed' }),
+    stop: async () =>
+      writes++ === 0
+        ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } }
+        : { kind: 'removed' },
   };
   const click = async (text: string) => {
     const button = [...host.querySelectorAll('button')].find((item) => item.textContent === text);
@@ -98,11 +117,11 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     await click(m.settings_watches_retry_original());
     expect(host.textContent).toContain(m.settings_watches_removed());
     expect(host.textContent).not.toContain(m.settings_watches_access_lost());
-    response = { kind: 'page', page: { watches: [], next: 'opaque' } };
+    response = { kind: 'page', page: { ...envelope, watches: [], next: 'opaque' } };
     await click(m.settings_watches_refresh());
     expect(host.textContent).toContain(m.settings_watches_sparse());
     expect(host.textContent).not.toContain(m.settings_watches_empty());
-    response = { kind: 'page', page: { watches: [], next: null } };
+    response = { kind: 'page', page: { ...envelope, watches: [], next: null } };
     await click(m.settings_watches_next());
     expect(host.textContent).toContain(m.settings_watches_end());
     await click(m.settings_watches_first());
@@ -112,9 +131,16 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     expect(host.textContent).toContain(m.settings_watches_failed_text());
     expect(host.textContent).not.toContain(m.settings_watches_empty());
     fail = false;
-    response = { kind: 'unavailable' };
+    response = { kind: 'unavailable', problem: { status: 503, code: 'dependency_unavailable' } };
     await click(m.settings_retry());
     expect(host.textContent).toContain(m.settings_watches_unavailable());
+    expect(host.querySelector('[data-response-code="dependency_unavailable"]')).toBeTruthy();
+    response = { kind: 'invalid_cursor', problem: { status: 400, code: 'invalid_cursor' } };
+    await click(m.settings_retry());
+    expect(host.textContent).toContain(m.settings_watches_invalid_cursor());
+    response = { kind: 'page', page: { ...envelope, actions: { remove: 'denied' }, watches: [], next: null } };
+    await click(m.settings_watches_restart());
+    expect(host.textContent).toContain(m.settings_watches_remove_denied());
     await act(async () =>
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'bob' }),
     );

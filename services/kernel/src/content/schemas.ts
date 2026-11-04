@@ -77,6 +77,20 @@ export const ContentIdSchema = t.String({
   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
 });
 export const WatchManagementKindSchema = t.Union([t.Literal('thread'), t.Literal('board')]);
+export const WatchManagementAdviceSchema = t.Union([t.Literal('available'), t.Literal('denied')]);
+export const WatchManagementViewerSchema = t.Object(
+  { state: t.Literal('current'), accountId: ContentIdSchema },
+  closed,
+);
+export const WatchManagementActionsSchema = t.Object({ remove: WatchManagementAdviceSchema }, closed);
+export const WatchManagementCommandSchema = t.Object(
+  {
+    watchId: ContentIdSchema,
+    kind: WatchManagementKindSchema,
+    expectedRevision: t.Integer({ minimum: 1, maximum: 2147483646 }),
+  },
+  closed,
+);
 const watchManagementIdentity = {
   id: ContentIdSchema,
   kind: WatchManagementKindSchema,
@@ -90,19 +104,29 @@ export const WatchManagementItemSchema = t.Union([
       state: t.Literal('available'),
       resourceId: ContentIdSchema,
       title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
+      command: WatchManagementCommandSchema,
     },
     closed,
   ),
-  t.Object({ ...watchManagementIdentity, state: t.Literal('unavailable') }, closed),
+  t.Object(
+    { ...watchManagementIdentity, state: t.Literal('unavailable'), command: WatchManagementCommandSchema },
+    closed,
+  ),
 ]);
 export const WatchManagementPageSchema = t.Object(
   {
+    viewer: WatchManagementViewerSchema,
+    actions: WatchManagementActionsSchema,
     items: t.Array(WatchManagementItemSchema, { maxItems: 20 }),
     next: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
   },
   closed,
 );
 export type WatchManagementKind = Static<typeof WatchManagementKindSchema>;
+export type WatchManagementAdvice = Static<typeof WatchManagementAdviceSchema>;
+export type WatchManagementViewer = Static<typeof WatchManagementViewerSchema>;
+export type WatchManagementActions = Static<typeof WatchManagementActionsSchema>;
+export type WatchManagementCommand = Static<typeof WatchManagementCommandSchema>;
 export type WatchManagementItem = Static<typeof WatchManagementItemSchema>;
 export type WatchManagementPage = Static<typeof WatchManagementPageSchema>;
 const nullableId = t.Union([ContentIdSchema, t.Null()]);
