@@ -1,11 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
 import type { SelectedContext } from '@rezics/composition';
 import type { SubjectRead } from '@rezics/client';
+import type { Release } from '@rezics/definitions';
+import { loadRecordingRelease } from './actions';
 import type { ProfileBound } from '../music-reader';
 import type { PageLink } from '../../pages/shared';
-import { loadRecordingRelease } from './actions';
-import { recordingReaderVisit } from './model';
 import { RecordingReader } from './view';
+import { useRecordingRelease, type RecordingReleaseLoader } from './review/release';
+
+const readRelease: RecordingReleaseLoader = (digest) => loadRecordingRelease({ data: digest });
 
 export function RecordingOverview({
   locale,
@@ -13,43 +15,44 @@ export function RecordingOverview({
   bounds,
   context,
   returnTo,
+  currentHref,
   link,
+  loadRelease = readRelease,
 }: {
   locale: string;
   public: SubjectRead;
   bounds?: readonly ProfileBound[];
   context?: SelectedContext;
   returnTo?: string;
+  currentHref?: string;
   link?: PageLink;
+  /** Injectable only for mounted examples; production uses the authenticated server function above. */
+  loadRelease?: RecordingReleaseLoader;
 }) {
-  const source = publicRead.subject;
-  const query = useQuery({
-    queryKey: ['recording-reader', source.id, source.context, source.revision, source.release, locale],
-    queryFn: () => loadRecordingRelease({ data: source.release }),
-    retry: false,
-    staleTime: Infinity,
-    gcTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
-  const loaded = query.data?.ok ? query.data : undefined;
-  const visit = recordingReaderVisit({
+  const episode = useRecordingRelease({
     locale,
     public: publicRead,
-    ...(loaded ? { release: loaded.release, releaseDigest: loaded.digest } : {}),
-    ...(!query.isPending && (!query.data?.ok || query.isError) ? { reason: 'unavailable' as const } : {}),
     ...(bounds ? { bounds } : {}),
-    ...(query.isPending ? { loading: true } : {}),
+    ...(context ? { context } : {}),
+    loadRelease,
   });
+  const release: Release | undefined = episode.release;
+
   return (
     <RecordingReader
-      visit={visit}
+      visit={episode.visit}
       read={publicRead}
-      {...(loaded ? { release: loaded.release } : {})}
+      {...(release ? { release } : {})}
       locale={locale}
       {...(context ? { context } : {})}
       {...(returnTo ? { returnTo } : {})}
-      {...(link ? { link } : {})}
+      {...(currentHref ? { currentHref } : {})}
+      retryAvailable={episode.retryAvailable}
+      retrying={episode.retrying}
+      onRetry={episode.retry}
+      scope={episode.generation}
+      active={episode.active}
+      link={link}
     />
   );
 }
