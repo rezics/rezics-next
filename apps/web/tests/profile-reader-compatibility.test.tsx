@@ -739,7 +739,8 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       ),
     );
     expect(injectedMarkup).toContain(`value="${nativeProfile.displayName}"`);
-    expect(injectedMarkup).not.toMatch(/<input[^>]*disabled/);
+    const injectedDocument = new window.DOMParser().parseFromString(injectedMarkup, 'text/html');
+    expect(injectedDocument.querySelector('input[id$="-displayName"]')?.disabled).toBe(false);
     expect(injectedMarkup).not.toMatch(/role="switch"[^>]*disabled/);
     const hiddenMarkup = renderToStaticMarkup(
       createElement(
