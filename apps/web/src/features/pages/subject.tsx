@@ -825,7 +825,7 @@ export function SubjectPage({
                 locale={locale}
                 public={composedSubjectRead(read)}
                 bounds={boundedProfileRelations(page)}
-                context={page.context}
+                {...(page.context ? { context: page.context } : {})}
                 {...(visitReturn ? { returnTo: visitReturn } : {})}
                 link={ContextLink}
               />

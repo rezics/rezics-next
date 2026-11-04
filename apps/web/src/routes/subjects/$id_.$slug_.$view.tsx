@@ -263,7 +263,7 @@ function SubjectViewRoute() {
   return (
     <SubjectViewPage
       page={page}
-      returnTo={search.via}
+      {...(search.via ? { returnTo: search.via } : {})}
       subjectLabel={frame.title.text}
       curation={
         view === 'details' && !realm ? <SubjectCandidateCuration id={page.subject!} locale={locale} /> : undefined
