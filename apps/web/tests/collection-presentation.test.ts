@@ -3,7 +3,12 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { parseListPresentation } from '@rezics/ui/cover';
 import { CollectionMemberDetails } from '../src/library/collection-member-row';
-import { collectionMemberRatio, type CollectionListPresentations } from '../src/library/collection-presentation';
+import {
+  collectionMemberRatio,
+  collectionPageAddress,
+  type CollectionListPresentations,
+} from '../src/library/collection-presentation';
+import { collectionFilterAddress } from '../src/library/collection-filter-params';
 import { subjectOf, type CollectionMember } from '../src/library/reads';
 import { getLocale, locales, overwriteGetLocale } from '../src/paraglide/runtime.js';
 import recording from '../src/kernel/recorded/library-collection-members.json';
@@ -190,6 +195,38 @@ test('unset presentation stays mixed and exact member hints do not follow a pare
   expect(
     ['work', 'character', 'person', 'unreleased'].map((type) => collectionMemberRatio({ type }, {}, hints)),
   ).toEqual(['16:9', '5:7', '1:1', '5:7']);
+});
+
+test('grid/list and predicate addresses retain view state and reset only invalid cursors', () => {
+  const search = { type: 'schema:Book', 'f.schema:genre': ['novel', 'essay'] };
+  const address = (cursor: string | undefined, layout: 'grid' | 'list') =>
+    new URL(collectionPageAddress('zh-Hant', 'collection', cursor, search, layout), 'https://site.test');
+  const grid = address('opaque+/=', 'grid');
+  const list = address('opaque+/=', 'list');
+  const first = new URL(collectionPageAddress('ja', 'collection', undefined), 'https://site.test');
+  const filtered = new URL(
+    collectionFilterAddress(
+      'zh-Hant',
+      'collection',
+      { 'schema:genre': ['film'] },
+      {},
+      {},
+      search.type,
+      grid.searchParams,
+    ),
+    'https://site.test',
+  );
+  expect([grid.searchParams.get('layout'), list.searchParams.has('layout')]).toEqual(['grid', false]);
+  expect([
+    list.searchParams.get('cursor'),
+    list.searchParams.get('type'),
+    list.searchParams.getAll('f.schema:genre'),
+  ]).toEqual(['opaque+/=', 'schema:Book', ['novel', 'essay']]);
+  expect([first.search, filtered.searchParams.has('cursor'), filtered.searchParams.get('layout')]).toEqual([
+    '',
+    false,
+    'grid',
+  ]);
 });
 
 test('native order and reorder preserve duplicate Subject occurrences and later-page boundaries', async () => {

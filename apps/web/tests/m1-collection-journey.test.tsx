@@ -291,6 +291,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
         <CollectionPage
           queryKey={['collection-journey']}
           cursor={undefined}
+          layout="grid"
           page={value}
           refreshPage={async () => {
             refreshes++;
@@ -310,6 +311,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
     await show({ ...page, viewerActions: { state: 'ready', actions: [] } });
     expect(button(m.library_collection_add_items())).toBeUndefined();
     await show(page);
+    expect(host.querySelector('[data-collection-members]')?.getAttribute('data-collection-layout')).toBe('grid');
     await click(button(m.library_collection_add_items()));
     const picker = host.querySelector<HTMLInputElement>('input[role=combobox]')!;
     await click(picker);
@@ -367,6 +369,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
         node.getAttribute('data-collection-member-id'),
       ),
     ).toContain(members[0]!.id);
+    expect(host.querySelector('[data-collection-members]')?.getAttribute('data-collection-layout')).toBe('grid');
     const dynamic = {
       id: id(30),
       title: 'Saved property rule',
