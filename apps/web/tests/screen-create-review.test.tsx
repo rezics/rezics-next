@@ -6,7 +6,6 @@ import type { Release } from '@rezics/definitions';
 import type { CreateResult, CreatedReader } from '../src/features/catalogue/create-subject';
 import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { ScreenCommand } from '../src/features/catalogue/screen-profile';
-import type { ScreenTransport } from '../src/features/catalogue/screen-profile-view';
 import recorded from '../src/kernel/recorded/definitions-release.json';
 import * as start from '../.storybook/react-start';
 
@@ -402,8 +401,8 @@ async function mountScreenCreate(options: {
   session?: 'signed-in' | 'signed-out';
   subject?: string;
   series?: boolean;
-  create?: ScreenTransport['create'];
-  read?: ScreenTransport['read'];
+  create?: (command: ScreenCommand) => Promise<CreateResult>;
+  read?: (id: string) => Promise<CreatedReader>;
 }) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
@@ -441,7 +440,7 @@ async function mountScreenCreate(options: {
   const fixture = screenProfileFixture();
   const commands: ScreenCommand[] = [];
   const reads: string[] = [];
-  const transport: ScreenTransport = {
+  const transport = {
     ...fixture.transport,
     eligibility: options.eligibility,
     ...(options.series
@@ -501,6 +500,7 @@ async function mountScreenCreate(options: {
   };
   await render();
   const canvas = () => within(host);
+  await waitFor(() => expect(canvas().getByRole('textbox', { name: m.catalogue_create_label() })).toBeDefined());
   return {
     host,
     canvas,
@@ -519,7 +519,7 @@ async function mountScreenCreate(options: {
       );
     },
     async submit() {
-      const retry = canvas().queryByRole('button', { name: m.correction_retry() });
+      const retry = canvas().queryByRole('button', { name: m.catalogue_create_retry() });
       if (retry) return act(async () => user.click(retry));
       await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
     },
@@ -542,7 +542,7 @@ test('refused, unknown and guest Screen eligibility keep admitted types and seri
   });
   try {
     await guest.waitFor(() => expect(guest.host.textContent).toContain(guest.m.identity_intake_authority_guest()));
-    expect(guest.host.textContent).toContain(guest.m.screen_episode_from_series());
+    await guest.waitFor(() => expect(guest.host.textContent).toContain(guest.m.screen_episode_from_series()));
     expect(guest.canvas().getByRole('textbox', { name: guest.m.catalogue_create_label() })).toBeDefined();
     expect(guest.host.textContent).toContain('Parent series');
     expect(
@@ -682,7 +682,9 @@ test('viewer replacement drops a late allowed Screen observation', async () => {
   });
   try {
     await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_reading()));
-    expect(page.canvas().getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined(),
+    );
     await page.render({ subject: 'bob' });
     await page.waitFor(() =>
       expect(page.canvas().getByRole('alert').textContent).toContain(
