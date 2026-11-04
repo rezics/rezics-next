@@ -234,10 +234,17 @@ const tick = (fn: () => unknown = () => {}) =>
     await fn();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+function hostProps<T>(element: Element): T {
+  const key = Object.getOwnPropertyNames(element).find((name) => name.startsWith('__reactProps$'));
+  if (!key) throw new Error('React props are not attached to the rendered test element');
+  return (element as unknown as Record<string, unknown>)[key] as T;
+}
 function formCallback(host: HTMLDivElement) {
-  const props = Object.entries(host.querySelector('form')!).find(([key]) => key.startsWith('__reactProps$'))![1] as {
+  const form = host.querySelector('form');
+  if (!form) throw new Error('Progress start form is not rendered');
+  const props = hostProps<{
     onSubmit: (event: { preventDefault(): void }) => void;
-  };
+  }>(form);
   return () => props.onSubmit({ preventDefault() {} });
 }
 async function mount() {
@@ -562,9 +569,9 @@ test('healthy same-viewer rotation and equivalent refresh retain exact uncertain
           if (mode !== 'completed_units')
             await tick(() => {
               const input = h.host.querySelector('[name="total"]')!;
-              const props = Object.entries(input).find(([key]) => key.startsWith('__reactProps$'))![1] as {
+              const props = hostProps<{
                 onChange: (event: { target: { value: string } }) => void;
-              };
+              }>(input);
               props.onChange({ target: { value: '0' } });
             });
         }
@@ -661,11 +668,11 @@ test('public suggestion requests fence both response and decode continuations on
 test('late owner results cannot populate a newly selected state predicate', async () => {
   const h = await mount();
   try {
-    const oldRead = reads.at(-1)!;
+    const oldQuery = h.indexQuery();
     await h.address({ subjectId: id(1), state: 'completed' });
-    const filteredRead = reads.at(-1)!;
-    expect(filteredRead).not.toBe(oldRead);
-    await tick(() => filteredRead.work.resolve(envelope()));
+    const filteredQuery = h.indexQuery();
+    expect(filteredQuery.queryKey).not.toEqual(oldQuery.queryKey);
+    await tick(() => h.client.setQueryData(oldQuery.queryKey, envelope()));
     expect(h.host.textContent).not.toContain('Private A');
     expect(h.host.querySelector(`a[href="/en/library/progress/${id(20)}"]`)).toBeNull();
 
