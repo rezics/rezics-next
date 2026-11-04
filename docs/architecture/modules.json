@@ -636,7 +636,9 @@
       "publicEntries": [
         "apps/web/src/kernel/client.ts",
         "apps/web/src/paraglide/messages.js",
+        "apps/web/src/paraglide/messages.d.ts",
         "apps/web/src/paraglide/runtime.js",
+        "apps/web/src/paraglide/runtime.d.ts",
         "apps/web/src/session/request.ts",
         "apps/web/src/subject/definitions.ts"
       ],
