@@ -14,7 +14,7 @@ test('the generated reading page route sends its cursor through the kernel clien
   const client: KernelClient = createKernelClient(ORIGIN, { fetch });
   const cursor = 'selected-frontier';
 
-  const result = await client.threads({ id: THREAD_ID }).reading_page.get({ query: { cursor } });
+  const result = await client.threads({ id: THREAD_ID })['reading-page'].get({ query: { cursor } });
 
   expect(result.status).toBe(200);
   expect(result.error).toBeNull();
