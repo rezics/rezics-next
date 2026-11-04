@@ -44,28 +44,31 @@ export async function runDevelopmentSeed(
     path: catalogueState,
     port: createImportTransport({ origin: api, tokenProvider }),
   });
-  await (options.runSeed ?? runCrossMediaSeedCli)([
-    '--bangumi',
-    dumps.bangumi,
-    '--vndb',
-    dumps.vndb,
-    '--state',
-    state,
-    '--showcase-state',
-    showcase,
-    '--result',
-    result,
-    '--api',
-    api,
-    '--auth',
-    auth,
-    '--account-key',
-    accountKey,
-    '--account',
-    account,
-    '--client',
-    client,
-  ], { episodeCatalogueSubjects: reviewedCatalogue.subjects });
+  await (options.runSeed ?? runCrossMediaSeedCli)(
+    [
+      '--bangumi',
+      dumps.bangumi,
+      '--vndb',
+      dumps.vndb,
+      '--state',
+      state,
+      '--showcase-state',
+      showcase,
+      '--result',
+      result,
+      '--api',
+      api,
+      '--auth',
+      auth,
+      '--account-key',
+      accountKey,
+      '--account',
+      account,
+      '--client',
+      client,
+    ],
+    { episodeCatalogueSubjects: reviewedCatalogue.subjects },
+  );
 }
 
 if (import.meta.main) {

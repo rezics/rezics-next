@@ -47,9 +47,11 @@ export function episodeTypeConceptCode(uri: string): string | undefined {
 }
 
 function hasCurrentPublicValue(read: unknown, property: string, expected: string): boolean {
-  const statements = (read as {
-    subject?: { statements?: Record<string, { value?: { type?: string; content?: unknown } }[]> };
-  }).subject?.statements?.[property];
+  const statements = (
+    read as {
+      subject?: { statements?: Record<string, { value?: { type?: string; content?: unknown } }[]> };
+    }
+  ).subject?.statements?.[property];
   return (
     Array.isArray(statements) &&
     statements.some((statement) => statement?.value?.type === 'value' && statement.value.content === expected)

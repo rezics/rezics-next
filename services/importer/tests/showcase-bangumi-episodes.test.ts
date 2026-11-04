@@ -8,10 +8,7 @@ import { bundledDigest } from '@rezics/definitions/bundled';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
 import type { CrossMediaPort, CrossMediaTables } from '../src/cross-media-seed.ts';
 import { planCrossMediaSeed, seedCrossMedia } from '../src/cross-media-seed.ts';
-import {
-  composeVocabularyAdmissions,
-  SHOWCASE_EPISODE_WINDOW,
-} from '../src/showcase-bangumi-episodes.ts';
+import { composeVocabularyAdmissions, SHOWCASE_EPISODE_WINDOW } from '../src/showcase-bangumi-episodes.ts';
 import { episodeTypeConceptUri, episodeTypeSchemeUri } from '../src/bangumi-episode-fidelity.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
@@ -141,7 +138,8 @@ function port(commands: BatchCommand[]): CrossMediaPort {
             types.set(id, command.subject.type);
             return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
           }
-          if (command.op === 'propose') return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
+          if (command.op === 'propose')
+            return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
           return { key: command.key, status: 200 as const, value: { revision: 1 } };
         }),
       };
@@ -155,9 +153,9 @@ function port(commands: BatchCommand[]): CrossMediaPort {
     },
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
-      return (
-        catalog.get(id) ?? { subject: { id, type: types.get(id) ?? 'schema:Thing', statements: {} } }
-      ) as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      return (catalog.get(id) ?? { subject: { id, type: types.get(id) ?? 'schema:Thing', statements: {} } }) as Awaited<
+        ReturnType<CrossMediaPort['readReviewedSubject']>
+      >;
     },
   };
 }
@@ -174,11 +172,13 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
   const composed = composeVocabularyAdmissions(retainedAdmission, {
     request: () => ({ bindings: currentVocabulary, rows: [] }),
   });
-  expect(composed?.request?.({
-    owner: { source: 'bangumi_cross_media', external_id: 'episode:900001' },
-    conversion: { normalized: { type: 0 } } as never,
-    subject: randomUUID(),
-  })?.rows).toHaveLength(0);
+  expect(
+    composed?.request?.({
+      owner: { source: 'bangumi_cross_media', external_id: 'episode:900001' },
+      conversion: { normalized: { type: 0 } } as never,
+      subject: randomUUID(),
+    })?.rows,
+  ).toHaveLength(0);
 
   const plan = await planCrossMediaSeed(tables());
   const selected = plan.entities.bangumi.filter((record) => record.key.startsWith('episode:'));
@@ -196,17 +196,11 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
   const commands: BatchCommand[] = [];
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-episodes-'));
   try {
-    const result = await seedCrossMedia(
-      plan,
-      join(directory, 'state.sqlite'),
-      port(commands),
-      undefined,
-      {
-        episodeCatalogueSubjects: catalogueSubjects,
-        vocabularyAdmission: retainedAdmission,
-        providers: ['bangumi'],
-      },
-    );
+    const result = await seedCrossMedia(plan, join(directory, 'state.sqlite'), port(commands), undefined, {
+      episodeCatalogueSubjects: catalogueSubjects,
+      vocabularyAdmission: retainedAdmission,
+      providers: ['bangumi'],
+    });
     expect(result.status).toBe('imported-with-gaps');
     expect(retainedHookCalls).toBeGreaterThan(0);
     expect(result.episodeDiagnostics).toContainEqual(
@@ -216,9 +210,7 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
 
     const source = (command: BatchCommand) => command.source.external_id;
     const value = (command: Extract<BatchCommand, { op: 'propose' }>) =>
-      command.statement.value.type === 'value'
-        ? command.statement.value.content
-        : undefined;
+      command.statement.value.type === 'value' ? command.statement.value.content : undefined;
     expect(
       commands.some(
         (command) =>

@@ -8,12 +8,7 @@ import {
   episodeVocabularyAdmission,
   readEpisodeTypeBindings,
 } from './bangumi-episode-fidelity.ts';
-import type {
-  CrossMediaGap,
-  CrossMediaMember,
-  CrossMediaTables,
-  Franchise,
-} from './cross-media-seed.ts';
+import type { CrossMediaGap, CrossMediaMember, CrossMediaTables, Franchise } from './cross-media-seed.ts';
 import type { CrossMediaPort } from './cross-media-seed.ts';
 import type { GraphEdgeDraft } from './cross-media-bindings.ts';
 import type { Owner } from './record-bindings.ts';
@@ -74,7 +69,9 @@ export async function discoverShowcaseBangumiEpisodes(input: {
   const seen = new Set<string>();
   const addGap = (gap: CrossMediaGap) => {
     if (result.gaps.length >= MAX_EPISODE_OMISSION_GAPS)
-      throw new TypeError(`Selected Bangumi episode omissions exceed the bounded diagnostic limit at ${gap.externalId ?? 'unknown source key'}`);
+      throw new TypeError(
+        `Selected Bangumi episode omissions exceed the bounded diagnostic limit at ${gap.externalId ?? 'unknown source key'}`,
+      );
     result.gaps.push(gap);
   };
 
@@ -82,7 +79,8 @@ export async function discoverShowcaseBangumiEpisodes(input: {
     const parentId = positiveId(row.subject_id);
     const family = parentId === undefined ? undefined : input.selectedAnime.get(parentId);
     if (!family) continue;
-    const parentIsWellFormed = typeof row.subject_id === 'number' && Number.isSafeInteger(row.subject_id) && row.subject_id > 0;
+    const parentIsWellFormed =
+      typeof row.subject_id === 'number' && Number.isSafeInteger(row.subject_id) && row.subject_id > 0;
     const id = positiveId(row.id);
     const record = {
       id: id ?? safeDiagnosticValue(row.id),
@@ -130,7 +128,13 @@ export async function discoverShowcaseBangumiEpisodes(input: {
       payload: row,
     };
     result.entities.push(sourceRecord);
-    result.members.push({ source: 'bangumi', key: sourceKey, kind: 'episode', membership: 'referenced', franchise: family });
+    result.members.push({
+      source: 'bangumi',
+      key: sourceKey,
+      kind: 'episode',
+      membership: 'referenced',
+      franchise: family,
+    });
     if (parentIsWellFormed) {
       result.edges.push({
         source: 'bangumi',
@@ -177,7 +181,11 @@ export function composeVocabularyAdmissions(
   const hooks = admissions.filter((item): item is SourceVocabularyAdmission => !!item?.request);
   if (!hooks.length) return;
   return {
-    request(input: { owner: Owner; conversion: ImportConversion; subject?: string }): SourceVocabularyRequest | undefined {
+    request(input: {
+      owner: Owner;
+      conversion: ImportConversion;
+      subject?: string;
+    }): SourceVocabularyRequest | undefined {
       const requests = hooks
         .map((hook) => hook.request?.(input))
         .filter((request): request is SourceVocabularyRequest => request !== undefined);
@@ -229,7 +237,7 @@ export function showcaseEpisodeAdmissionDiagnostics(
       diagnostics.push({
         sourceKey,
         path,
-        ...( /^[0-9]{1,4}$/u.test(code) ? { code } : {}),
+        ...(/^[0-9]{1,4}$/u.test(code) ? { code } : {}),
         reason: 'unknown_code',
         property: 'episode.type',
       });
@@ -247,14 +255,11 @@ export function showcaseEpisodeAdmissionDiagnostics(
         item.schemeId === bindings.schemes.find((candidate) => candidate.taxonomy === episodeTypeTaxonomy)?.id &&
         item.releaseDigest === bundledDigest,
     );
-    if (!conceptId)
-      diagnostics.push({ sourceKey, path, code, reason: 'unbound_concept', property: 'episode.type' });
+    if (!conceptId) diagnostics.push({ sourceKey, path, code, reason: 'unbound_concept', property: 'episode.type' });
   }
   return diagnostics;
 }
 
-export function showcaseEpisodeVocabularyAdmission(
-  bindings: SourceVocabularyBindings,
-): SourceVocabularyAdmission {
+export function showcaseEpisodeVocabularyAdmission(bindings: SourceVocabularyBindings): SourceVocabularyAdmission {
   return episodeVocabularyAdmission(bindings);
 }
