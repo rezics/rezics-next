@@ -56,7 +56,15 @@ function CitationPart({
 }
 
 /** The detailed public reader shares the subject frame, value renderer and original Sources presentation. */
-export function SubjectSourcesPage({ result, locale, onRetry, busy = false, headingRef, observation, returnTo }: Props) {
+export function SubjectSourcesPage({
+  result,
+  locale,
+  onRetry,
+  busy = false,
+  headingRef,
+  observation,
+  returnTo,
+}: Props) {
   const headingId = useId();
   const o = { locale: locale as never };
   if (result.kind !== 'ready')
@@ -93,7 +101,9 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
           </Button>
         )}
         {returnTo && (
-          <a className={linkClassName} href={returnTo}>{m.subject_synopsis_return({}, o)}</a>
+          <a className={linkClassName} href={returnTo}>
+            {m.subject_synopsis_return({}, o)}
+          </a>
         )}
       </article>
     );
@@ -143,7 +153,9 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
               {m.sources_back({}, o)}
             </a>
             {returnTo && (
-              <a className={linkClassName} href={returnTo}>{m.subject_synopsis_return({}, o)}</a>
+              <a className={linkClassName} href={returnTo}>
+                {m.subject_synopsis_return({}, o)}
+              </a>
             )}
             <a className={linkClassName} href={contextHref(`${page.href.split('?', 1)[0]}/details`, page.realm)}>
               {m.subject_details({}, o)}

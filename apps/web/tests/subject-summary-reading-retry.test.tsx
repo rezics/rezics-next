@@ -98,11 +98,28 @@ test('an explicit missing synopsis reports failed retry and accepts only its exa
     locale: 'en',
     subject: body.subject.id,
     subjectLabel: 'Bound work',
-    link: ({ href, children, lang, className }: { href: string; children: ReactNode; lang?: string; className?: string }) => (
-      <a href={href} lang={lang} className={className}>{children}</a>
+    link: ({
+      href,
+      children,
+      lang,
+      className,
+    }: {
+      href: string;
+      children: ReactNode;
+      lang?: string;
+      className?: string;
+    }) => (
+      <a href={href} lang={lang} className={className}>
+        {children}
+      </a>
     ),
     reader: { spoilerLevel: 0, suitability: 'blur' as const },
-    labels: { spoilerShow: 'Show', spoilerHide: 'Hide', documentSpoiler: 'Reveal', cover: { withheld: '', reveal: '', credit: '', via: '' } },
+    labels: {
+      spoilerShow: 'Show',
+      spoilerHide: 'Hide',
+      documentSpoiler: 'Reveal',
+      cover: { withheld: '', reveal: '', credit: '', via: '' },
+    },
     unlabelled: 'Unlabelled',
     spoilerShow: 'Show',
     details: 'Details',
@@ -112,19 +129,25 @@ test('an explicit missing synopsis reports failed retry and accepts only its exa
     source: 'Source',
     sources: 'Sources',
     sections: new Map([['summary', section]]),
-    viewer: { state: 'anonymous' as const, context: body.subject.context, actions: { statementPropose: 'denied' as const } },
+    viewer: {
+      state: 'anonymous' as const,
+      context: body.subject.context,
+      actions: { statementPropose: 'denied' as const },
+    },
     relations: {},
     relationNodes: [],
   };
 
   async function show() {
-    await act(async () => root.render(
-      <QueryClientProvider client={client}>
-        <OverviewContext.Provider value={value}>
-          <Summary id="summary" />
-        </OverviewContext.Provider>
-      </QueryClientProvider>,
-    ));
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <OverviewContext.Provider value={value}>
+            <Summary id="summary" />
+          </OverviewContext.Provider>
+        </QueryClientProvider>,
+      ),
+    );
   }
   try {
     readPublicSubjectDocument.mockReset();

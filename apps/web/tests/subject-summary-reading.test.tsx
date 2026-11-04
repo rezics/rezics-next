@@ -66,7 +66,12 @@ test('mounted About chooses exact supplied language and candidate, shows selecte
   const base = structuredClone(body.subject.statements['schema:abstract'][0]);
   const specifications = [
     ['00000000-0000-4000-8000-000000000101', 'en', 'English first synopsis.', 'https://evidence.test/first'],
-    ['00000000-0000-4000-8000-000000000102', 'en', `${'Second candidate paragraph. '.repeat(24)}`, 'https://evidence.test/second'],
+    [
+      '00000000-0000-4000-8000-000000000102',
+      'en',
+      `${'Second candidate paragraph. '.repeat(24)}`,
+      'https://evidence.test/second',
+    ],
     ['00000000-0000-4000-8000-000000000103', 'ja', '日本語のあらすじ。'.repeat(60), 'https://evidence.test/japanese'],
   ] as const;
   const candidates = specifications.map(([id, language, text, evidence]) => {
@@ -77,12 +82,16 @@ test('mounted About chooses exact supplied language and candidate, shows selecte
     statement.rank = 'preferred';
     statement.value = { type: 'value', content: { document: documentId, digest, language } };
     statement.qualifiers = [];
-    statement.references = [{
-      parts: [{
-        property: { id: 'schema:url', data_type: 'url' },
-        value: { type: 'value', content: evidence },
-      }],
-    }];
+    statement.references = [
+      {
+        parts: [
+          {
+            property: { id: 'schema:url', data_type: 'url' },
+            value: { type: 'value', content: evidence },
+          },
+        ],
+      },
+    ];
     return {
       statement,
       document: {
@@ -119,7 +128,15 @@ test('mounted About chooses exact supplied language and candidate, shows selecte
             reads={reads}
             reader={{ spoilerLevel: 0, suitability: 'blur' }}
             {...(viewer ? { viewer } : {})}
-            messages={{ unknown: 'Unknown', none: 'None', unlabelled: 'Unlabelled', sources: 'Sources', aliases: '', search: '', spoilerShow: 'Show spoilers' }}
+            messages={{
+              unknown: 'Unknown',
+              none: 'None',
+              unlabelled: 'Unlabelled',
+              sources: 'Sources',
+              aliases: '',
+              search: '',
+              spoilerShow: 'Show spoilers',
+            }}
           >
             <CompositionRender document={composition} definitions={pageDefinitions} components={dataComponents} />
           </PageData>
@@ -169,9 +186,19 @@ test('mounted About chooses exact supplied language and candidate, shows selecte
     expect(window.document.activeElement?.id).toBe('subject-summary-reading');
 
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'account-1', csrfToken: null });
-    await show({ state: 'account', account: 'account-1', context: body.subject.context, actions: { statementPropose: 'allowed' } });
+    await show({
+      state: 'account',
+      account: 'account-1',
+      context: body.subject.context,
+      actions: { statementPropose: 'allowed' },
+    });
     expect(host.querySelector('a[href*="/authored?"]')).not.toBeNull();
-    await show({ state: 'account', account: 'account-1', context: body.subject.context, actions: { statementPropose: 'denied' } });
+    await show({
+      state: 'account',
+      account: 'account-1',
+      context: body.subject.context,
+      actions: { statementPropose: 'denied' },
+    });
     expect(host.textContent).toContain(m.subject_synopsis_advice_refused({}, { locale: 'en' }));
     await show(undefined);
     expect(host.textContent).toContain(m.subject_synopsis_advice_unavailable({}, { locale: 'en' }));

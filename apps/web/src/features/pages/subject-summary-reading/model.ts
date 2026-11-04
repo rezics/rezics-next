@@ -45,9 +45,7 @@ function snakMetadata(value: unknown): unknown {
   };
 }
 
-function validSnak(
-  value: unknown,
-): value is {
+function validSnak(value: unknown): value is {
   id?: unknown;
   rank?: unknown;
   qualifiers?: unknown;
@@ -76,10 +74,7 @@ function choiceMetadata(statement: Stmt): unknown {
 }
 
 /** Admit the entire disclosed work-synopsis projection before building language groups. */
-export function synopsisChoices(
-  subject: Subject,
-  locale: string,
-): SynopsisChoiceSet {
+export function synopsisChoices(subject: Subject, locale: string): SynopsisChoiceSet {
   if (!workTypes.has(subject.type)) return { kind: 'not-admitted' };
   const held = Object.hasOwn(subject.statements, SUMMARY_PROPERTY) ? subject.statements[SUMMARY_PROPERTY] : undefined;
   const statements = Array.isArray(held) ? (held as unknown as Stmt[]) : [];
@@ -89,25 +84,27 @@ export function synopsisChoices(
   let admitted: Stmt[];
   try {
     admitted = bestRank(statements);
-    if (admitted.some((statement) => {
-      const raw = statement as unknown;
-      return (
-        !validSnak(raw) ||
-        typeof raw.id !== 'string' ||
-        !/^[A-Za-z0-9:_-]{1,128}$/.test(raw.id) ||
-        raw.property.id !== SUMMARY_PROPERTY ||
-        raw.property.data_type !== 'document' ||
-        !Array.isArray(raw.qualifiers) ||
-        raw.qualifiers.some((qualifier) => !validSnak(qualifier)) ||
-        !Array.isArray(raw.references) ||
-        raw.references.some(
-          (reference) =>
-            !isRecord(reference) ||
-            !Array.isArray(reference.parts) ||
-            reference.parts.some((part) => !validSnak(part)),
-        )
-      );
-    }))
+    if (
+      admitted.some((statement) => {
+        const raw = statement as unknown;
+        return (
+          !validSnak(raw) ||
+          typeof raw.id !== 'string' ||
+          !/^[A-Za-z0-9:_-]{1,128}$/.test(raw.id) ||
+          raw.property.id !== SUMMARY_PROPERTY ||
+          raw.property.data_type !== 'document' ||
+          !Array.isArray(raw.qualifiers) ||
+          raw.qualifiers.some((qualifier) => !validSnak(qualifier)) ||
+          !Array.isArray(raw.references) ||
+          raw.references.some(
+            (reference) =>
+              !isRecord(reference) ||
+              !Array.isArray(reference.parts) ||
+              reference.parts.some((part) => !validSnak(part)),
+          )
+        );
+      })
+    )
       return { kind: 'unavailable', reason: 'invalid' };
     metadata = JSON.stringify(admitted.map(choiceMetadata));
   } catch {

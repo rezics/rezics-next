@@ -2193,6 +2193,7 @@ retains its own candidate, command and draft state; the names projection is neve
 Decision: until the shared names-return handoff is delivered, people names use the existing page Context link adapter
 for Terms and Sources and do not promise restoration of a former group, filter or focus. That handoff and its exact
 return acceptance remain a continuation; public name expansion grants no editor permission.
+
 ## Choose a supplied work synopsis
 
 The ordinary About section for Visual Novels (`wd:Q689445`), anime films and series (`schema:Movie` and

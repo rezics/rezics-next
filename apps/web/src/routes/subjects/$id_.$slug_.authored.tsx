@@ -106,7 +106,9 @@ function AuthoredRoute() {
   if (state === 'signed-out')
     return (
       <>
-        <div className="p-6"><EditorFailure reason="denied" locale={locale} /></div>
+        <div className="p-6">
+          <EditorFailure reason="denied" locale={locale} />
+        </div>
         {returnLink}
       </>
     );
@@ -122,7 +124,12 @@ function AuthoredRoute() {
     );
   if (!query.data)
     return (
-      <div><p role="status" className="p-6">{m.candidate_loading()}</p>{returnLink}</div>
+      <div>
+        <p role="status" className="p-6">
+          {m.candidate_loading()}
+        </p>
+        {returnLink}
+      </div>
     );
   return (
     <>
