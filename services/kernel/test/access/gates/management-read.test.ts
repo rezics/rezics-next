@@ -304,13 +304,14 @@ describe('Exact current direct Global exposure management authority reads bounde
         [GLOBAL_CONTEXT.id, fixture.actorId, action],
       );
     }
+    const delegated = await identity(fixture.actorId, [action], delegatedRequest);
     await pool.query(
       `UPDATE access.principal_assignment
        SET revoked_at = $2::timestamptz, valid = valid * tstzrange(NULL, $2::timestamptz, '[)')
        WHERE principal_id = $1`,
       [fixture.principalId, instant.toISOString()],
     );
-    await expect(nativeRead(await identity(fixture.actorId, [action], delegatedRequest))).rejects.toMatchObject({
+    await expect(nativeRead(delegated)).rejects.toMatchObject({
       code: 'forbidden',
     });
     await expect(
