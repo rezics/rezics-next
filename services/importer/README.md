@@ -1603,7 +1603,13 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB release original language
 
 - Touches: the same selected-family COPY set and seed caller, plus `releases.olang` on already selected releases. Language shares `convertCrossMediaEntity` with titles and identity; it does not split or merge releases, copy language onto a work, or invent platform language qualifiers.
-- Bound: one optional cited `schema:inLanguage` fact per release inside the existing 162-command, 64 KiB and 64-release caps. Inventory language codes canonicalise through `inLanguageTag`; COPY `\\N` and unmapped codes are review diagnostics only. No Concept reads or per-field authority queries.
+- Bound: one optional cited `schema:inLanguage` fact per release inside the existing 163-command, 64 KiB and 64-release caps. Inventory language codes canonicalise through `inLanguageTag`; COPY `\\N` and unmapped codes are review diagnostics only. No Concept reads or per-field authority queries.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
+### Import authored VNDB release barcodes
+
+- Touches: the same selected-family and date-fidelity operator entry points, plus the COPY `releases.gtin` cell on already selected releases. The barcode shares `convertCrossMediaEntity` and the existing public batch/facts group; it does not invent a second identity, uniqueness registry or SourceRegistration option.
+- Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, one optional `schema:gtin` fact per release inside the existing 163-command, 64 KiB, per-record candidate (≤300) and journal budgets. Unknown `0`, null, malformed, unsupported-length and unsafe numeric cells withhold only that fact. Unrelated releases are not scanned.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
 ### Import authored VNDB public tag associations
@@ -2055,6 +2061,13 @@ and codes outside the inventory language enumeration withhold only that statemen
 Decision: converter `@5` offers the new fact on unchanged dump bytes without a
 fabricated source revision; a later absent or unsupported `olang` does not retract
 an independently adopted language.
+
+Those callers also keep the COPY `releases.gtin` cell. Admitted 8 or 12–14 digit
+strings become one cited `schema:gtin` fact on the same Release; dump unknown
+`0`, null, malformed, unsupported-length and unsafe JavaScript numbers withhold
+only that field. Decision: COPY bigint decimal spelling is preserved; `0` is
+unknown; leading zeros are not invented; barcode equality does not merge
+subjects.
 
 The production VNDB public-tag operator
 [`vndb-public-tags.ts`](src/vndb-public-tags.ts) traverses extracted `tags` and
