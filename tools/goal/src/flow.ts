@@ -360,7 +360,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
           const boundary = nextIntervalBoundary(ordered, e, startActions[q.stage], waitEnds[q.stage]);
           const end = boundary && waitEnds[q.stage].includes(boundary.action) ? boundary : undefined;
           // Closed or legacy terminal requests have no observed wait end. Keep their duration unknown.
-          const terminal = tasks.some((task) => task.id === e.taskId && terminalCloses(task.terminalState, e.stage));
+          const terminal = tasks.some((task) => task.id === e.taskId && terminalCloses(task.terminalState, q.stage));
           return (
             sum +
             (end
