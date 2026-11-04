@@ -638,6 +638,17 @@ not additional check requests.
   keeps 0/00000000 as unknown, 99999999 as TBA and 00/99 components omitted; completeness stays a `wdt:P31` qualifier
   gap; `schema:exampleOfWork` is the release-to-work fact; supersession stays unproposed until the Release profile
   admits `wdt:P155`.
+- `production operator imports authored VNDB release titles through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-release-names.test.ts`.
+  Frozen scenario names:
+  `authored multilingual release titles keep language, latin and a stable label`;
+  `nullable and unadmitted latin keep the primary title`;
+  `selected-family and date-fidelity planners bind only selected multilingual titles`;
+  `production operator imports authored VNDB release titles through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: label order is
+  language then text; `mtl` never ranks names; exact-empty `releases_titles.latin` is unadmitted and does not inherit
+  the `vn_titles` empty-cell contract; title language is not a whole-release language assertion.
 - `production operator publishes authored VNDB public tags through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-public-tags.test.ts`.
   Frozen scenario names:

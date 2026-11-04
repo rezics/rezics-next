@@ -11,6 +11,7 @@ import {
   canonicalLanguageTag,
   commandKey,
   inLanguageTag,
+  latinLanguageTag,
   safeSourceUrl,
   sourceDigest,
   sourceEnvelope,
@@ -148,13 +149,6 @@ function website(value: string, pointer: string): string {
   } catch {
     return fail('Invalid external website URL', pointer);
   }
-}
-
-function latinLanguageTag(tag: string): string | null {
-  const parts = tag.split('-');
-  if (/^[A-Z][a-z]{3}$/u.test(parts[1] ?? '')) parts[1] = 'Latn';
-  else parts.splice(1, 0, 'Latn');
-  return canonicalLanguageTag(parts.join('-'));
 }
 
 /**

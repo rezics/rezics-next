@@ -38,7 +38,7 @@ async function authoredCopy(directory: string, released = '20200229') {
       ].join('\n'),
     ],
     releases_titles: [
-      'id\tlang\tofficial\ttitle\tlatin',
+      'id\tlang\tmtl\ttitle\tlatin',
       [
         'r1\tja\tt\tAuthored exact release\t\\N',
         'r2\tja\tt\tAuthored month release\t\\N',

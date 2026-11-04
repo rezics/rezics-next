@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { types as utilTypes } from 'node:util';
 import {
+  BATCH_LIMIT,
   checkBatchWrite,
   type BatchCommand,
   type BatchReference,
@@ -8,9 +9,27 @@ import {
   type FieldGroup,
 } from '@rezics/definitions/bulk';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
-import { commandKey, sourceDigest, sourceEnvelope, textDocument, type ConversionContext } from './support.ts';
+import {
+  canonicalLanguageTag,
+  commandKey,
+  latinLanguageTag,
+  sourceDigest,
+  sourceEnvelope,
+  textDocument,
+  type ConversionContext,
+} from './support.ts';
+import { vndbLimits } from './vndb.ts';
 
-export const converter_revision = 'cross-media-entities@2';
+export const converter_revision = 'cross-media-entities@3';
+export const vndbReleaseNameLimits = Object.freeze({
+  maxTitles: vndbLimits.maxTitles,
+  maxNames: vndbLimits.maxTitleCandidates,
+  maxAlternateNames: vndbLimits.maxAliases,
+  stringBytes: vndbLimits.stringBytes,
+  titleChars: 1500,
+  recordBytes: vndbLimits.recordBytes,
+  maxCommands: 1 + vndbLimits.maxTitleCandidates + vndbLimits.maxAliases,
+});
 const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
 const durationSecond = 'http://www.wikidata.org/entity/Q11574';
 const episodeOrdinalPattern = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u;
@@ -352,16 +371,150 @@ function producerType(record: object): string {
   return mapping?.term === 'schema:Person' ? 'schema:Person' : 'schema:Organization';
 }
 
-function project(
-  kind: EntityKind,
-  input: ConversionInput,
-): {
+type Projected = {
   normalized: Normalized;
   type: string;
   labels: Record<string, string>;
+  aliases?: Record<string, string[]>;
+  names?: { language: string; text: string }[];
+  alternateNames?: { language: string; text: string }[];
   identifier: string;
   ignored?: ConversionDiagnostic;
+  diagnostics?: ConversionDiagnostic[];
+};
+
+function copyFlag(value: unknown, pointer: string): boolean {
+  if (value === true || value === 't') return true;
+  if (value === false || value === 'f') return false;
+  return fail(pointer);
+}
+
+function releaseTitleText(value: unknown, pointer: string): string {
+  if (
+    typeof value !== 'string' ||
+    !value.isWellFormed() ||
+    !value.trim() ||
+    [...value].length > vndbReleaseNameLimits.titleChars ||
+    Buffer.byteLength(value, 'utf8') > vndbReleaseNameLimits.stringBytes
+  )
+    fail(pointer);
+  return value;
+}
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function projectReleaseTitles(
+  raw: object,
+  releaseId: string,
+): {
+  titles: {
+    id: string;
+    lang: string;
+    mtl: boolean;
+    title: string;
+    latin: string | null;
+  }[];
+  names: { language: string; text: string }[];
+  alternateNames: { language: string; text: string }[];
+  labels: Record<string, string>;
+  aliases: Record<string, string[]>;
+  diagnostics: ConversionDiagnostic[];
 } {
+  const value = own(raw, 'releases_titles', '/releases_titles');
+  if (
+    utilTypes.isProxy(value) ||
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype
+  )
+    fail('/releases_titles');
+  const length = Object.getOwnPropertyDescriptor(value, 'length')!.value as number;
+  if (length > vndbReleaseNameLimits.maxTitles) fail('/releases_titles', 'invalid_record_row_limit');
+  const titles: {
+    id: string;
+    lang: string;
+    mtl: boolean;
+    title: string;
+    latin: string | null;
+  }[] = [];
+  const diagnostics: ConversionDiagnostic[] = [];
+  const names: { language: string; text: string }[] = [];
+  const alternateNames: { language: string; text: string }[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < length; i++) {
+    const pointer = `/releases_titles/${i}`;
+    const entry = own(value, String(i), pointer);
+    if (entry === undefined) fail(pointer);
+    const row = object(entry, pointer);
+    const id = own(row, 'id', `${pointer}/id`);
+    if (typeof id !== 'string' || id !== releaseId) fail(`${pointer}/id`, 'invalid_identifier');
+    const rawLanguage = own(row, 'lang', `${pointer}/lang`);
+    if (typeof rawLanguage !== 'string') fail(`${pointer}/lang`);
+    const lang = canonicalLanguageTag(rawLanguage);
+    const title = releaseTitleText(own(row, 'title', `${pointer}/title`), `${pointer}/title`);
+    const mtl = copyFlag(own(row, 'mtl', `${pointer}/mtl`), `${pointer}/mtl`);
+    const latin = own(row, 'latin', `${pointer}/latin`);
+    const association = JSON.stringify([lang ?? rawLanguage, title, latin]);
+    if (seen.has(association)) fail(pointer, 'duplicate_association');
+    seen.add(association);
+    let admittedLatin: string | null;
+    let romanizedText: string | undefined;
+    if (latin === null) admittedLatin = null;
+    else if (typeof latin !== 'string') fail(`${pointer}/latin`);
+    else if (latin === '') {
+      admittedLatin = '';
+      diagnostics.push({ pointer: `${pointer}/latin`, code: 'unadmitted_empty_latin' });
+    } else if (!latin.isWellFormed() || !latin.trim()) {
+      admittedLatin = latin;
+      diagnostics.push({ pointer: `${pointer}/latin`, code: 'unadmitted_latin' });
+    } else {
+      try {
+        admittedLatin = releaseTitleText(latin, `${pointer}/latin`);
+        romanizedText = admittedLatin;
+      } catch {
+        admittedLatin = latin;
+        diagnostics.push({ pointer: `${pointer}/latin`, code: 'unadmitted_latin' });
+      }
+    }
+    titles.push({ id: releaseId, lang: lang ?? rawLanguage, mtl, title, latin: admittedLatin });
+    if (lang === null) {
+      diagnostics.push({ pointer: `${pointer}/lang`, code: 'unadmitted_language' });
+      continue;
+    }
+    names.push({ language: lang, text: title });
+    if (romanizedText) {
+      const romanized = latinLanguageTag(lang);
+      if (romanized === null) diagnostics.push({ pointer: `${pointer}/latin`, code: 'unadmitted_latin_language' });
+      else alternateNames.push({ language: romanized, text: romanizedText });
+    }
+  }
+  if (names.length > vndbReleaseNameLimits.maxNames) fail('/releases_titles', 'invalid_record_name_limit');
+  if (alternateNames.length > vndbReleaseNameLimits.maxAlternateNames)
+    fail('/releases_titles', 'invalid_record_alias_limit');
+  names.sort((a, b) => compareText(a.language, b.language) || compareText(a.text, b.text));
+  alternateNames.sort((a, b) => compareText(a.language, b.language) || compareText(a.text, b.text));
+  const uniqueNames = new Map<string, { language: string; text: string }>();
+  for (const name of names) uniqueNames.set(JSON.stringify([name.language, name.text]), name);
+  const labels: Record<string, string> = Object.create(null);
+  const aliases: Record<string, string[]> = Object.create(null);
+  for (const name of uniqueNames.values()) {
+    if (labels[name.language] === undefined) labels[name.language] = name.text;
+    else if (labels[name.language] !== name.text) (aliases[name.language] ??= []).push(name.text);
+  }
+  for (const name of alternateNames) {
+    if (labels[name.language] === name.text) continue;
+    const listed = aliases[name.language] ?? [];
+    if (!listed.includes(name.text)) (aliases[name.language] ??= []).push(name.text);
+  }
+  if (!Object.keys(labels).length) fail('/releases_titles', 'invalid_record_title');
+  return { titles, names: [...uniqueNames.values()], alternateNames, labels, aliases, diagnostics };
+}
+
+function project(
+  kind: EntityKind,
+  input: ConversionInput,
+): Projected {
   const raw = object(input.record, '');
   const idField = kind.startsWith('vndb')
     ? 'id'
@@ -381,6 +534,27 @@ function project(
     const id = nativeNumber(nativeId, '/id');
     if (String(id) !== expected) fail('/id', 'invalid_identifier');
   } else if (typeof nativeId !== 'string' || nativeId !== expected) fail('/id', 'invalid_identifier');
+  const profile = profiles[kind];
+  let type = profile.type;
+  if (kind === 'vndb-release' && own(raw, 'releases_titles', '/releases_titles') !== undefined) {
+    const projectedTitles = projectReleaseTitles(raw, expected);
+    const normalized: Normalized = { id: nativeId, releases_titles: projectedTitles.titles };
+    const released = own(raw, 'released', '/released');
+    if (released !== undefined) normalized.released = released;
+    if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > vndbReleaseNameLimits.recordBytes)
+      fail('', 'invalid_record_byte_limit');
+    const aliases = Object.keys(projectedTitles.aliases).length ? projectedTitles.aliases : undefined;
+    return {
+      normalized,
+      type,
+      labels: projectedTitles.labels,
+      ...(aliases ? { aliases } : {}),
+      names: projectedTitles.names,
+      alternateNames: projectedTitles.alternateNames,
+      identifier: expected,
+      diagnostics: projectedTitles.diagnostics,
+    };
+  }
   const name = own(raw, 'name', '/name');
   const title = own(raw, 'title', '/title');
   const label =
@@ -388,8 +562,6 @@ function project(
   const chinese = own(raw, 'name_cn', '/name_cn');
   const labels: Record<string, string> = { und: label };
   if (typeof chinese === 'string' && chinese.trim()) labels.zh = text(chinese, '/name_cn', 500, true);
-  const profile = profiles[kind];
-  let type = profile.type;
   const normalized: Normalized = { id: nativeId, name: label };
   if (chinese !== undefined) normalized.name_cn = labels.zh ?? '';
   if (kind === 'bangumi-character') {
@@ -523,11 +695,14 @@ function convert(
   });
   const profile = profiles[kind];
   const identifierContent = kind === 'bangumi-episode' ? url : projected.identifier;
+  const names =
+    projected.names ?? Object.entries(projected.labels).map(([language, value]) => ({ language, text: value }));
   const facts: BatchStatement[] = [
     fact(profile.identifier, identifierContent),
-    ...Object.entries(projected.labels).map(([language, value]) => fact('schema:name', { language, text: value })),
+    ...names.map((name) => fact('schema:name', name)),
+    ...(projected.alternateNames ?? []).map((name) => fact('schema:alternateName', name)),
   ];
-  const diagnostics: ConversionDiagnostic[] = [];
+  const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
   let descriptionText: string | undefined;
   if (kind === 'bangumi-episode') {
     const ordinal = episodeOrdinal(projected.normalized.sort);
@@ -562,7 +737,11 @@ function convert(
       op: 'create',
       key: key('bootstrap', 'facts'),
       source: envelope('facts'),
-      subject: { type: projected.type, labels: projected.labels },
+      subject: {
+        type: projected.type,
+        labels: projected.labels,
+        ...(projected.aliases && Object.keys(projected.aliases).length ? { aliases: projected.aliases } : {}),
+      },
     });
   } else {
     if (
@@ -599,7 +778,10 @@ function convert(
       });
     }
   }
-  if (checkBatchWrite({ commands: proposals }).length) fail('', 'invalid_record_proposals');
+  if (proposals.length > vndbReleaseNameLimits.maxCommands) fail('', 'invalid_record_proposals');
+  for (let offset = 0; offset < proposals.length; offset += BATCH_LIMIT)
+    if (checkBatchWrite({ commands: proposals.slice(offset, offset + BATCH_LIMIT) }).length)
+      fail('', 'invalid_record_proposals');
   return {
     ...metadata,
     source: sourceKind,

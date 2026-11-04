@@ -1588,6 +1588,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, with the existing per-record converter, candidate (≤300) and journal budgets. Vocabulary bindings are re-read on each convert so unchanged dump bytes cannot hide missing or retracted Concepts. Completeness remains a review gap on `wdt:P31`; supersession is not proposed.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Import authored VNDB release titles
+
+- Touches: the same selected-family and date-fidelity operator entry points, plus `releases_titles` COPY rows whose exact release ID is already selected. Titles share `convertCrossMediaEntity`; they do not invent a second converter, identity or language-split release.
+- Bound: at most 64 title rows and 64 KiB per release, 64 names and 64 Romanized alternate names, within the existing per-record candidate and journal budgets. Nonselected owners, missing selected titles, overflow and duplicate associations are review gaps or converter refusals. Machine-translation flags are not a ranking rule.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
 ### Import authored VNDB public tag associations
 
 - Touches: bounded `tags` (512) and `tags_vn` (256) COPY projections, matching VN title/revision rows, current native scheme/concept point reads, and ordinary public batch/fence/candidate commands through the existing seed/importer caller. User ids, notes and vote values stay unprojected.
@@ -1995,6 +2001,13 @@ never guessed. Completeness stays a `wdt:P31` qualifier gap on the release-to-wo
 fact. These proposals do not contain VNDB votes, personal lists or score-derived
 facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to TBA
 and 00/99 omitted components to year or month precision.
+
+The same production callers now attach admitted `releases_titles` rows to each
+selected release payload and convert them through `cross-media-entities@3`.
+Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
+their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
+latin on this table is unadmitted. Date/status/completeness remain independently
+owned. Decision: label order is language then text; `mtl` never ranks names.
 
 The production VNDB public-tag operator
 [`vndb-public-tags.ts`](src/vndb-public-tags.ts) traverses extracted `tags` and

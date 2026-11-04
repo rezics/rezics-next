@@ -119,6 +119,41 @@ function number(row: Row, field: string): number {
   ensure(typeof value === 'number' && Number.isSafeInteger(value) && value > 0, `Invalid Bangumi ${field}`);
   return value;
 }
+const RELEASE_TITLE_CAP = 64;
+function compareCopyText(a: unknown, b: unknown): number {
+  const left = a == null ? '' : String(a);
+  const right = b == null ? '' : String(b);
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Bind title rows whose exact release ID is selected. Input order never ranks labels. */
+export function collectSelectedReleaseTitles(
+  id: string,
+  rows: readonly Row[],
+): { titles: Row[]; overflow: Row[]; duplicates: Row[] } {
+  const seen = new Set<string>();
+  const unique: Row[] = [];
+  const duplicates: Row[] = [];
+  for (const row of rows) {
+    if (row.id !== id) continue;
+    const key = JSON.stringify([row.lang, row.title, row.latin]);
+    if (seen.has(key)) {
+      duplicates.push(row);
+      continue;
+    }
+    seen.add(key);
+    unique.push(row);
+  }
+  unique.sort(
+    (a, b) =>
+      compareCopyText(a.lang, b.lang) || compareCopyText(a.title, b.title) || compareCopyText(a.latin, b.latin),
+  );
+  return {
+    titles: unique.slice(0, RELEASE_TITLE_CAP),
+    overflow: unique.slice(RELEASE_TITLE_CAP),
+    duplicates,
+  };
+}
 function fieldsOf(table: string, record: Row): string[] {
   return Object.keys(record)
     .sort()
@@ -900,9 +935,27 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
         revision: null,
         payload: { ...row, ...(staffNames.get(text(row, 'id')) ? { name: staffNames.get(text(row, 'id')) } : {}) },
       });
+  const releaseTitleRows: Row[] = [];
+  for await (const row of input.rows('vndb', 'releases_titles')) {
+    if (typeof row.id !== 'string' || !releases.has(row.id)) continue;
+    releaseTitleRows.push(row);
+  }
   for await (const row of input.rows('vndb', 'releases'))
-    if (releases.has(text(row, 'id')))
-      plan.entities.vndb.push({ source: 'vndb', key: text(row, 'id'), revision: null, payload: row });
+    if (releases.has(text(row, 'id'))) {
+      const bound = collectSelectedReleaseTitles(text(row, 'id'), releaseTitleRows);
+      for (const extra of bound.overflow)
+        gap('vndb', 'releases_titles', extra, 'Release titles exceed the bounded import cap');
+      for (const extra of bound.duplicates)
+        gap('vndb', 'releases_titles', extra, 'Duplicate selected VNDB release title');
+      if (!bound.titles.length)
+        gap('vndb', 'releases_titles', { id: text(row, 'id') }, 'Missing selected VNDB release title');
+      plan.entities.vndb.push({
+        source: 'vndb',
+        key: text(row, 'id'),
+        revision: null,
+        payload: bound.titles.length ? { ...row, releases_titles: bound.titles } : row,
+      });
+    }
   for await (const row of input.rows('vndb', 'vn_anime'))
     if (vnIds.has(text(row, 'id')))
       gap('vndb', 'vn_anime', row, 'VNDB anime.aid is an AniDB identifier, not a Bangumi or native subject identity');
@@ -956,17 +1009,13 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     );
   }
   for (const [table, ids] of [
-    ['releases_titles', releases],
     ['staff_extlinks', staff],
     ['vn_extlinks', vnIds],
   ] as const)
     for await (const row of input.rows('vndb', table)) {
       if (!ids.has(text(row, 'id'))) continue;
-      if (table === 'vn_extlinks' || table === 'staff_extlinks') {
-        links.add(text(row, 'link'));
-        if (table === 'vn_extlinks') vnLinks.set(text(row, 'link'), text(row, 'id'));
-      }
-      if (table === 'releases_titles') continue;
+      links.add(text(row, 'link'));
+      if (table === 'vn_extlinks') vnLinks.set(text(row, 'link'), text(row, 'id'));
     }
   for await (const row of input.rows('vndb', 'staff'))
     if (staff.has(text(row, 'id')) && typeof row.prod === 'string') producers.add(row.prod);

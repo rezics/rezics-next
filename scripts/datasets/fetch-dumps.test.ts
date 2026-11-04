@@ -53,6 +53,10 @@ async function tempCache(): Promise<{ cacheRoot: string; dispose: () => Promise<
   return { cacheRoot: join(temp, 'cache'), dispose: () => rm(temp, { recursive: true, force: true }) };
 }
 
+test('VNDB dump cache requires releases_titles and its header', () => {
+  expect(VNDB_DUMP_TABLES).toContain('releases_titles');
+});
+
 test("When the pinned VNDB dump URL is gone, the fetch resolves the current dump from VNDB's published dump index (or the documented durable location), verifies it, and records the resolved file and checksum; it never silently seeds without VNDB.", async () => {
   expect(parseVndbDumpIndex(INDEX_HTML)).toEqual({
     file: 'vndb-db-2026-11-03.tar.zst',
