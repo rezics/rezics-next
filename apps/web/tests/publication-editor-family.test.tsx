@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, useSyncExternalStore } from 'react';
 import type { CreateFailure } from '../src/features/catalogue/create-subject';
 import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { PublicationCommand, PublicationTransport } from '../src/features/catalogue/publication-editor';
@@ -102,18 +102,25 @@ test('independent publication creation, local corrections, immutable recovery an
   let entries: Entry[] = [];
   let scene = 0;
   let admitted = true;
+  const listeners = new Set<() => void>();
+  let revision = 0;
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
   const observed = () =>
     admitted
       ? { state: 'signed-in' as const, subject: 'reader', csrfToken: 'original-credential-epoch' }
       : { state: 'signed-out' as const, csrfToken: null };
   const Scene = () => {
+    useSyncExternalStore(subscribe, () => revision, () => revision);
     const destination = useRouterState({ select: (state) => state.location.search.page });
     return destination === 'other' ? null : (
       <CandidateReaderBoundary address={`publication-family-${scene}`} observed={observed()}>
         {admitted &&
           entries.map((entry, index) => (
             <PublicationEditor
-              key={index}
+              key={`${scene}-${index}`}
               work={entry.fixture.work.subject.id}
               locale="en"
               session={entry.session ?? 'signed-in'}
@@ -131,13 +138,15 @@ test('independent publication creation, local corrections, immutable recovery an
     history: createMemoryHistory({ initialEntries: ['/'] }),
   });
   const draw = async () =>
-    act(async () =>
+    act(async () => {
+      revision++;
+      listeners.forEach((listener) => listener());
       root.render(
         <QueryClientProvider client={client}>
           <RouterProvider router={router} />
         </QueryClientProvider>,
-      ),
-    );
+      );
+    });
   const mount = async (...next: Entry[]) => {
     scene++;
     entries = next;
@@ -175,7 +184,8 @@ test('independent publication creation, local corrections, immutable recovery an
   const ready = async (index = 0) => {
     await scope(index).findByRole('textbox', { name: m.catalogue_create_label() });
     await replace(input(m.catalogue_create_label(), index), 'A distinct edition');
-    await act(async () => user.click(scope(index).getByRole('checkbox', { name: m.publication_independent() })));
+    const independent = await scope(index).findByRole('checkbox', { name: m.publication_independent() });
+    await act(async () => user.click(independent));
   };
   const ids = () => [...host.querySelectorAll('[id]')].map((element) => element.id);
   const associations = async (index: number) => {
@@ -955,10 +965,18 @@ test('publication creation uses Global Context eligibility independently of the 
     transport: PublicationTransport;
   };
   let entry: Entry | undefined;
-  const Scene = () =>
-    entry ? (
+  let scene = 0;
+  const listeners = new Set<() => void>();
+  let revision = 0;
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  const Scene = () => {
+    useSyncExternalStore(subscribe, () => revision, () => revision);
+    return entry ? (
       <CandidateReaderBoundary
-        address="publication-eligibility"
+        address={`publication-eligibility-${scene}`}
         observed={
           entry.session === 'signed-in'
             ? { state: 'signed-in' as const, subject: 'reader', csrfToken: 'eligibility-epoch' }
@@ -966,6 +984,7 @@ test('publication creation uses Global Context eligibility independently of the 
         }
       >
         <PublicationEditor
+          key={scene}
           work={entry.fixture.work.subject.id}
           locale="en"
           session={entry.session}
@@ -975,18 +994,21 @@ test('publication creation uses Global Context eligibility independently of the 
         />
       </CandidateReaderBoundary>
     ) : null;
+  };
   const router = createRouter({
     routeTree: createRootRoute({ component: Scene }),
     history: createMemoryHistory({ initialEntries: ['/'] }),
   });
   const draw = () =>
-    act(async () =>
+    act(async () => {
+      revision++;
+      listeners.forEach((listener) => listener());
       root.render(
         <QueryClientProvider client={client}>
           <RouterProvider router={router} />
         </QueryClientProvider>,
-      ),
-    );
+      );
+    });
   function make(observation: CreateAuthority | Promise<CreateAuthority>, scenario: PublicationScenario = 'ready'): Entry {
     const fixture = publicationFixture(scenario);
     const commands: PublicationCommand[] = [];
@@ -1021,7 +1043,7 @@ test('publication creation uses Global Context eligibility independently of the 
   }
   const mount = async (next: Entry) => {
     entry = next;
-    client.clear();
+    scene++;
     await draw();
   };
   const scope = () => within(canvas.getByRole('article'));
