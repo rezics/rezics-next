@@ -1,11 +1,7 @@
 import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { OperatorTransferPage } from '../../routes/operators.transfer';
 import { AuthShell } from '../../frame';
-import {
-  OPERATOR_MANAGEMENT_PROFILE,
-  storeTransferAttempt,
-  type TransferAttempt,
-} from '../../operator-transfer';
+import { OPERATOR_MANAGEMENT_PROFILE, storeTransferAttempt, type TransferAttempt } from '../../operator-transfer';
 import { OPERATOR_TRANSFER_PAGE_PATH } from '../../operator-transfer-page';
 import { authLocale, reviewParameters, button, waitFor } from '../accounts-operations/story';
 import { m } from '../../paraglide/messages.js';
@@ -95,9 +91,15 @@ function Fixture({
         }
         if (input.kind === 'destination') {
           if (mode === 'denied')
-            return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'destination', destinationAccountId: input.request.operatorAccountId, action: 'denied' } });
+            return Response.json({
+              viewer: { kind: 'ready' },
+              review: { kind: 'destination', destinationAccountId: input.request.operatorAccountId, action: 'denied' },
+            });
           if (mode === 'conflict') return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'changed' } });
-          return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'destination', destinationAccountId: input.request.operatorAccountId, action: 'allowed' } });
+          return Response.json({
+            viewer: { kind: 'ready' },
+            review: { kind: 'destination', destinationAccountId: input.request.operatorAccountId, action: 'allowed' },
+          });
         }
       }
       if (path === '/account-operations/approve')

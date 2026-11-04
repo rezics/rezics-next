@@ -37,7 +37,11 @@ export type RelationResult = { kind: 'ready'; relation: OperatorRelation } | Tra
 export type TransferResult =
   | { kind: 'accepted'; reference: string }
   | { kind: 'current'; relation: OperatorRelation }
-  | { kind: 'acknowledged'; reference: string; readback: { kind: 'current'; relation: OperatorRelation } | TransferFailure }
+  | {
+      kind: 'acknowledged';
+      reference: string;
+      readback: { kind: 'current'; relation: OperatorRelation } | TransferFailure;
+    }
   | TransferFailure;
 
 const storageKey = 'rezics.operator-transfer.attempt';
@@ -138,10 +142,7 @@ function pageResponse(value: unknown): value is OperatorTransferPageResponse {
     if (!exactFields(review, ['kind', 'relation', 'action']) || review.action !== 'allowed' || !record(review.relation))
       return false;
     const relation = review.relation;
-    return (
-      exactFields(relation, ['previous', 'expectedVersion']) &&
-      isRelation(relation)
-    );
+    return exactFields(relation, ['previous', 'expectedVersion']) && isRelation(relation);
   }
   if (review.kind === 'destination')
     return (
@@ -157,9 +158,7 @@ export function pageFailure(page: OperatorTransferPageResponse): TransferFailure
   if (page.viewer.kind === 'refused') return { kind: 'failure', reason: 'denied' };
   return null;
 }
-export function isTransferFailure(
-  value: OperatorTransferPageResponse | TransferFailure,
-): value is TransferFailure {
+export function isTransferFailure(value: OperatorTransferPageResponse | TransferFailure): value is TransferFailure {
   return 'kind' in value && value.kind === 'failure';
 }
 export async function reviewDestinationTransfer(
@@ -182,9 +181,10 @@ export async function reviewDestinationTransfer(
   return { kind: 'failure', reason: page.review.kind === 'missing' ? 'invalid' : 'unavailable' };
 }
 export async function refreshTransferAdvice(attempt: TransferAttempt): Promise<TransferFailure | null> {
-  const input: OperatorTransferPageInput = attempt.side === 'source'
-    ? { kind: 'source', subjectAccountId: attempt.request.previous.subjectAccountId }
-    : { kind: 'destination', request: attempt.request };
+  const input: OperatorTransferPageInput =
+    attempt.side === 'source'
+      ? { kind: 'source', subjectAccountId: attempt.request.previous.subjectAccountId }
+      : { kind: 'destination', request: attempt.request };
   const page = await readOperatorTransferPage(input, attempt.accountId);
   if (isTransferFailure(page)) return page;
   const denied = pageFailure(page);
@@ -220,9 +220,11 @@ export async function readOperatorTransferPage(
   if (!pageResponse(result.body)) return { kind: 'failure', reason: 'unavailable' };
   if (
     (input.kind === 'readiness' && result.body.viewer.kind === 'ready' && result.body.review.kind !== 'readiness') ||
-    (input.kind === 'source' && result.body.review.kind === 'source' &&
+    (input.kind === 'source' &&
+      result.body.review.kind === 'source' &&
       result.body.review.relation.previous.subjectAccountId !== input.subjectAccountId) ||
-    (input.kind === 'destination' && result.body.review.kind === 'destination' &&
+    (input.kind === 'destination' &&
+      result.body.review.kind === 'destination' &&
       result.body.review.destinationAccountId !== input.request.operatorAccountId)
   )
     return { kind: 'failure', reason: 'unavailable' };
@@ -237,8 +239,12 @@ export async function readOperatorRelation(subjectAccountId: string, accountId: 
     return { kind: 'ready', relation: result.review.relation };
   return {
     kind: 'failure',
-    reason: result.review.kind === 'changed' || result.review.kind === 'missing' ? 'conflict' :
-      result.review.kind === 'refused' ? 'denied' : 'unavailable',
+    reason:
+      result.review.kind === 'changed' || result.review.kind === 'missing'
+        ? 'conflict'
+        : result.review.kind === 'refused'
+          ? 'denied'
+          : 'unavailable',
   };
 }
 export async function prepareTransfer(
@@ -252,8 +258,15 @@ export async function prepareTransfer(
   const denied = pageFailure(page);
   if (denied) return denied;
   if (page.review.kind !== 'source')
-    return { kind: 'failure', reason: page.review.kind === 'missing' || page.review.kind === 'changed' ? 'conflict' :
-      page.review.kind === 'refused' ? 'denied' : 'unavailable' };
+    return {
+      kind: 'failure',
+      reason:
+        page.review.kind === 'missing' || page.review.kind === 'changed'
+          ? 'conflict'
+          : page.review.kind === 'refused'
+            ? 'denied'
+            : 'unavailable',
+    };
   const current = page.review.relation;
   const request = {
     ...current,
@@ -397,7 +410,11 @@ export async function submitTransferAttempt(
       reference: attempt.reference!,
       readback: { kind: 'failure', reason: 'conflict' },
     };
-  return { kind: 'acknowledged', reference: attempt.reference!, readback: { kind: 'current', relation: current.relation } };
+  return {
+    kind: 'acknowledged',
+    reference: attempt.reference!,
+    readback: { kind: 'current', relation: current.relation },
+  };
 }
 
 /** Reauthentication stays on the transfer page; there is no return URL. The

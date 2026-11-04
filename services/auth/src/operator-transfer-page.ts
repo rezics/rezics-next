@@ -23,7 +23,11 @@ export type OperatorTransferPageRead =
   | { kind: 'destination'; destinationAccountId: string; action: 'allowed' | 'denied' }
   | { kind: 'missing' | 'refused' | 'changed' | 'unavailable' };
 export type OperatorTransferPageAccess = {
-  readOperatorTransferPage(token: string, input: NativeInput, context: { deadline: number }): Promise<OperatorTransferPageRead>;
+  readOperatorTransferPage(
+    token: string,
+    input: NativeInput,
+    context: { deadline: number },
+  ): Promise<OperatorTransferPageRead>;
 };
 export type OperatorTransferPageResponse = {
   viewer:
@@ -41,8 +45,7 @@ const response = (body: OperatorTransferPageResponse, status = 200) =>
     status,
     headers: { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' },
   });
-const refused = (status = 400) =>
-  response({ viewer: { kind: 'refused' }, review: { kind: 'refused' } }, status);
+const refused = (status = 400) => response({ viewer: { kind: 'refused' }, review: { kind: 'refused' } }, status);
 
 function fields(value: Record<string, unknown>, names: string[]) {
   return Object.keys(value).sort().join(',') === [...names].sort().join(',');
@@ -123,7 +126,10 @@ function projectRead(input: NativeInput, value: unknown): OperatorTransferPageRe
     (result.action === 'allowed' || result.action === 'denied')
   )
     return { kind: 'destination', destinationAccountId: input.request.operatorAccountId, action: result.action };
-  if (['missing', 'refused', 'changed', 'unavailable'].includes(String(result.kind)) && Object.keys(result).length === 1)
+  if (
+    ['missing', 'refused', 'changed', 'unavailable'].includes(String(result.kind)) &&
+    Object.keys(result).length === 1
+  )
     return { kind: result.kind as 'missing' | 'refused' | 'changed' | 'unavailable' };
   return { kind: 'unavailable' };
 }
@@ -219,10 +225,8 @@ export function operatorTransferPageTransport(
           viewer: { kind: 'authentication-required', continuation: 'operator-transfer' },
           review: { kind: 'unavailable' },
         });
-      if (status === 401)
-        return response({ viewer: { kind: 'signed-out' }, review: { kind: 'unavailable' } });
-      if (status === 403)
-        return response({ viewer: { kind: 'refused' }, review: { kind: 'refused' } });
+      if (status === 401) return response({ viewer: { kind: 'signed-out' }, review: { kind: 'unavailable' } });
+      if (status === 403) return response({ viewer: { kind: 'refused' }, review: { kind: 'refused' } });
       return response({ viewer: { kind: 'ready' }, review: { kind: 'unavailable' } }, 503);
     }
   };

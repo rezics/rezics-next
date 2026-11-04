@@ -3,13 +3,16 @@ import { authPost, type AuthPostResult } from './api';
 export type OperatorTransferPageInput =
   | { kind: 'readiness' }
   | { kind: 'source'; subjectAccountId: string }
-  | { kind: 'destination'; request: {
-      version: 1;
-      previous: { operatorAccountId: string; subjectAccountId: string; reservationId: string };
-      expectedVersion: string;
-      operatorAccountId: string;
-      sourceOperationKey: string;
-    } };
+  | {
+      kind: 'destination';
+      request: {
+        version: 1;
+        previous: { operatorAccountId: string; subjectAccountId: string; reservationId: string };
+        expectedVersion: string;
+        operatorAccountId: string;
+        sourceOperationKey: string;
+      };
+    };
 export type OperatorTransferPageResponse = {
   viewer:
     | { kind: 'ready' }
@@ -18,10 +21,14 @@ export type OperatorTransferPageResponse = {
     | { kind: 'refused' };
   review:
     | { kind: 'readiness' }
-    | { kind: 'source'; relation: {
-        previous: { operatorAccountId: string; subjectAccountId: string; reservationId: string };
-        expectedVersion: string;
-      }; action: 'allowed' }
+    | {
+        kind: 'source';
+        relation: {
+          previous: { operatorAccountId: string; subjectAccountId: string; reservationId: string };
+          expectedVersion: string;
+        };
+        action: 'allowed';
+      }
     | { kind: 'destination'; destinationAccountId: string; action: 'allowed' | 'denied' }
     | { kind: 'missing' | 'refused' | 'changed' | 'unavailable' };
 };

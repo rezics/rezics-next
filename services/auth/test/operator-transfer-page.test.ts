@@ -13,7 +13,10 @@ const subject = '00000000-0000-8000-8000-000000000001';
 const source = '00000000-0000-8000-8000-000000000002';
 const destination = '00000000-0000-8000-8000-000000000003';
 const reservation = '00000000-0000-8000-8000-000000000004';
-const relation = { previous: { subjectAccountId: subject, operatorAccountId: source, reservationId: reservation }, expectedVersion: '7' };
+const relation = {
+  previous: { subjectAccountId: subject, operatorAccountId: source, reservationId: reservation },
+  expectedVersion: '7',
+};
 const transfer = managementOperationProfile('transfer');
 const profile = (client_id = transfer.client_id, scope = [...transfer.scope]): SessionProof => ({
   account_id: source,
@@ -24,7 +27,11 @@ const profile = (client_id = transfer.client_id, scope = [...transfer.scope]): S
   amr: ['pwd'],
 });
 
-function fixture(proof = profile(), result: OperatorTransferPageRead = { kind: 'source', relation, action: 'allowed' }, withAccess = true) {
+function fixture(
+  proof = profile(),
+  result: OperatorTransferPageRead = { kind: 'source', relation, action: 'allowed' },
+  withAccess = true,
+) {
   const calls: unknown[] = [];
   let tokenCalls = 0;
   const service = {
@@ -86,11 +93,22 @@ test('the page transport keeps readiness safe and exposes only the selected clos
   const admitted = fixture();
   const sourcePage = await admitted.handler(request({ kind: 'source', subjectAccountId: subject }));
   expect(sourcePage.headers.get('cache-control')).toBe('private, no-store');
-  expect(await sourcePage.json()).toEqual({ viewer: { kind: 'ready' }, review: { kind: 'source', relation, action: 'allowed' } });
-  expect(admitted.calls[0]).toEqual(['server-native-token', { kind: 'source', subjectAccountId: subject }, expect.anything()]);
+  expect(await sourcePage.json()).toEqual({
+    viewer: { kind: 'ready' },
+    review: { kind: 'source', relation, action: 'allowed' },
+  });
+  expect(admitted.calls[0]).toEqual([
+    'server-native-token',
+    { kind: 'source', subjectAccountId: subject },
+    expect.anything(),
+  ]);
   expect(admitted.tokenCalls).toBe(2);
 
-  const destinationPage = fixture(profile(), { kind: 'destination', destinationAccountId: destination, action: 'allowed' });
+  const destinationPage = fixture(profile(), {
+    kind: 'destination',
+    destinationAccountId: destination,
+    action: 'allowed',
+  });
   const response = await destinationPage.handler(request({ kind: 'destination', request: handoff }));
   expect(await response.json()).toEqual({
     viewer: { kind: 'ready' },
