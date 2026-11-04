@@ -208,6 +208,28 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
         );
       }
 
+      if (url.pathname === '/security-page' && request.method === 'GET') {
+        if (state.signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
+        return Response.json(
+          {
+            viewer: {
+              account_id: state.sessionAccountId,
+              session_id: 'current-session',
+              client_id: state.sessionClientId,
+            },
+            sessions: {
+              kind: 'ready',
+              rows: sessions.slice(0, state.sessionCount).map((row) => ({ ...row, revoke: 'allowed' })),
+              limit: 64,
+              truncated: false,
+            },
+            passkeys: { kind: 'ready', rows: [], limit: 32, truncated: false },
+            actions: { change_password: 'allowed', register_passkey: 'allowed' },
+          },
+          { headers },
+        );
+      }
+
       if (url.pathname === '/sessions' && request.method === 'GET') {
         if (state.signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
         return Response.json(

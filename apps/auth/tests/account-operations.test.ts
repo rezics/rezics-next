@@ -242,7 +242,7 @@ test(
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
       const firstApproval = postBodies('/account-operations/approve')[0]!;
       await (await confirmDelete(page)).click();
-      await page.getByRole('status').waitFor();
+      await page.getByText('Your account has been deleted.', { exact: true }).waitFor();
       const approvals = postBodies('/account-operations/approve');
       expect(approvals).toHaveLength(2);
       expect(approvals[1]).toEqual(firstApproval);
@@ -268,6 +268,7 @@ test(
     try {
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
       await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), (await confirmDelete(page)).click()]);
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
       await page.getByLabel('Password', { exact: true }).fill('secure-password');
       await page.getByRole('button', { name: 'Verify your identity', exact: true }).click();
@@ -296,6 +297,7 @@ test(
     try {
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
       await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), (await confirmDelete(page)).click()]);
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
       await page.getByLabel('Password', { exact: true }).fill('secure-password');
       await Promise.all([
@@ -327,6 +329,7 @@ test(
     reset({ signInSucceeds: true });
     const { page } = await open('/step-up?return_to=%2Faccount%2Fdelete');
     try {
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
       await page.getByLabel('Password', { exact: true }).fill('secure-password');
       await page.getByRole('button', { name: 'Verify your identity', exact: true }).click();
@@ -355,6 +358,7 @@ test(
     try {
       await page.getByRole('heading', { name: 'Delete your account', exact: true }).waitFor();
       await Promise.all([page.waitForURL((url) => url.pathname === '/step-up'), (await confirmDelete(page)).click()]);
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
       await page.getByLabel('Password', { exact: true }).fill('secure-password');
       await Promise.all([
@@ -499,6 +503,7 @@ test(
         page.getByRole('button', { name: 'Create organization', exact: true }).click(),
       ]);
       expect(new URL(page.url()).searchParams.get('account_operation')).toBe('organization');
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
       await page.getByLabel('Email', { exact: true }).fill('reader@example.test');
       await page.getByLabel('Password', { exact: true }).fill('secure-password');
       await Promise.all([
@@ -519,7 +524,7 @@ test(
       expect(await page.getByRole('button', { name: 'Create organization', exact: true }).isEnabled()).toBe(true);
       const firstApproval = postBodies('/account-operations/approve')[0]!;
       await page.getByRole('button', { name: 'Create organization', exact: true }).click();
-      await page.getByRole('status').waitFor();
+      await page.getByText('Your account has been deleted.', { exact: true }).waitFor();
       const approvals = postBodies('/account-operations/approve');
       expect(approvals).toHaveLength(2);
       expect(approvals[1]).toEqual(firstApproval);
