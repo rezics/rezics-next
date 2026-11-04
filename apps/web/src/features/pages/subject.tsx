@@ -803,6 +803,7 @@ export function SubjectPage({
           locale={locale}
           readingView={view}
           subject={page.subject}
+          currentHref={currentHref}
           listTarget={
             page.account
               ? { account: page.account.handle, ...(view ? { view } : {}) }
