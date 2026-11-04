@@ -1,9 +1,12 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import { isRedirect } from '@tanstack/react-router';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { initialHeaderSearchState } from '../src/search/header-search/state';
 import { UnavailableAccountAction } from '../src/shell/top-bar';
 import { loadPrivatePage, SessionUnavailablePrompt } from '../src/session/private-page';
+import { requirePrivatePageAccess } from '../src/session/guard';
+import { SessionUnavailableError } from '../src/session/unavailable';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('../src/kernel/exposure', () => ({
@@ -15,26 +18,67 @@ const { HeaderSearchView } = await import('../src/search/header-search/header-se
 
 afterAll(() => mock.restore());
 
-test('unresolved private destinations show a localized sign-in prompt without starting private reads', async () => {
+test('indeterminate private access uses the shared recovery state without starting private reads', async () => {
   const paths = ['/en/library', '/en/realms', '/en/settings', '/en/creator/sales'];
   for (const path of paths) {
     const signInHref = `/auth/sign-in?return_to=${encodeURIComponent(path)}`;
     let reads = 0;
-    const page = await loadPrivatePage({ state: 'unavailable', signInHref }, () => {
+    await expect(loadPrivatePage({ state: 'unavailable', signInHref }, () => {
       reads++;
       return { privateValue: 'must not load' };
-    });
-    expect(page).toEqual({ sessionUnavailable: true, signInHref });
+    })).rejects.toBeInstanceOf(SessionUnavailableError);
     expect(reads).toBe(0);
   }
 });
 
-test('only the session boundary failure is softened into the prompt', async () => {
+test('a private read that loses session authority becomes a typed shared failure', async () => {
   const access = { state: 'signed-in' as const, signInHref: '/auth/sign-in?return_to=%2Fen%2Flibrary' };
   await expect(
     loadPrivatePage(access, () => Promise.reject({ problem: { code: 'session_unavailable' } })),
-  ).resolves.toEqual({ sessionUnavailable: true, signInHref: access.signInHref });
+  ).rejects.toBeInstanceOf(SessionUnavailableError);
   await expect(loadPrivatePage(access, () => Promise.reject(new Error('reader bug')))).rejects.toThrow('reader bug');
+});
+
+test('known signed-out private visitors keep the established sign-in redirect', async () => {
+  const path = '/en/library?tab=recent';
+  const signInHref = `/auth/sign-in?return_to=${encodeURIComponent(path)}`;
+  const queryClient = {
+    ensureQueryData: async () => ({ state: 'signed-out', csrfToken: null }),
+    getQueryState: () => ({
+      status: 'success',
+      fetchStatus: 'idle',
+      isInvalidated: false,
+      data: { state: 'signed-out', csrfToken: null },
+    }),
+  };
+  let failure: unknown;
+  try {
+    await requirePrivatePageAccess({
+      context: { queryClient } as never,
+      location: { publicHref: path },
+    });
+  } catch (error) {
+    failure = error;
+  }
+  expect(isRedirect(failure)).toBe(true);
+  expect(failure).toMatchObject({ options: { href: signInHref, statusCode: 302, reloadDocument: true } });
+});
+
+test('failed or retired session observations cannot admit a private route', async () => {
+  const staleReader = { state: 'signed-in', subject: 'reader-1', csrfToken: 'token-1' };
+  for (const queryState of [
+    { status: 'error', fetchStatus: 'idle', isInvalidated: false, data: staleReader },
+    { status: 'success', fetchStatus: 'fetching', isInvalidated: false, data: staleReader },
+    { status: 'success', fetchStatus: 'idle', isInvalidated: true, data: staleReader },
+  ]) {
+    const queryClient = {
+      ensureQueryData: async () => staleReader,
+      getQueryState: () => queryState,
+    };
+    await expect(
+      requirePrivatePageAccess({ context: { queryClient } as never, location: { publicHref: '/en/library' } }),
+    ).rejects.toBeInstanceOf(SessionUnavailableError);
+  }
 });
 
 test('the phone shell keeps an accessible status, a sign-in target, and a search affordance', () => {
@@ -60,11 +104,10 @@ test('the phone shell keeps an accessible status, a sign-in target, and a search
   expect(search).not.toContain('REZICS');
 });
 
-test('the unavailable prompt exposes its safe local sign-in destination', () => {
-  const href = '/auth/sign-in?return_to=%2Fen%2Fsettings%3Ftab%3Dprofile';
-  const html = renderToStaticMarkup(createElement(SessionUnavailablePrompt, { signInHref: href }));
-  expect(html).toContain('role="status"');
-  expect(html).toContain(m.shell_account_unavailable());
-  expect(html).toContain(m.account_sign_in());
-  expect(html).toContain(`href="${href}"`);
+test('the private session failure adapter uses the shared unavailable page and safe Home destination', () => {
+  const html = renderToStaticMarkup(createElement(SessionUnavailablePrompt));
+  expect(html).toContain('data-route-state="unavailable"');
+  expect(html).toContain(m.dependency_unavailable_heading());
+  expect(html).toContain(`href="/${'en'}"`);
+  expect(html).not.toContain('/auth/sign-in');
 });

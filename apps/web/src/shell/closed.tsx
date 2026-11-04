@@ -5,7 +5,11 @@ import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import { pageHead, type HeadContext } from './head.ts';
 import { routeRetry } from './error-state';
 import { RouteState } from './route-state';
-import { normalizeSessionObservation, sessionQueryKey } from '../session/browser-state';
+import { browserObservation } from '../session/observation';
+import { sessionQuery } from '../session/query';
+import { isDependencyUnavailableError, isSessionUnavailableError } from '../session/unavailable';
+import { DependencyUnavailablePage } from './dependency-recovery/page';
+import { recoveryOwnerIsCurrent, type RecoveryOwner } from './dependency-recovery/retry-owner';
 
 export function closedPageHead(context: HeadContext) {
   return pageHead({ robots: 'noindex' }, context);
@@ -39,35 +43,40 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
     return () => clearTimeout(timer);
   }, [error, policy]);
 
-  function owner() {
-    const client = router.options.context.queryClient;
-    const session = normalizeSessionObservation(client.getQueryData(sessionQueryKey));
-    return { state: session.state, subject: session.subject, token: session.csrfToken };
-  }
+  const client = router.options.context.queryClient;
+  const observation = browserObservation(client);
   async function retry() {
     if (active.current || !policy.allowed || waiting || policy.deferred) return;
     active.current = true;
-    const visit = router.state.location.state.key;
-    const reader = owner();
-    const current = () => {
-      const next = owner();
-      return (
-        mounted.current &&
-        router.state.location.state.key === visit &&
-        reader.state === next.state &&
-        reader.subject === next.subject &&
-        reader.token === next.token
+    let owner: RecoveryOwner = { visit: router.state.location.state.key, reader: observation.getSnapshot() };
+    const currentVisit = () => mounted.current && router.state.location.state.key === owner.visit;
+    const current = () =>
+      recoveryOwnerIsCurrent(
+        owner,
+        { visit: router.state.location.state.key, reader: observation.getSnapshot() },
+        mounted.current,
       );
-    };
+    const hadPageFocus = Boolean(
+      document.querySelector<HTMLElement>('[data-route-state]')?.contains(document.activeElement),
+    );
     setRetrying(true);
     setRetryFailed(false);
     try {
+      if (isSessionUnavailableError(error)) {
+        await client.fetchQuery({ ...sessionQuery, staleTime: 0 });
+        if (!currentVisit()) return;
+        // This explicit retry adopts the newly read session incarnation before the private loader runs.
+        owner = { visit: owner.visit, reader: observation.getSnapshot() };
+      }
       // Invalidation reruns the original bounded loader; reset alone only rerenders its failed match.
       await router.invalidate({ sync: true });
       if (!current()) return;
       if (router.state.matches.some((match) => match.status === 'error' || match.status === 'notFound'))
         setRetryFailed(true);
-      else reset?.();
+      else {
+        reset?.();
+        if (hadPageFocus) document.getElementById('main-content')?.focus({ preventScroll: true });
+      }
     } catch {
       if (current()) setRetryFailed(true);
     } finally {
@@ -83,14 +92,16 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
       : waiting
         ? m.route_retry_after({ seconds: policy.delay })
         : undefined;
-  return (
-    <RouteState
-      kind="error"
-      onRetry={policy.allowed && !policy.deferred ? retry : undefined}
-      retrying={retrying}
-      retryDisabled={waiting}
-      retryFailed={retryFailed}
-      recovery={recovery}
-    />
+  const retryProps = {
+    onRetry: policy.allowed && !policy.deferred ? retry : undefined,
+    retrying,
+    retryDisabled: waiting,
+    retryFailed,
+    recovery,
+  };
+  return isDependencyUnavailableError(error) ? (
+    <DependencyUnavailablePage {...retryProps} />
+  ) : (
+    <RouteState kind="error" {...retryProps} />
   );
 }

@@ -28,3 +28,5 @@ personal_library exposure policy is explicit and does not imply Library membersh
 An uncertain command retains the original operands, credential, method and key under its feature owner. A browser
 lease only refuses stale dispatch/completion; it never reconstructs, upgrades or automatically retries that intent.
 Native authorization, disclosure and prepared authenticated requests retain their existing owners.
+
+Decision: outage recovery retains only a bounded, query-free local return path in a short-lived HttpOnly login cookie; callback credentials and private query state are never replayed.

@@ -1,5 +1,5 @@
 import { requirePrivatePageAccess } from '../../session/guard';
-import { isSessionUnavailablePage, loadPrivatePage, SessionUnavailablePrompt } from '../../session/private-page';
+import { loadPrivatePage } from '../../session/private-page';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, Link } from '@tanstack/react-router';
@@ -79,6 +79,5 @@ function MyRealmsErrorPage({ error, reset }: { error: unknown; reset?: () => voi
 function MyRealms() {
   const initial = Route.useLoaderData();
   const { cursor } = Route.useSearch();
-  if (isSessionUnavailablePage(initial)) return <SessionUnavailablePrompt signInHref={initial.signInHref} />;
   return <MyRealmsCallerHost key={initial.visit.id} initial={initial} cursor={cursor} />;
 }
