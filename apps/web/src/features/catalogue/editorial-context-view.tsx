@@ -149,7 +149,8 @@ function EditorialContextWorkspaceLive({
     settingsSource.current = source;
     let cancelled = false;
     setInventory({ kind: 'loading' });
-    void source.choices(session.current)
+    void source
+      .choices(session.current)
       .then((latest) => {
         if (!cancelled && mounted.current && lifetime.active()) setInventory(latest);
       })

@@ -251,9 +251,7 @@ test('acknowledged create shows the returned policy when it differs from the rev
       })}
       reload={noop}
       settings={{ kind: 'ready', snapshot }}
-      loadSettings={async () =>
-        settingsReads++ === 0 ? { kind: 'ready', snapshot } : { kind: 'unavailable' }
-      }
+      loadSettings={async () => (settingsReads++ === 0 ? { kind: 'ready', snapshot } : { kind: 'unavailable' })}
     />,
   );
   try {
