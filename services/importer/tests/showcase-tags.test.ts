@@ -209,7 +209,15 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     const kanaResponse = (rating: number, spoiler: number) =>
       JSON.stringify({
         more: false,
-        results: [{ id: 'v410', tags: [{ id: 'g311', rating, spoiler, lie: false }, { id: 'g44', rating: 0.75, spoiler: 0, lie: false }] }],
+        results: [
+          {
+            id: 'v410',
+            tags: [
+              { id: 'g311', rating, spoiler, lie: false },
+              { id: 'g44', rating: 0.75, spoiler: 0, lie: false },
+            ],
+          },
+        ],
       });
     const fetchRatings: VndbTagRatingFetch = async (input, init) => {
       expect(String(input)).toBe(vndbTagsRatingEndpoint);
@@ -362,8 +370,12 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     expect(nextGenres.map((command) => command.key).slice(0, keys.length)).toEqual(keys);
     const nextWeights = nextGenres.filter(hasMetric);
     expect(nextWeights.length).toBeGreaterThan(weights.length);
-    expect(nextWeights.slice(weights.length).map((command) => command.subject)).toEqual(weights.map((command) => command.subject));
-    expect(nextWeights.slice(weights.length).map((command) => command.statement.value)).toEqual(weights.map((command) => command.statement.value));
+    expect(nextWeights.slice(weights.length).map((command) => command.subject)).toEqual(
+      weights.map((command) => command.subject),
+    );
+    expect(nextWeights.slice(weights.length).map((command) => command.statement.value)).toEqual(
+      weights.map((command) => command.statement.value),
+    );
     expect(new Set(nextWeights.map((command) => referenceValue(command, 'rezics:sourceSnapshot'))).size).toBe(2);
   } finally {
     await rm(directory, { recursive: true, force: true });

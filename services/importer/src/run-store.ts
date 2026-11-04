@@ -1880,7 +1880,8 @@ export class RunStore<Projection = BatchStatement[]> {
           ((c.source.digest !== row.digest ||
             c.source.record_revision !== row.recordRevision ||
             c.source.converter_revision !== row.converter_revision) &&
-            !sourceVocabularyOriginMatches(c, row.recordKey, row.recordRevision, input.sourceVocabulary)))
+            !sourceVocabularyOriginMatches(c, row.recordKey, row.recordRevision, input.sourceVocabulary))
+        )
           fail();
       }
       if (e.kind && commands.length && e.bytes !== bytes) throw new Error('Prepared command envelope is immutable');

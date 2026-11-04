@@ -882,8 +882,8 @@ export async function publishShowcase(input: {
   review: ShowcaseReviewPort;
   publicClient: PublicBulkClient;
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
-    tagWeightObservations?: ShowcaseManifest['tagWeightObservations'];
-    tagWeightRefreshes?: ShowcaseManifest['tagWeightRefreshes'];
+  tagWeightObservations?: ShowcaseManifest['tagWeightObservations'];
+  tagWeightRefreshes?: ShowcaseManifest['tagWeightRefreshes'];
 }): Promise<ShowcasePublicationResult> {
   const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
   const result = { ...input.result, mediaOutcomes };
@@ -1075,7 +1075,11 @@ export async function publishShowcase(input: {
     if (sourceTagWeight(assertion.statement)) {
       const tagId = sourceTagId(assertion.statement);
       const content = assertion.statement.value.type === 'value' ? assertion.statement.value.content : null;
-      if (!tagId || typeof content !== 'string' || !currentTagBindings.has(`${record.sourceKey}\0${tagId}\0${content}`)) {
+      if (
+        !tagId ||
+        typeof content !== 'string' ||
+        !currentTagBindings.has(`${record.sourceKey}\0${tagId}\0${content}`)
+      ) {
         omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
         continue;
       }
@@ -1257,7 +1261,8 @@ export async function publishShowcase(input: {
   };
   for (const [key, group] of grouped) {
     const [id] = key.split('\0');
-    const refreshWeights = group.record.provider === 'vndb' && manifest.tagWeightRefreshes.includes(group.record.sourceKey);
+    const refreshWeights =
+      group.record.provider === 'vndb' && manifest.tagWeightRefreshes.includes(group.record.sourceKey);
     if (!id || (stoppedSubjects.has(id) && !(refreshWeights && group.ids.size === 0))) continue;
     if (group.property === 'schema:image') {
       const assertion = assertions.find(
@@ -1301,14 +1306,22 @@ export async function publishShowcase(input: {
       continue;
     }
     if (refreshWeights && page.next !== null && page.next !== undefined) {
-      omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: 'adoption-selection-bounded' });
+      omissions.push({
+        provider: group.record.provider,
+        sourceKey: group.record.sourceKey,
+        code: 'adoption-selection-bounded',
+      });
       continue;
     }
     const selections = new Map<string, 'normal' | 'preferred'>();
     for (const item of priorSelection) {
       if (!item?.candidate) continue;
       const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
-      if (refreshWeights && selectedCandidate && managedSourceTagWeight(selectedCandidate, input.aliases.vndb, group.record.sourceKey))
+      if (
+        refreshWeights &&
+        selectedCandidate &&
+        managedSourceTagWeight(selectedCandidate, input.aliases.vndb, group.record.sourceKey)
+      )
         continue;
       selections.set(item.candidate, item.rank === 'preferred' ? 'preferred' : 'normal');
     }

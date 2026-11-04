@@ -305,12 +305,14 @@ function selectedEnvelopes(
 }
 
 function sourceTagWeight(assertion: ShowcaseAssertion): boolean {
-  return assertion.statement.qualifiers?.some(
-    (term) =>
-      term.property.id === 'rezics:sourceTagWeightMetric' &&
-      term.value.type === 'value' &&
-      term.value.content === vndbTagsRatingMetric,
-  ) ?? false;
+  return (
+    assertion.statement.qualifiers?.some(
+      (term) =>
+        term.property.id === 'rezics:sourceTagWeightMetric' &&
+        term.value.type === 'value' &&
+        term.value.content === vndbTagsRatingMetric,
+    ) ?? false
+  );
 }
 
 function currentTagWeight(
@@ -435,7 +437,9 @@ export function buildShowcaseManifest(input: {
   const currentBangumiGenreCandidateIds = new Set(input.currentBangumiGenreCandidateIds ?? []);
   const bangumiGenreOwnerKeys = new Set(input.bangumiGenreOwnerKeys ?? []);
   const tagWeightObservations = input.tagWeightObservations ?? [];
-  const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) => /^v[1-9][0-9]{0,9}$/u.test(id));
+  const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) =>
+    /^v[1-9][0-9]{0,9}$/u.test(id),
+  );
   for (const requirement of input.vocabularyRequirements ?? []) {
     if (vocabularyRequirements.length >= showcaseLimits.vocabulary) {
       omissions.push({
@@ -462,13 +466,7 @@ export function buildShowcaseManifest(input: {
     vocabularyRequirements.push(requirement);
   }
   const mediaOutcomes = input.mediaOutcomes ?? [];
-  const allowedSources = selectedEnvelopes(
-    plan,
-    aliases,
-    vocabularyRequirements,
-    mediaOutcomes,
-    tagWeightObservations,
-  );
+  const allowedSources = selectedEnvelopes(plan, aliases, vocabularyRequirements, mediaOutcomes, tagWeightObservations);
 
   const records: ShowcaseRecord[] = [];
   let remainingCandidates: number = showcaseLimits.candidates;

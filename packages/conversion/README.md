@@ -16,7 +16,7 @@ The [package exports](package.json) are only these entry points:
 | `@rezics/conversion/bangumi`              | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                                                            |
 | `@rezics/conversion/bangumi-vocabulary`   | `mapBangumiVocabulary`, `bangumiVocabularyRevision` and Bangumi row types                                                                              |
 | `@rezics/conversion/vndb`                 | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                                                                     |
-| `@rezics/conversion/vndb-vocabulary`      | `mapVndbVocabulary`, `vndbVocabularyRevision`, `produceVndbSourceTagWeightCandidate`, Kana rating constants and VNDB row types                       |
+| `@rezics/conversion/vndb-vocabulary`      | `mapVndbVocabulary`, `vndbVocabularyRevision`, `produceVndbSourceTagWeightCandidate`, Kana rating constants and VNDB row types                         |
 | `@rezics/conversion/source-vocabulary`    | Released binding, identity, row, gap and result types                                                                                                  |
 | `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                                                                    |
 | `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                                                                        |

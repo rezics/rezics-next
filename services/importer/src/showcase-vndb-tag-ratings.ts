@@ -123,7 +123,8 @@ function authenticResponse(bytes: Uint8Array, workId: string): boolean {
     };
     if (value?.more !== false || !Array.isArray(value.results) || value.results.length !== 1) return false;
     const result = value.results[0];
-    const tags = result !== null && typeof result === 'object' && !Array.isArray(result) ? Reflect.get(result, 'tags') : null;
+    const tags =
+      result !== null && typeof result === 'object' && !Array.isArray(result) ? Reflect.get(result, 'tags') : null;
     return (
       result !== null &&
       typeof result === 'object' &&
@@ -214,12 +215,24 @@ export async function acquireShowcaseVndbTagRatings(input: {
       const bytes = await responseBytes(response, signal);
       if (bytes.byteLength > showcaseVndbTagRatingLimits.totalBytes - totalBytes) {
         partial = true;
-        observations.push({ workId, state: 'partial', code: 'total-response-byte-cap', requestBody, bindings: boundedBindings });
+        observations.push({
+          workId,
+          state: 'partial',
+          code: 'total-response-byte-cap',
+          requestBody,
+          bindings: boundedBindings,
+        });
         continue;
       }
       totalBytes += bytes.byteLength;
       if (!authenticResponse(bytes, workId)) {
-        observations.push({ workId, state: 'unavailable', code: 'kana-response-invalid', requestBody, bindings: boundedBindings });
+        observations.push({
+          workId,
+          state: 'unavailable',
+          code: 'kana-response-invalid',
+          requestBody,
+          bindings: boundedBindings,
+        });
         continue;
       }
       const digest = createHash('sha256').update(bytes).digest('hex');

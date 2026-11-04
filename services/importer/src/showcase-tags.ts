@@ -332,20 +332,23 @@ export async function projectShowcaseTagTables(
     const count = titleCounts.get(id) ?? 0;
     const latin = row.latin;
     const titleValues = [row.id, row.lang, row.title, ...(typeof latin === 'string' ? [latin] : [])];
-    const official = row.official === true || row.official === 't' ? true : row.official === false || row.official === 'f' ? false : null;
+    const official =
+      row.official === true || row.official === 't'
+        ? true
+        : row.official === false || row.official === 'f'
+          ? false
+          : null;
     const fieldsValid =
       official !== null &&
       (latin === null || typeof latin === 'string') &&
-      titleValues.every((value) => typeof value === 'string' && Buffer.byteLength(value, 'utf8') <= vndbLimits.stringBytes);
+      titleValues.every(
+        (value) => typeof value === 'string' && Buffer.byteLength(value, 'utf8') <= vndbLimits.stringBytes,
+      );
     const bytes = fieldsValid
       ? Buffer.byteLength(JSON.stringify({ id: row.id, lang: row.lang, official, title: row.title, latin }))
       : Number.POSITIVE_INFINITY;
     const usedBytes = titleBytes.get(id) ?? 0;
-    if (
-      count >= vndbLimits.maxTitles ||
-      !Number.isFinite(bytes) ||
-      bytes > vndbLimits.recordBytes - usedBytes
-    ) {
+    if (count >= vndbLimits.maxTitles || !Number.isFinite(bytes) || bytes > vndbLimits.recordBytes - usedBytes) {
       if (!titleLimitReported.has(id)) {
         gap('vn_titles', { id }, 'Selected VNDB title projection exceeds the source record cap');
         titleLimitReported.add(id);
