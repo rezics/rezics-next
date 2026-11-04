@@ -128,13 +128,13 @@ function realmResource(
           });
           const current = await pageSnapshot(
             client,
-            expected.map(({ snapshot }) => snapshot.space_id),
+            expected.flatMap(({ snapshot }) => (snapshot.space_id === null ? [] : [snapshot.space_id])),
             at,
           );
           const native = await prepared.read(client, ids, at, time);
           return Object.fromEntries(
             expected.map(({ realmId, snapshot }) => {
-              const source = current.get(snapshot.space_id);
+              const source = snapshot.space_id === null ? undefined : current.get(snapshot.space_id);
               return [realmId, native[realmId] === true && sameSpace(source, snapshot) && sameRealm(source, snapshot)];
             }),
           );
@@ -257,7 +257,10 @@ export async function followingSpaceTargets(
     const snapshot = snapshots.get(spaceId);
     const spaceResult = actionResults.get(key(SPACE_RESOURCE, spaceId));
     const readable = snapshot !== undefined && success(spaceResult);
-    const target = readable ? { id: spaceId, type: 'space' as const, label: snapshot.title } : null;
+    const target =
+      snapshot !== undefined && success(spaceResult)
+        ? { id: spaceId, type: 'space' as const, label: snapshot.title! }
+        : null;
     let destination: FollowingSpaceDestination = { kind: 'unavailable' };
     let actions: FollowingSpaceActions = { status: 'unavailable' };
     if (readable && snapshot.address !== null) {

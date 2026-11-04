@@ -67,6 +67,7 @@ import {
   readReleaseSearchGroups,
   type ReleaseSearchGroupsResult,
 } from './release-search-source.ts';
+import type { ReleaseSearchCandidateReservation } from './release-search-native-stream.ts';
 import { ReleaseSearchCursorInvalid } from './release-search-cursor.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
@@ -845,7 +846,7 @@ export function createSearchService({
       const hits = keys.map((key) => ({ ...key, matched: [] as string[] }));
       const checked = await sourceRequest(() =>
         checkHits(source, hits, new Map(), {
-          filter: admitted,
+          ...(admitted === undefined ? {} : { filter: admitted as FilterDocument }),
           relationProperties,
           spoilerThreshold: spoilerThreshold ?? 0,
           observeRelationRelease: relationRelease,
@@ -988,7 +989,7 @@ export function createSearchService({
             release: current ?? undefined,
             meaningDigest: kinds?.digest,
             text,
-            filter: admitted,
+            filter: admitted as FilterDocument | undefined,
             deadline: readContext?.deadline ?? Date.now() + 10_000,
             ...(readContext?.realmAuthority ? { authority: readContext.realmAuthority } : {}),
           },
@@ -1311,7 +1312,7 @@ export function createSearchService({
             clauses,
             admitted && !preparedScope
               ? {
-                  filter: admitted,
+                  filter: admitted as FilterDocument,
                   relationProperties,
                   ...(spoilerThreshold === undefined ? {} : { spoilerThreshold }),
                   observeRelationRelease: async () => {
@@ -1678,7 +1679,7 @@ export function createSearchService({
           const scope = createSearchScopeForService(service, context.scope);
           const scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
           const prepared = await sourceRequest(() =>
-            scope.prepare(admitted, {
+            scope.prepare(admitted as FilterDocument, {
               releaseDigest: kindDigest(current),
               allowance: scopeWork.remaining(),
             }),
@@ -1687,8 +1688,8 @@ export function createSearchService({
           return {
             principal,
             text: normalized.text,
-            filter: admitted,
-            originalFilter: normalized.filter,
+            filter: admitted as FilterDocument,
+            originalFilter: normalized.filter as FilterDocument | undefined,
             release: current,
             languages,
             now,
@@ -1720,7 +1721,7 @@ export function createSearchService({
       const positions = await authenticateFacetCursors(cursors, {
         principal,
         text,
-        originalFilter: filter,
+        originalFilter: filter as FilterDocument | undefined,
         facets,
         languages,
         now,
@@ -1729,7 +1730,7 @@ export function createSearchService({
       if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       validateFacetCursorRelease(positions, current);
       const admitted = await admitQuery(text, filter, current);
-      admitFacets(facets, admitted, current);
+      admitFacets(facets, admitted as FilterDocument | undefined, current);
       // The native factory must resolve the actual registered catalogue/meaning/identity context.
       // Neither preview buckets nor a guessed Global/type configuration can replace this boundary.
       const provider =
@@ -1741,8 +1742,8 @@ export function createSearchService({
         {
           principal,
           text,
-          filter: admitted,
-          originalFilter: filter,
+          filter: admitted as FilterDocument | undefined,
+          originalFilter: filter as FilterDocument | undefined,
           release: current,
           facets,
           languages,
@@ -1809,7 +1810,7 @@ export function createSearchService({
             scope = createSearchScopeForService(service, read.scope);
             scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
             preparedScope = await sourceRequest(() =>
-              scope!.prepare(admitted, {
+              scope!.prepare(admitted as FilterDocument, {
                 releaseDigest: current.digest,
                 allowance: scopeWork!.remaining(),
               }),
@@ -1822,7 +1823,7 @@ export function createSearchService({
             context,
             limit,
             generation,
-            filter: admitted,
+            filter: admitted as FilterDocument,
             release: current.release,
             source,
             ...(scope ? { scope } : {}),

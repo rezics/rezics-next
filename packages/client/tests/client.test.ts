@@ -5,7 +5,10 @@ import {
   type Kernel,
   type KernelClient,
   type KernelSubjectsClient,
+  type NoticeInboxItem,
+  type NoticeInboxPage,
   type SubjectRead,
+  type UnreadNoticeSummary,
 } from '../src/index.ts';
 
 const ORIGIN = 'https://kernel.test';
@@ -204,6 +207,25 @@ test('the derived subjects group keeps native counts and routes contributed by o
     return { complete, noExtraGroups, path };
   };
   expect(typeof typed).toBe('function');
+});
+
+test('the generated account client reads the Inbox and unread summary', async () => {
+  const { sent, fetch } = kernel([
+    () => json(200, { items: [], next: null }),
+    () => json(200, { unread: 0 }),
+  ]);
+  const client = createKernelClient(ORIGIN, { fetch });
+  const inbox = await client.accounts({ accountId: ID }).notifications.get();
+  const unread = await client.accounts({ accountId: ID }).notifications.count.get();
+  const page: NoticeInboxPage = inbox.data!;
+  const first: NoticeInboxItem | undefined = page.items[0];
+  const summary: UnreadNoticeSummary = unread.data!;
+  expectTypeOf(first).toEqualTypeOf<NoticeInboxItem | undefined>();
+  expectTypeOf(summary).toEqualTypeOf<UnreadNoticeSummary>();
+  expect(sent.map(({ url, method }) => [url, method])).toEqual([
+    [`${ORIGIN}/v1/accounts/${ID}/notifications`, 'GET'],
+    [`${ORIGIN}/v1/accounts/${ID}/notifications/count`, 'GET'],
+  ]);
 });
 
 test('the same proxy rewrites a custom method and retains viewer headers', async () => {

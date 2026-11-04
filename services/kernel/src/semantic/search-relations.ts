@@ -957,7 +957,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       !identity.request
     )
       throw new TypeError('Invalid concept browse definition');
-    const conceptRoute = route;
+    const conceptRoute: number = route;
     const conceptSchemeRoute = schemeRoute;
 
     const allowance = (cost: ConceptBrowseNativeReservation) => reserve?.(cost);
@@ -1036,7 +1036,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         if (!first) return { status: 'unavailable' as const };
         if (!first.conceptReady || !first.schemeReady) return { status: 'preparing' as const };
         if (!expected(first) || !first.member) return { status: 'rejected' as const };
-        const rootMember = await source.match(partitionOf(route), [
+        const rootMember = await source.match(partitionOf(conceptRoute), [
           { subject: selection.concept, property: 'skos:inScheme', value: selection.scheme },
         ]);
         if (rootMember[0] !== true)
@@ -1082,12 +1082,11 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           );
           const generation = graph.rows[0];
           if (!generation || !/^[0-9]+$/.test(generation.last_value)) return null;
-          const observation = await readConceptObservation.run(client, {
+          const root = await readConceptObservation.run(client, {
             concept: selection.concept,
             scheme: selection.scheme,
             route: conceptRoute,
           });
-          const root = observation;
           if (!root) return null;
           const currentBinding = bind({
             runtime: current,
