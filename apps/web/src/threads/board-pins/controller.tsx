@@ -540,39 +540,37 @@ export function BoardPinThreadControls({
           if (!open) setPending(null);
         },
       },
-      pending
-        ? createElement(
-            AlertDialogContent,
-            { className: 'min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] text-start' },
-            createElement(
-              AlertDialogHeader,
-              { className: 'min-w-0 place-items-stretch text-start' },
-              createElement(AlertDialogTitle, null, confirmTitle),
-              createElement(AlertDialogDescription, null, confirmBody),
-            ),
-            createElement(
-              AlertDialogFooter,
-              { className: 'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2' },
-              createElement(
-                AlertDialogCancel,
-                { className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal' },
-                m.board_pin_cancel(),
-              ),
-              createElement(
-                AlertDialogAction,
-                {
-                  className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
-                  onClick: () => {
-                    if (!pending) return;
-                    onChange(pending);
-                    setPending(null);
-                  },
-                },
-                m.board_pin_confirm(),
-              ),
-            ),
-          )
-        : null,
+      createElement(
+        AlertDialogContent,
+        { className: 'min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] text-start' },
+        createElement(
+          AlertDialogHeader,
+          { className: 'min-w-0 place-items-stretch text-start' },
+          createElement(AlertDialogTitle, null, confirmTitle),
+          createElement(AlertDialogDescription, null, confirmBody),
+        ),
+        createElement(
+          AlertDialogFooter,
+          { className: 'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2' },
+          createElement(
+            AlertDialogCancel,
+            { className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal' },
+            m.board_pin_cancel(),
+          ),
+          createElement(
+            AlertDialogAction,
+            {
+              className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
+              onClick: () => {
+                if (!pending) return;
+                onChange(pending);
+                setPending(null);
+              },
+            },
+            m.board_pin_confirm(),
+          ),
+        ),
+      ),
     ),
     statusText
       ? createElement('span', { role: 'status', className: 'text-sm text-muted-foreground' }, statusText)
