@@ -27,6 +27,18 @@ type RelationReadCall = {
   session?: string;
 };
 
+async function waitFor(assertion: () => void) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      if (attempt === 99) throw error;
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
+  }
+}
+
 async function mount(
   fixture: ReturnType<typeof releaseFidelityFixture>,
   hooks: {
@@ -87,7 +99,6 @@ async function mount(
     review: () => ({}) as never,
   };
   const { createRoot } = await import('react-dom/client');
-  const { waitFor } = await import('@testing-library/dom');
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
