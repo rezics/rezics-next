@@ -124,7 +124,15 @@ removal and terminal erasure use the bounded cleanup and continue while rows rem
 paid by the native episode command once. Page and cleanup work use the archive's section/session indexes. No
 arbitrary LIMIT over unrelated units or History establishes the I/P bounds.
 
-Performance is asked to review the complete caller equation, including nested native work and physical cleanup.
+The profile-migration writer fence uses function-scoped `plan_cache_mode = force_custom_plan` in both fresh schema
+and migration installation. Generic pending-pin probes seq-scanned pinned owner Sessions at Native512 despite the
+matching partial index. Custom planning uses current parameter values and adds planning work; it does not guarantee
+an index scan or bounded access. The four pending predicates, owner serialization and migration/Undo fences remain
+unchanged.
+
+Performance must measure the actual admitted writer through the existing whole-caller capture, including nested
+pending probes, examined rows, buffers, locks, retries, planning overhead, full physical/native work and cleanup.
 Native64/512/4096 unrelated same-owner Session/unit/History acceptance and whole-caller row/buffer/byte/effect
-measurements remain unmeasured integration acceptance. The focused native test establishes the owner outcome only;
-it is not a replacement for the frozen growth oracle.
+measurements remain unmeasured until evidence exists for that admitted source, without increasing capture limits or
+reducing capture. The focused native test establishes the owner outcome only; it is not a replacement for the frozen
+growth oracle.
