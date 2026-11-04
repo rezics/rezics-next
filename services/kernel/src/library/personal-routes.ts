@@ -77,6 +77,7 @@ import {
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { readViewerFactsPage, viewerFactsResponseSchema } from './viewer-facts.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
+import { assertShelfPageCurrent } from './shelf-viewer-currentness.ts';
 
 import { basicQuery, embedded, fullView, subjectFields, targetFields, viewQuery } from './views.ts';
 
@@ -612,10 +613,12 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     viewer: Actor,
     result: T,
     deadline: number,
+    revalidate?: () => Promise<void>,
   ) {
     if (viewer.kind !== 'account' || result.libraryEntries.length === 0) return result;
     const rows = result.libraryEntries.map((entry, index) => ({ rowKey: String(index), subjectId: entry.subjectId }));
     const facts = await readViewerFactsPage(config(), viewer, rows, STANDARD_QUESTION_ID, deadline);
+    await revalidate?.();
     return { ...result, viewerFacts: facts };
   }
   async function attachLibraryListFacts<T extends { subjectId: string }>(
@@ -783,6 +786,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               return command(() => shelves('listShelf').listShelf(actor, pageQuery));
             });
           const result = await readPage();
+          const revalidate = async () => assertShelfPageCurrent(result, await readPage());
           const libraryEntries =
             query.view === 'FULL'
               ? await attachLibraryListFacts(
@@ -790,15 +794,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                   result.entries.map(shelfEntryView),
                   job.deadline,
                   languages,
-                  async () => {
-                    const current = await readPage();
-                    if (
-                      JSON.stringify(current.entries) !== JSON.stringify(result.entries) ||
-                      Boolean(current.next) !== Boolean(result.next) ||
-                      JSON.stringify(current.scoreQuestion ?? null) !== JSON.stringify(result.scoreQuestion ?? null)
-                    )
-                      throw new ProblemError('semantic_not_ready');
-                  },
+                  revalidate,
                 )
               : result.entries.map(shelfEntryView);
           const response = {
@@ -806,7 +802,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             ...(result.scoreQuestion ? { scoreQuestion: result.scoreQuestion } : {}),
             next: result.next,
           };
-          return withLibraryViewerFacts(actor, response, job.deadline);
+          return withLibraryViewerFacts(actor, response, job.deadline, revalidate);
         }
         if (query.direction !== undefined || query.type !== undefined) throw new ProblemError('invalid_request');
         const { orderBy: _orderBy, direction: _direction, type: _type, ...oldQuery } = query;
@@ -814,19 +810,13 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         const readPage = () =>
           admission.run('normal', job, () => command(() => entries().listEntries(actor, pageQuery)));
         const result = await readPage();
+        const revalidate = async () => assertShelfPageCurrent(result, await readPage());
         const libraryEntries =
           query.view === 'FULL'
-            ? await attachLibraryListFacts(actor, result.entries.map(entryView), job.deadline, languages, async () => {
-                const current = await readPage();
-                if (
-                  JSON.stringify(current.entries) !== JSON.stringify(result.entries) ||
-                  Boolean(current.next) !== Boolean(result.next)
-                )
-                  throw new ProblemError('semantic_not_ready');
-              })
+            ? await attachLibraryListFacts(actor, result.entries.map(entryView), job.deadline, languages, revalidate)
             : result.entries.map(entryView);
         const response = { libraryEntries, next: result.next };
-        return withLibraryViewerFacts(actor, response, job.deadline);
+        return withLibraryViewerFacts(actor, response, job.deadline, revalidate);
       },
     )
     .get(

@@ -1727,6 +1727,12 @@ no subject details or browser per-row requests supply facts. Commerce rechecks i
 reads, then checks current original-to-terminal identity/epoch equality against both the returned native facts and
 summary. Changed identity or source fails closed. Denied/missing entries expose neither a subject nor sibling facts;
 only a complete visible no-facts result becomes `{}`. Neither permission nor source authority is cached.
+After the optional viewer-facts overlay, the Collection route performs a source-only reread of the exact admitted
+branch and compares the ordered source page, including occurrence ID, subject, note, added time, ordering fields and
+original `next` cursor. FULL finalization calls `readMembers`, not `fullMembers`, so it does not repeat the shared
+Semantic fact producer. A hidden, removed or changed source returns its existing refusal (`not_found`, `forbidden`,
+or `stale_cursor`); a source branch that becomes unavailable returns the typed Semantic-unavailable problem. The
+optional viewer-facts unavailable value is preserved only when this final source read remains current.
 
 The existing `CollectionSource` work-context branch admits the native Members or Kind episode on the same live
 Core work-step client before Source I/O and rereads native admission and current Source/canonical keys before
@@ -2944,7 +2950,8 @@ Collection/keyset page. Each member returns <=4 configured properties with <=3 a
 rows, statements, blocks and bytes remain independent inclusive bounds; no native allowance changes or hydration waiver.
 `collection-list-facts.test.ts` supplies native API/persona, configuration, concealment, tuple/identity/source-race and
 raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
-64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
+64/512/4096 unrelated fact/history populations, including the authenticated Collection viewer overlay, failed page
+finalization and private/source-change work.
 
 ### FULL shelf facts and viewer overlay cost
 
@@ -2955,8 +2962,8 @@ Before and after Semantic disclosure, identity mappings cover at most `U` origin
 re-observes each admitted source/terminal, active release, account and source tuple, and checks up to `4*3*K` selected
 fact values. At the maximum page this is at most 1,200 related item references, handled by at most 12 batches of 100
 IDs; source observations, SQL statements and blocks depend on the actual homes and indexes touched, not shelf
-population. The existing 64/512/4096 Collection growth scenario measures the shared facts/summary helpers, not the
-additional shelf and viewer composition.
+population. `shelf-viewer-currentness-growth.test.ts` measures the ordered shelf route and post-overlay source reread
+at 64/512/4096 unrelated same-owner Entry rows with all participating backends captured.
 
 FULL reauthorization repeats the same native page query once after foreign reads; it compares the ordered rows,
 score descriptor and whether lookahead exists, while expiring cursor bytes may differ. The caller overlay then admits
@@ -2967,6 +2974,13 @@ generation initialization, its existing maintenance command, receipt, partition 
 remain additional costs under the shelf-maintenance contract. Every acquired pool/source connection and repeated
 authority statement remains in the inclusive cost. Personal-score ordering aborts unavailable by default, so this is
 not a source for whole-owner currentness or an available score order.
+
+After viewer facts finish, the shelf caller repeats the exact native page query once more and compares ordered raw
+entries, score descriptor and lookahead presence. It returns the original cursor bytes. A changed, denied or unavailable
+page returns `semantic_not_ready`; optional viewer facts remain optional only when this final page is current. This
+adds at most `K+1` native keys and one bounded page serialization to the caller; it does not run the Semantic fact
+producer again. The same post-overlay rule applies to Collection member reads, whose source-only recheck costs one
+bounded page and lookahead without repeating FULL fact attachment.
 
 ### Native identity scope planning and current seals
 
