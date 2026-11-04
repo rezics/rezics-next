@@ -13,7 +13,7 @@ export const TypeListContext = createContext<{ target?: TypeListTarget; full?: s
 
 const controlClass = `${linkClass} ${linkColor} inline-flex min-h-[44px] min-w-[44px] max-w-full items-center rounded-sm px-2 py-2 text-start whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
 
-/** Render only native search hits and its explicit terminal/continuation outcome, never a detail object's facts. */
+/** Render the native window and its supplied public comparison context without hydrating its targets. */
 export function TypeList(props: Record<string, unknown>) {
   const value = useContext(OverviewContext);
   const { target, full, cursor } = useContext(TypeListContext);
@@ -70,7 +70,13 @@ export function TypeList(props: Record<string, unknown>) {
       ) : (
         <>
           {items.length ? (
-            <CoverList items={items} value={value} label={title.text} preview={full !== id} />
+            <CoverList
+              items={items}
+              value={value}
+              label={title.text}
+              preview={full !== id}
+              memberCatalogue={Object.fromEntries((page?.subjects ?? []).map((hit) => [hit.id, hit.catalogue]))}
+            />
           ) : (
             <p role="status">{m.search_no_results({}, options)}</p>
           )}

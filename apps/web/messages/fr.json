@@ -1,4 +1,10 @@
 {
+  "catalogue_context_unavailable": "Contexte indisponible",
+  "catalogue_context_unknown": "Le contexte d’identification est inconnu",
+  "catalogue_context_withheld": "Le contexte d’identification n’est pas divulgué",
+  "catalogue_context_absent": "Aucun contexte d’identification fourni",
+  "catalogue_context_new_tab": "S’ouvre dans un nouvel onglet",
+  "catalogue_context_observations": "{count} observations de la source",
   "library_filtered_occurrence_remove_action": "Retirer toutes les occurrences correspondantes…",
   "library_filtered_occurrence_remove_title": "Retirer de cette collection",
   "library_filtered_occurrence_remove_source": "Source : {title} ({id})",

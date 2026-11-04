@@ -1,4 +1,10 @@
 {
+  "catalogue_context_unavailable": "식별 정보를 이용할 수 없습니다",
+  "catalogue_context_unknown": "식별 정보를 알 수 없습니다",
+  "catalogue_context_withheld": "식별 정보가 공개되지 않았습니다",
+  "catalogue_context_absent": "제공된 식별 정보가 없습니다",
+  "catalogue_context_new_tab": "새 탭에서 열립니다",
+  "catalogue_context_observations": "출처 관측 수: {count}",
   "library_filtered_occurrence_remove_action": "일치하는 모든 항목 제거…",
   "library_filtered_occurrence_remove_title": "이 컬렉션에서 제거",
   "library_filtered_occurrence_remove_source": "원본: {title} ({id})",

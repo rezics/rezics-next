@@ -1,8 +1,15 @@
 import type { SubjectSummary } from '../../media/summary';
 import { isRecord } from './shared';
+import { catalogueRowContext, type CatalogueRowContext } from './catalogue-list-context/model';
 
 export type NativeTypeListPage = {
-  subjects: { id: string; type: string; labels: Record<string, string>; summary: SubjectSummary }[];
+  subjects: {
+    id: string;
+    type: string;
+    labels: Record<string, string>;
+    summary: SubjectSummary;
+    catalogue: CatalogueRowContext;
+  }[];
   next: string | null;
 };
 
@@ -108,7 +115,18 @@ export function nativeTypeListPage(read: unknown, body: unknown): NativeTypeList
     )
       return undefined;
     seen.add(row.id.toLowerCase());
-    subjects.push({ id: row.id, type: row.type, labels: row.labels, summary: row.summary });
+    subjects.push({
+      id: row.id,
+      type: row.type,
+      labels: row.labels,
+      summary: row.summary,
+      catalogue: catalogueRowContext({
+        id: row.id,
+        facts: row.facts,
+        listPresentation: row.listPresentation,
+        catalogueContext: row.catalogueContext,
+      }),
+    });
   }
   return { subjects, next: body.next };
 }

@@ -1,4 +1,10 @@
 {
+  "catalogue_context_unavailable": "Kontext nicht verfügbar",
+  "catalogue_context_unknown": "Identifizierender Kontext ist unbekannt",
+  "catalogue_context_withheld": "Identifizierender Kontext wird nicht offengelegt",
+  "catalogue_context_absent": "Kein identifizierender Kontext angegeben",
+  "catalogue_context_new_tab": "Öffnet in einem neuen Tab",
+  "catalogue_context_observations": "{count} Quellenbeobachtungen",
   "library_filtered_occurrence_remove_action": "Alle passenden Vorkommen entfernen…",
   "library_filtered_occurrence_remove_title": "Aus dieser Sammlung entfernen",
   "library_filtered_occurrence_remove_source": "Quelle: {title} ({id})",

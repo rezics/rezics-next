@@ -16,6 +16,8 @@ import type { Item, RowValue } from './overview';
 import { QualifiedCredit } from './qualified-credit';
 import { SpoilerGate } from './values';
 import type { LinkProps } from './shared';
+import { CatalogueSecondary, CatalogueTargetLink } from './catalogue-list-context/secondary';
+import { catalogueText, type CatalogueRowContext } from './catalogue-list-context/model';
 
 export function ExactEditionLink({ href, lang, className, children }: LinkProps) {
   return (
@@ -46,6 +48,7 @@ function ItemCard({
   facts,
   credit = false,
   openExactEdition = false,
+  catalogue,
 }: {
   item: Item;
   value: RowValue;
@@ -53,13 +56,14 @@ function ItemCard({
   facts?: Readonly<Record<string, readonly Fact[]>>;
   credit?: boolean;
   openExactEdition?: boolean;
+  catalogue?: CatalogueRowContext;
 }) {
   const title = item.label.text || value.unlabelled;
   const subject = coverSubject(item.id, title, item.summary, item.type);
-  const releasedPresentation = parseListPresentation(listPresentationFor?.(subject.types));
+  const releasedPresentation = catalogue?.presentation ?? parseListPresentation(listPresentationFor?.(subject.types));
   const listPresentation = releasedPresentation ?? fallbackListPresentation(subject.types);
   const keyFacts = listKeyFacts(
-    facts,
+    catalogue?.facts ?? facts,
     releasedPresentation?.keyFacts ?? fallbackListFactProperties(subject.types),
     [],
     value.locale,
@@ -67,7 +71,7 @@ function ItemCard({
   const notes = [
     ...keyFacts.map((fact, index) => (
       <span key={index} lang={fact.lang} data-property={fact.property}>
-        {fact.text}
+        {catalogue ? catalogueText(fact.text) : fact.text}
       </span>
     )),
     ...item.notes,
@@ -82,6 +86,7 @@ function ItemCard({
   };
   const href = relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
   const exactEdition = openExactEdition && isExactEdition(item);
+  const secondary = notes.length > 0 ? <MetaLine items={notes} /> : null;
   const card = credit ? (
     <QualifiedCredit
       title={title}
@@ -95,12 +100,20 @@ function ItemCard({
     />
   ) : (
     <CoverCard
-      link={exactEdition ? ExactEditionLink : value.link}
-      href={href}
+      link={
+        catalogue
+          ? (props) => <CatalogueTargetLink {...props} locale={value.locale} />
+          : exactEdition
+            ? ExactEditionLink
+            : value.link
+      }
+      {...(!catalogue || catalogue.context.target ? { href } : {})}
       title={title}
       {...(item.label.lang ? { titleLang: item.label.lang } : {})}
       cover={cover}
-      {...(notes.length > 0 ? { secondary: <MetaLine items={notes} /> } : {})}
+      secondary={
+        catalogue ? <CatalogueSecondary context={catalogue.context} value={value} nativeFacts={secondary} /> : secondary
+      }
     />
   );
   // Only rendered facts and the resolved presentation matter, not adapter function identity or unused facts.
@@ -128,6 +141,7 @@ export function CoverList({
   listPresentationFor,
   memberFacts,
   openExactEditions = false,
+  memberCatalogue,
 }: {
   items: Item[];
   value: RowValue & { subject?: string | null };
@@ -139,6 +153,8 @@ export function CoverList({
   memberFacts?: Readonly<Record<string, Readonly<Record<string, readonly Fact[]>>>>;
   /** Open only exact released bf:Instance destinations in a separate tab. */
   openExactEditions?: boolean;
+  /** Current native TypeList rows only; this public seam never carries personal state or actions. */
+  memberCatalogue?: Readonly<Record<string, CatalogueRowContext>>;
 }) {
   const context = value.context;
   const disclosure = [
@@ -170,6 +186,7 @@ export function CoverList({
         value={value}
         credit={credits}
         openExactEdition={openExactEditions}
+        {...(memberCatalogue && Object.hasOwn(memberCatalogue, item.id) ? { catalogue: memberCatalogue[item.id] } : {})}
         {...(listPresentationFor ? { listPresentationFor } : {})}
         {...(facts ? { facts } : {})}
       />

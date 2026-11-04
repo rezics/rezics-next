@@ -1,4 +1,10 @@
 {
+  "catalogue_context_unavailable": "識別情報を利用できません",
+  "catalogue_context_unknown": "識別情報は不明です",
+  "catalogue_context_withheld": "識別情報は非公開です",
+  "catalogue_context_absent": "識別情報は提供されていません",
+  "catalogue_context_new_tab": "新しいタブで開きます",
+  "catalogue_context_observations": "情報源の観測数：{count}",
   "library_filtered_occurrence_remove_action": "一致するすべての項目を削除…",
   "library_filtered_occurrence_remove_title": "このコレクションから削除",
   "library_filtered_occurrence_remove_source": "対象：{title}（{id}）",
