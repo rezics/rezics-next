@@ -6,13 +6,13 @@
 
 `bun run --cwd services/kernel typecheck` places through the [compiler placement contract](../../../docs/development/compiler-check-placement.md). Slot wait and rsync stay on the transport receipt. After admission the command appends paired markers to `REZICS_CHECK_PHASES`:
 
-| Phase            | Work |
-| ---------------- | ---- |
-| `database-image` | Postgres image and one throwaway container |
-| `migrations`     | Schema migrations on that container |
+| Phase            | Work                                                     |
+| ---------------- | -------------------------------------------------------- |
+| `database-image` | Postgres image and one throwaway container               |
+| `migrations`     | Schema migrations on that container                      |
 | `compiler`       | Optional client emit, `tsc`, construct, optional OpenAPI |
-| `sql-schema`     | Optional `--emit-schema=` dump from the same database |
-| `cleanup`        | Remove the one-run container and its volume |
+| `sql-schema`     | Optional `--emit-schema=` dump from the same database    |
+| `cleanup`        | Remove the one-run container and its volume              |
 
 Client emit stays before the workspace compiler so tests see source-checked declarations. Client emit, `tsc` and construct share the same migrated database; they do not start a second compiler database. `--emit-client` still runs a declaration compiler and then `tsc --noEmit`; that is the accepted client-publication order, not duplicate preparation.
 
