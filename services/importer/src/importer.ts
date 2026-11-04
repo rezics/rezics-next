@@ -1882,7 +1882,8 @@ export class Importer {
     } else if (
       isDeepStrictEqual(acknowledged, row) &&
       !this.options.classificationAdmission &&
-      !this.options.vocabularyAdmission
+      !this.options.vocabularyAdmission &&
+      !this.options.identifierLookup
     ) {
       return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
     }
