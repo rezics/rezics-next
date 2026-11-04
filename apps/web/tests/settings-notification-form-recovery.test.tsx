@@ -64,8 +64,10 @@ test('native kind forms own each field once; hydration retains choices and recov
   const initial = { reply: true, mention: false, weekly_digest: true };
   const current = { reply: false, mention: true, weekly_digest: false };
   const initialPage = settingsPage(initial, 7);
-  const currentPage = settingsPage(current, 9);
-  const receiptPage = settingsPage(current, 8);
+  const initialCurrentPage = settingsPage(current, 9);
+  const recoveredCurrentPage = settingsPage(current, 10);
+  let currentPage = initialCurrentPage;
+  const receiptPage = settingsPage(current, 9);
   const calls: NotificationChange[] = [];
   let refuseCurrentRead = false;
   const io = {
@@ -73,9 +75,9 @@ test('native kind forms own each field once; hydration retains choices and recov
       calls.push(input);
       if (calls.length === 1) return { ok: false as const, reason: 'invalid' as const };
       if (calls.length === 3) throw new Error('response lost');
-      if (calls.length === 4) return { ok: true as const, version: 8, notifications: current, page: receiptPage };
+      if (calls.length === 4) return { ok: true as const, version: 9, notifications: current, page: receiptPage };
       if (calls.length === 6) return { ok: false as const, reason: 'conflict' as const, page: currentPage };
-      return { ok: true as const, version: 9, notifications: current, page: currentPage };
+      return { ok: true as const, version: currentPage.version, notifications: current, page: currentPage };
     },
     read: async () =>
       refuseCurrentRead
@@ -87,7 +89,7 @@ test('native kind forms own each field once; hydration retains choices and recov
           }
         : {
             signedIn: true as const,
-            preferences: { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 9 },
+            preferences: { spoilerLevel: 1 as const, suitability: 'blur' as const, version: currentPage.version },
             notifications: current,
             page: currentPage,
             securityHref: null,
@@ -167,6 +169,7 @@ test('native kind forms own each field once; hydration retains choices and recov
       ),
     ).toBe(false);
     refuseCurrentRead = false;
+    currentPage = recoveredCurrentPage;
     await click('Reload');
     expect(host.textContent).toContain('Review current settings');
     expect(host.textContent).toContain('Restore defaults');
