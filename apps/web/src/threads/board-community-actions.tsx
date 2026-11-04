@@ -12,22 +12,16 @@ type Board = CommunityBoardPage['board'];
 type BoardAdvice = CommunityBoardPage['actions']['createThread'];
 
 /** The mounted page's current advice controls the entry; the composer command remains authoritative. */
-export function BoardStartThread({
-  board,
-  advice,
-  returnTo,
-}: {
-  board: Board;
-  advice: BoardAdvice;
-  returnTo: string;
-}) {
+export function BoardStartThread({ board, advice, returnTo }: { board: Board; advice: BoardAdvice; returnTo: string }) {
   const { state: session } = useSession();
   const available =
     board.availability === 'available' && board.visibility !== 'taken_down' && board.visibility !== 'draft';
   if (!available) return null;
   if (session === 'unavailable' || session === 'unknown') return null;
   if (session === 'signed-out')
-    return advice === 'sign-in' ? <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact /> : null;
+    return advice === 'sign-in' ? (
+      <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />
+    ) : null;
   if (advice === 'unavailable')
     return (
       <p role="status" className="text-sm text-muted-foreground">
@@ -43,13 +37,7 @@ export function BoardStartThread({
   );
 }
 
-export function BoardParticipation({
-  community,
-  returnTo,
-}: {
-  community: BoardCommunitySource;
-  returnTo: string;
-}) {
+export function BoardParticipation({ community, returnTo }: { community: BoardCommunitySource; returnTo: string }) {
   const { state: session } = useSession();
   if (community?.state !== 'available') return null;
   if (session === 'unknown' || session === 'unavailable') return null;

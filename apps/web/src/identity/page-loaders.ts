@@ -11,7 +11,10 @@ import { readPageAuthors, type PageAuthors } from './read';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadPage = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;
-export type BoardPageAuthor = Extract<BoardPageResponse['threads'][number]['authors']['thread'], { state: 'available' }>;
+export type BoardPageAuthor = Extract<
+  BoardPageResponse['threads'][number]['authors']['thread'],
+  { state: 'available' }
+>;
 export type BoardPageAuthors = Record<string, BoardPageAuthor> | null;
 export type PageInput = { id: string; cursor?: string; sort?: 'hot' | 'new' };
 
@@ -65,8 +68,7 @@ export async function loadBoardPageWithAuthors(
     rankRefreshedAt: response.rankRefreshedAt,
   };
   const openingCards: Record<string, BoardPageResponse['threads'][number]> = {};
-  for (const card of [...response.pinnedThreads, ...response.threads])
-    openingCards[card.thread.id] ??= card;
+  for (const card of [...response.pinnedThreads, ...response.threads]) openingCards[card.thread.id] ??= card;
   const authors: Record<string, BoardPageAuthor> = {};
   for (const card of Object.values(openingCards)) {
     for (const author of [card.authors.thread, card.authors.openingPost]) {

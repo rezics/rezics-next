@@ -61,9 +61,10 @@ test('the actual community feed continues an empty page, preserves every sort an
     expect(feed).not.toContain(m.threads_next_page());
     expect(feed).not.toContain(m.realm_join());
     expect(calls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(0);
-    expect(calls.filter((url) => url.pathname.endsWith('/page')).map((url) => url.searchParams.get('sort'))).toEqual(
-      [sort, sort],
-    );
+    expect(calls.filter((url) => url.pathname.endsWith('/page')).map((url) => url.searchParams.get('sort'))).toEqual([
+      sort,
+      sort,
+    ]);
     expect(calls.some((url) => /^\/v1\/(threads|posts|media)\//u.test(url.pathname))).toBe(false);
     const sorts = [...feed.matchAll(/href="([^"]+)"/gu)]
       .map((match) => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://site.test'))
@@ -101,17 +102,19 @@ test('removed openings and denied sources never become hidden previews, fabricat
   expect(unavailable).not.toContain(m.board_community_global());
   expect(unavailable).not.toContain(m.realm_join());
   for (const status of [404, 503]) {
-      const denied = createKernelClient('https://kernel.test', {
-        fetch: (input, init) => {
-          const url = new URL(new Request(input, init).url);
-          const refuse = url.pathname === `/v1/boards/${continuationBoardId}/page`;
-          return refuse
-            ? Promise.resolve(Response.json({ code: status === 404 ? 'not_found' : 'dependency_unavailable' }, { status }))
-            : recorded(input, init);
-        },
-      });
-      const attempt = loadBoardPageWithAuthors(denied, { id: continuationBoardId, cursor: continuationCursor });
-      if (status === 404) await expect(attempt).rejects.toMatchObject({ isNotFound: true });
-      else await expect(attempt).rejects.toThrow(/Kernel .* read failed/u);
-    }
+    const denied = createKernelClient('https://kernel.test', {
+      fetch: (input, init) => {
+        const url = new URL(new Request(input, init).url);
+        const refuse = url.pathname === `/v1/boards/${continuationBoardId}/page`;
+        return refuse
+          ? Promise.resolve(
+              Response.json({ code: status === 404 ? 'not_found' : 'dependency_unavailable' }, { status }),
+            )
+          : recorded(input, init);
+      },
+    });
+    const attempt = loadBoardPageWithAuthors(denied, { id: continuationBoardId, cursor: continuationCursor });
+    if (status === 404) await expect(attempt).rejects.toMatchObject({ isNotFound: true });
+    else await expect(attempt).rejects.toThrow(/Kernel .* read failed/u);
+  }
 });

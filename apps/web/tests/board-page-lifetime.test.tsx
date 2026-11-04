@@ -186,15 +186,15 @@ async function pageFor(input: BoardReadInput, label: string): Promise<CommunityB
       const { pathname } = new URL(request.url);
       if (pathname === `/v1/boards/${input.id}/page`) {
         const threads = threadsRecording.threads.map((thread) => ({
-            ...thread,
+          ...thread,
+          boardId: input.id,
+          title: `${label} Thread`,
+          firstPost: {
+            ...thread.firstPost,
             boardId: input.id,
-            title: `${label} Thread`,
-            firstPost: {
-              ...thread.firstPost,
-              boardId: input.id,
-              body: fromPlainText(`${label} opening text`, 'blocks'),
-            },
-          }));
+            body: fromPlainText(`${label} opening text`, 'blocks'),
+          },
+        }));
         const author = (id: string) => {
           const account = accountsRecording.accounts.find((entry) => entry.id === id);
           return account

@@ -67,19 +67,21 @@ test('the actual board feed uses heading-style titles and the available opening 
         return Response.json({
           board: boardRecording.board,
           pinnedThreads: [],
-          threads: [{
-            thread: row,
-            target: { kind: 'thread', id: row.id, boardId: row.boardId },
-            authors: { thread: author(row.authorId), openingPost: author(row.firstPost.authorId) },
-            media: { state: 'none', images: [] },
-            interaction: {
-              target: { kind: 'thread', id: row.id },
-              counts: { state: 'unavailable' },
-              viewer: { state: 'not-applicable' },
+          threads: [
+            {
+              thread: row,
+              target: { kind: 'thread', id: row.id, boardId: row.boardId },
+              authors: { thread: author(row.authorId), openingPost: author(row.firstPost.authorId) },
+              media: { state: 'none', images: [] },
+              interaction: {
+                target: { kind: 'thread', id: row.id },
+                counts: { state: 'unavailable' },
+                viewer: { state: 'not-applicable' },
+              },
+              comments: { state: 'unavailable' },
+              actions: { reply: 'sign-in', react: 'sign-in', share: 'available' },
             },
-            comments: { state: 'unavailable' },
-            actions: { reply: 'sign-in', react: 'sign-in', share: 'available' },
-          }],
+          ],
           next: null,
           rankRefreshedAt: null,
           reactionsAsOf: null,

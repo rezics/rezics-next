@@ -300,10 +300,7 @@ test('late accepted and failed commands cannot update a replacement CSRF lifetim
       headers: { 'X-CSRF-Token': 'csrf-original' },
     });
     await surface.setSessions(signedIn(subject, 'csrf-next'));
-    await surface.until(
-      () => standingReads.length === 3,
-      'standing after the next credential change',
-    );
+    await surface.until(() => standingReads.length === 3, 'standing after the next credential change');
     failed.resolve({ outcome: 'refused', detail: 'late failure detail' });
     await surface.settle();
     expect(surface.hasText(m.realm_leave_refused())).toBe(false);

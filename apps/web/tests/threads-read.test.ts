@@ -110,8 +110,22 @@ function boardPage(
       thread,
       target: { kind: 'thread', id: thread.id, boardId: thread.boardId },
       authors: {
-        thread: { state: 'available', id: account.id, kind: 'actor', handle: account.handle, displayName: account.displayName, automated: false },
-        openingPost: { state: 'available', id: account.id, kind: 'actor', handle: account.handle, displayName: account.displayName, automated: false },
+        thread: {
+          state: 'available',
+          id: account.id,
+          kind: 'actor',
+          handle: account.handle,
+          displayName: account.displayName,
+          automated: false,
+        },
+        openingPost: {
+          state: 'available',
+          id: account.id,
+          kind: 'actor',
+          handle: account.handle,
+          displayName: account.displayName,
+          automated: false,
+        },
       },
       media: { state: 'none', images: [] },
       interaction: {
@@ -202,10 +216,7 @@ test('a board page preserves kernel order and follows the emitted cursor', async
       page: {
         get: async (options?: { query?: Record<string, string> }) => {
           requests.push({ path: `/v1/boards/${id(1)}/page`, ...(options?.query ? { query: options.query } : {}) });
-          const pages = [
-            boardPage([first.thread, second.thread], pageCursor),
-            boardPage([last.thread]),
-          ];
+          const pages = [boardPage([first.thread, second.thread], pageCursor), boardPage([last.thread])];
           return { data: pages[pageNumber++] };
         },
       },

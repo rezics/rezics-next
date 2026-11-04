@@ -73,10 +73,7 @@ test('Next traverses an empty visible page to a returned thread with the exact c
     expect(visible.includes(`dateTime="${rankRefreshedAt}"`)).toBe(sort !== 'new');
     const pages = calls.filter((url) => url.pathname === `/v1/boards/${continuationBoardId}/page`);
     expect(pages.map((url) => url.searchParams.get('cursor'))).toEqual([null, continuationCursor]);
-    expect(pages.map((url) => url.searchParams.get('sort'))).toEqual([
-      sort,
-      sort,
-    ]);
+    expect(pages.map((url) => url.searchParams.get('sort'))).toEqual([sort, sort]);
     const terminal = await loadBoardPageWithAuthors(client, { id: emptyBoardId });
     const empty = await render(terminal, sort);
     expect(empty).toContain(m.board_threads_empty());
@@ -88,18 +85,18 @@ test('Next traverses an empty visible page to a returned thread with the exact c
 
 test('a continued board or page refusal stays a failure rather than becoming an empty success', async () => {
   for (const status of [404, 503]) {
-      const recorded = createStoryRecordedKernelFetch();
-      const client = createKernelClient('https://kernel.test', {
-        fetch: async (input, init) => {
-          const url = new URL(new Request(input, init).url);
-          const refused = url.pathname === `/v1/boards/${continuationBoardId}/page`;
-          return refused
-            ? Response.json({ code: status === 404 ? 'not_found' : 'dependency_unavailable' }, { status })
-            : recorded(input, init);
-        },
-      });
-      const result = loadBoardPageWithAuthors(client, { id: continuationBoardId, cursor: continuationCursor });
-      if (status === 404) await expect(result).rejects.toMatchObject({ isNotFound: true });
-      else await expect(result).rejects.toThrow(/Kernel .* read failed/u);
-    }
+    const recorded = createStoryRecordedKernelFetch();
+    const client = createKernelClient('https://kernel.test', {
+      fetch: async (input, init) => {
+        const url = new URL(new Request(input, init).url);
+        const refused = url.pathname === `/v1/boards/${continuationBoardId}/page`;
+        return refused
+          ? Response.json({ code: status === 404 ? 'not_found' : 'dependency_unavailable' }, { status })
+          : recorded(input, init);
+      },
+    });
+    const result = loadBoardPageWithAuthors(client, { id: continuationBoardId, cursor: continuationCursor });
+    if (status === 404) await expect(result).rejects.toMatchObject({ isNotFound: true });
+    else await expect(result).rejects.toThrow(/Kernel .* read failed/u);
+  }
 });
