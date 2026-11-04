@@ -454,7 +454,16 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
         return;
       return `${url.pathname}${url.search}`;
     }
-    const allowed = new Set(['realm', 'node', 'cursor', 'property', 'screenCursor', 'screenSelection']);
+    const allowed = new Set([
+      'realm',
+      'node',
+      'cursor',
+      'property',
+      'streamProperty',
+      'streamDirection',
+      'screenCursor',
+      'screenSelection',
+    ]);
     const keys = [...url.searchParams.keys()];
     const nestedVia = url.searchParams.getAll('via');
     if (nestedVia.length) {
@@ -466,6 +475,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const node = url.searchParams.get('node');
     const cursor = url.searchParams.get('cursor');
     const property = url.searchParams.get('property');
+    const streamProperty = url.searchParams.get('streamProperty');
+    const streamDirection = url.searchParams.get('streamDirection');
     const screenCursor = url.searchParams.get('screenCursor');
     const screenSelection = url.searchParams.get('screenSelection');
     const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
@@ -475,9 +486,14 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
       (cursor !== null &&
-        (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
+        (!subject?.[2] || node === null || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
       (property !== null &&
         (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f\u007f]/u.test(property))) ||
+      (streamProperty !== null &&
+        (!subject?.[2] || node === null || !streamProperty.trim() || streamProperty.length > 256 || /[\u0000-\u001f\u007f]/u.test(streamProperty))) ||
+      (streamDirection !== null &&
+        (!subject?.[2] || node === null || streamProperty === null || !['forward', 'inverse'].includes(streamDirection))) ||
+      (streamProperty !== null && streamDirection === null) ||
       (screenReturn &&
         (subject?.[2] !== undefined ||
           (screenCursor !== null &&

@@ -10,10 +10,16 @@ export function literaryAddress(input: {
   view: string;
   realm?: string | undefined;
   continuation?: PageContinuation | undefined;
+  stream?: { node: string; property: string; direction: 'forward' | 'inverse' } | undefined;
 }): string {
   const url = new URL(subjectViewHref(input, input.locale, input.view), 'https://rezics.invalid');
   if (input.realm) url.searchParams.set('realm', input.realm);
-  if (input.continuation) {
+  if (input.stream) {
+    url.searchParams.set('node', input.stream.node);
+    url.searchParams.set('streamProperty', input.stream.property);
+    url.searchParams.set('streamDirection', input.stream.direction);
+    if (input.continuation?.node === input.stream.node) url.searchParams.set('cursor', input.continuation.cursor);
+  } else if (input.continuation) {
     url.searchParams.set('node', input.continuation.node);
     url.searchParams.set('cursor', input.continuation.cursor);
   }

@@ -1,0 +1,97 @@
+import { expect, test } from 'bun:test';
+import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
+import { literaryAddress, literaryDestination } from '../src/features/catalogue/literary-reader/navigation';
+import { literaryIds } from '../src/features/catalogue/literary-reader/examples';
+import { profileRelationWindows } from '../src/features/pages/views';
+import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+
+test('destination return preserves the selected stream row address and never borrows a different node cursor', () => {
+  const selected = {
+    node: 'members-released',
+    property: 'wdt:P179',
+    direction: 'inverse' as const,
+  };
+  const original = literaryAddress({
+    id: literaryIds.series,
+    label: 'Harbour stories',
+    locale: 'ja',
+    view: 'contents',
+    realm: literaryIds.author,
+    stream: selected,
+    continuation: { node: selected.node, cursor: 'native opaque cursor' },
+  });
+  expect(subjectVisitReturn(original, 'ja')).toBe(original);
+  const destination = new URL(
+    literaryDestination(literaryIds.member, 'Harbour work', 'ja', original, literaryIds.author),
+    'https://site.test',
+  );
+  const returned = destination.searchParams.get('via')!;
+  expect(subjectVisitReturn(returned, 'ja')).toBe(original);
+  const address = new URL(returned, 'https://site.test');
+  expect(address.pathname).toContain('/contents');
+  expect(address.hash).toBe('#literary-reader');
+  expect(address.searchParams.get('realm')).toBe(literaryIds.author);
+  expect(address.searchParams.get('node')).toBe(selected.node);
+  expect(address.searchParams.get('streamProperty')).toBe(selected.property);
+  expect(address.searchParams.get('streamDirection')).toBe(selected.direction);
+  expect(address.searchParams.get('cursor')).toBe('native opaque cursor');
+
+  const changed = new URL(
+    literaryAddress({
+      id: literaryIds.series,
+      label: 'Harbour stories',
+      locale: 'ja',
+      view: 'contents',
+      stream: { node: 'members-other', property: 'schema:isPartOf', direction: 'forward' },
+      continuation: { node: selected.node, cursor: 'native opaque cursor' },
+    }),
+    'https://site.test',
+  );
+  expect(changed.searchParams.get('node')).toBe('members-other');
+  expect(changed.searchParams.has('cursor')).toBe(false);
+  expect(
+    subjectVisitReturn(
+      `/ja/subjects/${literaryIds.series}/title/contents?cursor=unpaired#literary-reader`,
+      'ja',
+    ),
+  ).toBeUndefined();
+  expect(
+    subjectVisitReturn(
+      `/ja/subjects/${literaryIds.series}/title/contents?node=members-released&streamProperty=wdt%3AP179#literary-reader`,
+      'ja',
+    ),
+  ).toBeUndefined();
+});
+
+test('aliased native reads keep a continuation attached only to its supplied node', () => {
+  const document: CompositionDocument = {
+    format: 'rezics.composition.v1',
+    content: [
+      { type: 'SubjectList', props: { id: 'members-primary', title: 'Members', property: 'wdt:P179', limit: 12 } },
+      { type: 'SubjectList', props: { id: 'members-alias', title: 'Other members', property: 'wdt:P179', limit: 12 } },
+    ],
+  };
+  const continuation = { node: 'members-primary', cursor: 'primary-only-cursor' };
+  const plan = planReads(platformRegistry, document, {
+    subject: literaryIds.series,
+    account: null,
+    continuation,
+  });
+  const key = plan.nodes['members-primary']!;
+  expect(plan.nodes['members-alias']).toBe(key);
+  const planned = plan.reads[key]!;
+  const body = {
+    [planned.kind === 'links' ? 'links' : 'relations']: [{ subject: literaryIds.member, target: literaryIds.member }],
+    next: 'next-native-cursor',
+    freshness: { caught_up: true },
+  };
+  const windows = profileRelationWindows({
+    subject: literaryIds.series,
+    continuation,
+    document,
+    reads: { [key]: { status: 200, body } },
+  }, { includeAliases: true });
+  expect(windows.map(({ node }) => node)).toEqual(['members-primary', 'members-alias']);
+  expect(windows[0]).toMatchObject({ node: 'members-primary', status: 200, next: 'next-native-cursor' });
+  expect(windows[1]).toMatchObject({ node: 'members-alias', status: 409, rows: [], valid: false });
+});

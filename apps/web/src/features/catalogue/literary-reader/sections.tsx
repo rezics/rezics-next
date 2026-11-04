@@ -110,7 +110,9 @@ export function LiteraryNativeWindow({
   returnTo,
   realm,
   nextHref,
+  retryHref,
   restartHref,
+  continued = false,
 }: {
   window: LiteraryWindow;
   definitions: LiteraryDefinitions;
@@ -118,7 +120,9 @@ export function LiteraryNativeWindow({
   returnTo: string;
   realm?: string | undefined;
   nextHref?: string | undefined;
+  retryHref?: string | undefined;
   restartHref?: string | undefined;
+  continued?: boolean | undefined;
 }) {
   const { native, state } = window;
   const property = definitions.properties[native.property];
@@ -136,6 +140,16 @@ export function LiteraryNativeWindow({
         {title.text || m.subject_relations({}, o)}
       </h3>
       <LiteraryStatus state={state} locale={locale} />
+      {continued && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.literary_grain_stream_continued({}, o)}
+        </p>
+      )}
+      {native.next && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.literary_grain_stream_truncated({}, o)}
+        </p>
+      )}
       {(state === 'ready' || state === 'preparing') && window.rows.length > 0 && (
         <ul className="divide-y divide-border">
           {window.rows.map((row) => {
@@ -173,6 +187,11 @@ export function LiteraryNativeWindow({
       )}
       {state === 'ready' && window.withheld && <LiteraryStatus state="withheld" locale={locale} />}
       <nav className="flex flex-wrap gap-x-4">
+        {retryHref && state === 'unavailable' && (
+          <a href={retryHref} className={action}>
+            {m.subject_section_retry({}, o)}
+          </a>
+        )}
         {nextHref &&
           native.status === 200 &&
           (state === 'ready' || state === 'sparse' || state === 'withheld' || state === 'preparing') && (

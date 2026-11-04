@@ -548,6 +548,9 @@ export function SubjectPage({
   relations,
   view = 'overview',
   returnTo,
+  selectedNode,
+  selectedStreamProperty,
+  selectedStreamDirection,
   currentHref,
   tabs,
   tabLabels,
@@ -595,6 +598,10 @@ export function SubjectPage({
   view?: View;
   /** The validated Subject visit return address, when supplied by a Recording journey. */
   returnTo?: string;
+  /** Native stream selection carried by the validated Subject view route. */
+  selectedNode?: string | undefined;
+  selectedStreamProperty?: string | undefined;
+  selectedStreamDirection?: 'forward' | 'inverse' | undefined;
   /** This Subject visit's supported address, including search and fragment state. */
   currentHref?: string | undefined;
   /** The views to offer, from `subjectTabs` of the subject's overview. */
@@ -627,7 +634,10 @@ export function SubjectPage({
         locale,
         view,
         realm: subjectPageRealm(page),
-        continuation: page.continuation,
+        ...(view !== 'overview' && page.continuation ? { continuation: page.continuation } : {}),
+        ...(selectedNode && selectedStreamProperty && selectedStreamDirection
+          ? { stream: { node: selectedNode, property: selectedStreamProperty, direction: selectedStreamDirection } }
+          : {}),
       })
     : undefined;
   const mangaReturn = mangaSubject
@@ -857,11 +867,14 @@ export function SubjectPage({
                 descriptorState={page.catalogue?.state}
                 digest={page.catalogue?.digest}
                 directions={page.catalogue?.directions}
-                windows={profileRelationWindows(page)}
+                windows={profileRelationWindows(page, { includeAliases: true })}
                 reader={reader ?? defaultReader}
                 view={view}
                 realm={realm}
                 continuation={page.continuation}
+                selectedNode={selectedNode}
+                selectedStreamProperty={selectedStreamProperty}
+                selectedStreamDirection={selectedStreamDirection}
                 viewer={page.requestedReader ?? null}
               />
             ) : null}

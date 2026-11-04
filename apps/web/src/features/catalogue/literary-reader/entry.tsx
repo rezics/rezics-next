@@ -1,4 +1,4 @@
-import { useMemo, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { PageContinuation, SelectedContext } from '@rezics/composition';
 import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
@@ -15,6 +15,8 @@ import {
   literaryGrain,
   literarySelected,
   literaryWindow,
+  literaryWindowKind,
+  literaryWindowState,
   literaryWindows,
   literaryWorkIdentity,
   type LiteraryDefinitions,
@@ -56,6 +58,9 @@ export function LiteraryReaderEntry({
   view = 'overview',
   realm,
   continuation,
+  selectedNode,
+  selectedStreamProperty,
+  selectedStreamDirection,
   viewer = null,
 }: {
   work: Subject;
@@ -72,6 +77,9 @@ export function LiteraryReaderEntry({
   view?: string;
   realm?: string | undefined;
   continuation?: PageContinuation | undefined;
+  selectedNode?: string | undefined;
+  selectedStreamProperty?: string | undefined;
+  selectedStreamDirection?: 'forward' | 'inverse' | undefined;
   viewer?: string | null;
 }) {
   const overview = useOverview('');
@@ -90,6 +98,9 @@ export function LiteraryReaderEntry({
     view,
     realm,
     continuation,
+    selectedNode,
+    selectedStreamProperty,
+    selectedStreamDirection,
     viewer,
   ]);
   const captured = useRef<{
@@ -121,18 +132,72 @@ export function LiteraryReaderEntry({
       captured.current.retired = true;
   }
   const retired = captured.current.retired;
-  const returnTo = literaryAddress({
-    id: work.id,
-    label: pageText(work.labels, locale).text,
-    locale,
-    view,
-    realm,
-    continuation,
-  });
-  const selected = useMemo(
-    () => (definitions ? literaryWindows(windows, definitions, continuation?.node) : []),
-    [windows, definitions, continuation?.node],
-  );
+  const supplied = useMemo(() => (definitions ? literaryWindows(windows, definitions) : []), [windows, definitions]);
+  const requestedNode = selectedNode ?? continuation?.node;
+  const requestedStream = requestedNode ? supplied.find((native) => native.node === requestedNode) : undefined;
+  const expectsStream = selectedStreamProperty !== undefined || selectedStreamDirection !== undefined;
+  const selectionLost =
+    (expectsStream &&
+      (!requestedStream ||
+        requestedStream.property !== selectedStreamProperty ||
+        requestedStream.direction !== selectedStreamDirection)) ||
+    (requestedNode !== undefined && !requestedStream) ||
+    (selectedNode !== undefined && continuation !== undefined && selectedNode !== continuation.node);
+  const focusedRetiredStream =
+    typeof document !== 'undefined' &&
+    selectionLost &&
+    document.activeElement instanceof Element &&
+    !!document.activeElement.closest('[data-slot="literary-reader"]') &&
+    !!document.activeElement.closest('[data-stream-node], [data-slot="literary-window"]');
+  useEffect(() => {
+    if (focusedRetiredStream) document.getElementById('literary-reader-title')?.focus();
+  }, [source, focusedRetiredStream]);
+  const routeFor = (native: ProfileRelationWindow) => {
+    const kind = definitions ? literaryWindowKind(native, definitions) : undefined;
+    return view === 'overview' ? 'overview' : kind === 'editions' ? 'editions' : 'contents';
+  };
+  const addressFor = (native: ProfileRelationWindow, addressView: string, keepCursor: boolean) =>
+    literaryAddress({
+      id: work.id,
+      label: pageText(work.labels, locale).text,
+      locale,
+      view: addressView,
+      realm,
+      stream: { node: native.node, property: native.property, direction: native.direction },
+      ...(keepCursor &&
+      view !== 'overview' &&
+      addressView === view &&
+      continuation?.node === native.node
+        ? { continuation }
+        : {}),
+    });
+  const recoveryHref = literaryAddress({ id: work.id, label: '', locale, view, realm });
+  const requestedReturn =
+    requestedStream && !selectionLost
+      ? addressFor(requestedStream, routeFor(requestedStream), true)
+      : literaryAddress({
+          id: work.id,
+          label: pageText(work.labels, locale).text,
+          locale,
+          view,
+          realm,
+          ...(view !== 'overview' && continuation ? { continuation } : {}),
+        });
+  const activeFor = (kind: 'members' | 'editions') => {
+    if (selectionLost) return undefined;
+    if (requestedStream && definitions && literaryWindowKind(requestedStream, definitions) === kind) return requestedStream;
+    return supplied.find((native) => definitions && literaryWindowKind(native, definitions) === kind);
+  };
+  const activeMembers = activeFor('members');
+  const activeEditions = activeFor('editions');
+  const windowState = (native: ProfileRelationWindow) => {
+    const direction = directions?.find(
+      (admitted) => admitted.property === native.property && admitted.direction === native.direction,
+    );
+    if (direction?.state !== 'admitted' || direction.release !== digest)
+      return direction?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const);
+    return literaryWindowState(native, work.id, locale, reader);
+  };
   const o = { locale: locale as never };
   const grain = literaryGrain(work.type, definitions);
   const type = pageText(definitions?.types[work.type]?.labels, locale);
@@ -148,7 +213,7 @@ export function LiteraryReaderEntry({
     return (
       <a
         {...props}
-        href={match ? literaryDestination(match[1]!, decodeURIComponent(match[2]!), locale, returnTo, realm) : href}
+        href={match ? literaryDestination(match[1]!, decodeURIComponent(match[2]!), locale, requestedReturn, realm) : href}
         target="_blank"
         rel="noopener noreferrer"
       />
@@ -162,7 +227,7 @@ export function LiteraryReaderEntry({
       editionHref={editionHref ?? undefined}
       factsHref={factsHref ?? undefined}
       retired={retired}
-      recoveryHref={returnTo}
+      recoveryHref={recoveryHref}
       scopeText={m.literary_grain_scope({}, o)}
       grainLabel={
         type.text ? (
@@ -225,37 +290,41 @@ export function LiteraryReaderEntry({
               ];
             })}
           </dl>
-          {selected.length ? (
-            selected.map((native) => {
-              const direction = directions?.find(
-                (admitted) => admitted.property === native.property && admitted.direction === native.direction,
-              );
-              const projected =
-                direction?.state === 'admitted' && direction.release === digest
-                  ? literaryWindow(native, work.id, locale, reader)
-                  : {
-                      native,
-                      rows: [],
-                      withheld: false,
-                      state: direction?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const),
-                    };
-              const streamView =
-                native.property === 'schema:exampleOfWork' ||
-                native.property === 'schema:workExample' ||
-                native.property === 'rezics:representativeEdition'
-                  ? 'editions'
-                  : 'contents';
-              // Overview and full-view nodes need not have the same identity. Continue only the node actually mounted here.
-              const currentView = view === 'overview' ? 'overview' : streamView;
-              return (
-                <LiteraryNativeWindow
-                  key={native.node}
-                  window={projected}
-                  definitions={definitions}
-                  locale={locale}
-                  returnTo={returnTo}
-                  realm={realm}
-                  nextHref={
+          {selectionLost ? (
+            <div role="status" data-state="unavailable" className="space-y-2 text-sm text-muted-foreground">
+              <p>{m.literary_grain_stream_missing({}, o)}</p>
+              <a
+                href={recoveryHref}
+                className="inline-flex min-h-11 min-w-11 max-w-full items-center py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {m.literary_grain_stream_recover({}, o)}
+              </a>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {(['members', 'editions'] as const).map((kind) => {
+                const candidates = supplied.filter((native) => definitions && literaryWindowKind(native, definitions) === kind);
+                const active = kind === 'members' ? activeMembers : activeEditions;
+                const heading = kind === 'members' ? m.literary_grain_members({}, o) : m.literary_grain_editions({}, o);
+                const renderNative = (native: ProfileRelationWindow) => {
+                  const projectedDirection = directions?.find(
+                    (admitted) => admitted.property === native.property && admitted.direction === native.direction,
+                  );
+                  const state = windowState(native);
+                  const projected =
+                    projectedDirection?.state === 'admitted' && projectedDirection.release === digest
+                      ? literaryWindow(native, work.id, locale, reader)
+                      : {
+                          native,
+                          rows: [],
+                          withheld: false,
+                          state: projectedDirection?.state === 'unsupported' ? ('unsupported' as const) : ('unavailable' as const),
+                        };
+                  const streamView = kind === 'editions' ? 'editions' : 'contents';
+                  const currentView = routeFor(native);
+                  const stream = { node: native.node, property: native.property, direction: native.direction };
+                  const returnTo = addressFor(native, currentView, true);
+                  const nextHref =
                     native.next && view !== 'overview'
                       ? literaryAddress({
                           id: work.id,
@@ -263,18 +332,84 @@ export function LiteraryReaderEntry({
                           locale,
                           view: currentView,
                           realm,
+                          stream,
                           continuation: { node: native.node, cursor: native.next },
                         })
                       : native.next && value
                         ? (viewHref(value, streamView) ?? undefined)
-                        : undefined
-                  }
-                  restartHref={literaryAddress({ id: work.id, label: '', locale, view: currentView, realm })}
-                />
-              );
-            })
-          ) : (
-            <LiteraryStatus state="unsupported" locale={locale} />
+                        : undefined;
+                  const retryHref = state === 'unavailable' ? addressFor(native, currentView, true) : undefined;
+                  const restartHref = literaryAddress({ id: work.id, label: '', locale, view: currentView, realm, stream });
+                  return (
+                    <LiteraryNativeWindow
+                      key={native.node}
+                      window={projected}
+                      definitions={definitions}
+                      locale={locale}
+                      returnTo={returnTo}
+                      realm={realm}
+                      nextHref={nextHref}
+                      retryHref={retryHref}
+                      restartHref={restartHref}
+                      continued={view !== 'overview' && continuation?.node === native.node}
+                    />
+                  );
+                };
+                return (
+                  <div key={kind} className="space-y-3">
+                    <h3 className="font-medium">{heading}</h3>
+                    {candidates.length ? (
+                      <nav aria-label={heading}>
+                        <ul className="grid min-w-0 gap-2 sm:grid-cols-2">
+                          {candidates.map((native) => {
+                            const property = definitions.properties[native.property];
+                            const label = pageText(
+                              native.direction === 'inverse' ? property?.relation?.inverseLabels : property?.labels,
+                              locale,
+                            );
+                            const directionLabel =
+                              native.direction === 'inverse'
+                                ? m.literary_grain_direction_inverse({}, o)
+                                : m.literary_grain_direction_forward({}, o);
+                            const current = active?.node === native.node;
+                            const addressView = routeFor(native);
+                            const href = addressFor(native, addressView, current);
+                            const state = windowState(native);
+                            return (
+                              <li key={native.node} data-stream-node={native.node} className="min-w-0 rounded-md border border-border p-2">
+                                <a
+                                  href={href}
+                                  aria-current={current ? 'page' : undefined}
+                                  aria-label={`${m.literary_grain_stream_read({}, o)}: ${label.text}, ${directionLabel}`}
+                                  className="flex min-h-11 min-w-11 max-w-full flex-wrap items-center gap-x-2 gap-y-1 text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                >
+                                  <span lang={label.lang} className="font-medium">
+                                    {label.text || m.subject_relations({}, o)}
+                                  </span>
+                                  <span className="text-sm">{directionLabel}</span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {current
+                                      ? m.literary_grain_stream_selected({}, o)
+                                      : m.literary_grain_stream_not_selected({}, o)}
+                                  </span>
+                                  <span className="sr-only">{m.literary_grain_stream_read({}, o)}</span>
+                                </a>
+                                <div data-state={state} className="pt-1">
+                                  <LiteraryStatus state={state} locale={locale} />
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </nav>
+                    ) : (
+                      <LiteraryStatus state="unsupported" locale={locale} />
+                    )}
+                    {active ? renderNative(active) : null}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </>
       )}

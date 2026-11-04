@@ -114,13 +114,19 @@ their current admission; public reading does not require a correction companion.
 
 Decision: A released Book with a directed series membership remains that exact Book; neither a numbered title nor a stated count grants a new volume Type, member identity or integer position.
 
-One native member window and one edition window may accompany the current Subject. The explicitly continued node
-wins selection within its family. Rows retain statement identity, direction, source references and qualifiers; a
-missing target summary never becomes a link. Preparing, withheld, unavailable, unsupported, empty terminal and
-sparse continued windows remain distinct. The native page's row limit applies before projection. A sparse page can
-continue; a stale cursor offers a fresh reading instead of claiming exhaustion. Overview enters the existing full
-view, since its preview node need not be the full view's node. Full-view continuation uses the exact current node
-and opaque cursor, replacing the loaded page rather than accumulating a catalogue.
+Every membership and Edition window supplied by the current Subject composition is discoverable in native order,
+labelled by its released property and direction. The explicitly selected node wins only in its own family; the
+reader retains at most one membership page and one Edition page at a time. Rows retain statement identity, repeated
+occurrences, direction, source references and qualifiers; a missing target summary never becomes a link. Preparing,
+withheld, unavailable, unsupported, empty terminal, sparse, continued and truncated states remain distinct from a
+missing canonical work mapping. The native page's row limit applies before projection. A deliberate stream change
+starts that node without a cursor. A sparse page can continue; a stale cursor offers a fresh reading instead of
+claiming exhaustion. Overview enters the existing full view, since its preview node need not be the full view's node.
+Full-view continuation uses the exact current node and opaque cursor, replacing the loaded page rather than
+accumulating a catalogue. A selected stream that disappears or changes its released property or direction is
+unavailable until the reader explicitly reloads the current Subject.
+
+Decision: Keep stream choices in native order, render one active page per family, and restart a deliberate stream change at its own node without carrying another node's cursor.
 
 Destinations open in a new tab and carry the existing validated single-hop return address. Returning preserves the
 source window, locale, Realm Context, reader settings and focus. Explicit return links name the original native
@@ -132,10 +138,11 @@ parent resolver or per-target read is added.
 ### Literary work reader Cost
 
 The adapter starts zero requests and decodes zero additional network bytes. It shares the already decoded Subject,
-related summaries and native descriptor, and retains at most two currently mounted relation windows. Native
-`profileRelationWindows` exposes each planned `PageRead.limit` and freshness; `SubjectList` in `platformRegistry`
-admits at most 24 rows (12 for paged previews), while other relation nodes retain their own native planned limit.
-The shared plan retains `MAX_PAGE_READS = 16`, `MAX_PAGE_COST = 128`, `MAX_COMPOSITION_NODES = 256` and
+related summaries and native descriptor. Choices retain at most the 16 relation windows allowed by
+`MAX_PAGE_READS`; each supplied window carries its exact native `PageRead.limit`. The reader retains rows from at most
+two active windows, so its row bound is the sum of those two planned limits. `SubjectList` in `platformRegistry`
+admits at most 24 rows (12 for paged previews), while other relation nodes keep their own installed planned limit.
+The shared plan also retains `MAX_PAGE_COST = 128`, `MAX_COMPOSITION_NODES = 256` and
 `MAX_COMPOSITION_BYTES = 65,536`. The descriptor uses the existing bounded definition-release vocabulary; extending
 its literary admission adds no engine query. No SQL selection, scan, count or statement-history path is added.
 
