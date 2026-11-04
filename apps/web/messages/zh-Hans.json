@@ -8106,5 +8106,6 @@
   "search_share_close": "关闭预览",
   "relation_actions_unavailable": "无法读取当前关系操作。请重新加载后重试。",
   "relation_actions_read_only": "你可以比较关系。提出建议需要当前有效的权限。",
-  "relation_participants_unreadable": "当前无法读取一个关系参与者。请选择可读取的身份或重新加载。"
+  "relation_participants_unreadable": "当前无法读取一个关系参与者。请选择可读取的身份或重新加载。",
+  "search_review_historical_question_unavailable": "无法获取当时的问题名称和量表。这里显示的是已记录的引用，并非当前评分。"
 }

@@ -8198,5 +8198,6 @@
   "search_share_close": "Close preview",
   "relation_actions_unavailable": "Current relationship actions could not be read. Reload to try again.",
   "relation_actions_read_only": "You can compare relationships. Proposing requires current permission.",
-  "relation_participants_unreadable": "A relationship participant cannot currently be read. Choose a readable identity or reload."
+  "relation_participants_unreadable": "A relationship participant cannot currently be read. Choose a readable identity or reload.",
+  "search_review_historical_question_unavailable": "The historical question label and scale are unavailable. This is the recorded citation, not a current rating."
 }

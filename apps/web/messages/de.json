@@ -8106,5 +8106,6 @@
   "search_share_close": "Vorschau schließen",
   "relation_actions_unavailable": "Die aktuellen Beziehungsaktionen konnten nicht geladen werden. Bitte erneut laden.",
   "relation_actions_read_only": "Sie können Beziehungen vergleichen. Für Vorschläge ist eine aktuelle Berechtigung erforderlich.",
-  "relation_participants_unreadable": "Ein Beziehungsteilnehmer kann derzeit nicht gelesen werden. Wählen Sie eine lesbare Identität oder laden Sie erneut."
+  "relation_participants_unreadable": "Ein Beziehungsteilnehmer kann derzeit nicht gelesen werden. Wählen Sie eine lesbare Identität oder laden Sie erneut.",
+  "search_review_historical_question_unavailable": "Die damalige Frage und Skala sind nicht verfügbar. Dies ist das gespeicherte Zitat, keine aktuelle Bewertung."
 }

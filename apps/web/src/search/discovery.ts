@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { reviewContextSource, searchReviewContext, validReviewContextBinding } from './review-context';
 import { isCalendarDate } from '@rezics/filter';
 import type { KernelClient } from '@rezics/client';
 import { GLOBAL, PUBLIC_RATING_SCALE, QUESTION } from '../features/pages/subject-ratings';
@@ -183,6 +184,8 @@ const publicReviewSummary = v.strictObject({
   author: v.exactOptional(reviewAuthor),
   excerpt: v.exactOptional(v.pipe(v.string(), v.maxLength(640))),
   subject: v.exactOptional(v.nullable(reviewSubject)),
+  source: v.exactOptional(reviewContextSource),
+  reviewContext: v.exactOptional(searchReviewContext),
 });
 const publicSpaceSummary = v.strictObject({
   id: resourceId,
@@ -347,6 +350,7 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
   const parsed = v.safeParse(page, value);
   if (!parsed.success) return;
   const result = parsed.output;
+  let reviewBytes = 0;
   for (const hit of result.hits) {
     if (hit.key.id !== hit.summary.value.id) return;
     switch (hit.summary.kind) {
@@ -372,7 +376,17 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
           return;
         break;
       case 'review':
-        if (hit.key.owner !== 'content' || hit.key.kind !== 'review' || hit.summary.value.kind !== 'review') return;
+        if (
+          hit.key.owner !== 'content' ||
+          hit.key.kind !== 'review' ||
+          hit.summary.value.kind !== 'review' ||
+          !validReviewContextBinding(hit.summary.value)
+        )
+          return;
+        if (hit.summary.value.reviewContext) {
+          reviewBytes += new TextEncoder().encode(JSON.stringify(hit.summary.value.reviewContext)).byteLength;
+          if (reviewBytes > 128 * 1024) return;
+        }
         break;
       case 'space':
         if (hit.key.owner !== 'community' || hit.key.kind !== 'space') return;

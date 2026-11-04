@@ -8106,5 +8106,6 @@
   "search_share_close": "Fermer l’aperçu",
   "relation_actions_unavailable": "Les actions actuelles de la relation sont indisponibles. Rechargez pour réessayer.",
   "relation_actions_read_only": "Vous pouvez comparer les relations. Une autorisation actuelle est nécessaire pour proposer.",
-  "relation_participants_unreadable": "Un participant de la relation est illisible actuellement. Choisissez une identité accessible ou rechargez."
+  "relation_participants_unreadable": "Un participant de la relation est illisible actuellement. Choisissez une identité accessible ou rechargez.",
+  "search_review_historical_question_unavailable": "Le libellé et l’échelle historiques sont indisponibles. Il s’agit de la citation enregistrée, pas de la note actuelle."
 }

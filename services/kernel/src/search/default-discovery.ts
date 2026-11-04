@@ -1,3 +1,4 @@
+import { prepareSearchReviewContexts } from './review-context.ts';
 import { boundWorkContexts } from './work-context.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -779,6 +780,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
       const read = await open(principal, request, context);
       return readAdmittedDiscoveryPage(read, async (page) => {
         try {
+          const reviews = await prepareSearchReviewContexts(config, page, context);
           const enriched = await enrichDiscoveryPage(config, principal, page, {
             ...context,
             descriptions: request.descriptions === true,
@@ -808,7 +810,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
               enriched.viewer.prepared,
               context.deadline,
             ));
-          return { page: enriched.page, viewerCurrent };
+          return { page: await reviews.finish(enriched.page), viewerCurrent };
         } catch (error) {
           if (error instanceof ProblemError || error instanceof CollectionDiscoveryReadinessError) throw error;
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });

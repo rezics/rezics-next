@@ -249,6 +249,7 @@ export function DiscoveryResults({
               <DiscoveryPublicRow
                 key={discoveryKey(hit)}
                 hit={hit}
+                targetTypes={kinds}
                 kind={kind}
                 locale={locale}
                 subjectHrefFor={subjectHrefFor}
