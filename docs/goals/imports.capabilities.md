@@ -1471,7 +1471,7 @@ The local task reuses Accounts' development persona and private seed wiring, the
 Decision: accept one literal HTTP(S) `官方网站` value per field occurrence. Exact URL duplicates coalesce; distinct addresses remain separate candidates under the single-valued released property. Do not normalize hosts or split lists.
 
 The official-website mapping was introduced in `bangumi@12`; current
-`bangumi@13` also preserves Game destinations, TVAnime and Book names,
+`bangumi@14` also preserves Game destinations, TVAnime and Book names,
 original-run facts, Game player-count and work-evidence mappings.
 Ordinary registration and selected-family seeding share the bounded profile
 extractor. Only the exact type-2 `{{Infobox animanga/TVAnime` profile is
@@ -1687,8 +1687,8 @@ unrelated adopted facts.
 Decision: preserve admitted URL bytes and withhold labelled destinations until a
 released source contract can preserve their platform, region or edition meaning.
 
-Ordinary conversion uses `bangumi@13`; selected-family registration uses the
-combined `cross-media-entities@11+bangumi@13` revision. Exact Game-template
+Ordinary conversion uses `bangumi@14`; selected-family registration uses the
+combined `cross-media-entities@11+bangumi@14` revision. Exact Game-template
 `website` and `链接` occurrences propose separate `schema:url` and `wdt:P973`
 facts with the Bangumi record citation. Unsafe, malformed and labelled values
 remain unavailable while independent valid facts proceed. The existing journal,

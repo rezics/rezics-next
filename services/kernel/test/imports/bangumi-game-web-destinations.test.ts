@@ -123,7 +123,8 @@ test('selected Bangumi Game destinations survive independent review, correction 
       return id;
     }
     const infobox = (link: string) =>
-      ['{{Infobox Game', `|website=${website}`, `|链接=${link}`, '}}'].join('\n');
+      ['{{Infobox Game', `|website=${website}`, `|链接=${link}`,
+        '|website=javascript:alert(1)', '|链接=[[https://edition.example/game|Switch edition]]', '}}'].join('\n');
 
     const first = await run(infobox(`${descriptive} with mixed prose`));
     expect(first.plan.records.bangumi.some((record) => record.key === gameExternalId)).toBe(true);
@@ -145,6 +146,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
       record_revision: 'unversioned',
       converter_revision: crossMediaBangumiRevision,
     });
+    expect(websitePage.candidates.filter((candidate) => 'source' in candidate && isGameSource(candidate.source))).toHaveLength(1);
     const malformedPage = await runtime.importTransport.reviewedCandidates(subjectId, {
       property: 'wdt:P973',
       context: globalContext,

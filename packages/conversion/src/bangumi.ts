@@ -338,7 +338,10 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   const gameDestinationKeys = new Map<number, string>();
   for (const destination of gameWebDestinations?.destinations ?? []) {
     gameDestinationKeys.set(facts.length, `game-destination:${destination.field}:${destination.pointer}`);
-    facts.push(fact(destination.property, destination.url));
+    facts.push({
+      ...fact(destination.property, destination.url),
+      references: references([recordUrl, `${recordUrl}#${destination.pointer}`]),
+    });
   }
   if (record.meta_tags?.includes('后宫')) {
     const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');

@@ -2883,7 +2883,7 @@ Ordinary Game imports preserve exact unqualified values from the pinned
 `wdt:P973` proposals. Occurrence citations retain the source field pointer; the
 Bangumi subject URL remains provenance only. Unsafe, malformed or qualified
 destinations are withheld without suppressing independent valid facts. The
-conversion and selected-family callers share the honest `bangumi@13` revision
+conversion and selected-family callers share the honest `bangumi@14` revision
 and existing native review, adoption, refresh, journal and current-read APIs.
 
 Decision: preserve admitted URL bytes; withhold labelled destinations until a

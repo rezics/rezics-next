@@ -308,7 +308,7 @@ revision.
 Decision: Game-template `游玩人数` admits only an entire-field unqualified
 positive integer or inclusive range; a lone count invents no minimum.
 
-Current Bangumi revision `bangumi@13` converts pinned Game infobox `平台` and `游戏引擎`
+Current Bangumi revision `bangumi@14` converts pinned Game infobox `平台` and `游戏引擎`
 on type 4 through the same bound proposal path, preserving Game names, Game
 player-count, Book grain and TVAnime work-evidence mapping. Each exact list or
 scalar item
@@ -320,7 +320,7 @@ is an admitted BCP 47 value; engine version/platform/edition text is withheld
 because `wdt:P408` has no qualifiers. Top-level `subject.platform` is unchanged.
 Unchanged dump bytes refresh under this revision without inventing a native
 record revision.
-Decision: Game environment admission stays on the combined `bangumi@13` revision so
+Decision: Game environment admission stays on the combined `bangumi@14` revision so
 unchanged dumps offer the new facts; names, dates, player count, book grain,
 cover and source-link support are preserved. No infobox-field scheme URI is
 minted.
@@ -1274,9 +1274,9 @@ withheld. A bad occurrence does not suppress a valid sibling or unrelated
 names, dates, player counts, appearances, performer credits or covers. The two
 properties remain independent when they contain the same URL.
 
-Ordinary conversion uses `bangumi@13`; selected-family imports use the existing
-combined `cross-media-entities@11+bangumi@13` registration and journal. Each
-occurrence keeps its exact field pointer in bounded evidence. A conversion
+Ordinary conversion uses `bangumi@14`; selected-family imports use the existing
+combined `cross-media-entities@11+bangumi@14` registration and journal. Each
+occurrence keeps its exact field pointer in bounded evidence and admitted citations. A conversion
 offers at most 16 destination candidates across both fields; overflow produces
 an explicit bounded omission. No links are fetched or followed.
 

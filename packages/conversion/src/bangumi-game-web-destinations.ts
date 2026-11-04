@@ -266,9 +266,18 @@ export function projectBangumiGameWebDestinations(infobox: unknown): BangumiGame
 
   const destinations: BangumiGameDestination[] = [];
   const evidence: BangumiGameDestinationEvidence[] = [];
-  const diagnostics = [...parsed.diagnostics];
   const sink = omissionSink();
-  for (const occurrence of parsed.occurrences) {
+  for (const diagnostic of parsed.diagnostics) sink.add(diagnostic.pointer, diagnostic.code);
+  for (const [index, occurrence] of parsed.occurrences.entries()) {
+    if (index === bangumiGameWebDestinationLimits.maxDestinations) {
+      sink.add(occurrence.pointer, 'game_destination_limit');
+      // Keep overflow explicit even when earlier omissions filled the diagnostic budget.
+      sink.diagnostics[sink.diagnostics.length - 1] = {
+        pointer: occurrence.pointer,
+        code: 'game_destination_limit',
+      };
+      break;
+    }
     let code: string | undefined;
     let url: string | undefined;
     if (occurrence.tooLarge) code = 'game_destination_value_limit';
@@ -281,21 +290,18 @@ export function projectBangumiGameWebDestinations(infobox: unknown): BangumiGame
 
     const property = occurrence.field === 'website' ? 'schema:url' : 'wdt:P973';
     if (!code && url !== undefined) {
-      if (destinations.length < bangumiGameWebDestinationLimits.maxDestinations) {
-        destinations.push({ field: occurrence.field, pointer: occurrence.pointer, property, url });
-        evidence.push({ field: occurrence.field, pointer: occurrence.pointer, outcome: 'admitted', property });
-      } else code = 'game_destination_limit';
+      destinations.push({ field: occurrence.field, pointer: occurrence.pointer, property, url });
+      evidence.push({ field: occurrence.field, pointer: occurrence.pointer, outcome: 'admitted', property });
     }
     if (code) {
       evidence.push({ field: occurrence.field, pointer: occurrence.pointer, outcome: 'withheld', code });
       sink.add(occurrence.pointer, code);
     }
   }
-  diagnostics.push(...sink.diagnostics);
   return {
     handledInfobox: !parsed.hasOtherFields,
     destinations,
     evidence,
-    diagnostics: diagnostics.slice(0, bangumiCharacterMeasurementLimits.maxDiagnostics),
+    diagnostics: sink.diagnostics,
   };
 }

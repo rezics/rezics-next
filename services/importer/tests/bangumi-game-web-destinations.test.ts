@@ -42,13 +42,15 @@ test('Bangumi Game destinations retain exact native properties and withhold unsa
       '|website=https://user:secret@private.example/path',
       '|链接=https://guide.example/story?chapter=2#walkthrough',
       '|链接=https://mixed.example/guide with extra prose',
+      '|发行日期=2004-04-28',
+      '|游玩人数=1人',
       '}}',
     ].join('\n'),
   );
   const destinations = proposals(result).filter((command) => ['schema:url', 'wdt:P973'].includes(command.statement.property.id));
 
   expect(registration.converter_revision).toBe(converter_revision);
-  expect(registration.converter_revision).toBe('bangumi@13');
+  expect(registration.converter_revision).toBe('bangumi@14');
   expect(destinations.map((command) => [command.statement.property.id, value(command)])).toEqual([
     ['schema:url', 'https://Official.Game.example/portal?region=global#home'],
     ['wdt:P973', 'https://guide.example/story?chapter=2#walkthrough'],
@@ -56,6 +58,10 @@ test('Bangumi Game destinations retain exact native properties and withhold unsa
   expect(destinations.map((command) => command.statement.references?.[0]?.parts[0])).toEqual([
     { property: { id: 'schema:url' }, value: { type: 'value', content: recordUrl } },
     { property: { id: 'schema:url' }, value: { type: 'value', content: recordUrl } },
+  ]);
+  expect(destinations.map((command) => command.statement.references?.[0]?.parts[1]?.value)).toEqual([
+    { type: 'value', content: `${recordUrl}#/infobox/fields/0` },
+    { type: 'value', content: `${recordUrl}#/infobox/fields/4` },
   ]);
   expect('gameWebDestinationEvidence' in result ? result.gameWebDestinationEvidence : undefined).toEqual([
     { field: 'website', pointer: '/infobox/fields/0', outcome: 'admitted', property: 'schema:url' },
@@ -70,6 +76,8 @@ test('Bangumi Game destinations retain exact native properties and withhold unsa
     code: 'malformed_game_destination',
   });
   expect(proposals(result).some((command) => command.statement.property.id === 'wdt:P5732')).toBe(true);
+  expect(proposals(result).some((command) => command.statement.property.id === 'schema:datePublished')).toBe(true);
+  expect(proposals(result).some((command) => command.statement.property.id === 'schema:numberOfPlayers')).toBe(true);
 });
 
 test('Game destination overflow is an explicit bounded omission', () => {
@@ -87,4 +95,7 @@ test('Game destination overflow is an explicit bounded omission', () => {
     pointer: '/infobox/fields/16',
     code: 'game_destination_limit',
   });
+  const withheld = convert(['{{Infobox Game', ...Array(16).fill('|website=javascript:alert(1)'), fields[16], '}}'].join('\n')).result;
+  expect(proposals(withheld).some((command) => command.statement.property.id === 'schema:url')).toBe(false);
+  expect(withheld.diagnostics).toContainEqual({ pointer: '/infobox/fields/16', code: 'game_destination_limit' });
 });
