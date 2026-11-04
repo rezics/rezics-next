@@ -58,9 +58,13 @@ const ready = (value = detail()): DetailResult => ({ ok: true, viewerId, value }
 const markup = (reader: ManagedAccountReader | null) =>
   renderToStaticMarkup(
     createElement(
-      AnonymousSessionContext,
-      { value: true },
-      createElement(ManagedAccountDetailCard, { reader, backHref }),
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(
+        AnonymousSessionContext,
+        { value: true },
+        createElement(ManagedAccountDetailCard, { reader, backHref }),
+      ),
     ),
   );
 
