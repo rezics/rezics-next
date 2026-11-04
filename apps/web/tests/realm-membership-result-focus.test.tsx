@@ -148,7 +148,7 @@ test.each(['join', 'leave', 'recovery', 'survive', 'pointer', 'move', 'renew', '
             : ['pointer', 'renew', 'background'].includes(scenario)
               ? window.document.body
               : host.querySelector('[data-member-state]');
-      expect(window.document.activeElement).toBe(expected);
+      expect(window.document.activeElement === expected).toBe(true);
       expect(commands).toBe(scenario === 'background' ? 0 : 1);
       expect(reads).toBe(scenario === 'renew' ? 3 : 2);
       expect(completions).toHaveLength(['recovery', 'survive', 'renew', 'background'].includes(scenario) ? 0 : 1);
