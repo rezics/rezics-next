@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { SubjectOffer, SubjectOffersData } from '../src/checkout/subject-offers';
-import { supplied as supplied } from '../src/kernel/fake/subject-offers';
+import { subjectOfferFixture as supplied } from '../src/kernel/fake/subject-offers';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 
