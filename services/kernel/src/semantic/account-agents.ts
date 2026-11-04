@@ -20,7 +20,6 @@ import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import syncLabel from './account-agent-sync-label.sql';
 import insertSubject from './create-subject.sql';
 import createRevision from './create-revision.sql';
-import { writeSubject } from './subject.ts';
 import { identityEpochStore } from './identity-epoch-store.ts';
 
 type Queryable = Pick<PoolClient, 'query'>;
@@ -248,18 +247,25 @@ async function ensureInTransaction(
       throw new AccountAgentScopeGrowthError('packages/definitions/sources/vndb.yaml');
     if (!active.release.types[type])
       throw new AccountAgentVerificationError('The account agent kind is absent from the active definition release');
-    const created =
+    const created = await createUnlabeledAgent(tx, transactionId, agentId, type, active.digest);
+    // Account labels are a replaceable native projection, including at birth.
+    // The authored catalogue writer enrolls retention/history that this derived
+    // identity does not own and would retain prior account display names.
+    const labeled =
       options.name === null
-        ? await createUnlabeledAgent(tx, transactionId, agentId, type, active.digest)
-        : await writeSubject(tx, transactionId, {
-            target: { route: agentRoute, id: agentId },
-            item: { type, labels: { [language]: options.name } },
-            release: active,
-          });
+        ? null
+        : await syncAgentLabel(
+            tx,
+            transactionId,
+            agentRoute,
+            (await readAgentSubject(tx, agentId))!,
+            options.name,
+            language,
+          );
     await createAccountAgentBackLink(tx, account, agentRoute, agentId);
     return {
-      value: { subject: created.value, created: true },
-      events: created.events,
+      value: { subject: labeled?.subject ?? created.value, created: true },
+      events: [...created.events, ...(labeled?.events ?? [])],
       changed: true,
     };
   }

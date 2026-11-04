@@ -123,6 +123,7 @@ async function startPersonaSeed(databaseUrl: string) {
       }
     }
     expect(history.sort()).toEqual(['collection.structure_history_compare', 'collection.structure_history_list']);
+    return person.accountId;
   } finally {
     await composition.stop();
     await rm(directory, { recursive: true, force: true });
@@ -135,8 +136,16 @@ async function boot(env: NodeJS.ProcessEnv) {
   // Match dev-stack's loader before any entry or SQL-loading support import.
   await import('reylo/register');
   // DBOS is process-global; production runs these entries in separate processes.
-  await startPersonaSeed(databaseUrl);
+  const personaId = await startPersonaSeed(databaseUrl);
   await startKernelApi(databaseUrl);
+  const { synchronizeAccountAgent } = await import('../../src/access/account-agent-effect.ts');
+  const { Pool } = await import('pg');
+  const pool = new Pool({ connectionString: databaseUrl });
+  try {
+    await synchronizeAccountAgent(pool, personaId);
+  } finally {
+    await pool.end();
+  }
   await startAuthHost(databaseUrl);
   await startKernelWorker(databaseUrl);
 }
