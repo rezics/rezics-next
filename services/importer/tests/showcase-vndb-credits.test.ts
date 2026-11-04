@@ -13,10 +13,29 @@ import { crossMediaAliases, planCrossMediaSeed, seedCrossMedia, type CrossMediaP
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 function selectedVn() {
+  const bangumiRows: Record<string, Record<string, unknown>[]> = {
+    subject: [
+      { id: 1, type: 2, name: 'STEINS;GATE' },
+      { id: 2, type: 2, name: 'CLANNAD' },
+      { id: 3, type: 2, name: 'Fate/stay night' },
+    ],
+  };
   const rows: Record<string, Record<string, unknown>[]> = {
-    vn: [{ id: 'v1', olang: 'en', alias: null }],
-    vn_titles: [{ id: 'v1', lang: 'en', official: 't', title: 'CLANNAD', latin: null }],
-    entry_meta: [{ id: 'v1', revision: '7', lastmod: '2026-10-25 00:00:00+00' }],
+    vn: [
+      { id: 'v1', olang: 'ja', alias: null },
+      { id: 'v2', olang: 'ja', alias: null },
+      { id: 'v3', olang: 'ja', alias: null },
+    ],
+    vn_titles: [
+      { id: 'v1', lang: 'ja', official: 't', title: 'CLANNAD', latin: null },
+      { id: 'v2', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null },
+      { id: 'v3', lang: 'ja', official: 't', title: 'Fate/stay night', latin: null },
+    ],
+    entry_meta: [
+      { id: 'v1', revision: '7', lastmod: '2026-10-25 00:00:00+00' },
+      { id: 'v2', revision: '8', lastmod: '2026-10-25 00:00:00+00' },
+      { id: 'v3', revision: '9', lastmod: '2026-10-25 00:00:00+00' },
+    ],
     vn_staff: [
       { id: 'v1', aid: '10', role: 'scenario', note: 'Writer Alias' },
       { id: 'v1', aid: '20', role: 'chardesign', note: 'Artist Alias' },
@@ -31,7 +50,7 @@ function selectedVn() {
   };
   return {
     async *rows(provider: 'bangumi' | 'vndb', table: string) {
-      if (provider === 'vndb') yield* rows[table] ?? [];
+      yield* (provider === 'vndb' ? rows[table] : bangumiRows[table]) ?? [];
     },
   };
 }
