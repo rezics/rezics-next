@@ -252,6 +252,12 @@ test('presentation choice distinguishes automatic, released owner choice and ret
   const { CollectionPresentationFields } = await import('../src/library/collection-editor');
   const { m } = await import('../src/paraglide/messages.js');
   const options = [{ id: 'schema:Book', label: 'Released book label' }];
+  expect(
+    readCollectionTypeOptions({
+      ...definitions.release,
+      types: { 'schema:Book': { ...definitions.release.types['schema:Book'], labels: {} } },
+    }),
+  ).toEqual([{ id: 'schema:Book', label: m.collection_choice_type_unavailable() }]);
   expect(presentationTypeChoice(null, null, options, presentations)).toMatchObject({
     availability: 'automatic',
     state: 'retained',

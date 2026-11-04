@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime.js';
+import { m } from '../paraglide/messages.js';
 import {
   defaultCoverRatio,
   listPresentationRatio,
@@ -89,7 +90,7 @@ export function readCollectionTypeOptions(release: Release): CollectionTypeOptio
   return Object.entries(release.types)
     .map(([id, type]) => ({
       id,
-      label: type.labels ? pickText(type.labels, getLocale()).text || id : id,
+      label: (type.labels ? pickText(type.labels, getLocale()).text : '') || m.collection_choice_type_unavailable(),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 }
