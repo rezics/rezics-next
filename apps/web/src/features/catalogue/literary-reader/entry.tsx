@@ -3,7 +3,12 @@ import { subjectViewHref } from '../../../subject/subject-href';
 import { useSession } from '../../../session/query';
 import type { Subject } from '../../../subject/types';
 import { useOverview, viewHref } from '../../pages/overview';
-import { literaryAuthorityKey, literaryReaderRetired, literaryWorkIdentity, type LiteraryReaderObservation } from './model';
+import {
+  literaryAuthorityKey,
+  literaryReaderRetired,
+  literaryWorkIdentity,
+  type LiteraryReaderObservation,
+} from './model';
 import { LiteraryReader } from './view';
 
 export function LiteraryReaderEntry({
@@ -48,10 +53,10 @@ export function LiteraryReaderEntry({
   const editionSection = editionView?.section;
   const editionHref =
     matchingSource && value && editionSection?.ok && editionSection.read.kind === 'links'
-      ? viewHref(value, 'editions') ?? undefined
+      ? (viewHref(value, 'editions') ?? undefined)
       : undefined;
   const factsHref = matchingSource
-    ? viewHref(value, 'details') ?? undefined
+    ? (viewHref(value, 'details') ?? undefined)
     : subjectViewHref({ id: work.id, label: '' }, locale, 'details');
 
   return (
