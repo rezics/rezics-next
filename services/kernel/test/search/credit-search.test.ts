@@ -35,7 +35,7 @@ describe('bounded credited-name projection consumer', () => {
 
   test('missing support and partial creator labels never prove an empty complete population', async () => {
     expect(await projectCreditSearch(undefined, 'work')).toEqual({ state: 'unavailable' });
-    expect(await projectCreditSearch(native([{ ...entry(), namesComplete: false }]), 'work')))
+    expect(await projectCreditSearch(native([{ ...entry(), namesComplete: false }]), 'work'))
       .toEqual({ state: 'incomplete' });
     const names = Array.from({ length: CREDIT_SEARCH_LIMITS.namesPerCreator + 1 }, () => entry().names[0]!);
     expect(await projectCreditSearch(native([{ ...entry(), names }]), 'work'))
