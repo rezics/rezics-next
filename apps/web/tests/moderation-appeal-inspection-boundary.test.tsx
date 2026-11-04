@@ -4,7 +4,6 @@ import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createAppealResolutionIntent } from '../src/moderation/appeal-resolution/intent';
 import { appealReadKey, moderationAppealInput } from '../src/moderation/appeals-read-model';
-import { WorkbenchAppeal } from '../src/moderation/workbench-appeal';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -12,6 +11,7 @@ mock.module('../src/threads/authoring-departure', () => ({
   AuthoringDepartureBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
   useAuthoringDeparture: () => ({ release() {} }),
 }));
+const { WorkbenchAppeal } = await import('../src/moderation/workbench-appeal');
 const { readModerationAppealPage, admitAppealInspection } = await import('../src/moderation/appeals-read');
 const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
 const session = { state: 'signed-in', subject: 'viewer', csrfToken: 'csrf' };

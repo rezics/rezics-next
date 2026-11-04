@@ -90,6 +90,7 @@ function page(state: WorkbenchRead['state'], resolved = false): WorkbenchRead {
 let root: ReturnType<typeof createRoot> | undefined;
 let cache: InstanceType<typeof QueryClient>;
 let host: HTMLElement;
+let replaceSource: () => Promise<void>;
 const flush = () =>
   act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -105,13 +106,15 @@ async function mount(
   host = document.createElement('main');
   document.body.append(host);
   root = createRoot(host);
-  await act(async () =>
+  const render = (source: typeof read) => act(async () =>
     root!.render(
       <QueryClientProvider client={cache}>
-        <WorkbenchPage page={prepared} search={search} onSearch={() => {}} read={read} onRefresh={refresh} />
+        <WorkbenchPage page={prepared} search={search} onSearch={() => {}} read={source} onRefresh={refresh} />
       </QueryClientProvider>,
     ),
   );
+  replaceSource = () => render(async () => page('unavailable'));
+  await render(read);
 }
 function button(label: string) {
   return [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label)!;
@@ -159,7 +162,7 @@ test('same-input inspection retries recover keyboard focus and show a resolved s
 });
 
 test('pointer retry and moved focus do not steal focus; session replacement fences late inspection', async () => {
-  for (const mode of ['pointer', 'moved', 'session', 'account']) {
+  for (const mode of ['pointer', 'moved', 'session', 'account', 'source']) {
     let finish!: (value: WorkbenchRead) => void;
     await mount(
       page('unavailable'),
@@ -176,10 +179,11 @@ test('pointer retry and moved focus do not steal focus; session replacement fenc
       cache.setQueryData(['session'], { ...session, ...(mode === 'account' ? { subject: 'foreign' } : { csrfToken: 'replacement' }) });
       await flush();
     }
+    if (mode === 'source') await replaceSource();
     await act(async () => finish(page('ready', true)));
     expect(document.activeElement).not.toBe(host.querySelector('article'));
     if (mode === 'moved') expect(document.activeElement).toBe(elsewhere);
-    if (mode === 'session' || mode === 'account') expect(host.textContent).not.toContain('Reviewed.');
+    if (mode === 'session' || mode === 'account' || mode === 'source') expect(host.textContent).not.toContain('Reviewed.');
     await act(async () => root!.unmount());
     root = undefined;
     cache.clear();
