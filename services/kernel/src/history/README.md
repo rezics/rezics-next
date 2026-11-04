@@ -116,7 +116,8 @@ and executor seal at the real commit boundary. An unused allocation cannot commi
 partition/Account fences, family domain, operational head, ordered History seals, SDK restore domain and SDK writer.
 The existing-original full-key lookup is immutable and allocates nothing. Original finalization and deferred native
 verification run before the actual COMMIT; private transfers activate only after that COMMIT succeeds. Every exit
-invalidates live handles, and failed/contention attempts invalidate transfers without refunding spent allowance.
+invalidates live handles. Failed or contended attempts invalidate unused transfers; the original is identity,
+deadline and optional WorkClient, not a remaining ledger.
 
 The retained `registerOperationalHistoryWork` interface preserves legacy unpositioned behavior. This explicit
 versioned entry point keeps its existing callers and frozen regressions intact. Old nullable-position records and
@@ -125,11 +126,11 @@ through the positioned interface reuses that exact legacy record. An older SDK e
 including when a genuine new positioned registration encounters it. Neither a dedup hit nor a recreated SDK row
 becomes initial positive custody.
 
-`reserveOperationalWorkTransfer(tx, phase)` privately prepays one child for each of `resolve`, `verify`, `receive`,
-`replay`, `retirement`, after registration while the authentic original is live. Tokens bind the custody locator,
-actual Pool, phase and absolute original deadline. Copies, foreign locators/Pools, repeated issuance/spend,
+`reserveOperationalWorkTransfer(tx, phase)` issues a one-shot post-COMMIT token for each of `resolve`, `verify`,
+`receive`, `replay`, `retirement`, after registration while the authentic original is live. Tokens bind the custody
+locator, actual Pool, phase and absolute original deadline. Copies, foreign locators/Pools, repeated issuance/spend,
 precommit use, expired or rolled-back attempts refuse before checkout. Reusing a durable original cannot extend
-that original's deadline. One cumulative original balance funds all three possible attempts without refills.
+that original's deadline. `OPERATIONAL_WORK_ATTEMPT_BOUND` is 3; callers do not buy those attempts from a ledger.
 
 `resolveCommittedOperationalWork(pool, locator, transfer)` performs one bounded committed read, holding the actual
 partition/family/head/original fences through its source-home COMMIT, then releases the client before returning

@@ -1,38 +1,24 @@
-import { expect, spyOn, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import type { WorkClient } from '../../src/work/client.ts';
 import {
   claimOperationalWorkOriginal,
-  debitOperationalWork,
   debitOperationalWorkAttempt,
-  fundOperationalWorkOriginal,
-  OPERATIONAL_WORK_COST,
+  openOperationalWorkOriginal,
+  OPERATIONAL_WORK_ATTEMPT_BOUND,
   OPERATIONAL_WORK_LOCAL_DECLARATION,
   OPERATIONAL_WORK_REGISTRATION,
-  sumOperationalWork,
 } from '../../src/history/operational-work-budget.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import type { WorkDimensions } from '../../src/library/collection-source.ts';
-import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import {
   MEMBERS_PREPARATION_CHILDREN,
   declareMembersPreparationParent,
-  fundMembersPreparationHistory,
-  runFundedMembersPreparation,
-  transferMembersPreparationBudget,
   type MembersPreparationDeclarations,
 } from '../../src/library/members-preparation-budget.ts';
+import { MEMBERS_PREPARATION_RESERVATION_SUBTOTAL, MEMBERS_PREPARATION_STEP_CEILING } from '../../src/library/members-preparation-cost.ts';
+import { declareMembersPreparationRequest } from '../../src/library/members-preparation-request.ts';
 
-const axes = [
-  'candidateKeys',
-  'nativeRows',
-  'identityMetadataRows',
-  'emptySeeks',
-  'nativePoints',
-  'witnessKeys',
-  'statements',
-  'bytes',
-] as const;
 const cost = (amount: number): WorkDimensions => ({
   candidateKeys: amount,
   nativeRows: amount,
@@ -43,149 +29,31 @@ const cost = (amount: number): WorkDimensions => ({
   statements: amount,
   bytes: amount,
 });
-
-test('funded execution refuses missing owner prices and a local subtotal before invoking any child', async () => {
-  let calls = 0;
-  const body = async () => ++calls;
-  const cleanup = async () => {
-    calls++;
-  };
-  await expect(
-    runFundedMembersPreparation(parent(), 'key', { ...declarations(), sourceResolve: null }, body, cleanup),
-  ).rejects.toBeInstanceOf(ProblemError);
-  // This balance covers a Members body, but cannot authorize the complete History/Source composition.
-  const original = parent(16);
-  await expect(runFundedMembersPreparation(original, 'key', declarations(), body, cleanup)).rejects.toBeInstanceOf(
-    ProblemError,
-  );
-  expect(original.available('statements')).toBe(16);
-  expect(calls).toBe(0);
-});
-
-for (const fails of [false, true]) {
-  test(`funded execution settles Source and cleanup on the original parent (failure=${fails})`, async () => {
-    const declared = declareMembersPreparationParent(declarations());
-    const original = new NativeCollectionWork(
-      { reservationId: 'original', remaining: declared.total },
-      Date.now() + 60000,
-    );
-    const unavailable = new ProblemError('dependency_unavailable');
-    let source: NativeCollectionWork | undefined;
-    let cleanups = 0;
-    const running = runFundedMembersPreparation(
-      original,
-      'key',
-      declarations(),
-      async (children) => {
-        source = children.sourceResolve;
-        for (const axis of axes) expect(original.available(axis)).toBe(0);
-        expect(children.historyRegistration.available('statements')).toBe(464);
-        expect(children.receivingReadback.available('statements')).toBe(429);
-        dispatch(source, 1);
-        if (fails) throw unavailable;
-        return 'completed body';
-      },
-      async (children, outcome) => {
-        cleanups++;
-        expect(outcome.ok).toBe(!fails);
-        dispatch(children.cleanup, 1);
-      },
-    );
-    if (fails) {
-      await expect(running).rejects.toBe(unavailable);
-      expect(Reflect.get(unavailable, 'work')).toEqual(original.receipt());
-    } else expect(await running).toEqual({ value: 'completed body', work: original.receipt() });
-    expect(cleanups).toBe(1);
-    expect(original.receipt().used).toEqual(cost(2));
-    expect(() => dispatch(source!, 1)).toThrow('allocation is closed');
-    await expect(
-      runFundedMembersPreparation(
-        original,
-        'key',
-        declarations(),
-        async () => 'duplicate',
-        async () => {},
-      ),
-    ).rejects.toBeInstanceOf(ProblemError);
-    expect(original.receipt().used).toEqual(cost(2));
-  });
-}
-
-test('cleanup failure still closes the group and retains both failures and their charges', async () => {
-  const declared = declareMembersPreparationParent(declarations());
-  const original = new NativeCollectionWork(
-    { reservationId: 'original', remaining: declared.total },
-    Date.now() + 60000,
-  );
-  const sourceError = new ProblemError('dependency_unavailable');
-  const cleanupError = new Error('cleanup failed');
-  let cleanup: NativeCollectionWork | undefined;
-  const error = await runFundedMembersPreparation(
-    original,
-    'key',
-    declarations(),
-    async (children) => {
-      dispatch(children.sourceResolve, 1);
-      throw sourceError;
-    },
-    async (children) => {
-      cleanup = children.cleanup;
-      dispatch(cleanup, 1);
-      throw cleanupError;
-    },
-  ).catch((error: unknown) => error);
-  expect(error).toBeInstanceOf(AggregateError);
-  expect((error as AggregateError).errors).toEqual([sourceError, cleanupError]);
-  expect(original.receipt().used).toEqual(cost(2));
-  expect(() => dispatch(cleanup!, 1)).toThrow('allocation is closed');
-});
 const declarations = (): MembersPreparationDeclarations =>
   Object.fromEntries(MEMBERS_PREPARATION_CHILDREN.map((name) => [name, cost(2)])) as MembersPreparationDeclarations;
-const parent = (amount = MEMBERS_PREPARATION_CHILDREN.length * 2, deadline = Date.now() + 60000) =>
-  new NativeCollectionWork({ reservationId: 'one-c3-parent', remaining: cost(amount) }, deadline);
 
-test('History uses one transferred parent allocation across bounded attempts without borrowing cleanup', () => {
-  const pool = {} as Pool;
-  const work = {} as WorkClient;
-  const original = new NativeCollectionWork(
-    {
-      reservationId: 'funded-history-parent',
-      remaining: sumOperationalWork(OPERATIONAL_WORK_LOCAL_DECLARATION, cost(2)),
-    },
-    Date.now() + 60_000,
+test('the static Members equation includes constant History bounds and refuses an incomplete or oversized body', () => {
+  const declared = declareMembersPreparationParent(declarations());
+  expect(declared.children.historyRegistration.statements).toBe(464);
+  expect(declared.children.receivingReadback.statements).toBe(429);
+  expect(declared.children.members.statements).toBeLessThanOrEqual(16);
+  expect(declareMembersPreparationRequest(declarations()).children.history).toEqual(OPERATIONAL_WORK_LOCAL_DECLARATION);
+  expect(MEMBERS_PREPARATION_STEP_CEILING.statements).toBe(16);
+  expect(OPERATIONAL_WORK_REGISTRATION.statements).toBe(464);
+  expect(MEMBERS_PREPARATION_RESERVATION_SUBTOTAL.statements).toBeGreaterThan(464 + 429);
+  expect(() => declareMembersPreparationParent({ ...declarations(), sourceResolve: null })).toThrow(ProblemError);
+  expect(() => declareMembersPreparationParent({ ...declarations(), members: cost(17) })).toThrow(
+    'Members preparation body exceeds 16 statements',
   );
-  const funded = original.transferChildren({ history: OPERATIONAL_WORK_LOCAL_DECLARATION, cleanup: cost(2) });
-  const history = fundOperationalWorkOriginal(funded.children.history, pool, work, original.deadlineAt);
-  expect(funded.children.history.receipt().used).toEqual(OPERATIONAL_WORK_LOCAL_DECLARATION);
-  expect(funded.children.cleanup.available('statements')).toBe(2);
-  expect(() => fundOperationalWorkOriginal(funded.children.history, pool, work, original.deadlineAt)).toThrow();
-  claimOperationalWorkOriginal(history, pool, work, original.deadlineAt);
-  for (let attempt = 0; attempt < 3; attempt++) debitOperationalWorkAttempt(history);
-  expect(() => debitOperationalWorkAttempt(history)).toThrow('attempt-bound');
-  expect(funded.finish().used).toEqual(OPERATIONAL_WORK_LOCAL_DECLARATION);
 });
 
-test('History refuses underfunded axes and binds its single-use original to the exact executor resources', () => {
+test('History original is opened from static bounds and refuses a fourth attempt without a caller ledger', () => {
   const pool = {} as Pool;
   const work = {} as WorkClient;
   const deadline = Date.now() + 60_000;
-  for (const axis of axes) {
-    const remaining = { ...OPERATIONAL_WORK_LOCAL_DECLARATION, [axis]: OPERATIONAL_WORK_LOCAL_DECLARATION[axis] - 1 };
-    // History declares no candidate/identity/witness keys; negative budgets cannot be constructed.
-    if (remaining[axis] < 0) continue;
-    const original = new NativeCollectionWork({ reservationId: 'underfunded-history', remaining }, deadline);
-    expect(() => fundOperationalWorkOriginal(original, pool, work, deadline)).toThrow();
-    expect(original.receipt().used).toEqual(cost(0));
-  }
-  const original = new NativeCollectionWork(
-    {
-      reservationId: 'history-binding',
-      remaining: OPERATIONAL_WORK_LOCAL_DECLARATION,
-    },
-    deadline,
-  );
-  expect(() => fundOperationalWorkOriginal(original, pool, work, deadline + 1)).toThrow('deadline');
-  const history = fundOperationalWorkOriginal(original, pool, work, deadline);
+  expect(() => openOperationalWorkOriginal(pool, Date.now() - 1, work)).toThrow('deadline');
+  const history = openOperationalWorkOriginal(pool, deadline, work);
+  expect(() => debitOperationalWorkAttempt(history)).toThrow('original-unavailable');
   for (const [p, w, d, token] of [
     [{} as Pool, work, deadline, history],
     [pool, {} as WorkClient, deadline, history],
@@ -195,243 +63,6 @@ test('History refuses underfunded axes and binds its single-use original to the 
     expect(() => claimOperationalWorkOriginal(token, p, w, d)).toThrow('original-unavailable');
   expect(claimOperationalWorkOriginal(history, pool, work, deadline)).toBe(history);
   expect(() => claimOperationalWorkOriginal(history, pool, work, deadline)).toThrow('original-unavailable');
-});
-function dispatch(work: NativeCollectionWork, amount: number) {
-  const reserved = work.reserve(cost(amount));
-  reserved.dispatch();
-  reserved.settle();
-}
-
-test('every required child must be declared and funded before any checkout can begin', () => {
-  for (const missing of MEMBERS_PREPARATION_CHILDREN) {
-    const original = parent();
-    expect(() => transferMembersPreparationBudget(original, 'key', { ...declarations(), [missing]: null })).toThrow(
-      ProblemError,
-    );
-    expect(original.receipt().used).toEqual(cost(0));
-    expect(original.available('statements')).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2);
-    // Refusal allocated nothing; a later complete declaration can still be transferred.
-    expect(transferMembersPreparationBudget(original, 'key', declarations()).children[missing]).toBeInstanceOf(
-      NativeCollectionWork,
-    );
-  }
-  for (const axis of axes) {
-    const original = parent();
-    const declared = declarations();
-    expect(() =>
-      transferMembersPreparationBudget(original, 'key', {
-        ...declared,
-        sourceVerify: { ...declared.sourceVerify!, [axis]: 3 },
-      }),
-    ).toThrow(ProblemError);
-    expect(original.available(axis)).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2);
-  }
-});
-
-test('one key transfers all children once and siblings cannot borrow a spent or unused reservation', () => {
-  const original = parent();
-  const funded = transferMembersPreparationBudget(original, 'exact-preparation-key', declarations());
-  for (const axis of axes) expect(original.available(axis)).toBe(0);
-  expect(() => transferMembersPreparationBudget(original, 'exact-preparation-key', declarations())).toThrow(
-    ProblemError,
-  );
-  dispatch(funded.children.sourceResolve, 2);
-  expect(() => dispatch(funded.children.sourceResolve, 1)).toThrow(ProblemError);
-  expect(funded.children.sourceVerify.available('nativeRows')).toBe(2);
-  // Retry and rollback use their own prepaid children, including when no result is returned.
-  dispatch(funded.children.retry, 1);
-  dispatch(funded.children.rollback, 1);
-  for (const child of Object.values(funded.children)) expect(child.receipt().reservationId).toBe('one-c3-parent');
-  expect(funded.finish().used).toEqual(cost(4));
-  expect(() => funded.finish()).toThrow('already finished');
-  expect(() => dispatch(funded.children.cleanup, 1)).toThrow('allocation is closed');
-  expect(() => funded.children.cleanup.reserve(cost(1), true)).toThrow('allocation is closed');
-  expect(() => transferMembersPreparationBudget(original, 'exact-preparation-key', declarations())).toThrow(
-    ProblemError,
-  );
-});
-
-test('completion waits for in-flight child work and records charged work without reporting unused capacity', () => {
-  const original = parent();
-  const declared = declarations();
-  const funded = transferMembersPreparationBudget(original, 'key', declared);
-  // A caller changing its declaration after transfer cannot increase a child or the parent.
-  Object.assign(declared.cleanup!, cost(100));
-  expect(funded.children.cleanup.available('statements')).toBe(2);
-  const inFlight = funded.children.members.reserve(cost(1));
-  const zeroWork = funded.children.cleanup.reserve(cost(0));
-  inFlight.dispatch();
-  expect(() => funded.finish()).toThrow('still in flight');
-  for (const axis of axes) expect(original.available(axis)).toBe(0);
-  inFlight.settle();
-  // Even a declared zero-cost operation has to settle before its child can close.
-  expect(() => funded.finish()).toThrow('still in flight');
-  zeroWork.cancel();
-  expect(funded.finish().used).toEqual(cost(1));
-  for (const axis of axes) expect(original.available(axis)).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2 - 1);
-});
-
-test('invalid or overflowing declarations cannot partially transfer a finite parent', () => {
-  for (const amount of [-1, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
-    const original = parent();
-    expect(() => original.transferChildren({ members: cost(1), cleanup: cost(amount) })).toThrow(TypeError);
-    expect(original.available('bytes')).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2);
-  }
-  const original = parent(Number.MAX_SAFE_INTEGER);
-  expect(() => original.transferChildren({ members: cost(Number.MAX_SAFE_INTEGER), cleanup: cost(1) })).toThrow(
-    'overflow',
-  );
-  expect(original.available('bytes')).toBe(Number.MAX_SAFE_INTEGER);
-});
-
-test('failed child receipts stay charged and poison the parent after settlement', async () => {
-  const original = parent();
-  const funded = transferMembersPreparationBudget(original, 'key', declarations());
-  await expect(
-    funded.children.sourceResolve.compose(async () => {
-      throw new Error('Source failed');
-    }),
-  ).rejects.toThrow('Source failed');
-  expect(funded.finish().used).toEqual(cost(2));
-  expect(() => original.assertReady()).toThrow('Source failed');
-  expect(() => dispatch(funded.children.sourceVerify, 1)).toThrow('allocation is closed');
-});
-
-test('the complete declaration includes constant History prices and cannot assume a missing Source price', () => {
-  const declared = declareMembersPreparationParent(declarations());
-  expect(declared.children.historyRegistration.statements).toBe(464);
-  expect(declared.children.receivingReadback.statements).toBe(429);
-  expect(declared.children.members.statements).toBeLessThanOrEqual(16);
-  const original = new NativeCollectionWork(
-    { reservationId: 'original', remaining: declared.total },
-    Date.now() + 60000,
-  );
-  const funded = transferMembersPreparationBudget(original, 'key', declared.children);
-  for (const axis of axes) expect(original.available(axis)).toBe(0);
-  expect(funded.children.historyRegistration.deadlineAt).toBe(original.deadlineAt);
-  expect(funded.finish().used).toEqual(cost(0));
-  expect(() => declareMembersPreparationParent({ ...declarations(), sourceResolve: null })).toThrow(ProblemError);
-  expect(() => declareMembersPreparationParent({ ...declarations(), members: cost(17) })).toThrow(
-    'Members preparation body exceeds 16 statements',
-  );
-  expect(() => declareMembersPreparationParent({ ...declarations(), sourceVerify: cost(Infinity) })).toThrow(TypeError);
-});
-
-test('expiration refuses initial and transferred work before checkout without extending the original deadline', () => {
-  const original = parent();
-  const other = parent(MEMBERS_PREPARATION_CHILDREN.length * 2, original.deadlineAt);
-  const funded = transferMembersPreparationBudget(original, 'key', declarations());
-  const now = spyOn(Date, 'now').mockReturnValue(original.deadlineAt);
-  try {
-    expect(() => dispatch(funded.children.sourceResolve, 1)).toThrow(ProblemError);
-    expect(() => transferMembersPreparationBudget(other, 'other', declarations())).toThrow(ProblemError);
-    expect(funded.finish().used).toEqual(cost(0));
-  } finally {
-    now.mockRestore();
-  }
-});
-
-test('inherited declarations and axes cannot establish complete funding or consume the original', () => {
-  const inherited = Object.create(declarations()) as MembersPreparationDeclarations;
-  const original = parent();
-  expect(() => declareMembersPreparationParent(inherited)).toThrow(ProblemError);
-  expect(() => transferMembersPreparationBudget(original, 'key', inherited)).toThrow(ProblemError);
-  const inheritedAxes = { ...declarations(), sourceResolve: Object.create(cost(2)) as WorkDimensions };
-  expect(() => declareMembersPreparationParent(inheritedAxes)).toThrow(TypeError);
-  expect(() => transferMembersPreparationBudget(original, 'key', inheritedAxes)).toThrow(TypeError);
-  expect(original.available('statements')).toBe(MEMBERS_PREPARATION_CHILDREN.length * 2);
-});
-
-test('already funded rollback and cleanup survive expiry and retain dispatched producer work', () => {
-  const original = parent();
-  const funded = transferMembersPreparationBudget(original, 'key', declarations());
-  const rollback = funded.children.rollback.reserve(cost(1), true);
-  const cleanup = funded.children.cleanup.reserve(cost(1), true);
-  dispatch(funded.children.members, 1);
-  const now = spyOn(Date, 'now').mockReturnValue(original.deadlineAt);
-  try {
-    rollback.dispatch();
-    rollback.settle();
-    cleanup.dispatch();
-    cleanup.settle();
-    expect(funded.finish().used).toEqual(cost(3));
-  } finally {
-    now.mockRestore();
-  }
-});
-
-test('the native History receiver uses the original disjoint children through deadline-bounded retries', async () => {
-  const price = sumOperationalWork(OPERATIONAL_WORK_COST.attempt, OPERATIONAL_WORK_REGISTRATION);
-  const owners = { ...declarations(), retry: sumOperationalWork(price, price, price) };
-  const declared = declareMembersPreparationParent(owners);
-  const original = new NativeCollectionWork(
-    { reservationId: 'native-history-c3', remaining: declared.total },
-    Date.now() + 60000,
-  );
-  const pool = {} as Pool;
-  const work = {} as WorkClient;
-  await runFundedMembersPreparation(
-    original,
-    'exact-native-key',
-    owners,
-    async (children) => {
-      const history = fundMembersPreparationHistory(children, pool, work);
-      expect(() => debitOperationalWorkAttempt(history)).toThrow('funding-unavailable');
-      claimOperationalWorkOriginal(history, pool, work, original.deadlineAt);
-      // More than three attempts are possible without changing native deadline policy or adding a payer.
-      for (let attempt = 0; attempt < 4; attempt++) {
-        debitOperationalWorkAttempt(history);
-        debitOperationalWork(history, OPERATIONAL_WORK_REGISTRATION);
-      }
-      expect(children.retry.available('statements')).toBe(0);
-      expect(children.historyRegistration.available('statements')).toBe(0);
-      expect(children.receivingReadback.available('statements')).toBe(429);
-      expect(() => debitOperationalWorkAttempt(history)).toThrow(ProblemError);
-      expect(children.cleanup.available('statements')).toBe(2);
-      expect(children.members.available('statements')).toBe(2);
-      expect(() => fundMembersPreparationHistory(children, pool, work)).toThrow('funding-unavailable');
-    },
-    async () => {},
-  );
-  expect(original.receipt().used).toEqual(sumOperationalWork(price, price, price, price));
-});
-
-test('a native receiver refuses foreign resources and cannot replace exported prices with a cheaper debit', async () => {
-  const declared = declareMembersPreparationParent(declarations());
-  const original = new NativeCollectionWork(
-    { reservationId: 'native-history-binding', remaining: declared.total },
-    Date.now() + 60000,
-  );
-  const pool = {} as Pool;
-  const work = {} as WorkClient;
-  await runFundedMembersPreparation(
-    original,
-    'key',
-    declarations(),
-    async (children) => {
-      const history = fundMembersPreparationHistory(children, pool, work);
-      expect(() => claimOperationalWorkOriginal(history, {} as Pool, work, original.deadlineAt)).toThrow();
-      expect(() => claimOperationalWorkOriginal(history, pool, {} as WorkClient, original.deadlineAt)).toThrow();
-      expect(() => claimOperationalWorkOriginal(history, pool, work, original.deadlineAt + 1)).toThrow();
-      claimOperationalWorkOriginal(history, pool, work, original.deadlineAt);
-      expect(() => debitOperationalWork(history, cost(1))).toThrow('funding-unavailable');
-      expect(children.historyRegistration.available('statements')).toBe(464);
-      debitOperationalWork(history, OPERATIONAL_WORK_REGISTRATION);
-    },
-    async () => {},
-  );
-  expect(original.receipt().used).toEqual(OPERATIONAL_WORK_REGISTRATION);
-});
-
-import {
-  MEMBERS_PREPARATION_RESERVATION_SUBTOTAL,
-  MEMBERS_PREPARATION_STEP_CEILING,
-  requireMembersReservationBudget,
-} from '../../src/library/members-preparation-cost.ts';
-
-test('C3 preserves the Members body allowance and refuses an undeclared whole parent', () => {
-  expect(MEMBERS_PREPARATION_STEP_CEILING.statements).toBe(16);
-  expect(OPERATIONAL_WORK_REGISTRATION.statements).toBe(464);
-  expect(MEMBERS_PREPARATION_RESERVATION_SUBTOTAL.statements).toBeGreaterThan(464 + 429);
-  expect(requireMembersReservationBudget).toThrow('whole-members-reservation-cost-unavailable');
+  for (let attempt = 0; attempt < OPERATIONAL_WORK_ATTEMPT_BOUND; attempt++) debitOperationalWorkAttempt(history);
+  expect(() => debitOperationalWorkAttempt(history)).toThrow('attempt-bound');
 });

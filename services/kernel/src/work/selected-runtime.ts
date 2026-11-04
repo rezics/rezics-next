@@ -10,14 +10,7 @@ import {
 } from '../command/operational.ts';
 import { assertSelectedWorkClient, type WorkClient, type WorkIntent } from './client.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import {
-  SELECTED_AXES,
-  SELECTED_COST,
-  SELECTED_LOCAL_DECLARATION,
-  SELECTED_CLEANUP_DECLARATION,
-  sumSelectedCost,
-  type SelectedCost,
-} from './selected-runtime-cost.ts';
+import { SELECTED_AXES, type SelectedCost } from './selected-runtime-cost.ts';
 import {
   associateSelectedEpisode,
   finishSelectedEpisode,
@@ -99,13 +92,10 @@ export type SelectedRuntime = Readonly<{
     children?: SelectedChildren,
   ): (locator: SelectedLocator) => Promise<R>;
 }>;
-type Balance = Record<(typeof SELECTED_AXES)[number], number>;
 type Original = {
   pool: Pool;
   work: NativeSdk;
   deadline: number;
-  remaining: Balance;
-  cleanup: Balance;
   children: SelectedChildren | undefined;
   counts: Map<string, number>;
   claim?: Claim;
@@ -120,19 +110,8 @@ type Original = {
   attempted: Set<string>;
 };
 const active = new AsyncLocalStorage<Original>();
-const balance = (cost: SelectedCost): Balance => ({ ...cost });
-function debit(state: Original, cost: SelectedCost, cleanup = false): void {
-  if (
-    (!cleanup && (state.revoked || Date.now() >= state.deadline)) ||
-    SELECTED_AXES.some(
-      (axis) =>
-        !Number.isSafeInteger(cost[axis]) ||
-        cost[axis] < 0 ||
-        cost[axis] > (cleanup ? state.cleanup : state.remaining)[axis],
-    )
-  )
-    refuse('selected-runtime-admission-exhausted');
-  for (const axis of SELECTED_AXES) (cleanup ? state.cleanup : state.remaining)[axis] -= cost[axis];
+function live(state: Original): void {
+  if (state.revoked || Date.now() >= state.deadline) refuse('selected-runtime-not-live');
 }
 function identity(state: Original): SelectedIdentity {
   if (!state.claim || state.revoked || Date.now() >= state.deadline) refuse('selected-runtime-not-live');
@@ -179,7 +158,6 @@ export function selectedOperationalEnqueue(
       })
   )
     refuse('selected-runtime-continuation-enqueue-refused');
-  debit(state, SELECTED_COST.enqueue);
   state.counts.set('sdk-enqueue', 1);
   return (created) => {
     identity(state);
@@ -247,9 +225,7 @@ export function openSelectedOperationalPhase(pool: Pool, options: OperationalOpt
   )
     refuse('selected-runtime-foreign-transaction');
   binding.used = true;
-  // Usable controls/fences, plus disjoint rollback, are paid before gate/checkout/BEGIN.
-  debit(state, SELECTED_COST.transaction);
-  debit(state, SELECTED_COST.rollback, true);
+  live(state);
   state.busy = true;
   let guarded = false;
   let held: OperationalTransaction | undefined;
@@ -270,7 +246,6 @@ export function openSelectedOperationalPhase(pool: Pool, options: OperationalOpt
       if (!declaration) refuse('selected-runtime-unknown-native-sql');
       const count = state.counts.get(sql) ?? 0;
       if (count >= declaration.limit) refuse('selected-runtime-native-multiplicity-exhausted');
-      debit(state, declaration.cost);
       state.counts.set(sql, count + 1);
     },
     async hold(tx: OperationalTransaction, raw: PoolClient) {
@@ -279,7 +254,6 @@ export function openSelectedOperationalPhase(pool: Pool, options: OperationalOpt
       const current = currentOperationalResources(tx);
       if (current.pool !== state.pool || current.workClient !== state.work || current.deadline !== state.deadline)
         refuse('selected-runtime-foreign-client');
-      debit(state, SELECTED_COST.hold);
       await state.work.checkSelectedExecutionInTransaction(raw, state.pool, state.claim!);
     },
     guardBody() {
@@ -343,24 +317,23 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
           declarations.native.some((x) => !x.sql || !Number.isSafeInteger(x.limit) || x.limit < 1 || x.limit > 64))
       )
         throw new TypeError('Invalid selected native declaration');
-      const foreign = declarations
-        ? sumSelectedCost(
-            ...declarations.native.flatMap((x) => Array.from({ length: x.limit }, () => x.cost)),
-            ...(declarations.source ? [declarations.source] : []),
-          )
-        : undefined;
-      // The local original is allocated at the actual runtime body boundary, before native issuance IO.
-      // This is the existing operational original convention, with a private fixed finite partition.
+      if (
+        declarations &&
+        (declarations.native.some((item) =>
+          SELECTED_AXES.some((axis) => !Number.isSafeInteger(item.cost[axis]) || item.cost[axis] < 0),
+        ) ||
+          (declarations.source &&
+            SELECTED_AXES.some(
+              (axis) => !Number.isSafeInteger(declarations.source[axis]) || declarations.source[axis] < 0,
+            )))
+      )
+        throw new TypeError('Invalid selected native declaration');
       const lifecycle: Lifecycle = {
         async open() {
-          const usable = { ...SELECTED_LOCAL_DECLARATION };
-          for (const axis of SELECTED_AXES) usable[axis] -= SELECTED_CLEANUP_DECLARATION[axis];
           const state: Original = {
             pool,
             work: work as NativeSdk,
             deadline: Date.now() + 5000,
-            remaining: balance(sumSelectedCost(usable, ...(foreign ? [foreign] : []))),
-            cleanup: balance(SELECTED_CLEANUP_DECLARATION),
             children: declarations,
             counts: new Map(),
             revoked: false,
@@ -370,17 +343,17 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
             attempted: new Set(),
           };
           // Native capability and held database owner locks supply execution authority.
-          // Async context only pairs the prepaid lifecycle with its registered body.
-          // The SDK calls run only at the actual registered body execution site.
+          // Async context pairs the documented static bound with its registered body.
           return {
             deadline: state.deadline,
             run<T>(run: () => Promise<T>) {
               return active.run(state, run);
             },
             async reserve(dispatch) {
-              if (dispatch === 'issue') debit(state, SELECTED_COST.issue);
-              else if (dispatch === 'release') debit(state, SELECTED_COST.release, true);
-              else refuse('selected-runtime-unpriced-sdk-dispatch');
+              live(state);
+              if (dispatch !== 'issue' && dispatch !== 'release') refuse('selected-runtime-unpriced-sdk-dispatch');
+              if (state.counts.has(`sdk-${dispatch}`)) refuse('selected-runtime-repeated-sdk-dispatch');
+              state.counts.set(`sdk-${dispatch}`, 1);
             },
             async close() {
               state.revoked = true;
@@ -409,10 +382,9 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
               if (state.phase !== 'new') refuse('selected-runtime-repeated-selection');
               scope(state, input);
               state.phase = 'selecting';
-              debit(state, SELECTED_COST.consume);
               const fresh = await state.work.consumeSelectedExecutionAdmission(claim, state.pool);
               const episode = await transaction(state, input, 'select', (tx) =>
-                associateSelectedEpisode(tx, identity(state), input, (amount) => debit(state, amount), fresh),
+                associateSelectedEpisode(tx, identity(state), input, fresh),
               );
               state.phase = episode.result ? 'applied' : 'selected';
               return episode;
@@ -421,7 +393,6 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
               if (state.phase !== 'selected' || state.busy || !declarations?.source)
                 refuse('selected-runtime-source-declaration-unavailable');
               identity(state);
-              debit(state, declarations.source);
               state.phase = 'source';
               try {
                 const result = await read(state.deadline);
@@ -436,7 +407,7 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
             async apply(episode, apply) {
               if (state.phase !== 'read') refuse('selected-runtime-apply-phase-unavailable');
               const result = await transaction(state, state.locator!, 'apply', (tx) =>
-                finishSelectedEpisode(tx, identity(state), episode, 'apply', apply, (amount) => debit(state, amount)),
+                finishSelectedEpisode(tx, identity(state), episode, 'apply', apply),
               );
               state.phase = 'applied';
               return result;
@@ -444,7 +415,7 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
             async failure(episode, fail) {
               if (!['selected', 'read'].includes(state.phase)) refuse('selected-runtime-failure-phase-unavailable');
               const result = await transaction(state, state.locator!, 'failure', (tx) =>
-                finishSelectedEpisode(tx, identity(state), episode, 'failure', fail, (amount) => debit(state, amount)),
+                finishSelectedEpisode(tx, identity(state), episode, 'failure', fail),
               );
               state.phase = 'failed';
               return result;

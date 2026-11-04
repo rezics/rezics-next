@@ -1,8 +1,5 @@
 import { ProblemError } from '../http/problem.ts';
-import type { Pool } from 'pg';
-import type { WorkClient } from '../work/client.ts';
 import {
-  fundOperationalWorkChildren,
   OPERATIONAL_WORK_AXES,
   OPERATIONAL_WORK_COST,
   OPERATIONAL_WORK_REGISTRATION,
@@ -10,8 +7,7 @@ import {
   OPERATIONAL_WORK_TRANSFER_COST,
   sumOperationalWork,
 } from '../history/operational-work-budget.ts';
-import type { WorkDimensions, WorkReceipt } from './collection-source.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import type { WorkDimensions } from './collection-source.ts';
 
 /** Disjoint owner declarations, including failed prefixes and terminal controls. A missing
  * declaration is unknown, never zero. History's local declaration does not price other owners.
@@ -70,10 +66,9 @@ function snapshot(value: WorkDimensions | null): WorkDimensions {
   });
 }
 
-/** Prices one complete original before I/O, without allocating a second payer or granting authority.
- * Core/Access, released Source, selected-runtime and cleanup have no guessed default declaration.
- * Retry/rollback declarations include all additional failed prefixes and controls, including repeated
- * History bodies. They preserve the native request deadline policy rather than imposing a new retry cap.
+/** Documented static equation for one complete original. Core/Access, released Source, selected-runtime
+ * and cleanup have no guessed default. Retry/rollback cover failed prefixes and controls, including
+ * repeated History bodies. This describes bounds; it does not allocate dispatch authority.
  */
 export function declareMembersPreparationParent(owners: MembersPreparationOwnerDeclarations): Readonly<{
   children: Readonly<Record<MembersPreparationChild, WorkDimensions>>;
@@ -93,108 +88,4 @@ export function declareMembersPreparationParent(owners: MembersPreparationOwnerD
   return Object.freeze({ children: Object.freeze(children), total });
 }
 
-const registered = new WeakMap<NativeCollectionWork, Set<string>>();
 
-/** C3 accounting seam for the retained producer: all children come from one existing finite
- * parent before checkout. It neither opens a connection nor issues History registration.
- * The producer must still bind the durable preparation key and freshly verify physical Source
- * authority. A complete accounting frame is not evidence that those dependencies are released.
- */
-export function transferMembersPreparationBudget(
-  parent: NativeCollectionWork,
-  preparationKey: string,
-  declarations: MembersPreparationDeclarations,
-) {
-  if (!preparationKey || registered.get(parent)?.has(preparationKey)) throw new ProblemError('dependency_unavailable');
-  const complete = Object.create(null) as Record<MembersPreparationChild, WorkDimensions>;
-  for (const name of MEMBERS_PREPARATION_CHILDREN) {
-    const declaration = Object.hasOwn(declarations, name) ? declarations[name] : null;
-    complete[name] = snapshot(declaration);
-  }
-  const transferred = parent.transferChildren(complete);
-  const keys = registered.get(parent) ?? new Set<string>();
-  keys.add(preparationKey);
-  registered.set(parent, keys);
-  return transferred;
-}
-
-export type MembersPreparationBudgets = Readonly<Record<MembersPreparationChild, NativeCollectionWork>>;
-
-/** Prepaid native History receiver for the exact Pool, WorkClient and original deadline.
- * Use inside runFundedMembersPreparation, before reserve or any Source work. Registration and
- * every transfer consume their own exported prices; native retries cannot borrow siblings.
- * This original establishes accounting, never Source currentness or durable result authority.
- */
-export function fundMembersPreparationHistory(children: MembersPreparationBudgets, pool: Pool, workClient: WorkClient) {
-  return fundOperationalWorkChildren(
-    {
-      registration: children.historyRegistration,
-      receive: children.receivingReadback,
-      resolve: children.historyResolve,
-      verify: children.historyVerify,
-      replay: children.historyReplay,
-      retirement: children.historyRetirement,
-      attempt: children.executor,
-      retry: children.retry,
-    },
-    pool,
-    workClient,
-    children.members.deadlineAt,
-  );
-}
-
-/** Execute within the caller's original C3 balance, never a ledger made from our local subtotal.
- * All owner declarations and the whole transfer must succeed before either callback can run.
- * The body still owns native registration/current Source verification; these budgets grant no authority.
- * Both callbacks must await their dispatched work. Cleanup always runs after an admitted body, even on
- * failure or expiry, and uses only its original children (terminal controls may use reserve's cleanup flag).
- */
-export async function runFundedMembersPreparation<T>(
-  parent: NativeCollectionWork,
-  preparationKey: string,
-  owners: MembersPreparationOwnerDeclarations,
-  body: (children: MembersPreparationBudgets) => Promise<T>,
-  cleanup: (
-    children: Pick<MembersPreparationBudgets, 'rollback' | 'cleanup'>,
-    outcome: Readonly<{ ok: true } | { ok: false; error: unknown }>,
-  ) => Promise<void>,
-): Promise<Readonly<{ value: T; work: WorkReceipt }>> {
-  // In particular, a caller cannot supply a cheaper History registration/readback declaration here.
-  // The total describes required funding; only the already existing parent can authorize the transfer.
-  const declared = declareMembersPreparationParent(owners);
-  const funded = transferMembersPreparationBudget(parent, preparationKey, declared.children);
-  let outcome: { ok: true; value: T } | { ok: false; error: unknown };
-  try {
-    outcome = { ok: true, value: await body(funded.children) };
-  } catch (error) {
-    outcome = { ok: false, error };
-  }
-  const failures: unknown[] = outcome.ok ? [] : [outcome.error];
-  try {
-    await cleanup(
-      Object.freeze({ rollback: funded.children.rollback, cleanup: funded.children.cleanup }),
-      Object.freeze(outcome.ok ? { ok: true as const } : { ok: false as const, error: outcome.error }),
-    );
-  } catch (error) {
-    failures.push(error);
-  }
-  // Close every child only after cleanup settles; dispatched failed prefixes remain on the parent.
-  // If a callback leaves work in flight, finish refuses and the original allocation stays held.
-  let work: WorkReceipt | undefined;
-  try {
-    work = funded.finish();
-  } catch (error) {
-    failures.push(error);
-  }
-  if (failures.length) {
-    const error = failures.length === 1 ? failures[0] : new AggregateError(failures, 'Members preparation failed');
-    if (error instanceof Error && Object.isExtensible(error)) {
-      const descriptor = Object.getOwnPropertyDescriptor(error, 'work');
-      if (!descriptor || descriptor.configurable)
-        Object.defineProperty(error, 'work', { get: () => parent.receipt(), configurable: true });
-    }
-    throw error;
-  }
-  if (!outcome.ok || !work) throw new TypeError('Members preparation did not settle');
-  return Object.freeze({ value: outcome.value, work });
-}

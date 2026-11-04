@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { currentOperationalResources, type OperationalTransaction } from '../command/operational.ts';
 import { partitionOf } from '../route/route.ts';
-import { SELECTED_COST, type SelectedCost } from '../work/selected-runtime-cost.ts';
 import {
   assertSelectedOperationalTransaction,
   selectedLocalQuery,
@@ -96,13 +95,7 @@ const SQL = Object.freeze({
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 });
 
-async function original(
-  tx: OperationalTransaction,
-  identity: SelectedIdentity,
-  locator: SelectedLocator,
-  charge: (cost: SelectedCost) => void,
-) {
-  charge(SELECTED_COST.original);
+async function original(tx: OperationalTransaction, identity: SelectedIdentity, locator: SelectedLocator) {
   const p = partitionOf(locator.route);
   const home = (await selectedLocalQuery(tx, identity, SQL.home, [p])).rows[0];
   const domain = (await selectedLocalQuery(tx, identity, SQL.domain)).rows[0];
@@ -160,7 +153,6 @@ async function original(
     )
       unavailable('selected-runtime-sdk-arguments-changed');
   } else {
-    charge(SELECTED_COST.continuation);
     const c = (await selectedLocalQuery(tx, identity, SQL.continuation, [p, identity.workflowID])).rows[0];
     if (
       !c ||
@@ -180,9 +172,7 @@ async function tuple(
   tx: OperationalTransaction,
   identity: SelectedIdentity,
   locator: SelectedLocator,
-  charge: (cost: SelectedCost) => void,
 ): Promise<Tuple> {
-  charge(SELECTED_COST.tuple);
   if (!(await selectedLocalQuery(tx, identity, SQL.present)).rows[0]?.present)
     unavailable('selected-runtime-commerce-native-episode-absent');
   const row = (
@@ -208,7 +198,6 @@ export async function associateSelectedEpisode(
   tx: OperationalTransaction,
   identity: SelectedIdentity,
   locator: SelectedLocator,
-  charge: (cost: SelectedCost) => void,
   fresh = true,
 ): Promise<SelectedEpisode> {
   assertSelectedOperationalTransaction(tx, identity);
@@ -219,13 +208,10 @@ export async function associateSelectedEpisode(
     resources.kind !== 'library.membersPreparation.step'
   )
     unavailable('selected-runtime-native-context-mismatch');
-  const { o, reservation } = await original(tx, identity, locator, charge);
-  charge(SELECTED_COST.association);
+  const { o, reservation } = await original(tx, identity, locator);
   const keys = [resources.partition, identity.workflowID, identity.functionID];
   const previous = !fresh ? (await selectedLocalQuery(tx, identity, SQL.association, keys)).rows[0] : undefined;
-  // Reconcile the real committed outcome before requiring a still-live native episode.
-  // A recovered invocation never obtains another foreign/Source allowance.
-  const native = previous?.result ? (previous.selected_tuple as Tuple) : await tuple(tx, identity, locator, charge);
+  const native = previous?.result ? (previous.selected_tuple as Tuple) : await tuple(tx, identity, locator);
   if (
     reservation!.canonicalBasis !== native.basis ||
     reservation!.basisDigest !== native.digest ||
@@ -281,18 +267,16 @@ export async function finishSelectedEpisode(
   episode: SelectedEpisode,
   phase: 'apply' | 'failure',
   body: (tx: OperationalTransaction) => Promise<SelectedOutcome>,
-  charge: (cost: SelectedCost) => void,
 ): Promise<SelectedOutcome> {
   assertSelectedOperationalTransaction(tx, identity);
   const bound = episodes.get(episode);
   if (!bound || bound.txIdentity !== identity) unavailable('selected-runtime-forged-or-escaped-episode');
   if (bound.result) return structuredClone(bound.result);
-  const { o } = await original(tx, identity, bound.locator, charge);
+  const { o } = await original(tx, identity, bound.locator);
   if (Buffer.from(o.request_digest).toString('hex') !== bound.originalDigest)
     unavailable('selected-runtime-original-changed');
-  const before = await tuple(tx, identity, bound.locator, charge);
+  const before = await tuple(tx, identity, bound.locator);
   if (!same(before, bound.tuple)) unavailable('selected-runtime-observed-version-or-generation-changed');
-  charge(SELECTED_COST.association);
   const keys = [partitionOf(bound.locator.route), identity.workflowID, identity.functionID];
   const stored = (await selectedLocalQuery(tx, identity, SQL.association, keys)).rows[0];
   if (!stored || !same(stored.selected_tuple, before) || stored.attempt_generation !== identity.attemptGeneration)
@@ -306,7 +290,7 @@ export async function finishSelectedEpisode(
   )
     throw new TypeError('Invalid selected native outcome');
   if (result.kind === 'complete') unavailable('selected-runtime-final-source-physical-authority-unavailable');
-  const after = await tuple(tx, identity, bound.locator, charge);
+  const after = await tuple(tx, identity, bound.locator);
   if (
     after.basis !== before.basis ||
     after.digest !== before.digest ||
@@ -321,7 +305,6 @@ export async function finishSelectedEpisode(
     unavailable('selected-runtime-native-transition-unobserved');
   if (result.continuation) {
     assertSelectedContinuation(tx, identity, result.continuation);
-    charge(SELECTED_COST.continuation);
     const l = bound.locator;
     if (
       result.kind !== 'continue' ||
@@ -358,7 +341,6 @@ export async function finishSelectedEpisode(
       s.creator_xid,
     ]);
   }
-  charge(SELECTED_COST.result);
   if (!(await selectedLocalQuery(tx, identity, SQL.result, [...keys, JSON.stringify(result)])).rows[0])
     unavailable('selected-runtime-result-raced');
   // No heap committed flag: only the actual durable row at replay/recovery establishes COMMIT.

@@ -1,8 +1,7 @@
-import type { OperationalWorkCost } from '../history/operational-work-budget.ts';
 import { OPERATIONAL_WORK_AXES } from '../history/operational-work-axes.ts';
 
 export const SELECTED_AXES = [...OPERATIONAL_WORK_AXES, 'engineRequests'] as const;
-export type SelectedCost = OperationalWorkCost & Readonly<{ engineRequests: number }>;
+export type SelectedCost = Readonly<Record<(typeof SELECTED_AXES)[number], number>>;
 /** Named fields, never positional conversion from a foreign declaration. */
 export const selectedCost = (rows: number, points: number, statements: number, bytes: number): SelectedCost =>
   Object.freeze({
@@ -26,7 +25,7 @@ export function sumSelectedCost(...parts: readonly SelectedCost[]): SelectedCost
 }
 const times = (n: number, part: SelectedCost) => sumSelectedCost(...Array.from({ length: n }, () => part));
 /** Literal complete LOCAL dispatch partitions. Child native SQL/Source prices are additional.
- * Full-key misses consume the same bound. No debit is undone by failure/rollback. */
+ * These are documented static bounds. Dispatch admits declared SQL and multiplicity, not a remaining ledger. */
 export const SELECTED_COST = Object.freeze({
   // Outer select + domain/status/fence/operation/input probes + attempt upsert + native return.
   // Upsert includes PK probe/insert/conflict-update; metadata projection and input <=8192.

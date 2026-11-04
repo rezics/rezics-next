@@ -69,8 +69,8 @@ type OrderedRequest = Parameters<OrderedSource['sourcePrefix']>[1] | Parameters<
 
 const nativeCost = (cost: Readonly<WorkDimensions>) => ({ ...cost, engineRequests: 0 });
 /** Literal invocation-wide owned dispatch multiplicities. Native SQL performs no engine requests.
- * Source deliberately has no declaration: an inner allowance/receipt is not a complete child quote.
- * The runtime refuses that reached branch before dispatch, while permitting a real native failure result.
+ * Source remains undeclared until its complete child bound is supplied; the runtime refuses that
+ * reached branch before dispatch, while permitting a real native failure result.
  */
 export const MEMBERS_SELECTED_CHILDREN: SelectedChildren = {
   native: [
@@ -494,8 +494,8 @@ export async function runMembersPreparationStep(
     return await invocation.apply(episode, (tx) => applyPreparationAdvance(tx, locator, source));
   } catch (error) {
     if (error instanceof LifecycleDeniedError) throw error;
-    // This is the producer's separately held reached-failure phase on the SAME balance/deadline.
-    // Unknown Source pricing refuses before dispatch and can still record an honest native failure.
+    // This is the producer's separately held reached-failure phase on the SAME deadline.
+    // Unknown Source SQL refuses before dispatch and can still record an honest native failure.
     return invocation.failure(episode, async (tx) => {
       const state = await readPreparationStep(tx, locator);
       if (!state) throw error;

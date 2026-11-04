@@ -140,7 +140,7 @@ current measured exits, screenshots, visual defects, growth passes or promotion 
 
 The owned Members consumer uses the installed selected-runtime interface, not a retained request transfer.
 Selection releases before a new live Source transaction, while apply/failure stay on the selected original's
-unchanged deadline and balance. Native header lookup coordinates point to the exact committed selected result;
+unchanged deadline. Native header lookup coordinates point to the exact committed selected result;
 the reader also revalidates current original, Source/Scope, owner and disclosure. A header complete flag, SDK success
 or exhausted raw prefix cannot establish readiness. Bounded generation repair uses an explicit repair checkpoint,
 child-first pages of at most 100 results and one new native version per continuation.
@@ -148,9 +148,8 @@ Completed headers missing original provenance return unavailable rather than pol
 the failed outcome instead of being classified as missing dependencies.
 
 Approved C3 assigns 16 statements to the Members body, with constant History registration (464), receiving/readback
-(429), Core/Access, transfers, executor controls, retries and cleanup prepaid by one finite parent before first I/O.
-Production Source and native authority declarations remain absent, so unbound runtime admission retains the pre-episode
-`whole-members-reservation-cost-unavailable` refusal. The released Source body remains gated by the missing complete Source
+(429), Core/Access, transfers, executor controls, retries and cleanup as a documented static equation. Runtime
+admission opens History from those bounds without a NativeCollectionWork parent. The released Source body remains gated by the missing complete Source
 child declaration (`selected-runtime-source-declaration-unavailable`); final completion separately lacks the
 producer's current Source and physical authority (`selected-runtime-final-source-physical-authority-unavailable`).
 The selected producer's local prices and Search's inner receipts do not fund or price those whole calls.

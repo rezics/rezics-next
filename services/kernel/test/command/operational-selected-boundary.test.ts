@@ -55,16 +55,12 @@ test('Copied phase, structural WorkClient and matching names cannot create a nat
 test('History association has no public structural identity or synthetic transaction route', async () => {
   expect(() => assertSelectedOperationalTransaction(tx, identity)).toThrow('forged-association');
   const locator = { route: 0xc100, ownerAccountId: owner, collectionId: newId(0xc100), episodeId: newId(0xc100) };
-  await expect(associateSelectedEpisode(tx, identity, locator, () => {})).rejects.toThrow('forged-association');
+  await expect(associateSelectedEpisode(tx, identity, locator)).rejects.toThrow('forged-association');
   await expect(
-    finishSelectedEpisode(
-      tx,
-      identity,
-      { result: null } as SelectedEpisode,
-      'apply',
-      async () => ({ kind: 'complete', version: '1' }),
-      () => {},
-    ),
+    finishSelectedEpisode(tx, identity, { result: null } as SelectedEpisode, 'apply', async () => ({
+      kind: 'complete',
+      version: '1',
+    })),
   ).rejects.toThrow('forged-association');
 });
 test('The finite local original reserves disjoint cleanup and rejects unknown or overflowing child prices', () => {

@@ -50,44 +50,45 @@ the respective owner document, not in this research report.
 
 ### 1. Runtime accounting has become multiple engines around the engine
 
-**Evidence.** `services/kernel/src/library/collection-source-work.ts` (948 lines) defines
-`NativeCollectionWork`, eight axes, balances, held amounts, reservations, dispatch and settlement.
-Its `reserve` begins at line 310 and its producer transfer starts around line 223.
-`services/kernel/src/history/operational-work-budget.ts` (386 lines) repeats cost arithmetic,
-phase prices, original ownership and prepaid child binding. Lines 205–220 reserve and settle
-`OPERATIONAL_WORK_LOCAL_DECLARATION`; `fundOperationalWorkChildren` at line 229 checks foreign
-children against prices and throws `operational-work-native-funding-unavailable`.
-`services/kernel/src/work/selected-runtime-cost.ts` defines another axis list, arithmetic and
-local/cleanup partitions. `services/kernel/src/work/selected-runtime.ts` (462 lines) maintains
-separate remaining and cleanup balances, debits them at line 124, and refuses with
-`selected-runtime-admission-exhausted`. Lines 348–385 construct the balance and prepaid lifecycle.
-These are executable dispatch requirements, not just documented static ceilings.
+**Source consolidation (this continuation).** The selected Members → History → Work path no
+longer uses remaining-balance debit as dispatch authority. History `openOperationalWorkOriginal`
+is identity, Pool, deadline and optional WorkClient; transfers are one-shot post-COMMIT tokens;
+`OPERATIONAL_WORK_ATTEMPT_BOUND` is 3. Work admits declared SQL and multiplicity 1–64 and
+refuses unknown SQL, exhausted multiplicity, unpriced SDK dispatch and invalid declarations.
+Members `runtime: true` and `runMembersPreparationRequest` open History from documented static
+bounds. `NativeCollectionWork` remains the Library SQL observer for identity, catalogue, Search
+and publication. Native acceptance of this journey is still unmeasured; compiler and focused
+source tests do not certify native product outcomes.
+
+**Evidence (pre-consolidation source).** `services/kernel/src/library/collection-source-work.ts`
+defines `NativeCollectionWork`, eight axes, balances, held amounts, reservations, dispatch and
+settlement. `services/kernel/src/history/operational-work-budget.ts` previously repeated cost
+arithmetic, phase prices, original ownership and prepaid child binding, including
+`fundOperationalWorkChildren` and `operational-work-native-funding-unavailable`.
+`services/kernel/src/work/selected-runtime-cost.ts` defines axis list, arithmetic and
+local/cleanup partitions as documented constants. `services/kernel/src/work/selected-runtime.ts`
+previously maintained remaining and cleanup balances and refused with
+`selected-runtime-admission-exhausted`. Follow current-dev signatures; the line numbers in the
+original audit are stale.
 
 **Boundary and impact.** Architecture says: “Do not build runtime price protocols between
 owners” and explicitly excludes “prepaid funding” and “no-refill ledgers”. It requires the
-producer's documented static bound instead. History imports `NativeCollectionWork` from Library;
-Work imports History cost types. General execution infrastructure therefore depends on a
-feature's accounting engine. A changed SQL footprint can require updating multiple prices and
-phase transfers before otherwise bounded useful work can run. The explicit refusal paths are
-observable code behavior; this audit does not establish how frequently users encounter them.
+producer's documented static bound instead. The selected path no longer imports
+`NativeCollectionWork` through History into Work. Broader identity, catalogue, Search and
+publication callers still use the Library observer. A changed SQL footprint still requires
+updating documented static constants. Native user-visible frequency of the old refusal paths
+was not measured.
 
 **History.** `ac4f601137` adopted the static-ceiling rule. `0c6de27f1b` deliberately bound
 Members History phases to original child funding. `1d7117153f` and `c9935f3a05` are later
-squash entries around this area; their subjects alone do not explain intent. This is deliberate
-local machinery inconsistent with the current architectural direction, not an accidental duplicate
-class that can simply be replaced by one more shared ledger.
+squash entries around this area; their subjects alone do not explain intent.
 
-**Single owner and consolidation.** Work owns execution identity, deadlines, durable steps and
-replay. Library and History keep native source/partition/disclosure guards. Performance owns
-static cost derivation and growth proof. Remove accounting-based dispatch authority from the
-selected Members/History path; do not replace three ledgers with a fourth. Preserve native SDK
-execution identity, transaction ownership, bounded SQL, retry limits and cleanup. Keep exported
-static constants where composition needs a bound.
+**Single owner.** Work owns execution identity, deadlines, durable steps and replay. Library and
+History keep native source/partition/disclosure guards. Performance owns static cost derivation
+and growth proof. Do not replace remaining still-live ledgers with a fourth accounting runtime.
 
-**Estimate.** 2,400–3,000 changed lines across the named files, their connected Members/source
-callers and focused tests; approximately 700–1,100 accounting lines removable in that slice.
-Broader accounting callers require later bounded migrations, not a global deletion.
-Continuation: `.temp/continuation/static-members-history.md`; owning Goals: Performance for
+**Estimate.** 2,400–3,000 changed lines was the consolidation envelope. Broader accounting
+callers require later bounded migrations, not a global deletion. Owning Goals: Performance for
 cost design, Commerce for Library caller, Accounts for History/Work infrastructure.
 
 ### 2. Browser reader lifetime mechanisms repeatedly observe the same session

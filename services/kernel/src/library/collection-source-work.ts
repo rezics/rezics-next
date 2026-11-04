@@ -67,7 +67,9 @@ export function withNativeCollectionWorkAllowance<T>(
   });
 }
 
-/** Private accounting only. SQL/API owners supply the proved footprint before dispatch. */
+/** Compatibility SQL observer for identity, catalogue, Search and publication callers.
+ * The Members → History → Work selected path uses documented static bounds and does not
+ * buy dispatch from this ledger. */
 export class NativeCollectionWork {
   private readonly used = zero();
   private readonly held = zero();
