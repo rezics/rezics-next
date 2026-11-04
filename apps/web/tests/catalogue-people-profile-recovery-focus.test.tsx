@@ -81,6 +81,7 @@ test('People correction focus stays current and profile creation keeps authority
           >
             <PeopleProfileEditor
               {...(id ? { id } : {})}
+              {...(!id ? { work: selectedFixture.work.subject.id } : {})}
               locale="en"
               session="signed-in"
               transport={selectedTransport}
