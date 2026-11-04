@@ -1,4 +1,4 @@
-import { securityEnvelope, currentSecuritySession } from './security-page-fixture';
+import { securityEnvelope, currentSecuritySession, signInPage } from './security-page-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
@@ -46,6 +46,8 @@ const fake = Bun.serve({
     };
 
     if (url.pathname === '/authorize') return new Response('resumed', { headers });
+    if (url.pathname === '/signin/page' && request.method === 'POST')
+      return json(signInPage(JSON.parse(body).query, url.origin, { kind: 'signed-out' }));
     if (url.pathname === '/security-page')
       return json(securityEnvelope(accountId, [currentSecuritySession()], passkeys));
     if (url.pathname === '/session') return json({ account_id: accountId });
@@ -82,7 +84,7 @@ const fake = Bun.serve({
     }
     if (url.pathname === '/passkeys/remove') {
       passkeys = passkeys.filter((passkey) => passkey.id !== JSON.parse(body).id);
-      return json({});
+      return json({ success: true });
     }
     return new Response('Not Found', { status: 404, headers });
   },
@@ -217,7 +219,7 @@ function authRequests(since = 0): string[] {
 }
 
 test(
-  'a passkey sign-in makes two Auth requests however many passkeys the person has',
+  'a passkey sign-in reads native advice and sends two commands however many passkeys the person has',
   async () => {
     for (const count of scales) {
       seed(count);
@@ -227,7 +229,7 @@ test(
           page.waitForURL((url) => url.pathname === '/authorize'),
           page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click(),
         ]);
-        expect(authRequests(), `${count} passkeys`).toEqual(['POST /signin/passkey/options', 'POST /signin/passkey']);
+        expect(authRequests(), `${count} passkeys`).toEqual(['POST /signin/page', 'POST /signin/passkey/options', 'POST /signin/passkey']);
       } finally {
         await page.context().close();
       }
@@ -261,7 +263,7 @@ test(
 );
 
 test(
-  'listing passkeys is one read however many passkeys the person has',
+  'the Security page uses four bounded reads however many passkeys the person has',
   async () => {
     for (const count of scales) {
       seed(count);
@@ -275,7 +277,7 @@ test(
         expect(await page.getByRole('list', { name: 'Passkeys', exact: true }).getByRole('listitem').count()).toBe(
           count,
         );
-        expect(authRequests().sort(), `${count} passkeys`).toEqual(['GET /security-page']);
+        expect(authRequests().sort(), `${count} passkeys`).toEqual(['GET /clients', 'GET /consents', 'GET /security-page', 'POST /account-identity']);
       } finally {
         await page.context().close();
       }
@@ -301,7 +303,8 @@ test(
           page.waitForResponse((response) => new URL(response.url()).pathname === '/passkeys/register'),
           page.getByRole('button', { name: 'Add a passkey', exact: true }).click(),
         ]);
-        await page.getByRole('list', { name: 'Passkeys', exact: true }).getByRole('listitem').nth(count).waitFor();
+        await page.getByRole('list', { name: 'Passkeys', exact: true }).getByRole('listitem').nth(count)
+          .getByRole('button').and(page.locator(':enabled')).waitFor();
         expect(authRequests(before), `${count} passkeys`).toEqual([
           'POST /passkeys/register/options',
           'POST /passkeys/register',
@@ -326,11 +329,8 @@ test(
         const rows = page.getByRole('list', { name: 'Passkeys', exact: true }).getByRole('listitem');
         await rows.nth(count - 1).waitFor();
         const before = calls.length;
-        await Promise.all([
-          page.waitForResponse((response) => new URL(response.url()).pathname === '/passkeys/remove'),
-          rows.first().getByRole('button').click(),
-        ]);
-        await page.getByRole('status').waitFor();
+        await rows.first().getByRole('button').click();
+        await page.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
         expect(authRequests(before), `${count} passkeys`).toEqual(['GET /session', 'POST /passkeys/remove']);
       } finally {
         await page.context().close();

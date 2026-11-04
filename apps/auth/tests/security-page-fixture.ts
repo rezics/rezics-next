@@ -1,3 +1,4 @@
+export { signInPage } from '../../../services/auth/src/signin-page';
 import type {
   SecurityPageEnvelope,
   SecurityPageSession,
