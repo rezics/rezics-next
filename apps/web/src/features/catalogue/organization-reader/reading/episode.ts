@@ -7,7 +7,12 @@ const noSubscribe = () => () => {};
 const anonymousSnapshot = () => 'unobserved';
 
 /** Local ownership of one Organization region, using the installed browser observation store. */
-export function useOrganizationEpisode(source: object, descriptor: string, viewer: string | null) {
+export function useOrganizationEpisode(
+  source: object,
+  descriptor: string,
+  viewer: string | null,
+  cacheSource: object = source,
+) {
   const client = useContext(QueryClientContext);
   const store = client ? browserObservation(client) : undefined;
   const session = useSyncExternalStore(
@@ -23,13 +28,25 @@ export function useOrganizationEpisode(source: object, descriptor: string, viewe
     };
     return JSON.stringify([
       stamp(['session']),
+      client
+        .getQueryCache()
+        .findAll({
+          predicate: (query) => {
+            const data: unknown = query.state.data;
+            return (
+              data === cacheSource ||
+              (typeof data === 'object' && data !== null && 'page' in data && data.page === cacheSource)
+            );
+          },
+        })
+        .map((query) => [query.queryHash, stamp(query.queryKey)]),
       stamp(['exposure', 'viewer']),
       client
         .getQueryCache()
         .findAll({ queryKey: ['exposure', 'viewer'] })
         .map((query) => [query.queryHash, stamp(query.queryKey)]),
     ]);
-  }, [client, session]);
+  }, [client, session, cacheSource]);
   const cache = useSyncExternalStore(store?.subscribeCache ?? noSubscribe, cacheSnapshot, cacheSnapshot);
   const ready =
     !client || viewer === null || (session?.state === 'signed-in' && session.observation.subject === viewer);

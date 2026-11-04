@@ -140,6 +140,14 @@ test('composition documents stay together; exact inspection closes to its opener
     expect(host.textContent).not.toContain('Mira directs independent films.');
     await click(m.organization_reader_return());
     expect(window.document.activeElement).toBe(host.querySelector('h2'));
+    const boundSource = {};
+    const cached = { kind: 'page', page: boundSource };
+    client.setQueryData(['subject-page-fixture'], cached);
+    await show(boundSource);
+    expect(host.textContent).toContain('Mira directs independent films.');
+    await click(m.organization_reader_inspect());
+    await act(async () => client.setQueryData(['subject-page-fixture'], cached));
+    expect(host.textContent).not.toContain('Mira directs independent films.');
     await act(async () => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
     expect(host.textContent).toContain(m.organization_reader_unavailable());
     expect(host.querySelectorAll('button')).toHaveLength(0);
