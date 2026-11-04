@@ -35,15 +35,20 @@ function FilteredInventory({
   missing?: boolean;
   empty?: boolean;
 }) {
+  const kind = empty ? null : missing ? 'lost-kind' : 'print';
+  const status = empty ? null : 'shelf';
+  const query = new URLSearchParams();
+  if (kind) query.set('kind', kind);
+  if (status) query.set('status', status);
   return (
-    <PatternStory visitor="Signed In" path={`${pagePaths['library-copies']}?kind=print&status=shelf`}>
+    <PatternStory visitor="Signed In" path={`${pagePaths['library-copies']}${query.size ? `?${query}` : ''}`}>
       <div className="min-w-0 p-4">
         <CopiesPage
           page={{
             signedIn: true,
             subjectId: null,
-            kind: empty ? null : missing ? 'lost-kind' : 'print',
-            status: empty ? null : 'shelf',
+            kind,
+            status,
             copies: [],
             next: null,
             addKey: 'story-only',
