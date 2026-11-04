@@ -68,6 +68,9 @@ test('shared whole-response admission retains every supplied language, spelling 
   expect(filterPeopleNames(names.groups, 'Mel')).toHaveLength(0);
   expect(filterPeopleNames(names.groups, '名･ja')[0]?.names).toHaveLength(1);
   expect(supportsWorkNames(subject.type)).toBe(false);
+  expect(peopleNames({ ...subject, labels: { ja: '本来の名前' } }, 'en')).toMatchObject({
+    selected: { text: '本来の名前', lang: 'ja' },
+  });
   expect(peopleNames({ ...subject, labels: {}, aliases: {} }, 'en')).toMatchObject({ state: 'ready', groups: [] });
   expect(peopleNames({ ...subject, aliases: { en: 'bad container' } } as unknown as Subject, 'en').state).toBe(
     'malformed',
@@ -206,6 +209,9 @@ test('mounted signed-out search, overflow, exact copying, advice retry and A-B-A
     await draw();
     expect(reads).toBe(0);
     expect(host.textContent).toContain('signed out');
+    expect(host.querySelector('details')?.open).toBe(false);
+    host.querySelector('details')!.open = true;
+    host.querySelector<HTMLDetailsElement>('[data-name-language]')!.open = true;
     expect(host.querySelectorAll('[data-name-language]')).toHaveLength(8);
     expect(host.querySelectorAll('[data-supplied-name]').length).toBeLessThanOrEqual(8 * 24);
     expect(host.querySelector('a')?.getAttribute('href')).toContain('/terms?realm=');
