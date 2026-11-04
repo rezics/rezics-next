@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { PROFILE_FORMAT, type PageDocument, type PresentationProfile } from '@rezics/composition';
+import { PROFILE_FORMAT, type PresentationProfile } from '@rezics/composition';
 import { releaseDigest } from '@rezics/definitions';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bundledSources } from '../../../../packages/definitions/src/bundled.ts';
@@ -23,17 +23,20 @@ const editor = '019a1b2c-3d4e-7f00-8a00-ed170e000266';
 const routeKey = new Uint8Array(32).fill(116);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(117)]]) };
 const actions = ['subject:create', 'subject:read', 'statement:propose', 'presentation:read'];
-const document: PageDocument = {
-  root: { props: {} },
-  content: [
-    { type: 'SubjectHeader', props: { id: 'header' } },
-    { type: 'Statements', props: { id: 'file-facts', properties: ['wdt:P4092', 'wdt:P3575', 'rezics:codec'] } },
-    { type: 'RelationGroups', props: { id: 'episodes', property: 'schema:encodesCreativeWork', limit: 20 } },
-  ],
-};
 const profile: PresentationProfile = {
   format: PROFILE_FORMAT,
-  generic: { views: { overview: document } },
+  generic: {
+    views: {
+      overview: {
+        root: { props: {} },
+        content: [
+          { type: 'SubjectHeader', props: { id: 'header' } },
+          { type: 'Statements', props: { id: 'file-facts', properties: ['wdt:P4092', 'wdt:P3575', 'rezics:codec'] } },
+          { type: 'RelationGroups', props: { id: 'episodes', property: 'schema:encodesCreativeWork', limit: 20 } },
+        ],
+      },
+    },
+  },
   bases: [],
   types: [],
   routes: [],
