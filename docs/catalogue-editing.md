@@ -139,9 +139,22 @@ Unknown delivery retries the identical labels, settings ID and key. A known crea
 and later failures retry only that read. Captured historical labels resolve against that Context's immutable
 release; a later activation does not mutate existing defaults. Subject comparison uses the existing context-review
 route and native inherited/suppressed/replaced/unresolved outcomes, including a suppress default's no-value
-result. Candidate accept/adopt remain independent. Decision: live review stays on the create form with one Create
-action; a pre-submit active-release reread requires another Create only when the selected policy's id and defaults
-change.
+result. Explicit Context curation reads the chosen Context and separate Global Subject readings, then uses one
+bounded viewer-action batch for the exact Context and Subject. The Context action resource independently projects
+candidate decision and adoption availability; a failed action read stays unavailable, keeps comparison readable and
+offers a reload. Commands reauthorize and retain the exact candidate, slot, Context and head. Acceptance does not
+select a candidate, and Context selection does not change Global. Decision: live review stays on the create form with
+one Create action; a pre-submit active-release reread requires another Create only when the selected policy's id and
+defaults change.
+
+Decision: explicit Context decision and adoption controls use separate native operation pairs on the exact selected
+`semantic.context` viewerActions reference; action-read failure leaves comparison visible and write controls unavailable.
+
+### Compare and curate one explicit Context slot
+
+- Touches: one exact Context, its Subject reading, the separate Global reading, the current release, one 20-candidate page and one viewer-action batch for the Context and Subject.
+- Bound: retain the exact property/slot/candidate and existing session; do not enumerate Contexts or candidate/grant history, or hydrate actions per row.
+- Growth check: with the chosen Subject, slot and page fixed, unrelated Contexts, candidates and grants leave the two action references and bounded native reads fixed; existing Context, candidate and viewer-action growth suites own the indexed work bounds.
 
 ## Browser flow: subject contributions
 

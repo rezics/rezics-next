@@ -13,6 +13,7 @@ export type ContextScenario =
   | 'suppressed'
   | 'unresolved'
   | 'empty'
+  | 'concealed'
   | 'loading'
   | 'denied'
   | 'adopt-denied'
@@ -87,6 +88,25 @@ export function contextFixture(scenario: ContextScenario = 'inherited', locale =
       if (scenario === 'loading') return new Promise<Response>(() => {});
       return scenario === 'unavailable' ? json({ code: 'overloaded' }, 503) : json({ context });
     }
+    if (request.method === 'POST' && url.pathname === '/v1/viewerActions') {
+      const references = body?.resources as { type: string; id: string }[] | undefined;
+      return json({
+        resources: (references ?? []).map(({ type, id }) =>
+          type === 'semantic.context' && id === context.id
+            ? {
+                type,
+                id,
+                viewerActions: [
+                  { action: 'context:accept', operations: ['subject.accept_candidate', 'subject.reject_candidate'] },
+                  { action: 'context:adopt', operations: ['subject.adopt'] },
+                ],
+              }
+            : type === 'semantic.subject' && id === base.id
+              ? { type, id, viewerActions: [] }
+              : { type, id, error: 'not_found' },
+        ),
+      });
+    }
     if (
       request.method === 'GET' &&
       url.pathname === `/v1/subjects/${base.id}` &&
@@ -95,7 +115,12 @@ export function contextFixture(scenario: ContextScenario = 'inherited', locale =
       return json(reading);
     if (request.method === 'GET' && url.pathname === `/v1/subjects/${base.id}/candidates`)
       return json({
-        candidates: scenario === 'empty' ? [] : [candidate],
+        candidates:
+          scenario === 'empty'
+            ? []
+            : scenario === 'concealed'
+              ? [{ id: candidate.id, deleted: true } as unknown as CandidatePage['candidates'][number]]
+              : [candidate],
         adoption,
         next: null,
       } satisfies CandidatePage);

@@ -138,9 +138,12 @@ function CandidateReviewLive({
   const selectionAvailability = current?.actions
     ? nativeOperationAvailability(current.actions.context, 'context:adopt', 'subject.adopt')
     : undefined;
+  const subjectActionUnavailable =
+    !!context && !!current && (!current.actions || current.actions.subject.state !== 'available');
+  const actionObservationRequired = requireActionObservation || !!context;
   const actionReadUnavailable = [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
     (availability) => availability === 'unavailable',
-  );
+  ) || subjectActionUnavailable;
   const actionDenied = [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
     (availability) => availability === 'denied',
   );
@@ -157,9 +160,12 @@ function CandidateReviewLive({
     return nativeOperationAvailability(current?.actions?.context, action, operationId) === 'allowed';
   };
   const actionProjectionUnavailable =
-    requireActionObservation &&
+    actionObservationRequired &&
     (actionFailure === 'unavailable' ||
-      (!!current && (!current.actions || current.actions.context.state !== 'available')));
+      (!!current &&
+        (!current.actions ||
+          current.actions.context.state !== 'available' ||
+          (context && current.actions.subject.state !== 'available'))));
   const publicRead = context
     ? (result?.contextReview?.reading ?? current?.contextReview?.reading)
     : result
@@ -332,7 +338,8 @@ function CandidateReviewLive({
       running.current ||
       requiresReload ||
       (confirmation === 'adopt' ? !valid : !candidate) ||
-      (requireActionObservation && selectedAvailability !== 'allowed') ||
+      (actionObservationRequired &&
+        (selectedAvailability !== 'allowed' || subjectActionUnavailable)) ||
       (selectedAvailability !== undefined && selectedAvailability !== 'allowed')
     )
       return;
@@ -341,7 +348,7 @@ function CandidateReviewLive({
     setFailure(undefined);
     try {
       let prepared = current;
-      if (requireActionObservation && !request.current) {
+      if (actionObservationRequired && !request.current) {
         const latest = await transport.read(property, undefined, session.current, work);
         if (!work.live()) return;
         if (!latest.ok) {
@@ -376,8 +383,10 @@ function CandidateReviewLive({
               ? 'subject.accept_candidate'
               : 'subject.reject_candidate',
         );
-        if (latestAvailability !== 'allowed') {
-          const unavailable = latestAvailability === 'unavailable';
+        const latestSubjectUnavailable =
+          !!context && (!latest.actions || latest.actions.subject.state !== 'available');
+        if (latestSubjectUnavailable || latestAvailability !== 'allowed') {
+          const unavailable = latestSubjectUnavailable || latestAvailability === 'unavailable';
           setActionFailure(unavailable ? 'unavailable' : 'denied');
           restoreConfirmationFocus.current = true;
           setConfirmation(null);
@@ -549,13 +558,13 @@ function CandidateReviewLive({
           </Link>
         )}
         {returnUnavailable && <p role="status">{m.candidate_unavailable({}, options)}</p>}
-        {!requireActionObservation && current?.actions && actionReadUnavailable && (
+        {!actionObservationRequired && current?.actions && actionReadUnavailable && (
           <p role="status">{m.candidate_actions_unavailable({}, options)}</p>
         )}
-        {!requireActionObservation && current?.actions && !actionReadUnavailable && actionDenied && (
+        {!actionObservationRequired && current?.actions && !actionReadUnavailable && actionDenied && (
           <p role="status">{m.candidate_denied({}, options)}</p>
         )}
-        {requireActionObservation && current && !actionProjectionUnavailable && !actionFailure && actionDenied && (
+        {actionObservationRequired && current && !actionProjectionUnavailable && !actionFailure && actionDenied && (
           <p role="status">{m.candidate_action_denied({}, options)}</p>
         )}
       </div>
@@ -799,6 +808,7 @@ function CandidateReviewLive({
                                 disabled={
                                   locked ||
                                   requiresReload ||
+                                  (!!context && (subjectActionUnavailable || acceptanceAvailability !== 'allowed')) ||
                                   acceptanceAvailability === 'denied' ||
                                   acceptanceAvailability === 'unavailable'
                                 }
@@ -816,6 +826,7 @@ function CandidateReviewLive({
                                 disabled={
                                   locked ||
                                   requiresReload ||
+                                  (!!context && (subjectActionUnavailable || rejectionAvailability !== 'allowed')) ||
                                   rejectionAvailability === 'denied' ||
                                   rejectionAvailability === 'unavailable'
                                 }
@@ -966,6 +977,7 @@ function CandidateReviewLive({
                               locked ||
                               requiresReload ||
                               !valid ||
+                              (!!context && (subjectActionUnavailable || selectionAvailability !== 'allowed')) ||
                               selectionAvailability === 'denied' ||
                               selectionAvailability === 'unavailable'
                             }
