@@ -39,7 +39,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: 1.0.1 is current, while release 1.0.0 bytes and its digest remain loadable for existing pins. Book
+is immutable: 1.0.2 is current, while release 1.0.0 and 1.0.1 bytes and their digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre. These ordered factual hints, media dimensions,
 source authority, membership, LibraryProfileSource and accepted profile pins retain their meaning. Hints convey
@@ -151,8 +151,8 @@ and pattern checks.
 A property may name at most 1,024 targets. Compilation allows at most 256 schema files.
 
 The launch grain is three types and twelve properties in one schema file. The bundled
-catalogue has 17 types, 68 properties and 12 schema files. One hundred such verticals
-add 300 types, 1,200 properties and 100 schema files: 317 types, 1,268 properties and
+catalogue has 25 types, 111 properties and 12 schema files. One hundred such verticals
+add 300 types, 1,200 properties and 100 schema files: 325 types, 1,311 properties and
 112 schema files, 874,688 canonical bytes. `foaf:focus` ranges over `Thing`, so its
 target is `schema:Thing`; a later type matches through its `bases`.
 `schema:exampleOfWork` ranges over `CreativeWork`, so its target stays

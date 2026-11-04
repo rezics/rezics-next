@@ -19,9 +19,32 @@ import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
+function withoutProducerAdmission() {
+  const closed = structuredClone(bundledRelease);
+  for (const id of ['wdt:P749', 'wdt:P1365', 'wdt:P1366'] as const) delete closed.properties[id];
+  const type = closed.types['schema:Organization'];
+  if (type) type.properties = type.properties.filter((id) => id !== 'wdt:P749' && id !== 'wdt:P1365' && id !== 'wdt:P1366');
+  return closed;
+}
+
 test('producer history binds admitted direction and inverse, keeps similar names distinct, and continues a bounded native page', async () => {
-  expect(producerHistoryStreams(bundledRelease, 'schema:Organization', 'en')).toEqual([]);
-  expect(producerHistoryUnreleased(bundledRelease, 'schema:Organization').map((item) => item.meaning)).toEqual([
+  expect(
+    producerHistoryStreams(bundledRelease, 'schema:Organization', 'en').map((stream) => [
+      stream.meaning,
+      stream.direction,
+      stream.property,
+    ]),
+  ).toEqual([
+    ['parent', 'forward', 'wdt:P749'],
+    ['subsidiary', 'inverse', 'wdt:P749'],
+    ['predecessor', 'forward', 'wdt:P1365'],
+    ['successor', 'inverse', 'wdt:P1365'],
+    ['successor', 'forward', 'wdt:P1366'],
+    ['predecessor', 'inverse', 'wdt:P1366'],
+  ]);
+  expect(producerHistoryUnreleased(bundledRelease, 'schema:Organization')).toEqual([]);
+  expect(producerHistoryStreams(withoutProducerAdmission(), 'schema:Organization', 'en')).toEqual([]);
+  expect(producerHistoryUnreleased(withoutProducerAdmission(), 'schema:Organization').map((item) => item.meaning)).toEqual([
     'parent',
     'predecessor',
     'successor',
@@ -141,7 +164,7 @@ test('producer history page names unreleased fields, similar organizations, cont
           ok: true,
           public: closed.studio,
           streams: [],
-          unreleased: producerHistoryUnreleased(bundledRelease, 'schema:Organization'),
+          unreleased: producerHistoryUnreleased(withoutProducerAdmission(), 'schema:Organization'),
           rows: [],
           labels: {},
           next: null,

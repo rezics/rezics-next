@@ -26,6 +26,11 @@ properties:
   schema:dateModified: 'última actualización'
   schema:inLanguage: 'idioma'
   schema:abstract: 'resumen'
+  wdt:P106: ocupación
+  schema:knowsLanguage: idioma conocido
+  wdt:P749: organización matriz
+  wdt:P1365: reemplaza
+  wdt:P1366: reemplazado por
   schema:image: 'imagen'
   wdt:P648: 'identificador Open Library'
   wdt:P5732: 'identificador de tema de Bangumi'
@@ -80,6 +85,9 @@ inverseProperties:
   rezics:summaryOf: 'Versiones resumidas'
   rezics:sideStoryOf: 'Historias paralelas'
   rezics:bangumiRelatedTo: 'Vinculado desde (Bangumi)'
+  wdt:P749: filiales
+  wdt:P1365: reemplazado por
+  wdt:P1366: reemplaza
 typeDescriptions:
   wd:Q2095: 'Un alimento o sustancia comestible, como la harina; la receta describe cómo prepararlo.'
   wd:Q2620972: 'Un tramo narrativo con nombre y orden dentro de una obra, delimitado por números de episodios o capítulos.'
@@ -108,6 +116,11 @@ propertyDescriptions:
   schema:dateModified: 'La fecha de la última actualización del registro de origen, no la publicación de la obra.'
   schema:inLanguage: 'El código de idioma del recurso, como en o ja, independiente del idioma de la interfaz.'
   schema:abstract: 'Un documento de resumen redactado, normalmente uno por idioma; acepta un valor de documento y no texto simple.'
+  wdt:P106: 'Un concepto que nombra la ocupación de esta persona, como director o escritor; los créditos de las obras no aportan este hecho.'
+  schema:knowsLanguage: 'Un idioma que esta persona conoce, registrado como un concepto admitido; no es competencia oral ni el idioma de una obra acreditada.'
+  wdt:P749: 'La organización matriz de este productor. La declaración se guarda en el hijo y puede llevar fechas de inicio y fin con citas.'
+  wdt:P1365: 'La organización a la que este productor sustituye. El valor es el predecesor; un reemplazo dirigido, no un vecino cronológico genérico.'
+  wdt:P1366: 'La organización que sustituye a este productor. El valor es el sucesor, como dirección independiente de la declaración de predecesor.'
   schema:image: 'Un objeto multimedia subido que representa al sujeto; acepta un valor multimedia y no una URL de imagen externa.'
   wdt:P648: 'Un identificador de Open Library, como OL45804W, OL7353617M u OL23919A; no la URL de la página.'
   wdt:P5732: 'El identificador numérico de un título en Bangumi, por ejemplo 123; no un ID de persona o personaje.'

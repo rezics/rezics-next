@@ -26,6 +26,11 @@ properties:
   schema:dateModified: 最終更新日
   schema:inLanguage: 言語
   schema:abstract: アブストラクト
+  wdt:P106: 職業
+  schema:knowsLanguage: 使用言語
+  wdt:P749: 親組織
+  wdt:P1365: 前身
+  wdt:P1366: 後継
   schema:image: 画像
   wdt:P648: Open Library識別子
   wdt:P5732: 番組計画主題識別子
@@ -80,6 +85,9 @@ inverseProperties:
   rezics:summaryOf: '総集編'
   rezics:sideStoryOf: '外伝'
   rezics:bangumiRelatedTo: '関連元（Bangumi）'
+  wdt:P749: 子組織
+  wdt:P1365: 後継
+  wdt:P1366: 前身
 
 propertyDescriptions:
   rezics:penNameOf: 'この筆名または共同名義を使用する人物または組織。'
@@ -103,6 +111,11 @@ propertyDescriptions:
   schema:dateModified: '出典レコードが最後に更新された日付。作品の公表日とは別です。'
   schema:inLanguage: 'enやjaなど、リソースの言語コード。画面の表示言語とは区別します。'
   schema:abstract: '執筆された要約のドキュメント。通常は言語ごとに一つを用い、単なる文字列ではなくドキュメント値を指定します。'
+  wdt:P106: 'この人物の職業を示す概念。監督や作家など。作品クレジットはこの事実を供給しません。'
+  schema:knowsLanguage: 'この人物が知る言語を、採用済みの概念として記録します。会話能力でも、クレジットされた作品の言語でもありません。'
+  wdt:P749: 'この制作組織の親組織。文は子側に保存し、開始日・終了日と出典を付けられます。'
+  wdt:P1365: 'この制作組織が置き換える組織。値は前身です。単なる年代順の隣接点ではなく、方向のある交代です。'
+  wdt:P1366: 'この制作組織を置き換える組織。値は後継であり、前身の文とは独立した方向として保ちます。'
   schema:image: '対象を描いたアップロード済みのメディア。外部画像のURLではなくメディア値を指定します。'
   wdt:P648: 'OL45804W、OL7353617M、OL23919AなどのOpen Library識別子。ページのURLではありません。'
   wdt:P5732: '123など、Bangumiの作品を表す数字の識別子。人物やキャラクターのIDとは別です。'

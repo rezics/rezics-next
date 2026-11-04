@@ -26,6 +26,11 @@ properties:
   schema:dateModified: last update
   schema:inLanguage: language
   schema:abstract: abstract
+  wdt:P106: occupation
+  schema:knowsLanguage: known language
+  wdt:P749: parent organization
+  wdt:P1365: replaces
+  wdt:P1366: replaced by
   schema:image: image
   wdt:P648: Open Library ID
   wdt:P5732: Bangumi subject ID
@@ -80,6 +85,9 @@ inverseProperties:
   rezics:summaryOf: 'Summary versions'
   rezics:sideStoryOf: 'Side stories'
   rezics:bangumiRelatedTo: 'Related from (Bangumi)'
+  wdt:P749: subsidiaries
+  wdt:P1365: replaced by
+  wdt:P1366: replaces
 
 propertyDescriptions:
   rezics:penNameOf: 'The person or organization behind this pen name or collective name.'
@@ -103,6 +111,11 @@ propertyDescriptions:
   schema:dateModified: 'When the source record was last updated, rather than when the work was published.'
   schema:inLanguage: "The resource's language code, such as en or ja; keep it separate from the interface language."
   schema:abstract: 'An authored summary document, conventionally one per language; supply a document value rather than plain text.'
+  wdt:P106: "A Concept naming this person's occupation, such as director or writer; credits on works do not supply this fact."
+  schema:knowsLanguage: "A language this person knows, recorded as an admitted Concept; this is not spoken proficiency and not a credited work's language."
+  wdt:P749: 'The parent organization of this producer. The statement is stored on the child and may carry start and end dates with citations.'
+  wdt:P1365: 'The organization this producer replaces. The value is the predecessor; this is a directed replacement, not a generic chronological neighbor.'
+  wdt:P1366: 'The organization that replaces this producer. The value is the successor, kept as an independent direction from the predecessor statement.'
   schema:image: 'An uploaded media object depicting the subject; use a media value rather than an external image URL.'
   wdt:P648: 'An Open Library identifier, such as OL45804W, OL7353617M or OL23919A; use the identifier, not the page URL.'
   wdt:P5732: 'The numeric Bangumi subject identifier, for example 123; not a person or character ID.'

@@ -24,7 +24,8 @@ function fixture() {
     qualifiers: ['schema:startDate', 'schema:endDate'],
     relation: { group: 'credit', order: 'name', inverse: 'none' },
   };
-  release.types['schema:Organization']!.properties.push('wdt:P1365');
+  if (!release.types['schema:Organization']!.properties.includes('wdt:P1365'))
+    release.types['schema:Organization']!.properties.push('wdt:P1365');
   publicRead.subject.descriptions = { en: 'A historical studio', ja: '歴史ある制作会社' };
   publicRead.related[target] = {
     type: 'schema:Organization',

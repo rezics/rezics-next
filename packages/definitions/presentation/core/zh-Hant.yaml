@@ -26,6 +26,11 @@ properties:
   schema:dateModified: 最後更新
   schema:inLanguage: 語言
   schema:abstract: 摘要
+  wdt:P106: 職業
+  schema:knowsLanguage: 通曉語言
+  wdt:P749: 上級組織
+  wdt:P1365: 前身
+  wdt:P1366: 繼任者
   schema:image: 圖像
   wdt:P648: 開放圖書館識別碼
   wdt:P5732: Bangumi主題識別碼
@@ -80,6 +85,9 @@ inverseProperties:
   rezics:summaryOf: '總集篇'
   rezics:sideStoryOf: '番外篇'
   rezics:bangumiRelatedTo: '關聯來源（Bangumi）'
+  wdt:P749: 下屬組織
+  wdt:P1365: 繼任者
+  wdt:P1366: 前身
 
 propertyDescriptions:
   rezics:penNameOf: '使用此筆名或共同名義的個人或組織。'
@@ -103,6 +111,11 @@ propertyDescriptions:
   schema:dateModified: '來源紀錄最後更新的日期，與作品出版日期分開記錄。'
   schema:inLanguage: '資源使用的語言代碼，例如 en、ja，與介面語言分開。'
   schema:abstract: '撰寫的摘要文件，慣例上每種語言一份；接受文件值，而非一般字串。'
+  wdt:P106: '表示此人職業的概念，例如導演或作家；作品署名不能代替此一事實。'
+  schema:knowsLanguage: '此人通曉的語言，記為已採納的概念；既非口語能力，也非署名作品所用語言。'
+  wdt:P749: '此製作方的上級組織。陳述記在下級一側，可附起迄日期與出處。'
+  wdt:P1365: '此製作方所取代的組織。值為前身；這是有方向的更替，不是單純按時間相鄰的鄰居。'
+  wdt:P1366: '取代此製作方的組織。值為繼任者，作為與前身陳述相互獨立的方向保存。'
   schema:image: '描繪此對象的已上傳媒體物件；使用媒體值，而非外部圖片 URL。'
   wdt:P648: 'Open Library 識別碼，例如 OL45804W、OL7353617M 或 OL23919A；填入識別碼而非頁面 URL。'
   wdt:P5732: 'Bangumi 條目的數字識別碼，例如 123；與人物及角色識別碼分開。'

@@ -64,9 +64,21 @@ function statement(
   };
 }
 
+function withoutPeopleAdmission(release: Release): Release {
+  const closed = structuredClone(release);
+  delete closed.properties['wdt:P106'];
+  delete closed.properties['schema:knowsLanguage'];
+  const person = closed.types['schema:Person'];
+  if (person)
+    person.properties = person.properties.filter(
+      (id) => id !== 'schema:abstract' && id !== 'wdt:P106' && id !== 'schema:knowsLanguage',
+    );
+  return closed;
+}
+
 test('Person biography groups bind admitted multilingual documents, occupations and languages and keep unreleased fields named unsupported', async () => {
   const fixture = peopleProfileFixture('ready', 'en', 'person');
-  const closed = peopleBiographyGroups(fixture.release, 'schema:Person', 'en', fixture.person);
+  const closed = peopleBiographyGroups(withoutPeopleAdmission(fixture.release), 'schema:Person', 'en', fixture.person);
   expect(closed.map((group) => group.kind)).toEqual(['biography', 'occupations', 'languages', 'affiliations']);
   expect(
     closed
@@ -74,6 +86,27 @@ test('Person biography groups bind admitted multilingual documents, occupations 
       .flatMap((group) => group.fields)
       .every((field) => field.status === 'unsupported'),
   ).toBe(true);
+  const recorded = peopleBiographyGroups(fixture.release, 'schema:Person', 'en');
+  expect(recorded.find((group) => group.kind === 'biography')?.fields[0]).toMatchObject({
+    id: 'schema:abstract',
+    status: 'absent',
+    editor: 'authored',
+  });
+  expect(recorded.find((group) => group.kind === 'occupations')?.fields.find((field) => field.id === 'wdt:P106')).toMatchObject({
+    status: 'absent',
+    editor: 'item',
+    label: { text: 'occupation' },
+  });
+  expect(recorded.find((group) => group.kind === 'languages')?.fields[0]).toMatchObject({
+    id: 'schema:knowsLanguage',
+    status: 'absent',
+    editor: 'item',
+  });
+  expect(
+    peopleBiographyGroups(fixture.release, 'schema:Person', 'en', fixture.person, false)
+      .find((group) => group.kind === 'occupations')
+      ?.fields.find((field) => field.id === 'wdt:P106')?.status,
+  ).toBe('unreadable');
   expect(peopleScalarFields(fixture.release, 'schema:Person', 'en')).toContain('schema:url');
   expect(peopleBiographyHref(peoplePersonId, 'Mira Sato', 'en', 'schema:abstract')).toContain(
     '/authored?property=schema%3Aabstract',

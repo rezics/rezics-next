@@ -51,7 +51,9 @@ export function personReaderExample(state: 'admitted' | 'empty' | 'withheld' | '
   if (state !== 'unsupported') {
     release.properties['wdt:P106'] = item('Occupation');
     release.properties['schema:knowsLanguage'] = item('Working language');
-    release.types['schema:Person']!.properties.push('schema:abstract', 'wdt:P106', 'schema:knowsLanguage');
+    for (const id of ['schema:abstract', 'wdt:P106', 'schema:knowsLanguage'] as const)
+      if (!release.types['schema:Person']!.properties.includes(id))
+        release.types['schema:Person']!.properties.push(id);
     if (state !== 'empty') {
       const bio = statement('schema:abstract', { document, language: 'en', digest }, 'document');
       bio.id = biography;

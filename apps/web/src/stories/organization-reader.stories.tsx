@@ -15,7 +15,8 @@ function ReaderStory({ state }: { state: 'unconfigured' | 'history' | 'withheld'
     current.subject.descriptions = { en: 'An independent animation studio.', ja: '独立系アニメーション制作会社。' };
     // Illustrative admitted-release variation, not a claim of native configuration or a rendered pass.
     if (state !== 'unconfigured') {
-      release.types['schema:Organization']!.properties.push('wdt:P1365');
+      if (!release.types['schema:Organization']!.properties.includes('wdt:P1365'))
+        release.types['schema:Organization']!.properties.push('wdt:P1365');
       release.properties['wdt:P1365'] = {
         ...release.properties['rezics:penNameOf']!,
         labels: { en: 'Predecessor', ja: '前身' },
