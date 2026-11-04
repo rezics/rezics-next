@@ -105,9 +105,7 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
           </div>
           {state.write === 'sending' ? <p role="status">{m.settings_watches_stopping()}</p> : null}
           {state.write === 'removed' ? <p role="status">{m.settings_watches_removed()}</p> : null}
-          {state.write === 'removed_current' ? (
-            <p role="status">{m.settings_watches_removed_current()}</p>
-          ) : null}
+          {state.write === 'removed_current' ? <p role="status">{m.settings_watches_removed_current()}</p> : null}
           {state.write === 'rejected' || state.write === 'conflict' || state.write === 'denied' ? (
             <Alert variant="destructive">
               <AlertDescription
