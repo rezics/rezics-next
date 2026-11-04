@@ -685,7 +685,17 @@ export async function publishShowcase(input: {
           const parsed = new URL(uri);
           if (parsed.protocol !== 'https:') return true;
           const host = parsed.hostname.toLowerCase();
-          return record.provider === 'bangumi'
+          const exactVocabularySource =
+            record.kind === 'source-vocabulary' &&
+            input.vocabularyRequirements?.some(
+              (requirement) =>
+                requirement.provider === record.provider &&
+                requirement.sourceKey === record.sourceKey &&
+                requirement.sourceUri === uri,
+            );
+          return exactVocabularySource
+            ? false
+            : record.provider === 'bangumi'
             ? host !== 'bgm.tv' && host !== 'bangumi.tv' && host !== 'www.bgm.tv' && host !== 'www.bangumi.tv'
             : host !== 'vndb.org' && !host.endsWith('.vndb.org');
         } catch {

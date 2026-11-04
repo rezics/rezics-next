@@ -30,11 +30,24 @@ import {
 } from './bangumi-creator-credits.ts';
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
 import { createPublicBulkClient } from './public-bulk-client.ts';
-import { captureShowcaseCommands, publishShowcase, ShowcaseJournal } from './showcase-publication.ts';
+import {
+  captureShowcaseCommands,
+  publishShowcase,
+  ShowcaseJournal,
+  type ShowcasePublicationResult,
+} from './showcase-publication.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
+import {
+  combineBangumiCreditBindings,
+  currentBangumiCreatorCreditBindings,
+  prepareBangumiCreatorCreditBindings,
+  type BangumiCreditRoleBinding,
+  type BangumiCreditVocabularyResolution,
+} from './showcase-bangumi-credits.ts';
+import { showcaseLimits, type ShowcaseManifest } from './showcase-manifest.ts';
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -46,6 +59,8 @@ const patterns: Record<Franchise, RegExp> = {
 };
 export const crossMediaAliases = { bangumi: 'bangumi_cross_media', vndb: 'vndb_cross_media' } as const;
 const FAMILY_CAP = 256;
+const CREDIT_ASSOCIATIONS_PER_WORK = 64;
+const CREDIT_ASSOCIATIONS = 8192;
 const RELATION_CAP = 4096;
 
 /** Membership uses titles only, never synopsis mentions, credits or a shared actor. */
@@ -589,6 +604,12 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const selectedBangumiWorks = importedWorks;
   const admittedAppearanceIndices = new Set<number>();
   const appearanceCounts = new Map<number, number>();
+  const admittedStaffIndices = new Set<number>();
+  const admittedVoiceIndices = new Set<number>();
+  const staffCounts = new Map<number, number>();
+  const voiceCounts = new Map<number, number>();
+  const staffOverflow = new Set<number>();
+  const voiceOverflow = new Set<number>();
   let selectionIndex = 0;
   for await (const row of input.rows('bangumi', 'subject-characters')) {
     const sourceIndex = selectionIndex++;
@@ -605,15 +626,51 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     characters.add(characterId);
     admittedAppearanceIndices.add(sourceIndex);
   }
+  let staffIndex = 0;
   for await (const row of input.rows('bangumi', 'subject-persons')) {
-    if (!familyWorks.has(number(row, 'subject_id'))) continue;
+    const sourceIndex = staffIndex++;
+    const subjectId = number(row, 'subject_id');
+    if (!familyWorks.has(subjectId)) continue;
+    const count = (staffCounts.get(subjectId) ?? 0) + 1;
+    staffCounts.set(subjectId, count);
+    if (count > CREDIT_ASSOCIATIONS_PER_WORK || admittedStaffIndices.size >= CREDIT_ASSOCIATIONS) {
+      staffOverflow.add(subjectId);
+      continue;
+    }
+    admittedStaffIndices.add(sourceIndex);
     persons.add(number(row, 'person_id'));
   }
+  let voiceIndex = 0;
   for await (const row of input.rows('bangumi', 'person-characters')) {
-    if (!familyWorks.has(number(row, 'subject_id')) && !characters.has(number(row, 'character_id'))) continue;
+    const sourceIndex = voiceIndex++;
+    const subjectId = number(row, 'subject_id');
+    if (!familyWorks.has(subjectId)) continue;
+    const count = (voiceCounts.get(subjectId) ?? 0) + 1;
+    voiceCounts.set(subjectId, count);
+    if (count > CREDIT_ASSOCIATIONS_PER_WORK || admittedVoiceIndices.size >= CREDIT_ASSOCIATIONS) {
+      voiceOverflow.add(subjectId);
+      continue;
+    }
+    admittedVoiceIndices.add(sourceIndex);
     persons.add(number(row, 'person_id'));
     characters.add(number(row, 'character_id'));
   }
+  for (const subjectId of staffOverflow)
+    plan.gaps.push({
+      source: 'bangumi',
+      fields: ['person_id', 'position', 'subject_id'],
+      record: { subject_id: subjectId },
+      reason: 'Per-work subject-person credit limit exceeded',
+      property: 'schema:contributor',
+    });
+  for (const subjectId of voiceOverflow)
+    plan.gaps.push({
+      source: 'bangumi',
+      fields: ['character_id', 'person_id', 'subject_id'],
+      record: { subject_id: subjectId },
+      reason: 'Per-work person-character credit limit exceeded',
+      property: 'wdt:P725',
+    });
   let appearanceIndex = 0;
   for await (const row of input.rows('bangumi', 'subject-characters')) {
     const sourceIndex = appearanceIndex++;
@@ -652,7 +709,10 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
           }),
     });
   }
+  let currentStaffIndex = 0;
   for await (const row of input.rows('bangumi', 'subject-persons')) {
+    const sourceIndex = currentStaffIndex++;
+    if (!admittedStaffIndices.has(sourceIndex)) continue;
     if (!familyWorks.has(number(row, 'subject_id'))) continue;
     const work = String(number(row, 'subject_id'));
     const personId = number(row, 'person_id');
@@ -681,12 +741,16 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       workType: workType ?? 0,
       person,
       roleCode: row.position as number,
+      ...(row.creditedAs === undefined ? {} : { creditedAs: row.creditedAs as string }),
       path: `/subject-persons/${work}/${personId}/position`,
       record: row,
     });
   }
+  let currentVoiceIndex = 0;
   for await (const row of input.rows('bangumi', 'person-characters')) {
-    if (!familyWorks.has(number(row, 'subject_id')) && !characters.has(number(row, 'character_id'))) continue;
+    const sourceIndex = currentVoiceIndex++;
+    if (!admittedVoiceIndices.has(sourceIndex)) continue;
+    if (!familyWorks.has(number(row, 'subject_id'))) continue;
     const work = String(number(row, 'subject_id'));
     const personId = number(row, 'person_id');
     const characterId = number(row, 'character_id');
@@ -721,6 +785,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       workType: types.get(number(row, 'subject_id')) ?? 0,
       person,
       character,
+      ...(row.creditedAs === undefined ? {} : { creditedAs: row.creditedAs as string }),
       path: `/person-characters/${work}/${personId}/${characterId}`,
       record: row,
     });
@@ -1581,6 +1646,8 @@ export type CrossMediaSeedResult = {
   readings: CrossMediaReading[];
   gaps: CrossMediaGap[];
   creditGaps: BangumiCreatorCreditGap[];
+  creditRoles?: readonly BangumiCreditRoleBinding[];
+  creditVocabularyRequirements?: BangumiCreditVocabularyResolution['requirements'];
   characterDiagnostics: SourceVocabularyGap[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
 };
@@ -1600,7 +1667,24 @@ export type CrossMediaSeedExtras = {
   sourceVocabulary?: SourceVocabularyBindings;
   providers?: readonly Provider[];
   mediaDeadlineMs?: ImporterOptions['mediaDeadlineMs'];
+  readPublicSubject?: (subjectId: string) => Promise<ReviewedSubjectRead>;
+  prepareBangumiCreatorCreditBindings?: (input: {
+    plan: CrossMediaPlan;
+    result: CrossMediaSeedResult;
+    drafts: readonly BangumiCreatorCreditDraft[];
+    read(subjectId: string): Promise<ReviewedSubjectRead | null>;
+  }) => Promise<BangumiCreditVocabularyResolution>;
 };
+
+function bangumiSourceIdentity(
+  key: string,
+): { property: string; value: string } | undefined {
+  if (key.startsWith('person:')) return { property: 'wdt:P6298', value: key.slice('person:'.length) };
+  if (key.startsWith('character:')) return { property: 'wdt:P6296', value: key.slice('character:'.length) };
+  if (key.startsWith('episode:')) return { property: 'schema:url', value: bangumiRecordUrl(key) };
+  if (/^[1-9][0-9]*$/u.test(key)) return { property: 'wdt:P5732', value: key };
+  return undefined;
+}
 
 export async function seedCrossMedia(
   plan: CrossMediaPlan,
@@ -1629,6 +1713,15 @@ export async function seedCrossMedia(
   const readings: CrossMediaReading[] = [];
   try {
     const nativeTypes = new Map<string, string>();
+    const currentReads = new Map<string, Promise<ReviewedSubjectRead | null>>();
+    const readCurrent = (subjectId: string): Promise<ReviewedSubjectRead | null> => {
+      let pending = currentReads.get(subjectId);
+      if (!pending) {
+        pending = port.readReviewedSubject(subjectId).catch(() => null);
+        currentReads.set(subjectId, pending);
+      }
+      return pending;
+    };
     const providers = extras?.providers ?? (['bangumi', 'vndb'] as const);
     for (const provider of providers) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
@@ -1704,6 +1797,92 @@ export async function seedCrossMedia(
         complete: plan.relationSnapshotComplete,
       },
     });
+    const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
+    const sourceIdentityGaps: CrossMediaGap[] = [];
+    for (const record of keys) {
+      const provider: Provider = record.source === 'vndb' ? 'vndb' : 'bangumi';
+      const sourceAlias = crossMediaAliases[provider];
+      const claim = importer.session.bindings.claim({ source: sourceAlias, external_id: record.key });
+      if (claim?.state !== 'bound') continue;
+      const subjectRead = await readCurrent(claim.subject);
+      ensure(subjectRead, 'Current bound source subject is unavailable');
+      if (provider === 'bangumi') {
+        const subject = subjectRead.subject as
+          | { id?: unknown; type?: unknown; statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[]> }
+          | undefined;
+        const identity = bangumiSourceIdentity(record.key);
+        const expectedType = nativeTypes.get(`${sourceAlias}\u0000${record.key}`);
+        const matches =
+          identity !== undefined &&
+          (subject?.statements?.[identity.property]?.some(
+            (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
+          ) ?? false);
+        if (subject?.id !== claim.subject || subject.type !== expectedType || !matches) {
+          if (identity)
+            sourceIdentityGaps.push({
+              source: 'bangumi',
+              fields: [identity.property],
+              record: { external_id: record.key },
+              reason: 'Current source identity association is missing or mismatched',
+              property: identity.property,
+            });
+          continue;
+        }
+      }
+      readings.push({
+        source: provider,
+        externalId: record.key,
+        subject: subjectRead,
+        route: subjectRoute(subjectRead),
+        selection: 'selected',
+      });
+    }
+    const unresolved = delivered.unresolved.map((edge) => ({
+      holder: edge.holder,
+      target: edge.target,
+      property: edge.property,
+      reason: edge.reason,
+    }));
+    const baseResult: CrossMediaSeedResult = {
+      status:
+        plan.gaps.length || delivered.gaps.length || unresolved.length || sourceIdentityGaps.length || fidelity?.gaps.length
+          ? 'imported-with-gaps'
+          : 'imported',
+      franchises: plan.franchises,
+      members: plan.members,
+      runs,
+      readings,
+      gaps: [
+        ...plan.gaps,
+        ...sourceIdentityGaps,
+        ...delivered.gaps.map((gap) => ({
+          source: (gap.table === 'producers_relations' ? 'vndb' : 'bangumi') as Provider,
+          fields: fieldsOf(gap.table ?? 'subject-relations', gap.record),
+          record: gap.record,
+          reason: gap.reason,
+          ...(gap.code === undefined ? {} : { code: gap.code }),
+          ...(gap.endpoint === undefined ? {} : { endpoint: gap.endpoint }),
+          ...(gap.property === undefined ? {} : { property: gap.property }),
+          ...(gap.requiredProfile === undefined ? {} : { requiredProfile: gap.requiredProfile }),
+        })),
+      ],
+      creditGaps: [],
+      characterDiagnostics: fidelity?.gaps ?? [],
+      unresolved,
+    };
+    const vocabulary = extras?.prepareBangumiCreatorCreditBindings
+      ? await extras.prepareBangumiCreatorCreditBindings({
+          plan,
+          result: baseResult,
+          drafts: plan.credits,
+          read: (subjectId) => (extras.readPublicSubject ?? port.readReviewedSubject)(subjectId),
+        })
+      : undefined;
+    if (vocabulary) currentReads.clear();
+    const bindings = combineBangumiCreditBindings(
+      extras?.sourceVocabulary,
+      vocabulary?.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+    );
     const bangumiRegistration = createSourceRegistration('bangumi', {
       source: crossMediaAliases.bangumi,
       converterRevision: entityRevision,
@@ -1712,11 +1891,15 @@ export async function seedCrossMedia(
       alias: crossMediaAliases.bangumi,
       converterRevision: entityRevision,
       drafts: plan.credits,
-      bindings: extras?.sourceVocabulary ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+      bindings,
       claim: (owner) => importer.session.bindings.claim(owner),
       batch: (request) => port.batch(request),
       fence: (tuple) => port.fence(tuple),
-      read: (subjectId) => port.readReviewedSubject(subjectId),
+      read: (subjectId) =>
+        extras?.readPublicSubject
+          ? extras.readPublicSubject(subjectId)
+          : (readCurrent(subjectId) as Promise<ReviewedSubjectRead>),
+      expectedNativeType: (externalId) => nativeTypes.get(`${crossMediaAliases.bangumi}\u0000${externalId}`),
       metadataFor: (work) => {
         const record = [...plan.records.bangumi, ...plan.entities.bangumi].find((row) => row.key === work);
         ensure(record, `Missing selected Bangumi work for credit ${work}`);
@@ -1731,32 +1914,12 @@ export async function seedCrossMedia(
         };
       },
     });
-    const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
-    for (const record of keys) {
-      const provider: Provider = record.source === 'vndb' ? 'vndb' : 'bangumi';
-      const alias = crossMediaAliases[provider];
-      const claim = importer.session.bindings.claim({ source: alias, external_id: record.key });
-      if (claim?.state !== 'bound') continue;
-      const subject = await port.readReviewedSubject(claim.subject);
-      readings.push({
-        source: provider,
-        externalId: record.key,
-        subject,
-        route: subjectRoute(subject),
-        selection: 'selected',
-      });
-    }
-    const unresolved = delivered.unresolved.map((edge) => ({
-      holder: edge.holder,
-      target: edge.target,
-      property: edge.property,
-      reason: edge.reason,
-    }));
     return {
       status:
         plan.gaps.length ||
         delivered.gaps.length ||
         unresolved.length ||
+        sourceIdentityGaps.length ||
         credits.gaps.length ||
         credits.fenced.length ||
         (fidelity?.gaps.length ?? 0)
@@ -1766,26 +1929,49 @@ export async function seedCrossMedia(
       members: plan.members,
       runs,
       readings,
-      gaps: [
-        ...plan.gaps,
-        ...delivered.gaps.map((gap) => ({
-          source: (gap.table === 'producers_relations' ? 'vndb' : 'bangumi') as Provider,
-          fields: fieldsOf(gap.table ?? 'subject-relations', gap.record),
-          record: gap.record,
-          reason: gap.reason,
-          ...(gap.code === undefined ? {} : { code: gap.code }),
-          ...(gap.endpoint === undefined ? {} : { endpoint: gap.endpoint }),
-          ...(gap.property === undefined ? {} : { property: gap.property }),
-          ...(gap.requiredProfile === undefined ? {} : { requiredProfile: gap.requiredProfile }),
-        })),
-      ],
+      gaps: baseResult.gaps,
       creditGaps: credits.gaps,
+      ...(vocabulary
+        ? { creditRoles: vocabulary.roles, creditVocabularyRequirements: vocabulary.requirements }
+        : {}),
       characterDiagnostics: fidelity?.gaps ?? [],
       unresolved,
     };
   } finally {
     await importer.close();
   }
+}
+
+async function readPriorShowcasePublication(path: string): Promise<
+  Pick<ShowcasePublicationResult, 'manifest' | 'published'> | undefined
+> {
+  const limit = 32 * 1024 * 1024;
+  let bytes: Buffer;
+  try {
+    bytes = await readFile(path);
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return undefined;
+    throw error;
+  }
+  ensure(bytes.byteLength <= limit, 'Prior cross-media result exceeds the bounded showcase read limit');
+  const value = JSON.parse(bytes.toString('utf8')) as { showcase?: unknown };
+  const showcase = value?.showcase;
+  if (!showcase || typeof showcase !== 'object' || Array.isArray(showcase)) return undefined;
+  const manifest = Reflect.get(showcase, 'manifest') as ShowcaseManifest | undefined;
+  const published = Reflect.get(showcase, 'published') as ShowcasePublicationResult['published'] | undefined;
+  if (
+    !manifest ||
+    manifest.version !== 1 ||
+    typeof manifest.digest !== 'string' ||
+    !Array.isArray(manifest.vocabulary) ||
+    manifest.vocabulary.length > showcaseLimits.vocabulary ||
+    !Array.isArray(manifest.records) ||
+    manifest.records.length > showcaseLimits.records ||
+    !Array.isArray(published) ||
+    published.length > showcaseLimits.records + showcaseLimits.vocabulary
+  )
+    return undefined;
+  return { manifest, published };
 }
 
 export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<void> {
@@ -1845,6 +2031,7 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   });
   const resultPath = resolve(values.get('--result')!);
   const statePath = resolve(values.get('--state')!);
+  const priorShowcase = showcasePath ? await readPriorShowcasePublication(resultPath) : undefined;
   const characterBindingsPath = values.has('--bangumi-character-bindings')
     ? resolve(values.get('--bangumi-character-bindings')!)
     : undefined;
@@ -1876,8 +2063,37 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   const importPort = createImportTransport({ origin: api, tokenProvider });
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
+  const publicClient = showcasePath ? createPublicBulkClient({ origin: api }) : undefined;
+  let creditResolution: BangumiCreditVocabularyResolution | undefined;
   try {
-    const result = await seedCrossMedia(plan, statePath, port, { origin: api }, undefined, characterBindings);
+    const result = await seedCrossMedia(
+      plan,
+      statePath,
+      port,
+      { origin: api },
+      journal && publicClient
+        ? {
+            readPublicSubject: (subjectId) => publicClient.readSubject(subjectId),
+            prepareBangumiCreatorCreditBindings: async ({ result: baseResult, drafts, read }) => {
+              const prepared = await prepareBangumiCreatorCreditBindings({
+                plan,
+                result: baseResult,
+                drafts,
+                port,
+                journal,
+                review: importPort,
+                publicClient,
+                ...(priorShowcase ? { prior: priorShowcase } : {}),
+                subjectTypes: [2],
+                read,
+              });
+              creditResolution = prepared;
+              return prepared;
+            },
+          }
+        : undefined,
+      characterBindings,
+    );
     const { importShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
     let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
     if (tagBindingsPath) {
@@ -1896,14 +2112,47 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
       known: knownTagBindings,
       destination: { origin: api },
     });
-    const showcase = journal
+    if (journal && publicClient && creditResolution) {
+      const current = await currentBangumiCreatorCreditBindings({
+        resolution: creditResolution,
+        acknowledgements: journal.acknowledgedCommands(),
+        read: async (id) => {
+          try {
+            return await publicClient.readSubject(id);
+          } catch {
+            return null;
+          }
+        },
+      });
+      const currentCodes = new Set(current.roles.map((role) => role.code));
+      for (const role of creditResolution.roles) {
+        if (currentCodes.has(role.code)) continue;
+        for (const draft of plan.credits) {
+          if (draft.kind !== 'staff' || String(draft.roleCode) !== role.code) continue;
+          result.creditGaps.push({
+            provider: 'bangumi',
+            path: draft.path,
+            code: role.code,
+            reason: 'missing_concept',
+            property: role.property,
+          });
+        }
+      }
+      result.creditRoles = current.roles;
+      result.creditVocabularyRequirements = current.requirements;
+      if (result.creditGaps.length) result.status = 'imported-with-gaps';
+    }
+    const showcase = journal && publicClient
       ? await publishShowcase({
           plan,
           result,
           aliases: crossMediaAliases,
           journal,
           review: importPort,
-          publicClient: createPublicBulkClient({ origin: api }),
+          publicClient,
+          ...(result.creditVocabularyRequirements
+            ? { vocabularyRequirements: result.creditVocabularyRequirements }
+            : {}),
         })
       : undefined;
     await mkdir(dirname(resultPath), { recursive: true });
