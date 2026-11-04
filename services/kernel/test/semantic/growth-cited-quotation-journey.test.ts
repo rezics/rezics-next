@@ -97,7 +97,11 @@ beforeAll(async () => {
     }),
   );
   expect(created.status).toBe(201);
-  quotationId = ((await created.json()) as { subject: { id: string } }).subject.id;
+  const createdBody = (await created.json()) as {
+    subject: { id: string; statements: Record<string, { value: { type: string } }[]> };
+  };
+  expect(createdBody.subject.statements['schema:spokenByCharacter'][0]!.value.type).toBe('somevalue');
+  quotationId = createdBody.subject.id;
 }, 60_000);
 afterAll(async () => {
   if (db) await db.close();
@@ -168,7 +172,10 @@ test('fixed quotation page work stays bounded as unrelated facts grow', async ()
         reads: Record<string, { status: number; body?: any }>;
       };
       expect(body.viewer).toEqual({ kind: 'account' });
-      const facts = Object.values(body.reads).find((result) => result.status === 200 && result.body?.subject)?.body;
+      const facts = Object.values(body.reads).find(
+        (result) => result.status === 200 && result.body?.subject?.id === quotationId,
+      )?.body;
+      expect(facts.subject.id).toBe(quotationId);
       expect(facts.subject.statements['schema:text'][0].value.content.language).toBe('en');
       expect(facts.subject.statements['schema:spokenByCharacter'][0].value.type).toBe('somevalue');
       const document = facts.documents[facts.subject.statements['schema:text'][0].id];
