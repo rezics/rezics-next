@@ -4,6 +4,7 @@ types:
   schema:Person: 'Person'
   schema:Organization: 'Organisation'
   schema:SoftwareApplication: 'Softwareanwendung'
+  rezics:ReleaseGroup: "Release-Gruppe"
 properties:
   rezics:penNameOf: 'Pseudonym von'
   wdt:P186: hergestellt aus
@@ -61,6 +62,12 @@ properties:
   rezics:editionCounterpart: 'Andere Buchfassung'
   rezics:bangumiLegacyVersion: 'Versionsbezug (alter Bangumi-Code)'
   rezics:expansionCounterpart: 'Erweiterung oder Grundspiel'
+  wdt:P4092: "Prüfsumme"
+  wdt:P3575: "Dateigröße"
+  rezics:hashAlgorithm: "Hashalgorithmus"
+  rezics:codec: "Codec"
+  rezics:fileQuality: "Dateiqualität"
+  rezics:releaseGroup: "Release-Gruppe"
 inverseProperties:
   rezics:penNameOf: 'Pseudonyme'
   wdt:P186: Verwendet in
@@ -80,12 +87,14 @@ inverseProperties:
   rezics:summaryOf: 'Zusammenfassungen'
   rezics:sideStoryOf: 'Nebengeschichten'
   rezics:bangumiRelatedTo: 'Verknüpft von (Bangumi)'
+  rezics:releaseGroup: "Dateien dieser Release-Gruppe"
 typeDescriptions:
   wd:Q2095: 'Ein Lebensmittel oder essbarer Stoff, etwa Mehl; ein Rezept beschreibt dessen Zubereitung.'
   wd:Q2620972: 'Ein benannter, geordneter Abschnitt aus Folgen oder Kapiteln eines Werks mit erster und letzter Teilnummer.'
   schema:Person: 'Eine reale Person im Katalog, etwa ein Autor; fiktive Figuren haben einen eigenen Typ.'
   schema:Organization: 'Eine Organisation oder als Mitwirkende genannte Gruppe, etwa ein Verlag oder Studio.'
   schema:SoftwareApplication: 'Eine identifizierbare Anwendung, etwa ein Leseprogramm; Spiele und ihre Veröffentlichungen haben eigene Typen.'
+  rezics:ReleaseGroup: "Eine von AniDB identifizierte Quellgruppe, die mit den von ihr veröffentlichten Dateien verknüpft ist. Ihre Identität bleibt von jeder Datei und Veröffentlichung getrennt."
 propertyDescriptions:
   rezics:penNameOf: 'Die Person oder Organisation hinter diesem Pseudonym oder Kollektivnamen.'
   wdt:P186: 'Ein Lebensmittel oder zubereitetes Rezept als Zutat oder Bestandteil; Menge und Listenposition können ergänzt werden.'
@@ -143,3 +152,10 @@ propertyDescriptions:
   rezics:editionCounterpart: 'Eine andere Buchfassung oder Ausgabe; diese symmetrische Beziehung legt weder Original noch Werk-Ausgabe-Richtung fest.'
   rezics:bangumiLegacyVersion: 'Die symmetrische Versionsbeziehung aus Bangumis eingestelltem Main-Version-Code 4013 ohne Richtung zwischen Original und Fassung.'
   rezics:expansionCounterpart: 'Ein Grundspiel und Zusatzinhalt ohne festgelegte Erweiterungsrichtung; bei bekannter Richtung dient die gerichtete Erweiterungsbeziehung.'
+
+  wdt:P4092: "Exakter Prüfsummentext. Der Hashalgorithmus wird separat gespeichert; gleiche Werte identifizieren oder vereinen keine Dateien."
+  wdt:P3575: "Dateigröße als exakte Dezimalmenge in Byte, entsprechend der Quelle."
+  rezics:hashAlgorithm: "Der genaue Quellcode des Prüfsummenalgorithmus; unbekannte Codes bleiben zur Prüfung erhalten."
+  rezics:codec: "Der genaue von der Quelle gemeldete Codec-Code, auch wenn er noch nicht erkannt wird."
+  rezics:fileQuality: "Der genaue von der Quelle gemeldete Qualitätscode, auch wenn er noch nicht erkannt wird."
+  rezics:releaseGroup: "Die unabhängig lesbare AniDB-Quellgruppe dieser Datei, getrennt von Veröffentlichung und persönlicher Kopie."

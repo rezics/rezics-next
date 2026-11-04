@@ -62,30 +62,38 @@ export function catalogueFileProfileFixture(scenario: CatalogueFileScenario = 'r
         scenario === 'unreleased'
           ? {}
           : {
-              'schema:sha256': [
-                statement(
-                  '00000000-0000-4000-8000-00000000a211',
-                  'schema:sha256',
-                  'string',
-                  { type: 'value', content: 'abc123def456' },
-                  digest,
-                ),
+              'wdt:P4092': [
+                {
+                  ...statement(
+                    '00000000-0000-4000-8000-00000000a211',
+                    'wdt:P4092',
+                    'string',
+                    { type: 'value', content: 'abc123def456' },
+                    digest,
+                  ),
+                  qualifiers: [
+                    {
+                      property: { id: 'rezics:hashAlgorithm', data_type: 'string' },
+                      value: { type: 'value', content: 'sha256' },
+                    },
+                  ],
+                },
               ],
-              'schema:encodingFormat': [
+              'rezics:codec': [
                 statement(
                   '00000000-0000-4000-8000-00000000a212',
-                  'schema:encodingFormat',
+                  'rezics:codec',
                   'string',
                   { type: 'value', content: scenario === 'unknown-codec' ? 'av1' : 'h264' },
                   digest,
                 ),
               ],
-              'schema:contentSize': [
+              'wdt:P3575': [
                 statement(
                   '00000000-0000-4000-8000-00000000a213',
-                  'schema:contentSize',
+                  'wdt:P3575',
                   'quantity',
-                  { type: 'value', content: { amount: '123456789', unit: 'wd:Q11573' } },
+                  { type: 'value', content: { amount: '123456789', unit: 'wd:Q8799' } },
                   digest,
                 ),
               ],
@@ -136,7 +144,7 @@ export function catalogueFileProfileFixture(scenario: CatalogueFileScenario = 'r
         labels: scenario === 'concealed-episode' ? {} : { en: 'Episode 1' },
       },
       [catalogueGroup]: { type: 'rezics:ReleaseGroup', labels: { en: 'Example Fansub' } },
-      'wd:Q11573': { type: 'schema:Thing', labels: { en: 'byte' } },
+      'wd:Q8799': { type: 'schema:Thing', labels: { en: 'byte' } },
     },
     account: null,
     summary: null,

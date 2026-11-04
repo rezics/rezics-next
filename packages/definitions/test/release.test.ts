@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import releaseSchema from '../schema/release.json';
+import { bundledRelease } from '../src/bundled.ts';
 import { DATA_TYPES, RELEASE_FORMAT, releaseDigest, validateRelease, valueSchema, type Release } from '../src/index.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
@@ -193,4 +194,38 @@ test('patterns must be safe and releases are bounded', () => {
       };
   });
   expect(pointers(crowded)).toEqual(['limit /types']);
+});
+
+test('the bundled catalogue admits exact file hashes, byte size and directed file associations', () => {
+  const { types, properties } = bundledRelease;
+  expect(bundledRelease.catalogue.version).toBe('1.0.2');
+  expect(types['schema:MediaObject']?.properties).toEqual(
+    expect.arrayContaining([
+      'wdt:P4092',
+      'wdt:P3575',
+      'rezics:codec',
+      'rezics:fileQuality',
+      'schema:inLanguage',
+      'rezics:releaseGroup',
+      'schema:encodesCreativeWork',
+    ]),
+  );
+  expect(types['rezics:AnimeRelease']?.properties).toContain('schema:associatedMedia');
+  expect(types['rezics:ReleaseGroup']?.bases).toContain('schema:Organization');
+  expect(properties['wdt:P4092']).toMatchObject({ datatype: 'string', qualifiers: ['rezics:hashAlgorithm'] });
+  expect(properties['wdt:P3575']).toMatchObject({ datatype: 'quantity', units: ['http://www.wikidata.org/entity/Q8799'] });
+  expect(properties['rezics:releaseGroup']?.relation?.inverse).toBe('rezics:groupFiles');
+  expect(properties['schema:encodesCreativeWork']?.relation?.inverse).toBe('rezics:encodedByFile');
+  expect(properties['schema:associatedMedia']?.relation?.inverse).toBe('rezics:includedInRelease');
+  for (const type of ['rezics:CatalogueFile', 'wd:Q82753', 'wd:Q55327']) expect(types[type]).toBeUndefined();
+  for (const locale of ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
+    for (const property of ['wdt:P4092', 'wdt:P3575', 'rezics:hashAlgorithm', 'rezics:codec', 'rezics:fileQuality', 'rezics:releaseGroup']) {
+      expect(properties[property]?.labels[locale]).toBeTruthy();
+      expect(properties[property]?.descriptions?.[locale]).toBeTruthy();
+    }
+    expect(types['schema:MediaObject']?.labels[locale]).toBeTruthy();
+    expect(types['schema:MediaObject']?.descriptions?.[locale]).toBeTruthy();
+    expect(types['rezics:ReleaseGroup']?.labels[locale]).toBeTruthy();
+    expect(types['rezics:ReleaseGroup']?.descriptions?.[locale]).toBeTruthy();
+  }
 });

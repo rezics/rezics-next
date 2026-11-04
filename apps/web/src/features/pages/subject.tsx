@@ -38,6 +38,7 @@ import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
+import type { Release } from '@rezics/definitions';
 import {
   planReads,
   documentRead,
@@ -111,6 +112,20 @@ export type SubjectPageData = {
   document: PageDocument;
   /** The views the subject's templates define; absent when the kernel did not say. */
   views?: string[];
+  /** Bounded active file/group vocabulary carried by the native page response. */
+  catalogue?: {
+    state: 'released' | 'unsupported' | 'unavailable';
+    type: string;
+    digest?: string;
+    definitions?: Pick<Release, 'types' | 'properties'>;
+  };
+  /** Caller-bound native action state; page responses containing it are private and no-store. */
+  viewer?: {
+    state: 'anonymous' | 'account';
+    account?: string;
+    context: string;
+    actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
+  };
   reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
 };
 

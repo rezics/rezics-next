@@ -26,6 +26,76 @@ export function semanticPageView(
   return resolved === null ? null : { resolved, views: definedViews(profile, target) };
 }
 
+export type CataloguePageDefinitions = Pick<Release, 'types' | 'properties'>;
+export type CataloguePageMetadata = {
+  state: 'released' | 'unsupported' | 'unavailable';
+  type: string;
+  digest?: string;
+  definitions?: CataloguePageDefinitions;
+};
+
+const catalogueFileTypes = ['schema:MediaObject', 'rezics:CatalogueFile', 'wd:Q82753'];
+const catalogueGroupTypes = ['rezics:ReleaseGroup', 'wd:Q55327'];
+
+function typeIsA(release: CataloguePageDefinitions, type: string, base: string, seen = new Set<string>()): boolean {
+  if (type === base) return true;
+  if (seen.has(type)) return false;
+  seen.add(type);
+  return (release.types[type]?.bases ?? []).some((candidate) => typeIsA(release, candidate, base, seen));
+}
+
+/** The ordinary page carries only the current file/group descriptor and its directed relation vocabulary. */
+export function cataloguePageMetadata(
+  release: CataloguePageDefinitions | undefined,
+  digest: string | undefined,
+  type: string,
+): CataloguePageMetadata | undefined {
+  const candidate = [...catalogueFileTypes, ...catalogueGroupTypes].includes(type);
+  const file = catalogueFileTypes.some((base) => release && typeIsA(release, type, base));
+  const group = catalogueGroupTypes.some((base) => release && typeIsA(release, type, base));
+  if (!candidate && !file && !group) return;
+  if (!release || !digest) return { state: 'unavailable', type };
+  if (!release.types[type] || (!file && !group)) return { state: 'unsupported', type, digest };
+
+  const propertyIds = new Set(release.types[type]?.properties ?? []);
+  const inversePropertyIds = new Set<string>();
+  for (const [id, property] of Object.entries(release.properties)) {
+    if (
+      property.relation &&
+      (property.targets ?? []).some((target) => typeIsA(release, type, target))
+    ) {
+      propertyIds.add(id);
+      inversePropertyIds.add(id);
+    }
+  }
+  const pendingProperties = [...propertyIds];
+  for (let index = 0; index < pendingProperties.length; index++)
+    for (const qualifier of release.properties[pendingProperties[index]!]?.qualifiers ?? [])
+      if (!propertyIds.has(qualifier)) {
+        propertyIds.add(qualifier);
+        pendingProperties.push(qualifier);
+      }
+  const properties = Object.fromEntries(
+    [...propertyIds].flatMap((id) => (release.properties[id] ? [[id, release.properties[id]]] : [])),
+  );
+  const types = new Set<string>([type]);
+  const addType = (id: string) => {
+    if (types.has(id) || !release.types[id]) return;
+    types.add(id);
+    for (const base of release.types[id]?.bases ?? []) addType(base);
+  };
+  for (const property of Object.values(properties)) for (const target of property.targets ?? []) addType(target);
+  for (const [owner, definition] of Object.entries(release.types))
+    if ((definition.properties ?? []).some((id) => inversePropertyIds.has(id))) addType(owner);
+  const typeDefinitions = Object.fromEntries([...types].flatMap((id) => (release.types[id] ? [[id, release.types[id]]] : [])));
+  return {
+    state: 'released',
+    type,
+    digest,
+    definitions: { types: typeDefinitions, properties },
+  };
+}
+
 export type PublicSemanticPageMetadata = {
   views: readonly string[];
   /** An Account association vetoes independent Subject fallback; it never proves an Account target. */

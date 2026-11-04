@@ -4,6 +4,7 @@ types:
   schema:Movie: 映画
   schema:TVSeason: シーズン
   schema:TVSeries: 'TVアニメ'
+  schema:MediaObject: "メディアオブジェクト"
 properties:
   bf:hasPart: '収録作品'
   marcrel:fds: '映画配給者'
@@ -16,17 +17,22 @@ properties:
   schema:startDate: 開始日
   wdt:P449: 放送当初のネットワーク
   wdt:P973: 詳細情報URL
+  schema:associatedMedia: "関連メディア"
+  schema:encodesCreativeWork: "このエピソードを収録"
 inverseProperties:
   bf:hasPart: 'この作品を収録する刊行版'
   marcrel:fds: '配給した刊行版'
   schema:isPartOf: 'エピソード'
   wdt:P449: '初回放送作品'
+  schema:associatedMedia: "このファイルを含む刊行物"
+  schema:encodesCreativeWork: "このエピソードを収録するファイル"
 typeDescriptions:
   rezics:AnimeRelease: '作品自体とは別に識別される、アニメの刊行版または頒布版。エピソード、再生ファイル、個人の所蔵物とも区別し、言語や形式の違いだけで別の版を作りません。'
   schema:Episode: '第3話や特別編など、個別に識別されるアニメ作品の一回分。再生ファイルやシーズン全体ではありません。'
   schema:Movie: '作品としての長編または短編アニメ映画。頒布された各版とは独立した対象です。'
   schema:TVSeason: 'テレビアニメの中で個別に識別される一つのシーズン。シリーズ全体や単一のエピソードとは区別します。'
   schema:TVSeries: 'シーズンやエピソードを含む作品としてのテレビアニメシリーズ。特定の刊行版とは別です。'
+  schema:MediaObject: "独立して識別されるカタログ上のファイルです。メタデータは所持、ダウンロード権限、再生可能性、視聴進捗を証明しません。"
 libraryProfiles:
   anime.series:
     states:
@@ -128,3 +134,6 @@ propertyDescriptions:
   schema:startDate: '当初の放送期間や公開期間の開始日。出典の日付の精度を保ちます。'
   wdt:P449: '出典が初回放送局として示す組織。後の配給者すべてを指すものではありません。'
   wdt:P973: 'このアニメ作品を説明するページのURL。同一実体の完全一致とは区別します。'
+
+  schema:associatedMedia: "識別されたアニメ刊行リリースに関連付けられたカタログファイルです。この関係はファイルを刊行物と同一にしません。"
+  schema:encodesCreativeWork: "このカタログファイルが収録するエピソードです。この関係は所持や視聴状態を証明しません。"

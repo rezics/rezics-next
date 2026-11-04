@@ -1,6 +1,5 @@
 import type { SubjectRead } from '@rezics/client';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { languageName } from '../../../subject/language';
@@ -12,7 +11,6 @@ import type { SubjectPageData } from '../../pages/subject';
 import { boundedProfileRelations, profileRelationPages } from '../../pages/views';
 import { linkClass, linkColor, PlainLink, type PageLink } from '../../pages/shared';
 import { catalogueFileDestinationHref, catalogueFileSourceId, catalogueFileSourceReturnHref } from './navigation';
-import { loadCatalogueFileReaderDefinitions, type CatalogueFileReaderDefinitions } from './actions';
 import {
   catalogueFileReaderCandidate,
   catalogueFileReaderVisit,
@@ -365,23 +363,6 @@ export function CatalogueFileReader({ visit, link = PlainLink }: { visit: Catalo
   );
 }
 
-function definitionsQueryKey(publicRead: SubjectRead, page: SubjectPageData, locale: string) {
-  return [
-    'catalogue-file-reader-definitions',
-    publicRead.subject.id,
-    publicRead.subject.type,
-    publicRead.subject.release,
-    publicRead.subject.revision,
-    publicRead.subject.context,
-    page.context?.id ?? '',
-    page.requestedRealm ?? '',
-    page.requestedReader ?? '',
-    locale,
-  ] as const;
-}
-
-export const catalogueFileReaderDefinitionsKey = definitionsQueryKey;
-
 /** Ordinary Subject overview: active admission plus the exact composed read already rendered on the page. */
 export function CatalogueFileReaderOverview({
   page,
@@ -397,16 +378,6 @@ export function CatalogueFileReaderOverview({
   returning?: boolean;
 }) {
   const candidate = catalogueFileReaderCandidate(publicRead);
-  const query = useQuery<CatalogueFileReaderDefinitions>({
-    queryKey: definitionsQueryKey(publicRead, page, locale),
-    queryFn: () => loadCatalogueFileReaderDefinitions({ data: undefined }),
-    enabled: candidate,
-    retry: false,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: false,
-  });
   if (!candidate) {
     if (!returning) return null;
     const visit = catalogueFileReaderVisit({
@@ -418,14 +389,20 @@ export function CatalogueFileReaderOverview({
     });
     return <CatalogueFileReader visit={visit} link={link} />;
   }
-  const definitions = query.data?.ok ? query.data : undefined;
+  const catalogue = page.catalogue;
+  const definitions = catalogue?.state === 'released' ? catalogue.definitions : undefined;
   const visit = catalogueFileReaderVisit({
     locale,
     public: publicRead,
-    ...(definitions ? { release: definitions.release, digest: definitions.digest } : {}),
-    ...(query.isPending ? { loading: true } : {}),
-    ...(query.isError || query.data?.ok === false ? { unavailable: true } : {}),
-    allowCorrection: !page.requestedRealm && page.context?.population.kind !== 'realm',
+    ...(definitions && catalogue?.digest ? { release: definitions, digest: catalogue.digest } : {}),
+    ...(catalogue?.state === 'unsupported' ? { unsupported: true } : {}),
+    ...(!catalogue || catalogue.state === 'unavailable' || (catalogue.state === 'released' && !definitions)
+      ? { unavailable: true }
+      : {}),
+    allowCorrection:
+      page.viewer?.actions.statementPropose === 'allowed' &&
+      !page.requestedRealm &&
+      page.context?.population.kind !== 'realm',
     relationPages: profileRelationPages(page),
     bounds: boundedProfileRelations(page),
   });

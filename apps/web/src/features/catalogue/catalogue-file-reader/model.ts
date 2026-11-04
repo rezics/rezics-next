@@ -291,7 +291,7 @@ export function catalogueFileReaderVisit(input: {
   const unknownCodec = codec
     ? selectedStatements(input.public.subject.statements[codec]).some((statement) => {
         if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return false;
-        return codecEnum ? !codecEnum.includes(statement.value.content) : true;
+        return codecEnum ? !codecEnum.includes(statement.value.content) : false;
       })
     : false;
   const rows = associations(input.public, release, input.digest, streams, input.relationPages ?? [], input.locale);
@@ -303,7 +303,7 @@ export function catalogueFileReaderVisit(input: {
     groups,
     associations: rows,
     unknownCodec,
-    ...(input.allowCorrection !== false && input.public.subject.context === candidateContext
+    ...(input.allowCorrection === true && input.public.subject.context === candidateContext
       ? { correction: { id: input.public.subject.id, label: pickText(input.public.subject.labels, input.locale).text } }
       : {}),
   };

@@ -46,91 +46,21 @@ function itemProperty(id: string, en: string, targets: string[]): PropertyDefini
   };
 }
 
-function stringProperty(id: string, en: string, extra: Partial<PropertyDefinition> = {}): PropertyDefinition {
-  return {
-    iri: `https://schema.org/${id.split(':')[1] ?? id}`,
-    labels: labels(en),
-    mappings: [],
-    datatype: 'string',
-    multivalued: false,
-    qualifiers: [],
-    value: { type: 'string', maxLength: 1500, minLength: 1 },
-    ...extra,
-  };
-}
-
-/** Test-only admitted file/group types and directed release-to-release properties. */
+/** Test-only release-to-release properties; file/group descriptors come from the bundled release. */
 export function withConcreteReleaseDescriptors(source: Release, files = true): Release {
   const release = structuredClone(source);
   const editionTargets = ['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656'];
   release.properties[basedOnProperty] = itemProperty(basedOnProperty, 'based on', editionTargets);
   release.properties[replacedByProperty] = itemProperty(replacedByProperty, 'replaced by', editionTargets);
-  release.properties['schema:sha256'] = stringProperty('schema:sha256', 'SHA-256');
-  release.properties['schema:encodingFormat'] = stringProperty('schema:encodingFormat', 'codec', {
-    value: { type: 'string', enum: ['h264', 'hevc'], maxLength: 1500, minLength: 1 },
-  });
-  release.properties['schema:contentSize'] = {
-    iri: 'https://schema.org/contentSize',
-    labels: labels('size'),
-    mappings: [],
-    datatype: 'quantity',
-    multivalued: false,
-    qualifiers: [],
-    value: { type: 'object' },
-  };
-  release.properties['schema:encodesCreativeWork'] = itemProperty('schema:encodesCreativeWork', 'encodes', [
-    'schema:Episode',
-  ]);
-  release.properties['rezics:releaseGroup'] = itemProperty('rezics:releaseGroup', 'release group', [
-    'rezics:ReleaseGroup',
-  ]);
-  release.properties['rezics:relatedFile'] = itemProperty('rezics:relatedFile', 'related file', [
-    'schema:MediaObject',
-    'rezics:CatalogueFile',
-  ]);
   for (const type of editionTargets) {
     const definition = release.types[type];
     if (!definition) continue;
     for (const id of [basedOnProperty, replacedByProperty])
       if (!definition.properties.includes(id)) definition.properties.push(id);
   }
-  if (files) {
-    const fileProperties = [
-      'schema:name',
-      'schema:sha256',
-      'schema:encodingFormat',
-      'schema:contentSize',
-      'schema:inLanguage',
-      'schema:encodesCreativeWork',
-      'rezics:relatedFile',
-      'rezics:releaseGroup',
-      'schema:author',
-      'schema:sameAs',
-    ];
-    release.types['schema:MediaObject'] = {
-      iri: 'https://schema.org/MediaObject',
-      labels: labels('media object'),
-      mappings: [],
-      bases: [],
-      properties: fileProperties,
-      facets: [],
-    };
-    release.types['rezics:CatalogueFile'] = {
-      iri: 'https://rezics.com/vocab/CatalogueFile',
-      labels: labels('catalogue file'),
-      mappings: [],
-      bases: ['schema:MediaObject'],
-      properties: fileProperties,
-      facets: [],
-    };
-    release.types['rezics:ReleaseGroup'] = {
-      iri: 'https://rezics.com/vocab/ReleaseGroup',
-      labels: labels('release group'),
-      mappings: [],
-      bases: [],
-      properties: ['schema:name', 'schema:author', 'schema:sameAs'],
-      facets: [],
-    };
+  if (!files) {
+    delete release.types['schema:MediaObject'];
+    delete release.types['rezics:ReleaseGroup'];
   }
   return release;
 }

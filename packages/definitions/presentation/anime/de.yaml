@@ -4,6 +4,7 @@ types:
   schema:Movie: Film
   schema:TVSeason: Staffel
   schema:TVSeries: Fernsehserie
+  schema:MediaObject: "Medienobjekt"
 properties:
   bf:hasPart: 'enthaltenes Werk'
   marcrel:fds: 'Filmverleih'
@@ -16,17 +17,22 @@ properties:
   schema:startDate: Startdatum
   wdt:P449: Sender der Erstausstrahlung
   wdt:P973: beschrieben in URL
+  schema:associatedMedia: "zugehörige Medien"
+  schema:encodesCreativeWork: "kodiert diese Episode"
 inverseProperties:
   bf:hasPart: 'Veröffentlichungen mit diesem Werk'
   marcrel:fds: 'Filmveröffentlichungen'
   schema:isPartOf: 'Episoden'
   wdt:P449: 'Erstausstrahlungen'
+  schema:associatedMedia: "Veröffentlichungen mit dieser Datei"
+  schema:encodesCreativeWork: "Dateien mit dieser Episode"
 typeDescriptions:
   rezics:AnimeRelease: 'Eine eigenständig identifizierte Veröffentlichung oder Vertriebsversion von Anime-Inhalten. Getrennt von Werk, Folge, Wiedergabedatei und persönlichem Exemplar; Sprachen und Formate allein erzeugen keine weiteren Veröffentlichungen.'
   schema:Episode: 'Eine eigenständig identifizierte Folge eines Anime-Werks, etwa Folge 3 oder ein Special; weder Wiedergabedatei noch ganze Staffel.'
   schema:Movie: 'Ein animierter Lang- oder Kurzfilm als Werk, unabhängig von seinen veröffentlichten Ausgaben.'
   schema:TVSeason: 'Eine gesondert identifizierte Staffel einer animierten Fernsehserie, getrennt von Gesamtserie und einzelner Folge.'
   schema:TVSeries: 'Eine animierte Fernsehserie als Werk mit ihren Staffeln und Folgen, unabhängig von einer bestimmten Veröffentlichung.'
+  schema:MediaObject: "Eine unabhängig identifizierte Katalogdatei. Ihre Metadaten belegen weder Besitz noch Downloadberechtigung, Wiedergabe oder gesehenen Fortschritt."
 libraryProfiles:
   anime.series:
     states:
@@ -132,3 +138,6 @@ propertyDescriptions:
   schema:startDate: 'Der Beginn des ursprünglichen Ausstrahlungs- oder Veröffentlichungszeitraums mit der Datumsgenauigkeit der Quelle.'
   wdt:P449: 'Die von der Quelle als ursprünglicher Sender bezeichnete Organisation, nicht jeder spätere Vertrieb.'
   wdt:P973: 'Eine URL zu einer beschreibenden Seite über dieses Anime-Werk; kein automatischer Identitätsnachweis.'
+
+  schema:associatedMedia: "Eine Katalogdatei, die dieser identifizierten Anime-Veröffentlichung zugeordnet ist; die Verknüpfung macht die Datei nicht zur Veröffentlichung."
+  schema:encodesCreativeWork: "Die Episode, die diese genaue Katalogdatei enthält; die Beziehung belegt weder Besitz noch einen Gesehen-Status."

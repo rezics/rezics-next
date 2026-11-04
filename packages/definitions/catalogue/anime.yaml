@@ -31,6 +31,7 @@ classes:
       - abstract
       - exampleOfWork
       - animeReleaseContains
+      - associatedMedia
       - filmDistributor
       - inLanguage
       - datePublished
@@ -52,6 +53,23 @@ classes:
         keyFacts: [schema:datePublished, schema:director]
       facets: exampleOfWork animeReleaseContains filmDistributor inLanguage datePublished distributionFormat publisher translator author illustrator director musicBy producer productionCompany screenwriter voiceActor
       schema_org_type: https://schema.org/CreativeWork
+  MediaObject:
+    is_a: CreativeWork
+    class_uri: schema:MediaObject
+    description: >-
+      An independently identified catalogue file. Its hashes and technical facts describe the file record only;
+      they do not establish possession, download permission, playback or watched progress.
+    slots:
+      - author
+      - checksum
+      - fileSize
+      - fileCodec
+      - inLanguage
+      - fileQuality
+      - releaseGroup
+      - encodesCreativeWork
+    annotations:
+      schema_org_type: https://schema.org/MediaObject
   TVSeries:
     is_a: CreativeWorkSeries
     class_uri: schema:TVSeries
@@ -335,6 +353,26 @@ slots:
       inverse: rezics:filmDistributionOf
       relation_order: position
       relation_filter: [wdt:P3831, wdt:P518]
+  associatedMedia:
+    slot_uri: schema:associatedMedia
+    description: A catalogue file associated with this identified anime publication release.
+    range: MediaObject
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:includedInRelease
+      relation_order: name
+  encodesCreativeWork:
+    slot_uri: schema:encodesCreativeWork
+    description: The anime episode or installment encoded by this catalogue file.
+    range: Episode
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:encodedByFile
+      relation_order: name
   numberOfEpisodes:
     slot_uri: schema:numberOfEpisodes
     description: The number of episodes or installments in the work or season.

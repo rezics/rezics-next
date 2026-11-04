@@ -49,7 +49,7 @@ export type CatalogueFileCreateHolder = { key: string; property: string; stateme
 export type CatalogueFileCreateGrain = 'file' | 'group';
 
 const termProperties = new Set(['schema:name', 'schema:description', 'schema:alternateName']);
-const hashIds = new Set(['schema:sha256', 'rezics:ed2k', 'rezics:crc32', 'wdt:P4092']);
+const hashIds = new Set(['wdt:P4092', 'schema:sha256', 'rezics:ed2k', 'rezics:crc32']);
 export const catalogueFileCreateUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -170,7 +170,7 @@ export function catalogueFileCreateHashNotice(
   property: string,
 ): 'hash' | 'codec' | undefined {
   if (hashIds.has(property) || hashProperty(release, type) === property) return 'hash';
-  if (property === 'schema:encodingFormat' || codecProperty(release, type) === property) return 'codec';
+  if (codecProperty(release, type) === property) return 'codec';
   return undefined;
 }
 

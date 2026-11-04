@@ -25,6 +25,7 @@ import type { Pool } from 'pg';
 import { readPublicAccountByAgent } from '../../access/account-data.ts';
 import { PageResponseSchema } from './page-contract.ts';
 import { deadlineClient } from '../../access/authenticate.ts';
+import { AccessUnavailableError } from '../../access/unavailable.ts';
 import { readItemTypes } from '../../semantic/subject.ts';
 import { withConnection } from '../../database/pool.ts';
 import type { createApp } from '../../http/app.ts';
@@ -33,14 +34,14 @@ import { ProblemError, problemSchema, type FieldError } from '../../http/problem
 import { createAccess } from '../../access/index.ts';
 import { actionCatalogue } from '../../http/request.ts';
 import { SESSION_HEADER } from '../../http/request.ts';
-import type { Access, AccessFactory } from '../../request/access.ts';
+import { accessCheck, type Access, type AccessFactory } from '../../request/access.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { semanticPageView } from '../semantic-page.ts';
+import { cataloguePageMetadata, semanticPageView } from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -344,10 +345,12 @@ export function pageRoutes<App>(
       let account: PageAccount | null = null;
       let resolved: ResolvedTemplate;
       let views: View[] | null = null;
+      let definitionRelease: Awaited<ReturnType<typeof activeRelease>> = undefined;
       if ('route' in target) {
         resolved = resolveTemplate(active.profile, { route: target.route });
       } else {
         const release = await activeRelease(pool);
+        definitionRelease = release;
         let subjectTarget: string | null = null;
         let kind = 'actor';
         let automated = false;
@@ -434,8 +437,37 @@ export function pageRoutes<App>(
           ? Object.keys(initialSubject.subject.statements)
           : [];
       const plannedDocuments = documentRead(resolved.document, subject?.id ?? null, properties, selected?.context.id);
+      const pageCatalogue = subject
+        ? cataloguePageMetadata(definitionRelease?.release, definitionRelease?.digest, subject.type)
+        : undefined;
+      const pageViewer = pageCatalogue?.state === 'released'
+        ? async () => {
+            let statementPropose: 'allowed' | 'denied' | 'unavailable';
+            try {
+              const check = await accessCheck(
+                authority.deps.access,
+                actor,
+                'statement:propose',
+                resource,
+                { pool, deadline: job.deadline },
+              );
+              statementPropose = (await admission.run('normal', job, () => withConnection(pool, (client) => check(client))))
+                ? 'allowed'
+                : 'denied';
+            } catch (error) {
+              if (!(error instanceof AccessUnavailableError)) throw error;
+              statementPropose = 'unavailable';
+            }
+            return {
+              state: actor.kind === 'account' ? ('account' as const) : ('anonymous' as const),
+              ...(actor.kind === 'account' ? { account: actor.accountId } : {}),
+              context: selected?.context.id ?? GLOBAL_CONTEXT,
+              actions: { statementPropose },
+            };
+          }
+        : undefined;
       return pageAnswer({
-        release: (await activeRelease(pool))?.release,
+        release: definitionRelease?.release,
         continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
         ...(selected ? { context: selected.context } : {}),
         ...(selected || plannedDocuments
@@ -487,6 +519,8 @@ export function pageRoutes<App>(
         request,
         session,
         digest: active.digest,
+        ...(pageCatalogue ? { catalogue: pageCatalogue } : {}),
+        ...(pageViewer ? { viewer: pageViewer } : {}),
         resolved,
         views,
         subject: subject?.id ?? null,
@@ -520,6 +554,13 @@ async function pageAnswer(input: {
   continuation?: PageContinuation;
   finalGuard?: (session: string | null) => Promise<string | null>;
   resolveBuiltin: NonNullable<Parameters<typeof readPage>[0]['resolveBuiltin']>;
+  catalogue?: ReturnType<typeof cataloguePageMetadata>;
+  viewer?: () => Promise<{
+    state: 'anonymous' | 'account';
+    account?: string;
+    context: string;
+    actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
+  }>;
 }): Promise<Response> {
   const violations = validateDocumentFilters(
     platformRegistry,
@@ -658,6 +699,8 @@ async function pageAnswer(input: {
       template: { scope: input.resolved.scope, key: input.resolved.key },
       document: input.resolved.document,
       ...(input.views === null ? {} : { views: input.views }),
+      ...(input.catalogue ? { catalogue: input.catalogue } : {}),
+      ...(input.viewer ? { viewer: await input.viewer() } : {}),
       reads,
     },
     readSession,

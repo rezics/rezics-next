@@ -1,5 +1,4 @@
 import { expect, mock, test } from 'bun:test';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { planReads, platformRegistry } from '@rezics/composition';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -20,10 +19,7 @@ import {
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const [{ SubjectPage }, { catalogueFileReaderDefinitionsKey }] = await Promise.all([
-  import('../src/features/pages/subject'),
-  import('../src/features/catalogue/catalogue-file-reader/reader'),
-]);
+const { SubjectPage } = await import('../src/features/pages/subject');
 
 function ordinaryPage(publicRead: SubjectRead): SubjectPageData {
   const document: SubjectPageData['document'] = {
@@ -40,14 +36,14 @@ function ordinaryPage(publicRead: SubjectRead): SubjectPageData {
           ],
         },
       },
-      { type: 'Statements', props: { id: 'file-facts', properties: ['schema:name', 'schema:sha256'] } },
+      { type: 'Statements', props: { id: 'file-facts', properties: ['schema:name', 'wdt:P4092'] } },
       { type: 'RelationGroups', props: { id: 'file-relations', property: 'schema:encodesCreativeWork', limit: 20 } },
     ],
   };
   const page: SubjectPageData = {
     subject: publicRead.subject.id,
     profile: 'catalogue-file-reader-test',
-    template: { scope: 'base', key: 'rezics:CatalogueFile' },
+    template: { scope: 'base', key: 'schema:MediaObject' },
     document,
     reads: {},
   };
@@ -69,21 +65,28 @@ function renderSubject(
   release: Release,
   digest: string,
   fileSource?: string,
+  statementPropose: 'allowed' | 'denied' | 'unavailable' = 'allowed',
 ) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(catalogueFileReaderDefinitionsKey(read, page, 'en'), { ok: true, release, digest });
+  const supported = !!release.types[read.subject.type];
+  page.catalogue = {
+    state: supported ? 'released' : 'unsupported',
+    type: read.subject.type,
+    ...(supported ? { digest, definitions: { types: release.types, properties: release.properties } } : {}),
+  };
+  page.viewer = {
+    state: 'account',
+    account: '019a1b2c-3d4e-7f00-8a00-ed170e000195',
+    context: read.subject.context,
+    actions: { statementPropose },
+  };
   return renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(SubjectPage, {
-        page,
-        locale: 'en',
-        messages: subjectPageMessages(),
-        fileSource,
-        renderJsonLd: false,
-      }),
-    ),
+    createElement(SubjectPage, {
+      page,
+      locale: 'en',
+      messages: subjectPageMessages(),
+      fileSource,
+      renderJsonLd: false,
+    }),
   );
 }
 
@@ -120,8 +123,8 @@ test('retired associations cannot add a destination return, and unsupported file
   const missing = await catalogueFileProfileFixture('unreleased').read();
   if (!missing.ok) throw new Error('Expected generic facts without file definitions');
   const unsupportedRead = structuredClone(missing.public);
-  unsupportedRead.subject.type = 'schema:Person';
-  const source = current.public.subject.statements['schema:sha256']?.[0];
+  unsupportedRead.subject.type = 'wd:Q82753';
+  const source = current.public.subject.statements['wdt:P4092']?.[0];
   if (!source) throw new Error('Expected a generic fact example');
   unsupportedRead.subject.statements['schema:name'] = [
     {
@@ -145,6 +148,24 @@ test('retired associations cannot add a destination return, and unsupported file
   );
   expect(unsupportedHtml).toContain('Generic file title');
   expect(unsupportedHtml).not.toMatch(/href="\/en\/subjects\/[^\"]+\/file(?:\?|\")/);
+});
+
+test('native page action decisions keep denied and unavailable correction controls closed', async () => {
+  const result = await catalogueFileProfileFixture('ready').read();
+  if (!result.ok) throw new Error('Expected the current recorded catalogue definitions');
+  const denied = renderSubject(ordinaryPage(result.public), result.public, result.release, result.digest, undefined, 'denied');
+  const unavailable = renderSubject(
+    ordinaryPage(result.public),
+    result.public,
+    result.release,
+    result.digest,
+    undefined,
+    'unavailable',
+  );
+  expect(denied).not.toContain('data-slot="catalogue-file-reader-correction"');
+  expect(unavailable).not.toContain('data-slot="catalogue-file-reader-correction"');
+  expect(denied).toContain('Episode 1 file A');
+  expect(unavailable).toContain('Episode 1 file A');
 });
 
 test('return destinations stay in the same locale and accept only a subject path', () => {

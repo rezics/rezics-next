@@ -4,6 +4,7 @@ types:
   schema:Movie: 電影
   schema:TVSeason: '季'
   schema:TVSeries: 'TV 動畫'
+  schema:MediaObject: "媒體物件"
 properties:
   bf:hasPart: '收錄作品'
   marcrel:fds: '影片發行方'
@@ -16,17 +17,22 @@ properties:
   schema:startDate: 開始日期
   wdt:P449: 首播平台
   wdt:P973: 詳細描述網址
+  schema:associatedMedia: "相關媒體"
+  schema:encodesCreativeWork: "編碼的單集"
 inverseProperties:
   bf:hasPart: '收錄此作品的發行版'
   marcrel:fds: '發行的影片版本'
   schema:isPartOf: '集數'
   wdt:P449: '首播作品'
+  schema:associatedMedia: "包含此檔案的發行版"
+  schema:encodesCreativeWork: "編碼此單集的檔案"
 typeDescriptions:
   rezics:AnimeRelease: '具有獨立識別身分的動畫出版或發行版本，與作品本身分開。也與單集、播放檔案及個人副本區別，不因語言或格式不同就自動建立多個發行版。'
   schema:Episode: '可獨立識別的一集動畫或其他單篇，例如第 3 集或特別篇；不是播放檔案，也不是整季。'
   schema:Movie: '作為作品的動畫長片或短片，獨立於各個出版發行版本。'
   schema:TVSeason: '電視動畫中可單獨識別的一季，與完整系列及單集分開。'
   schema:TVSeries: '包含各季與各集的電視動畫作品系列，與某個具體發行版分開。'
+  schema:MediaObject: "獨立識別的目錄檔案。其詮釋資料不證明擁有檔案、下載權限、可播放狀態或觀看進度。"
 libraryProfiles:
   anime.series:
     states:
@@ -128,3 +134,6 @@ propertyDescriptions:
   schema:startDate: '原始播出或發行期間的開始日期，維持來源的日期精度。'
   wdt:P449: '來源明確指出的首播機構，不泛指後續所有發行者。'
   wdt:P973: '介紹這部動畫作品的頁面 URL，描述性連結不等於身分精確對應。'
+
+  schema:associatedMedia: "與此已識別動畫出版發行版關聯的目錄檔案；此關聯不會使檔案等同於發行版。"
+  schema:encodesCreativeWork: "此精確目錄檔案所編碼的單集；此關係不證明擁有檔案或已觀看。"

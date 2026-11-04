@@ -4,6 +4,7 @@ types:
   schema:Person: 人物
   schema:Organization: 組織
   schema:SoftwareApplication: 軟體應用程式
+  rezics:ReleaseGroup: "發佈組"
 properties:
   rezics:penNameOf: '筆名使用者'
   wdt:P186: 材料
@@ -61,6 +62,12 @@ properties:
   rezics:editionCounterpart: '圖書的不同版本'
   rezics:bangumiLegacyVersion: '版本關聯（Bangumi 舊代碼）'
   rezics:expansionCounterpart: '擴充包或基礎遊戲'
+  wdt:P4092: "校驗和"
+  wdt:P3575: "檔案大小"
+  rezics:hashAlgorithm: "雜湊演算法"
+  rezics:codec: "編解碼器"
+  rezics:fileQuality: "檔案品質"
+  rezics:releaseGroup: "發佈組"
 inverseProperties:
   rezics:penNameOf: '筆名'
   wdt:P186: 用於
@@ -81,6 +88,7 @@ inverseProperties:
   rezics:sideStoryOf: '番外篇'
   rezics:bangumiRelatedTo: '關聯來源（Bangumi）'
 
+  rezics:releaseGroup: "此發佈組的檔案"
 propertyDescriptions:
   rezics:penNameOf: '使用此筆名或共同名義的個人或組織。'
   wdt:P186: '作為材料或組成部分的食物或已完成的食譜，可用限定詞補充用量和清單順序。'
@@ -138,9 +146,17 @@ propertyDescriptions:
   rezics:editionCounterpart: '書籍的其他版本或版次；這項對稱關聯不判定原版，也不表示作品到版本的方向。'
   rezics:bangumiLegacyVersion: '保留自 Bangumi 已停用 Main Version 代碼 4013 的對稱版本關聯，不指定原版方向。'
   rezics:expansionCounterpart: '基礎遊戲與追加作品的無方向關聯；來源若已明示擴充方向，可使用有方向的擴充關係。'
+  wdt:P4092: "校驗和的精確文字。雜湊演算法另行保存；數值相同不會識別或合併檔案。"
+  wdt:P3575: "依來源記錄的位元組單位精確十進位數量保存檔案大小。"
+  rezics:hashAlgorithm: "原樣保存校驗演算法的來源代碼，未知代碼也保留以供審查。"
+  rezics:codec: "原樣保存來源提供的編解碼器代碼，包括尚未識別的代碼。"
+  rezics:fileQuality: "原樣保存來源提供的品質代碼，包括尚未識別的代碼。"
+  rezics:releaseGroup: "與此檔案關聯的 AniDB 來源群組，可獨立讀取，並與出版發行版及個人副本區分。"
 typeDescriptions:
   wd:Q2095: '可供食用的食品或物質，例如麵粉；食譜則說明食物的製作方式。'
   wd:Q2620972: '作品內具有名稱且依序排列的一段集數或章節，以起訖編號界定範圍。'
   schema:Person: '目錄中可識別的真實人物，例如作者；與虛構角色分開記錄。'
   schema:Organization: '出版社、製作公司等組織，或具署名的團體。'
   schema:SoftwareApplication: '可獨立識別的軟體應用程式，例如閱讀工具；遊戲作品與其發行版各有專用類型。'
+
+  rezics:ReleaseGroup: "由 AniDB 識別並與其發佈的檔案關聯的來源群組。其身分與各檔案及出版發行版分開保留。"

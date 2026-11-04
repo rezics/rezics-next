@@ -719,6 +719,19 @@ not mean implemented. No provider, QID, Source ID or source binding may be guess
 report evidence alone supplies none. No new runtime/configuration or library-profile
 expansion follows from this adoption.
 
+### Catalogue files and release groups
+
+Anime files use the single standard `schema:MediaObject` Type. AniDB source groups use the separate
+`rezics:ReleaseGroup` Type, a source-grain child of `schema:Organization`; neither is an AnimeRelease,
+work identity or personal Copy. `wd:Q55327` is not a release-group class. `wdt:P4092` stores each exact
+checksum string and `rezics:hashAlgorithm` retains its source algorithm code as a qualifier. Hashes are
+catalogue data: equal strings do not identify or merge files. `wdt:P3575` stores file size as an exact
+quantity in bytes. `rezics:codec` and `rezics:fileQuality` keep source codes as reported, including
+unknown codes for review; language remains `schema:inLanguage`. Directed `schema:encodesCreativeWork`,
+`schema:associatedMedia` and `rezics:releaseGroup` relations keep file, episode, publication release and
+group identities separate and retain their source references. None proves possession, download rights,
+playback availability, entitlement or watched progress.
+
 ### Recipe diet and cooking time
 
 Adopt `schema:suitableForDiet` as the required released Concept-valued Recipe

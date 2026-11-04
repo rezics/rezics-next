@@ -215,7 +215,7 @@ function CatalogueFileProfileLive({
   const unknownCodec = codec
     ? (read?.public.subject.statements[codec] ?? []).some((statement) => {
         if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return false;
-        return codecEnum ? !codecEnum.includes(statement.value.content) : true;
+        return codecEnum ? !codecEnum.includes(statement.value.content) : false;
       })
     : false;
   return (

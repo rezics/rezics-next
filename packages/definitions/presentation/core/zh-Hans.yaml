@@ -4,6 +4,7 @@ types:
   schema:Person: '人物'
   schema:Organization: '组织'
   schema:SoftwareApplication: '软件应用程序'
+  rezics:ReleaseGroup: "发布组"
 properties:
   rezics:penNameOf: '笔名使用者'
   wdt:P186: 材料
@@ -61,6 +62,12 @@ properties:
   rezics:editionCounterpart: '图书的不同版本'
   rezics:bangumiLegacyVersion: '版本关联（Bangumi 旧代码）'
   rezics:expansionCounterpart: '扩展包或基础游戏'
+  wdt:P4092: "校验和"
+  wdt:P3575: "文件大小"
+  rezics:hashAlgorithm: "哈希算法"
+  rezics:codec: "编解码器"
+  rezics:fileQuality: "文件质量"
+  rezics:releaseGroup: "发布组"
 inverseProperties:
   rezics:penNameOf: '笔名'
   wdt:P186: 用于
@@ -80,12 +87,14 @@ inverseProperties:
   rezics:summaryOf: '总集篇'
   rezics:sideStoryOf: '番外篇'
   rezics:bangumiRelatedTo: '关联来源（Bangumi）'
+  rezics:releaseGroup: "此发布组的文件"
 typeDescriptions:
   wd:Q2095: '可食用的食物或物质，如面粉；食谱则描述如何制作食物。'
   wd:Q2620972: '作品中有名称且按顺序排列的一段集数或章节范围，以首尾编号界定。'
   schema:Person: '目录中可识别的真实人物，如作者；与虚构角色分开记录。'
   schema:Organization: '出版社、工作室等组织，或署名的团体。'
   schema:SoftwareApplication: '可独立识别的软件应用，如阅读工具；游戏作品及其发行版使用各自的类型。'
+  rezics:ReleaseGroup: "由 AniDB 标识并与其发布的文件关联的来源组。其身份与每个文件及出版发行版分别保留。"
 propertyDescriptions:
   rezics:penNameOf: '使用此笔名或共同名义的个人或组织。'
   wdt:P186: '用作材料或组成部分的食物或已制成的食谱，可用限定词补充用量及列表顺序。'
@@ -143,3 +152,10 @@ propertyDescriptions:
   rezics:editionCounterpart: '书籍的其他版本或版次；此对称关联不判定原版，也不表示作品到版本的方向。'
   rezics:bangumiLegacyVersion: '保留自 Bangumi 已停用 Main Version 代码 4013 的对称版本关联，不判定原版方向。'
   rezics:expansionCounterpart: '基础游戏与追加作品的无方向关联；若来源明确扩展方向，可使用有方向的扩展关系。'
+
+  wdt:P4092: "校验和的精确文本。哈希算法单独保存；数值相同不会识别或合并文件。"
+  wdt:P3575: "按来源记录的单位字节精确十进制数量保存文件大小。"
+  rezics:hashAlgorithm: "原样保存校验算法的来源代码，未知代码也保留以供审查。"
+  rezics:codec: "原样保存来源给出的编解码器代码，包括尚未识别的代码。"
+  rezics:fileQuality: "原样保存来源给出的质量代码，包括尚未识别的代码。"
+  rezics:releaseGroup: "与此文件关联的 AniDB 来源组，可独立读取，并与出版发行版和个人副本区分。"

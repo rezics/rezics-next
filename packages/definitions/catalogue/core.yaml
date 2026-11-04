@@ -111,6 +111,10 @@ classes:
       - wd:Q43229
     annotations:
       schema_org_type: https://schema.org/Organization
+  ReleaseGroup:
+    is_a: Organization
+    class_uri: rezics:ReleaseGroup
+    description: A source-identified group that releases or distributes related catalogue files.
   Food:
     is_a: Thing
     class_uri: wd:Q2095
@@ -147,6 +151,45 @@ slots:
     annotations:
       datatype: quantity
       units: '*'
+  hashAlgorithm:
+    slot_uri: rezics:hashAlgorithm
+    description: The exact source code naming a checksum's algorithm.
+    annotations:
+      datatype: string
+  fileCodec:
+    slot_uri: rezics:codec
+    description: The codec code reported for a catalogue file.
+    annotations:
+      datatype: string
+  fileQuality:
+    slot_uri: rezics:fileQuality
+    description: The quality code reported for a catalogue file.
+    annotations:
+      datatype: string
+  checksum:
+    slot_uri: wdt:P4092
+    description: An exact checksum value with its algorithm stated separately.
+    multivalued: true
+    annotations:
+      datatype: string
+      qualifiers: hashAlgorithm
+  fileSize:
+    slot_uri: wdt:P3575
+    description: The exact file size as a quantity in its stated unit.
+    range: decimal
+    annotations:
+      datatype: quantity
+      units: wd:Q8799
+  releaseGroup:
+    slot_uri: rezics:releaseGroup
+    description: The independently identified source group associated with a catalogue file.
+    range: ReleaseGroup
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:groupFiles
+      relation_order: name
   note:
     slot_uri: rezics:note
     description: A free-text note qualifying a statement.

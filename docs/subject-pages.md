@@ -385,8 +385,10 @@ release. Native-return links keep the work, existing publisher target selection,
 ## Inspect catalogue file metadata and its release group
 
 `/{locale}/subjects/{id}/{slug}/file` is the companion for an admitted catalogue file or release group. The frame
-offers it for `schema:MediaObject`, `rezics:CatalogueFile`, `rezics:ReleaseGroup`, `wd:Q82753` and `wd:Q55327` when
-those exact type IDs are current. Until Semantic publishes file/group types in the active release, the page names
+offers it for `schema:MediaObject` files and `rezics:ReleaseGroup` source groups when those exact type IDs are current.
+`schema:MediaObject` is the file class; a second local file alias is not published. `rezics:ReleaseGroup` is the
+distinct source-group grain and is not a file, release or personal copy. The page does not publish `wd:Q55327` as a
+group type. Until Semantic publishes these types in the active release, the page names
 the profile unreleased. Hashes, size, codec, language and quality are catalogue statements. They never prove the
 viewer possesses, matched or consumed the file. A file is not an AnimeRelease. Group credits render independently
 from creator credits. File association does not create progress completion. Web does not upload, scan, hash-match,
@@ -405,6 +407,8 @@ existing `/file` profile remains the correction path, with the exact selected as
 return to that anchor. Correction is offered only for the currently admitted type in the existing candidate context.
 Native subjects, links and candidates remain the implementation.
 
+Decision: use `schema:MediaObject` for catalogue files and `rezics:ReleaseGroup` for source groups; `wd:Q55327` is Échevannes, France, not a release-group class.
+
 ## Release and file visit cost
 
 One selected release or file/group visit uses C = 4 installed components: descriptor, subject, one association page
@@ -412,9 +416,11 @@ and at most one explicitly selected detail. Calls per visit are at most C. Web p
 are O(∑ L_i + ∑ B_i) for that visit, independent of catalogue/file history N. Each continuation replaces its page.
 Correction uses a fixed addressed native command/readback sequence.
 
-The ordinary Subject file reader adds C = 2 reads for eligible file/group type candidates: the active descriptor and
-its exact immutable release bundle. The Subject read and finite relation pages are reused from the page composition;
-the reader adds no relation continuation or per-target detail reads. Its association rows are already included in the
+The ordinary Subject file reader uses the current active descriptor already resolved by `POST /v1/pages:read`; the
+response carries only the selected file/group Type and its admitted field and relation meanings. Its current viewer
+and proposal action come from native Access under that caller and are returned with the page's private no-store
+envelope. The Subject read and finite relation pages are reused from the page composition; the reader adds no
+definition request, relation continuation or per-target detail reads. Its association rows are already included in the
 ordinary page's composition bounds.
 
 | Component   | L_i (rows)                                       | B_i (bytes) | Source                                                                                                             |

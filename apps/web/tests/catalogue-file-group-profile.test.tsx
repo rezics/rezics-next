@@ -28,10 +28,11 @@ test('a catalogue file keeps hash identity, group credits and an unknown codec v
   expect(page.profile).toBe('file');
   expect(isFileOrGroupType(page.release, 'schema:MediaObject')).toBe(true);
   expect(fileProfileReleased(page.release)).toBe(true);
-  const hash = page.facts.technical?.find((fact) => fact.property === 'schema:sha256')?.statements[0];
+  const hash = page.facts.technical?.find((fact) => fact.property === 'wdt:P4092')?.statements[0];
   expect(rawIdentifier(hash!)?.raw).toBe('abc123def456');
+  expect(hash?.qualifiers[0]?.value.content).toBe('sha256');
   expect(page.facts.technical?.some((fact) => fact.statements[0]?.value.content === 'av1')).toBe(true);
-  expect(page.release.properties['schema:encodingFormat']?.value).toMatchObject({ enum: ['h264', 'hevc'] });
+  expect(page.release.properties['rezics:codec']?.datatype).toBe('string');
   expect(page.facts.group?.some((fact) => fact.property === 'rezics:releaseGroup')).toBe(true);
   expect(page.facts.credits?.some((fact) => fact.property === 'schema:author')).toBe(true);
   expect(page.public.subject.type).not.toBe('rezics:AnimeRelease');
@@ -43,15 +44,12 @@ test('two files for one episode stay distinct from the release, and a concealed 
   if (!page.ok || !page.stream) throw new Error('Expected file streams');
   const episode = page.streams.find((stream) => stream.kind === 'episode');
   const group = page.streams.find((stream) => stream.kind === 'group');
-  const siblings = page.streams.find((stream) => stream.kind === 'file');
+  const release = page.streams.find((stream) => stream.kind === 'release');
   expect(episode).toBeDefined();
   expect(group).toBeDefined();
-  expect(siblings).toBeDefined();
-  const files = await fixture.read(siblings!.key);
-  if (!files.ok) throw new Error('Expected sibling files for the same episode');
-  const identities = files.rows.flatMap((row) => Object.keys(row.related));
-  expect(identities).toContain(catalogueFileTwo);
-  expect(identities).not.toContain(catalogueRelease);
+  expect(release).toBeUndefined();
+  expect(catalogueFile).not.toBe(catalogueFileTwo);
+  expect(catalogueFile).not.toBe(catalogueRelease);
   const concealed = await catalogueFileProfileFixture('concealed-episode').read();
   if (!concealed.ok) throw new Error('Expected concealed episode');
   expect(concealed.related ? concealed.public.related[catalogueEpisode]?.labels : {}).toEqual({});
@@ -66,20 +64,20 @@ test('precise file correction uses the selected assertion; a stale read does not
   const page = await fixture.read();
   if (!page.ok) throw new Error('Expected current file');
   const key = '00000000-0000-4000-8000-00000000a280';
-  const original = page.public.subject.statements['schema:sha256']![0]!;
+  const original = page.public.subject.statements['wdt:P4092']![0]!;
   const result = await fixture.propose({
     id: catalogueFile,
     key,
     statement: {
-      property: { id: 'schema:sha256' },
+      property: { id: 'wdt:P4092' },
       value: { type: 'value', content: 'ffffffffffffffff' },
-      qualifiers: [],
+      qualifiers: [{ property: { id: 'rezics:hashAlgorithm' }, value: { type: 'value', content: 'sha256' } }],
       references: [],
       rank: 'normal',
     },
   });
   expect(result).toMatchObject({ ok: true });
-  expect(page.public.subject.statements['schema:sha256']![0]).toEqual(original);
+  expect(page.public.subject.statements['wdt:P4092']![0]).toEqual(original);
   const post = fixture.calls.find((call) => call.method === 'POST')!;
   expect(post.path).toBe(`/v1/subjects/${catalogueFile}/candidates`);
   expect(fixture.receipts.get(key)).toMatchObject({ candidate: '00000000-0000-4000-8000-00000000a299' });

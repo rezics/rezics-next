@@ -4,6 +4,7 @@ types:
   schema:Movie: film
   schema:TVSeason: 'season'
   schema:TVSeries: television series
+  schema:MediaObject: "media object"
 properties:
   bf:hasPart: 'included work'
   marcrel:fds: 'film distributor'
@@ -16,17 +17,22 @@ properties:
   schema:startDate: start date
   wdt:P449: original broadcaster
   wdt:P973: described at URL
+  schema:associatedMedia: "associated media"
+  schema:encodesCreativeWork: "encodes episode"
 inverseProperties:
   bf:hasPart: 'Publications containing this work'
   marcrel:fds: 'Film distributions'
   schema:isPartOf: 'Episodes'
   wdt:P449: 'Original broadcasts'
+  schema:associatedMedia: "releases containing this file"
+  schema:encodesCreativeWork: "files encoding this episode"
 typeDescriptions:
   rezics:AnimeRelease: 'An independently identified publication or distributed version of anime content. Distinct from the work, episode, playback file or personal copy; languages and formats alone do not create separate releases.'
   schema:Episode: 'An independently identified installment of an anime work, such as episode 3 or a special; not a playback file or a whole season.'
   schema:Movie: 'An animated feature or short film as a work, independent of its distributed editions.'
   schema:TVSeason: 'A separately identified season of an animated television series, rather than the whole series or a single episode.'
   schema:TVSeries: 'An animated television series as a work spanning its seasons and episodes, distinct from a particular publication release.'
+  schema:MediaObject: "An independently identified catalogue file. Its metadata does not establish possession, permission to download, playback availability or watched progress."
 libraryProfiles:
   anime.series:
     states:
@@ -132,3 +138,6 @@ propertyDescriptions:
   schema:startDate: "The start of the original broadcast or release period, preserving the source's date precision."
   wdt:P449: 'The organization identified by the source as the original broadcaster; not every later distributor.'
   wdt:P973: 'A URL for a page describing this anime work; a descriptive link is not an exact identity match.'
+
+  schema:associatedMedia: "A catalogue file associated with this identified anime publication release; the link does not make the file the release."
+  schema:encodesCreativeWork: "The episode encoded by this exact catalogue file; the relation does not establish possession or watched state."

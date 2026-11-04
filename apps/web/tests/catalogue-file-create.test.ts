@@ -69,18 +69,18 @@ test('file and group creation offers released grains, grouped fields and the ord
   const fields = catalogueFileCreateFields(release, fileType);
   expect(fields.length).toBeGreaterThan(0);
   expect(fields.every((id) => release.types[fileType]!.properties.includes(id))).toBe(true);
-  expect(fields.some((id) => id === 'schema:sha256' || id === 'schema:encodingFormat' || id === 'schema:sameAs')).toBe(
+  expect(fields.some((id) => id === 'wdt:P4092' || id === 'rezics:codec' || id === 'schema:sameAs')).toBe(
     true,
   );
   const grouped = catalogueFileCreateFieldGroups(release, fileType, 'en').flatMap((group) => group.properties);
   expect(grouped).toEqual(fields);
-  expect(catalogueFileCreateHashNotice(release, fileType, 'schema:sha256')).toBe('hash');
-  expect(catalogueFileCreateHashNotice(release, fileType, 'schema:encodingFormat')).toBe('codec');
+  expect(catalogueFileCreateHashNotice(release, fileType, 'wdt:P4092')).toBe('hash');
+  expect(catalogueFileCreateHashNotice(release, fileType, 'rezics:codec')).toBe('codec');
   const empty = catalogueFileCreateDraft(release, { type: fileType, labels: { en: 'Empty file' } }, [
     {
       key: 'blank',
       statement: {
-        property: { id: 'schema:sha256' },
+        property: { id: 'wdt:P4092' },
         value: { type: 'value', content: '' },
         qualifiers: [],
         references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: '' } }] }],
@@ -94,7 +94,7 @@ test('file and group creation offers released grains, grouped fields and the ord
       {
         key: 'hash',
         statement: {
-          property: { id: 'schema:sha256' },
+          property: { id: 'wdt:P4092' },
           value: { type: 'value', content: 'abc' },
           qualifiers: [],
           references: [],

@@ -4,6 +4,7 @@ types:
   schema:Person: 人物
   schema:Organization: 組織
   schema:SoftwareApplication: ソフトウェアアプリケーション
+  rezics:ReleaseGroup: "リリースグループ"
 properties:
   rezics:penNameOf: '筆名の使用者'
   wdt:P186: 材料
@@ -61,6 +62,12 @@ properties:
   rezics:editionCounterpart: '書籍の別バージョン'
   rezics:bangumiLegacyVersion: '別バージョン（Bangumi旧コード）'
   rezics:expansionCounterpart: '拡張版・本編ゲーム'
+  wdt:P4092: "チェックサム"
+  wdt:P3575: "ファイルサイズ"
+  rezics:hashAlgorithm: "ハッシュアルゴリズム"
+  rezics:codec: "コーデック"
+  rezics:fileQuality: "ファイル品質"
+  rezics:releaseGroup: "リリースグループ"
 inverseProperties:
   rezics:penNameOf: '筆名'
   wdt:P186: 使用先
@@ -81,6 +88,7 @@ inverseProperties:
   rezics:sideStoryOf: '外伝'
   rezics:bangumiRelatedTo: '関連元（Bangumi）'
 
+  rezics:releaseGroup: "このリリースグループのファイル"
 propertyDescriptions:
   rezics:penNameOf: 'この筆名または共同名義を使用する人物または組織。'
   wdt:P186: '材料や構成要素として使う食品または調理済みのレシピ。数量やリスト内の順序を修飾できます。'
@@ -138,9 +146,17 @@ propertyDescriptions:
   rezics:editionCounterpart: '書籍の別版や別バージョンを対称的に結ぶ関連。原版や作品から版への方向は示しません。'
   rezics:bangumiLegacyVersion: '廃止されたBangumiのMain Versionコード4013に由来する対称的な版の関連。原版の方向は定めません。'
   rezics:expansionCounterpart: '基本ゲームと追加作品を方向なしで結ぶ関連。拡張する側が明確なら、方向のある拡張関係を使います。'
+  wdt:P4092: "チェックサムの正確な文字列です。ハッシュアルゴリズムは別に保存し、同じ値でもファイルを識別または統合しません。"
+  wdt:P3575: "ソースが示したファイルサイズを、バイト単位の正確な十進数量で保存します。"
+  rezics:hashAlgorithm: "チェックサムのアルゴリズムを示すソースコードをそのまま保存し、未知のコードも確認用に残します。"
+  rezics:codec: "ソースが示したコーデックコードをそのまま保存し、未認識のコードも保持します。"
+  rezics:fileQuality: "ソースが示した品質コードをそのまま保存し、未認識のコードも保持します。"
+  rezics:releaseGroup: "このファイルに関連付けられた AniDB のソースグループです。刊行リリースや個人の所有物とは別に読めます。"
 typeDescriptions:
   wd:Q2095: '小麦粉などの食品や食用の物質。調理方法を記すレシピとは別の対象です。'
   wd:Q2620972: '作品内のエピソードや章を順にまとめた、名前のある物語の区間。最初と最後の番号で範囲を示します。'
   schema:Person: '著者など、カタログで識別される実在の人物。架空のキャラクターとは区別します。'
   schema:Organization: '出版社や制作スタジオなどの組織、またはクレジットに記載された団体。'
   schema:SoftwareApplication: '閲覧ツールなど、個別に識別できるアプリケーション。ゲーム作品とそのリリースには別の型があります。'
+
+  rezics:ReleaseGroup: "AniDB が識別し、配布するファイルと関連付けるソースグループです。各ファイルや刊行リリースとは別の識別対象です。"
