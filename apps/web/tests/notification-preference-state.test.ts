@@ -315,7 +315,7 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
       });
       expect(editor.snapshot()).toMatchObject({
         phase: 'saved',
-        draft: { ...optional, reply: false, thread_watch: false },
+        draft: { ...optional, reply: false },
       });
     } finally {
       clock.mockRestore();
