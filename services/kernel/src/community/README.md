@@ -338,7 +338,7 @@ witnesses; response memory includes at most60 native opening bodies with their e
 60 titles (at most1024 scalars each), targets and count/source tuples, including serialization copies. This adds the
 derived sum of the existing body/citation/Access bounds to the Home Cost below; it makes no measured growth claim.
 
-Both mounted operations (`realm.home` and `realm.boardShelf`) use `RealmHomeBoardPageSchema`, including the closed
+Both mounted operations (`realm.home` and `realm.board_shelf`) use `RealmHomeBoardPageSchema`, including the closed
 recent projection, through the existing registrations and dependencies. Publication's sole receiver must deliver
 the official package-root-derived callable before Web extends its Home transport; the older handwritten envelope
 does not authorize another substitute ABI. Web's agreed `RealmCommunityBoards` seam retains its existing shelf,
