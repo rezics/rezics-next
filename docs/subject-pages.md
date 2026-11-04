@@ -52,6 +52,22 @@ Correction uses the existing album and screen editors: an explicit proposal, nat
 reread of the same subject. Empty, loading, denied, stale and unavailable readings keep useful copy and a bounded retry;
 retry never creates. A contributor list previews the credits view.
 
+TVSeries and TVSeason episode browsing uses only the released inverse `schema:isPartOf` link window. It preserves the
+native response order and displays `schema:position` only when that exact membership assertion discloses the admitted
+string qualifier. It never derives a number or episode kind from a title, position or array offset; extra episode facts
+open the exact Episode or Season page. If the assertion projection is withheld, its title, link and evidence stay hidden.
+
+Decision: preserve native episode link order and position strings; an absent released episode-kind fact stays unknown.
+
+### Screen episode reader Cost
+
+One screen profile read and one inverse link page suffice for a visit; the reader requests `WORK_PARTS_PAGE_CAP` (20)
+rows from the current `/links` endpoint, whose input accepts 1–100. The public link response has no aggregate UTF-8
+ceiling. Before retaining evidence, the adapter measures the complete decoded page and refuses it above 1 MiB without
+dropping qualifiers or references. Native statement admission bounds one statement to 16 qualifiers, 16 references
+and 16 parts per reference. This retained-page budget does not claim a native query or wire-byte bound; the adapter
+does not enumerate unrelated subjects, hydrate members or read historical membership versions.
+
 Admitted public containment is independently readable through the [album contents owner](../apps/web/src/features/catalogue/album-track-reader/README.md).
 
 ## Read a game work and its editions

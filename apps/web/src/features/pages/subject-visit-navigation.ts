@@ -121,19 +121,31 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
         return;
       return `${url.pathname}${url.search}`;
     }
-    const allowed = new Set(['realm', 'node', 'cursor', 'property']);
+    const allowed = new Set(['realm', 'node', 'cursor', 'property', 'screenCursor', 'screenSelection']);
     const keys = [...url.searchParams.keys()];
     if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return;
     const selectedRealm = url.searchParams.get('realm');
     const node = url.searchParams.get('node');
     const cursor = url.searchParams.get('cursor');
     const property = url.searchParams.get('property');
+    const screenCursor = url.searchParams.get('screenCursor');
+    const screenSelection = url.searchParams.get('screenSelection');
+    const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
+    const screenReturn = screenCursor !== null || screenSelection !== null || screenEntry !== null;
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
       (cursor !== null && (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f]/u.test(cursor))) ||
       (property !== null &&
-        (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f]/u.test(property)))
+        (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f]/u.test(property))) ||
+      (screenReturn &&
+        (subject?.[2] !== undefined ||
+          (screenCursor !== null &&
+            (!screenCursor || screenCursor.length > 8192 || /[\u0000-\u001f]/u.test(screenCursor))) ||
+          (screenSelection !== null && !new RegExp(`^${uuid}$`, 'i').test(screenSelection)) ||
+          (screenEntry !== null && !new RegExp(`^${uuid}$`, 'i').test(screenEntry[1]!)) ||
+          (screenSelection !== null && screenEntry?.[1]?.toLowerCase() !== screenSelection.toLowerCase()) ||
+          (screenSelection === null && screenEntry !== null)))
     )
       return;
     const fragment = url.hash === '' ? '#connections' : url.hash;
@@ -141,6 +153,7 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
       fragment !== '#connections' &&
       !(subject && connectionReturnWindow(fragment)) &&
       fragment !== '#manga-reader' &&
+      (fragment !== '#screen-episode-list' && screenEntry === null) &&
       !(subject?.[2] === 'sources' && fragment === '#subject-sources-heading')
     )
       return;
@@ -179,6 +192,8 @@ export function withSubjectVisitReturn(href: string, value: string, locale: stri
   const via = subjectVisitReturn(value, locale);
   if (!via || !/^\/[^/]+\/subjects\//.test(href)) return href;
   const url = new URL(href, 'https://rezics.invalid');
+  const existing = url.searchParams.getAll('via');
+  if (existing.length === 1 && subjectVisitReturn(existing[0], locale)) return href;
   url.searchParams.set('via', via);
   return `${url.pathname}${url.search}${url.hash}`;
 }
