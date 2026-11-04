@@ -1753,6 +1753,7 @@
   "own_drafts_retry_selection": "Retry selected draft",
   "own_drafts_revision": "Revision",
   "own_drafts_body_heading": "Draft body",
+  "own_drafts_inspect_subject": "Inspect Subject in a new tab",
   "own_drafts_subjects": "Subject references",
   "own_drafts_media": "Media references",
   "own_drafts_no_references": "None listed",
