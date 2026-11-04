@@ -11,10 +11,7 @@ import {
   type ReadingInsightsAssessments,
 } from './reading-insights-assessments.ts';
 import { createReadingInsightsProfileReads, type ReadingInsightsProfiles } from './reading-insights-profiles.ts';
-import {
-  createReadingInsightsOverviewReads,
-  type ReadingInsightsOverview,
-} from './reading-insights-overview.ts';
+import { createReadingInsightsOverviewReads, type ReadingInsightsOverview } from './reading-insights-overview.ts';
 
 const closed = { additionalProperties: false } as const;
 const count = t.String({ pattern: '^[0-9]{1,19}$' });
@@ -174,10 +171,13 @@ const reportedYearSummary = t.Unsafe<ReportedYearSummary>(
       calendar: t.Literal('gregorian'),
       dateSource: t.Literal('explicitly_reported_journal_finish'),
       ...summaryCounts.properties,
-      months: t.Array(t.Object({ month: t.Integer({ minimum: 1, maximum: 12 }), ...summaryCounts.properties }, closed), {
-        minItems: 12,
-        maxItems: 12,
-      }),
+      months: t.Array(
+        t.Object({ month: t.Integer({ minimum: 1, maximum: 12 }), ...summaryCounts.properties }, closed),
+        {
+          minItems: 12,
+          maxItems: 12,
+        },
+      ),
       monthUnallocated: summaryCounts,
       coverage: t.Object(
         {

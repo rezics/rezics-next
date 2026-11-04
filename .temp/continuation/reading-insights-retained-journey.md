@@ -32,15 +32,14 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Existing native aggregate cases: exact heterogeneous progress and revision-aware assessment values, coverage, deletion/restoration and receipt replay; pure bounded reads retain separately identified panel failures."
-    - "Existing page receiving cases: reported year, exact native values and meaning, independent panels and response-owned actions through the current owner/origin/locale visit; retired replies cannot hydrate another visit."
-    - "Existing maintenance cases: finite retained-owner installation and repair preserve the original admitted authority, exact progress/cursor and complete body-derived costs including failure/replay/cleanup; native/growth execution remains controller-owned."
+    - 'Existing native aggregate cases: exact heterogeneous progress and revision-aware assessment values, coverage, deletion/restoration and receipt replay; pure bounded reads retain separately identified panel failures.'
+    - 'Existing page receiving cases: reported year, exact native values and meaning, independent panels and response-owned actions through the current owner/origin/locale visit; retired replies cannot hydrate another visit.'
+    - 'Existing maintenance cases: finite retained-owner installation and repair preserve the original admitted authority, exact progress/cursor and complete body-derived costs including failure/replay/cleanup; native/growth execution remains controller-owned.'
   failing: true
   workerOwned: true
 estimate:
   lines: 2000
   files: 21
-
 ---
 
 # Finish the private Reading Insights journey
