@@ -19,7 +19,7 @@ import {
 import type { PublicBulkClient } from './public-bulk-client.ts';
 import { GLOBAL_CONTEXT } from './public-bulk-client.ts';
 import { createSourceRegistration } from './source-registry.ts';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { converter_revision as entityRevision, mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
 import { subjectSlug } from '@rezics/definitions/slug';
 
 type ImportTransport = ReturnType<typeof createImportTransport>;
@@ -356,7 +356,26 @@ function errorCode(error: unknown): string {
 }
 
 function recordSource(record: ShowcaseRecord, assertion: ShowcaseAssertion): boolean {
-  return assertion.source.source === record.sourceAlias && assertion.source.external_id === record.sourceKey;
+  return (
+    assertion.source.source === record.sourceAlias &&
+    (assertion.source.external_id === record.sourceKey || assertion.ownerKey === record.sourceKey)
+  );
+}
+
+const bangumiCharacterKindsUri = 'https://rezics.com/schemes/bangumi/character-kinds';
+const bangumiAppearanceRolesUri = 'https://rezics.com/schemes/bangumi/appearance-roles';
+const bangumiCharacterKindsSource =
+  'https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/CharacterType';
+const bangumiAppearanceRolesSource =
+  'https://github.com/bangumi/Archive/blob/959474a4fcb833f6dabe8dd2f4fe192f82a71140/README.md';
+
+function sourceVocabularyCitation(record: ShowcaseRecord, uri: string): boolean {
+  if (record.provider !== 'bangumi' || record.kind !== 'source-vocabulary' || !record.sourceUri) return false;
+  if (/^https:\/\/rezics\.com\/schemes\/bangumi\/character-kinds(?:\/[1-4])?$/u.test(record.sourceUri))
+    return uri === record.sourceUri || uri === bangumiCharacterKindsSource;
+  if (/^https:\/\/rezics\.com\/schemes\/bangumi\/appearance-roles(?:\/[1-3])?$/u.test(record.sourceUri))
+    return uri === record.sourceUri || uri === bangumiAppearanceRolesSource;
+  return false;
 }
 
 function proseOrImage(property: string): boolean {
@@ -563,6 +582,18 @@ export type ShowcasePublicationResult = Readonly<{
     assertions: readonly { candidateId: string; property: string; digest: string }[];
   }[];
   omissions: readonly { provider: 'bangumi' | 'vndb'; sourceKey: string; code: string }[];
+  unresolvedCharacterDependencies: readonly {
+    workKey: string | null;
+    workSubjectId: string | null;
+    characterKey: string;
+    characterSubjectId: string | null;
+    sourceIndex: number | null;
+    conceptUri?: string;
+    conceptId?: string;
+    code?: string;
+    reason: string;
+    property?: string;
+  }[];
 }>;
 
 /** Accept exact acknowledged candidates, adopt only those selections, then check them as a public viewer. */
@@ -734,7 +765,11 @@ export async function publishShowcase(input: {
           if (parsed.protocol !== 'https:') return true;
           const host = parsed.hostname.toLowerCase();
           return record.provider === 'bangumi'
-            ? host !== 'bgm.tv' && host !== 'bangumi.tv' && host !== 'www.bgm.tv' && host !== 'www.bangumi.tv'
+            ? host !== 'bgm.tv' &&
+                host !== 'bangumi.tv' &&
+                host !== 'www.bgm.tv' &&
+                host !== 'www.bangumi.tv' &&
+                !sourceVocabularyCitation(record, uri)
             : host !== 'vndb.org' && !host.endsWith('.vndb.org');
         } catch {
           return true;
@@ -1024,6 +1059,61 @@ export async function publishShowcase(input: {
   const uniqueOmissions = [
     ...new Map(omissions.map((item) => [`${item.provider}\0${item.sourceKey}\0${item.code}`, item])).values(),
   ].slice(0, showcaseLimits.omissions);
+  const unresolvedCharacterDependencies = input.result.characterDiagnostics
+    .slice(0, showcaseLimits.omissions)
+    .flatMap((gap) => {
+      const appearanceIndex = /^\/subject-characters\/([0-9]+)\/type$/u.exec(gap.path)?.[1];
+      const appearance =
+        appearanceIndex === undefined
+          ? undefined
+          : input.plan.characterAppearances?.find((row) => row.sourceIndex === Number(appearanceIndex));
+      const characterCode = /^\/character\/([1-9][0-9]*)\/type$/u.exec(gap.path)?.[1];
+      const characterKey = appearance
+        ? `character:${appearance.characterId}`
+        : characterCode
+          ? `character:${characterCode}`
+          : undefined;
+      if (!characterKey) return [];
+      const workKey = appearance?.subjectId ?? null;
+      const work = workKey
+        ? manifest.records.find((record) => record.provider === 'bangumi' && record.sourceKey === workKey)
+        : undefined;
+      const character = manifest.records.find(
+        (record) => record.provider === 'bangumi' && record.sourceKey === characterKey,
+      );
+      const characterRecord = [...input.plan.records.bangumi, ...input.plan.entities.bangumi].find(
+        (record) => record.key === characterKey,
+      );
+      const code = appearance?.roleCode ?? (characterRecord?.payload as Record<string, unknown> | undefined)?.type;
+      const group = appearance ? 'subject-characters.type' : 'character.role';
+      const enumeration =
+        typeof code === 'number' || typeof code === 'string'
+          ? mapSourceEnumeration('bangumi', group, code)
+          : undefined;
+      const conceptUri = enumeration?.concept?.id;
+      const concept = conceptUri
+        ? manifest.vocabulary.find(
+            (record) =>
+              record.provider === 'bangumi' &&
+              record.nativeType === 'skos:Concept' &&
+              record.sourceUri === conceptUri,
+          )
+        : undefined;
+      return [
+        {
+          workKey,
+          workSubjectId: work?.subjectId ?? null,
+          characterKey,
+          characterSubjectId: character?.subjectId ?? null,
+          sourceIndex: appearance?.sourceIndex ?? null,
+          ...(conceptUri ? { conceptUri } : {}),
+          ...(concept?.subjectId ? { conceptId: concept.subjectId } : {}),
+          ...(gap.code ? { code: gap.code.slice(0, 64) } : {}),
+          reason: gap.reason,
+          ...(gap.property ? { property: gap.property } : {}),
+        },
+      ];
+    });
   return {
     status:
       uniqueOmissions.length || published.length !== manifest.records.length + manifest.vocabulary.length
@@ -1032,5 +1122,6 @@ export async function publishShowcase(input: {
     manifest,
     published,
     omissions: uniqueOmissions,
+    unresolvedCharacterDependencies,
   };
 }

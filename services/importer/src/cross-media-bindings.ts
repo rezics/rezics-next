@@ -1,11 +1,22 @@
 import type { Database } from 'bun:sqlite';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { BATCH_LIMIT, checkBatchWrite, type BatchCommand, type BatchWriteResult } from '@rezics/definitions/bulk';
+import {
+  BATCH_LIMIT,
+  checkBatchWrite,
+  type BatchCommand,
+  type BatchWriteResult,
+  type Source,
+} from '@rezics/definitions/bulk';
 import { mapBangumiVocabulary, bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
-import type { SourceVocabularyGap } from '@rezics/conversion';
-import { commandKey, sourceDigest } from '../../../packages/conversion/src/support.ts';
-import { relationStatement, vndbProducerParentEnds } from '@rezics/conversion/cross-media-entities';
+import type { SourceVocabularyGap, SourceVocabularyRequest } from '@rezics/conversion';
+import { commandKey, sourceDigest, sourceEnvelope } from '../../../packages/conversion/src/support.ts';
+import {
+  bangumiRecordUrl,
+  converter_revision as entityRevision,
+  relationStatement,
+  vndbProducerParentEnds,
+} from '@rezics/conversion/cross-media-entities';
 import type { Claim } from './record-bindings.ts';
 
 export type Provider = 'bangumi' | 'vndb';
@@ -53,6 +64,95 @@ export type GraphMappingGap = SourceVocabularyGap & {
   record: Record<string, unknown>;
   table?: string;
 };
+
+export type BangumiAppearanceEvidence = Readonly<{
+  subjectId: string;
+  characterId: number;
+  sourceIndex: number;
+  roleCode: unknown;
+  order?: number | string | null;
+  sourceRow?: Readonly<Record<string, unknown>>;
+}>;
+
+/** Stable source envelope for one selected subject-characters row. */
+export function bangumiAppearanceSource(alias: string, appearance: BangumiAppearanceEvidence): Source {
+  if (
+    !/^[1-9][0-9]*$/u.test(appearance.subjectId) ||
+    !Number.isSafeInteger(appearance.characterId) ||
+    appearance.characterId <= 0 ||
+    !Number.isSafeInteger(appearance.sourceIndex) ||
+    appearance.sourceIndex < 0
+  )
+    throw new TypeError('Invalid Bangumi appearance source identity');
+  const sourceRow =
+    appearance.sourceRow ?? {
+      subject_id: Number(appearance.subjectId),
+      character_id: appearance.characterId,
+      type: appearance.roleCode,
+      ...(appearance.order === undefined ? {} : { order: appearance.order }),
+    };
+  return sourceEnvelope(
+    {
+      source: alias,
+      external_id: `subject-characters:${appearance.subjectId}:${appearance.sourceIndex}`,
+      record_revision: null,
+      converter_revision: entityRevision,
+      digest: sourceDigest(sourceRow),
+    },
+    'facts',
+  );
+}
+
+/** Merge adapter requests without allowing one taxonomy binding to replace another. */
+export function combineSourceVocabularyRequests(
+  requests: readonly (SourceVocabularyRequest | undefined)[],
+): SourceVocabularyRequest | undefined {
+  const admitted = requests.filter((request): request is SourceVocabularyRequest => request !== undefined);
+  if (!admitted.length) return undefined;
+  const releaseDigest = admitted[0]!.bindings.releaseDigest;
+  const schemes = new Map<string, SourceVocabularyRequest['bindings']['schemes'][number]>();
+  const concepts = new Map<string, SourceVocabularyRequest['bindings']['concepts'][number]>();
+  const rows = new Map<string, SourceVocabularyRequest['rows'][number]>();
+  for (const request of admitted) {
+    if (request.bindings.releaseDigest !== releaseDigest)
+      throw new TypeError('Source vocabulary adapters use different definition releases');
+    for (const item of request.bindings.schemes) {
+      if (item.releaseDigest !== releaseDigest)
+        throw new TypeError(`Source vocabulary scheme uses a different definition release: ${item.taxonomy}`);
+      const prior = schemes.get(item.taxonomy);
+      if (
+        prior &&
+        (prior.id !== item.id || prior.uri !== item.uri || prior.type !== item.type || prior.releaseDigest !== item.releaseDigest)
+      )
+        throw new TypeError(`Source vocabulary adapters disagree on scheme ${item.taxonomy}`);
+      schemes.set(item.taxonomy, item);
+    }
+    for (const item of request.bindings.concepts) {
+      if (item.releaseDigest !== releaseDigest)
+        throw new TypeError(`Source vocabulary concept uses a different definition release: ${item.taxonomy}:${item.code}`);
+      const key = `${item.taxonomy}\0${item.code}`;
+      const prior = concepts.get(key);
+      if (
+        prior &&
+        (prior.id !== item.id ||
+          prior.schemeId !== item.schemeId ||
+          prior.type !== item.type ||
+          prior.releaseDigest !== item.releaseDigest)
+      )
+        throw new TypeError(`Source vocabulary adapters disagree on concept ${item.taxonomy}:${item.code}`);
+      concepts.set(key, item);
+    }
+    for (const row of request.rows) rows.set(JSON.stringify(row), row);
+  }
+  return {
+    bindings: {
+      releaseDigest,
+      schemes: [...schemes.values()],
+      concepts: [...concepts.values()],
+    },
+    rows: [...rows.values()],
+  };
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
