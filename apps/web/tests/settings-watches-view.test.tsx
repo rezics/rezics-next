@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, useState } from 'react';
 import * as start from '../.storybook/react-start';
 import type { ManagedWatch, WatchManagementIO, WatchRead } from '../src/settings/watch-native';
 
@@ -17,6 +17,7 @@ const globals = {
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
   HTMLButtonElement: window.HTMLButtonElement,
+  HTMLFormElement: window.HTMLFormElement,
   Element: window.Element,
   Node: window.Node,
   Document: window.Document,
@@ -46,6 +47,9 @@ const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query
 const { sessionQuery } = await import('../src/session/query');
 const { SettingsSessionOwner, SettingsSessionContext } = await import('../src/settings/settings-session-owner');
 const { WatchesSection } = await import('../src/settings/watches');
+const { SettingsNavigationProvider, useSettingsNavigationDraft } = await import('../src/settings/reading-navigation');
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+  await import('@tanstack/react-router');
 const { m } = await import('../src/paraglide/messages.js');
 
 test('the mounted private view separates inaccessible targets, uncertain removal, sparse/empty pages and refresh failure', async () => {
@@ -215,6 +219,131 @@ test('uncertain removal stays with the original viewer; replacement clears it be
     );
     expect(host.textContent).toBe('');
     expect(writes).toBe(1);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    client.clear();
+  }
+});
+
+test('watch-only and mixed departure name recovery honestly, retain the original retry on Stay and retire on Leave', async () => {
+  const client = new QueryClient();
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
+  const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
+  const attempts: Parameters<WatchManagementIO['stop']>[0][] = [];
+  let complete: (() => void) | undefined;
+  const io: WatchManagementIO = {
+    read: async () => ({
+      kind: 'page',
+      page: {
+        viewer: { state: 'current', accountId: 'alice' },
+        actions: { remove: 'available' },
+        next: null,
+        watches: [
+          {
+            subscriptionId: 'concealed',
+            kind: 'thread',
+            revision: 8,
+            createdAt: '2026-11-03T10:00:00.000Z',
+            command: { watchId: 'concealed', kind: 'thread', expectedRevision: 8 },
+            remove: 'available',
+            target: null,
+          },
+        ],
+      },
+    }),
+    stop: async (intent) => {
+      attempts.push(intent);
+      if (attempts.length === 3)
+        await new Promise<void>((resolve) => {
+          complete = resolve;
+        });
+      return { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } };
+    },
+  };
+  function Editors() {
+    const [draft, setDraft] = useState<'reading' | 'profile' | null>(null);
+    useSettingsNavigationDraft('reading', draft === 'reading', () => draft === 'reading');
+    useSettingsNavigationDraft('profile', draft === 'profile', () => draft === 'profile');
+    return (
+      <>
+        <button onClick={() => setDraft('reading')}>Reading draft</button>
+        <button onClick={() => setDraft('profile')}>Profile draft</button>
+        <WatchesSection io={io} />
+        <button onClick={() => void router.navigate({ to: '/away' })}>Away</button>
+      </>
+    );
+  }
+  const base = createRootRoute();
+  const settings = createRoute({
+    getParentRoute: () => base,
+    path: '/settings',
+    component: () => (
+      <SettingsNavigationProvider>
+        <Editors />
+      </SettingsNavigationProvider>
+    ),
+  });
+  const away = createRoute({ getParentRoute: () => base, path: '/away', component: () => <p>Away page</p> });
+  const router = createRouter({
+    routeTree: base.addChildren([settings, away]),
+    history: createMemoryHistory({ initialEntries: ['/settings#watches'] }),
+  });
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const button = (text: string) => {
+    const found = [...window.document.querySelectorAll('button')].find((item) => item.textContent === text);
+    expect(found).toBeDefined();
+    return found!;
+  };
+  const click = async (text: string) => {
+    await act(async () => button(text).click());
+  };
+  try {
+    await act(async () => {
+      await router.load();
+      root.render(
+        <QueryClientProvider client={client}>
+          <SettingsSessionContext.Provider value={owner}>
+            <RouterProvider router={router} />
+          </SettingsSessionContext.Provider>
+        </QueryClientProvider>,
+      );
+    });
+    await click(m.settings_watches_stop());
+    await act(async () => {
+      await router.navigate({ to: '/settings', hash: 'reading' });
+    });
+    expect(host.textContent).toContain(m.settings_watches_uncertain_text());
+    expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+    for (const other of [null, 'Reading draft', 'Profile draft']) {
+      if (other) await click(other);
+      button('Away').focus();
+      await click('Away');
+      const dialogs = window.document.querySelectorAll('[role="alertdialog"]');
+      expect(dialogs).toHaveLength(1);
+      expect(dialogs[0]!.textContent).toContain(
+        other ? m.settings_all_drafts_leave_title() : m.settings_watches_leave_title(),
+      );
+      expect(dialogs[0]!.textContent).toContain(
+        other ? m.settings_other_drafts_leave_description() : m.settings_watches_leave_description(),
+      );
+      expect(window.document.activeElement).toBe(button(m.settings_profile_stay()));
+      await click(m.settings_profile_stay());
+      expect(router.state.location.pathname).toBe('/settings');
+      expect(window.document.activeElement).toBe(button('Away'));
+    }
+    await click(m.settings_watches_retry_original());
+    expect(attempts[1]).toBe(attempts[0]);
+    await click(m.settings_watches_retry_original());
+    await click('Away');
+    await click(m.settings_profile_leave());
+    expect(router.state.location.pathname).toBe('/away');
+    await act(async () => complete!());
+    expect(host.textContent).toBe('Away page');
+    expect(owner.readCurrent()).toBe(false);
+    expect(attempts).toHaveLength(3);
   } finally {
     await act(async () => root.unmount());
     host.remove();

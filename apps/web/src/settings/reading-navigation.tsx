@@ -170,22 +170,28 @@ export function SettingsNavigationProvider({ children }: { children: ReactNode }
   const kinds = navigation.kinds();
   const reading = kinds.has('reading');
   const combined = reading && kinds.has('profile');
-  const additional = kinds.has('notifications') || kinds.has('collection-privacy') || kinds.has('verification');
+  const watches = kinds.has('watches');
+  const additional =
+    watches || kinds.has('notifications') || kinds.has('collection-privacy') || kinds.has('verification');
   const title = additional
     ? kinds.size > 1
       ? m.settings_all_drafts_leave_title()
-      : kinds.has('notifications')
-        ? m.settings_notifications_leave_title()
-        : kinds.has('collection-privacy')
-          ? m.settings_privacy_leave_title()
-          : m.settings_verification_leave_title()
+      : watches
+        ? m.settings_watches_leave_title()
+        : kinds.has('notifications')
+          ? m.settings_notifications_leave_title()
+          : kinds.has('collection-privacy')
+            ? m.settings_privacy_leave_title()
+            : m.settings_verification_leave_title()
     : combined
       ? m.settings_drafts_leave_title()
       : reading
         ? m.settings_reading_leave_title()
         : m.settings_profile_leave_title();
   const description = additional
-    ? m.settings_other_drafts_leave_description()
+    ? watches && kinds.size === 1
+      ? m.settings_watches_leave_description()
+      : m.settings_other_drafts_leave_description()
     : combined
       ? m.settings_drafts_leave_description()
       : reading

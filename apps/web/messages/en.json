@@ -5374,6 +5374,8 @@
   "settings_notifications_leave_title": "Leave notice preferences?",
   "settings_privacy_leave_title": "Leave Collection privacy settings?",
   "settings_verification_leave_title": "Leave agent verification?",
+  "settings_watches_leave_title": "Leave watch removal recovery?",
+  "settings_watches_leave_description": "The local retry information for this removal will be discarded. A removal already sent may still complete.",
   "settings_all_drafts_leave_title": "Leave these settings?",
   "settings_other_drafts_leave_description": "Local drafts and recovery keys kept on this page will be discarded. Commands already sent may still finish.",
   "erasure_details": "Technical status details",
