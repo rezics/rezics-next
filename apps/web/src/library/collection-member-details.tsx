@@ -57,10 +57,10 @@ export function CollectionMemberOccurrenceDetails<Member extends CollectionReadM
   noteStateKey: string;
   noteExpanded: boolean;
   onNoteExpandedChange: (expanded: boolean) => void;
-  currentHref?: string;
-  listPresentations?: CollectionListPresentations;
-  comparisonDefinitions?: CollectionComparisonDefinitions;
-  onReferenceNavigate?: (anchor: HTMLAnchorElement) => void;
+  currentHref?: string | undefined;
+  listPresentations?: CollectionListPresentations | undefined;
+  comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
+  onReferenceNavigate?: ((anchor: HTMLAnchorElement) => void) | undefined;
   viewerProjection?: CollectionViewerProjection;
   actionHref?: string;
 }) {

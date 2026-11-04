@@ -23,6 +23,7 @@ import {
   collectionPositionScope,
   collectionReadingPageKey,
 } from './collection-public-reading/position';
+import type { CollectionPositionScope } from './collection-public-reading/position';
 import { CollectionDescriptionReader } from './collection-description-reader';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { Cover } from '@rezics/ui/cover';
