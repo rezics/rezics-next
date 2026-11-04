@@ -730,6 +730,7 @@
   "collection_filter_to": "Bis",
   "collection_filter_unsupported": "Dieser Filter kann auf diese Sammlung nicht angewendet werden.",
   "collection_filter_failed": "Filter sind vorübergehend nicht verfügbar. Die Sammlung wird nicht als gefiltert angezeigt.",
+  "collection_filter_review_description": "Bearbeite die Filterauswahl und wende sie an oder brich ab, um zu dieser Sammlung zurückzukehren.",
   "collection_filters": "Filter",
   "editor_apply": "Übernehmen",
   "editor_blocks": "Blöcke",

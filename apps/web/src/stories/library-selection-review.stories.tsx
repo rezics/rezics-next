@@ -45,22 +45,33 @@ async function selectedReview(context: { canvasElement: HTMLElement }, unavailab
 }
 
 export const PhoneLight: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 export const PhoneDark: Story = {
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  globals: { locale: 'zh-Hant', viewport: { value: 'phone390' }, theme: 'dark' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 export const DesktopLight: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
+  globals: { locale: 'ja', viewport: { value: 'desktop1280' }, theme: 'light' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };
 export const DesktopDark: Story = {
-  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  globals: { locale: 'en', viewport: { value: 'desktop1280' }, theme: 'dark' },
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
+  play: (context) => selectedReview(context),
+};
+
+export const Desktop1440Light: Story = {
+  globals: { locale: 'zh-Hant', viewport: { value: 'desktop1440' }, theme: 'light' },
+  render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
+  play: (context) => selectedReview(context),
+};
+export const Desktop1440Dark: Story = {
+  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'dark' },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-entries']} />,
   play: (context) => selectedReview(context),
 };

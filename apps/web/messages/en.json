@@ -740,6 +740,7 @@
   "collection_filter_to": "To",
   "collection_filter_unsupported": "This filter cannot be used on this Collection.",
   "collection_filter_failed": "Filters are temporarily unavailable. This Collection is not shown as filtered.",
+  "collection_filter_review_description": "Edit filter choices, then apply or cancel to return to this Collection.",
   "collection_filters": "Filters",
   "editor_apply": "Apply",
   "editor_blocks": "Blocks",

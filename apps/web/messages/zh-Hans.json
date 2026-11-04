@@ -730,6 +730,7 @@
   "collection_filter_to": "最大值",
   "collection_filter_unsupported": "此集合不支持此筛选条件。",
   "collection_filter_failed": "筛选条件暂时不可用。此合集不会以已筛选的结果显示。",
+  "collection_filter_review_description": "编辑筛选条件，然后应用或取消并返回此收藏集。",
   "collection_filters": "筛选",
   "editor_apply": "应用",
   "editor_blocks": "区块",
