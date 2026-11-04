@@ -42,6 +42,11 @@ export function consolidationError(error: { status: number; code?: string | null
   const value = error.value;
   return {
     status: error.status,
-    code: typeof error.code === 'string' ? error.code : value && typeof value === 'object' && 'code' in value && typeof value.code === 'string' ? value.code : null,
+    code:
+      typeof error.code === 'string'
+        ? error.code
+        : value && typeof value === 'object' && 'code' in value && typeof value.code === 'string'
+          ? value.code
+          : null,
   };
 }

@@ -148,7 +148,9 @@ export function usePrivateReportOrigin(
       },
       watch(notify: () => void) {
         watchers.add(notify);
-        return () => { watchers.delete(notify); };
+        return () => {
+          watchers.delete(notify);
+        };
       },
       subscribe(notify: () => void) {
         const changed = () => {
