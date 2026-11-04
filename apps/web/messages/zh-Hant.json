@@ -8576,5 +8576,19 @@
   "moderation_directory_return_hint": "返回時將重新檢查原來的目錄頁面。",
   "moderation_directory_ready": "請選擇您目前有權開啟的佇列。",
   "moderation_directory_retired": "本次私人目錄存取已結束。請重新開始以檢查目前可用的佇列。",
-  "moderation_directory_expired": "此目錄頁面已過期。請重新探索佇列以檢查目前的存取權限。"
+  "moderation_directory_expired": "此目錄頁面已過期。請重新探索佇列以檢查目前的存取權限。",
+  "concept_tagged_works_title": "帶有此概念的作品",
+  "concept_tagged_works_property": "標籤屬性",
+  "concept_tagged_works_scheme": "來源方案",
+  "concept_tagged_works_type": "作品類型",
+  "concept_tagged_works_spoiler": "劇透級別上限",
+  "concept_tagged_works_descendants": "包含下級概念",
+  "concept_tagged_works_additional": "其他條件",
+  "concept_tagged_works_choose": "選擇",
+  "concept_tagged_works_source": "查看來源事實",
+  "concept_tagged_works_invalid": "這些搜尋選項無效。請選擇有效選項或重新開始搜尋。",
+  "concept_tagged_works_continuation_failed": "無法取得下一頁結果。已顯示的作品仍會保留。",
+  "concept_tagged_works_retry": "重試此結果頁",
+  "concept_tagged_works_lagging": "Search 更新期間，作品清單可能不完整。",
+  "concept_tagged_works_next": "顯示更多作品"
 }

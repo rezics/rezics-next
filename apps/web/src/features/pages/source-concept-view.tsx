@@ -12,8 +12,9 @@ import {
   ConceptHierarchy,
   visitAnnouncement,
 } from './source-concept-reading/hierarchy';
-import { originatingClassification } from './source-concept-reading/origin';
 import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
+import { originatingReturn } from './source-concept-reading/origin';
+import { ConceptTaggedWorks, type ConceptWorksRoutePatch, type ConceptWorksRouteState } from '../catalogue/concept-works/view';
 import { ViewHeading } from './view-heading';
 
 export type { ConceptTransport } from './source-concept-reading/visit';
@@ -26,6 +27,8 @@ type Props = {
   pinUnsupported?: boolean;
   transport: ConceptTransport;
   initial?: ConceptRead | undefined;
+  worksRoute?: ConceptWorksRouteState;
+  onWorksChange?: (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void;
 };
 
 export function SourceConceptView(props: Props) {
@@ -42,6 +45,8 @@ function ConceptVisitView({
   transport,
   initial,
   admission,
+  worksRoute,
+  onWorksChange,
 }: {
   id: string;
   locale: string;
@@ -51,9 +56,11 @@ function ConceptVisitView({
   transport: ConceptTransport;
   initial?: ConceptRead | undefined;
   admission: ReturnType<typeof useCatalogueLifetime>;
+  worksRoute?: ConceptWorksRouteState;
+  onWorksChange?: (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void;
 }) {
   const o = { locale: locale as never };
-  const returnTo = originatingClassification(suppliedReturn);
+  const returnTo = originatingReturn(suppliedReturn);
   const visit = useConceptVisit({ id, role, transport, initial, admission });
   const { read, error, busy } = visit;
   const title = pickText(read?.public.subject.labels ?? {}, locale);
@@ -250,6 +257,14 @@ function ConceptVisitView({
             </>
           )}
         </div>
+      )}
+      {read?.ok && (
+        <ConceptTaggedWorks
+          read={read}
+          locale={locale}
+          route={{ ...(worksRoute ?? {}), role, returnTo }}
+          onChange={onWorksChange}
+        />
       )}
       {returnTo && (
         <a className={linkClass} href={returnTo}>

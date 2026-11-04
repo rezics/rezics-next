@@ -8576,5 +8576,19 @@
   "moderation_directory_return_hint": "Al volver se comprobará de nuevo tu página original del directorio.",
   "moderation_directory_ready": "Elige una cola que tengas permiso para abrir actualmente.",
   "moderation_directory_retired": "Esta visita privada al directorio ha terminado. Reinicia para consultar tus colas actuales.",
-  "moderation_directory_expired": "Esta página del directorio ha caducado. Reinicia para comprobar el acceso actual a las colas."
+  "moderation_directory_expired": "Esta página del directorio ha caducado. Reinicia para comprobar el acceso actual a las colas.",
+  "concept_tagged_works_title": "Obras que usan este concepto",
+  "concept_tagged_works_property": "Propiedad de etiqueta",
+  "concept_tagged_works_scheme": "Esquema de origen",
+  "concept_tagged_works_type": "Tipo de obra",
+  "concept_tagged_works_spoiler": "Límite de spoilers",
+  "concept_tagged_works_descendants": "Incluir conceptos descendientes",
+  "concept_tagged_works_additional": "Condiciones adicionales",
+  "concept_tagged_works_choose": "Elegir",
+  "concept_tagged_works_source": "Consultar datos de origen",
+  "concept_tagged_works_invalid": "Estas opciones de búsqueda no son válidas. Elige opciones válidas o reinicia la búsqueda.",
+  "concept_tagged_works_continuation_failed": "La página siguiente de resultados no está disponible. Se conservan las obras mostradas.",
+  "concept_tagged_works_retry": "Reintentar esta página de resultados",
+  "concept_tagged_works_lagging": "La lista de obras puede estar incompleta mientras se actualiza Search.",
+  "concept_tagged_works_next": "Mostrar más obras"
 }

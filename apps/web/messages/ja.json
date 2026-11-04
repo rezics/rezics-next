@@ -8576,5 +8576,19 @@
   "moderation_directory_return_hint": "戻ると、元の一覧ページのアクセス権が再確認されます。",
   "moderation_directory_ready": "現在開く権限のあるキューを選択してください。",
   "moderation_directory_retired": "この非公開の一覧の閲覧は終了しました。現在のキューを確認するにはやり直してください。",
-  "moderation_directory_expired": "一覧のこのページは期限切れです。検索をやり直して、現在のアクセス権を確認してください。"
+  "moderation_directory_expired": "一覧のこのページは期限切れです。検索をやり直して、現在のアクセス権を確認してください。",
+  "concept_tagged_works_title": "このConceptが付いた作品",
+  "concept_tagged_works_property": "タグのプロパティ",
+  "concept_tagged_works_scheme": "出典スキーム",
+  "concept_tagged_works_type": "作品の種類",
+  "concept_tagged_works_spoiler": "ネタバレの上限",
+  "concept_tagged_works_descendants": "下位Conceptを含める",
+  "concept_tagged_works_additional": "追加条件",
+  "concept_tagged_works_choose": "選択",
+  "concept_tagged_works_source": "出典の情報を確認",
+  "concept_tagged_works_invalid": "検索条件が無効です。有効な条件を選ぶか、検索をやり直してください。",
+  "concept_tagged_works_continuation_failed": "次の結果ページを利用できません。表示済みの作品は保持されています。",
+  "concept_tagged_works_retry": "この結果ページを再試行",
+  "concept_tagged_works_lagging": "Searchの更新中は作品一覧が不完全な場合があります。",
+  "concept_tagged_works_next": "さらに作品を表示"
 }

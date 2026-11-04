@@ -1850,6 +1850,21 @@ A subject header offers additive companion routes `/graph`, `/quotations`, `/con
 do not widen the shared composition View enum and do not replace the generic `$view` route. Ordinary finite
 relations, credits and appearance lists remain the basic catalogue journey.
 
+On a readable work, released item-valued facets that point to readable Concepts appear as tag chips. Each chip opens
+that Concept on the existing `/subjects/:id/:slug/concepts` host and carries its exact property and the work's safe
+overview return path. The visit keeps Concept identity, source meaning and hierarchy fixed while composing admitted
+work types, descendant selection, spoiler threshold and additional conditions through native Search. It uses the sole
+readable source scheme automatically only when the Concept has exactly one source scheme; multiple schemes require
+an explicit choice. Decision: a tag chip carries its exact released property, and a source scheme is auto-selected
+only when it is the Concept's sole readable source scheme.
+
+The works request is capped at 24 Search rows, 65,536 serialized request bytes and 65,536 serialized response bytes.
+The current public result and viewer envelope share that response cap; the released work-admission metadata embedded
+in the Concept read is separately capped at 65,536 bytes. The work-list composition therefore retains at most
+196,608 serialized bytes across request, admission metadata and result/viewer state, in addition to the existing,
+separately budgeted Concept definition and hierarchy reads. Continuation is explicit and bounded; the visit does not
+read work details per result.
+
 The graph reader consumes `GET /v1/subjects/:id/graph`, `/links` and `/counts`. Native `graph.ts` admits depth 1 or 2,
 at most eight relation properties, and a **per-expansion** neighbour page of at most 25. The producer also stops
 edge exploration at 500 edges; Web never requests more than 25 neighbours per expansion and never crawls, auto-expands

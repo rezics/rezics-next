@@ -4,6 +4,7 @@ import { csrfHeaders } from '../../../threads/composer';
 import { m } from '../../../paraglide/messages.js';
 import { SourceConceptView } from '../../pages/source-concept-view';
 import { readSubjectConcept } from './actions';
+import type { ConceptWorksRoutePatch, ConceptWorksRouteState } from '../concept-works/view';
 
 export const SourceConceptSession = candidateSession(function SourceConceptSessionLive({
   id,
@@ -11,12 +12,16 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   role,
   returnTo,
   pinUnsupported,
+  worksRoute,
+  onWorksChange,
 }: {
   id: string;
   locale: string;
   role?: string | undefined;
   returnTo?: string | undefined;
   pinUnsupported?: boolean | undefined;
+  worksRoute?: ConceptWorksRouteState;
+  onWorksChange?: (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void;
 }) {
   const work = useCatalogueLifetime(JSON.stringify(['concept-explore', id, locale, role]));
   const { state } = useSession();
@@ -30,6 +35,8 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
       role={role}
       returnTo={returnTo}
       {...(pinUnsupported === undefined ? {} : { pinUnsupported })}
+      worksRoute={worksRoute}
+      onWorksChange={onWorksChange}
       transport={{
         read: (next) =>
           readSubjectConcept({

@@ -8576,5 +8576,19 @@
   "moderation_directory_return_hint": "返回时将重新检查原来的目录页面。",
   "moderation_directory_ready": "请选择您目前有权打开的队列。",
   "moderation_directory_retired": "本次私人目录访问已结束。请重新开始以检查目前可用的队列。",
-  "moderation_directory_expired": "此目录页面已过期。请重新发现队列以检查目前的访问权限。"
+  "moderation_directory_expired": "此目录页面已过期。请重新发现队列以检查目前的访问权限。",
+  "concept_tagged_works_title": "带有此概念的作品",
+  "concept_tagged_works_property": "标签属性",
+  "concept_tagged_works_scheme": "来源方案",
+  "concept_tagged_works_type": "作品类型",
+  "concept_tagged_works_spoiler": "剧透级别上限",
+  "concept_tagged_works_descendants": "包含下级概念",
+  "concept_tagged_works_additional": "其他条件",
+  "concept_tagged_works_choose": "选择",
+  "concept_tagged_works_source": "查看来源事实",
+  "concept_tagged_works_invalid": "这些搜索选项无效。请选择有效选项或重新开始搜索。",
+  "concept_tagged_works_continuation_failed": "无法获取下一页结果。已显示的作品仍会保留。",
+  "concept_tagged_works_retry": "重试此结果页",
+  "concept_tagged_works_lagging": "Search 更新期间，作品列表可能不完整。",
+  "concept_tagged_works_next": "显示更多作品"
 }

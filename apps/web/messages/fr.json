@@ -8576,5 +8576,19 @@
   "moderation_directory_return_hint": "Votre page d’annuaire d’origine sera vérifiée à nouveau à votre retour.",
   "moderation_directory_ready": "Choisissez une file que vous avez actuellement le droit d’ouvrir.",
   "moderation_directory_retired": "Cette visite privée de l’annuaire est terminée. Recommencez pour vérifier vos files actuelles.",
-  "moderation_directory_expired": "Cette page d’annuaire a expiré. Recommencez pour vérifier l’accès actuel aux files."
+  "moderation_directory_expired": "Cette page d’annuaire a expiré. Recommencez pour vérifier l’accès actuel aux files.",
+  "concept_tagged_works_title": "Œuvres associées à ce concept",
+  "concept_tagged_works_property": "Propriété de tag",
+  "concept_tagged_works_scheme": "Schéma source",
+  "concept_tagged_works_type": "Type d’œuvre",
+  "concept_tagged_works_spoiler": "Limite des révélations",
+  "concept_tagged_works_descendants": "Inclure les concepts descendants",
+  "concept_tagged_works_additional": "Conditions supplémentaires",
+  "concept_tagged_works_choose": "Choisir",
+  "concept_tagged_works_source": "Consulter les faits source",
+  "concept_tagged_works_invalid": "Ces choix de recherche sont invalides. Choisissez des options valides ou relancez la recherche.",
+  "concept_tagged_works_continuation_failed": "La page de résultats suivante est indisponible. Les œuvres déjà affichées sont conservées.",
+  "concept_tagged_works_retry": "Réessayer cette page de résultats",
+  "concept_tagged_works_lagging": "La liste des œuvres peut être incomplète pendant la mise à jour de Search.",
+  "concept_tagged_works_next": "Afficher plus d’œuvres"
 }

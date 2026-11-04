@@ -8688,5 +8688,19 @@
   "moderation_directory_return_hint": "Your original directory page will be checked again when you return.",
   "moderation_directory_ready": "Choose a queue you are currently permitted to open.",
   "moderation_directory_retired": "This private directory visit has ended. Restart to check your current queues.",
-  "moderation_directory_expired": "This directory page has expired. Restart discovery to check current queue access."
+  "moderation_directory_expired": "This directory page has expired. Restart discovery to check current queue access.",
+  "concept_tagged_works_title": "Works carrying this Concept",
+  "concept_tagged_works_property": "Tag property",
+  "concept_tagged_works_scheme": "Source scheme",
+  "concept_tagged_works_type": "Work type",
+  "concept_tagged_works_spoiler": "Spoiler limit",
+  "concept_tagged_works_descendants": "Include descendant Concepts",
+  "concept_tagged_works_additional": "Additional conditions",
+  "concept_tagged_works_choose": "Choose",
+  "concept_tagged_works_source": "Review source facts",
+  "concept_tagged_works_invalid": "These search choices are invalid. Choose valid options or restart the search.",
+  "concept_tagged_works_continuation_failed": "The next result page is unavailable. Existing works are retained.",
+  "concept_tagged_works_retry": "Retry this result page",
+  "concept_tagged_works_lagging": "The work list may be incomplete while Search updates.",
+  "concept_tagged_works_next": "Show more works"
 }

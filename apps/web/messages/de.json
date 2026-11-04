@@ -8576,5 +8576,19 @@
   "moderation_directory_return_hint": "Beim Zurückkehren wird deine ursprüngliche Übersichtsseite erneut geprüft.",
   "moderation_directory_ready": "Wähle eine Warteschlange, die du derzeit öffnen darfst.",
   "moderation_directory_retired": "Dieser private Besuch der Übersicht ist beendet. Starte neu, um deine aktuellen Warteschlangen zu prüfen.",
-  "moderation_directory_expired": "Diese Übersichtsseite ist abgelaufen. Starte die Übersicht neu, um den aktuellen Zugriff zu prüfen."
+  "moderation_directory_expired": "Diese Übersichtsseite ist abgelaufen. Starte die Übersicht neu, um den aktuellen Zugriff zu prüfen.",
+  "concept_tagged_works_title": "Werke mit diesem Konzept",
+  "concept_tagged_works_property": "Tag-Eigenschaft",
+  "concept_tagged_works_scheme": "Quellenschema",
+  "concept_tagged_works_type": "Werktyp",
+  "concept_tagged_works_spoiler": "Spoilergrenze",
+  "concept_tagged_works_descendants": "Nachgeordnete Konzepte einschließen",
+  "concept_tagged_works_additional": "Zusätzliche Bedingungen",
+  "concept_tagged_works_choose": "Auswählen",
+  "concept_tagged_works_source": "Quellenangaben ansehen",
+  "concept_tagged_works_invalid": "Diese Suchauswahl ist ungültig. Wähle gültige Optionen oder starte die Suche neu.",
+  "concept_tagged_works_continuation_failed": "Die nächste Ergebnisseite ist nicht verfügbar. Bereits angezeigte Werke bleiben erhalten.",
+  "concept_tagged_works_retry": "Diese Ergebnisseite erneut laden",
+  "concept_tagged_works_lagging": "Die Werkliste kann unvollständig sein, solange die Suche aktualisiert wird.",
+  "concept_tagged_works_next": "Weitere Werke anzeigen"
 }
