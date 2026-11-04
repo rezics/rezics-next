@@ -345,16 +345,13 @@ test('filtered review pages never narrow the captured set; exact start replay ke
     key(),
   );
   await collections.addMember(owner.actor, source.id, { subjectId: excluded.subjectId, note: 'filtered out' }, key());
-  const created = await bulk.preview(
-    owner.actor,
-    {
-      action: 'set_status',
-      state: 'completed',
-      selection: { kind: 'query', sourceId: source.id, filter: '{ "state": "planned" }', sort: 'id' },
-    },
-    key(),
-  );
-  const operation = created.value.operation;
+  const created = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
+    action: 'set_status',
+    state: 'completed',
+    selection: { kind: 'query', sourceId: source.id, filter: '{ "state": "planned" }', sort: 'id' },
+  });
+  expect(created.status, await created.clone().text()).toBe(201);
+  const operation = (await created.json()).operation;
   expect(operation).toMatchObject({ selectionSource: { id: source.id, filter: '{"state":"planned"}', sort: 'id' } });
   expect(operation.counts).toMatchObject({ selectedSubjects: 25, targets: 25, pending: 25 });
   const review = await bulk.outcomes(owner.actor, operation.id, { limit: 10 });
@@ -422,10 +419,11 @@ test('remote add receipt is recovered after cancellation, then results stay priv
   const sourceRoute = routeOf(owner.actor.accountId)!;
   const destinationRoute = sourceRoute < 65520 ? sourceRoute + 16 : sourceRoute - 16;
   const destinationOwner = await f.identity(
-    ['collection:create', 'collection:read', 'collection:update'],
+    ['access:grant', 'collection:create', 'collection:read', 'collection:update'],
     undefined,
     destinationRoute,
   );
+  await f.grantLibraryGate(destinationOwner.actor.accountId);
   const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
   const destination = (
     await collections.createCollection(
@@ -436,7 +434,7 @@ test('remote add receipt is recovered after cancellation, then results stay priv
   ).value;
   const grants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant', clock });
   await grants.create(
-    { pool: f.pool, actor: f.steward.actor, deadline: workStepDeadline() },
+    { pool: f.pool, actor: destinationOwner.actor, deadline: workStepDeadline() },
     {
       resource: { route: destinationRoute, id: destination.id },
       subject: { kind: 'account', id: owner.actor.accountId },

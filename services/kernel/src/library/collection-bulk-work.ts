@@ -31,6 +31,7 @@ import {
   BULK_CHANGED_EVENT,
   BULK_CONFIRMED_EVENT,
   bulkHash,
+  collectionBulkView,
   readCollectionBulkInitiator,
   type CollectionBulkInput,
 } from './collection-bulk-operation.ts';
