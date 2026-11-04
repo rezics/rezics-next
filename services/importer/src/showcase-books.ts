@@ -400,6 +400,7 @@ export async function importShowcaseBooks(input: {
       })),
       runs: {},
       readings: [],
+      workLinks: [],
       family: planned.family,
       selected: planned.selected,
       conversions: planned.conversions,
@@ -414,7 +415,10 @@ export async function importShowcaseBooks(input: {
         },
       ],
       creditGaps: [],
+      vndbCreditDiagnostics: [],
+      vndbCreditVocabularyRequirements: [],
       characterDiagnostics: [],
+      episodeDiagnostics: [],
       unresolved: [],
     };
   }
