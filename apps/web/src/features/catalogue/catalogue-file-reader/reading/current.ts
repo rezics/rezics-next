@@ -77,7 +77,7 @@ function createReading(
     cancelFocus: undefined as (() => void) | undefined,
     lease: undefined as unknown as ReturnType<typeof addressLease>,
     owns: () => true,
-    current: () => false,
+    current: () => false as boolean,
     retire: () => {},
   } satisfies CurrentReading;
   reading.lease = addressLease(() => reading.active && !reading.retired && reading.owns());
