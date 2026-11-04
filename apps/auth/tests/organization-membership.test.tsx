@@ -43,9 +43,19 @@ const approval = () =>
 const ready = (id = organizationId): membership.MembershipPage => ({
   kind: 'ready',
   organizationId: id,
-  role: 'owner',
-  holders: [{ accountId: memberAccountId, role: 'member', reservationId }],
-  next: 'next-cursor',
+  viewer: { accountId, role: 'owner', leave: 'unavailable' },
+  members: {
+    state: 'ready',
+    holders: [
+      {
+        accountId: memberAccountId,
+        account: { id: memberAccountId, kind: 'actor', handle: 'reader', displayName: 'Rae Reader' },
+        role: 'member',
+        actions: { changeRole: 'allowed', remove: 'allowed' },
+      },
+    ],
+    next: 'next-cursor',
+  },
 });
 const list = spyOn(membership, 'loadMembershipPage');
 let root: ReturnType<typeof createRoot> | undefined, host: HTMLDivElement;
@@ -116,21 +126,27 @@ afterAll(async () => {
   await dom.happyDOM.close();
 });
 
-test('unavailable reads retain identity and Stay preserves an edited selection', async () => {
+test('an unavailable inventory is explicit, reloadable and never presented as empty', async () => {
   await mount();
-  await leave(false);
-  reply = () => Response.json({}, { status: 503 });
-  await flush(() => root!.render(<OrganizationMembersPage organizationId={organizationId} />));
-  expect(button(m.auth_inventory_reload()).disabled).toBe(false);
-  reply = () => session();
-  list.mockResolvedValueOnce({ kind: 'unavailable' });
+  list.mockResolvedValueOnce({ kind: 'ready', organizationId, viewer: { accountId, role: 'owner', leave: 'unavailable' }, members: { state: 'unavailable' } });
   await click(m.auth_inventory_reload());
-  await flush(() => input('membership-account', memberAccountId));
+  expect(host.textContent).toContain(m.auth_members_inventory_unavailable());
+  expect(host.textContent).not.toContain(m.auth_members_empty_page());
+  expect(host.querySelector('#membership-account')).toBeNull();
+  list.mockResolvedValueOnce(ready());
   await click(m.auth_inventory_reload());
-  await click(m.auth_members_stay());
   expect(list.mock.calls.at(-1)).toEqual([organizationId, accountId, undefined]);
-  expect(host.querySelector<HTMLInputElement>('#membership-account')!.value).toBe(memberAccountId);
-  expect(calls.filter(({ path }) => path === '/session')).toHaveLength(3);
+  expect(host.textContent).toContain('Rae Reader');
+});
+
+test('refresh retires previously advised actions when the current viewer loses membership authority', async () => {
+  await mount();
+  expect(button(m.auth_members_change_role()).disabled).toBe(false);
+  list.mockResolvedValueOnce({ kind: 'denied' });
+  await click(m.auth_inventory_reload());
+  expect(host.textContent).toContain(m.auth_members_denied());
+  expect(host.querySelector('ul[aria-label]')).toBeNull();
+  expect(host.querySelector('#membership-confirmation')).toBeNull();
 });
 
 for (const stage of ['list', 'selection', 'signin', 'session', 'reservation', 'approval', 'execute', 'readback'])

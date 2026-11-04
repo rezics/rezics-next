@@ -8,6 +8,10 @@ import {
   accountManagementMembershipTransport,
   type ManagementMembershipAccess,
 } from './account-management-membership-transport.ts';
+import {
+  organizationMembershipPageTransport,
+  type OrganizationMembershipPageAccess,
+} from './organization-membership-page.ts';
 import { randomUUID } from 'node:crypto';
 import { createNativeLifecycleResults } from './native-lifecycle-results.ts';
 import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
@@ -296,33 +300,40 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
         workflows,
         accountManagementReadTransport(
           service,
-          accountManagementMembershipTransport(
+          organizationMembershipPageTransport(
             service,
-            automatedOperatorTransport(
+            accountManagementMembershipTransport(
               service,
-              organizationDeletionReadTransport(
+              automatedOperatorTransport(
                 service,
-                accountProfileReadTransport(
+                organizationDeletionReadTransport(
                   service,
-                  credentialEffectTransport(service, workflows.handler, options),
-                  (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
-                    .readRenameAccountProfile
-                    ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
+                  accountProfileReadTransport(
+                    service,
+                    credentialEffectTransport(service, workflows.handler, options),
+                    (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
+                      .readRenameAccountProfile
+                      ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
+                      : undefined,
+                  ),
+                  (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationDeletionAccess>)
+                    .readOrganizationForDeletion
+                    ? (options.trustedAccess as typeof options.trustedAccess & OrganizationDeletionAccess)
                     : undefined,
                 ),
-                (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationDeletionAccess>)
-                  .readOrganizationForDeletion
-                  ? (options.trustedAccess as typeof options.trustedAccess & OrganizationDeletionAccess)
+                (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)
+                  .readAutomatedCreationOperator
+                  ? (options.trustedAccess as typeof options.trustedAccess & AutomatedOperatorAccess)
                   : undefined,
               ),
-              (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)
-                .readAutomatedCreationOperator
-                ? (options.trustedAccess as typeof options.trustedAccess & AutomatedOperatorAccess)
+              (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
+                .readOrganizationMembershipCommandState
+                ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
                 : undefined,
             ),
-            (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
-              .readOrganizationMembershipCommandState
-              ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
+            (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationMembershipPageAccess>)
+              .readOrganizationMembershipPage
+              ? (options.trustedAccess as typeof options.trustedAccess & OrganizationMembershipPageAccess)
               : undefined,
           ),
           options.accountManagementReads ?? options.accountOperations,
