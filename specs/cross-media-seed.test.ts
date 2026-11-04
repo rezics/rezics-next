@@ -33,7 +33,10 @@ function tables() {
     { subject_id: 1, character_id: 7, type: 1, order: 0 },
     { subject_id: 99, character_id: 7, type: 3, order: 5 },
   ];
-  rows['bangumi/person-characters'] = [{ subject_id: 99, character_id: 7, person_id: 8, summary: 'voice' }];
+  rows['bangumi/person-characters'] = [
+    { subject_id: 1, character_id: 7, person_id: 8, summary: 'voice' },
+    { subject_id: 99, character_id: 7, person_id: 8, summary: 'voice' },
+  ];
   rows['bangumi/person'] = [{ id: 8, name: 'Actor', type: 1 }];
   rows['bangumi/character'] = [{ id: 7, name: 'Character' }];
   rows['bangumi/subject-persons'] = [{ subject_id: 1, person_id: 8, position: 1, appear_eps: '1-3' }];
@@ -72,6 +75,16 @@ test('three anime/VN franchises elect family membership and retain exact unsuppo
   expect(plan.edges.some((edge) => edge.table === 'subject-persons')).toBe(false);
   expect(
     plan.credits.some((credit) => credit.kind === 'staff' && credit.person === 'person:8' && credit.roleCode === 1),
+  ).toBe(true);
+  expect(
+    plan.credits.some(
+      (credit) => credit.kind === 'voice-credit' && credit.person === 'person:8' && credit.character === 'character:7',
+    ),
+  ).toBe(true);
+  expect(
+    plan.gaps.some(
+      (gap) => gap.fields.includes('person-characters.subject_id') && gap.record.subject_id === 99,
+    ),
   ).toBe(true);
   expect(
     plan.gaps.some(
@@ -155,7 +168,7 @@ test('the registered importer reopens idempotently and returns only readings sup
     expect(again.readings.some((row) => row.externalId === 'character:7' && row.route.startsWith('/subjects/'))).toBe(
       true,
     );
-    expect(reads.length).toBe(first.readings.length * 2 + 4);
+    expect(reads.length).toBe(first.readings.length * 2 + 6);
     expect(again.status).toBe('imported-with-gaps');
     expect(again.unresolved.some((edge) => edge.target === 'character:7' || edge.holder === '99')).toBe(true);
   } finally {

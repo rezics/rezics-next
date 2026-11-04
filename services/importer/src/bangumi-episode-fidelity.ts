@@ -7,6 +7,7 @@ import type { Owner } from './record-bindings.ts';
 import { type GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
   crossMediaAliases,
+  emptyCrossMediaPlan,
   seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
@@ -138,19 +139,7 @@ export function episodeVocabularyAdmission(
 
 /** Select admitted episode members and their parent works from a bounded authored dump. */
 export async function planBangumiEpisodeFidelity(input: CrossMediaTables): Promise<CrossMediaPlan> {
-  const plan: CrossMediaPlan = {
-    records: { bangumi: [], vndb: [] },
-    entities: { bangumi: [], vndb: [] },
-    edges: [],
-    credits: [],
-    franchises: {
-      'steins-gate': { bangumi: [], vndb: [] },
-      clannad: { bangumi: [], vndb: [] },
-      fate: { bangumi: [], vndb: [] },
-    },
-    members: [],
-    gaps: [],
-  };
+  const plan: CrossMediaPlan = emptyCrossMediaPlan();
   const gap = (record: Row, reason: string) => {
     plan.gaps.push({ source: 'bangumi', fields: fieldsOf('episode', record), record, reason });
   };

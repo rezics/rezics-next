@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import {
   bangumiRecordUrl,
   converter_revision as entityRevision,
@@ -14,7 +14,6 @@ import {
   vndbRecordUrl,
 } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
-import { bundledDigest } from '@rezics/definitions/bundled';
 import { subjectSlug } from '@rezics/definitions/slug';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
@@ -106,6 +105,21 @@ function emptyFranchises(): Record<Franchise, { bangumi: string[]; vndb: string[
   };
 }
 
+export function emptyCrossMediaPlan(): CrossMediaPlan {
+  return {
+    records: { bangumi: [], vndb: [] },
+    entities: { bangumi: [], vndb: [] },
+    edges: [],
+    credits: [],
+    franchises: emptyFranchises(),
+    members: [],
+    gaps: [],
+    relationScope: [],
+    relationSnapshotDigest: sourceDigest([]),
+    relationSnapshotComplete: true,
+  };
+}
+
 function bangumiRelation(type: number, code: unknown): SourceMapping | undefined {
   return mapSourceEnumeration('bangumi', `relation.${type}`, code as number);
 }
@@ -121,18 +135,7 @@ function countFamily<K>(franchiseOf: Map<K, Franchise>, family: Franchise): numb
  * Title matching locates records only; identities bind only through cited provider URLs.
  */
 export async function planCrossMediaSeed(input: CrossMediaTables): Promise<CrossMediaPlan> {
-  const plan: CrossMediaPlan = {
-    records: { bangumi: [], vndb: [] },
-    entities: { bangumi: [], vndb: [] },
-    edges: [],
-    credits: [],
-    franchises: emptyFranchises(),
-    members: [],
-    gaps: [],
-    relationScope: [],
-    relationSnapshotDigest: sourceDigest([]),
-    relationSnapshotComplete: true,
-  };
+  const plan: CrossMediaPlan = emptyCrossMediaPlan();
   const gap = (
     source: Provider,
     table: string,

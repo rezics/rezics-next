@@ -1423,6 +1423,20 @@ bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
 
+### Bangumi creator and voice credits
+
+- Touches: one current-authority fence read per elected work, one claim/type read
+  per work/person/character endpoint, one vocabulary map of at most 64 association
+  rows, and ordinary bulk propose pages for the resulting credit commands.
+- Bound: O(W + A) for W elected works and A admitted association rows on those
+  works, plus existing import of the selected records. No catalogue scan, vote
+  write or fabricated staff order.
+- Growth check: `services/importer/tests/bangumi-creator-credits.test.ts` and
+  `packages/conversion/tests/bangumi-creator-credits.test.ts` pin the operator
+  and mapper. Native API adoption remains
+  `services/kernel/test/imports/bangumi-creator-credits.test.ts`; it is not
+  claimed passed in this delivery.
+
 ### Bangumi subject relations
 
 - Touches: at most 4,096 selected `subject-relations` rows, their reciprocal evidence, existing source bindings and current facts-fence tuples. Relation commands use the bundled property descriptor and the resolved native profile of both endpoints.
@@ -1964,17 +1978,3 @@ staff codes stay the pinned omitted inventory gap.
 
 Decision: music/live-action staff is reported as that missing producer binding
 rather than a guessed mapping.
-
-### Bangumi creator credit cost
-
-- Touches: one current-authority fence read per elected work, one claim/type read
-  per work/person/character endpoint, one vocabulary map of at most 64 association
-  rows, and ordinary bulk propose pages for the resulting credit commands.
-- Bound: O(W + A) for W elected works and A admitted association rows on those
-  works, plus existing import of the selected records. No catalogue scan, vote
-  write or fabricated staff order.
-- Growth check: `services/importer/tests/bangumi-creator-credits.test.ts` and
-  `packages/conversion/tests/bangumi-creator-credits.test.ts` pin the operator
-  and mapper. Native API adoption remains
-  `services/kernel/test/imports/bangumi-creator-credits.test.ts`; it is not
-  claimed passed in this delivery.
