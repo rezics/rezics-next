@@ -2,8 +2,37 @@ import { readdirSync, readFileSync, readlinkSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { defaultPolicy } from './policy.ts';
-import { fixtureOwnerForLog, recordFixtureOwnedProcess, trackFixtureWait } from './fixture-process-ownership.ts';
 export type ProcessIdentity = { pid: number; start: string; boot: string; group: number };
+
+/** Optional ownership hooks for callers that need to observe worker and waiter lifetimes. */
+export type ProcessOwnershipAdapter = {
+  assertWorkerLaunchAllowed(logPath: string): void;
+  workerStarted(logPath: string, identity: ProcessIdentity): void;
+  waiterStarted(logPath: string): ((identity: ProcessIdentity) => void) | undefined;
+  trackWait(logPath: string, wait: Promise<unknown>): void;
+};
+
+export const normalProcessOwnershipAdapter: ProcessOwnershipAdapter = {
+  assertWorkerLaunchAllowed: (_logPath) => {},
+  workerStarted: (_logPath, _identity) => {},
+  waiterStarted: (_logPath) => undefined,
+  trackWait: (_logPath, _wait) => {},
+};
+
+let installedProcessOwnershipAdapter = normalProcessOwnershipAdapter;
+
+export function getProcessOwnershipAdapter(): ProcessOwnershipAdapter {
+  return installedProcessOwnershipAdapter;
+}
+
+/** Install optional ownership behavior at an application boundary such as test support. */
+export function installProcessOwnershipAdapter(adapter: ProcessOwnershipAdapter): () => void {
+  const previous = installedProcessOwnershipAdapter;
+  installedProcessOwnershipAdapter = adapter;
+  return () => {
+    if (installedProcessOwnershipAdapter === adapter) installedProcessOwnershipAdapter = previous;
+  };
+}
 
 // The boot id cannot change while this process runs; reading it for every /proc entry dominated each scan.
 const bootIds = new Map<string, string>();
@@ -194,18 +223,13 @@ export function waitForWorkerExit(
   logPath: string,
   policy = defaultPolicy.process,
 ): Promise<WorkerExit> {
-  const fixtureOwner = fixtureOwnerForLog(logPath);
+  const ownership = getProcessOwnershipAdapter();
   const waiting = (async () => {
     if (identity)
-      await waitForProcess(
-        identity,
-        undefined,
-        fixtureOwner ? (waiter) => recordFixtureOwnedProcess(logPath, 'waiter', waiter) : undefined,
-        policy,
-      );
+      await waitForProcess(identity, undefined, ownership.waiterStarted(logPath), policy);
     return readWorkerExit(logPath);
   })();
-  if (fixtureOwner) trackFixtureWait(logPath, waiting);
+  ownership.trackWait(logPath, waiting);
   return waiting;
 }
 /** Linux pidfds let a restarted controller wait for non-children without polling or a model. */

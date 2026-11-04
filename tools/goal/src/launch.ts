@@ -29,10 +29,10 @@ import {
   terminateProcessGroup,
   waitForWorkerExit,
   workerExitPath,
+  getProcessOwnershipAdapter,
   type ProcessIdentity,
   type WorkerExit,
 } from './process.ts';
-import { fixtureOwnerForLaunch, recordFixtureOwnedProcess } from './fixture-process-ownership.ts';
 import type { Attempt, Brief, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 import { recordFlow } from './flow.ts';
@@ -532,7 +532,8 @@ export async function launch(
   mkdirSync(dirname(attempt.logPath), { recursive: true });
   const exitPath = workerExitPath(attempt.logPath),
     pidPath = `${attempt.logPath}.pid`;
-  const fixtureOwner = fixtureOwnerForLaunch(attempt.logPath);
+  const ownership = getProcessOwnershipAdapter();
+  ownership.assertWorkerLaunchAllowed(attempt.logPath);
   for (const path of [exitPath, `${exitPath}.tmp`, pidPath]) rmSync(path, { force: true });
   const resuming = Boolean(resumeSession);
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
@@ -560,7 +561,7 @@ export async function launch(
     process.env,
     task.worktree,
   );
-  let unrecordedFixtureWorker: ProcessIdentity | null = null;
+  let unrecordedWorker: ProcessIdentity | null = null;
   try {
     // Publication and spawn share the fence's write lock. A retry cannot miss a just-started process.
     store.write(attempt, () => {
@@ -595,10 +596,10 @@ export async function launch(
       // A systemd-run client may fail after the wrapper published its identity. Adopt that process instead of
       // treating it as a pre-start failure and risking a second launch during recovery.
       const wrapperStarted = Boolean(identity || existsSync(exitPath));
-      if (identity && fixtureOwner) {
-        unrecordedFixtureWorker = identity;
-        recordFixtureOwnedProcess(attempt.logPath, 'worker', identity);
-        unrecordedFixtureWorker = null;
+      if (identity) {
+        unrecordedWorker = identity;
+        ownership.workerStarted(attempt.logPath, identity);
+        unrecordedWorker = null;
       }
       if (!wrapperStarted) {
         if (started.error) throw started.error;
@@ -615,9 +616,9 @@ export async function launch(
       if (ownerDecisionPrompt.delivery) store.recordOwnerDecisionDelivery(attempt, ownerDecisionPrompt.delivery);
     });
   } catch (error) {
-    if (unrecordedFixtureWorker) {
+    if (unrecordedWorker) {
       try {
-        await terminateProcessGroup(unrecordedFixtureWorker, policy.worker.fixtureCleanupGraceMs, policy.process);
+        await terminateProcessGroup(unrecordedWorker, policy.worker.fixtureCleanupGraceMs, policy.process);
       } catch (cleanupError) {
         throw new AggregateError([error, cleanupError], 'fixture ownership failed and its worker could not be reaped');
       }

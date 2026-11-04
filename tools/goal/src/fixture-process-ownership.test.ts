@@ -9,6 +9,7 @@ import {
   recordFixtureOwnedProcess,
   settleFixtureWaits,
   trackFixtureWait,
+  fixtureProcessOwnershipAdapter,
 } from './fixture-process-ownership.ts';
 import {
   checkedProcessGroup,
@@ -17,9 +18,60 @@ import {
   processIdentity,
   sameProcess,
   terminateProcessGroup,
+  getProcessOwnershipAdapter,
+  installProcessOwnershipAdapter,
+  normalProcessOwnershipAdapter,
+  waitForWorkerExit,
   waitForProcess,
   waitForProcessGroup,
 } from './process.ts';
+
+test('process ownership adapters preserve the normal default and inject fixture child tracking', async () => {
+  const f = fixtureDirectory();
+  const restore = installProcessOwnershipAdapter(normalProcessOwnershipAdapter);
+  expect(getProcessOwnershipAdapter()).toBe(normalProcessOwnershipAdapter);
+  restore();
+
+  const restoreFixture = installProcessOwnershipAdapter(fixtureProcessOwnershipAdapter);
+  let identity: ReturnType<typeof processIdentity> = null;
+  let waiting: Promise<unknown> | undefined;
+  let child: ReturnType<typeof spawn> | undefined;
+  try {
+    const token = createFixtureProcessOwner(f.state);
+    child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    await new Promise<void>((resolve, reject) => {
+      child!.once('error', reject);
+      child!.once('spawn', resolve);
+    });
+    identity = processIdentity(child.pid!);
+    expect(identity).not.toBeNull();
+    waiting = waitForWorkerExit(identity, f.log);
+    expect(fixtureOwnedProcesses(f.state, token).map((process) => process.role)).toEqual(['waiter']);
+    expect(hasUnsettledFixtureWaits(f.state, token)).toBe(true);
+
+    await terminateProcessGroup(identity, 50);
+    await waiting;
+    await settleFixtureWaits(f.state, token);
+    expect(hasUnsettledFixtureWaits(f.state, token)).toBe(false);
+  } finally {
+    const remaining = identity ?? (child?.pid ? processIdentity(child.pid) : null);
+    if (remaining && sameProcess(remaining)) await terminateProcessGroup(remaining, 50);
+    await waiting?.catch(() => {});
+    child?.unref();
+    restoreFixture();
+    f.close();
+  }
+});
+
+test('production process modules do not import fixture ownership policy', () => {
+  for (const path of ['process.ts', 'launch.ts', 'job.ts']) {
+    const source = fs.readFileSync(join(import.meta.dir, path), 'utf8');
+    expect(source).not.toContain("from './fixture-process-ownership.ts'");
+  }
+});
 
 function fixtureDirectory() {
   const parent = resolve(import.meta.dir, '../../../.temp/goal-tests');

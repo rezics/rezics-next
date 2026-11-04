@@ -1,6 +1,5 @@
 import defaults from '../defaults.json';
 import { defaultPolicy } from './policy.ts';
-import { trackFixtureWait } from './fixture-process-ownership.ts';
 import {
   ProofCapacityQueuedError,
   ProofUnavailableError,
@@ -36,6 +35,7 @@ import {
   waitForProcessGroup,
   waitForWorkerExit,
   processIdentity,
+  getProcessOwnershipAdapter,
 } from './process.ts';
 import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -819,7 +819,7 @@ export class WorkerJob implements GateOutcomeSink {
   }
   async follow(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
     const following = this.followAttempt(worker).catch((error) => this.endAsEnvironment(worker.attempt, error));
-    trackFixtureWait(worker.attempt.logPath, following);
+    getProcessOwnershipAdapter().trackWait(worker.attempt.logPath, following);
     await following;
   }
   private async followAttempt(worker: Pick<RunningWorker, 'attempt' | 'exited'>): Promise<void> {
