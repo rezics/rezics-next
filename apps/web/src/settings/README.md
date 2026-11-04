@@ -46,6 +46,10 @@ after the response. An unresolved original patch and key stay until acknowledgem
 result can refresh current values without clearing that original. Session retirement clears private drafts; a stale
 response cannot restore edit authority.
 
+Retry-After is captured once on receipt as an absolute deadline in the mounted editor. Read and unresolved-write delays
+remain separate: editing or reading current values does not clear a command wait. Expiry only enables deliberate
+recovery; it never sends automatically, and a retired viewer episode cannot pass its deadline to a new one.
+
 **Decision:** Reset PATCHes the admitted native defaults with the reviewed version; missing or malformed choice/default
 advice leaves reset unavailable. Viewer state and read/update actions live as additive siblings of the notification
 catalogue `page` on the same preference 200, without a second preference version. Catalogue `page.actions` use the same
