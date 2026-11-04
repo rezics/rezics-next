@@ -120,7 +120,7 @@ test('generated inventory and exact removal operations preserve kind, cursor, re
     expectedRevision: 9,
     idempotencyKey: '01a17a3b-0884-721b-91ef-d7ffd7bb58f8',
   });
-  expect(await removeWatchNative(client, command)).toEqual({ kind: 'removed' });
+  expect(await removeWatchNative(client, command, 'Bearer alice')).toEqual({ kind: 'removed' });
   const deletion = requests[2]!;
   expect(deletion.request.method).toBe('DELETE');
   expect(new URL(deletion.request.url).pathname).toBe('/v1/accounts/alice/watches/private-watch-episode');
@@ -128,6 +128,40 @@ test('generated inventory and exact removal operations preserve kind, cursor, re
   expect(deletion.request.headers.get('authorization')).toBe('Bearer alice');
   expect(deletion.request.headers.get('idempotency-key')).toBe(JSON.stringify(command.idempotencyKey));
   expect(deletion.body).toEqual({ expectedRevision: 9 });
+});
+
+test('caller authorization stays on the DELETE when factory defaults differ or are absent', async () => {
+  const caller = 'Bearer caller-selected';
+  const factoryDefault = 'Bearer factory-default';
+  const command = Object.freeze({
+    accountId: 'alice',
+    watchId: 'private-watch-episode',
+    kind: 'thread' as const,
+    expectedRevision: 9,
+    idempotencyKey: '01a17a3b-0884-721b-91ef-d7ffd7bb58f8',
+  });
+  const seen: { authorization: string | null; idempotency: string | null; method: string }[] = [];
+  const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    seen.push({
+      authorization: request.headers.get('authorization'),
+      idempotency: request.headers.get('idempotency-key'),
+      method: request.method,
+    });
+    if (request.method === 'GET') return Response.json({ ...envelope, items: [unavailableRow], next: null });
+    return Response.json({ removed: true });
+  }) as typeof fetch;
+  const factory = createKernelClient('http://kernel.local', { headers: { authorization: factoryDefault }, fetch });
+  const injected = createKernelClient('http://kernel.local', { fetch });
+  expect(await removeWatchNative(factory, command, caller)).toEqual({ kind: 'removed' });
+  expect(await removeWatchNative(injected, command, caller)).toEqual({ kind: 'removed' });
+  expect(seen.filter((entry) => entry.method === 'DELETE')).toEqual([
+    { authorization: caller, idempotency: JSON.stringify(command.idempotencyKey), method: 'DELETE' },
+    { authorization: caller, idempotency: JSON.stringify(command.idempotencyKey), method: 'DELETE' },
+  ]);
+  const listed = await readWatchInventoryNative(factory, 'alice', { kind: 'thread', limit: 20, cursor: null });
+  expect(listed.kind).toBe('page');
+  expect(seen.at(-1)).toMatchObject({ method: 'GET', authorization: factoryDefault, idempotency: null });
 });
 
 test('fixed 20-row watch visits release controllers and ignore unrelated inventory growth', async () => {
@@ -198,6 +232,7 @@ test('fixed 20-row watch visits release controllers and ignore unrelated invento
 
 test('uncertain removal retries the original command and a retired owner callback cannot dispatch again', async () => {
   let current = true;
+  let token = 'csrf';
   let notify!: () => void;
   const row = {
     subscriptionId: 'private-watch-episode',
@@ -210,11 +245,13 @@ test('uncertain removal retries the original command and a retired owner callbac
   };
   const listed = { kind: 'page' as const, page: { ...envelope, watches: [row], next: null } };
   const commands: unknown[] = [];
+  const credentials: string[] = [];
   const controller = new WatchController(
     {
       read: async () => listed,
-      stop: async (command) => {
+      stop: async (command, csrfToken) => {
         commands.push(command);
+        credentials.push(csrfToken);
         return commands.length === 1
           ? { kind: 'uncertain' as const, problem: { status: 503, code: 'deadline_exceeded' } }
           : { kind: 'removed' as const };
@@ -223,7 +260,7 @@ test('uncertain removal retries the original command and a retired owner callbac
     {
       subject: 'alice',
       readCurrent: () => current,
-      credential: () => (current ? 'csrf' : null),
+      credential: () => (current ? token : null),
       subscribe: (listener) => {
         notify = listener;
         return () => {};
@@ -234,12 +271,15 @@ test('uncertain removal retries the original command and a retired owner callbac
   await controller.first();
   await controller.stop(row.subscriptionId);
   const original = controller.snapshot().command;
+  expect(original?.credential).toBe('csrf');
   expect(controller.snapshot().write).toBe('uncertain');
   await controller.refresh();
   expect(controller.snapshot().command).toBe(original);
+  token = 'replacement';
   await controller.retryOriginal();
   expect(commands[0]).toBe(original);
   expect(commands[1]).toBe(original);
+  expect(credentials).toEqual(['csrf', 'csrf']);
   expect(controller.snapshot()).toMatchObject({ write: 'removed', command: null, rows: [] });
 
   const lateController = new WatchController(
@@ -289,12 +329,16 @@ test('native inventory keeps problem metadata for cursor restart, dependency fai
     problem: { status: 503, code: 'dependency_unavailable', retryable: true, requestId: 'dep-1' },
   });
   expect(
-    await removeWatchNative(client, {
-      accountId: 'alice',
-      watchId: 'private-watch-episode',
-      kind: 'thread',
-      expectedRevision: 9,
-      idempotencyKey: '01a17a3b-0884-721b-91ef-d7ffd7bb58f8',
-    }),
+    await removeWatchNative(
+      client,
+      {
+        accountId: 'alice',
+        watchId: 'private-watch-episode',
+        kind: 'thread',
+        expectedRevision: 9,
+        idempotencyKey: '01a17a3b-0884-721b-91ef-d7ffd7bb58f8',
+      },
+      'Bearer alice',
+    ),
   ).toEqual({ kind: 'conflict', problem: { status: 409, code: 'conflict', retryable: false, requestId: 'rev-1' } });
 });

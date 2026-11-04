@@ -2,7 +2,7 @@ import { withManagedReadDeadline } from './managed-read-deadline';
 import type {
   ManagedWatch,
   NativeWatchProblem,
-  StopWatch,
+  StopWatchIntent,
   WatchActions,
   WatchKind,
   WatchManagementIO,
@@ -27,7 +27,7 @@ export type WatchState = Readonly<{
   viewer: WatchViewer | null;
   actions: WatchActions | null;
   problem: NativeWatchProblem | null;
-  command: StopWatch | null;
+  command: StopWatchIntent | null;
   write: 'idle' | 'sending' | 'uncertain' | 'rejected' | 'removed' | 'conflict' | 'denied';
   retired: boolean;
 }>;
@@ -168,13 +168,15 @@ export class WatchController {
 
   stop = async (subscriptionId: string) => {
     const row = this.state.rows.find((candidate) => candidate.subscriptionId === subscriptionId);
-    if (!this.canRemove() || this.state.read !== 'ready' || this.state.command || !row) return;
+    const credential = this.owner.credential();
+    if (!this.canRemove() || this.state.read !== 'ready' || this.state.command || !row || !credential) return;
     const command = Object.freeze({
       accountId: this.state.viewer?.accountId ?? this.owner.subject,
       watchId: row.command.watchId,
       kind: row.command.kind,
       expectedRevision: row.command.expectedRevision,
       idempotencyKey: crypto.randomUUID(),
+      credential,
     });
     this.update({ command, write: 'sending' });
     await this.send(command);
@@ -185,12 +187,11 @@ export class WatchController {
     this.update({ write: 'sending' });
     await this.send(command);
   };
-  private async send(command: StopWatch) {
-    const credential = this.owner.credential();
-    if (!credential || !this.current()) return;
+  private async send(command: StopWatchIntent) {
+    if (!command.credential || !this.current()) return;
     try {
       // Bound waiting without claiming cancellation reversed a dispatched command.
-      const result = await withManagedReadDeadline(() => this.io.stop(command, credential));
+      const result = await withManagedReadDeadline(() => this.io.stop(command, command.credential));
       if (!this.current() || this.state.command !== command) return;
       if (result.kind === 'removed') {
         this.update({

@@ -145,11 +145,13 @@ test('lost target access still permits removal by owner subscription identity, w
 
 test('unknown stop preserves the immutable original through list refresh; only explicit retry sends it again', async () => {
   const commands: StopWatch[] = [];
+  const credentials: string[] = [];
   let current = page([readable, inaccessible]);
   const { controller } = setup({
     read: async () => current,
-    stop: async (input) => {
+    stop: async (input, token) => {
       commands.push(input);
+      credentials.push(token);
       if (commands.length === 1) throw new Error('reply lost');
       return { kind: 'removed' };
     },
@@ -157,6 +159,7 @@ test('unknown stop preserves the immutable original through list refresh; only e
   await controller.first();
   await controller.stop(readable.subscriptionId);
   const original = controller.snapshot().command;
+  expect(original?.credential).toBe(identity.csrfToken);
   expect(controller.needsDecision()).toBe(true);
   current = page([]);
   await controller.refresh();
@@ -165,6 +168,7 @@ test('unknown stop preserves the immutable original through list refresh; only e
   expect(commands).toHaveLength(1);
   await controller.retryOriginal();
   expect(commands[1]).toBe(original);
+  expect(credentials).toEqual([identity.csrfToken, identity.csrfToken]);
   expect(controller.snapshot()).toMatchObject({ write: 'removed', command: null });
   expect(controller.needsDecision()).toBe(false);
 });
@@ -173,23 +177,27 @@ test('viewer replacement or failed session refresh retires rows, pending command
   for (const transition of ['replacement', 'error'] as const) {
     const lateRead = deferred<WatchRead>();
     const lateCommand = deferred<{ kind: 'removed' }>();
+    const credentials: string[] = [];
     let writes = 0;
     const { controller, client } = setup({
       read: async () => page([readable]),
-      stop: async () => {
+      stop: async (_input, token) => {
         writes++;
+        credentials.push(token);
         return lateCommand.promise;
       },
     });
     await controller.first();
     const write = controller.stop(readable.subscriptionId);
-    if (transition === 'replacement') client.setQueryData(sessionQuery.queryKey, { ...identity, subject: 'bob' });
+    if (transition === 'replacement')
+      client.setQueryData(sessionQuery.queryKey, { ...identity, subject: 'bob', csrfToken: 'bob-token' });
     else client.getQueryCache().find({ queryKey: sessionQuery.queryKey })!.setState({ status: 'error' });
     lateCommand.resolve({ kind: 'removed' });
     await write;
     await controller.retryOriginal();
     await controller.stop(readable.subscriptionId);
     expect(writes).toBe(1);
+    expect(credentials).toEqual([identity.csrfToken]);
     expect(controller.snapshot()).toMatchObject({ retired: true, rows: [], command: null });
     // A separate still-mounted observation also rejects reads arriving after a subject transition.
     const next = setup({ read: async () => lateRead.promise, stop: async () => ({ kind: 'removed' }) });
