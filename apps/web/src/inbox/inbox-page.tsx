@@ -836,7 +836,7 @@ export function ViewerInboxPage({
                 onMarkSeen={markNoticeSeen}
                 onRetrySeen={retryNoticeSeen}
                 pendingNoticeId={noticePendingId}
-                uncertainNoticeId={noticeFailure ? noticeAttemptView?.noticeId : null}
+                uncertainNoticeId={noticeFailure ? noticeAttemptView?.noticeId ?? null : null}
                 acknowledgementBlocked={
                   noticeAttemptView !== null ||
                   seenAttempt.current !== null ||
