@@ -97,8 +97,8 @@ function DynamicCollectionPageLifetime({
   const retryButton = useRef<HTMLButtonElement>(null);
   const resultNotice = useRef<HTMLParagraphElement>(null);
   const focusResult = useRef(false);
-  const ruleRead = useOperation('collection_rule.get');
-  const ruleUpdate = useOperation('collection_rule.update');
+  const ruleRead = useOperation('collection.get');
+  const ruleUpdate = useOperation('collection.update');
   // The route's reader closes over the originating filter; callback churn must not retarget a timer.
   const origin = useRef({ read: readMembers, id: page.id, cursor: page.cursor });
   const active = useRef(false);
@@ -136,7 +136,7 @@ function DynamicCollectionPageLifetime({
         ...current,
         ...result,
         filterStatus: result.filterStatus,
-        cursorRestarted: result.cursorRestarted,
+        cursorRestarted: result.cursorRestarted === true,
       };
       setCurrent({
         ...replacement,
