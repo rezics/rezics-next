@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest } from '@rezics/definitions/bundled';
 import { releaseDigest } from '@rezics/definitions';
 import { selectLibraryProfile } from '../../src/library/profile.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
