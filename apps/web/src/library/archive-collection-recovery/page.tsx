@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
@@ -54,7 +54,17 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
     journeyRef.current = createArchiveCollectionRecoveryJourney({ port, visit });
   }
   const journey = journeyRef.current;
-  const snapshot = useSyncExternalStore(journey.subscribe, journey.snapshot, journey.snapshot);
+  const snapshotCache = useRef<ReturnType<typeof journey.snapshot> | null>(null);
+  const subscribe = useCallback(
+    (notify: () => void) =>
+      journey.subscribe(() => {
+        snapshotCache.current = null;
+        notify();
+      }),
+    [journey],
+  );
+  const getSnapshot = useCallback(() => (snapshotCache.current ??= journey.snapshot()), [journey]);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const [focusVersion, setFocusVersion] = useState(0);
   const text = noticeText(snapshot.notice);
   const locked = snapshot.notice?.kind === 'unknown';
