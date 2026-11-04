@@ -68,6 +68,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/settings/actions', () => ({ readProfile: readProfileBoundary, saveProfile: saveProfileBoundary }));
 mock.module('../src/threads/upload', () => ({
   createMediaReservationIntent: () => undefined,
+  readSiteAvatarUploadAdvice: async () => avatarAdvice(),
   UploadRefusal: MockUploadRefusal,
   uploadAvatar: uploadAvatarBoundary,
   resumeReplyImageUpload: uploadAvatarBoundary,
@@ -107,6 +108,19 @@ function failedRead(status: number, retryAfter?: string): ProfileReadResult {
 
 function session(subject: string, csrfToken: string | null) {
   return { state: 'signed-in' as const, subject, csrfToken };
+}
+
+function avatarAdvice() {
+  return {
+    viewerState: 'signed_in',
+    viewer: { accountId: accountA },
+    target: { containerId: accountA, purpose: 'avatar' },
+    constraints: {
+      mediaTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'],
+      maxByteCount: 20_971_520,
+    },
+    allowedActions: ['upload'],
+  };
 }
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
