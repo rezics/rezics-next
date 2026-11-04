@@ -72,6 +72,10 @@ import { vndbImportRoutes } from '../library/list-import-vndb-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
+import {
+  readViewerPersonalActionsPage,
+  type ViewerPersonalActionsReader,
+} from '../library/viewer-personal-actions.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
@@ -533,6 +537,21 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ...(dependencies.search ? { search: dependencies.search } : {}),
     access: () => resolveAccess({ actions: actionCatalogue(continued), realmRoleReader }),
   });
+  let viewerResources: Map<string, ViewerActionResource> | undefined;
+  let viewerBindings: ViewerActionBindings | undefined;
+  let viewerGuestSecurity: ReadonlyMap<string, 'anonymous' | 'authenticated' | 'unknown'> | undefined;
+  const viewerActionRuntime = () => {
+    if (!viewerResources || !viewerBindings || !viewerGuestSecurity) throw new ProblemError('dependency_unavailable');
+    return {
+      access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+      resources: viewerResources,
+      bindings: viewerBindings,
+      guestSecurity: viewerGuestSecurity,
+      clock,
+    };
+  };
+  const viewerPersonalActions: ViewerPersonalActionsReader = (actor, rows, questionId, deadline) =>
+    readViewerPersonalActionsPage({ pool: dependencies.pool, viewerActionRuntime }, actor, rows, questionId, deadline);
   const feed = feedRoutes(continued as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,
     pool: dependencies.pool,
@@ -543,6 +562,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ...(dependencies.discovery ? { discovery: dependencies.discovery } : {}),
     access: () => resolveAccess({ actions: actionCatalogue(feed), realmRoleReader }),
     contentAccess: () => realmAwareContentAccess(resolveAccess({ actions: actionCatalogue(feed), realmRoleReader })),
+    viewerPersonalActions,
   });
   const contextual = contextRoutes(feed as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,
@@ -565,9 +585,6 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
   let contentAccess: Access | undefined;
   let realmParticipation: RealmParticipationCheck | undefined;
-  let viewerResources: Map<string, ViewerActionResource> | undefined;
-  let viewerBindings: ViewerActionBindings | undefined;
-  let viewerGuestSecurity: ReadonlyMap<string, 'anonymous' | 'authenticated' | 'unknown'> | undefined;
   let content: ReturnType<typeof contentRoutes>;
   const checkRealmParticipation: RealmParticipationCheck = (client, input, time) => {
     realmParticipation ??= createRealmParticipationCheck({
@@ -588,16 +605,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),
     ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),
-    viewerActionRuntime: () => {
-      if (!viewerResources || !viewerBindings || !viewerGuestSecurity) throw new ProblemError('dependency_unavailable');
-      return {
-        access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
-        resources: viewerResources,
-        bindings: viewerBindings,
-        guestSecurity: viewerGuestSecurity,
-        clock,
-      };
-    },
+    viewerActionRuntime,
     realmParticipation: checkRealmParticipation,
     get access() {
       if (!contentAccess)

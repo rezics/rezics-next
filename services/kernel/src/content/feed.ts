@@ -12,6 +12,7 @@ import { classifyUnavailability } from '../access/unavailable.ts';
 import { createContinueReads } from '../library/continue-reads.ts';
 import { createFollowActivitySource } from '../library/follow-activity.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';
+import type { ViewerPersonalActionsReader } from '../library/viewer-personal-actions.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { feedExcerpt, feedAuthor } from './feed-summary.ts';
 import { prepareFeedContentContext, type FeedContentContextReference } from './feed-context.ts';
@@ -56,6 +57,8 @@ export type FeedDependencies = {
   workClient: () => Promise<WorkClient>;
   discovery?: DiscoverySearch;
   search?: SearchService;
+  /** Home calls this bounded seam only after its feed candidates are admitted and disclosed. */
+  viewerPersonalActions: ViewerPersonalActionsReader;
 };
 
 /** The native factory and mounted route share this query and response contract. */

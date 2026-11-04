@@ -72,6 +72,7 @@ caller binding, bounded continuation lifecycle, concurrent edits, terminal fence
 Decision: Account member reads add each viewer's own entry state and standard-question score beside each disclosed subject in a private, no-store response.
 Decision: Viewer entry lookup follows the installed Library read: exact subject entry first, then the current Content terminal only when the exact entry is absent.
 Decision: A public Collection session page may request one bounded authenticated FULL member page from the existing producer; Web joins only exact occurrence keys and source subject IDs, then opens the native Subject Library slot with the current filtered page and occurrence anchor as its return address. Collection and personal action gates remain independent.
+Decision: Home and Collection use the callable `readViewerPersonalActionsPage` seam with the caller's admitted occurrence key, original Subject ID and disclosed resource type; a current empty allowed-action list remains distinct from unavailable admission.
 
 The installed `library/viewer-facts.ts` producer exports `prepareViewerFacts`, `readViewerFacts` and
 `viewerFactsCurrent` for staged callers, plus `readViewerFactsPage` for Library and Collection consumers.
@@ -105,6 +106,52 @@ candidate admission, source witnesses, private assembly and final disclosure fen
 members attach only a current private, no-store page under their existing gates. Web keeps its interfaces.
 This overlay does not implement owner-wide `PersonalScoreCurrentness`, activate shelf score ordering or relax 503.
 
+`viewer-personal-actions.ts` exports `readViewerPersonalActionsPage` and the matching `ViewerPersonalActionsReader`
+callable. Each input row adds the exact disclosed `resourceType` to its `rowKey` and original `subjectId`; the helper
+never replaces that identity with a terminal or sibling. The Home feed receives this callable from Kernel as
+`FeedDependencies.viewerPersonalActions`. Content owns candidate disclosure and source admission. Its caller must
+recheck its feed or Collection source/membership fence after this helper finishes foreign work; the helper proves
+Library facts and mounted Access actions, not the caller's source membership.
+
+Each returned row keeps its existing Entry and vote facts and adds `actions`. `actions: {state: "current", allowed: []}`
+means the admitted resource is readable and Access currently offers no supported action. An unavailable action state
+is explicit (`admission`, `currentness` or `dependency`) and never changes an unreadable Entry or vote into absence.
+Allowed action names and operation IDs come from the mounted `ViewerActionBindings` and `readViewerActions`, preserving
+the distinct own-account Library/progress authority and Subject-resource rating authority. The projection includes
+mounted Entry update/delete and progress-session create/update actions. Manual score operations are included only for
+the current standard question `00000000-0000-7000-8000-000000000001`, revision 1, scale 0–20 step 1, and only for the
+mounted `rating.vote_put` / `rating.vote_delete` operations. Imported conditional vote effects remain unavailable.
+The action projection is an observation; Entry commands and `createVoteCommands.putVoteOutcome` remain the only score
+and Entry writers. Web still owns unsettled-write state and the controls that consume this response.
+
+`viewer-personal-actions.ts` exports `readViewerPersonalActionsPage` and the matching `ViewerPersonalActionsReader`
+callable. Each input row adds the exact disclosed `resourceType` to its `rowKey` and original `subjectId`; the helper
+never replaces that identity with a terminal or sibling. The Home feed receives this callable from Kernel as
+`FeedDependencies.viewerPersonalActions`. Content owns candidate disclosure and source admission. Its caller must
+recheck its feed or Collection source/membership fence after this helper finishes foreign work; the helper proves
+Library facts and mounted Access actions, not the caller's source membership.
+
+Each returned row keeps its existing Entry and vote facts and adds `actions`. `actions: {state: "current", allowed: []}`
+means the admitted resource is readable and Access currently offers no mounted action. An unavailable action state
+is explicit (`admission`, `currentness` or `dependency`) and never changes an unreadable Entry or vote into absence.
+Allowed actions and operation IDs come from the mounted `ViewerActionBindings` and `readViewerActions`, preserving the
+distinct own-account Library authority and Subject-resource rating authority. Manual score operations are included
+only for the current standard question `00000000-0000-7000-8000-000000000001`, revision 1, scale 0–20 step 1, and
+only for the mounted `rating.vote_put` / `rating.vote_delete` operations. Imported conditional vote effects remain
+unavailable. The action projection is an observation; Entry commands and `createVoteCommands.putVoteOutcome` remain
+the only writers. Web still owns unsettled-write state and the controls that consume this response.
+
+The action helper validates raw multiplicity and the full typed input before deduplicating `(resourceType, subjectId)`
+references. It retains the 100-row, 16,384-byte input and 65,536-byte complete-response caps. It releases the Library
+home read before Access preparation, then reads the generic Subject and disclosed resource-type batches, rechecks
+Library facts, repeats both action batches and rechecks facts again. A changed action projection or mounted binding
+is unavailable, never a stale positive. The full caller cost therefore includes four bounded Access preparations
+and action reads plus two complete `viewerFactsCurrent` finishes; each batch contains at most 100 distinct resource
+references and the existing 64-action/256-operation per-type Access caps still apply. The batches use the same
+request deadline, contain no per-row network calls, and perform no internal retry. This is an internal callable seam,
+not a new HTTP route or generated client response; shared client publication remains with Content's existing
+publisher.
+
 For N admitted rows, U distinct requested IDs and T distinct counted destinations, U,T <= N <= 100. A successful
 nonempty standard call pays the following complete composition in addition to its caller's existing admission:
 
@@ -113,11 +160,12 @@ nonempty standard call pays the following complete composition in addition to it
 - Caller snapshot: one checkout with BEGIN/COMMIT (ROLLBACK on failure), account-home binding and Library account
   point, one Entry statement with at most 2U exact/fallback seeks, then native read's account binding/point and one
   counted-target statement with at most T index seeks and T rows. No foreign-home preparation occurs here.
-- After release: one Library account snapshot; native finish repeats its question read, two mapping calls around
+- After release: one Library account snapshot; Library also reruns the bounded selected Entry lookup and compares
+  original-exact/terminal-fallback identity, incarnation, state and revision. Native finish repeats its question read, two mapping calls around
   Subject disclosure, and a separate account-home snapshot with account point and the same T counted-target seeks.
   Library finally repeats its bounded mapping and visible-question observations. Thus there are five account
   point reads, four question observations, six direct mapping calls plus disclosure's mapping calls, two disclosure
-  batches, one Entry statement and two counted-target statements on the full successful path. Account-only native
+  batches, two Entry statements and two counted-target statements on the full successful `readViewerFactsPage` path. Account-only native
   snapshots, Library final account snapshot and the caller snapshot each pay their own checkout/begin/commit.
 - Mapping calls retain Content's supplied-source/control-home double collection; each disclosure batch also pays
   its bounded mapping and original/terminal Access preparation/evaluation. Their native row/operation limits and
@@ -126,9 +174,17 @@ nonempty standard call pays the following complete composition in addition to it
   history scan, blanket reservation, maintained cache, new payer, vote mutation or repair occurs.
 - Correlation and encoding cost O(N) rows plus the bounded serialized input/output bytes and native fingerprints (which retain clear/absence distinctions).
   Empty/no-scope/unsupported-question paths skip native vote work; identity/preparation/read/finish mismatch exits
-  early and discards provisional facts. Byte overflow returns unavailable; deadline, cancellation and dependency
+ early and discards provisional facts. Byte overflow returns unavailable; deadline, cancellation and dependency
   errors propagate through existing rollback/release paths. A same-input retry pays preparation and snapshots
   again, with no hidden refill or internal retry loop.
+
+- The personal-action overlay adds four bounded Access preparations and action reads over at most U distinct
+  disclosed `(resourceType, SubjectID)` references, split into generic Subject and exact resource-type batches for
+  each of two passes. It runs the existing full Library/Content finish after each pass, so a page with Entry access
+  pays three Entry statements total: the initial snapshot and one selected-row recheck per pass. Each batch has at most 100
+  references; the exact candidate operation count is bounded by Access's 64 actions and 256 bindings per resource
+  type. The 65,536-byte response limit includes every repeated occurrence's action list. The helper retains no
+  Library home connection during Access preparation and starts no per-row request or retry.
 
 Source bounds do not establish executed native growth. The controller retains independent unrelated owner/vote
 history growth with fixed admitted identities, page size and bytes, plus frozen full acceptance. Closest reference

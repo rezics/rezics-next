@@ -36,6 +36,18 @@ Preparations and selected rows stay instance-local; callers keep the exact actor
 provisional facts on false currentness. `readViewerFactsPage` performs that sequence for actual Library list and
 Collection member consumers. Search retains admission, source witnesses, private assembly and its final guard.
 
+`viewer-personal-actions.ts` adds the callable `readViewerPersonalActionsPage` over those same facts and the kernel's
+live mounted Access action runtime. Its caller supplies each admitted occurrence key, original Subject ID and
+disclosed resource type. It preserves duplicate row keys, deduplicates native action references only after raw row
+and byte validation, distinguishes current empty actions from unavailable admission, and returns typed unavailable
+action state when final action currentness is not proven. Home receives the callable as
+`FeedDependencies.viewerPersonalActions`; its Content caller retains feed disclosure and rechecks source membership
+after the helper's foreign work. The separate Collection continuation composes the same seam under its own fence.
+Actions come from current mounted bindings for Entry update/delete, progress-session create/update, and manual score
+operations. Score operations are limited to `rating.vote_put` and `rating.vote_delete` while the standard question
+meaning is current. Entry and vote command writers remain unchanged.
+The helper adds no HTTP route or generated client DTO; shared response publication remains with Content.
+
 The [owning wire and complete caller cost](../../../../docs/library-and-collections.md) preserve zero and
 unavailable disclosure/meaning. Native clear and true absence retain distinct private row/fingerprint evidence;
 clear deliberately maps to an absent score on the unchanged wire. Requested/original/counting identities and
@@ -47,8 +59,10 @@ installation is claimed.
 
 `test/library/viewer-facts.test.ts` uses actual native vote and merge commands and the existing figure worker to
 exercise survivor/redirected/duplicate rows, Entry precedence, zero/clear/absence, pending identity and late selected
-row, account/scope and disclosure changes. Full frozen acceptance and independent native growth remain controller
-checks. No raw vote slot, parallel reader, route, writer, score cache or GET repair is introduced.
+row, account/scope and disclosure changes. The personal-action cases cover duplicate rows, allowed and denied mounted
+operations, failed action dependencies, action catalogue changes, Entry/account/question/identity finalization races,
+and response/input limits. Full frozen acceptance and independent native growth remain controller checks. No raw vote
+slot, parallel reader, route, writer, score cache or GET repair is introduced.
 
 ## Scope and implementation boundary
 

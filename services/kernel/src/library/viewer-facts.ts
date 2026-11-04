@@ -151,6 +151,7 @@ export type PreparedViewerFacts = Readonly<{
 }>;
 
 type EntryRow = Awaited<ReturnType<typeof viewerEntries.run>>[number];
+type EntryReadStage = Readonly<{ ids: readonly string[]; fingerprint: string }>;
 // Native preparations belong to this reader instance and never cross the staged API as DTOs.
 type NativeStage = {
   reader: ReturnType<typeof createOwnCountedVoteReader>;
@@ -160,6 +161,7 @@ type NativeStage = {
   readStarted?: boolean;
 };
 const nativeStages = new WeakMap<PreparedViewerFacts, NativeStage>();
+const entryReadStages = new WeakMap<PreparedViewerFacts, EntryReadStage>();
 
 function unavailable(reason: Extract<ViewerFactsPage, { state: 'unavailable' }>['reason']): ViewerFactsPage {
   return { state: 'unavailable', reason, retryable: reason !== 'response_limit' };
@@ -224,6 +226,25 @@ function canonicalTarget(mapping: IdentityMapping, original: string): string | n
   if (mapping.state === 'mapped') return mapping.terminal;
   if (mapping.state === 'absent') return original;
   return null;
+}
+
+function entryFingerprint(prepared: PreparedViewerFacts, rows: readonly EntryRow[]): string {
+  const bySubject = new Map(rows.map((row) => [row.subjectId, row]));
+  const mappings = new Map(prepared.mappings.map(({ subjectId, mapping }) => [subjectId, mapping]));
+  return JSON.stringify(
+    prepared.rows.map(({ rowKey, subjectId }) => {
+      const target = canonicalTarget(mappings.get(subjectId)!, subjectId)!;
+      const selected = bySubject.get(subjectId) ?? bySubject.get(target);
+      return [
+        rowKey,
+        subjectId,
+        selected?.subjectId ?? null,
+        selected?.incarnationId ?? null,
+        selected?.state ?? null,
+        selected ? Number(selected.revision) : null,
+      ];
+    }),
+  );
 }
 
 async function currentAccount(client: Pick<PoolClient, 'query'>, actor: AccountActor) {
@@ -313,6 +334,7 @@ export async function readViewerFacts(
       subject_ids: entryIds,
     });
   }
+  if (prepared.canReadEntries) entryReadStages.set(prepared, { ids: entryIds, fingerprint: entryFingerprint(prepared, entryRows) });
   const entries = new Map(entryRows.map((row) => [row.subjectId, row]));
 
   const native = nativeStages.get(prepared);
@@ -390,6 +412,20 @@ export async function viewerFactsCurrent(
     currentAccount(deadlineClient(client, deadline), actor),
   );
   if (!accountCurrent) return false;
+  if (prepared.canReadEntries) {
+    const stage = entryReadStages.get(prepared);
+    if (!stage) return false;
+    const currentRows = stage.ids.length
+      ? await withReadTransaction(dependencies.pool, (client) =>
+          viewerEntries.run(deadlineClient(client, deadline), {
+            route: routeOf(actor.accountId)!,
+            account_id: actor.accountId,
+            subject_ids: [...stage.ids],
+          }),
+        )
+      : [];
+    if (entryFingerprint(prepared, currentRows) !== stage.fingerprint) return false;
+  }
   const native = nativeStages.get(prepared);
   if (prepared.canReadVotes && prepared.questionId === STANDARD_QUESTION_ID && prepared.question && !native)
     return false;
