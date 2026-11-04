@@ -13,7 +13,7 @@ import {
   type NotificationWriteResult,
   type SettingsPage,
 } from '../src/settings/preferences';
-import { NotificationEditor } from '../src/settings/notification-recovery';
+import { NotificationEditor, notificationIntentAllowed } from '../src/settings/notification-recovery';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -638,4 +638,44 @@ test('conflict returns the current page, prunes forbidden kinds and keeps a stil
   expect(editor.snapshot()).toMatchObject({ phase: 'idle', draft: { ...optional, mention: false } });
   expect(transport.calls.map((call) => call.method)).toEqual(['PATCH']);
   expect(transport.sessionReads()).toBe(1);
+});
+
+test('reviewed reset stays unavailable on edit-only advice until a deliberate current read admits reset', async () => {
+  const editOnly: PreferencePage = {
+    ...settingsPreferencePage(optional, 8),
+    actions: [{ name: 'edit', expectedVersion: 8 }],
+  };
+  const resetAllowed = settingsPreferencePage(optional, 8);
+  const writes: NotificationChange[] = [];
+  let allowReset = false;
+  const editor = new NotificationEditor(page, {
+    save: async (input) => {
+      writes.push(input);
+      return writes.length === 1
+        ? { ok: false, reason: 'conflict', page: editOnly }
+        : { ok: true, notifications: optional, version: 9, page: settingsPreferencePage(optional, 9) };
+    },
+    read: async () => ({
+      signedIn: true,
+      preferences: { spoilerLevel: 1, suitability: 'blur', version: 8 },
+      notifications: optional,
+      page: allowReset ? resetAllowed : editOnly,
+      securityHref: null,
+    }),
+  });
+  const capturedSubmit = () => editor.submit(7);
+
+  await editor.restore(7);
+  expect(writes[0]!.notifications).toBeNull();
+  expect(editor.snapshot()).toMatchObject({ phase: 'review', pending: null, intent: null, currentAdvice: editOnly });
+  expect(notificationIntentAllowed(editor.snapshot().intent, editOnly)).toBe(false);
+  await capturedSubmit();
+  expect(writes).toHaveLength(1);
+
+  allowReset = true;
+  await editor.reload();
+  expect(notificationIntentAllowed(editor.snapshot().intent, resetAllowed)).toBe(true);
+  await capturedSubmit();
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toMatchObject({ expectedVersion: 8, notifications: null });
 });
