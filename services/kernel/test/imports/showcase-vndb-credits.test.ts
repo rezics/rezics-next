@@ -231,7 +231,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       path,
       runtime.importTransport,
       { origin: 'https://kernel.import.test' },
-      { vndbCreditReferences: references },
+      { mediaDeadlineMs: 0, vndbCreditReferences: references },
     );
     expect(first.vndbCreditDiagnostics).toContainEqual(
       expect.objectContaining({ code: 'chardesign', reason: 'missing_concept' }),
@@ -292,7 +292,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
       path,
       runtime.importTransport,
       { origin: 'https://kernel.import.test' },
-      { vndbCreditReferences: references },
+      { mediaDeadlineMs: 0, vndbCreditReferences: references },
     );
     expect(reopened.readings.map((row) => row.externalId).sort()).toEqual(first.readings.map((row) => row.externalId).sort());
     current = await readCurrent();

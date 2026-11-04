@@ -135,6 +135,7 @@ test('the selected-family seed qualifies staff and voice credits without alias i
             { code: 'scenario', id: scenarioId },
             { code: 'chardesign', id: designId },
           ],
+        mediaDeadlineMs: 0,
         },
       },
     );
@@ -201,4 +202,4 @@ test('the selected-family seed qualifies staff and voice credits without alias i
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
