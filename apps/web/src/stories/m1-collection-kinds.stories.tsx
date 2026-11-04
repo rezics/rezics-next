@@ -22,7 +22,13 @@ function Example({ layout = 'list', mixed = false }: { layout?: 'list' | 'grid';
   return (
     <PatternStory visitor="Signed Out" path={`/collections/${page.id}${layout === 'grid' ? '?layout=grid' : ''}`}>
       <div className="mx-auto w-full max-w-6xl p-4">
-        <CollectionPage page={page} layout={layout} refreshPage={async () => page} />
+        <CollectionPage
+          queryKey={undefined}
+          cursor={undefined}
+          page={page}
+          layout={layout}
+          refreshPage={async () => page}
+        />
       </div>
     </PatternStory>
   );
