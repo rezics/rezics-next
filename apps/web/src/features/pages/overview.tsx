@@ -38,6 +38,8 @@ import { RelationStream } from './relation-stream';
 import { qualifiedNotes, type QualifiedNote } from './qualified-relations';
 import { relationPreviewCount } from './subject-relations-preview';
 import { relationItemRows } from './relation-item-identity';
+import { workCastAdmitted, WORK_VOICE_PROPERTY } from '../catalogue/work-cast/model';
+import { WorkCastWindow } from '../catalogue/work-cast/view';
 import { collectionListValue } from './collection-list-value';
 import {
   bestRank,
@@ -522,6 +524,21 @@ export function statementItems(
       statement.property.data_type === 'wikibase-item' &&
       typeof statement.value.content === 'string',
   );
+  const qualifierRelated = Object.fromEntries(
+    Object.entries(read.related).map(([id, related]) => {
+      const label = pageText(related.labels, value.locale);
+      return [
+        id,
+        {
+          id: related.redirect ?? id,
+          ...(related.type ? { type: related.type } : {}),
+          ...(related.types ? { types: related.types } : {}),
+          label: { value: label.text, language: label.lang ?? value.locale },
+          ...(related.cover !== undefined ? { cover: related.cover } : {}),
+        },
+      ];
+    }),
+  );
   const items = statements.slice(0, limit).flatMap((statement): Item[] => {
     const target = statement.value.content as string;
     const entry = Object.hasOwn(read.related, target) ? read.related[target] : undefined;
@@ -544,16 +561,7 @@ export function statementItems(
             }
           : {}),
         notes: [],
-        qualified: qualifiedNotes(
-          statement,
-          Object.fromEntries(
-            Object.entries(read.related).map(([id, related]) => [
-              id,
-              { id: related.redirect ?? id, label: { value: pageText(related.labels, value.locale).text } },
-            ]),
-          ),
-          value.locale,
-        ),
+        qualified: qualifiedNotes(statement, qualifierRelated, value.locale),
         gated: spoilerLevel(statement) > value.reader.spoilerLevel,
       },
     ];
@@ -599,6 +607,7 @@ function LinkSection(
         view={view}
         title={text.text || title}
         titleLang={text.lang}
+        workCast={forward && view === 'credits' && props.property === WORK_VOICE_PROPERTY}
       />
     );
   if (!section?.ok)
@@ -614,6 +623,18 @@ function LinkSection(
     return <Failed slot={slot} id={id} title={text.text || title} titleLang={text.lang} locale={value.locale} />;
   if (found.items.length === 0 && !found.more && !found.count?.value && props.paged !== true) return null;
   const listed = forward ? found : { ...found, items: datedItems(found.items, value.locale) };
+  const workCast = forward && view === 'credits' && props.property === WORK_VOICE_PROPERTY;
+  const castWindowReady =
+    workCast &&
+    workCastAdmitted(value) &&
+    section?.ok === true &&
+    (section.read.kind === 'relations'
+      ? section.read.property === WORK_VOICE_PROPERTY
+      : section.read.kind === 'subject' &&
+        isRecord(section.body.subject) &&
+        isRecord(section.body.subject.statements) &&
+        Object.hasOwn(section.body.subject.statements, WORK_VOICE_PROPERTY));
+  const currentCreditVisit = creditVisit(value, id, section, view);
   return (
     <Preview
       slot={slot}
@@ -628,14 +649,28 @@ function LinkSection(
       {listed.items.length === 0 && (
         <p role="status">{m.subject_relation_empty_page({}, { locale: value.locale as never })}</p>
       )}
-      <CoverList
-        items={listed.items}
-        value={value}
-        label={text.text || title}
-        preview={props.paged !== true}
-        creditVisit={creditVisit(value, id, section, view)}
-        openExactEditions={view === 'editions' && props.property === 'schema:exampleOfWork'}
-      />
+      {workCast && !castWindowReady && (
+        <p role="note" className="text-sm text-muted-foreground">
+          {m.work_cast_unavailable({}, { locale: value.locale as never })}
+        </p>
+      )}
+      {castWindowReady && listed.items.length > 0 ? (
+        <WorkCastWindow
+          items={listed.items}
+          value={value}
+          label={text.text || title}
+          creditVisit={currentCreditVisit}
+        />
+      ) : (
+        <CoverList
+          items={listed.items}
+          value={value}
+          label={text.text || title}
+          preview={props.paged !== true}
+          creditVisit={currentCreditVisit}
+          openExactEditions={view === 'editions' && props.property === 'schema:exampleOfWork'}
+        />
+      )}
       {props.paged === true && section.ok && typeof section.body.next === 'string' && (
         <StreamLink value={value} view={view} node={id} cursor={section.body.next} title={text.text || title} />
       )}
