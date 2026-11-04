@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { VerificationSubjectChooserView, type VerificationSubject } from '../../settings/verification-subject-chooser';
+import type { VerificationSearchResult } from '../../settings/verification-core';
 
 type Scenario = 'ready' | 'failed' | 'empty' | 'delayed';
 const controls = new WeakMap<
@@ -31,16 +32,24 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
       selections: [] as (VerificationSubject | null)[],
       submits: 0,
     };
-    const search = async (query: string): Promise<VerificationSubject[]> => {
+    const search = async (query: string): Promise<VerificationSearchResult<VerificationSubject[]>> => {
       state.calls.push(query);
-      if (scenario === 'failed' && state.calls.length === 1) throw new Error('Search unavailable');
-      if (scenario === 'empty') return [];
+      if (scenario === 'failed' && state.calls.length === 1)
+        return {
+          ok: false,
+          failure: {
+            kind: 'unavailable',
+            status: 0,
+            message: m.settings_verification_search_unavailable(),
+          },
+        };
+      if (scenario === 'empty') return { ok: true, value: [] };
       // Intentionally ignores abort to exercise ownership of a late native completion.
       if (scenario === 'delayed')
         return new Promise((resolve) => {
-          state.finish = () => resolve(subjects);
+          state.finish = () => resolve({ ok: true, value: subjects });
         });
-      return subjects;
+      return { ok: true, value: subjects };
     };
     return { state, search };
   });
