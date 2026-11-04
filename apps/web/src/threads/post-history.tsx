@@ -286,6 +286,13 @@ function HistoryDisclosure({
         pathname,
         locationSearch,
       );
+    if (pendingReturn) {
+      console.log('history-return-load-debug', {
+        cursorMatches: pendingReturn.target.historyCursor === cursor,
+        returning,
+        ownsConnection: lifetime.ownsConnection(connection),
+      });
+    }
     if (pendingReturn && !returning) {
       retireHistoryReturnReceipt(pendingReturn.target.token);
       returnAttempt.current = undefined;
@@ -306,6 +313,7 @@ function HistoryDisclosure({
         ? keyboardElement
         : undefined;
     const request = lifetime.begin(connection, source, postId, cursor, locale, credentialMode, viewerId);
+    if (pendingReturn) console.log('history-return-request-debug', !!request);
     if (!request) return;
     const intent = keyboardOwner ? { connection, element: keyboardOwner } : undefined;
     continuationIntent.current = intent;
