@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement as h } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,6 +8,8 @@ import { creditVisit, type CreditVisit } from '../src/features/catalogue/credit-
 import { creditReturn, creditWindowHref } from '../src/features/catalogue/credit-inspection/navigation';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import type { OverviewValue, RowValue } from '../src/features/pages/overview';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
 
 test('current Person credit returns from work, Character and Sources with exact labels, Context and window; replaced and concealed rows stay unavailable', async () => {
   const { Window } = await import(
