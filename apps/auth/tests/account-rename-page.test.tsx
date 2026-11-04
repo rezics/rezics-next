@@ -118,6 +118,6 @@ test('dependency recovery reloads an admitted handleless actor and requires a ne
   expect(host.textContent).toContain('No handle');
   expect(host.textContent).toContain('Returning here did not submit a rename');
   expect(host.querySelector<HTMLInputElement>('#rename-handle')?.value).toBe('');
-  expect(host.querySelector<HTMLInputElement>('#rename-confirm')?.checked).toBe(false);
+  expect(host.querySelector<HTMLInputElement>('#rename-confirm')).toBeNull();
   expect(host.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled).toBe(true);
 });
