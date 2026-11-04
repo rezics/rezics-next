@@ -83,6 +83,16 @@ export function contextFixture(scenario: ContextScenario = 'inherited', locale =
     const url = new URL(request.url);
     const body = request.method === 'POST' ? ((await request.clone().json()) as Record<string, unknown>) : null;
     calls.push({ path: url.pathname, query: url.search, method: request.method, body, headers: request.headers });
+    if (request.method === 'POST' && url.pathname === '/v1/viewerActions') {
+      const resources = body?.resources as { type: string; id: string }[];
+      const authority = fixtureCandidateViewerActions(scenario === 'adopt-denied' ? 'actions-denied' : 'ready');
+      return json({
+        resources: resources.map((resource) => {
+          const component = resource.type === 'semantic.context' ? authority.context : authority.subject;
+          return { ...resource, viewerActions: component.state === 'available' ? component.actions : [] };
+        }),
+      });
+    }
     if (request.method === 'GET' && url.pathname === `/v1/contexts/${context.id}`) {
       if (scenario === 'loading') return new Promise<Response>(() => {});
       return scenario === 'unavailable' ? json({ code: 'overloaded' }, 503) : json({ context });

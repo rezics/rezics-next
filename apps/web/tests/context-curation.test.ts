@@ -98,11 +98,12 @@ describe('Context curation through the generated native request seam', () => {
     expect(decision.ok && decision.kind).toBe('rejected');
     const adoption = await fixture.transport.confirm(command(fixture));
     expect(adoption).toEqual({ ok: false, reason: 'denied' });
-    expect(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.body?.expected_head)).toEqual([
-      4, 7,
-    ]);
+    const commands = fixture.calls.filter(
+      (call) => call.method === 'POST' && call.path !== '/v1/viewerActions',
+    );
+    expect(commands.map((call) => call.body?.expected_head)).toEqual([4, 7]);
     expect(
-      fixture.calls.filter((call) => call.method === 'POST').every((call) => call.body?.context === fixture.context.id),
+      commands.every((call) => call.body?.context === fixture.context.id),
     ).toBe(true);
   });
 
