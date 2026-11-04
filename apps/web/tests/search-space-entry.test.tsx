@@ -1,10 +1,9 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DiscoveryResults } from '../src/search/discovery-results';
-import { useDiscoveryPersonalResults } from '../src/search/discovery-personal-host';
 import { parseDiscoveryPage, type DiscoveryPage, type DiscoveryState } from '../src/search/discovery';
 import type { DiscoveryBoundPage } from '../src/search/discovery-personal-server';
 import { SpaceEntryControls } from '../src/search/space-entry/controls';
@@ -13,6 +12,8 @@ import { createDiscoveryCommandRegistry } from '../src/search/discovery-personal
 import type { FollowWriteResult } from '../src/library/follow-records';
 import { sessionQuery } from '../src/session/query';
 import { viewerExposureQuery } from '../src/kernel/viewer-exposure';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { useDiscoveryPersonalResults } = await import('../src/search/discovery-personal-host');
 const id = '00000000-0000-4000-8000-000000000811',
   realm = '00000000-0000-4000-8000-000000000812',
   reader = '00000000-0000-4000-8000-000000000813';
