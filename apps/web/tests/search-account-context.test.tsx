@@ -87,7 +87,7 @@ function region(state: DiscoveryState, locale = 'en', personal?: ReturnType<type
       personal={personal}
       data={{
         discovery: state,
-        queryState: { query: 'Homonym', facets: {} },
+        queryState: { query: 'Homonym', facets: {}, type: undefined, cursor: undefined, sort: undefined },
         sort: 'relevance',
         hitTypes: {},
         yearProperties: [],

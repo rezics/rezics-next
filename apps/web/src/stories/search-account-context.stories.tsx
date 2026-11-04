@@ -72,7 +72,7 @@ function Example({
         selectedFacets={{}}
         data={{
           discovery: { status: 'ready', page },
-          queryState: { query: 'Mira', facets: {} },
+          queryState: { query: 'Mira', facets: {}, type: undefined, cursor: undefined, sort: undefined },
           sort: 'relevance',
           hitTypes: {},
           yearProperties: [],
@@ -104,7 +104,9 @@ function Example({
                 rowKey={discoveryKey(hit)}
                 write={async () => (pending ? new Promise(() => {}) : { ok: true, following: true })}
               />
-            ) : null;
+            ) : (
+              <></>
+            );
           },
         }}
       />
