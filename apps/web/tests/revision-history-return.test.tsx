@@ -214,6 +214,12 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
   try {
     await click(button(view.host, m.thread_history_show()));
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined]);
+    const binding = historyReads[0]!.binding;
+    const { historicalActualMatches, historicalBindingCurrent, historicalReaderSource } = await import(
+      '../src/threads/historical-reader-provenance'
+    );
+    expect(historicalActualMatches(binding, anonymousReader)).toBe(true);
+    expect(historicalBindingCurrent(historicalReaderSource(view.client), binding, anonymousReader)).toBe(true);
     await click(button(view.host, m.thread_history_more()));
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor]);
     await click(button(view.host, m.revision_history_inspect({ number: '2' })));
