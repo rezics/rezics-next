@@ -20,7 +20,7 @@ const { OverviewContext } = await import('../src/features/pages/overview');
 const { SubjectConnections } = await import('../src/features/pages/subject-connections-view');
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const property = 'wdt:P155';
-const release = { ...definitions, digest: 'a'.repeat(64) } as unknown as GuideRelease;
+const release = { ...definitions, digest: `sha256:${'a'.repeat(64)}` } as unknown as GuideRelease;
 const original = (n = 10, target = id(2), rank = 'normal') => ({
   id: id(n), property: { id: property, data_type: 'wikibase-item' },
   value: { type: 'value', content: target }, rank,

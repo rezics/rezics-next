@@ -150,7 +150,7 @@ function ConnectionsReading({
         (element) => element.dataset.workStatement === target.focus && element.dataset.workHolder === target.holder,
       );
       row?.querySelector<HTMLElement>('a, summary')?.focus();
-    } else status.current?.focus();
+    } else region.current?.querySelector<HTMLElement>('[data-connections-recovery="relations"]')?.focus();
   }, [snapshot]);
   useEffect(() => {
     window.activate();
@@ -335,7 +335,7 @@ function ConnectionsReading({
                   )}
                 </>
               ) : (
-                <div role="alert" className="space-y-3">
+                <div role="alert" tabIndex={-1} data-connections-recovery={group} className="space-y-3">
                   <p>{failure(section && !section.ok ? (section.status ?? 503) : 503)}</p>
                   <Button
                     variant="outline"

@@ -25,13 +25,13 @@ function DirectedVisit({ state, locale, inverse }: Props) {
     qualifiers: [
       { property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: '2' } },
       ...(state === 'spoiler' ? [{ property: { id: 'rezics:spoilerLevel', data_type: 'quantity' }, value: { type: 'value', content: { amount: '1', unit: '1' } } }] : []),
-    ], references: [], rezics: { release: 'a'.repeat(64), revision: 7 } };
+    ], references: [], rezics: { release: `sha256:${'a'.repeat(64)}`, revision: 7 } };
   const summary = state === 'withheld' ? null : { id: target, type: 'schema:Book', types: ['schema:Book'],
     label: { value: '海の物語と原作・改編作品の長い題名／跨媒體原作與相關作品的繁體中文長標題', language: locale }, cover: null };
   const row = inverse ? { subject: target, statement, property, assertion: original, summary, related: {} }
     : { target, statement: original, summary, related: {} };
   const read: ConnectionRead = async () => state === 'loading' ? new Promise(() => {}) : ({
-    ok: true, id: source, release: 'a'.repeat(64), streams: state === 'unsupported' ? [] : [stream],
+    ok: true, id: source, release: `sha256:${'a'.repeat(64)}`, streams: state === 'unsupported' ? [] : [stream],
     sections: state === 'unsupported' ? {} : { relations: {
       stream, reading: 'b'.repeat(64), section: state === 'failure' ? { ok: false, status: 503 }
         : { ok: true, read: { kind: inverse ? 'links' : 'relations', id: source, property, limit: 12 },
