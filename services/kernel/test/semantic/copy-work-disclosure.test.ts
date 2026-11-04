@@ -14,11 +14,7 @@ import { createListPresentationFixture } from './support/list-presentation-fixtu
 
 const nil = '00000000-0000-0000-0000-000000000000';
 
-async function adoptWork(
-  f: Awaited<ReturnType<typeof createListPresentationFixture>>,
-  edition: string,
-  work: string,
-) {
+async function adoptWork(f: Awaited<ReturnType<typeof createListPresentationFixture>>, edition: string, work: string) {
   const candidate = await f.propose(edition, 'schema:exampleOfWork', work);
   await f.adopt(edition, 'schema:exampleOfWork', [candidate]);
 }
