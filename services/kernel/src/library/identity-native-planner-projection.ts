@@ -4,9 +4,7 @@ import { sql as currentSQL } from './identity-native-planner-current.sql';
 import { sql as sealSQL } from './identity-scope-effects-seal.sql';
 import { libraryIdentitySQL } from './identity-native-planner-statements.ts';
 
-/** Consume Reylo's compiled statement export, including its parameter order and file marker.
- * Refuse a changed statement shape rather than silently dispatching an unbounded projection.
- */
+/** Bound an exact fragment in a compiled native statement without changing its parameter order or marker. */
 function projectNativeSQL(sql: string, projections: readonly (readonly [string, string])[]): string {
   let projected = sql;
   for (const [selected, bounded] of projections) {
@@ -18,34 +16,8 @@ function projectNativeSQL(sql: string, projections: readonly (readonly [string, 
   return projected;
 }
 
-const uuid = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
-const fields = ['readyGeneration', 'readyBasis', 'workingGeneration', 'workingBasis'] as const;
-// These are the four native retained-state fields, not an arbitrary JSON intent size cap.
-const oldShape = `jsonb_build_object(${fields.map((field) => `'${field}',old_state->'${field}'`).join(',')})`;
-const oldValid = `(old_state IS NULL OR (jsonb_typeof(old_state)='object'
- AND old_state=${oldShape} AND ${fields
-   .map(
-     (field) =>
-       `(old_state->'${field}'='null'::jsonb OR (jsonb_typeof(old_state->'${field}')='string' AND ${
-         field.endsWith('Generation')
-           ? `old_state->>'${field}' ~ '${uuid}'`
-           : `octet_length(old_state->>'${field}') BETWEEN 1 AND 256`
-       }))`,
-   )
-   .join(' AND ')}
- AND (old_state->'readyGeneration'='null'::jsonb)=(old_state->'readyBasis'='null'::jsonb)
- AND (old_state->'workingGeneration'='null'::jsonb)=(old_state->'workingBasis'='null'::jsonb)))`;
-const digestValid = "scope_digest ~ '^[0-9a-f]{64}$'";
-
-/** Invalid native state is returned as a bounded invalid marker, never truncated or treated as absent. */
-export const libraryIdentityBoundedPlanSQL = projectNativeSQL(planSQL, [
-  ['scope_digest,', `CASE WHEN ${digestValid} THEN scope_digest ELSE NULL END AS scope_digest,`],
-  ['old_state,', `CASE WHEN ${oldValid} THEN old_state ELSE NULL END AS old_state,`],
-  [
-    'FROM library.identity_scope_plan',
-    `, (${digestValid} AND ${oldValid}) AS projection_valid FROM library.identity_scope_plan`,
-  ],
-]);
+/** The SQL source owns the bounds so compiled formatting does not shape the native projection. */
+export const libraryIdentityBoundedPlanSQL = planSQL;
 
 // The actual admission producer writes a SHA256 hex digest. Do not return arbitrary stored text.
 export const libraryIdentityBoundedJobSQL = projectNativeSQL(jobSQL, [
