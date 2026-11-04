@@ -422,6 +422,18 @@ Admission retries races against other callers. The default probe interval is fiv
 
 ### A run's life and measurements
 
+#### Retained host-a transfer comparison
+
+Use a confirmed deployed tuple of the `remote-check` hash, `cp-sync` point and periodic check-reclaim state. The
+supplied evidence for the retained comparison does not establish that tuple or provide a comparable required-check
+cohort, so the deployed runner identity, deployment point, stopgap state, transport phases and persistence of the
+reported 58-second symptom are unmeasured. Do not infer deployment from integrated source.
+
+Select receipts with matching command class, host-a, source and dirty state, snapshot/base reuse and concurrency.
+Record each observed run and its snapshot, GitHub fetch and rsync durations; label missing facts unmeasured. Include
+dependency-cache171 and Git-preparation423 only if they occur in the selected cohort. Keep check-reclaim and disk
+stopgap evidence separate; only the supermanager retires either stopgap.
+
 1. Select a responding eligible host and verify a run-private SSH control connection with a trivial command before
    using it. The probe is bounded to five seconds. On failure, close that run's master, replace its control path and
    probe once more; the second failure is `RemoteTransportError` for the host and `control probe` stage. A check never
