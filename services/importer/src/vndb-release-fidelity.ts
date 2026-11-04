@@ -1,11 +1,9 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { SourceRecord } from '@rezics/conversion';
 import type { NativeIdentity, SourceVocabularyBindings, SourceVocabularyRequest } from '@rezics/conversion';
-import { converter_revision as entityRevision, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import type { Owner } from './record-bindings.ts';
-import { type GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
-  crossMediaAliases,
   seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
@@ -166,10 +164,12 @@ export function vndbReleaseVocabulary(
     value: decodeVndbReleased(fact.released),
   });
   for (const link of fact.links) {
+    const work = identities.get(link.vid);
     rows.push({
       kind: 'release-work',
       path: `/releases_vn/${owner.external_id}/${link.vid}`,
       release,
+      ...(work ? { work } : {}),
       workCode: link.vid,
       completenessCode: link.completeness,
     });
@@ -297,7 +297,6 @@ export async function planVndbReleaseFidelity(input: CrossMediaTables): Promise<
       continue;
     }
     const vn: Row = { id, olang: row.olang, ...(row.alias === null || row.alias === undefined ? {} : { alias: row.alias }) };
-    if (row.devstatus !== undefined && row.devstatus !== null) vn.devstatus = row.devstatus;
     facts.works.set(id, { devstatus: decodeVndbDevstatus(row.devstatus) });
     plan.records.vndb.push({
       source: 'vndb',
@@ -322,21 +321,6 @@ export async function planVndbReleaseFidelity(input: CrossMediaTables): Promise<
     facts.releases.set(id, { released: row.released, links: releaseLinks });
     plan.entities.vndb.push({ source: 'vndb', key: id, revision: null, payload });
     plan.members.push({ source: 'vndb', key: id, kind: 'release', membership: 'referenced' });
-    for (const link of releaseLinks) {
-      const edge: GraphEdgeDraft = {
-        source: 'vndb',
-        alias: crossMediaAliases.vndb,
-        table: 'releases_vn',
-        holder: id,
-        target: link.vid,
-        property: 'schema:exampleOfWork',
-        url: vndbRecordUrl(id),
-        membership: 'referenced',
-        record: { id, vid: link.vid, rtype: link.completeness },
-        fields: ['releases_vn.id', 'releases_vn.rtype', 'releases_vn.vid'],
-      };
-      plan.edges.push(edge);
-    }
   }
   plan.records.vndb.sort((a, b) => a.key.localeCompare(b.key));
   plan.entities.vndb.sort((a, b) => a.key.localeCompare(b.key));

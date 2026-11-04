@@ -8,6 +8,7 @@ import { converter_revision } from '@rezics/conversion/cross-media-entities';
 import { CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import {
+  decodeVndbReleased,
   developmentStatusConceptUri,
   developmentStatusSchemeUri,
   developmentStatusTaxonomy,
@@ -123,6 +124,15 @@ test('operator plans authored VNDB COPY releases without mixing work and release
     expect(plan.members.some((row) => row.key === 'v1' && row.kind === 'work')).toBe(true);
     expect(plan.members.filter((row) => row.kind === 'release')).toHaveLength(7);
     expect(plan.gaps.some((gap) => gap.reason.includes('supersession'))).toBe(true);
+    expect(plan.edges).toEqual([]);
+    expect(decodeVndbReleased('20200229')).toBe('2020-02-29');
+    expect(decodeVndbReleased('20200300')).toBe('2020-03');
+    expect(decodeVndbReleased('20200000')).toBe('2020');
+    expect(decodeVndbReleased('99999999')).toBe('TBA');
+    expect(decodeVndbReleased('00000000')).toBe('unknown');
+    expect(decodeVndbReleased(null)).toBeNull();
+    expect(plan.facts.releases.get('r1')?.links).toEqual([{ vid: 'v1', completeness: 'complete' }]);
+    expect(plan.facts.releases.get('r2')?.links).toEqual([{ vid: 'v1', completeness: 'partial' }]);
     const commands: BatchCommand[] = [];
     const bindings = await readVndbReleaseBindings(port(commands), [
       {
@@ -177,6 +187,24 @@ test('operator plans authored VNDB COPY releases without mixing work and release
     });
     expect(again.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
     expect(commands.length).toBeGreaterThanOrEqual(count);
+    const changed: BatchCommand[] = [];
+    const successor = await importVndbReleaseFidelity({
+      tables: await authoredCopy(directory, '20200301'),
+      path: join(directory, 'state.sqlite'),
+      port: port(changed),
+      bindings,
+    });
+    expect(successor.runs.vndb?.counts.changed).toBeGreaterThan(0);
+    expect(
+      changed.some(
+        (command) =>
+          command.op === 'propose' &&
+          command.statement.property.id === 'schema:datePublished' &&
+          JSON.stringify(command.statement.value.type === 'value' ? command.statement.value.content : undefined).includes(
+            '+2020-03-01T00:00:00Z',
+          ),
+      ),
+    ).toBe(true);
     subjects[statusId] = { subject: { id: statusId, type: 'skos:Concept', statements: {} } };
     const withheld = await readVndbReleaseBindings(port([]), [
       {
