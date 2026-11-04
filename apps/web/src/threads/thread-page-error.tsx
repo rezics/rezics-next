@@ -1,7 +1,7 @@
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { isThreadPageCursorError } from './thread-page';
+import { isThreadPageCursorError } from './thread-page-errors';
 import { threadLocation } from './thread-href';
 
 export function ThreadPageError({ error, threadId, retry }: { error: unknown; threadId: string; retry(): void }) {

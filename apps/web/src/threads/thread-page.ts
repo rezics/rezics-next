@@ -1,3 +1,5 @@
+import { ThreadPageCursorError } from './thread-page-errors';
+export { isThreadPageCursorError } from './thread-page-errors';
 import type { KernelClient } from '@rezics/client';
 import type { DocumentMentions } from '@rezics/ui/document-body';
 import { boardProblemCode } from './board-reading';
@@ -43,23 +45,6 @@ export type LoadedThreadPage = {
   verification: VerificationConfig;
   linkedPostUnavailable?: boolean;
 };
-
-export class ThreadPageCursorError extends Error {
-  readonly code = 'invalid_cursor';
-  readonly name = 'ThreadPageCursorError';
-}
-
-export function isThreadPageCursorError(error: unknown): boolean {
-  return (
-    error instanceof ThreadPageCursorError ||
-    (!!error &&
-      typeof error === 'object' &&
-      'name' in error &&
-      error.name === 'ThreadPageCursorError' &&
-      'code' in error &&
-      error.code === 'invalid_cursor')
-  );
-}
 
 function checkRead<T>(result: { error?: unknown; status?: number; data?: T | null }, resource: string): NonNullable<T> {
   if (result.error) {
@@ -131,7 +116,7 @@ export async function loadThreadPage(
       ...(cursor === undefined ? {} : { query: { cursor } }),
       ...(authorization ? { headers: { authorization } } : {}),
     };
-    return client.threads({ id: data.id })['reading-page'].get(options);
+    return client.threads({ id: data.id })['reading-page'].get({ ...options, fetch: { cache: 'no-store' } });
   };
   let readingPageRead = data.expectedSlug === undefined ? readReadingPage() : undefined;
   if (data.expectedSlug !== undefined) {
