@@ -520,22 +520,6 @@ export function BoardPinThreadControls({
       'aria-label': m.board_pin_controls({ title: discussionTitle }),
       'aria-busy': status?.state === 'submitting',
     },
-    actionable && !blocked && action
-      ? createElement(
-          AlertDialogTrigger,
-          {
-            render: createElement(Button, {
-              type: 'button',
-              variant: 'outline',
-              className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
-              ...{ 'data-board-pin-focus': 'toggle' },
-              'aria-haspopup': 'dialog',
-              'aria-expanded': pending !== null,
-            }),
-          },
-          action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
-        )
-      : null,
     createElement(
       AlertDialog,
       {
@@ -544,6 +528,22 @@ export function BoardPinThreadControls({
           setPending(open ? action : null);
         },
       },
+      actionable && !blocked && action
+        ? createElement(
+            AlertDialogTrigger,
+            {
+              render: createElement(Button, {
+                type: 'button',
+                variant: 'outline',
+                className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
+                ...{ 'data-board-pin-focus': 'toggle' },
+                'aria-haspopup': 'dialog',
+                'aria-expanded': pending !== null,
+              }),
+            },
+            action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
+          )
+        : null,
       createElement(
         AlertDialogContent,
         { className: 'min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] text-start' },
