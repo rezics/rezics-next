@@ -240,6 +240,30 @@ export class StatementDisclosureDeniedError extends Error {}
 export class StatementDisclosureNotFoundError extends Error {}
 export class StatementDisclosureConflictError extends Error {}
 
+/** Shared exact-key reads keep consent observation and command custody on the same native rows. */
+export async function readStatementDisclosure(client: Pool | Pick<PoolClient, 'query'>, candidate: string) {
+  const route = routeOf(candidate);
+  if (route === null) return null;
+  return readDisclosure.run(client as PoolClient, { route, candidate_id: candidate });
+}
+export async function statementDisclosureTargetOwnedBy(
+  client: Pool | Pick<PoolClient, 'query'>,
+  target: string,
+  account: string,
+) {
+  const agents = await accountAgentsForSubjects(client, [target]);
+  return agents.get(target)?.account === account;
+}
+export async function readStatementRetraction(
+  client: Pool | Pick<PoolClient, 'query'>,
+  subject: string,
+  candidate: string,
+) {
+  const route = routeOf(candidate);
+  if (route === null) return null;
+  return readRetraction.run(client as PoolClient, { route, subject_id: subject, candidate_id: candidate });
+}
+
 /** Target-account consent and its terminal retraction share receipt and ownership checks. */
 export async function changeStatementDisclosure(
   pool: Pool,
@@ -277,15 +301,11 @@ export async function changeStatementDisclosure(
       authorization: options.authorization,
     },
     async (tx, { transactionId }) => {
-      const row = await readDisclosure.run(tx, { route, candidate_id: options.candidate });
+      const row = await readStatementDisclosure(tx, options.candidate);
       if (!row) throw new StatementDisclosureNotFoundError();
-      const agents = await accountAgentsForSubjects(tx, [row.target_id]);
-      if (agents.get(row.target_id)?.account !== options.actor.accountId) throw new StatementDisclosureDeniedError();
-      const priorRetraction = await readRetraction.run(tx, {
-        route,
-        subject_id: row.subject_id,
-        candidate_id: options.candidate,
-      });
+      if (!(await statementDisclosureTargetOwnedBy(tx, row.target_id, options.actor.accountId)))
+        throw new StatementDisclosureDeniedError();
+      const priorRetraction = await readStatementRetraction(tx, row.subject_id, options.candidate);
       if (priorRetraction && !options.retract) throw new StatementDisclosureConflictError();
       if (options.retract) {
         const revision = priorRetraction?.revision ?? row.latest_revision + 1;

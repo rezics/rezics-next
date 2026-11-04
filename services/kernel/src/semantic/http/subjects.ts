@@ -70,7 +70,7 @@ import { AccountAgentLabelEditError, AccountAgentWriteDeniedError } from '../age
 import readRedirect from '../read-redirect.sql';
 import { SourceRecordSchema } from '../source-records.ts';
 import { revisionResource, StaleRevisionAuthorshipError } from '../authorship.ts';
-import { readSubjectCorrectionActions } from '../viewer-actions.ts';
+import { readStatementConsentActions, readSubjectCorrectionActions } from '../viewer-actions.ts';
 import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
 import { requireAccessDeadline } from '../../access/unavailable.ts';
 import { withReadTransaction } from '../read.ts';
@@ -497,6 +497,23 @@ const statementVisibilityResponse = t.Object(
   { additionalProperties: false },
 );
 const cacheControl = { 'cache-control': t.Literal('no-cache') };
+const privateCacheControl = { 'cache-control': t.Literal('private, no-store') };
+const statementConsentActionsResponse = t.Union([
+  t.Object(
+    {
+      state: t.Literal('available'),
+      disclosed: t.Boolean(),
+      operations: t.Array(t.Union([t.Literal('statement.disclose'), t.Literal('statement.retract')]), {
+        minItems: 1,
+        uniqueItems: true,
+      }),
+    },
+    { additionalProperties: false },
+  ),
+  ...(['refused', 'terminal', 'unavailable'] as const).map(
+    (state) => t.Object({ state: t.Literal(state) }, { additionalProperties: false }),
+  ),
+]);
 const reactionKind = t.Unsafe<ReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
 const reactionCountResponse = t.Object(
   {
@@ -2717,6 +2734,52 @@ function subjectRoutes(
         }
       },
     )
+    .get(
+      '/v1/statements/:id/consent',
+      {
+        params: t.Object({ id: t.String({ format: 'uuid' }) }),
+        query: t.Object({
+          subject: t.String({ format: 'uuid' }),
+          property: t.String({ minLength: 1, maxLength: 256 }),
+          target: t.Optional(t.String({ format: 'uuid' })),
+          sameAs: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
+          key: t.Optional(t.String({ format: 'uuid' })),
+        }),
+        response: {
+          200: withHeaders(statementConsentActionsResponse, privateCacheControl),
+          ...listingErrors,
+        },
+        detail: {
+          operationId: 'statement.consent_actions',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        if ((query.target && query.sameAs) || (query.key && !query.target)) return { state: 'refused' as const };
+        if (actor.kind !== 'account') return { state: 'refused' as const };
+        const route = routeOf(params.id);
+        if (route === null) return { state: 'refused' as const };
+        return admission.run('normal', job, () =>
+          readStatementConsentActions({
+            pool,
+            access: access(),
+            bindings: viewerActionBindings?.() ?? compileViewerActionBindings(app.routes),
+            actor,
+            clock,
+            subject: query.subject,
+            candidate: params.id,
+            property: query.property,
+            slot: {
+              ...(query.target ? { target: query.target } : {}),
+              ...(query.sameAs ? { sameAs: query.sameAs } : {}),
+              ...(query.key ? { key: query.key } : {}),
+            },
+            deadline: job.deadline,
+          }),
+        );
+      },
+    )
     .post(
       '/v1/statements/:id/disclose',
       {
@@ -2738,6 +2801,8 @@ function subjectRoutes(
           operationId: 'statement.disclose',
           'x-exposure': 'public',
           'x-action': 'statement:propose',
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': GLOBAL_CONTEXT,
           security: [{ bearerAuth: [] }],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
         },
@@ -2798,6 +2863,8 @@ function subjectRoutes(
           operationId: 'statement.retract',
           'x-exposure': 'public',
           'x-action': 'statement:propose',
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': GLOBAL_CONTEXT,
           security: [{ bearerAuth: [] }],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
         },

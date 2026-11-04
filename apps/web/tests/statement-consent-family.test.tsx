@@ -156,7 +156,7 @@ test('Statement consent composes the complete family with isolated confirmation,
     expect(entry.className).toContain('focus-visible:outline-2');
     await click(button(left, m.statement_consent_open()));
     await until(() => !!left.querySelector('[data-consent-part="assertion"]'));
-    expect(first.calls).toHaveLength(3); // One candidate page, anonymous public read and pinned definition.
+    expect(first.calls).toHaveLength(4); // Candidate page, independent public read, pinned definition and current actions.
     expect(second.calls).toHaveLength(0);
     await click(button(right, m.statement_consent_open()));
     await until(() => !!right.querySelector('[data-consent-part="assertion"]'));
@@ -305,7 +305,7 @@ test('Statement consent composes the complete family with isolated confirmation,
     await open();
     await confirm('disclose');
     await until(() => !!host.querySelector('[data-consent-part="recovery"]'));
-    expect(lost.calls).toHaveLength(4);
+    expect(lost.calls).toHaveLength(5);
     const original = structuredClone(commands[0]!);
     const post = structuredClone(lost.calls.find((call) => call.method === 'POST')!);
     expect(original).toEqual({ ...lost.address, operation: 'disclose', key: original.key, session: 'consent-session' });
@@ -335,7 +335,7 @@ test('Statement consent composes the complete family with isolated confirmation,
     expect(commands[1]).toBe(commands[0]);
     expect(commands[1]).toEqual(original);
     expect(lost.calls.filter((call) => call.method === 'POST')).toEqual([post, post]);
-    expect(lost.calls).toHaveLength(6); // Exact retry plus one anonymous current public read.
+    expect(lost.calls).toHaveLength(8); // Exact retry, current action observation and one anonymous public read.
     const beforePublic = lost.calls.length;
     await click(button(host, m.statement_consent_refresh_public()));
     await until(() => publics.length === 1 && !button(host, m.statement_consent_refresh_public()).disabled);
@@ -475,7 +475,7 @@ test('Statement consent composes the complete family with isolated confirmation,
     const beforeReload = withheld.calls.length;
     await click(button(host, m.candidate_reload()));
     await until(() => !!host.querySelector('[data-consent-part="assertion"]'));
-    expect(withheld.calls).toHaveLength(beforeReload + 3);
+    expect(withheld.calls).toHaveLength(beforeReload + 4);
     expect(withheld.calls.every((call) => call.method === 'GET')).toBe(true);
 
     const terminal = consentFixture('lagging-retraction');
@@ -597,9 +597,8 @@ test('Statement consent composes the complete family with isolated confirmation,
     await click(button(host, m.statement_consent_refresh_public()));
     await until(() => !button(host, m.statement_consent_refresh_public()).disabled);
     await act(async () => staleOwnership());
-    expect(button(host, m.statement_consent_confirm()).disabled).toBe(false);
+    expect(host.querySelector('[data-consent-part="confirmation"]')).toBeNull();
 
-    await click(button(host, m.candidate_cancel()));
     await click(button(host, m.statement_consent_share()));
     await click(label(host));
     await click(button(host, m.statement_consent_confirm()));

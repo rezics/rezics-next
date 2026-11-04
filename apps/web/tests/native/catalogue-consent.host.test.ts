@@ -90,7 +90,7 @@ test('website consent discloses and terminally retracts an unsourced assertion t
   await serverAction(page, () => page.getByRole('button', { name: 'Open private review', exact: true }).click());
   await expect(page.getByText('River Ink', { exact: true })).toBeVisible();
   await expect(page.getByText(current.alice.agent.label, { exact: true })).toBeVisible();
-  await expect(page.getByText('Eligibility is not supplied', { exact: false })).toBeVisible();
+  await expect(page.getByText('Your current native permissions allow sharing this assertion.', { exact: true })).toBeVisible();
   await expect(
     page.getByText('The current public read does not include this assertion', { exact: false }),
   ).toBeVisible();
@@ -103,6 +103,13 @@ test('website consent discloses and terminally retracts an unsourced assertion t
   const disclosePath = `/v1/statements/${current.own.candidate}/disclose`;
   expect(posts(shareTraffic, disclosePath)).toHaveLength(1);
   expect(posts(shareTraffic, disclosePath)[0]?.authorization).toMatch(/^Bearer /);
+  expect(
+    shareTraffic.some(
+      (request) =>
+        request.method === 'GET' &&
+        new URL(request.url, 'http://kernel.test').pathname === `/v1/statements/${current.own.candidate}/consent`,
+    ),
+  ).toBe(true);
   expect(
     shareTraffic.some(
       (request) =>
@@ -125,13 +132,10 @@ test('website consent discloses and terminally retracts an unsourced assertion t
   other.setDefaultTimeout(30_000);
   await openConsent(other, current.own);
   await serverAction(other, () => other.getByRole('button', { name: 'Open private review', exact: true }).click());
-  const otherRetract = other.getByRole('button', { name: 'Retract assertion', exact: true });
-  if ((await otherRetract.count()) > 0) {
-    await confirm(other, 'Retract assertion');
-    await expect(other.getByText('not permitted for the current account', { exact: false })).toBeVisible();
-  } else {
-    await expect(other.getByRole('button', { name: 'Share consent', exact: true })).toHaveCount(0);
-  }
+  await expect(other.getByText('River Ink', { exact: true })).toBeVisible();
+  await expect(other.getByText('Your current account is not currently allowed', { exact: false })).toBeVisible();
+  await expect(other.getByRole('button', { name: 'Share consent', exact: true })).toHaveCount(0);
+  await expect(other.getByRole('button', { name: 'Retract assertion', exact: true })).toHaveCount(0);
   expect(await publicStatement(current.own.id, current.own.property, current.own.candidate)).not.toBeNull();
 
   const beforeRetract = (await kernelNow()).length;
@@ -140,7 +144,7 @@ test('website consent discloses and terminally retracts an unsourced assertion t
   await expect(page.getByText('no undo', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Share consent', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Retract assertion', exact: true })).toHaveCount(0);
-  expect(await page.content()).not.toContain(current.own.slot.target);
+
   const retractPath = `/v1/statements/${current.own.candidate}/retract`;
   expect(posts((await kernelNow()).slice(beforeRetract), retractPath)).toHaveLength(1);
   expect(await publicStatement(current.own.id, current.own.property, current.own.candidate)).toBeNull();
@@ -149,6 +153,44 @@ test('website consent discloses and terminally retracts an unsourced assertion t
   await serverAction(page, () => page.getByRole('button', { name: 'Read current public result', exact: true }).click());
   expect(posts((await kernelNow()).slice(beforeRefresh), retractPath)).toHaveLength(0);
   expect(posts((await kernelNow()).slice(beforeRefresh), disclosePath)).toHaveLength(0);
+
+  const unavailable = current.uncertain;
+  await current.stack.injectKernelFailureOnce({
+    method: 'GET',
+    path: `/v1/statements/${unavailable.candidate}/consent`,
+    status: 503,
+    body: JSON.stringify({
+      type: 'https://rezics.com/problems/unavailable',
+      title: 'Unavailable',
+      status: 503,
+      code: 'unavailable',
+      request_id: crypto.randomUUID(),
+      retryable: true,
+      effect_status: 'none',
+    }),
+  });
+  await openConsent(page, unavailable);
+  await serverAction(page, () => page.getByRole('button', { name: 'Open private review', exact: true }).click());
+  await expect(page.getByText('River Ink', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('The assertion remains readable, but current action eligibility could not be checked.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Share consent', exact: true })).toHaveCount(0);
+
+  await openConsent(page, unavailable);
+  await serverAction(page, () => page.getByRole('button', { name: 'Open private review', exact: true }).click());
+  await page.getByRole('button', { name: 'Share consent', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'This assertion targets the agent linked to my current account.' }).click();
+  await current.revokeStatementProposal();
+  const beforeRevokedSubmit = (await kernelNow()).length;
+  await serverAction(page, () => page.getByRole('button', { name: 'Confirm', exact: true }).click());
+  await expect(page.getByText('Your current account is not currently allowed', { exact: false })).toBeVisible();
+  const revokedTraffic = (await kernelNow()).slice(beforeRevokedSubmit);
+  expect(posts(revokedTraffic, `/v1/statements/${unavailable.candidate}/disclose`)).toHaveLength(1);
+  await current.restoreStatementProposal();
+  expect(await page.content()).not.toContain(current.own.slot.target);
 
   await openConsent(page, current.sourced);
   await serverAction(page, () => page.getByRole('button', { name: 'Open private review', exact: true }).click());

@@ -25,7 +25,7 @@ test('The real mounted candidate read gives the authorized target account readab
     const moderator = await f.person('consent_identity_moderator');
     await f.grantAccount(owner, ['subject:create', 'statement:propose']);
     await f.grantAccount(other, ['subject:create', 'statement:propose']);
-    await f.grantAccount(moderator, ['moderation:hide']);
+    await f.grantAccount(moderator, ['moderation:hide', 'statement:propose']);
     const target = (
       await ensureAccountAgent(f.pool, {
         account: owner.accountId,
@@ -76,6 +76,17 @@ test('The real mounted candidate read gives the authorized target account readab
       target: { id: target, labels: { en: 'The person behind the name' } },
     });
     expect(read.field).toEqual(bundledRelease.properties[property]!.labels);
+    expect(read.actions).toEqual({
+      state: 'available',
+      disclosed: false,
+      operations: ['statement.disclose', 'statement.retract'],
+    });
+    const changedTarget = await client.statements({ id: candidate }).consent.get({
+      query: { subject: id, property, target: randomUUID() },
+      headers: { authorization },
+    });
+    expect(changedTarget.status).toBe(200);
+    expect(changedTarget.data).toEqual({ state: 'refused' });
     expect(consentAssertion(read, address, 'en').identified).toBe(true);
     expect(read.public.state).toBe('absent');
     const privatePage = await f.send(owner, 'GET', path);
@@ -88,6 +99,10 @@ test('The real mounted candidate read gives the authorized target account readab
       expect(JSON.stringify(page.body)).not.toContain('The person behind the name');
       if (!reader) expect(page.headers.get('cache-control')).toBe('no-cache');
     }
+    const readableOther = await readStatementConsent(client, `Bearer ${moderator.bearer}`, address);
+    expect(readableOther.ok && readableOther.candidate?.id).toBe(candidate);
+    expect(readableOther.ok && readableOther.actions).toEqual({ state: 'refused' });
+    expect(JSON.stringify(readableOther.ok ? readableOther.actions : readableOther)).not.toContain(target);
     const denied = await changeStatementConsent(client, `Bearer ${other.bearer}`, {
       ...address,
       operation: 'disclose',
@@ -122,6 +137,7 @@ test('The real mounted candidate read gives the authorized target account readab
     expect(consentAfterChange(read, retracted).candidate).toBeNull();
     const terminal = await readStatementConsent(client, authorization, address);
     expect(terminal.ok && terminal.terminal).toBe(true);
+    expect(terminal.ok && terminal.actions).toEqual({ state: 'terminal' });
     if (terminal.ok) expect(terminal.candidate).toBeNull();
     const terminalPage = await f.send(owner, 'GET', path);
     expect(terminalPage.status).toBe(200);
