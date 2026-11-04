@@ -1,4 +1,23 @@
 types:
   schema:MusicAlbum: Album
+  schema:Quotation: Zitat
 typeDescriptions:
   schema:MusicAlbum: 'Ein Musikalbum als Werk mit zusammengehörigen Titeln, unabhängig von einem bestimmten Exemplar oder einer vertriebenen Ausgabe.'
+  schema:Quotation: 'Ein verfasstes Zitat aus einem Werk, mit getrenntem Sprecher, genannter Urheberschaft und belegter Quelle.'
+properties:
+  schema:text: Text
+  schema:spokenByCharacter: Sprecher
+  schema:about: Werk
+  schema:creator: genannte Urheberschaft
+  schema:actor: Stimme
+propertyDescriptions:
+  schema:text: 'Das genaue verfasste Zitatdokument. Ein Dokumentwert, kein Beziehungslabel und kein anderes Textfeld.'
+  schema:spokenByCharacter: 'Die fiktive Figur, die dieses Zitat spricht. Keine genannte Urheberschaft und keine Stimme.'
+  schema:about: 'Das Werk, das dieses Zitat belegt. Die genaue Werk- oder Teilidentität gilt; eine Teilzeichenkette erzeugt keine Beziehung.'
+  schema:creator: 'Eine Person oder Organisation, der dieses Zitat zugeschrieben wird, getrennt vom fiktiven Sprecher.'
+  schema:actor: 'Eine optionale Stimme. Ein Sprecher impliziert ohne qualifizierte Quellenaussage keine Stimme.'
+inverseProperties:
+  schema:spokenByCharacter: Gesprochene Zitate
+  schema:about: Zitate
+  schema:creator: Zugeschriebene Zitate
+  schema:actor: Vertonte Zitate
