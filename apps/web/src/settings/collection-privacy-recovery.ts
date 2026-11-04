@@ -98,6 +98,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       isCurrent,
     );
   }
+  hasCurrentUpdateAdvice = () => !!this.state.current?.allowedVisibilityActions.length;
   commandRetryDeadline = () => this.commandRetryAt;
   currentReadRetryDeadline = () => this.currentReadRetryAt;
   private commandWaiting = () => this.commandRetryAt > this.now();
@@ -198,7 +199,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     await this.send(false);
   }
   async retry() {
-    if (!this.live() || !this.canWrite() || this.commandWaiting()) return;
+    if (!this.live() || !this.canWrite() || this.commandWaiting() || !this.hasCurrentUpdateAdvice()) return;
     if (!this.state.readRefusal && this.state.attempt && this.state.phase === 'uncertain') await this.send(true);
   }
   abandon() {
@@ -215,7 +216,13 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     });
   }
   private async send(recovering: boolean) {
-    if (!this.live() || !this.canWrite() || this.commandWaiting()) return;
+    if (
+      !this.live() ||
+      !this.canWrite() ||
+      this.commandWaiting() ||
+      (recovering && !this.hasCurrentUpdateAdvice())
+    )
+      return;
     const attempt = this.state.attempt;
     if (!attempt) return;
     const generation = this.generation;
