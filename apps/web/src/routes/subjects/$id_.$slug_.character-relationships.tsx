@@ -2,7 +2,10 @@ import { createFileRoute, notFound } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { CharacterRelationshipsSession } from '../../features/catalogue/character-relationships/session';
-import { characterRelationshipsVisit, type CharacterRelationshipsOrigin } from '../../features/catalogue/character-relationships/navigation';
+import {
+  characterRelationshipsVisit,
+  type CharacterRelationshipsOrigin,
+} from '../../features/catalogue/character-relationships/navigation';
 import { validatePageRealm } from '../../features/pages/view-cursor';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
@@ -36,7 +39,15 @@ function CharacterRelationshipsRoute() {
   const { context, realm, work, stream, cursor } = Route.useSearch();
   const router = useRouter({ warn: false });
   const locale = getLocale();
-  const origin: CharacterRelationshipsOrigin = { id, locale, context: context ?? candidateContext, realm, stream, cursor, work };
+  const origin: CharacterRelationshipsOrigin = {
+    id,
+    locale,
+    context: context ?? candidateContext,
+    realm,
+    stream,
+    cursor,
+    work,
+  };
   const [visit] = useState(() => characterRelationshipsVisit(router.history.location.state, origin));
   return (
     <CharacterRelationshipsSession
@@ -47,11 +58,17 @@ function CharacterRelationshipsRoute() {
       realm={realm}
       origin={origin}
       visit={visit}
-      {...(visit ? { work: visit.work ?? undefined, stream: visit.stream ?? undefined, cursor: visit.cursors[visit.index] ?? undefined } : {
-        ...(work ? { work } : {}),
-        ...(stream ? { stream } : {}),
-        ...(cursor ? { cursor } : {}),
-      })}
+      {...(visit
+        ? {
+            work: visit.work ?? undefined,
+            stream: visit.stream ?? undefined,
+            cursor: visit.cursors[visit.index] ?? undefined,
+          }
+        : {
+            ...(work ? { work } : {}),
+            ...(stream ? { stream } : {}),
+            ...(cursor ? { cursor } : {}),
+          })}
     />
   );
 }

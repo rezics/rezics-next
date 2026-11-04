@@ -25,9 +25,21 @@ async function withHost(run: (host: HTMLElement, render: (node: ReactNode) => Pr
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.invalid/en' });
   const keys = [
-    'window', 'document', 'navigator', 'HTMLElement', 'HTMLButtonElement', 'HTMLSelectElement', 'Element', 'Node',
-    'DocumentFragment', 'MutationObserver', 'ResizeObserver', 'getComputedStyle', 'requestAnimationFrame',
-    'cancelAnimationFrame', 'IS_REACT_ACT_ENVIRONMENT',
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLButtonElement',
+    'HTMLSelectElement',
+    'Element',
+    'Node',
+    'DocumentFragment',
+    'MutationObserver',
+    'ResizeObserver',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'IS_REACT_ACT_ENVIRONMENT',
   ];
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of keys)
@@ -44,7 +56,9 @@ async function withHost(run: (host: HTMLElement, render: (node: ReactNode) => Pr
   const root = createRoot(host);
   const render = async (node: ReactNode) =>
     act(async () =>
-      root.render(h(QueryClientProvider, { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }, node)),
+      root.render(
+        h(QueryClientProvider, { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }, node),
+      ),
     );
   try {
     await run(host, render);
@@ -72,13 +86,15 @@ test('returns retain bounded current addresses, focus only disclosed row keys, a
   );
   expect(bounded.cursors).toEqual(cursors.slice(-CHARACTER_RELATIONSHIPS_CURSOR_LIMIT));
   expect(bounded.index).toBe(CHARACTER_RELATIONSHIPS_CURSOR_LIMIT - 1);
-  expect(createCharacterRelationshipsVisit(origin, {
-    stream: origin.stream,
-    work: appearanceWorkA,
-    cursors: [null, ...bounded.cursors.slice(1)],
-    index: CHARACTER_RELATIONSHIPS_CURSOR_LIMIT - 1,
-    focus: { holder: appearanceWorkA, statement: '00000000-0000-4000-8000-0000000000c8' },
-  })).toMatchObject({ work: appearanceWorkA, index: CHARACTER_RELATIONSHIPS_CURSOR_LIMIT - 1 });
+  expect(
+    createCharacterRelationshipsVisit(origin, {
+      stream: origin.stream,
+      work: appearanceWorkA,
+      cursors: [null, ...bounded.cursors.slice(1)],
+      index: CHARACTER_RELATIONSHIPS_CURSOR_LIMIT - 1,
+      focus: { holder: appearanceWorkA, statement: '00000000-0000-4000-8000-0000000000c8' },
+    }),
+  ).toMatchObject({ work: appearanceWorkA, index: CHARACTER_RELATIONSHIPS_CURSOR_LIMIT - 1 });
   expect(characterRelationshipsVisit({ version: 1 }, origin)).toBeUndefined();
 
   const fixture = characterRelationshipsFixture('appearances');
@@ -91,23 +107,23 @@ test('returns retain bounded current addresses, focus only disclosed row keys, a
     ...fixture.transport,
     read: async (_stream?: string, cursor?: string) => {
       reads.push(cursor);
-      return cursor
-        ? { ...initial, rows: initial.rows.slice(1), next: null }
-        : firstPage;
+      return cursor ? { ...initial, rows: initial.rows.slice(1), next: null } : firstPage;
     },
   };
   const { CharacterRelationshipsView } = await import('../src/features/catalogue/character-relationships/view');
   const { m } = await import('../src/paraglide/messages.js');
   await withHost(async (host, render) => {
-    await render(h(CharacterRelationshipsView, {
-      id: fixture.id,
-      locale: 'en',
-      transport,
-      search: fixture.search,
-      initial: firstPage,
-      origin,
-      saveVisit: (value: Visit) => savedVisits.push(value),
-    }));
+    await render(
+      h(CharacterRelationshipsView, {
+        id: fixture.id,
+        locale: 'en',
+        transport,
+        search: fixture.search,
+        initial: firstPage,
+        origin,
+        saveVisit: (value: Visit) => savedVisits.push(value),
+      }),
+    );
     const target = host.querySelector<HTMLElement>('[data-relationship-row="0"] a[href*="/subjects/"]');
     if (!target) throw new Error('Expected a disclosed target link');
     await act(async () => {
@@ -142,27 +158,31 @@ test('returns retain bounded current addresses, focus only disclosed row keys, a
   });
   if (!presentVisit) throw new Error('Expected a validated current row address');
   await withHost(async (host, render) => {
-    await render(h(CharacterRelationshipsView, {
-      id: fixture.id,
-      locale: 'en',
-      transport: fixture.transport,
-      search: fixture.search,
-      initial: firstPage,
-      origin,
-      visit: presentVisit,
-    }));
+    await render(
+      h(CharacterRelationshipsView, {
+        id: fixture.id,
+        locale: 'en',
+        transport: fixture.transport,
+        search: fixture.search,
+        initial: firstPage,
+        origin,
+        visit: presentVisit,
+      }),
+    );
     expect(document.activeElement).toBe(host.querySelector('[data-relationship-row="0"]'));
   });
   await withHost(async (host, render) => {
-    await render(h(CharacterRelationshipsView, {
-      id: fixture.id,
-      locale: 'en',
-      transport: fixture.transport,
-      search: fixture.search,
-      initial: firstPage,
-      origin,
-      visit: changedVisit,
-    }));
+    await render(
+      h(CharacterRelationshipsView, {
+        id: fixture.id,
+        locale: 'en',
+        transport: fixture.transport,
+        search: fixture.search,
+        initial: firstPage,
+        origin,
+        visit: changedVisit,
+      }),
+    );
     expect(host.textContent).toContain(m.character_relationships_return_changed());
     expect(findButton(host, m.character_relationships_return_current())).toBeTruthy();
   });
@@ -171,13 +191,15 @@ test('returns retain bounded current addresses, focus only disclosed row keys, a
   const concealedRead = await concealed.read();
   if (!concealedRead.ok) throw new Error('Expected a concealed association');
   await withHost(async (host, render) => {
-    await render(h(CharacterRelationshipsView, {
-      id: concealed.id,
-      locale: 'en',
-      transport: concealed.transport,
-      search: concealed.search,
-      initial: concealedRead,
-    }));
+    await render(
+      h(CharacterRelationshipsView, {
+        id: concealed.id,
+        locale: 'en',
+        transport: concealed.transport,
+        search: concealed.search,
+        initial: concealedRead,
+      }),
+    );
     const row = host.querySelector<HTMLElement>('[data-relationship-row="0"]');
     expect(row?.getAttribute('aria-label')).toBe(m.character_relationships_concealed_row());
     expect(row?.hasAttribute('aria-labelledby')).toBe(false);

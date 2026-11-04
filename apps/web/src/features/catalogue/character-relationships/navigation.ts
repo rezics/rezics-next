@@ -49,12 +49,7 @@ function originKey(origin: CharacterRelationshipsOrigin): string | undefined {
 }
 
 function boundedCursor(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= 8192 &&
-    !/[\u0000-\u001f\u007f]/u.test(value)
-  );
+  return typeof value === 'string' && value.length > 0 && value.length <= 8192 && !/[\u0000-\u001f\u007f]/u.test(value);
 }
 
 /** A return address keeps at most eight opaque native cursors and exact row identity, never reader payloads. */
@@ -84,9 +79,7 @@ export function characterRelationshipsVisit(
     !Number.isSafeInteger(index) ||
     (index as number) < 0 ||
     (index as number) >= cursors.length ||
-    cursors.some((cursor, at) =>
-      cursor === null ? at !== 0 : !boundedCursor(cursor),
-    ) ||
+    cursors.some((cursor, at) => (cursor === null ? at !== 0 : !boundedCursor(cursor))) ||
     (focus !== undefined &&
       (!focus ||
         typeof focus !== 'object' ||
@@ -103,12 +96,14 @@ export function characterRelationshipsVisit(
     work: work as string | null,
     cursors: cursors as (string | null)[],
     index: index as number,
-    ...(focus ? {
-      focus: {
-        holder: Reflect.get(focus, 'holder') as string,
-        statement: Reflect.get(focus, 'statement') as string,
-      },
-    } : {}),
+    ...(focus
+      ? {
+          focus: {
+            holder: Reflect.get(focus, 'holder') as string,
+            statement: Reflect.get(focus, 'statement') as string,
+          },
+        }
+      : {}),
   };
   if (new TextEncoder().encode(JSON.stringify(accepted)).byteLength > visitStateByteLimit) return;
   return accepted;
@@ -150,12 +145,19 @@ export function advanceCharacterRelationshipsCursor(
 ): { cursors: (string | null)[]; index: number } {
   if (current[index + 1] === next) return { cursors: [...current], index: index + 1 };
   const cursors = [...current.slice(0, index + 1), next];
-  if (cursors.length > CHARACTER_RELATIONSHIPS_CURSOR_LIMIT) cursors.splice(0, cursors.length - CHARACTER_RELATIONSHIPS_CURSOR_LIMIT);
+  if (cursors.length > CHARACTER_RELATIONSHIPS_CURSOR_LIMIT)
+    cursors.splice(0, cursors.length - CHARACTER_RELATIONSHIPS_CURSOR_LIMIT);
   return { cursors, index: cursors.length - 1 };
 }
 
 export function characterRelationshipsHref(
-  address: { id: string; label: string; locale: string; context?: string; realm?: string } & Partial<CharacterRelationshipsAddress>,
+  address: {
+    id: string;
+    label: string;
+    locale: string;
+    context?: string;
+    realm?: string;
+  } & Partial<CharacterRelationshipsAddress>,
 ): string {
   const query = new URLSearchParams();
   if (address.context) query.set('context', address.context);
@@ -185,11 +187,17 @@ export function parseCharacterRelationshipsAddress(input: {
   const context = typeof input.context === 'string' && characterUuid.test(input.context) ? input.context : undefined;
   const realm = typeof input.realm === 'string' && characterUuid.test(input.realm) ? input.realm : undefined;
   const stream =
-    typeof input.stream === 'string' && input.stream.length > 0 && input.stream.length <= 256 && !/[\u0000-\u001f\u007f]/u.test(input.stream)
+    typeof input.stream === 'string' &&
+    input.stream.length > 0 &&
+    input.stream.length <= 256 &&
+    !/[\u0000-\u001f\u007f]/u.test(input.stream)
       ? input.stream
       : undefined;
   const cursor =
-    typeof input.cursor === 'string' && input.cursor.length > 0 && input.cursor.length <= 8192 && !/[\u0000-\u001f\u007f]/u.test(input.cursor)
+    typeof input.cursor === 'string' &&
+    input.cursor.length > 0 &&
+    input.cursor.length <= 8192 &&
+    !/[\u0000-\u001f\u007f]/u.test(input.cursor)
       ? input.cursor
       : undefined;
   const work = typeof input.work === 'string' && characterUuid.test(input.work) ? input.work : undefined;

@@ -320,14 +320,7 @@ function CharacterRelationshipsLive({
     setSelectedWork(next);
   }
   function visitTarget(row: CharacterAssociationRow, event: MouseEvent<HTMLAnchorElement>) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey ||
-      !slice.active()
-    )
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !slice.active())
       return;
     rememberVisit(stream?.key, selectedWork, { holder: row.holder, statement: row.statementId });
     if (router) {

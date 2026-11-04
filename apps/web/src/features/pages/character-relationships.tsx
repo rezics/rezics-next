@@ -390,7 +390,12 @@ export function CharacterRelationshipsGroups({
           )}
           <div className="flex flex-wrap gap-2">
             {canPrevious && onPrevious && (
-              <Button className={characterRelationshipsActionClass} variant="outline" disabled={busy} onClick={onPrevious}>
+              <Button
+                className={characterRelationshipsActionClass}
+                variant="outline"
+                disabled={busy}
+                onClick={onPrevious}
+              >
                 {m.character_relationships_previous({}, o)}
               </Button>
             )}
@@ -406,7 +411,9 @@ export function CharacterRelationshipsGroups({
                 disabled={busy}
                 onClick={onRestart}
               >
-                {returnChanged ? m.character_relationships_return_current({}, o) : m.character_relationships_restart({}, o)}
+                {returnChanged
+                  ? m.character_relationships_return_current({}, o)
+                  : m.character_relationships_restart({}, o)}
               </Button>
             )}
           </div>
