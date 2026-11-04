@@ -781,7 +781,7 @@ uses five metadata-only native envelopes and the ordinary account-key CLI: an ex
 subject, then live action, then returns as a revised Book under the same native key. Complete membership
 stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
 receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
-`bangumi@11` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
+`bangumi@13` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
 five-record launch checks. Its earlier ignored-type native child is superseded by typed 3/6 conversion.
 [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
 log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
@@ -1442,7 +1442,7 @@ bounds belong to the linked owners; conversion itself has no purge work.
 ### Import authored Bangumi Game player count
 
 - Touches: one admitted type-4 Game infobox on the ordinary Bangumi JSON-lines
-  registration, the shared `bangumi@11` converter, and ordinary public
+  registration, the shared `bangumi@13` converter, and ordinary public
   batch/fence/candidate paths on that VideoGame. Selected-family seed reuses the
   same converter; this adds no publisher.
 - Bound: at most 64 infobox keys, 8 examined count occurrences and one player
@@ -2269,8 +2269,10 @@ references after rereading source URI, type and `skos:inScheme`.
 The ordinary broad CLI retains this separate Book Girl source family.
 `task seed:dev` elects its directly selected Bangumi Official Book root as part
 of the five-work showcase. Decision: type 1 Book/BookSeries dispatch uses the
-current `bangumi@12` converter, preserving Book names, TVAnime original-run
-and Game player-count while adding TVAnime work evidence. Decision: one Bangumi subject stays one
+Steins;Gate remains the required VN/anime showcase; this book family is a
+separate actual source family. The type 1 Book/BookSeries dispatch uses the
+current `bangumi@13` converter, preserving Book names, TVAnime original-run and
+Game player-count while adding Game source genres. Decision: one Bangumi subject stays one
 identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
 selected Book Girl records join the common showcase manifest; book review
 gaps stay in the seed books section so they do not fail Steins;Gate
@@ -2302,11 +2304,11 @@ for these source Concepts.
 
 ### Bangumi TVAnime bounded profile conversion
 
-Current `bangumi@12` retains the exact-template TVAnime names, original-run and
+Current `bangumi@13` retains the exact-template TVAnime names, original-run and
 work-evidence projections while adding the official website mapping. Ordinary
 registration and selected-family rows share the bounded pure conversion; the
 selected-family registration uses
-`cross-media-entities@11+bangumi@12`. Existing source metadata admission,
+`cross-media-entities@11+bangumi@13`. Existing source metadata admission,
 citations, journal, independent review/adoption, current-read flow and exact
 Bangumi alias/key remain in use. No additional publisher or identity lookup is
 involved. A source without a provider revision remains `unversioned`; semantic
@@ -2356,7 +2358,7 @@ source digest and field-pointer command identity remain attached.
 ### Bangumi television original run
 
 Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@12`,
+`放送开始`, `播放结束` and `话数` on type 2 through current `bangumi@13`,
 retaining the original-run mapping alongside newer TVAnime evidence. Selected-family seed uses that same converter; this
 journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
 schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
@@ -2376,9 +2378,9 @@ date is not completion or access authority.
 ### Bangumi Game player count
 
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
-`游玩人数` on type 4 through current `bangumi@12`, retaining original-run and
+`游玩人数` on type 4 through current `bangumi@13`, retaining original-run and
 work-evidence mappings. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@11+bangumi@12` registration; this journey adds no
+existing combined `cross-media-entities@11+bangumi@13` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
@@ -2425,6 +2427,40 @@ from `平台` or `游戏引擎`.
   concealed/wrong-source withholding. The connected ordinary caller is
   `services/kernel/test/imports/bangumi-game-environment.test.ts`; native
   execution remains controller-owned.
+### Bangumi Game source genres
+
+Decision: each complete Game-template `游戏类型` occurrence remains one exact literal; separators are not guessed, and structured or continued values are withheld.
+Decision: ordinary Bangumi imports may opt into a finite binding-profile file; configured IDs remain hints and ordinary credentials remain proposal-only.
+
+The ordinary Bangumi registration and selected-family default caller convert
+exact scalar occurrences of `游戏类型` on the pinned type-4 Game template to
+`schema:genre`. Conversion proposals require an exact current binding to a
+public `skos:Concept` associated with the current `skos:ConceptScheme` whose
+URL is `https://rezics.com/schemes/bangumi/genres`. Configured IDs are lookup
+hints; the local showcase adapter reads the Scheme and used Concepts through
+the authenticated current public API before proposing. A transient read outage
+keeps only exact prior acknowledged genre candidates for recovery and cannot
+create or publish a new one.
+
+The explicit local showcase command accepts
+`--bangumi-game-genre-bindings <json>` with `schemeId`, the exact `schemeUri`,
+and at most 256 `{ literal, id, sourceUri }` Concept rows. Native review and
+adoption remain a separate local showcase step. Ordinary importer credentials
+remain proposal-only. The ordinary `rezics-import --source bangumi` command
+accepts the same shape through `--bangumi-game-genre-bindings-file <path>`; the
+file is capped at 256 KiB. Both callers re-read the current Scheme and used
+Concepts before proposing. No public-tag catalogue or canonical-equivalence
+claim is added.
+
+- Touches: one selected Game and at most 16 source genre proposals with exact
+  record citations.
+- Bound: the existing 65,536-character, 64-field Game infobox parser, 16
+  occurrences and sanitized omissions, a 256 KiB finite binding profile, and
+  the common command/journal limits.
+- Growth check: importer and Kernel focused scenarios cover ordinary and
+  selected-family registration, current binding checks, separate review and
+  adoption, current public read and same-UUID recovery. Source-shaped examples
+  are authored fixtures, not verified real-dump observations.
 
 ### Bangumi creator and voice credits
 
@@ -2665,8 +2701,8 @@ The result carries provider and native type bindings, source keys, source and co
 
 ### Bangumi TVAnime official websites
 
-The official-website projection runs through ordinary `bangumi@12` and the
-selected-family `cross-media-entities@11+bangumi@12` registration. It recognizes
+The official-website projection runs through ordinary `bangumi@13` and the
+selected-family `cross-media-entities@11+bangumi@13` registration. It recognizes
 only a literal `官方网站` value from the exact pinned type-2 TVAnime template.
 The URL fact is distinct from its `schema:url` reference to the exact Bangumi
 subject record. Source spelling, path, query and fragment are preserved. A
@@ -2691,20 +2727,76 @@ splitting decision is recorded in `packages/conversion/README.md`.
   covers separate acceptance/adoption, public read, restart and fencing; native
   execution is controller-owned and the M1 walkthrough remains separate.
 
+### Bangumi character source names
+
+The default cross-media selection follows selected anime `subject-characters`
+and `person-characters` endpoints, then keeps each selected `character` JSONL
+row intact through `planCrossMediaSeed`. The shared entity converter reads the
+bounded `Crt` source-name fields and creates ordinary cited `schema:name` and
+`schema:alternateName` assertions on the exact Bangumi Character identity. The
+common `publishShowcase` manifest remains responsible for independent candidate
+acceptance, adoption and anonymous public reads; local plan output alone proves
+neither publication nor Search indexing.
+
+Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `纯假名` use `ja`, `罗马字` uses `und-Latn`, and `昵称` uses `und`; top-level `name` is `und`, `name_cn` is `zh`, and `简体中文名` is `zh-Hans`; within nicknames only the observed full-width comma splits entries and slash sequences stay intact.
+
+- Touches: one selected character record and its source-owned name candidate
+  set; no new source table, page, publisher or native lookup is added.
+- Bound: source rows remain under the existing 1 MiB line cap; infobox parsing
+  is limited to 32 KiB, depth 2, 64 fields, 64 aliases, 4 KiB/500 codepoints per
+  name, 16 diagnostics and at most 85 commands, including up to two existing
+  physical-profile facts. Structurally malformed alias groups are withheld as a
+  whole; unsupported custom labels are omitted with diagnostics while
+  supported aliases, names and summary remain.
+- Growth check: `packages/conversion/tests/bangumi-character-names.test.ts`
+  covers exact language mapping and changed alias removal;
+  `services/kernel/test/imports/bangumi-character-names.test.ts` exercises the
+  default selected payload through same-state importer refresh, common
+  publication and an anonymous public read.
+
+### Bangumi Book-template subject names
+
+Ordinary Bangumi registration and the selected-family importer share one pure
+extractor for Book title fields. It requires the selected native profile
+`schema:Book` and the exact pinned `{{Infobox animanga/Book` header. The
+source-defined `Novel`, `Manga`, `PhotoBook` and `BookSeries` templates do not
+inherit this mapping. Both Book `中文名` and `别名` become additional
+`schema:name` candidates; explicit Chinese names use `zh`, and unqualified
+aliases use `und`. A malformed field is withheld as a whole while independent
+source names and summary proposals remain available.
+
+The ordinary importer remains proposal-only. The default selected-family path
+uses its existing `cross-media-entities@11+bangumi@13` registration, record bindings,
+finite showcase manifest and publication journal. Local review accepts and
+adopts current candidates through separate native commands; corrected source
+names create new proposals on the acknowledged Book UUID, and ordinary refresh
+does not rewrite adopted names. Record citations, the unversioned marker,
+source digest and field-pointer command identity remain attached.
+
+- Touches: one selected Book record, at most 24 distinct name values and 16
+  shared omission diagnostics.
+- Bound: the 65,536-byte projection/infobox caps, 64 visited field occurrences,
+  existing source journal and native batch limits; no catalogue scan is added.
+- Growth check: `services/importer/tests/bangumi-book-names.test.ts` covers
+  ordinary/default conversion, atomic malformed-field handling, same-UUID
+  refresh and same-title source identity separation. The native publication and
+  public-read scenario is `services/kernel/test/imports/bangumi-book-names.test.ts`;
+  its execution remains controller-owned.
+
 ### Bangumi TVAnime work evidence
 
 Decision: trim only horizontal template/list-boundary whitespace; `链接` remains a cited `wdt:P973` descriptive page and `官方网站` remains the separate `schema:url` mapping.
 
 Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` are admitted. Descriptive destinations preserve their source spelling and cite the Bangumi subject record; notices remain verbatim `schema:copyrightNotice` values and grant no licence or media permission. Malformed neighbors are bounded, source-free omissions; summary and cover rights remain separate.
 
-- Touches: ordinary `bangumi@12` and selected-family `cross-media-entities@11+bangumi@12` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
+- Touches: ordinary `bangumi@13` and selected-family `cross-media-entities@11+bangumi@13` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
 - Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
 - Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.
 
 ### Bangumi Game-template subject names
 
 Ordinary Bangumi registration and selected-family Game records use the exact
-`{{Infobox Game` grammar through the current `bangumi@12` converter. Type 4
+`{{Infobox Game` grammar through the current `bangumi@13` converter. Type 4
 remains `schema:VideoGame`; scalar `中文名` supplies `zh`, and scalar or
 single-level bullet `别名` stays `und`. Top-level labels keep their existing
 meaning. Unsupported field occurrences are withheld atomically while separate

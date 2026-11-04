@@ -99,6 +99,13 @@ import {
   mergeIdentifierResolutions,
   type BangumiGameEnvironmentBinding,
 } from './showcase-bangumi-game-environment.ts';
+import {
+  createShowcaseBangumiGameGenreLookup,
+  parseBangumiGameGenreBindings,
+  prepareShowcaseBangumiGameGenres,
+  type BangumiGameGenreBindings,
+  type BangumiGameGenrePublication,
+} from './showcase-bangumi-game-genres.ts';
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 import {
   combineBangumiCreditBindings,
@@ -1997,6 +2004,7 @@ export type CrossMediaSeedResult = {
   episodeDiagnostics: ShowcaseEpisodeDiagnostic[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
   bangumiGenrePublication?: BangumiGenrePublication;
+  bangumiGameGenrePublication?: BangumiGameGenrePublication;
 };
 
 function subjectRoute(read: ReviewedSubjectRead): string {
@@ -2034,6 +2042,8 @@ export type CrossMediaSeedExtras = {
   bangumiGenrePort?: ReviewedCataloguePort;
   /** Reviewed Game platform/engine Concepts; UUID/label values are lookup hints only. */
   bangumiGameEnvironment?: { readonly bindings: readonly BangumiGameEnvironmentBinding[] };
+  /** Finite exact Game-template bindings used only by the explicit local showcase flow. */
+  bangumiGameGenreBindings?: BangumiGameGenreBindings;
   readPublicSubject?: (subjectId: string) => Promise<ReviewedSubjectRead>;
   prepareBangumiCreatorCreditBindings?: (input: {
     plan: CrossMediaPlan;
@@ -2097,6 +2107,7 @@ export async function seedCrossMedia(
   let importer!: ReturnType<typeof createImporter>;
   let genreAdapter: ReturnType<typeof createShowcaseBangumiGenreLookup> | undefined;
   let gameEnvironmentAdapter: ReturnType<typeof createShowcaseBangumiGameEnvironmentLookup> | undefined;
+  let gameGenreAdapter: ReturnType<typeof createShowcaseBangumiGameGenreLookup> | undefined;
   const identifierLookup =
     extras?.bangumiGenrePort || extras?.bangumiGameEnvironment
       ? {
@@ -2109,6 +2120,12 @@ export async function seedCrossMedia(
                 extras.bangumiGenrePort,
               );
               parts.push(await genreAdapter.lookup.resolve(input));
+              gameGenreAdapter ??= createShowcaseBangumiGameGenreLookup(
+                crossMediaAliases.bangumi,
+                extras.bangumiGameGenreBindings,
+                extras.bangumiGenrePort,
+              );
+              parts.push(await gameGenreAdapter.lookup.resolve(input));
             }
             if (extras?.bangumiGameEnvironment) {
               gameEnvironmentAdapter ??= createShowcaseBangumiGameEnvironmentLookup({
@@ -2574,6 +2591,17 @@ export async function seedCrossMedia(
             lookupDiagnostics: genreAdapter.diagnostics(),
           })
         : undefined;
+    const bangumiGameGenrePublication =
+      gameGenreAdapter && providers.includes('bangumi')
+        ? await prepareShowcaseBangumiGameGenres({
+            sourceAlias: crossMediaAliases.bangumi,
+            records: plan.records.bangumi,
+            bindings: importer.session.bindings,
+            port: extras!.bangumiGenrePort!,
+            adapter: gameGenreAdapter,
+            lookupDiagnostics: gameGenreAdapter.diagnostics(),
+          })
+        : undefined;
     const mediaOutcomes: CrossMediaMediaOutcome[] = [];
     for (const source of plan.coverSources ?? []) {
       const owner = { source: source.sourceAlias, external_id: source.externalId };
@@ -2673,6 +2701,7 @@ export async function seedCrossMedia(
         (fidelity?.gaps.length ?? 0) ||
         episodeDiagnostics.length ||
         (bangumiGenrePublication?.diagnostics.length ?? 0) ||
+        (bangumiGameGenrePublication?.diagnostics.length ?? 0) ||
         mediaOutcomes.some((outcome) => outcome.status !== 'available')
           ? ('imported-with-gaps' as const)
           : ('imported' as const),
@@ -2706,6 +2735,7 @@ export async function seedCrossMedia(
       episodeDiagnostics,
       unresolved,
       ...(bangumiGenrePublication ? { bangumiGenrePublication } : {}),
+      ...(bangumiGameGenrePublication ? { bangumiGameGenrePublication } : {}),
     };
   } finally {
     await importer.close();
@@ -2764,6 +2794,7 @@ export async function runCrossMediaSeedCli(
   } = await import('./showcase-character-vocabulary.ts');
   const optionalFlags = [
     '--bangumi-character-bindings',
+    '--bangumi-game-genre-bindings',
     '--vndb-public-tag-bindings',
     '--showcase-state',
     '--vndb-credit-bindings',
@@ -2787,7 +2818,7 @@ export async function runCrossMediaSeedCli(
     process.stdout.write(
       'Usage: bun scripts/datasets/cross-media-seed.ts ' +
         requiredFlags.map((flag) => flag + ' <value>').join(' ') +
-        ' [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>] [--vndb-character-vocabulary <json>] [--vndb-character-profile-bindings <json>] [--vndb-release-state-bindings <json>]\n',
+        ' [--bangumi-character-bindings <json>] [--bangumi-game-genre-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>] [--vndb-character-vocabulary <json>] [--vndb-character-profile-bindings <json>] [--vndb-release-state-bindings <json>]\n',
     );
     return;
   }
@@ -2833,6 +2864,9 @@ export async function runCrossMediaSeedCli(
   const characterBindingsPath = values.has('--bangumi-character-bindings')
     ? resolve(values.get('--bangumi-character-bindings')!)
     : undefined;
+  const gameGenreBindingsPath = values.has('--bangumi-game-genre-bindings')
+    ? resolve(values.get('--bangumi-game-genre-bindings')!)
+    : undefined;
   const tagBindingsPath = values.has('--vndb-public-tag-bindings')
     ? resolve(values.get('--vndb-public-tag-bindings')!)
     : undefined;
@@ -2861,6 +2895,7 @@ export async function runCrossMediaSeedCli(
     (existsSync(defaultReleaseStateBindingsPath) ? defaultReleaseStateBindingsPath : undefined);
   const seedFiles = [
     characterBindingsPath,
+    gameGenreBindingsPath,
     tagBindingsPath,
     creditBindingsPath,
     vocabularyPath,
@@ -2883,6 +2918,12 @@ export async function runCrossMediaSeedCli(
     const bytes = await readFile(characterBindingsPath);
     ensure(bytes.byteLength <= 256 * 1024, 'Bangumi character bindings exceed the configuration limit');
     characterBindings = JSON.parse(bytes.toString('utf8')) as SourceVocabularyBindings;
+  }
+  let gameGenreBindings: BangumiGameGenreBindings | undefined;
+  if (gameGenreBindingsPath) {
+    const bytes = await readFile(gameGenreBindingsPath);
+    ensure(bytes.byteLength <= 256 * 1024, 'Bangumi Game genre bindings exceed the configuration limit');
+    gameGenreBindings = parseBangumiGameGenreBindings(JSON.parse(bytes.toString('utf8')) as unknown);
   }
   let vndbCreditReferences: VndbCreditVocabularyReferences | undefined;
   if (creditBindingsPath) {
@@ -3026,6 +3067,7 @@ export async function runCrossMediaSeedCli(
         vndbCharacterProfileBindings: characterProfileBindings,
         ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
         ...(vocabularyAdmissions.length ? { vocabularyAdmissions } : {}),
+        ...(gameGenreBindings ? { bangumiGameGenreBindings: gameGenreBindings } : {}),
         bangumiGenrePort: importPort,
         ...(journal && publicClient
           ? {
@@ -3516,7 +3558,7 @@ export async function runCrossMediaSeedCli(
         publicClient,
         ...(vocabularyRequirements.length ? { vocabularyRequirements } : {}),
       });
-    const { bangumiGenrePublication, ...publicCombinedResult } = combinedResult;
+    const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResult } = combinedResult;
     await mkdir(dirname(resultPath), { recursive: true });
     await writeFile(
       resultPath,
@@ -3528,6 +3570,9 @@ export async function runCrossMediaSeedCli(
             releases: Object.fromEntries(result.facts.releases),
           },
           ...(bangumiGenrePublication ? { bangumiGenreDiagnostics: bangumiGenrePublication.diagnostics } : {}),
+          ...(bangumiGameGenrePublication
+            ? { bangumiGameGenreDiagnostics: bangumiGameGenrePublication.diagnostics }
+            : {}),
           ...(showcase ? { showcase } : {}),
           ...(books
             ? {

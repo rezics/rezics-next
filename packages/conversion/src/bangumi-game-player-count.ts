@@ -26,13 +26,15 @@ export type GamePlayerCountMapping = {
   readonly diagnostics: readonly ConversionDiagnostic[];
 };
 
-type InfoboxField = {
+export type BangumiGameInfoboxField = {
   key: string;
   value: string;
   nested: boolean;
   continued: boolean;
   pointer: string;
 };
+
+export const bangumiGameInfoboxFieldLimit = fieldLimit;
 
 function infoboxPointer(key: string): string {
   return `/infobox/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`;
@@ -46,10 +48,10 @@ function notGreater(left: string, right: string): boolean {
   return left.length !== right.length ? left.length < right.length : left <= right;
 }
 
-function parseFields(infobox: string): { fields: InfoboxField[]; overflow: boolean } {
-  const fields: InfoboxField[] = [];
+function parseFields(infobox: string): { fields: BangumiGameInfoboxField[]; overflow: boolean } {
+  const fields: BangumiGameInfoboxField[] = [];
   let overflow = false;
-  let active: InfoboxField | undefined;
+  let active: BangumiGameInfoboxField | undefined;
   for (const raw of infobox.split('\n')) {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
     const trimmed = line.replace(horizontalSpace, '');
@@ -90,7 +92,7 @@ function parseFields(infobox: string): { fields: InfoboxField[]; overflow: boole
   return { fields, overflow };
 }
 
-function parseCount(field: InfoboxField): {
+function parseCount(field: BangumiGameInfoboxField): {
   readonly fact?: GamePlayerCountFact;
   readonly code?: string;
 } {
@@ -119,21 +121,32 @@ function parseCount(field: InfoboxField): {
   };
 }
 
-/** Type-4 pinned `{{Infobox Game` 游玩人数 only: unqualified count or inclusive range. */
-export function bangumiGamePlayerCount(record: {
-  readonly type: number;
-  readonly infobox?: string;
-}): GamePlayerCountMapping {
-  if (record.type !== 4 || record.infobox === undefined) return { handledInfobox: false, facts: [], diagnostics: [] };
+/** Parse the existing bounded, line-oriented Game template without evaluating wiki markup. */
+export function parseBangumiGameInfobox(infobox: string): {
+  readonly matched: boolean;
+  readonly fields: readonly BangumiGameInfoboxField[];
+  readonly overflow: boolean;
+} {
   let header: string | undefined;
-  for (const raw of record.infobox.split('\n')) {
+  for (const raw of infobox.split('\n')) {
     const line = (raw.endsWith('\r') ? raw.slice(0, -1) : raw).replace(horizontalSpace, '');
     if (line) {
       header = line;
       break;
     }
   }
-  if (header !== bangumiGameTemplateHead) return { handledInfobox: false, facts: [], diagnostics: [] };
+  if (header !== bangumiGameTemplateHead) return { matched: false, fields: [], overflow: false };
+  return { matched: true, ...parseFields(infobox) };
+}
+
+/** Type-4 pinned `{{Infobox Game` 游玩人数 only: unqualified count or inclusive range. */
+export function bangumiGamePlayerCount(record: {
+  readonly type: number;
+  readonly infobox?: string;
+}, options: { readonly handledFields?: readonly string[] } = {}): GamePlayerCountMapping {
+  if (record.type !== 4 || record.infobox === undefined) return { handledInfobox: false, facts: [], diagnostics: [] };
+  const parsedInfobox = parseBangumiGameInfobox(record.infobox);
+  if (!parsedInfobox.matched) return { handledInfobox: false, facts: [], diagnostics: [] };
 
   const diagnostics: ConversionDiagnostic[] = [];
   const omit = (pointer: string, code: string) => {
@@ -141,9 +154,10 @@ export function bangumiGamePlayerCount(record: {
     else if (!diagnostics.some((item) => item.code === 'additional_infobox_omissions'))
       diagnostics.push({ pointer: '/infobox', code: 'additional_infobox_omissions' });
   };
-  const { fields, overflow } = parseFields(record.infobox);
+  const { fields, overflow } = parsedInfobox;
   if (overflow) omit('/infobox', 'infobox_field_limit');
-  const counts: InfoboxField[] = [];
+  const counts: BangumiGameInfoboxField[] = [];
+  const handledFields = new Set(options.handledFields ?? []);
   let examined = 0;
   let bounded = false;
   for (const field of fields) {
@@ -161,7 +175,7 @@ export function bangumiGamePlayerCount(record: {
       counts.push(field);
       continue;
     }
-    if (field.key === '平台' || field.key === '游戏引擎') continue;
+    if (field.key === '平台' || field.key === '游戏引擎' || handledFields.has(field.key)) continue;
     omit(field.pointer, 'unsupported_infobox_mapping');
   }
 

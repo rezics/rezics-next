@@ -16,7 +16,7 @@ function keywords(record: unknown, bindings = context) {
 }
 test('actual pinned public meta_tags emit the trusted source Concept with its required qualifier and data-only digest', () => {
   const conversion = convertBangumi(input(pinned), context);
-  expect(converter_revision).toBe('bangumi@12');
+  expect(converter_revision).toBe('bangumi@13');
   expect(key).toBe('v1:["https://rezics.com/schemes/bangumi/public-tags","后宫"]');
   expect(key.length).toBe(58);
   expect(Buffer.byteLength(key)).toBe(62);
