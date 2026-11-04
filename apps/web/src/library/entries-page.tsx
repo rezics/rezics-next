@@ -381,6 +381,8 @@ export function LabelShelfPage({
           locale={locale}
           {...display}
           {...(canUnassign ? { isCurrent: canUnassign } : {})}
+          {...(isCurrent ? { readIsCurrent: isCurrent } : {})}
+          readObservation={page}
           csrfToken={page.csrfToken ?? null}
         />
       ) : (
