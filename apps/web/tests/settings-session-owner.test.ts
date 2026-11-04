@@ -249,13 +249,7 @@ test('late Reading and Notifications receipts cannot confirm versions; exact dis
   });
   const original = readingMutation(page.preferences, { spoilerLevel: 1, suitability: 'blur' })!;
   const result = sendReading(io.reading, original, true, () => 4);
-  const editor = new NotificationEditor(
-    page.page,
-    io.notifications,
-    false,
-    () => 4,
-    h.owner.isCurrent,
-  );
+  const editor = new NotificationEditor(page.page, io.notifications, false, () => 4, h.owner.isCurrent);
   const sending = editor.edit('reply', false, 4);
   const attempt = editor.snapshot().pending!;
   const frozen = JSON.stringify(attempt);
@@ -306,13 +300,7 @@ test('late preference and privacy page reads cannot replace old snapshots or rel
       saveNotifications: async () => ({ ok: false, reason: 'unavailable' }),
     },
   );
-  const editor = new NotificationEditor(
-    page.page,
-    io.notifications,
-    false,
-    () => 4,
-    h.owner.isCurrent,
-  );
+  const editor = new NotificationEditor(page.page, io.notifications, false, () => 4, h.owner.isCurrent);
   const reload = editor.reload();
   const pager = new CollectionPrivacyPager(() => list.promise, h.owner.isCurrent);
   const load = pager.load();

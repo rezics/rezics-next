@@ -135,28 +135,25 @@ test('reading and actual profile/public-activity state share one decision and ow
 
 test('notice originals and later drafts require a decision until exact recovery or Use current', async () => {
   const calls: unknown[] = [];
-  const editor = new NotificationEditor(
-    settingsPreferencePage({ reply: true, mention: true }, 0),
-    {
-      save: async (input) => {
-        calls.push(input);
-        if (calls.length === 1) throw new Error('Lost response');
-        return {
-          ok: true,
-          notifications: { reply: false, mention: true },
-          version: 1,
-          page: settingsPreferencePage({ reply: false, mention: true }, 1),
-        };
-      },
-      read: async () => ({
-        signedIn: true,
-        preferences: { spoilerLevel: 0, suitability: 'blur', version: 1 },
+  const editor = new NotificationEditor(settingsPreferencePage({ reply: true, mention: true }, 0), {
+    save: async (input) => {
+      calls.push(input);
+      if (calls.length === 1) throw new Error('Lost response');
+      return {
+        ok: true,
         notifications: { reply: false, mention: true },
+        version: 1,
         page: settingsPreferencePage({ reply: false, mention: true }, 1),
-        securityHref: null,
-      }),
+      };
     },
-  );
+    read: async () => ({
+      signedIn: true,
+      preferences: { spoilerLevel: 0, suitability: 'blur', version: 1 },
+      notifications: { reply: false, mention: true },
+      page: settingsPreferencePage({ reply: false, mention: true }, 1),
+      securityHref: null,
+    }),
+  });
   const navigation = new SettingsNavigationDrafts();
   navigation.register({
     kind: 'notifications',

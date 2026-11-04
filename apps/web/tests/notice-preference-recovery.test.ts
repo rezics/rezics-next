@@ -99,9 +99,7 @@ function preferenceJourney() {
     current = {
       version: current.version + 1,
       notifications:
-        change.notifications === null
-          ? { ...notifications }
-          : { ...current.notifications, ...change.notifications },
+        change.notifications === null ? { ...notifications } : { ...current.notifications, ...change.notifications },
     };
     receipt = current;
     if (lose) {

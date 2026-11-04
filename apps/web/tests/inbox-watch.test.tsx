@@ -216,40 +216,34 @@ test('native optional board activity uses original intent/key recovery and retir
   const calls: NotificationChange[] = [];
   const initial = { reply: true, mention: true, thread_watch: true, board_activity: true };
   const current = { ...initial, board_activity: false };
-  const editor = new NotificationEditor(
-    settingsPreferencePage(initial, 4),
-    {
-      save: async (input) => {
-        calls.push(input);
-        return calls.length === 1
-          ? { ok: false, reason: 'unavailable' }
-          : { ok: true, notifications: current, version: 5, page: settingsPreferencePage(current, 5) };
-      },
-      read: async () => ({
-        signedIn: true,
-        preferences: { spoilerLevel: 0, suitability: 'blur', version: 5 },
-        securityHref: null,
-        notifications: current,
-        page: settingsPreferencePage(current, 5),
-      }),
+  const editor = new NotificationEditor(settingsPreferencePage(initial, 4), {
+    save: async (input) => {
+      calls.push(input);
+      return calls.length === 1
+        ? { ok: false, reason: 'unavailable' }
+        : { ok: true, notifications: current, version: 5, page: settingsPreferencePage(current, 5) };
     },
-  );
+    read: async () => ({
+      signedIn: true,
+      preferences: { spoilerLevel: 0, suitability: 'blur', version: 5 },
+      securityHref: null,
+      notifications: current,
+      page: settingsPreferencePage(current, 5),
+    }),
+  });
   await editor.edit('board_activity', false, 4);
   await editor.retry();
   expect(calls[0]).toBe(calls[1]);
   expect(calls[0]?.notifications).toEqual({ board_activity: false });
   expect(editor.snapshot()).toMatchObject({ phase: 'saved', draft: current });
   let settle!: (result: NotificationWriteResult) => void;
-  const retired = new NotificationEditor(
-    settingsPreferencePage(initial, 4),
-    {
-      save: () =>
-        new Promise((resolve) => {
-          settle = resolve;
-        }),
-      read: async () => ({ signedIn: false }),
-    },
-  );
+  const retired = new NotificationEditor(settingsPreferencePage(initial, 4), {
+    save: () =>
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    read: async () => ({ signedIn: false }),
+  });
   const pending = retired.edit('board_activity', false, 4);
   retired.dispose();
   const before = retired.snapshot();

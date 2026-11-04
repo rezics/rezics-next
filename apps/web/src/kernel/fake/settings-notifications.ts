@@ -1,10 +1,6 @@
 import type { FakeRoute } from '../fake-modules.ts';
 import recording from '../recorded/settings-preferences.json';
-import {
-  parseNotificationChange,
-  type NotificationPreferences,
-  type PreferencePage,
-} from '../../settings/preferences';
+import { parseNotificationChange, type NotificationPreferences, type PreferencePage } from '../../settings/preferences';
 
 const optionalDefaults = {
   reply: true,
@@ -14,10 +10,7 @@ const optionalDefaults = {
 } as const;
 
 /** Recorded Settings page matching the native catalogue projection. */
-export function settingsPreferencePage(
-  notifications: NotificationPreferences,
-  version: number,
-): PreferencePage {
+export function settingsPreferencePage(notifications: NotificationPreferences, version: number): PreferencePage {
   return {
     version,
     kinds: [

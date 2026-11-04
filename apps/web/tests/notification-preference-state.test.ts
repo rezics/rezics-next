@@ -359,19 +359,12 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
 test('conflict returns the current page, prunes forbidden kinds and keeps a still-valid draft for review', async () => {
   const extra: PreferencePage = {
     version: 7,
-    kinds: [
-      ...page.kinds,
-      { kind: 'legacy_digest', optional: true, default: false, enabled: false },
-    ],
+    kinds: [...page.kinds, { kind: 'legacy_digest', optional: true, default: false, enabled: false }],
     actions: page.actions,
   };
   const current = settingsPreferencePage({ ...optional, mention: false }, 8);
   const transport = harness(
-    () =>
-      Response.json(
-        { code: 'conflict', page: current },
-        { status: 409, headers: { 'retry-after': '30' } },
-      ),
+    () => Response.json({ code: 'conflict', page: current }, { status: 409, headers: { 'retry-after': '30' } }),
     'POST',
   );
   const editor = new NotificationEditor(extra, {

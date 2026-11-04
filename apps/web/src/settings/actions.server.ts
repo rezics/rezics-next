@@ -165,7 +165,12 @@ export async function submitNotificationForm(request: Request): Promise<Response
   if (recovery[0] === 'review') {
     const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
     if (!page.signedIn) return recoveryPage(request, token, change, 'review', undefined, 403);
-    if (!('preferences' in page) || !page.page || !page.notifications || page.preferences.version < change.expectedVersion)
+    if (
+      !('preferences' in page) ||
+      !page.page ||
+      !page.notifications ||
+      page.preferences.version < change.expectedVersion
+    )
       return recoveryPage(request, token, change, 'review');
     const admitted =
       change.notifications === null
@@ -175,8 +180,7 @@ export async function submitNotificationForm(request: Request): Promise<Response
               page.page!.kinds.some((entry) => entry.kind === kind && entry.optional),
             ),
           );
-    if (admitted !== null && Object.keys(admitted).length === 0)
-      return recoveryPage(request, token, change, 'review');
+    if (admitted !== null && Object.keys(admitted).length === 0) return recoveryPage(request, token, change, 'review');
     return recoveryPage(
       request,
       token,

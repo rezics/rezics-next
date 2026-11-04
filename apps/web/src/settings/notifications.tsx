@@ -94,7 +94,12 @@ export function NotificationsCard({
   const localEdit = !!state.pending || readFailed || ['conflict', 'review', 'reloading'].includes(state.phase);
   const rowDisabled = disabled || (waiting && !localEdit) || !preferencePageAllows(state.known.page, 'edit');
   const restoreDisabled =
-    waiting || disabled || !!state.pending || state.phase === 'conflict' || readFailed || !preferencePageAllows(state.known.page, 'reset');
+    waiting ||
+    disabled ||
+    !!state.pending ||
+    state.phase === 'conflict' ||
+    readFailed ||
+    !preferencePageAllows(state.known.page, 'reset');
   const compulsory = state.known.page.kinds.filter((entry) => !entry.optional);
   const waitDescription = waiting ? `${ids}-retry-wait` : undefined;
 
@@ -391,7 +396,10 @@ export function NotificationsCard({
             </Button>
           ) : null}
           {compulsory.length > 0 ? (
-            <aside className="space-y-2 text-sm text-muted-foreground" aria-label={m.settings_notifications_policy_heading()}>
+            <aside
+              className="space-y-2 text-sm text-muted-foreground"
+              aria-label={m.settings_notifications_policy_heading()}
+            >
               <h3 className="font-medium text-foreground">{m.settings_notifications_policy_heading()}</h3>
               <ul className="space-y-1">
                 {compulsory.map((entry) => (
