@@ -30,6 +30,11 @@ const sessionModule = {
     staleTime: Infinity,
   },
 };
+mock.module('../src/kernel/query', () => ({
+  personalRead: { staleTime: 0, enabled: true },
+  publicRead: { staleTime: 60_000 },
+  readQueryKey: (key: readonly unknown[], mode: string) => [...key, mode],
+}));
 let readMembership: (realmId: string) => Promise<RealmViewer | null> = async () => viewer('member');
 let readJoinAdvice: (realmId: string) => Promise<RealmJoinAdvice> = async () => ({ state: 'current', allowed: true });
 let sendMembership: (input: MembershipCommand) => Promise<MembershipResult> = async () => ({
@@ -83,6 +88,7 @@ const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
 mock.module('../src/session/query', () => ({
   ...sessionModule,
+  sessionCsrfToken: () => null,
   useSession: () =>
     useQueryClient().getQueryData(sessionModule.sessionQuery.queryKey) ?? {
       state: 'unknown',
