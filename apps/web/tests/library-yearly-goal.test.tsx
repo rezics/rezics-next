@@ -4,7 +4,7 @@ import { yearlyGoalSearch } from '../src/library/yearly-goal-address';
 import { YearlyGoalPage } from '../src/library/yearly-goal-page';
 import { libraryNavigationEntries } from '../src/library/library-nav';
 import { m } from '../src/paraglide/messages.js';
-import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, locales, overwriteGetLocale } from '../src/paraglide/runtime.js';
 
 test('year selection accepts the native Gregorian bounds and keeps invalid addresses distinct', () => {
   expect(yearlyGoalSearch({})).toEqual({ year: undefined });
@@ -17,11 +17,11 @@ test('year selection accepts the native Gregorian bounds and keeps invalid addre
 });
 
 test('all eight locales expose the goal destination, metric, unavailable coverage and selected-year history', () => {
-  const original = getLocale();
+  const original = getLocale;
   try {
     expect(locales).toHaveLength(8);
     for (const locale of locales) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       const { tabs } = libraryNavigationEntries('goals', { state: 'preparing' }, [], locale);
       expect(tabs.find((tab) => tab.id === 'goals')).toEqual({
         id: 'goals',
@@ -45,7 +45,7 @@ test('all eight locales expose the goal destination, metric, unavailable coverag
       expect(html).not.toContain('name="target"');
     }
   } finally {
-    setLocale(original, { reload: false });
+    overwriteGetLocale(original);
   }
 });
 
