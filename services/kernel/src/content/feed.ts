@@ -894,8 +894,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           finalFeedAdmission,
         );
       else if (stream === 'home' && reactionAdvice?.hasTargets) await finalFeedAdmission();
-      if (reactionAdvice)
-        feedItems.splice(0, feedItems.length, ...(await reactionAdvice.finish(feedItems)));
+      if (reactionAdvice) feedItems.splice(0, feedItems.length, ...(await reactionAdvice.finish(feedItems)));
       const hasNext = names.some((lane) => next[lane] !== false && sources[lane] === 'ready');
       return {
         feedItems,

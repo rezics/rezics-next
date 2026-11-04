@@ -88,8 +88,8 @@ function bindingWitness(item: ContentReactionItem, contextWitness: string | unde
 
 function operationIds(type: ResourceType) {
   return type === 'content.thread'
-    ? ['thread.set_reaction', 'thread.clear_reaction'] as const
-    : ['post.set_reaction', 'post.clear_reaction'] as const;
+    ? (['thread.set_reaction', 'thread.clear_reaction'] as const)
+    : (['post.set_reaction', 'post.clear_reaction'] as const);
 }
 
 function hasReactionOperations(runtime: ReadingPageViewerActionRuntime, type: ResourceType): boolean {
@@ -202,7 +202,8 @@ export function prepareFeedReactionAdvice(
         }
         if (runtime) {
           const supported = [...activeTargets.values()].filter(
-            (entry) => runtime!.resources.has(entry.resourceType) && hasReactionOperations(runtime!, entry.resourceType),
+            (entry) =>
+              runtime!.resources.has(entry.resourceType) && hasReactionOperations(runtime!, entry.resourceType),
           );
           const references = [
             ...new Map(
