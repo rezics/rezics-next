@@ -10,6 +10,7 @@ import { newId } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
 import { verticalManifests } from '../support/manifests.ts';
 
@@ -57,6 +58,7 @@ beforeAll(async () => {
   digest = profileDigest(profile);
   kernel = createKernel({
     pool: db.pool,
+    receiptKeys: testReceiptKeys(),
     routeKey: new Uint8Array(32).fill(61),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(62)]]) },
   });

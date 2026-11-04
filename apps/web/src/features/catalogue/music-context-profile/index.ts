@@ -159,7 +159,9 @@ export async function readMusicContext(
       next = page.data.next;
       links = page.data.relations.map((row) => {
         const date = row.statement.qualifiers.find((part) => part.property.data_type === 'time');
-        const role = row.statement.qualifiers.find((part) => part.property.id === stream.slotKey);
+        const role = row.statement.qualifiers.find(
+          (part) => part.property.id === stream.slotKey || part.property.id === 'wdt:P1932',
+        );
         return {
           id: row.summary?.id ?? '',
           label: row.summary?.label?.value ?? '',

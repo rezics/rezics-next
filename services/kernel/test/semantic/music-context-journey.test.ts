@@ -43,7 +43,7 @@ function pageSubject(body: Record<string, any>, id: string) {
 }
 
 test('a reader follows a sourced music event through native review and a bounded production page', async () => {
-  const driver = await createSemanticDriver(undefined, { strictCleanup: true, originalCapabilities: true });
+  const driver = await createSemanticDriver(undefined, { strictCleanup: true });
   try {
     const outsider = await driver.fixtures.person('outsider');
     await driver.grant('steward', ['moderation:hide'], driver.globalContext);
