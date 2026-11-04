@@ -582,14 +582,17 @@ rejected rather than truncated.
 
 ### Bangumi character names and aliases
 
-`cross-media-entities@11` reads only the selected character's `name`, `name_cn`
+`cross-media-entities@12` reads only the selected character's `name`, `name_cn`
 and the pinned `Crt` infobox fields `简体中文名` and labelled `别名` rows. Top-level
 `name` remains `und`, `name_cn` remains `zh`, and `简体中文名` is a `zh-Hans`
 preferred name. Every supported `别名` row is an alternate name; its exact label
 supplies `zh`, `en`, `ja`, `und-Latn` or `und`. Romanization and nicknames never
 become preferred names. An in-limit infobox contributes a SHA-256 fingerprint
-and byte count to the sanitized source digest; oversized or non-string values
-contribute only bounded markers. Emitted facts preserve source spelling and cite
+and byte count to the sanitized source digest; oversized strings contribute only bounded markers, and non-string
+values emit no infobox facts. The normalized record also retains infobox input within the physical-profile
+parser's 65,536-byte source bound, subject to the combined 65,536-byte record cap, so durable importer replay can
+reproduce names, aliases and measurements. Oversized withheld infobox markers survive replay without admitting facts.
+Emitted facts preserve source spelling and cite
 the Bangumi character URL. Within a nickname value, only the full-width comma
 separator observed in the pinned character record splits individual aliases;
 slashes and their language mixture stay inside the exact alias text. Unsupported
@@ -611,7 +614,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@11` preserves Bangumi character names, physical profiles and person biographies while adding Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property.
+Combined revision decision: `cross-media-entities@12` retains replayable Bangumi character infobox input while preserving character names, physical profiles, person biographies, Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property.
 
 ### VNDB native alternate-name contract
 
@@ -1051,7 +1054,7 @@ not retract independently adopted assertions.
 
 ### Bangumi character physical profile
 
-`cross-media-entities@11` parses only `血型`, `身高` and `体重` from the
+`cross-media-entities@12` parses only `血型`, `身高` and `体重` from the
 [pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
 weights keep explicit kilograms/grams as released exact quantities. The
 original scalar and indexed field path enter normalized source evidence, so an
