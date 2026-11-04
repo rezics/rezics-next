@@ -70,8 +70,15 @@ test('a running attempt adopted after a control-plane restart keeps the waits re
   }
 }, 15_000);
 
+const idleAfterStartCli = `#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+console.log(JSON.stringify({type:'thread.started',thread_id:'silence-wait-worker'}));
+writeFileSync('.worker-started', 'ready');
+await new Promise(resolve => setTimeout(resolve, 600_000));
+`;
+
 test('an adopted attempt that is silent and not waiting is still stopped after the silence window', async () => {
-  const h = harness(workerUntilReleased);
+  const h = harness(idleAfterStartCli);
   let worker: Awaited<ReturnType<typeof h.tasks.retry>> | undefined;
   let release = '';
   h.settings.silenceMs = 300;
@@ -101,7 +108,7 @@ test('an adopted attempt that is silent and not waiting is still stopped after t
 }, 15_000);
 
 test('waits credited at adoption never exceed the time since the last output', async () => {
-  const h = harness(workerUntilReleased);
+  const h = harness(idleAfterStartCli);
   let worker: Awaited<ReturnType<typeof h.tasks.retry>> | undefined;
   let release = '';
   h.settings.silenceMs = 300;

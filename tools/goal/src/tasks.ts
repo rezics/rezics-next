@@ -504,9 +504,9 @@ export class WorkerTasks {
   setUrgentGrant(managerId: string, enabled: boolean, actor: AuthenticatedManager): void {
     setUrgentGrant(this.store.db, this.settings.integration.supermanager, managerId, enabled, actor);
   }
-  dispatch(briefFile: string, actor?: AuthenticatedManager | null, urgent = false): Task {
+  dispatch(briefFile: string, actor?: AuthenticatedManager | null, urgent = false, from?: 'verifier'): Task {
     const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile, undefined, actor, urgent);
-    if (submittedBrief.urgent)
+    if (submittedBrief.urgent && from !== 'verifier')
       requireUrgentDispatch(
         this.store.db,
         this.settings.integration.supermanager,

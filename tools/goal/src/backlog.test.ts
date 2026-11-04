@@ -630,3 +630,34 @@ test('continuation review defaults by Goal, supports explicit policy, release an
   expect((await sweepBacklog(f.runtime)).dispatched).toHaveLength(1);
   expect(() => readControlPolicy({ backlog: { continuationReview: { web: 'yes' } } })).toThrow('continuationReview');
 });
+
+test('seven continuations that share owner docs dispatch; a proposal does not block release', async () => {
+  const f = fixture({ perSweep: 8 });
+  f.runtime.policy = readControlPolicy({ backlog: { continuationReview: { web: false } } });
+  const shared = 'README.md, docs/journeys.md, packages/definitions/release/catalog.json';
+  const text = (title: string, paths: string) =>
+    markdown
+      .replace('goal: fixture', 'goal: web')
+      .replace('paths: [result.txt]', `paths: [${paths}]`)
+      .replace('Write the requested result and commit it.', title);
+  for (let index = 1; index <= 7; index++)
+    brief(
+      f.state,
+      'web',
+      `continuation-aaaaaaaa-1-journey-${index}.md`,
+      60_000,
+      text(`# Journey ${index}`, `apps/web/src/journeys/j${index}.ts, ${shared}`),
+    );
+  const first = await sweepBacklog(f.runtime);
+  expect(first.dispatched).toHaveLength(7);
+  expect(existsSync(join(f.state, 'backlog', 'web', 'proposed'))).toBe(false);
+
+  const root = join(f.state, 'backlog', 'web');
+  mkdirSync(join(root, 'proposed'), { recursive: true });
+  const parked = text('# Parked remainder', `apps/web/src/journeys/release.ts, ${shared}`);
+  writeFileSync(join(root, 'proposed', 'continuation-bbbbbbbb-1-parked.md'), parked);
+  const released = 'continuation-cccccccc-1-release.md';
+  brief(f.state, 'web', released, 60_000, text('# Released remainder', `apps/web/src/journeys/release.ts, ${shared}`));
+  expect((await sweepBacklog(f.runtime)).dispatched.map((entry) => entry.brief)).toEqual([released]);
+  expect(existsSync(join(root, 'proposed', 'continuation-bbbbbbbb-1-parked.md'))).toBe(true);
+});

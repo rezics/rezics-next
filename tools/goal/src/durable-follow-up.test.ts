@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GateOutcome } from './contracts.ts';
 import { completeContinuation, harvestContinuations } from './continuation.ts';
@@ -8,6 +8,7 @@ import { WorkerJob } from './job.ts';
 import { readRiskOwnership } from './briefs.ts';
 import { harness, markdown } from './test-support.ts';
 import { git } from './merge.ts';
+import { SqliteManagerInbox } from './inbox.ts';
 
 test("a gate failure's automatic retry survives the process that recorded it exiting before it ran", async () => {
   const h = harness();
@@ -147,7 +148,58 @@ test("a retried attempt's continuation is dropped once an earlier attempt queued
       `attempt ${earlier.attempt} of this task already queued its continuation`,
     ]);
     expect(readdirSync(source)).toEqual([]);
-    expect(readdirSync(join(h.settings.stateDirectory, 'backlog', 'fixture'))).toHaveLength(1);
+    const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+    expect(readdirSync(backlog).filter((name) => name.endsWith('.md'))).toHaveLength(1);
+    expect(readdirSync(join(backlog, 'failed')).filter((name) => name.endsWith('.md'))).toHaveLength(2);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an invalid Markdown continuation is kept with its reason and reported to its manager', () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, 'invalid.md'), markdown.replace('goal: fixture', 'goal: web'));
+    const failure = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt })
+      .dropped[0]!;
+    const failed = join(h.settings.stateDirectory, 'backlog', 'fixture', 'failed');
+    const saved = join(
+      failed,
+      readdirSync(failed).find((name) => name.endsWith('.md'))!,
+    );
+    const reason = readFileSync(`${saved}.reason`, 'utf8');
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.stateDirectory);
+    const notice = inbox
+      .pending(task.brief.manager)
+      .map(({ event }) => JSON.stringify(event) ?? '')
+      .join('\n');
+    expect(readFileSync(saved, 'utf8')).toContain('goal: web');
+    expect(reason).toContain(failure.reason);
+    expect(notice).toContain('instruction');
+    expect(notice).toContain('invalid.md');
+    expect(notice).toContain(failure.reason);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('acceptance placement without a command is removed and the continuation is admitted', () => {
+  const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    const placement = markdown.replace('paths: [result.txt]', 'paths: [result.txt]\nacceptance:\n  placement: default');
+    writeFileSync(join(source, 'placement-only.md'), placement);
+    const result = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt });
+    expect(result.queued).toHaveLength(1);
+    expect(readFileSync(result.queued[0]!, 'utf8')).not.toContain('placement:');
   } finally {
     h.dispose();
   }
@@ -294,6 +346,94 @@ test('harvest attributes new files to the attempt and proposes overlapping Goal 
         .replace('Write the requested result and commit it.', '# Distinct outcome'),
     );
     expect(harvestContinuations(h.store, h.settings, task, ref).queued).toHaveLength(1);
+  } finally {
+    h.dispose();
+  }
+});
+
+const SHARED_PATHS = 'README.md, docs/journeys.md, packages/definitions/release/catalog.json';
+
+function continuationMarkdown(title: string, paths: string): string {
+  return markdown
+    .replace('paths: [result.txt]', `paths: [${paths}]`)
+    .replace('Write the requested result and commit it.', title);
+}
+
+test('seven planner continuations that share owner docs reach the ready backlog', () => {
+  const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const ref = { taskId: task.id, attempt: attempt.attempt };
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    for (let index = 1; index <= 7; index++)
+      writeFileSync(
+        join(source, `journey-${index}.md`),
+        continuationMarkdown(`# Journey ${index}`, `apps/web/src/journeys/j${index}.ts, ${SHARED_PATHS}`),
+      );
+    const result = harvestContinuations(h.store, h.settings, task, ref);
+    expect(result.queued).toHaveLength(7);
+    expect(result.proposed).toEqual([]);
+    expect(existsSync(join(h.settings.stateDirectory, 'backlog', 'fixture', 'proposed'))).toBe(false);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('title match and remaining-path coverage are still duplicates; proposed briefs are not', () => {
+  const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const other = h.tasks.dispatch(h.briefFile);
+    h.store.updateTask({ taskId: other.id, attempt: 0 }, (current) => {
+      current.state = 'running';
+    });
+    const attempt = beginAttempt(h, task);
+    const ref = { taskId: task.id, attempt: attempt.attempt };
+    const source = join(task.worktree, '.temp/continuation');
+    const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+    mkdirSync(join(backlog, 'proposed'), { recursive: true });
+    mkdirSync(source, { recursive: true });
+    writeFileSync(
+      join(source, 'covered.md'),
+      continuationMarkdown('# Covered remainder', `result.txt, ${SHARED_PATHS}`),
+    );
+    expect(harvestContinuations(h.store, h.settings, task, ref).proposed[0]?.reason).toContain(
+      `overlaps task ${other.id}`,
+    );
+    writeFileSync(
+      join(source, 'titled.md'),
+      continuationMarkdown('# Finish shelf', `apps/web/src/journeys/titled.ts, ${SHARED_PATHS}`),
+    );
+    writeFileSync(
+      join(backlog, 'manager.md'),
+      continuationMarkdown('# Finish shelf', 'apps/web/src/journeys/other.ts'),
+    );
+    expect(harvestContinuations(h.store, h.settings, task, ref).proposed[0]?.reason).toContain('manager.md');
+    writeFileSync(
+      join(backlog, 'proposed', 'parked.md'),
+      continuationMarkdown('# Parked proposal', `apps/web/src/journeys/parked.ts, ${SHARED_PATHS}`),
+    );
+    writeFileSync(
+      join(source, 'sibling.md'),
+      continuationMarkdown('# Fresh journey', `apps/web/src/journeys/parked.ts, ${SHARED_PATHS}`),
+    );
+    expect(harvestContinuations(h.store, h.settings, task, ref).queued).toHaveLength(1);
+    writeFileSync(
+      join(source, 'batch.md'),
+      continuationMarkdown('# Batch sibling', `apps/web/src/journeys/parked.ts, ${SHARED_PATHS}`),
+    );
+    expect(harvestContinuations(h.store, h.settings, task, ref).queued).toHaveLength(1);
+    writeFileSync(
+      join(source, 'partial.md'),
+      continuationMarkdown('# Partial remainder', 'result.txt, apps/web/src/journeys/partial.ts'),
+    );
+    const partial = harvestContinuations(h.store, h.settings, task, ref);
+    expect(partial.proposed).toEqual([]);
+    expect(readFileSync(partial.queued[0]!, 'utf8')).toContain(other.id);
   } finally {
     h.dispose();
   }
