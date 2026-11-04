@@ -12,7 +12,12 @@ function reference(item: FeedItem): Readonly<{ threadId: string; lane: FeedActiv
     return { threadId: item.key.id, lane: 'discovery' };
   if (item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'thread')
     return { threadId: item.key.id, lane: 'following' };
-  if (item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'post')
+  if (
+    item.source === 'following' &&
+    item.key.owner === 'content' &&
+    item.key.kind === 'post' &&
+    'threadId' in item.summary
+  )
     return { threadId: item.summary.threadId, lane: 'following' };
   return null;
 }
