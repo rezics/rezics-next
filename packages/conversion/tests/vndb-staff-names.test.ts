@@ -73,7 +73,7 @@ test('preferred alias not last supplies the label and every admitted source name
   expect(
     names(
       registration.convert(
-        { external_id: 's4', record_revision: null, record: record([additional, preferred]) },
+        { external_id: 's4', record_revision: null, record: record([third, additional, preferred]) },
         { source: registration.source, subjectId },
       ),
     ),
