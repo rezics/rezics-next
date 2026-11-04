@@ -38,18 +38,36 @@ export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> &
 };
 
 const object = { additionalProperties: false } as const;
-const contextLabel = t.Object({ value: t.String({ minLength: 1, maxLength: 256 }), language: t.String({ minLength: 1, maxLength: 35 }) }, object);
+const contextLabel = t.Object(
+  { value: t.String({ minLength: 1, maxLength: 256 }), language: t.String({ minLength: 1, maxLength: 35 }) },
+  object,
+);
 const contextDate = t.Union([
   t.Object(
-    { state: t.Literal('value'), property: t.String({ minLength: 1, maxLength: 128 }), value: t.String({ pattern: '^\\d{4}$' }), precision: t.Literal('year') },
+    {
+      state: t.Literal('value'),
+      property: t.String({ minLength: 1, maxLength: 128 }),
+      value: t.String({ pattern: '^\\d{4}$' }),
+      precision: t.Literal('year'),
+    },
     object,
   ),
   t.Object(
-    { state: t.Literal('value'), property: t.String({ minLength: 1, maxLength: 128 }), value: t.String({ pattern: '^\\d{4}-(0[1-9]|1[0-2])$' }), precision: t.Literal('month') },
+    {
+      state: t.Literal('value'),
+      property: t.String({ minLength: 1, maxLength: 128 }),
+      value: t.String({ pattern: '^\\d{4}-(0[1-9]|1[0-2])$' }),
+      precision: t.Literal('month'),
+    },
     object,
   ),
   t.Object(
-    { state: t.Literal('value'), property: t.String({ minLength: 1, maxLength: 128 }), value: t.String({ pattern: '^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$' }), precision: t.Literal('day') },
+    {
+      state: t.Literal('value'),
+      property: t.String({ minLength: 1, maxLength: 128 }),
+      value: t.String({ pattern: '^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$' }),
+      precision: t.Literal('day'),
+    },
     object,
   ),
   t.Object(
@@ -290,7 +308,10 @@ const facetResponse = t.Object(
   },
   object,
 );
-const suggestResponse = t.Object({ subjects: t.Array(result, { maxItems: 10 }), as_of: t.String({ format: 'date-time' }) }, object);
+const suggestResponse = t.Object(
+  { subjects: t.Array(result, { maxItems: 10 }), as_of: t.String({ format: 'date-time' }) },
+  object,
+);
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const unavailable = problemSchema('index_not_ready', 'overloaded', 'deadline_exceeded');
 const resource = { route: 0, id: GLOBAL_CONTEXT };
@@ -614,7 +635,8 @@ export function searchRoutes<App>(
                 errors: [{ pointer: '/representation', code: 'unsupported' }],
               });
             const active = await activeRelease(pool);
-            const principal = actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
+            const principal: `account:${string}` | 'anonymous' =
+              actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
             const page = await search.releaseGroups(
               principal,
               body as GroupedReleaseSearchRequest,
