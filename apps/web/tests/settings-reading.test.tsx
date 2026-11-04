@@ -194,3 +194,115 @@ test('temporary read failure keeps the original until fresh advice is reviewed a
   await editor.retry();
   expect(calls[1]).toBe(original);
 });
+
+test('a command refusal deadline survives reads and edits and retries the same original only after expiry', async () => {
+  const realNow = Date.now;
+  let now = 1_000_000;
+  Date.now = () => now;
+  try {
+    const receipt = {
+      spoilerLevel: 0 as const,
+      suitability: 'blur' as const,
+      version: 4,
+      advice: readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' }),
+    };
+    const calls: unknown[] = [];
+    let reads = 0;
+    const editor = createEditor({
+      save: async (input) => {
+        calls.push(input);
+        return calls.length === 1
+          ? { ok: false as const, reason: 'unavailable' as const, failure: { status: 429, retryAfter: '2' } }
+          : { ok: true as const, preferences: receipt };
+      },
+      read: async () => ({
+        signedIn: true as const,
+        preferences: reads++ === 0 ? initial : receipt,
+        securityHref: null,
+      }),
+    });
+    const retryCapturedBeforeRefusal = () => editor.retry(false);
+    await editor.edit({ spoilerLevel: 0 });
+    const original = editor.snapshot().pending;
+    await editor.reload(false);
+    await editor.edit({ suitability: 'show' });
+    expect(editor.snapshot().pending).toBe(original);
+    expect(editor.snapshot().commandRetryAt).toBe(now + 2_000);
+    await retryCapturedBeforeRefusal();
+    expect(calls).toHaveLength(1);
+    now += 2_000;
+    await Promise.resolve();
+    expect(calls).toHaveLength(1);
+    await retryCapturedBeforeRefusal();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBe(original);
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      pending: null,
+      draft: { spoilerLevel: 0, suitability: 'show' },
+      known: { spoilerLevel: 0, suitability: 'blur', version: 4 },
+    });
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('an HTTP-date read deadline survives edits and fences retained reload callbacks without automatic reads', async () => {
+  const realNow = Date.now;
+  let now = Date.UTC(2026, 10, 5);
+  Date.now = () => now;
+  try {
+    const deadline = now + 5_000;
+    let reads = 0;
+    const editor = createEditor({
+      save: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+      read: async () =>
+        reads++ === 0
+          ? {
+              signedIn: true as const,
+              state: 'unavailable' as const,
+              failure: { status: 503, retryAfter: new Date(deadline).toUTCString() },
+              securityHref: null,
+            }
+          : { signedIn: true as const, preferences: initial, securityHref: null },
+    });
+    const reloadCapturedBeforeRefusal = () => editor.reload(false);
+    await reloadCapturedBeforeRefusal();
+    await editor.edit({ spoilerLevel: 0 });
+    await reloadCapturedBeforeRefusal();
+    now += 4_999;
+    await reloadCapturedBeforeRefusal();
+    expect(reads).toBe(1);
+    expect(editor.snapshot().readRetryAt).toBe(deadline);
+    now += 1;
+    await Promise.resolve();
+    expect(reads).toBe(1);
+    await reloadCapturedBeforeRefusal();
+    expect(reads).toBe(2);
+    expect(editor.snapshot()).toMatchObject({ readRetryAt: 0, draft: { spoilerLevel: 0 } });
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('a late read refusal after retirement cannot install its retry deadline', async () => {
+  let active = true;
+  let finish!: (page: SettingsPage) => void;
+  const editor = createEditor(
+    {
+      save: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+      read: () => new Promise((resolve) => (finish = resolve)),
+    },
+    () => active,
+  );
+  const pending = editor.reload();
+  active = false;
+  finish({
+    signedIn: true,
+    state: 'unavailable',
+    failure: { status: 503, retryAfter: '60' },
+    securityHref: null,
+  });
+  await pending;
+  expect(editor.snapshot().readRetryAt).toBe(0);
+});
