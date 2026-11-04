@@ -202,8 +202,7 @@ function choiceAdmitted(draft: ShelfDraft, advice: ReadingAdvice | undefined): b
   const supported = advice?.shelfAdvice?.supported;
   if (!supported) return false;
   if (!supported.layouts.includes(draft.layout) || !supported.gridSizes.includes(draft.gridSize)) return false;
-  for (const layout of Object.values(draft.layouts))
-    if (layout && !supported.layouts.includes(layout)) return false;
+  for (const layout of Object.values(draft.layouts)) if (layout && !supported.layouts.includes(layout)) return false;
   for (const choice of Object.values(draft.sorts)) {
     if (choice === defaultSortChoice || choice.startsWith('unsupported:')) continue;
     const [field, direction] = choice.split(':');
