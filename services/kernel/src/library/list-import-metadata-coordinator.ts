@@ -18,6 +18,31 @@ import {
   type EntryImportMetadataReview,
   type EntryImportMetadataView,
 } from './list-import-entry-metadata.ts';
+import {
+  listImportMetadataOrConflict,
+  listImportMetadataProposedConfirmation,
+  mergeListImportMetadataConfirmation as mergeConfirmation,
+  recoverListImportMetadataExpiredOutcome,
+  selectListImportMetadataConfirmation as selectConfirmation,
+  type ListImportMetadataDecision,
+  type ListImportMetadataReceiptObservation,
+} from './list-import-metadata-core.ts';
+
+export {
+  confirmListImportMetadata,
+  listImportMetadataFenceFacts,
+  listImportMetadataFirstPhaseEligible,
+  listImportMetadataOrConflict,
+  listImportMetadataPhaseStart,
+  listImportMetadataProposedConfirmation,
+  persistListImportMetadata,
+  recoverListImportMetadataExpiredOutcome,
+} from './list-import-metadata-core.ts';
+export type {
+  ListImportMetadataDecision,
+  ListImportMetadataFenceFacts,
+  ListImportMetadataReceiptObservation,
+} from './list-import-metadata-core.ts';
 
 export type ListImportMetadataScope = { actor: Actor; id: string; ordinal: number };
 export type ListImportMetadataReviewRequest = ListImportMetadataScope & {
@@ -136,93 +161,26 @@ export function appendListImportMetadataReview(
   return { history: next, reviewToken: review.token, added: true };
 }
 
+function requireConfirmation(
+  decision: ListImportMetadataDecision<EntryImportMetadataConfirmation>,
+): EntryImportMetadataConfirmation {
+  return listImportMetadataOrConflict(decision, () => {
+    throw new ProblemError('conflict');
+  });
+}
+
 export function selectListImportMetadataConfirmation(
   current: EntryImportMetadataConfirmation | undefined,
   proposed: EntryImportMetadataConfirmation,
 ): EntryImportMetadataConfirmation {
-  if (!current) return proposed;
-  if (current.selectionDigest !== proposed.selectionDigest) throw new ProblemError('conflict');
-  return current;
-}
-
-function sameImmutableOperand(left: unknown, right: unknown): boolean {
-  return entryImportMetadataDigest(left) === entryImportMetadataDigest(right);
-}
-
-function mergePhaseStatus(
-  current: EntryImportMetadataConfirmation['annotationStatus'],
-  next: EntryImportMetadataConfirmation['annotationStatus'],
-): EntryImportMetadataConfirmation['annotationStatus'] {
-  if (current === 'applied' || current === 'stale' || current === 'unsupported') return current;
-  if (current === 'unattempted' && (next === undefined || next === 'unattempted')) return next;
-  return next ?? current;
+  return requireConfirmation(selectConfirmation(current, proposed));
 }
 
 export function mergeListImportMetadataConfirmation(
   current: EntryImportMetadataConfirmation | undefined,
   next: EntryImportMetadataConfirmation,
 ): EntryImportMetadataConfirmation {
-  if (!current) return next;
-  if (current.selectionDigest !== next.selectionDigest) throw new ProblemError('conflict');
-  for (const key of ['annotationInput', 'provenanceInput'] as const) {
-    if (current[key] && next[key] && !sameImmutableOperand(current[key], next[key])) throw new ProblemError('conflict');
-  }
-  if (
-    current.sourceObservationDigest &&
-    next.sourceObservationDigest &&
-    current.sourceObservationDigest !== next.sourceObservationDigest
-  )
-    throw new ProblemError('conflict');
-  const merged: EntryImportMetadataConfirmation = {
-    ...current,
-    annotationStarted: current.annotationStarted || next.annotationStarted,
-    provenanceStarted: current.provenanceStarted || next.provenanceStarted,
-  };
-  if (
-    current.annotationReceiptDigest &&
-    next.annotationReceiptDigest &&
-    current.annotationReceiptDigest !== next.annotationReceiptDigest
-  )
-    throw new ProblemError('conflict');
-  if (
-    current.provenanceReceiptDigest &&
-    next.provenanceReceiptDigest &&
-    current.provenanceReceiptDigest !== next.provenanceReceiptDigest
-  )
-    throw new ProblemError('conflict');
-  const sourceExpired = current.sourceExpired === true || next.sourceExpired === true;
-  const fieldOutcomes = new Map(current.fieldOutcomes?.map((field) => [field.field, field]) ?? []);
-  for (const field of next.fieldOutcomes ?? []) {
-    const prior = fieldOutcomes.get(field.field);
-    if (!prior || prior.status === 'failed' || prior.status === 'unattempted' || field.status === 'applied')
-      fieldOutcomes.set(field.field, field);
-  }
-  const progress = {
-    ...(sourceExpired
-      ? {}
-      : {
-          annotationInput: current.annotationInput ?? next.annotationInput,
-          provenanceInput: current.provenanceInput ?? next.provenanceInput,
-          sourceObservationDigest: current.sourceObservationDigest ?? next.sourceObservationDigest,
-        }),
-    annotationReceiptDigest: current.annotationReceiptDigest ?? next.annotationReceiptDigest,
-    provenanceReceiptDigest: current.provenanceReceiptDigest ?? next.provenanceReceiptDigest,
-    provenanceKind: current.provenanceKind ?? next.provenanceKind,
-    annotationStatus: mergePhaseStatus(current.annotationStatus, next.annotationStatus),
-    provenanceStatus: mergePhaseStatus(current.provenanceStatus, next.provenanceStatus),
-    ...(fieldOutcomes.size ? { fieldOutcomes: [...fieldOutcomes.values()] } : {}),
-    outcome: current.outcome ?? next.outcome,
-  };
-  for (const [key, value] of Object.entries(progress)) {
-    if (value !== undefined) Object.assign(merged, { [key]: value });
-  }
-  if (sourceExpired) {
-    delete merged.annotationInput;
-    delete merged.provenanceInput;
-    delete merged.sourceObservationDigest;
-    merged.sourceExpired = true;
-  }
-  return merged;
+  return requireConfirmation(mergeConfirmation(current, next));
 }
 
 function currentReview(review: EntryImportMetadataReview, observation: ListImportMetadataObservation): boolean {
@@ -267,15 +225,20 @@ function confirmationFor(
   fields: EntryImportMetadataConfirmation['fields'],
   nativeAdmission?: EntryImportMetadataConfirmation['nativeAdmission'],
 ): EntryImportMetadataConfirmation {
-  return {
-    ...(nativeAdmission === undefined ? {} : { nativeAdmission }),
+  return listImportMetadataProposedConfirmation({
     fields,
     selectionDigest: entryImportMetadataDigest(fields),
     annotationKey: `${provider}:${id}:${ordinal}:${reviewToken}:annotations`,
     provenanceKey: `${provider}:${id}:${ordinal}:${reviewToken}:provenance`,
-    annotationStarted: false,
-    provenanceStarted: false,
-  };
+    nativeAdmission,
+  });
+}
+
+function receiptObservation(value: boolean | null | undefined): ListImportMetadataReceiptObservation | null {
+  if (value === true) return 'present';
+  if (value === false) return 'missing';
+  if (value === null) return 'unknown';
+  return null;
 }
 
 export function createListImportMetadataCoordinator<ReviewResult>(
@@ -290,36 +253,27 @@ export function createListImportMetadataCoordinator<ReviewResult>(
     const review = await adapter.loadExpiredRecovery?.(input, reviewToken);
     const confirmation = review?.confirmation;
     if (!review) return null;
-    if (!confirmation) return { reviewToken, fields: selections.map(({ field }) => ({ field, status: 'stale' })) };
-    if (confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
-    const old = new Map(
-      (confirmation.outcome?.fields ?? confirmation.fieldOutcomes ?? []).map((field) => [field.field, field.status]),
-    );
     const annotationReceipt =
-      confirmation.annotationStarted && confirmation.annotationReceiptDigest
+      confirmation?.annotationStarted && confirmation.annotationReceiptDigest
         ? await adapter.recoverReceipt?.(input, { ...review, confirmation }, 'annotation')
         : null;
     const provenanceReceipt =
-      confirmation.provenanceStarted && confirmation.provenanceReceiptDigest
+      confirmation?.provenanceStarted && confirmation.provenanceReceiptDigest
         ? await adapter.recoverReceipt?.(input, { ...review, confirmation }, 'provenance')
         : null;
-    const fields: EntryImportMetadataOutcome['fields'][number][] = selections.map(({ field }) => {
-      const prior = old.get(field);
-      const annotation = field === 'note' || field === 'priority';
-      const started = annotation ? confirmation.annotationStarted : confirmation.provenanceStarted;
-      const receipt = annotation ? annotationReceipt : provenanceReceipt;
-      if (started && receipt === true) return { field, status: 'applied' };
-      if (prior === 'stale' || prior === 'unsupported' || prior === 'failed') return { field, status: prior };
-      const phaseStatus = annotation ? confirmation.annotationStatus : confirmation.provenanceStatus;
-      if (phaseStatus === 'stale' || phaseStatus === 'unsupported') return { field, status: phaseStatus };
-      if (started && receipt === null && prior === 'applied') return { field, status: 'failed' };
-      if (started && receipt === false && prior === 'applied') return { field, status: 'failed' };
-      if (!started && prior) return { field, status: prior };
-      if (!started && phaseStatus === 'applied') return { field, status: 'applied' };
-      if (!started && phaseStatus === 'unattempted') return { field, status: 'unattempted' };
-      return { field, status: 'unattempted' };
-    });
-    return { reviewToken, fields };
+    return listImportMetadataOrConflict(
+      recoverListImportMetadataExpiredOutcome({
+        reviewToken,
+        selections,
+        selectionDigest,
+        ...(confirmation === undefined ? {} : { confirmation }),
+        annotationReceipt: receiptObservation(annotationReceipt),
+        provenanceReceipt: receiptObservation(provenanceReceipt),
+      }),
+      () => {
+        throw new ProblemError('conflict');
+      },
+    );
   }
 
   return {

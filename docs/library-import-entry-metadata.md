@@ -49,8 +49,10 @@ correction when that observation already exists; it cannot create a partial nati
 
 ## Review, confirmation and result
 
-Library's native `list-import-metadata-coordinator.ts` owns review identity, the two-review history rule, selection
-binding, confirmation phases and uncertain-result reconciliation. Provider adapters retain their own source evidence,
+Library's native `list-import-metadata-core.ts` owns immutable operands and selection, first-phase eligibility, monotone
+progress and expiry/receipt recovery; `list-import-metadata-coordinator.ts` owns review identity, the two-review history
+rule, selection binding, confirmation phases and uncertain-result reconciliation. Provider adapters capture fence facts
+under their existing locks and persist the core decision. Provider adapters retain their own source evidence,
 field mapping and currentness checks; storage adapters retain owner-scoped reads, locked compare-and-persist operations,
 byte limits and mutation receipts. Native annotation and source-observation commands remain the only write authorities.
 VNDB continues to store metadata in its bounded upload document and preserves its native-admission receipt marker;

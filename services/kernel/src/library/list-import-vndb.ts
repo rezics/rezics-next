@@ -46,9 +46,13 @@ import {
   appendListImportMetadataReview,
   assertListImportMetadataReviewAvailable,
   createListImportMetadataCoordinator,
-  mergeListImportMetadataConfirmation,
-  selectListImportMetadataConfirmation,
 } from './list-import-metadata-coordinator.ts';
+import {
+  confirmListImportMetadata,
+  listImportMetadataFenceFacts,
+  listImportMetadataOrConflict,
+  persistListImportMetadata,
+} from './list-import-metadata-core.ts';
 
 type Config = Parameters<typeof createEntryCommands>[0] & { routeKey: Uint8Array };
 const VNDB_DECISIONS_BYTES = 8_388_608;
@@ -309,6 +313,30 @@ type Upload = {
   decisions: Record<string, Decision>;
   xml: string;
 };
+
+function vndbMetadataFence(record: EntryImportMetadataReview, upload: Upload, ordinal: number) {
+  const decision = upload.decisions[ordinal],
+    row = upload.rows[ordinal];
+  return listImportMetadataFenceFacts({
+    cancelled: upload.state !== 'active',
+    expired: upload.expires_at.getTime() <= Date.now(),
+    currentSourceReviewToken: decision?.reviewId,
+    boundSourceReviewToken: record.sourceReviewToken,
+    currentSourceDigest: row ? entryImportMetadataDigest(row) : null,
+    boundSourceDigest: record.sourceDigest,
+    currentProfileDigest:
+      decision?.targetId && decision.guard
+        ? entryImportMetadataDigest({
+            targetId: decision.targetId,
+            source: decision.guard.source,
+            incarnationId: decision.baseline?.incarnationId ?? null,
+          })
+        : null,
+    boundProfileDigest: record.profileDigest,
+    currentIncarnationId: decision?.baseline?.incarnationId ?? null,
+    boundIncarnationId: record.incarnationId,
+  });
+}
 // Once dispatch can have happened, only the original command may settle this review.
 const pendingState = (decision: Decision | undefined) =>
   decision !== undefined && ['applying', 'failed'].includes(decision.status);
@@ -1313,10 +1341,12 @@ export function createVndbImport(config: Config) {
             decision = found?.decisions[ordinal],
             record = decision?.metadata?.find((item) => item.token === reviewToken);
           if (!found || !record) throw new ProblemError('conflict');
-          const confirmation = selectListImportMetadataConfirmation(record.confirmation, proposed);
-          if (!record.confirmation && (found.state !== 'active' || found.expires_at.getTime() <= Date.now()))
-            throw new ProblemError('conflict');
-          record.confirmation = confirmation;
+          record.confirmation = listImportMetadataOrConflict(
+            confirmListImportMetadata(record.confirmation, proposed, vndbMetadataFence(record, found, ordinal)),
+            () => {
+              throw new ProblemError('conflict');
+            },
+          );
           assertEntryImportMetadataHistorySize(decision!.metadata ?? []);
           await save(tx, a, id, ordinal, decision!);
           return { ordinal, reviewToken };
@@ -1338,20 +1368,13 @@ export function createVndbImport(config: Config) {
           const found = locked.rows[0],
             decision = found?.decisions[ordinal],
             record = decision?.metadata?.find((item) => item.token === reviewToken);
-          if (!found || !record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
-            throw new ProblemError('conflict');
-          const starting =
-            (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
-            (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
-          if (
-            starting &&
-            (found.state !== 'active' ||
-              found.expires_at.getTime() <= Date.now() ||
-              decision?.reviewId !== record.sourceReviewToken ||
-              entryImportMetadataDigest(found.rows[ordinal]) !== record.sourceDigest)
-          )
-            throw new ProblemError('conflict');
-          record.confirmation = mergeListImportMetadataConfirmation(record.confirmation, confirmation);
+          if (!found || !record) throw new ProblemError('conflict');
+          record.confirmation = listImportMetadataOrConflict(
+            persistListImportMetadata(record.confirmation, confirmation, vndbMetadataFence(record, found, ordinal)),
+            () => {
+              throw new ProblemError('conflict');
+            },
+          );
           await save(tx, a, id, ordinal, decision!);
           return { ordinal, reviewToken };
         },

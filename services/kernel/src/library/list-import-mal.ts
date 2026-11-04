@@ -49,9 +49,13 @@ import {
 import {
   appendListImportMetadataReview,
   createListImportMetadataCoordinator,
-  mergeListImportMetadataConfirmation,
-  selectListImportMetadataConfirmation,
 } from './list-import-metadata-coordinator.ts';
+import {
+  confirmListImportMetadata,
+  listImportMetadataFenceFacts,
+  listImportMetadataOrConflict,
+  persistListImportMetadata,
+} from './list-import-metadata-core.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import {
   describeProgressSources,
@@ -227,6 +231,28 @@ type Document = {
   metadataReviews?: Record<string, EntryImportMetadataReview[]>;
   canceled: boolean;
 };
+
+function malMetadataFence(record: EntryImportMetadataReview, doc: Document, ordinal: number) {
+  const review = doc.reviews[ordinal],
+    row = doc.rows[ordinal];
+  return listImportMetadataFenceFacts({
+    cancelled: doc.canceled,
+    currentSourceReviewToken: review?.version,
+    boundSourceReviewToken: record.sourceReviewToken,
+    currentSourceDigest: row ? entryImportMetadataDigest(row) : null,
+    boundSourceDigest: record.sourceDigest,
+    currentProfileDigest: review
+      ? entryImportMetadataDigest({
+          source: review.source,
+          binding: review.binding,
+          current: review.current,
+        })
+      : null,
+    boundProfileDigest: record.profileDigest,
+    currentIncarnationId: review?.current?.incarnationId ?? null,
+    boundIncarnationId: record.incarnationId,
+  });
+}
 type DateIntent = {
   review: MalDateReview;
   fields: MalDateField[];
@@ -1771,10 +1797,14 @@ export function createMalImport(deps: Dependencies) {
           'metadata-confirm',
           { row: ordinal, reviewToken, selectionDigest: proposed.selectionDigest },
           (doc) => {
-            const review = doc.reviews[ordinal],
-              record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
-            if (doc.canceled || !record || review?.version !== record.sourceReviewToken) throw stale();
-            record.confirmation = selectListImportMetadataConfirmation(record.confirmation, proposed);
+            const record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
+            if (!record) throw stale();
+            record.confirmation = listImportMetadataOrConflict(
+              confirmListImportMetadata(record.confirmation, proposed, malMetadataFence(record, doc, ordinal)),
+              () => {
+                throw stale();
+              },
+            );
             assertEntryImportMetadataHistorySize(doc.metadataReviews?.[ordinal] ?? []);
           },
         );
@@ -1788,22 +1818,14 @@ export function createMalImport(deps: Dependencies) {
           'metadata-progress',
           { row: ordinal, reviewToken: token, stateDigest },
           (doc) => {
-            const row = doc.rows[ordinal],
-              review = doc.reviews[ordinal],
-              record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === token);
-            if (!row || !record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
-              throw stale();
-            const starting =
-              (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
-              (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
-            if (
-              starting &&
-              (doc.canceled ||
-                review?.version !== record.sourceReviewToken ||
-                entryImportMetadataDigest(row) !== record.sourceDigest)
-            )
-              throw stale();
-            record.confirmation = mergeListImportMetadataConfirmation(record.confirmation, confirmation);
+            const record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === token);
+            if (!doc.rows[ordinal] || !record) throw stale();
+            record.confirmation = listImportMetadataOrConflict(
+              persistListImportMetadata(record.confirmation, confirmation, malMetadataFence(record, doc, ordinal)),
+              () => {
+                throw stale();
+              },
+            );
             assertEntryImportMetadataHistorySize(doc.metadataReviews?.[ordinal] ?? []);
           },
         );

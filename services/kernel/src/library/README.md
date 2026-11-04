@@ -3541,9 +3541,17 @@ return a useful retained page. The callback, locator and allocation declaration 
 
 Decision: preserve native metadata reservation and immutable-definition recovery; only explicit runtime admission requires the complete C3 parent, and list previews remain read-only.
 
+### Retained list-import metadata confirmation and recovery
+
+- Touches: one owner-scoped upload or row, its at most two retained metadata reviews, current source/profile/incarnation evidence captured once under that persistence fence, and at most two existing native receipts (annotation and provenance).
+- Bound: no scan of uploads or account history; selected fields, command keys and receipt digests stay fixed; first-phase eligibility is computed once from those locked facts.
+- Growth: unrelated lists, identities and receipts may grow while the addressed row, history and selected fields remain fixed; native currentness and bounded recovery stay within those two reviews and two receipts. Existing label and privacy workers retain their outcomes.
+
+Decision: provider adapters pass locked source-review snapshot facts into `list-import-metadata-core.ts`; live profile currentness stays in `isCurrent` before a native send.
+
 ## VNDB retained-source admission and retry
 
-VNDB, Bangumi, MAL and AniList share `list-import-metadata-coordinator.ts` for review identity, history limits, field selection,
+VNDB, Bangumi, MAL and AniList share `list-import-metadata-core.ts` for immutable selection, first-phase eligibility, monotone progress and expiry/receipt recovery, and `list-import-metadata-coordinator.ts` for review identity, history limits, field selection,
 confirmation phases and uncertain results. Their adapters retain the native storage boundaries: VNDB locks and saves
 its bounded upload document with the same-home source fence, while Bangumi locks its header and addressed row and
 keeps its own cancellation and expiry behavior. All four dispatch through the existing annotation and source-observation

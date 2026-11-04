@@ -62,9 +62,13 @@ import {
 import {
   appendListImportMetadataReview,
   createListImportMetadataCoordinator,
-  mergeListImportMetadataConfirmation,
-  selectListImportMetadataConfirmation,
 } from './list-import-metadata-coordinator.ts';
+import {
+  confirmListImportMetadata,
+  listImportMetadataFenceFacts,
+  listImportMetadataOrConflict,
+  persistListImportMetadata,
+} from './list-import-metadata-core.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import {
   describeProgressSources,
@@ -518,7 +522,7 @@ export function createAniListImport(deps: Dependencies) {
     kind: string,
     key: string,
     input: unknown,
-    change: (stored: Stored) => Stored,
+    change: (stored: Stored, fence: { cancelled: boolean }) => Stored,
   ) {
     const account = owner(actor),
       route = requireRoute(account.accountId);
@@ -531,6 +535,7 @@ export function createAniListImport(deps: Dependencies) {
         input: { id, ordinal, input },
       },
       async (tx) => {
+        let cancelled = false;
         if (kind === 'start' || kind === 'score-start' || kind === 'metadata-confirm' || kind === 'metadata-progress') {
           const header = (
             await tx.query<{ payload: Header }>(
@@ -539,7 +544,8 @@ export function createAniListImport(deps: Dependencies) {
             )
           ).rows[0];
           if (!header) return noEffect({ reviewId: null });
-          if (header.payload.cancelled && kind !== 'metadata-progress') return noEffect({ reviewId: null });
+          cancelled = header.payload.cancelled;
+          if (cancelled && kind !== 'metadata-progress') return noEffect({ reviewId: null });
         }
         const row = (
           await tx.query<{ payload: Stored }>(
@@ -548,26 +554,7 @@ export function createAniListImport(deps: Dependencies) {
           )
         ).rows[0];
         if (!row) throw new LibraryNotFoundError();
-        const next = change(row.payload);
-        if (kind === 'metadata-progress') {
-          const started = (next.metadataReviews ?? []).some((item, index) => {
-            const prior = row.payload.metadataReviews?.[index]?.confirmation;
-            return (
-              !!item.confirmation &&
-              ((item.confirmation.annotationStarted && !prior?.annotationStarted) ||
-                (item.confirmation.provenanceStarted && !prior?.provenanceStarted))
-            );
-          });
-          if (started) {
-            const header = (
-              await tx.query<{ payload: Header }>(
-                'SELECT payload FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=-1 FOR SHARE',
-                [route, account.accountId, id],
-              )
-            ).rows[0];
-            if (!header || header.payload.cancelled) throw new LibraryConflictError();
-          }
-        }
+        const next = change(row.payload, { cancelled });
         await tx.query(
           'UPDATE library.list_import_anilist SET payload=$5 WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=$4',
           [route, account.accountId, id, ordinal, JSON.stringify(next)],
@@ -580,6 +567,31 @@ export function createAniListImport(deps: Dependencies) {
         };
       },
     );
+  }
+
+  function anilistMetadataFence(record: EntryImportMetadataReview, current: Stored, cancelled: boolean) {
+    const review = current.review,
+      observation = review?.observation;
+    return listImportMetadataFenceFacts({
+      cancelled,
+      currentSourceReviewToken: review?.id,
+      boundSourceReviewToken: record.sourceReviewToken,
+      currentSourceDigest: entryImportMetadataDigest(current.source.evidence),
+      boundSourceDigest: record.sourceDigest,
+      currentProfileDigest:
+        review && observation
+          ? entryImportMetadataDigest({
+              match: review.match.fingerprint,
+              subjectId: observation.subjectId,
+              epoch: observation.epoch,
+              pin: observation.pin,
+              current: observation.current,
+            })
+          : null,
+      boundProfileDigest: record.profileDigest,
+      currentIncarnationId: observation?.current?.incarnationId ?? null,
+      boundIncarnationId: record.incarnationId,
+    });
   }
   async function preview(actor: Actor, upload: string, scoreFormat: string | undefined, key: string) {
     const account = owner(actor),
@@ -910,10 +922,15 @@ export function createAniListImport(deps: Dependencies) {
         'metadata-confirm',
         `${id}:${ordinal}:${reviewToken}:confirm`,
         { reviewToken, selectionDigest: proposed.selectionDigest },
-        (current) => {
+        (current, fence) => {
           const record = current.metadataReviews?.find((item) => item.token === reviewToken);
-          if (!record || current.review?.id !== record.sourceReviewToken) throw new LibraryConflictError();
-          const confirmation = selectListImportMetadataConfirmation(record.confirmation, proposed),
+          if (!record) throw new LibraryConflictError();
+          const confirmation = listImportMetadataOrConflict(
+            confirmListImportMetadata(record.confirmation, proposed, anilistMetadataFence(record, current, fence.cancelled)),
+            () => {
+              throw new LibraryConflictError();
+            },
+          ),
             next = {
               ...current,
               metadataReviews: current.metadataReviews!.map((item) =>
@@ -935,20 +952,15 @@ export function createAniListImport(deps: Dependencies) {
         'metadata-progress',
         `${id}:${ordinal}:${token}:progress:${stateDigest}`,
         { reviewToken: token, stateDigest },
-        (current) => {
+        (current, fence) => {
           const record = current.metadataReviews?.find((item) => item.token === token);
-          if (!record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
-            throw new LibraryConflictError();
-          const starting =
-            (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
-            (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
-          if (
-            starting &&
-            (current.review?.id !== record.sourceReviewToken ||
-              entryImportMetadataDigest(current.source.evidence) !== record.sourceDigest)
-          )
-            throw new LibraryConflictError();
-          const merged = mergeListImportMetadataConfirmation(record.confirmation, confirmation),
+          if (!record) throw new LibraryConflictError();
+          const merged = listImportMetadataOrConflict(
+            persistListImportMetadata(record.confirmation, confirmation, anilistMetadataFence(record, current, fence.cancelled)),
+            () => {
+              throw new LibraryConflictError();
+            },
+          ),
             next = {
               ...current,
               metadataReviews: current.metadataReviews!.map((item) =>

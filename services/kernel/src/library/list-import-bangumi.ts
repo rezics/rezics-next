@@ -29,16 +29,21 @@ import {
   type EntryImportMetadataProposal,
   type EntryImportMetadataConfirmation,
   type EntryImportMetadataProposals,
+  type EntryImportMetadataReview,
   type EntryImportMetadataView,
 } from './list-import-entry-metadata.ts';
 import {
   appendListImportMetadataReview,
   assertListImportMetadataReviewAvailable,
   createListImportMetadataCoordinator,
-  mergeListImportMetadataConfirmation,
-  selectListImportMetadataConfirmation,
   type ListImportMetadataExpiredRecovery,
 } from './list-import-metadata-coordinator.ts';
+import {
+  confirmListImportMetadata,
+  listImportMetadataFenceFacts,
+  listImportMetadataOrConflict,
+  persistListImportMetadata,
+} from './list-import-metadata-core.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
@@ -88,6 +93,26 @@ type StoredRow = Omit<BangumiRow, 'review'> & {
   choice: StoredChoice | null;
   labels: BangumiLabelState | null;
 };
+
+function bangumiMetadataFence(
+  record: EntryImportMetadataReview,
+  locked: StoredRow,
+  cancelled: boolean,
+) {
+  const sourceReview = locked.review;
+  return listImportMetadataFenceFacts({
+    cancelled,
+    currentSourceReviewToken: sourceReview?.token,
+    boundSourceReviewToken: record.sourceReviewToken,
+    currentSourceDigest: entryImportMetadataDigest(locked.evidence),
+    boundSourceDigest: record.sourceDigest,
+    currentProfileDigest:
+      sourceReview?.token === record.sourceReviewToken && sourceReview.guard ? record.profileDigest : null,
+    boundProfileDigest: record.profileDigest,
+    currentIncarnationId: sourceReview?.current?.incarnationId ?? null,
+    boundIncarnationId: record.incarnationId,
+  });
+}
 
 function scoreSource(evidence: BangumiRow['evidence']): BangumiScoreReview['source'] {
   const field = evidence.fields.find((candidate) => candidate.field === 'rate');
@@ -882,9 +907,12 @@ export function createBangumiImport(deps: Dependencies) {
             locked = await row(tx, a, id, ordinal, true),
             record = locked.review?.metadata?.find((item) => item.token === reviewToken);
           if (!record) throw new ProblemError('conflict');
-          const confirmation = selectListImportMetadataConfirmation(record.confirmation, proposed);
-          if (!record.confirmation && h.cancelled) throw new ProblemError('conflict');
-          record.confirmation = confirmation;
+          record.confirmation = listImportMetadataOrConflict(
+            confirmListImportMetadata(record.confirmation, proposed, bangumiMetadataFence(record, locked, h.cancelled)),
+            () => {
+              throw new ProblemError('conflict');
+            },
+          );
           assertEntryImportMetadataHistorySize(locked.review?.metadata ?? []);
           assertReviewBytes(locked.review);
           await tx.query(
@@ -906,19 +934,13 @@ export function createBangumiImport(deps: Dependencies) {
           const h = await header(tx, a, id, true),
             locked = await row(tx, a, id, ordinal, true),
             record = locked.review?.metadata?.find((item) => item.token === reviewToken);
-          if (!record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
-            throw new ProblemError('conflict');
-          const starting =
-            (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
-            (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
-          if (
-            starting &&
-            (h.cancelled ||
-              locked.review?.token !== record.sourceReviewToken ||
-              entryImportMetadataDigest(locked.evidence) !== record.sourceDigest)
-          )
-            throw new ProblemError('conflict');
-          record.confirmation = mergeListImportMetadataConfirmation(record.confirmation, confirmation);
+          if (!record) throw new ProblemError('conflict');
+          record.confirmation = listImportMetadataOrConflict(
+            persistListImportMetadata(record.confirmation, confirmation, bangumiMetadataFence(record, locked, h.cancelled)),
+            () => {
+              throw new ProblemError('conflict');
+            },
+          );
           assertEntryImportMetadataHistorySize(locked.review?.metadata ?? []);
           assertReviewBytes(locked.review);
           await tx.query(
