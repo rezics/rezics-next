@@ -27,8 +27,10 @@ test('independent publication creation, local corrections, immutable recovery an
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: () => {},
     IS_REACT_ACT_ENVIRONMENT: true,
   };
+  window.scrollTo = () => {};
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -140,6 +142,7 @@ test('independent publication creation, local corrections, immutable recovery an
     scene++;
     entries = next;
     admitted = true;
+    client.clear();
     await draw();
   };
   const article = (index = 0) => canvas.getAllByRole('article')[index]!;
@@ -920,8 +923,10 @@ test('publication creation uses Global Context eligibility independently of the 
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: () => {},
     IS_REACT_ACT_ENVIRONMENT: true,
   };
+  window.scrollTo = () => {};
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -1022,13 +1027,31 @@ test('publication creation uses Global Context eligibility independently of the 
   };
   const scope = () => within(canvas.getByRole('article'));
   const reviewButton = () => scope().getByRole('button', { name: m.publication_review() }) as HTMLButtonElement;
-  const ready = async () => {
-    await scope().findByRole('textbox', { name: m.catalogue_create_label() });
+  const settled = async () => {
+    await waitFor(
+      () => {
+        const text = canvas.getByRole('article').textContent ?? '';
+        expect(text).not.toContain(m.identity_intake_authority_reading());
+        expect(text).not.toContain(m.catalogue_create_loading());
+      },
+      { timeout: 5000 },
+    );
+  };
+  const fillDraft = async () => {
+    await waitFor(
+      () => expect(canvas.getByRole('article').textContent).not.toContain(m.catalogue_create_loading()),
+      { timeout: 5000 },
+    );
+    const label = await canvas.findByRole('textbox', { name: m.catalogue_create_label() }, { timeout: 5000 });
     await act(async () => {
-      await user.clear(scope().getByRole('textbox', { name: m.catalogue_create_label() }));
-      await user.type(scope().getByRole('textbox', { name: m.catalogue_create_label() }), 'A distinct edition');
+      await user.clear(label);
+      await user.type(label, 'A distinct edition');
       await user.click(scope().getByRole('checkbox', { name: m.publication_independent() }));
     });
+  };
+  const ready = async () => {
+    await settled();
+    await fillDraft();
   };
   try {
     const refused = make({ state: 'refused', reason: 'permission' });
@@ -1081,7 +1104,7 @@ test('publication creation uses Global Context eligibility independently of the 
     let lateAllowed: (value: CreateAuthority) => void = () => {};
     const delayed = make(new Promise<CreateAuthority>((resolve) => (lateAllowed = resolve)));
     await mount(delayed);
-    await ready();
+    await fillDraft();
     expect(reviewButton().disabled).toBe(true);
     delayed.session = 'signed-out';
     await draw();
