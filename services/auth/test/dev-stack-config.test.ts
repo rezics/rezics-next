@@ -114,8 +114,8 @@ test('persona retries open mixed Search and POST facets alongside anonymous GET 
   };
   await openLocalShowcase(routes, open);
   await openLocalShowcase(routes, open);
-  expect([...receipts.values()]).toEqual(['search', 'search_advanced', 'subjects']);
-  expect(attempts.slice(3)).toEqual(attempts.slice(0, 3));
+  expect([...receipts.values()]).toEqual(['search', 'search_advanced', 'personal_library', 'subjects']);
+  expect(attempts.slice(4)).toEqual(attempts.slice(0, 4));
 });
 
 test('a failed native opening stops persona setup and names the group, cause and retry', async () => {

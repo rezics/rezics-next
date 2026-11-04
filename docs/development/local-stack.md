@@ -53,10 +53,11 @@ a fresh persona can submit the bounded dataset batches. Explicit existing overri
 families, authorization and operator checks retain their normal policy.
 
 Decision: local persona setup opens mounted anonymous GET exposure groups plus the explicit M1 `search` (path 9,
-mixed Search) and `search_advanced` (path 10, filters and POST `/v1/subjects:facets`) groups through ordinary platform
+mixed Search), `search_advanced` (path 10, filters and POST `/v1/subjects:facets`), and `personal_library` for the
+protected VN source-statistic writer (path 2) and personal Library (path 20), through ordinary platform
 commands; `seed:dev` composes that same setup. Future additions must name a concrete M1 path here and in the bounded
 list in `services/auth/scripts/dev-stack.ts`; anonymous POST routes are not scanned for openings.
-Production configuration and private/write gates retain their defaults.
+Production configuration and unlisted private/write gates retain their defaults.
 A public exposure opening admits that group, while ordinary route and resource permissions still apply. Kernel and
 both app servers bind loopback. Do not expose this development database or host to a network.
 If an opening fails, setup reports the group and native error, exits unsuccessfully and tells you which task to rerun
