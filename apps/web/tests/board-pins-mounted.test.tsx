@@ -63,6 +63,15 @@ afterAll(async () => {
 });
 
 const sender: BoardPinSender = { subject: 'moderator-subject', csrfToken: 'current-csrf' };
+
+async function settle(ready: () => boolean) {
+  for (let attempt = 0; attempt < 100 && !ready(); attempt++)
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 10));
+    });
+  expect(ready()).toBe(true);
+}
+
 function sourceRevision(thread: CommunityBoardPage['threads']['threads'][number]): string {
   if (thread.firstPost.availability !== 'available') throw new Error('Expected a disclosed opening revision.');
   return thread.firstPost.revisionId;
@@ -283,26 +292,21 @@ test('unknown retry keeps its original command and missing rows move focus to th
   });
   const toggles = feed.host.querySelectorAll<HTMLButtonElement>('[data-board-pin-focus="toggle"]');
   expect(toggles).toHaveLength(1);
-  await act(async () => {
-    toggles[0]!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-  const dialog = document.querySelector<HTMLElement>('[data-slot="alert-dialog-content"]');
-  expect(dialog?.textContent).toContain(m.board_pin_confirm_title_pin());
-  const confirm = dialog?.querySelectorAll<HTMLButtonElement>('button').item(1);
+  toggles[0]!.focus();
+  await act(async () => toggles[0]!.click());
+  const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+  await settle(() => !!dialog());
+  const confirmation = dialog();
+  expect(confirmation?.textContent).toContain(m.board_pin_confirm_title_pin());
+  const confirm = confirmation?.querySelectorAll<HTMLButtonElement>('button').item(1);
   expect(confirm).toBeDefined();
-  await act(async () => {
-    confirm!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+  await act(async () => confirm!.click());
+  await settle(() => feed.host.textContent?.includes(m.board_pin_unknown()) === true);
   expect(feed.host.textContent).toContain(m.board_pin_unknown());
   const retry = feed.host.querySelector<HTMLButtonElement>('[data-board-pin-focus="retry"]');
   expect(retry).toBeDefined();
-  await act(async () => {
-    retry!.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+  await act(async () => retry!.click());
+  await settle(() => feed.host.querySelector('[data-slot="board-pin-focus-recovery"]') !== null);
   expect(commands).toHaveLength(2);
   expect(commands[1]).toBe(commands[0]);
   expect(commands[0]).toMatchObject({ boardId: page.board.id, threadId: ordinary.id, action: 'pin', sender });
