@@ -69,7 +69,7 @@ function ThreadCard({
   pin?: BoardPinThread;
   pinControl?: ReactNode;
   signedIn: boolean;
-  origin: { key: string; isCurrent(): boolean };
+  origin: BoardOpeningReactionOrigin;
 }) {
   const locale = getLocale();
   const available = thread.availability === 'available';
