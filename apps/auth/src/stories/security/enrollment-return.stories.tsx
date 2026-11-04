@@ -49,10 +49,11 @@ function ready(accountId?: string): Extract<SecurityLoadResult, { kind: 'ready' 
   if (accountId && value.accountId !== accountId) {
     value.accountId = accountId;
     if (value.page) value.page.viewer.account_id = accountId;
-    value.passkeys = {
-      kind: 'ready',
-      passkeys: [{ ...value.passkeys.passkeys[0]!, id: 'replacement-row', name: 'Replacement key' }],
-    };
+    if (value.passkeys.kind === 'ready')
+      value.passkeys = {
+        kind: 'ready',
+        passkeys: [{ ...value.passkeys.passkeys[0]!, id: 'replacement-row', name: 'Replacement key' }],
+      };
     if (value.page?.passkeys.kind === 'ready')
       value.page.passkeys.rows = [{ ...value.page.passkeys.rows[0]!, id: 'replacement-row', name: 'Replacement key' }];
   }

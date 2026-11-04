@@ -56,7 +56,7 @@ export class PasskeyEnrollmentController {
   begin(accountId: string): number | null {
     if (
       !accountId ||
-      (this.current && this.current.phase !== 'changed-account' && this.current.phase !== 'authority-unavailable')
+      (this.current && this.current.phase !== 'changed-account')
     )
       return null;
     const attemptId = ++this.nextAttemptId;
@@ -103,7 +103,7 @@ export class PasskeyEnrollmentController {
     const current = this.current;
     if (!current) return;
     current.callbacksLive = false;
-    if (current.phase === 'changed-account' || current.phase === 'authority-unavailable') return;
+    if (current.phase === 'changed-account') return;
     if (!current.possibleEffect) {
       this.current = null;
       return;

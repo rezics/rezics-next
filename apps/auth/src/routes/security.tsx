@@ -438,7 +438,7 @@ function SecurityPageView({
     } else if (
       recovery ||
       registrationRecovery ||
-      (enrollment && enrollment.phase !== 'changed-account' && enrollment.phase !== 'authority-unavailable')
+      (enrollment && enrollment.phase !== 'changed-account')
     )
       recoveryStatus.current?.focus();
     else if (sessionNotice) sessionStatus.current?.focus();
@@ -473,7 +473,7 @@ function SecurityPageView({
       else if (
         recovery ||
         registrationRecovery ||
-        (enrollment && enrollment.phase !== 'changed-account' && enrollment.phase !== 'authority-unavailable')
+        (enrollment && enrollment.phase !== 'changed-account')
       )
         recoveryStatus.current?.focus();
       else if (passwordOperation) document.querySelector<HTMLDivElement>('#security-password-recovery')?.focus();
