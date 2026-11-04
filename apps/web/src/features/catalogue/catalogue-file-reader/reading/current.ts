@@ -18,10 +18,10 @@ type CurrentReading = {
   session: BrowserObservationSnapshot | undefined;
   retired: boolean;
   active: boolean;
-  selection?: Selection;
-  receipt?: Receipt;
-  recovery?: Recovery;
-  cancelFocus?: () => void;
+  selection: Selection | undefined;
+  receipt: Receipt | undefined;
+  recovery: Recovery | undefined;
+  cancelFocus: (() => void) | undefined;
   lease: ReturnType<typeof addressLease>;
   owns: () => boolean;
   current: () => boolean;
@@ -151,7 +151,7 @@ export function useCatalogueFileReading(input: {
     holder.current?.retire();
     holder.current = createReading(input.source, descriptor, cache, observation, session);
   }
-  const episode = holder.current;
+  const episode = holder.current!;
   episode.owns = () =>
     holder.current === episode &&
     cacheSnapshot() === episode.cache &&
