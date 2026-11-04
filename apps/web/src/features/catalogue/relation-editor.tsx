@@ -974,11 +974,8 @@ function RelationEditorLive({
     setDraft(next);
     setOwnConsent(false);
     setConsentEntry(undefined);
-    setRead((previous) =>
-      previous?.ok
-        ? { ...previous, page: null, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } }
-        : previous,
-    );
+    // Context operations remain an observation; preparation always re-reads the new exact participants.
+    setRead((previous) => (previous?.ok ? { ...previous, page: null } : previous));
     setSlot(undefined);
     setCandidate(undefined);
     setResult(undefined);
