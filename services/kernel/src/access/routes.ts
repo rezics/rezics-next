@@ -383,6 +383,48 @@ const preferences = t.Object(
       },
       closed,
     ),
+    shelfAdvice: t.Object(
+      {
+        supported: t.Object(
+          {
+            layouts: t.Array(literals(SHELF_LAYOUTS), { minItems: 1, maxItems: SHELF_LAYOUTS.length, uniqueItems: true }),
+            tabs: t.Array(literals(SHELF_TABS), { minItems: 1, maxItems: SHELF_TABS.length, uniqueItems: true }),
+            sortFields: t.Array(literals(SHELF_SORT_FIELDS), {
+              minItems: 1,
+              maxItems: SHELF_SORT_FIELDS.length,
+              uniqueItems: true,
+            }),
+            sortDirections: t.Array(literals(SHELF_SORT_DIRECTIONS), {
+              minItems: 1,
+              maxItems: SHELF_SORT_DIRECTIONS.length,
+              uniqueItems: true,
+            }),
+            gridSizes: t.Array(literals(SHELF_GRID_SIZES), {
+              minItems: 1,
+              maxItems: SHELF_GRID_SIZES.length,
+              uniqueItems: true,
+            }),
+            tableColumns: t.Array(literals(SHELF_TABLE_COLUMNS), {
+              minItems: 1,
+              maxItems: SHELF_TABLE_COLUMNS.length,
+              uniqueItems: true,
+            }),
+          },
+          closed,
+        ),
+        limits: t.Object(
+          {
+            maxLayouts: t.Literal(SHELF_MAX_LAYOUTS),
+            scopeMaxLength: t.Literal(SHELF_SCOPE_MAX_LENGTH),
+            scopePattern: t.Literal(SHELF_SCOPE_PATTERN),
+          },
+          closed,
+        ),
+        effective: shelf,
+        defaults: t.Object({}, closed),
+      },
+      closed,
+    ),
   },
   closed,
 );

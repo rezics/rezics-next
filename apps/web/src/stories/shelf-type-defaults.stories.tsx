@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { expect, userEvent, within } from 'storybook/test';
 import { ShelfPreferencesCard } from '../settings/shelf-preferences';
-import type { ShelfPreferences } from '../settings/preferences';
+import { withShelfAdvice, type ShelfPreferences } from '../settings/preferences';
 import { SettingsSessionContext, SettingsSessionOwner } from '../settings/settings-session-owner';
 import { sessionQuery } from '../session/query';
 import { getLocale } from '../paraglide/runtime.js';
@@ -37,7 +37,7 @@ function Editor() {
       <SettingsSessionContext.Provider value={owner}>
         <div className="mx-auto max-w-xl">
           <ShelfPreferencesCard
-            initial={saved.shelf}
+            initial={withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', ...saved })}
             version={saved.version}
             csrfToken={csrfToken}
             onVersionChange={(version) => setSaved((old) => ({ ...old, version }))}
@@ -59,7 +59,7 @@ function Editor() {
                 signedIn: true,
                 accountId: subject,
                 securityHref: null,
-                preferences: { spoilerLevel: 0, suitability: 'blur', ...current.current },
+                preferences: withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', ...current.current }),
               }),
               save: async (input) => {
                 const shelf = input.shelf === null ? {} : { ...current.current.shelf };
@@ -74,7 +74,7 @@ function Editor() {
                 const next = { shelf, version: current.current.version + 1 };
                 current.current = next;
                 setSaved(next);
-                return { ok: true, preferences: { spoilerLevel: 0, suitability: 'blur', ...next } };
+                return { ok: true, preferences: withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', ...next }) };
               },
             }}
           />

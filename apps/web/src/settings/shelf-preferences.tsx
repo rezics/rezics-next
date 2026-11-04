@@ -16,12 +16,15 @@ import {
 } from '../library/shelf-preferences';
 import type { ReadingIO } from './reading-preferences';
 import {
+  ownerMayChangeShelf,
   shelfPreferenceColumns,
   shelfPreferenceSortFields,
   shelfPreferenceTabs,
   type NativePreferenceFailure,
   type PreferenceChange,
+  type ReadingAdvice,
   type ReadingPreferences,
+  type ShelfAdvice,
   type ShelfPreferencePatch,
   type ShelfPreferenceSort,
   type ShelfPreferenceTab,
@@ -66,6 +69,7 @@ type Pending = {
 };
 type ShelfState = {
   known: { shelf: ShelfPreferences; version: number };
+  advice: ReadingAdvice | undefined;
   draft: ShelfDraft;
   dirty: Set<string>;
   pending: Pending | null;
@@ -190,6 +194,28 @@ function pagePreferences(page: Awaited<ReturnType<ReadingIO['read']>>) {
   return page.signedIn && 'preferences' in page ? page.preferences : undefined;
 }
 
+function executableSorts(supported: ShelfAdvice['supported'] | undefined) {
+  return (['last_activity', 'added', 'finished'] as const).filter((field) => supported?.sortFields.includes(field));
+}
+
+function choiceAdmitted(draft: ShelfDraft, advice: ReadingAdvice | undefined): boolean {
+  const supported = advice?.shelfAdvice?.supported;
+  if (!supported) return false;
+  if (!supported.layouts.includes(draft.layout) || !supported.gridSizes.includes(draft.gridSize)) return false;
+  for (const layout of Object.values(draft.layouts))
+    if (layout && !supported.layouts.includes(layout)) return false;
+  for (const choice of Object.values(draft.sorts)) {
+    if (choice === defaultSortChoice || choice.startsWith('unsupported:')) continue;
+    const [field, direction] = choice.split(':');
+    if (
+      !supported.sortFields.includes(field as ShelfPreferenceSort['field']) ||
+      !supported.sortDirections.includes(direction as 'asc' | 'desc')
+    )
+      return false;
+  }
+  return true;
+}
+
 /** Versioned shelf editor: drafts stay local until save, and uncertain writes retain their exact command. */
 export class ShelfPreferenceDraftRecovery {
   private state: ShelfState;
@@ -203,6 +229,7 @@ export class ShelfPreferenceDraftRecovery {
     const shelf = initial.shelf ?? {};
     this.state = {
       known: { shelf, version: initial.version },
+      advice: initial.advice,
       draft: draftFrom(shelf),
       dirty: new Set(),
       pending: null,
@@ -223,8 +250,12 @@ export class ShelfPreferenceDraftRecovery {
     this.listeners.forEach((listener) => listener());
   }
 
+  private writable() {
+    return this.owner.canWrite() && ownerMayChangeShelf(this.state.advice);
+  }
+
   edit(next: Partial<ShelfDraft>, dirtyKey: string) {
-    if (!this.owner.canWrite()) return;
+    if (!this.writable()) return;
     this.update({
       draft: { ...this.state.draft, ...next },
       dirty: new Set([...this.state.dirty, dirtyKey]),
@@ -233,7 +264,7 @@ export class ShelfPreferenceDraftRecovery {
   }
 
   editSort(tab: ShelfPreferenceTab, choice: string) {
-    if (!this.owner.canWrite()) return;
+    if (!this.writable()) return;
     this.update({
       draft: { ...this.state.draft, sorts: { ...this.state.draft.sorts, [tab]: choice } },
       dirty: new Set([...this.state.dirty, `sort:${tab}`]),
@@ -242,7 +273,14 @@ export class ShelfPreferenceDraftRecovery {
   }
 
   editTypeLayout(scope: string, layout: ShelfDraft['layout'] | undefined) {
-    if (!this.owner.canWrite() || scope === 'all' || scope.length > 256 || !/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(scope))
+    const limits = this.state.advice?.shelfAdvice?.limits;
+    if (
+      !this.writable() ||
+      !limits ||
+      scope === 'all' ||
+      scope.length > limits.scopeMaxLength ||
+      !new RegExp(limits.scopePattern).test(scope)
+    )
       return;
     const layouts = { ...this.state.draft.layouts };
     delete layouts[scope];
@@ -252,7 +290,7 @@ export class ShelfPreferenceDraftRecovery {
 
   private async send(recovering: boolean) {
     const pending = this.state.pending;
-    if (!pending || !this.owner.canWrite()) return;
+    if (!pending || !this.writable()) return;
     this.update({ phase: 'saving', reason: undefined, failure: undefined });
     let result;
     try {
@@ -341,12 +379,17 @@ export class ShelfPreferenceDraftRecovery {
     );
     const changedWhileSaving = remainingDirty.size > 0;
     const resetDraft = rebaseDraft(shelf, this.state.draft, remainingDirty);
+    const needsReview =
+      changedWhileSaving ||
+      (pending.reset && pending.dirty.size > 0) ||
+      (remainingDirty.size > 0 && !choiceAdmitted(resetDraft, current.advice));
     this.update({
       known: { shelf, version: current.version },
+      advice: current.advice,
       draft: resetDraft,
       dirty: remainingDirty,
       pending: null,
-      phase: changedWhileSaving || (pending.reset && pending.dirty.size > 0) ? 'review' : 'saved',
+      phase: needsReview ? 'review' : 'saved',
       reason: undefined,
       failure: undefined,
     });
@@ -354,17 +397,18 @@ export class ShelfPreferenceDraftRecovery {
   }
 
   async submit(reset = false) {
-    if (!this.owner.canWrite() || this.state.pending || this.state.phase === 'reloading') return;
+    if (!this.writable() || this.state.pending || this.state.phase === 'reloading') return;
     if (this.owner.version() > this.state.known.version) {
       this.update({ phase: 'conflict', reason: 'conflict', failure: undefined });
       return;
     }
     const shelf = reset ? null : patchFor(this.state.known.shelf, this.state.draft, this.state.dirty);
     if (shelf?.layouts) {
+      const maxLayouts = this.state.advice?.shelfAdvice?.limits.maxLayouts ?? 0;
       const merged = { ...this.state.known.shelf.layouts, ...shelf.layouts };
       if (
-        Object.keys(shelf.layouts).length > 32 ||
-        Object.values(merged).filter((value) => value !== null).length > 32
+        Object.keys(shelf.layouts).length > maxLayouts ||
+        Object.values(merged).filter((value) => value !== null).length > maxLayouts
       ) {
         this.update({ phase: 'failed', reason: 'invalid' });
         return;
@@ -385,7 +429,7 @@ export class ShelfPreferenceDraftRecovery {
   }
 
   async retry() {
-    if (this.state.phase !== 'uncertain' || !this.state.pending || !this.owner.canWrite()) return;
+    if (this.state.phase !== 'uncertain' || !this.state.pending || !this.writable()) return;
     await this.send(true);
   }
 
@@ -399,10 +443,17 @@ export class ShelfPreferenceDraftRecovery {
         this.update({ phase: this.state.pending ? 'uncertain' : 'failed', reason: 'unavailable' });
         return;
       }
+      const shelf = current.shelf ?? {};
+      const draft = rebaseDraft(shelf, this.state.draft, this.state.dirty);
       this.update({
-        known: { shelf: current.shelf ?? {}, version: current.version },
-        draft: rebaseDraft(current.shelf ?? {}, this.state.draft, this.state.dirty),
-        phase: this.state.pending ? 'uncertain' : 'review',
+        known: { shelf, version: current.version },
+        advice: current.advice,
+        draft,
+        phase: this.state.pending
+          ? 'uncertain'
+          : this.state.dirty.size > 0 || !choiceAdmitted(draft, current.advice)
+            ? 'review'
+            : 'idle',
       });
       this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
     } catch {
@@ -421,6 +472,16 @@ export class ShelfPreferenceDraftRecovery {
       failure: undefined,
     });
   }
+}
+
+function layoutName(layout: string) {
+  return layout === 'grid'
+    ? m.library_layout_grid()
+    : layout === 'list'
+      ? m.library_layout_list()
+      : layout === 'table'
+        ? m.library_layout_table()
+        : layout;
 }
 
 function tabLabel(tab: ShelfPreferenceTab): string {
@@ -470,7 +531,7 @@ export function ShelfPreferencesCard({
   onVersionChange,
   readTypes,
 }: {
-  initial: ShelfPreferences;
+  initial: ReadingPreferences;
   version: number;
   csrfToken: string | null;
   io: ReadingIO;
@@ -480,13 +541,12 @@ export function ShelfPreferencesCard({
   const writeCurrent = useSettingsCurrent(csrfToken, !!io);
   const readCurrent = useSettingsReadCurrent(csrfToken, !!io);
   const sessionOwner = useSettingsSessionOwner(csrfToken);
-  const canWrite = writeCurrent();
   const canRead = readCurrent();
   const ownerRef = useRef({ version, writeCurrent, readCurrent, onVersionChange });
   ownerRef.current = { version, writeCurrent, readCurrent, onVersionChange };
   const [controller] = useState(
     () =>
-      new ShelfPreferenceDraftRecovery({ spoilerLevel: 0, suitability: 'blur', version, shelf: initial }, io, {
+      new ShelfPreferenceDraftRecovery(initial, io, {
         canRead: () => ownerRef.current.readCurrent(),
         canWrite: () => ownerRef.current.writeCurrent(),
         version: () => ownerRef.current.version,
@@ -494,12 +554,20 @@ export function ShelfPreferencesCard({
       }),
   );
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  const advice = state.advice;
+  const shelfAdvice = advice?.shelfAdvice;
+  const ownerMayChange = ownerMayChangeShelf(advice);
+  const canWrite = writeCurrent() && ownerMayChange;
   const disabled = !canWrite || state.phase === 'saving' || state.phase === 'reloading';
   const unavailableColumns = unsupportedShelfColumns(state.known.shelf);
   const unavailableSorts = unsupportedShelfSorts(state.known.shelf);
   const inputId = 'shelf-default-columns';
   const showFailure = ['failed', 'conflict', 'uncertain', 'review'].includes(state.phase);
   const waiting = state.phase === 'saving' || state.phase === 'reloading';
+  const offeredLayouts = shelfAdvice?.supported.layouts ?? [];
+  const offeredSizes = shelfAdvice?.supported.gridSizes ?? [];
+  const offeredSorts = executableSorts(shelfAdvice?.supported);
+  const maxLayouts = shelfAdvice?.limits.maxLayouts ?? 0;
 
   if (!canRead) return null;
 
@@ -522,109 +590,176 @@ export function ShelfPreferencesCard({
             {m.settings_shelf_order_unavailable({ tab: tabLabel(tab), field })}
           </p>
         ))}
-        <fieldset disabled={disabled} className="space-y-5">
-          <label className="grid gap-1 text-sm">
-            {m.settings_shelf_layout()}
-            <select
-              className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
-              value={state.draft.layout}
-              onChange={(event) =>
-                controller.edit({ layout: event.currentTarget.value as ShelfDraft['layout'] }, 'layout')
-              }
-            >
-              <option value="grid">{m.library_layout_grid()}</option>
-              <option value="list">{m.library_layout_list()}</option>
-              <option value="table">{m.library_layout_table()}</option>
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm">
-            {m.settings_shelf_size()}
-            <select
-              className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
-              value={state.draft.gridSize}
-              onChange={(event) =>
-                controller.edit({ gridSize: event.currentTarget.value as ShelfDraft['gridSize'] }, 'gridSize')
-              }
-            >
-              <option value="small">{m.library_size_small()}</option>
-              <option value="medium">{m.library_size_medium()}</option>
-              <option value="large">{m.library_size_large()}</option>
-            </select>
-          </label>
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">{m.settings_shelf_columns()}</legend>
-            {appColumns.map((column) => (
-              <Field key={column} orientation="horizontal" className="min-h-11">
-                <Checkbox
-                  id={`${inputId}-${column}`}
-                  checked={state.draft.columns.includes(column)}
-                  disabled={column === 'title'}
-                  onCheckedChange={(checked) =>
-                    controller.edit(
-                      {
-                        columns: appColumns.filter(
-                          (item) =>
-                            item === 'title' ||
-                            (item === column ? checked === true : state.draft.columns.includes(item)),
-                        ),
-                      },
-                      'columns',
-                    )
-                  }
-                />
-                <FieldLabel htmlFor={`${inputId}-${column}`}>
-                  {column === 'lastActivity' ? m.library_sort_activity() : shelfColumnLabel(column)}
-                </FieldLabel>
-              </Field>
-            ))}
-          </fieldset>
-          {tabs.map((tab) => {
-            const current = state.draft.sorts[tab];
-            return (
-              <label key={tab} className="grid gap-1 text-sm">
-                {m.settings_shelf_order({ tab: tabLabel(tab) })}
+        {!shelfAdvice ? (
+          <Alert>
+            <AlertTitle>{m.settings_shelf_choices_unavailable_title()}</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p>{m.settings_shelf_choices_unavailable_text()}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={!canRead || waiting}
+                onClick={() => void controller.reload()}
+              >
+                {m.settings_shelf_reload()}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <>
+            {ownerMayChange ? null : (
+              <Alert>
+                <AlertTitle>{m.settings_shelf_read_only_title()}</AlertTitle>
+                <AlertDescription>{m.settings_shelf_read_only_text()}</AlertDescription>
+              </Alert>
+            )}
+            <fieldset disabled={disabled} className="space-y-5">
+              <label className="grid gap-1 text-sm">
+                {m.settings_shelf_layout()}
+                <span className="text-muted-foreground">
+                  {state.known.shelf.layouts?.all
+                    ? m.settings_shelf_saved({ value: layoutName(state.known.shelf.layouts.all) })
+                    : m.settings_shelf_inherited()}
+                </span>
                 <select
                   className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
-                  value={current}
-                  onChange={(event) => controller.editSort(tab, event.currentTarget.value)}
+                  value={state.draft.layout}
+                  onChange={(event) =>
+                    controller.edit({ layout: event.currentTarget.value as ShelfDraft['layout'] }, 'layout')
+                  }
                 >
-                  {current.startsWith('unsupported:') ? (
-                    <option value={current} disabled>
-                      {m.settings_shelf_unavailable_option({
-                        field:
-                          state.known.shelf.sorts?.[tab]?.field === 'rating'
-                            ? `${m.library_score_order()} · ${state.known.shelf.sorts[tab].direction === 'desc' ? m.library_score_highest() : m.library_score_lowest()}`
-                            : current.slice('unsupported:'.length).replaceAll('_', ' '),
-                      })}
+                  {(offeredLayouts.includes(state.draft.layout)
+                    ? offeredLayouts
+                    : [state.draft.layout, ...offeredLayouts]
+                  ).map((layout) => (
+                    <option key={layout} value={layout}>
+                      {layoutName(layout)}
                     </option>
-                  ) : null}
-                  <option value={defaultSortChoice}>{m.settings_shelf_order_application_default()}</option>
-                  {(['last_activity', 'added', 'finished'] as const).flatMap((field) =>
-                    (['desc', 'asc'] as const).map((direction) => {
-                      const choice = `${field}:${direction}`;
-                      return (
-                        <option key={choice} value={choice}>
-                          {sortLabel(field, direction)}
-                        </option>
-                      );
-                    }),
-                  )}
+                  ))}
                 </select>
               </label>
-            );
-          })}
-        </fieldset>
-        <ShelfTypeDefaults
-          key={JSON.stringify([sessionOwner?.subject, csrfToken, getLocale()])}
-          layouts={{ ...state.draft.layouts, ...(state.dirty.has('layout') ? { all: state.draft.layout } : {}) }}
-          globalLayout={state.draft.layout}
-          savedLayouts={state.known.shelf.layouts ?? {}}
-          disabled={disabled}
-          subject={sessionOwner?.subject ?? null}
-          isCurrent={readCurrent}
-          onChange={(scope, layout) => controller.editTypeLayout(scope, layout)}
-          {...(readTypes ? { readTypes } : {})}
-        />
+              <label className="grid gap-1 text-sm">
+                {m.settings_shelf_size()}
+                <span className="text-muted-foreground">
+                  {state.known.shelf.gridSize
+                    ? m.settings_shelf_saved({
+                        value:
+                          state.known.shelf.gridSize === 'small'
+                            ? m.library_size_small()
+                            : state.known.shelf.gridSize === 'large'
+                              ? m.library_size_large()
+                              : m.library_size_medium(),
+                      })
+                    : m.settings_shelf_inherited()}
+                </span>
+                <select
+                  className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                  value={state.draft.gridSize}
+                  onChange={(event) =>
+                    controller.edit({ gridSize: event.currentTarget.value as ShelfDraft['gridSize'] }, 'gridSize')
+                  }
+                >
+                  {(offeredSizes.includes(state.draft.gridSize)
+                    ? offeredSizes
+                    : [state.draft.gridSize, ...offeredSizes]
+                  ).map((size) => (
+                    <option key={size} value={size}>
+                      {size === 'small'
+                        ? m.library_size_small()
+                        : size === 'large'
+                          ? m.library_size_large()
+                          : m.library_size_medium()}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">{m.settings_shelf_columns()}</legend>
+                <p className="text-sm text-muted-foreground">
+                  {state.known.shelf.tableColumns ? m.settings_shelf_saved_choice() : m.settings_shelf_inherited()}
+                </p>
+                {appColumns.map((column) => (
+                  <Field key={column} orientation="horizontal" className="min-h-11">
+                    <Checkbox
+                      id={`${inputId}-${column}`}
+                      checked={state.draft.columns.includes(column)}
+                      disabled={column === 'title'}
+                      onCheckedChange={(checked) =>
+                        controller.edit(
+                          {
+                            columns: appColumns.filter(
+                              (item) =>
+                                item === 'title' ||
+                                (item === column ? checked === true : state.draft.columns.includes(item)),
+                            ),
+                          },
+                          'columns',
+                        )
+                      }
+                    />
+                    <FieldLabel htmlFor={`${inputId}-${column}`}>
+                      {column === 'lastActivity' ? m.library_sort_activity() : shelfColumnLabel(column)}
+                    </FieldLabel>
+                  </Field>
+                ))}
+              </fieldset>
+              {tabs.map((tab) => {
+                const current = state.draft.sorts[tab];
+                return (
+                  <label key={tab} className="grid gap-1 text-sm">
+                    {m.settings_shelf_order({ tab: tabLabel(tab) })}
+                    <span className="text-muted-foreground">
+                      {state.known.shelf.sorts?.[tab] ? m.settings_shelf_saved_choice() : m.settings_shelf_inherited()}
+                    </span>
+                    <select
+                      className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
+                      value={current}
+                      onChange={(event) => controller.editSort(tab, event.currentTarget.value)}
+                    >
+                      {current.startsWith('unsupported:') ? (
+                        <option value={current} disabled>
+                          {m.settings_shelf_unavailable_option({
+                            field:
+                              state.known.shelf.sorts?.[tab]?.field === 'rating'
+                                ? `${m.library_score_order()} · ${state.known.shelf.sorts[tab].direction === 'desc' ? m.library_score_highest() : m.library_score_lowest()}`
+                                : current.slice('unsupported:'.length).replaceAll('_', ' '),
+                          })}
+                        </option>
+                      ) : null}
+                      <option value={defaultSortChoice}>{m.settings_shelf_order_application_default()}</option>
+                      {offeredSorts.flatMap((field) =>
+                        (['desc', 'asc'] as const)
+                          .filter((direction) => shelfAdvice.supported.sortDirections.includes(direction))
+                          .map((direction) => {
+                            const choice = `${field}:${direction}`;
+                            return (
+                              <option key={choice} value={choice}>
+                                {sortLabel(field, direction)}
+                              </option>
+                            );
+                          }),
+                      )}
+                    </select>
+                  </label>
+                );
+              })}
+            </fieldset>
+            <ShelfTypeDefaults
+              key={JSON.stringify([sessionOwner?.subject, csrfToken, getLocale()])}
+              layouts={{ ...state.draft.layouts, ...(state.dirty.has('layout') ? { all: state.draft.layout } : {}) }}
+              globalLayout={state.draft.layout}
+              savedLayouts={state.known.shelf.layouts ?? {}}
+              disabled={disabled}
+              subject={sessionOwner?.subject ?? null}
+              isCurrent={readCurrent}
+              maxLayouts={maxLayouts}
+              scopeMaxLength={shelfAdvice.limits.scopeMaxLength}
+              onChange={(scope, layout) => controller.editTypeLayout(scope, layout)}
+              {...(readTypes ? { readTypes } : {})}
+            />
+          </>
+        )}
         {showFailure ? (
           <Alert variant={state.phase === 'failed' ? 'destructive' : 'default'}>
             <AlertTitle>{failureText(state.phase)}</AlertTitle>
@@ -659,25 +794,27 @@ export function ShelfPreferencesCard({
           </Alert>
         ) : null}
         {state.phase === 'saved' ? <p role="status">{m.settings_saved()}</p> : null}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            className="min-h-11 max-w-full whitespace-normal"
-            disabled={disabled || !!state.pending || !state.dirty.size}
-            onClick={() => void controller.submit()}
-          >
-            {m.settings_shelf_save()}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 max-w-full whitespace-normal"
-            disabled={disabled || !!state.pending}
-            onClick={() => void controller.submit(true)}
-          >
-            {m.settings_shelf_reset()}
-          </Button>
-        </div>
+        {shelfAdvice ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              className="min-h-11 max-w-full whitespace-normal"
+              disabled={disabled || !!state.pending || !state.dirty.size}
+              onClick={() => void controller.submit()}
+            >
+              {m.settings_shelf_save()}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 max-w-full whitespace-normal"
+              disabled={disabled || !!state.pending}
+              onClick={() => void controller.submit(true)}
+            >
+              {m.settings_shelf_reset()}
+            </Button>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

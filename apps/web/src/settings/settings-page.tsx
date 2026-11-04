@@ -270,7 +270,7 @@ function SettingsSections({
         <DisplayPreferences />
         {'preferences' in page ? (
           <ShelfPreferencesCard
-            initial={page.preferences.shelf ?? {}}
+            initial={page.preferences}
             version={version}
             csrfToken={csrfToken}
             io={io.shelf}

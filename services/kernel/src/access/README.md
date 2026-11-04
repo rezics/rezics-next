@@ -2858,14 +2858,19 @@ envelope. `page` is the in-memory catalogue projection of each kind's optional/d
 advertises catalogue edit and reset; PATCH still requires `account:update`. Reading uses `viewerState` (`current` on a
 successful owner read), `allowedActions.read` / `allowedActions.update`, and `reading` with bounded supported
 spoiler/suitability choices, the effective confirmed pair, and native defaults `{ spoilerLevel: 0, suitability:
-"blur" }`. Those fields are display guidance: they do not grant platform exposure, authentication, or a second
-preference version. Command-time `account:update` authorization, original receipts, History and the shared account
-version stay on the existing PATCH. A successful GET with `update.allowed: false` is a readable owner whose Reading
-edit is currently disallowed. `PATCH` accepts `expectedVersion` (required, a nonnegative integer) and any of the
-settings, `shelf` and `notifications`. Omitted settings keep their current values. Stale versions answer 409 with the
-current catalogue `page` so the notifications viewer can review a still-valid draft. A successful PATCH returns the
-same envelope; replayed historical values keep current Reading action advice from the authorization that admitted the
-replay.
+"blur" }`. The same envelope adds `shelfAdvice`: native stored-value catalogues (layouts, tabs, sort fields and
+directions, grid sizes, table columns), limits (`maxLayouts` 32, `scopeMaxLength` 256, the stored-scope pattern),
+`effective` equal to the stored `shelf`, and `defaults` `{}` because Access stores only what was saved. Absent parts
+inherit; `shelf: null` is the reset patch that restores that empty stored shelf. Shelf edit and reset use the shared
+`allowedActions.update` decision, not a second action or version model. Native stored choices such as rating or
+creator are not a claim that Library currently executes them. Those fields are display guidance: they do not grant
+platform exposure, authentication, or a second preference version. Command-time `account:update` authorization,
+original receipts, History and the shared account version stay on the existing PATCH. A successful GET with
+`update.allowed: false` is a readable owner whose Reading and shelf edit is currently disallowed. `PATCH` accepts
+`expectedVersion` (required, a nonnegative integer) and any of the settings, `shelf` and `notifications`. Omitted
+settings keep their current values. Stale versions answer 409 with the current catalogue `page` so the notifications
+viewer can review a still-valid draft. A successful PATCH returns the same envelope; replayed historical values keep
+current Reading and shelf action advice from the authorization that admitted the replay.
 
 `shelf` in a PATCH is a JSON Merge Patch (RFC 7396) applied to the stored shelf: an object merges key by key, `null`
 removes that key (a part such as `gridSize`, or one `layouts` or `sorts` entry), and an array (`tableColumns`) replaces
@@ -2885,15 +2890,17 @@ setting the initial defaults therefore leaves storage absent. Returning to the d
 and its advancing version. Stale expected versions answer 409; reusing a key with different input answers 422.
 Replaying a successful key returns its original values/version after current authorization, even if later commands
 changed the preferences. Every successful response includes both settings, the shelf, notifications, the version,
-`page`, and the Reading viewer/actions envelope, and PATCH carries the session token for its command receipt. Each successful command emits the existing `account-updated` event with only
+`page`, the Reading viewer/actions envelope and `shelfAdvice`, and PATCH carries the session token for its command receipt. Each successful command emits the existing `account-updated` event with only
 the account ID, keeping preference values out of the event data. Invalid values and unknown fields answer 400.
 
 Read cost: one exact `(route, account_id)` primary-key seek, at most one row and one statement, plus the existing
-`account:read` authorization and one `account:update` authorization on the same account resource so Reading can
-declare whether that owner may change settings. `page` and the Reading projection are computed in memory after that
-seek. Rows and statements stay constant; blocks remain logarithmic in accounts plus a constant number of TOAST
-blocks, since the stored shelf is capped at 16,384 bytes and notification overrides at 2,048 bytes. The in-memory
-projection adds no statements at the 256, 1024 and 4096 preference scales.
+`account:read` authorization and one `account:update` authorization on the same account resource so Reading and shelf
+advice can declare whether that owner may change settings. `page`, the Reading projection and `shelfAdvice` are
+computed in memory after that seek. Rows and statements stay constant; blocks remain logarithmic in accounts plus a
+constant number of TOAST blocks, since the stored shelf is capped at 16,384 bytes and notification overrides at 2,048
+bytes. The in-memory projection adds no statements at the 256, 1024 and 4096 preference scales. Decision: shelf
+observation reuses the shared viewer/actions and empty stored defaults; reset remains the existing `shelf: null`
+merge-patch.
 Set cost: one preference row and the command envelope's receipt, with constant rows and statements; the merge is in
 memory over at most 32 + 6 + 2 shelf entries and 32 notification kinds. Authentication and native authorization
 retain their existing bounds. A bounded retry reuses the original idempotency key after current authorization;
@@ -2926,8 +2933,8 @@ readback. No channel, quiet-hour or conversation setting is implied.
 
 Decision: Reset, when shown, PATCHes native defaults `spoilerLevel` 0 and `suitability` `blur` with the reviewed
 shared version. Viewer state and read/update actions sit on the shared preference-page envelope so a notification
-catalogue can add its slice without a second preference version. Unknown or malformed choice data is unavailable;
-consumers do not guess the spoiler or suitability enum.
+catalogue and shelf observation can add their slices without a second preference version. Unknown or malformed choice
+data is unavailable; consumers do not guess the spoiler or suitability enum, nor invent shelf catalogues or limits.
 
 ## Direct resource role data
 

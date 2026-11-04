@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { decodePreferenceAdvice, decodePreferencePage, decodePreferenceValues } from '../src/preference-page.ts';
+import {
+  decodePreferenceAdvice,
+  decodePreferencePage,
+  decodePreferenceShelfAdvice,
+  decodePreferenceValues,
+} from '../src/preference-page.ts';
 
 const values = {
   spoilerLevel: 1 as const,
@@ -47,6 +52,67 @@ test('malformed choice data is unavailable rather than a guessed enum', () => {
       reading: { ...envelope.reading, effective: { spoilerLevel: 2, suitability: 'blur' } },
     }),
   ).toBeUndefined();
+});
+
+const shelfAdvice = {
+  supported: {
+    layouts: ['grid', 'list', 'table'],
+    tabs: ['in_progress', 'planned', 'completed', 'paused', 'dropped', 'all'],
+    sortFields: ['last_activity', 'added', 'finished', 'title', 'rating', 'release_date', 'progress'],
+    sortDirections: ['asc', 'desc'],
+    gridSizes: ['small', 'medium', 'large'],
+    tableColumns: [
+      'cover',
+      'title',
+      'creator',
+      'type',
+      'status',
+      'progress',
+      'rating',
+      'added',
+      'started',
+      'finished',
+      'last_activity',
+    ],
+  },
+  limits: {
+    maxLayouts: 32,
+    scopeMaxLength: 256,
+    scopePattern: '^(?:all|[A-Za-z][A-Za-z0-9+.-]*:\\S+)$',
+  },
+  effective: { layouts: { all: 'list' as const }, gridSize: 'large' as const },
+  defaults: {},
+};
+
+test('native shelf observation decodes stored values, catalogues and empty defaults', () => {
+  const page = {
+    ...envelope,
+    shelf: shelfAdvice.effective,
+    shelfAdvice,
+  };
+  expect(decodePreferenceShelfAdvice(page)?.effective).toEqual(shelfAdvice.effective);
+  expect(decodePreferenceAdvice(page)?.shelfAdvice?.limits.maxLayouts).toBe(32);
+  expect(decodePreferencePage(page)?.shelfAdvice?.defaults).toEqual({});
+});
+
+test('malformed or mismatched shelf observation is omitted without guessing', () => {
+  expect(
+    decodePreferenceShelfAdvice({
+      ...envelope,
+      shelfAdvice: { ...shelfAdvice, limits: { ...shelfAdvice.limits, maxLayouts: 64 } },
+    }),
+  ).toBeUndefined();
+  expect(
+    decodePreferenceAdvice({
+      ...envelope,
+      shelf: {},
+      shelfAdvice,
+    })?.shelfAdvice,
+  ).toBeUndefined();
+  expect(decodePreferenceAdvice({ ...envelope, shelfAdvice: { ...shelfAdvice, defaults: { gridSize: 'medium' } } })?.reading.defaults).toEqual({
+    spoilerLevel: 0,
+    suitability: 'blur',
+  });
 });
 
 test('a readable owner whose edit is disallowed remains a current viewer', () => {

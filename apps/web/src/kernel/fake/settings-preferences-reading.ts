@@ -2,6 +2,7 @@ import type { FakeRoute } from '../fake-modules';
 import recording from '../recorded/settings-preferences.json';
 import {
   parsePreferenceChange,
+  shelfAdviceFor,
   type PreferenceChange,
   type ReadingPreferences,
   type SettingsPage,
@@ -145,12 +146,14 @@ export const routes: FakeRoute[] = [
       const result = await fixture.io.read();
       if ('preferences' in result) {
         const { advice, ...values } = result.preferences;
+        const page = advice ?? readingAdviceFor(values);
         return {
           status: 200,
           ...values,
           notifications: result.notifications,
           shelf: {},
-          ...(advice ?? readingAdviceFor(values)),
+          ...page,
+          shelfAdvice: page.shelfAdvice ?? shelfAdviceFor({}),
         };
       }
       if (result.signedIn && 'failure' in result) {
@@ -184,12 +187,14 @@ export const routes: FakeRoute[] = [
       if (!result.ok)
         return { status: result.failure?.status ?? 503, code: result.failure?.code ?? 'dependency_unavailable' };
       const { advice, ...values } = result.preferences;
+      const page = advice ?? readingAdviceFor(values);
       return {
         status: 200,
         ...values,
         notifications: fixture.current().notifications,
         shelf: {},
-        ...(advice ?? readingAdviceFor(values)),
+        ...page,
+        shelfAdvice: page.shelfAdvice ?? shelfAdviceFor({}),
       };
     },
   },

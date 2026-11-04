@@ -1,11 +1,13 @@
 import {
   decodePreferenceAdvice,
   decodePreferenceValues,
+  PREFERENCE_SHELF_LIMITS,
   type KernelClient,
   type PreferencePage,
   type PreferencePageAction,
   type PreferencePageAdvice,
   type PreferencePageKind,
+  type PreferenceShelfAdvice,
 } from '@rezics/client';
 import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
@@ -74,6 +76,62 @@ export type ShelfPreferencePatch = {
   tableColumns?: ShelfPreferences['tableColumns'] | null;
 };
 export type ReadingAdvice = PreferencePageAdvice;
+export type ShelfAdvice = PreferenceShelfAdvice;
+
+export function ownerMayChangeShelf(advice: ReadingAdvice | undefined): boolean {
+  return (
+    advice?.viewerState === 'current' &&
+    advice.allowedActions.update.allowed === true &&
+    advice.shelfAdvice !== undefined
+  );
+}
+
+export function shelfAdviceFor(shelf: ShelfPreferences = {}): ShelfAdvice {
+  return {
+    supported: {
+      layouts: [...shelfPreferenceLayouts],
+      tabs: [...shelfPreferenceTabs],
+      sortFields: [...shelfPreferenceSortFields],
+      sortDirections: ['asc', 'desc'],
+      gridSizes: ['small', 'medium', 'large'],
+      tableColumns: [...shelfPreferenceColumns],
+    },
+    limits: { ...PREFERENCE_SHELF_LIMITS },
+    effective: {
+      ...(shelf.layouts !== undefined ? { layouts: { ...shelf.layouts } } : {}),
+      ...(shelf.sorts !== undefined ? { sorts: structuredClone(shelf.sorts) } : {}),
+      ...(shelf.gridSize !== undefined ? { gridSize: shelf.gridSize } : {}),
+      ...(shelf.tableColumns !== undefined ? { tableColumns: [...shelf.tableColumns] } : {}),
+    },
+    defaults: {},
+  };
+}
+
+export function withShelfAdvice(
+  values: Pick<ReadingPreferences, 'spoilerLevel' | 'suitability' | 'version' | 'shelf'>,
+  writable = true,
+): ReadingPreferences {
+  const shelf = values.shelf ?? {};
+  return {
+    spoilerLevel: values.spoilerLevel,
+    suitability: values.suitability,
+    version: values.version,
+    shelf,
+    advice: {
+      viewerState: 'current',
+      allowedActions: {
+        read: { allowed: true },
+        update: writable ? { allowed: true } : { allowed: false, reason: 'not_authorized' },
+      },
+      reading: {
+        supported: { spoilerLevels: [0, 1, 2], suitability: ['blur', 'show'] },
+        effective: { spoilerLevel: values.spoilerLevel, suitability: values.suitability },
+        defaults: { spoilerLevel: 0, suitability: 'blur' },
+      },
+      shelfAdvice: shelfAdviceFor(shelf),
+    },
+  };
+}
 export type ReadingPreferences = {
   spoilerLevel: SpoilerLevel;
   suitability: Suitability;
