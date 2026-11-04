@@ -21,9 +21,7 @@ test('current correction actions use mounted subject and terms operations and cu
   const path = `/v1/subjects/${subject}?includeViewerActions=true`;
   const permitted = await f.call('GET', path, 'owner');
   f.status(permitted, 200);
-  expect(correctionOperations(permitted.body)).toEqual(
-    expect.arrayContaining(['subject.propose', 'subject.terms']),
-  );
+  expect(correctionOperations(permitted.body)).toEqual(expect.arrayContaining(['subject.propose', 'subject.terms']));
 
   const grant = {
     resource: { route: 0, id: GLOBAL_CONTEXT },
