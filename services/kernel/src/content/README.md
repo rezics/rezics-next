@@ -3777,3 +3777,5 @@ activity retries the same page frontier, while incomplete activity stays withhel
   Measure the complete consumer operation, including strict indexed plans, actual examined rows/blocks, SQL/control
   work, retained/materialized/serialized UTF-8 bytes and all owner phases. Keep producer repair measurements with
   its original owner; this journey measures how page consumers call it.
+
+Decision: Review destination pages always require an explicit Board selection, including for one eligible Board, and re-inspect that exact Realm/Board/Subject under current native read and thread-create policy before opening the existing composer.
