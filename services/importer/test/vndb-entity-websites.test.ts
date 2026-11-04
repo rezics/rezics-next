@@ -219,4 +219,13 @@ test('COPY headers keep integer link keys, overflow fails, and unsupported sites
     'vndb/staff_extlinks': [{ id: 's4', link: 99 }],
   });
   await expect(planCrossMediaSeed(missing)).rejects.toThrow();
+  const unresolvedOwner = familyTables({
+    'vndb/staff_extlinks': [{ id: 's99', link: 7 }],
+    'vndb/extlinks': [{ id: 7, site: 'website', value: 'https://example.org/unresolved' }],
+  });
+  const unresolvedPlan = await planCrossMediaSeed(unresolvedOwner);
+  expect(unresolvedPlan.entities.vndb.some((row) => row.key === 's99')).toBe(false);
+  expect(
+    unresolvedPlan.entities.vndb.find((row) => row.key === 's4')?.payload,
+  ).not.toMatchObject({ extlinks: [{ id: 7, value: 'https://example.org/unresolved' }] });
 });

@@ -53,7 +53,17 @@ async function tempCache(): Promise<{ cacheRoot: string; dispose: () => Promise<
   return { cacheRoot: join(temp, 'cache'), dispose: () => rm(temp, { recursive: true, force: true }) };
 }
 
-test('VNDB dump cache requires releases_titles and its header', () => {
+test('VNDB dump cache requires the exact external-link tables and COPY headers', () => {
+  expect(VNDB_DUMP_TABLES).toEqual(
+    expect.arrayContaining(['extlinks', 'staff_extlinks', 'producers_extlinks', 'releases_extlinks', 'vn_extlinks']),
+  );
+  expect(VNDB_DUMP_HEADERS).toMatchObject({
+    extlinks: ['id', 'site', 'value'],
+    staff_extlinks: ['id', 'link'],
+    producers_extlinks: ['id', 'link'],
+    releases_extlinks: ['id', 'link'],
+    vn_extlinks: ['id', 'link'],
+  });
   expect(VNDB_DUMP_TABLES).toContain('releases_titles');
 });
 

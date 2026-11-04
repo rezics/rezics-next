@@ -64,19 +64,58 @@ test('selected staff, producer and release websites become sourced schema:url fa
       record: {
         id: 'r1',
         title: 'Authored release',
+        releases_titles: [{ id: 'r1', lang: 'en', mtl: false, title: 'Authored release', latin: null }],
         releases_extlinks: [{ id: 'r1', link: 9 }],
         extlinks: [{ id: 9, site: 'website', value: 'https://example.org/release' }],
       },
     },
     context,
   );
-  expect(converter_revision).toBe('cross-media-entities@3');
+  expect(converter_revision).toBe('cross-media-entities@4');
   expect(staff.proposals[0] && staff.proposals[0].op === 'propose' ? staff.proposals[0].source.converter_revision : '').toBe(
     converter_revision,
   );
+  const previousRevision = convertCrossMediaEntity(
+    { external_id: 's4', record_revision: null, record: staff.normalizedRecord },
+    context,
+    { converterRevision: 'cross-media-entities@3' },
+  );
+  const previousBytes = JSON.stringify(previousRevision.proposals);
+  const previousReplay = convertCrossMediaEntity(
+    { external_id: 's4', record_revision: null, record: staff.normalizedRecord },
+    context,
+    { converterRevision: 'cross-media-entities@3' },
+  );
+  expect(JSON.stringify(previousReplay.proposals)).toBe(previousBytes);
+  expect(previousRevision.digest).toBe(staff.digest);
+  expect(previousRevision.proposals[0]?.key).not.toBe(staff.proposals[0]?.key);
   expect(urls(staff.proposals)).toEqual(['https://example.org/shared', 'https://example.org/staff']);
   expect(urls(producer.proposals)).toEqual(['https://example.org/shared']);
   expect(urls(release.proposals)).toEqual(['https://example.org/release']);
+  const individualProducer = convertCrossMediaEntity(
+    {
+      external_id: 'p2',
+      record_revision: null,
+      record: {
+        id: 'p2',
+        type: 'in',
+        name: 'Individual producer',
+        producers_extlinks: [{ id: 'p2', link: 10 }],
+        extlinks: [{ id: 10, site: 'website', value: 'https://example.org/individual' }],
+      },
+    },
+    context,
+  );
+  const individualCreate = convertCrossMediaEntity({
+    external_id: 'p2',
+    record_revision: null,
+    record: { id: 'p2', type: 'in', name: 'Individual producer' },
+  });
+  expect(individualCreate.proposals[0]?.op === 'create' ? individualCreate.proposals[0].subject.type : '').toBe(
+    'schema:Person',
+  );
+  expect(urls(individualProducer.proposals)).toEqual(['https://example.org/individual']);
+  citation(individualProducer.proposals, 'p2');
   expect(staff.normalizedRecord).toMatchObject({
     id: 's4',
     staff_extlinks: [
