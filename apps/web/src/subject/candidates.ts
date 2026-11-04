@@ -90,22 +90,34 @@ export type CandidateActions = { state: 'available'; context: string; operations
 export type CandidateAuthority = {
   actions: CandidateActions;
   disclosure: 'available' | 'unreadable' | 'unavailable';
+  viewerActions?: { context: ViewerActionComponent; subjects: Record<string, ViewerActionComponent> };
 };
 
-/** One native projection for the mounted operations and at most three exact participants.
- * These are owner-resolved disclosure references, never browser-selected authority anchors.
- */
+const unavailableViewerActions = (reason: 'not-found' | 'unavailable' = 'unavailable'): ViewerActionComponent => ({
+  state: 'unavailable',
+  reason,
+});
+
+/** One native projection for mounted candidate operations and at most three exact Subject references. */
 export async function readCandidateAuthority(
   client: KernelClient,
   authorization: string,
   context: string,
   subjects: readonly string[] = [],
 ): Promise<CandidateAuthority> {
-  const unavailable: CandidateAuthority = { actions: { state: 'unavailable' }, disclosure: 'unavailable' };
+  const subjectIds = subjects.length <= 3 ? [...new Set(subjects)] : [];
+  const unavailable: CandidateAuthority = {
+    actions: { state: 'unavailable' },
+    disclosure: 'unavailable',
+    viewerActions: {
+      context: unavailableViewerActions(),
+      subjects: Object.fromEntries(subjectIds.map((id) => [id, unavailableViewerActions()])),
+    },
+  };
   if (subjects.length > 3) return unavailable;
   const references = [
     { type: 'semantic.context', id: context },
-    ...[...new Set(subjects)].map((id) => ({ type: 'semantic.subject', id })),
+    ...subjectIds.map((id) => ({ type: 'semantic.subject', id })),
   ];
   try {
     const result = await client.viewerActions.post(
@@ -113,34 +125,80 @@ export async function readCandidateAuthority(
       { headers: { authorization }, fetch: { cache: 'no-store' } },
     );
     if (result.status !== 200 || !result.data || result.data.resources.length !== references.length) return unavailable;
-    const resources = references.map(({ type, id }) =>
-      result.data!.resources.filter((resource) => resource.type === type && resource.id === id),
-    );
-    if (resources.some((matches) => matches.length !== 1)) return unavailable;
-    const contextResource = resources[0]![0]!;
-    if (!('viewerActions' in contextResource)) return unavailable;
-    const entries = contextResource.viewerActions;
-    if (entries.length > 64 || entries.reduce((count, entry) => count + entry.operations.length, 0) > 256)
-      return unavailable;
+    const component = (type: string, id: string): ViewerActionComponent => {
+      const matches = result.data!.resources.filter((resource) => resource.type === type && resource.id === id);
+      if (matches.length !== 1) return unavailableViewerActions();
+      const resource = matches[0]!;
+      if (!('viewerActions' in resource)) return unavailableViewerActions('not-found');
+      const entries = resource.viewerActions;
+      if (
+        entries.length > 64 ||
+        entries.reduce((count, entry) => count + entry.operations.length, 0) > 256 ||
+        entries.some(
+          (entry) =>
+            typeof entry.action !== 'string' ||
+            !Array.isArray(entry.operations) ||
+            entry.operations.some((operation) => typeof operation !== 'string'),
+        )
+      )
+        return unavailableViewerActions();
+      return {
+        state: 'available',
+        actions: entries.map((entry) => ({ action: entry.action, operations: [...entry.operations] })),
+      };
+    };
     const bindings: Record<string, string> = {
       'subject.propose': 'statement:propose',
       'subject.accept_candidate': 'context:accept',
       'subject.reject_candidate': 'context:accept',
       'subject.adopt': 'context:adopt',
     };
+    const nativeContextActions = component('semantic.context', context);
+    const contextActions: ViewerActionComponent =
+      nativeContextActions.state === 'available'
+        ? {
+            state: 'available',
+            actions: nativeContextActions.actions.flatMap((entry) => {
+              const operations = entry.operations.filter((operation) => bindings[operation] === entry.action);
+              return operations.length ? [{ action: entry.action, operations }] : [];
+            }),
+          }
+        : nativeContextActions;
+    const subjectActions = Object.fromEntries(
+      subjectIds.map((id) => {
+        const native = component('semantic.subject', id);
+        if (native.state !== 'available') return [id, native];
+        return [
+          id,
+          {
+            state: 'available' as const,
+            actions: native.actions.flatMap((entry) => {
+              const operations =
+                entry.action === 'subject:read'
+                  ? entry.operations.filter((operation) => operation === 'subject.list_candidates')
+                  : [];
+              return operations.length ? [{ action: entry.action, operations }] : [];
+            }),
+          },
+        ];
+      }),
+    );
+    const viewerActions = { context: contextActions, subjects: subjectActions };
+    if (contextActions.state !== 'available') return { ...unavailable, viewerActions };
+    const unreadable = Object.values(subjectActions).some(
+      (actions) => actions.state === 'unavailable' && actions.reason === 'not-found',
+    );
+    const subjectUnavailable = Object.values(subjectActions).some(
+      (actions) => actions.state === 'unavailable' && actions.reason !== 'not-found',
+    );
     return {
       actions: {
         state: 'available',
         context,
-        operations: [
-          ...new Set(
-            entries.flatMap((entry) => entry.operations.filter((operation) => bindings[operation] === entry.action)),
-          ),
-        ],
+        operations: [...new Set(contextActions.actions.flatMap((entry) => entry.operations))],
       },
-      disclosure: resources.slice(1).some(([resource]) => !resource || !('viewerActions' in resource))
-        ? 'unreadable'
-        : 'available',
+      disclosure: unreadable ? 'unreadable' : subjectUnavailable ? 'unavailable' : 'available',
+      viewerActions,
     };
   } catch {
     return unavailable;

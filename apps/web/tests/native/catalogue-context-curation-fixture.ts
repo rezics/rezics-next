@@ -28,6 +28,8 @@ export type CatalogueContextCurationFixture = {
   bobAccountId: string;
   journey: CatalogueContextSubject;
   seams: CatalogueContextSubject;
+  grantContext(accountId: string, contextId: string, actions: string[]): Promise<void>;
+  revokeContext(accountId: string, contextId: string, actions: string[]): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -67,6 +69,29 @@ async function grant(
       persona,
     ),
     `grant ${actions.join(',')}`,
+  );
+}
+
+async function revoke(stack: NativeWebStack, accountId: string, resourceId: string, actions: string[]) {
+  const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
+  if (route === null) throw new Error(`Cannot revoke on unroutable ${resourceId}`);
+  await json(
+    await stack.kernel(
+      '/v1/grants:revoke',
+      {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          resource: { route, id: resourceId },
+          subject: { kind: 'account', id: accountId },
+          actions,
+          valid: '(,)',
+        }),
+      },
+      'governor',
+    ),
+    `revoke ${actions.join(',')}`,
+    200,
   );
 }
 
@@ -144,6 +169,8 @@ export async function createCatalogueContextCurationFixture(): Promise<Catalogue
       bobAccountId: bob.accountId,
       journey,
       seams,
+      grantContext: (accountId, contextId, actions) => grant(stack, accountId, contextId, actions),
+      revokeContext: (accountId, contextId, actions) => revoke(stack, accountId, contextId, actions),
       async close() {
         await auth?.stop();
         await stack.stop();
