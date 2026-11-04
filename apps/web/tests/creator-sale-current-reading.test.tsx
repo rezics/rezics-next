@@ -153,7 +153,7 @@ for (const size of [1, 10, 20])
       expect(document.activeElement?.id).toBe('creator-sale-inspection-heading');
       expect(inspection()?.textContent).toContain(creatorSaleFixture.createdAt);
       const links = [...inspection()!.querySelectorAll('a')];
-      expect(links).toHaveLength(2);
+      expect(links).toHaveLength(3);
       expect(links[0]?.getAttribute('href')).toBe(`/en/offers/${creatorSaleFixture.offerId}`);
       expect(host.innerHTML).not.toContain('/orders/');
       expect(read).not.toHaveBeenCalled();
@@ -270,3 +270,70 @@ for (const size of [1, 10, 20])
       host.remove();
     }
   });
+
+test('received-page review keeps exact identities, bounded selections and original order without reads', async () => {
+  const { CreatorSalesPage } = await import('../src/checkout/creator-sales-page');
+  const read = spyOn(reads, 'readCreatorSalesCurrent');
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  const sales = Array.from({ length: 4 }, (_, i) => ({
+    ...creatorSaleFixture,
+    orderId: `019a2100-0000-7000-8000-${String(i + 100).padStart(12, '0')}`,
+    offerId: i < 2 ? creatorSaleFixture.offerId : `019a2100-0000-7000-8000-${String(i + 200).padStart(12, '0')}`,
+    title: 'Same captured title',
+    settlement: (['paid', 'pending', 'failed', 'unknown'] as const)[i]!,
+  }));
+  const page = { kind: 'ready', sales, next: 'older+/=', projectionState: 'ready' } as const;
+  const click = async (label: string) => {
+    const button = [...host.querySelectorAll('button')].find((element) => element.textContent === label);
+    if (!button) throw new Error(`Missing button: ${label}`);
+    await act(async () => button.click());
+  };
+  const choose = async (id: string, value: string) => {
+    const field = host.querySelector<HTMLSelectElement>(`#${id}`)!;
+    await act(async () => {
+      field.value = value;
+      field.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+  };
+  const rows = () => [...host.querySelectorAll('[data-settlement]')];
+  try {
+    await act(async () => root.render(<CreatorSalesPage page={page} locale="en" />));
+    expect(host.textContent).toContain('Showing 4 of 4 received sales');
+    expect(rows()).toHaveLength(4);
+    await act(async () => rows()[1]!.querySelector('button')!.click());
+    expect(host.querySelector('#creator-sale-inspection')?.textContent).toContain(sales[1]!.orderId);
+    expect(host.querySelector('#creator-sale-inspection')?.textContent).not.toContain(sales[0]!.orderId);
+    for (let i = 0; i < 3; i++)
+      await act(async () => rows()[i]!.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+    expect(rows()[3]!.querySelector<HTMLInputElement>('input[type=checkbox]')!.disabled).toBe(true);
+    await choose('creator-sales-review-offer', creatorSaleFixture.offerId);
+    expect(rows()).toHaveLength(2);
+    expect(host.textContent).toContain('Showing 2 of 4 received sales');
+    expect(host.textContent).toContain('1 selected sales are outside the current page view');
+    await choose('creator-sales-review-settlement', 'failed');
+    expect(rows()).toHaveLength(0);
+    expect(host.textContent).toContain('No matching sales in this page view');
+    expect(host.textContent).not.toContain('No sales recorded yet');
+    expect(host.textContent).toContain('Showing 0 of 4 received sales');
+    await click('Compare selections');
+    const comparison = host.querySelector('#creator-sales-comparison')!;
+    expect(comparison.querySelectorAll('article')).toHaveLength(3);
+    for (const sale of sales.slice(0, 3)) expect(comparison.textContent).toContain(sale.orderId);
+    expect(comparison.textContent).not.toContain(sales[3]!.orderId);
+    await click('Close comparison');
+    await click('Reset page view');
+    expect(rows()).toHaveLength(4);
+    rows().forEach((row, i) => expect(row.textContent).toContain(sales[i]!.orderId));
+    expect(host.textContent).toContain('3 of 3 sale references selected');
+    await act(async () => root.render(<CreatorSalesPage page={{ ...page }} source={{}} locale="en" />));
+    expect(host.textContent).toContain('0 of 3 sale references selected');
+    expect(host.querySelector('#creator-sale-inspection')).toBeNull();
+    expect(read).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+    read.mockRestore();
+    host.remove();
+  }
+});

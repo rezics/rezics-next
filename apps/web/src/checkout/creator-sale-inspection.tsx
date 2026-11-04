@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import type { CreatorSale } from './creator-sales';
-import { creatorSaleDestinations } from './creator-sale-destinations';
+import { creatorSaleDestinations, creatorSaleStatementDestination } from './creator-sale-destinations';
 import { CreatorSaleReturn } from './creator-sale-return';
 import { formatMinorAmount } from './money';
 
@@ -29,13 +29,22 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-type Props = { sale: CreatorSale; locale: string; close: () => void; isCurrent: () => boolean };
+type Props = {
+  sale: CreatorSale;
+  locale: string;
+  close: () => void;
+  isCurrent: () => boolean;
+  prepareDeparture?: ((href: string) => boolean) | undefined;
+  returned?: boolean | undefined;
+  cursor?: string | undefined;
+};
 
 /** One supplied historical observation. Opening, copying and link preparation perform no reads. */
-export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props) {
+export function CreatorSaleInspection({ sale, locale, close, isCurrent, prepareDeparture, returned, cursor }: Props) {
   const heading = useRef<HTMLHeadingElement>(null);
   const live = useRef({ isCurrent, mounted: true, attempt: 0 });
   live.current.isCurrent = isCurrent;
+  const [referenceKind, setReferenceKind] = useState<'sale' | 'offer' | 'work' | 'terms'>('sale');
   const [copy, setCopy] = useState<'idle' | 'pending' | 'copied' | 'failed'>('idle');
   useLayoutEffect(() => {
     live.current.mounted = true;
@@ -47,6 +56,43 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
   }, []);
   const destinations = creatorSaleDestinations(sale, locale);
   const amount = formatMinorAmount(locale, sale.currency, sale.unitAmountMinor, sale.moneyUnit);
+  const referenceLabel =
+    referenceKind === 'sale'
+      ? m.creator_sales_reference()
+      : referenceKind === 'offer'
+        ? m.creator_sale_offer_reference()
+        : referenceKind === 'work'
+          ? m.creator_sale_work_reference()
+          : m.creator_sale_terms();
+  const copyLabel =
+    referenceKind === 'sale'
+      ? m.creator_sale_copy()
+      : referenceKind === 'offer'
+        ? m.creator_review_copy_offer()
+        : referenceKind === 'work'
+          ? m.creator_review_copy_work()
+          : m.creator_review_copy_terms();
+  const referenceText =
+    referenceKind === 'terms'
+      ? [
+          `${m.creator_sales_reference()}: ${sale.orderId}`,
+          `${m.creator_review_captured_title()}: ${sale.title}`,
+          `${m.creator_sale_offer_reference()}: ${sale.offerId}`,
+          `${m.creator_sale_work_reference()}: ${sale.targetSubjectId}`,
+          `${m.creator_review_creation_observation()}: ${sale.createdAt}`,
+          `${m.creator_sale_unit_price()}: ${amount ?? m.statements_amount_unavailable()}`,
+          `${m.creator_sale_currency()}: ${sale.currency.toUpperCase()}`,
+          `${m.creator_sale_raw_amount()}: ${sale.unitAmountMinor}`,
+          `${m.creator_sale_tax()}: ${sale.taxBehavior === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}`,
+          `${m.creator_review_unit_provenance()}: ${
+            sale.moneyUnit
+              ? `${sale.moneyUnit.system} / ${sale.moneyUnit.factsVersion} / ${sale.moneyUnit.exponent}`
+              : m.creator_review_metadata_unknown()
+          }`,
+          `${m.creator_sale_settlement()}: ${creatorSaleSettlementLabel(sale.settlement)}`,
+          m.creator_review_terms_copy_hint(),
+        ].join('\n')
+      : `${referenceLabel}: ${referenceKind === 'sale' ? sale.orderId : referenceKind === 'offer' ? sale.offerId : sale.targetSubjectId}`;
   const copyReference = async () => {
     if (!live.current.isCurrent()) return;
     const attempt = ++live.current.attempt;
@@ -55,7 +101,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
     try {
       if (!globalThis.navigator?.clipboard?.writeText) throw new Error('Clipboard unavailable');
       // The copied text identifies this as a sale reference, never a receipt or buyer-order link.
-      await navigator.clipboard.writeText(`${m.creator_sales_reference()}: ${sale.orderId}`);
+      await navigator.clipboard.writeText(referenceText);
       if (current()) setCopy('copied');
     } catch {
       if (current()) setCopy('failed');
@@ -78,7 +124,13 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
           {m.creator_sale_inspection()}
         </h2>
         <p className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]">{sale.title}</p>
+        <p className="text-sm text-muted-foreground">{m.creator_review_recorded_title_hint()}</p>
       </div>
+      {returned && (
+        <p role="status" className="text-sm">
+          {m.creator_review_returned()}
+        </p>
+      )}
       <section className="space-y-3" aria-labelledby="creator-sale-terms">
         <h3 id="creator-sale-terms" className="font-medium">
           {m.creator_sale_terms()}
@@ -101,6 +153,25 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
             : m.creator_sale_unit_unknown()}
         </p>
       </section>
+      <details className="min-w-0 rounded-lg border p-4">
+        <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.creator_review_historical_detail()}</summary>
+        <div className="space-y-4 pt-4">
+          <p className="text-sm text-muted-foreground">{m.creator_review_historical_terms_hint()}</p>
+          <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <Fact label={m.creator_review_unit_system()}>
+              {sale.moneyUnit?.system ?? m.creator_review_metadata_unknown()}
+            </Fact>
+            <Fact label={m.creator_review_unit_version()}>
+              {sale.moneyUnit?.factsVersion ?? m.creator_review_metadata_unknown()}
+            </Fact>
+            <Fact label={m.creator_review_unit_digits()}>
+              {sale.moneyUnit ? String(sale.moneyUnit.exponent) : m.creator_review_metadata_unknown()}
+            </Fact>
+            <Fact label={m.creator_review_observation_timezone()}>UTC</Fact>
+          </dl>
+          <p className="text-sm text-muted-foreground">{m.creator_review_timestamp_hint()}</p>
+        </div>
+      </details>
       <section className="space-y-3 border-t pt-4" aria-labelledby="creator-sale-settlement">
         <h3 id="creator-sale-settlement" className="font-medium">
           {m.creator_sale_settlement()}
@@ -134,16 +205,55 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
             <span className="font-mono">{sale.targetSubjectId}</span>
           </Fact>
         </dl>
+        <div className="min-w-0 space-y-2">
+          <label htmlFor="creator-sale-reference-kind" className="block text-sm font-medium">
+            {m.creator_review_reference_kind()}
+          </label>
+          <select
+            id="creator-sale-reference-kind"
+            value={referenceKind}
+            disabled={copy === 'pending'}
+            onChange={(event) => {
+              if (!isCurrent()) return;
+              const value = event.currentTarget.value;
+              if (value !== 'sale' && value !== 'offer' && value !== 'work' && value !== 'terms') return;
+              live.current.attempt++;
+              setReferenceKind(value);
+              setCopy('idle');
+            }}
+            className="min-h-11 w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm"
+          >
+            <option value="sale">{m.creator_sales_reference()}</option>
+            <option value="offer">{m.creator_sale_offer_reference()}</option>
+            <option value="work">{m.creator_sale_work_reference()}</option>
+            <option value="terms">{m.creator_sale_terms()}</option>
+          </select>
+        </div>
+        <details className="min-w-0 rounded-lg border p-3">
+          <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium">
+            {m.creator_review_reference_preview()}
+          </summary>
+          <pre className="min-w-0 select-text whitespace-pre-wrap pt-3 font-mono text-sm [overflow-wrap:anywhere]">
+            {referenceText}
+          </pre>
+          <p className="pt-3 text-sm text-muted-foreground">{m.creator_review_terms_copy_hint()}</p>
+        </details>
         <Button
           variant="outline"
           className="min-h-11 whitespace-normal"
           disabled={copy === 'pending'}
           onClick={copyReference}
         >
-          {copy === 'pending' ? m.creator_sale_copying() : m.creator_sale_copy()}
+          {copy === 'pending' ? m.creator_sale_copying() : copyLabel}
         </Button>
         <p role="status" className="text-sm">
-          {copy === 'copied' ? m.creator_sale_copied() : copy === 'failed' ? m.creator_sale_copy_failed() : ''}
+          {copy === 'copied'
+            ? referenceKind === 'sale'
+              ? m.creator_sale_copied()
+              : m.creator_review_reference_copied()
+            : copy === 'failed'
+              ? m.creator_sale_copy_failed()
+              : ''}
         </p>
         <p className="text-sm text-muted-foreground">{m.creator_sale_reference_hint()}</p>
       </section>
@@ -154,6 +264,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
             [
               [destinations.offer, m.creator_sale_open_offer()],
               [destinations.work, m.creator_sale_open_work()],
+              [creatorSaleStatementDestination(locale), m.statements_heading()],
             ] as const
           ).map(([href, label]) =>
             href ? (
@@ -166,7 +277,20 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
                   <a
                     href={href}
                     onClick={(event) => {
-                      if (!isCurrent()) event.preventDefault();
+                      if (!isCurrent()) {
+                        event.preventDefault();
+                        return;
+                      }
+                      if (
+                        event.button === 0 &&
+                        !event.metaKey &&
+                        !event.ctrlKey &&
+                        !event.shiftKey &&
+                        !event.altKey &&
+                        prepareDeparture &&
+                        !prepareDeparture(href)
+                      )
+                        event.preventDefault();
                     }}
                   />
                 }
@@ -181,7 +305,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
           )}
         </div>
       </nav>
-      <CreatorSaleReturn close={close} />
+      <CreatorSaleReturn close={close} returned={returned} locale={locale} cursor={cursor} orderId={sale.orderId} />
     </section>
   );
 }

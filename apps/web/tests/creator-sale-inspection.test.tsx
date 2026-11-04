@@ -77,3 +77,54 @@ test('native continuation, preparation and stale recovery preserve cursor and em
   expect(renderPage({ ...empty, projectionState: 'preparing' })).not.toContain('No sales');
   expect(renderPage({ kind: 'stale' }, 'current+/=')).toContain('href="/en/creator/sales"');
 });
+
+test('comparison keeps payment facts independent and incompatible or unknown money separate', async () => {
+  const { CreatorSalesComparison } = await import('../src/checkout/creator-sales-review/comparison');
+  const { recordedUnitRelationship } = await import('../src/checkout/creator-sales-review/model');
+  const second = {
+    ...creatorSaleFixture,
+    orderId: '019a2100-0000-7000-8000-000000000099',
+    settlement: 'pending' as const,
+    currency: 'eur',
+  };
+  const renderComparison = (sale = second) =>
+    renderToStaticMarkup(
+      <CreatorSalesComparison
+        locale="en"
+        reading={{
+          comparisonSales: [creatorSaleFixture, sale],
+          closeComparison() {},
+          select() {},
+          toggleComparison() {},
+        }}
+      />,
+    );
+  const html = renderComparison();
+  for (const text of [
+    creatorSaleFixture.orderId,
+    second.orderId,
+    creatorSaleFixture.targetSubjectId,
+    'different currencies',
+    'Payment pending',
+    'does not establish available funds',
+    'not confirmed earnings',
+    'stripe-api',
+    'stripe-money-v1',
+    'Before tax',
+  ])
+    expect(html).toContain(text);
+  expect(html).not.toContain('$25.98');
+  expect(html).not.toContain('/orders/');
+  expect(renderComparison({ ...second, moneyUnit: null })).toContain('At least one recorded unit is unknown');
+  expect(renderComparison({ ...second, currency: 'usd' })).toContain('matching recorded currency and unit metadata');
+  expect(
+    recordedUnitRelationship([
+      creatorSaleFixture,
+      {
+        ...second,
+        currency: 'usd',
+        moneyUnit: { system: 'stripe-api', factsVersion: 'stripe-money-v1', exponent: 0 },
+      },
+    ]),
+  ).toBe('different-units');
+});
