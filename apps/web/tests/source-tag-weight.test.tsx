@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import type { Related, Subject } from '../src/subject/types';
@@ -69,14 +70,19 @@ function readBody(page: Awaited<ReturnType<typeof loadSubjectPage>>): { subject:
 }
 
 function render(page: SubjectPageData, spoilerLevel: 0 | 1 | 2) {
+  const client = new QueryClient();
   return renderToString(
-    createElement(SubjectPage, {
-      page,
-      locale: 'en',
-      messages: pageMessages,
-      reader: { spoilerLevel, suitability: 'blur' },
-      renderJsonLd: false,
-    } as never),
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(SubjectPage, {
+        page,
+        locale: 'en',
+        messages: pageMessages,
+        reader: { spoilerLevel, suitability: 'blur' },
+        renderJsonLd: false,
+      } as never),
+    ),
   );
 }
 
@@ -97,8 +103,8 @@ test('public tag chips use the disclosed Concept label and destination, keep sou
     taggedStatement('0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f42', hiddenTag, '+2.3'),
     taggedStatement('0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f43', spoilerTag, '+2.1', 2),
   ];
-  related[tag] = { labels: { en: 'Shared tag' } } as Related[string];
-  related[spoilerTag] = { labels: { en: 'Late story tag' } } as Related[string];
+  related[tag] = { type: 'skos:Concept', labels: { en: 'Shared tag' } } as Related[string];
+  related[spoilerTag] = { type: 'skos:Concept', labels: { en: 'Late story tag' } } as Related[string];
 
   const safe = render(loaded.page, 0);
   const safeText = text(safe);
@@ -109,9 +115,11 @@ test('public tag chips use the disclosed Concept label and destination, keep sou
   expect(safeText).not.toContain('2.3 / 3');
   expect(safeText).toContain('2.59999990463257 / 3');
   expect(safe).toContain('https://api.vndb.org/kana#post-vn');
-  expect(safe).toContain(`href="/en/subjects/${tag}/shared-tag"`);
-  const visibleTagList = /<ul[^>]*data-slot="subject-tags"[^>]*>([\s\S]*?)<\/ul>/u.exec(safe)?.[1] ?? '';
-  expect(visibleTagList.match(/data-slot="source-tag-weight" data-state="available"/gu)).toHaveLength(1);
+  const conceptHref = new RegExp(`href="([^"]*/subjects/${tag}/shared-tag[^\"]*)"`, 'u').exec(safe)?.[1];
+  expect(conceptHref).toBeDefined();
+  expect(new URL(conceptHref!, 'https://site.test').searchParams.has('returnTo')).toBe(true);
+  expect(safe.match(/data-slot="source-tag-weight" data-state="available"/gu)).toHaveLength(1);
+  expect(safe.match(/data-slot="source-tag-weight" data-state="absent"/gu)).toHaveLength(1);
 
   const revealed = render(loaded.page, 2);
   const revealedText = text(revealed);
