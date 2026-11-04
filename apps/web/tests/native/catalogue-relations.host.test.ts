@@ -172,6 +172,49 @@ describe('native catalogue relation contribution', () => {
     expect(fixture.movie.type).toBe('schema:Movie');
     expect(fixture.person.type).toBe('schema:Person');
     expect(fixture.firstRole.type).toBe('wd:Q95074');
+    const account = await fixture.stack.authPersona('alice');
+    const grant = async (action: string) => {
+      const result = await fixture.stack.kernel(
+        '/v1/grants',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'idempotency-key': `"${crypto.randomUUID()}"` },
+          body: JSON.stringify({
+            resource: { route: 0, id: '00000000-0000-8000-8000-000000000000' },
+            subject: { kind: 'account', id: account.accountId },
+            actions: [action],
+            valid: '(,)',
+          }),
+        },
+        'governor',
+      );
+      expect(result.status).toBe(201);
+    };
+    const confirmAction = async (action: string) => {
+      await page.getByRole('button', { name: action, exact: true }).click();
+      await page
+        .getByRole('group', { name: `Confirm: ${action}` })
+        .getByRole('button', { name: action, exact: true })
+        .click();
+    };
+    // Each entry uses its own current native permission, confirmation and exact readback.
+    await grant('context:accept');
+    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await page.getByRole('button', { name: 'Review suggestion', exact: true }).click();
+    await confirmAction('Accept suggestion');
+    const secondSlot = { property: voiceCredit, target: fixture.person.id, key: fixture.secondRole.id };
+    const decided = await readSlotCandidates(fixture.stack, fixture.movie.id, secondSlot);
+    expect(decided[0]?.id).toBe(second[0]?.id);
+    expect(decided[0]?.decision).toBe('accepted');
+    expect(await readPublicStatements(fixture.stack, fixture.movie.id, voiceCredit)).toEqual([]);
+    await playExpect(page.getByRole('button', { name: 'Use this suggestion', exact: true })).toBeDisabled();
+    await grant('context:adopt');
+    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await page.getByRole('button', { name: 'Review suggestion', exact: true }).click();
+    await confirmAction('Use this suggestion');
+    const selected = await readPublicStatements(fixture.stack, fixture.movie.id, voiceCredit);
+    expect(selected.map((item) => item.id)).toEqual([second[0]!.id]);
+
     await page.close();
   });
 });

@@ -3,6 +3,7 @@ import { relationFixture, relationProperty, relationActor, relationRole } from '
 import { candidateContext } from '../src/subject/candidates';
 import {
   relationFields,
+  relationDraftWithinBounds,
   validRelationSlot,
   type RelationConfirmation,
   type RelationTypeDescriptor,
@@ -286,4 +287,20 @@ test('relationship eligibility batches exact disclosure with separate mounted op
     context: candidateContext,
     operations: [],
   });
+});
+
+test('relationship intent keeps native statement counts and byte caps before any current-authority hydration', async () => {
+  const fixture = relationFixture();
+  expect(relationDraftWithinBounds(fixture.draft)).toBe(true);
+  const oversized = { ...fixture.draft, qualifiers: Array.from({ length: 17 }, () => fixture.draft.qualifiers[0]!) };
+  expect(relationDraftWithinBounds(oversized)).toBe(false);
+  expect(
+    await fixture.transport.propose({
+      id: fixture.id,
+      slot: fixture.slot,
+      key: crypto.randomUUID(),
+      statement: oversized,
+    }),
+  ).toEqual({ ok: false, reason: 'invalid' });
+  expect(fixture.calls).toHaveLength(0);
 });
