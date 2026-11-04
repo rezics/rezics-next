@@ -472,6 +472,9 @@ test('The default operator-transfer page supports request and acceptance file ha
     expect(saved()).toEqual(beforeImport);
     expect(host.querySelector<HTMLInputElement>('#transfer-confirm')!.checked).toBe(false);
     expect(mutations).toHaveLength(writesBeforeImport);
+    const beforeSourceAdvice = reads;
+    await click(m.auth_transfer_review());
+    expect(reads).toBe(beforeSourceAdvice + 1);
     await confirm();
     await click(m.auth_transfer_submit());
     expect(mutations).toHaveLength(writesBeforeImport + 2);
