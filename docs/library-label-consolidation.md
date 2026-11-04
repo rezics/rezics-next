@@ -92,6 +92,16 @@ remains finite, addressed and subject to current identity, cap and authority. An
 expiry, bounded per-owner admission and shared terminal/expiry cleanup. The journey grants no Entry state, Session,
 follow, licence or publication, and changes no imported evidence or public snapshot.
 
+## Receiving interface
+
+Decision: each requested review page belongs to one in-memory visit with an immutable ordered selection; any
+inconsistent evidence retires that visit and requires a new observation. The Web review accumulator retains exact
+null observations, requires every bounded page and refuses confirmation of any non-admissible item. Its request
+and response types derive from the installed root `KernelClient`; the adapter invokes only generated methods.
+The current-owner private request envelope must supply headers and capture current reader/exposure before each
+request. Retirement clears retained evidence. This foundation is not yet mounted on the Labels or shelf surfaces;
+confirmation recovery, results, locale strings and complete native growth coverage remain implementation work.
+
 ## Cost and verification boundary
 
 Review performs four fixed owner snapshots, six exact label metadata probes, two partition probes and native time
