@@ -559,10 +559,9 @@ test('independent publication creation, local corrections, immutable recovery an
     const recoveryButton = () =>
       scope().getByRole('button', { name: m.catalogue_create_review_new() }) as HTMLButtonElement;
     expect(recoveryButton().disabled).toBe(true);
-    expect(scope().getByRole('option', { name: stagedRelationLabel })).toBeDefined();
-    expect((scope().getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement).value).toBe(
-      'bf:hasPart',
-    );
+    const stagedRelation = scope().getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement;
+    expect([...stagedRelation.options].some((option) => option.textContent === stagedRelationLabel)).toBe(true);
+    expect(stagedRelation.value).toBe('bf:hasPart');
     expect(article().textContent).toContain('"ja"');
     expect(input(m.catalogue_create_language()).value).toBe('en-GB');
     expect(urlIn(workSection()).value).toBe('https://publisher.example/edition');
