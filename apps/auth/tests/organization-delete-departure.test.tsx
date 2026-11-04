@@ -18,6 +18,8 @@ const second = '30000000-0000-0000-0000-000000000000';
 const body = { account_id: human, client_id: session('delete').clientId, scope: session('delete').scopes };
 const ready = (id: string): OrganizationDeletionRead => ({
   kind: 'ready',
+  humanAccountId: human,
+  action: 'confirm',
   account: { id, kind: 'organization', handle: id === first ? 'first' : 'second', displayName: null },
 });
 
@@ -116,7 +118,7 @@ test('accepted deletion releases an open departure prompt', async () => {
   await flush(() => page.calls[1]!.resolve(Response.json({ accountId: first })));
   expect(page.router.history.location.pathname).toBe('/away');
   expect(document.querySelector('[role="alertdialog"]')).toBeNull();
-  expect(page.host.textContent).toContain('command was accepted');
+  expect(page.host.textContent).toContain('Organization deletion committed');
   expect(page.unload()).toBe(false);
 });
 

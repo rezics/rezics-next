@@ -161,7 +161,7 @@
   "auth_organization_conflict": "No se pudo crear la organización. Es posible que el identificador ya esté en uso.",
   "auth_organization_create": "Crear organización",
   "auth_organization_created": "Se ha creado la organización @{handle}.",
-  "auth_organization_delete_accepted": "Se aceptó la orden de eliminación de la organización. La limpieza por parte de todos los responsables de datos y de las copias compartidas o externas puede seguir pendiente. No se ha confirmado el borrado completo.",
+  "auth_organization_delete_accepted": "La eliminación de la organización se ha confirmado. La limpieza por parte de los responsables de datos y de las copias compartidas y externas puede seguir pendiente; el borrado completo no está confirmado.",
   "auth_organization_delete_changed": "La cuenta, la organización o la solicitud ha cambiado. Revisa la organización actual y confirma una nueva solicitud.",
   "auth_organization_delete_denied": "Las comprobaciones nativas de eliminación rechazaron esta solicitud. Resuelve las obligaciones de propiedad, las transferencias pendientes y las cuentas operadas antes de volver a confirmar.",
   "auth_organization_delete_effect": "La eliminación cierra esta organización de forma permanente y no se puede deshacer. La limpieza de datos nativos y de copias compartidas o externas puede seguir pendiente.",
@@ -460,5 +460,8 @@
   "auth_account_delete_advice_available": "El permiso actual permite solicitar la eliminación. Los requisitos y el permiso se comprobarán de nuevo al enviar.",
   "auth_account_delete_review_changed": "Tu cuenta o sesión ha cambiado. Recarga la revisión y vuelve a confirmar.",
   "auth_account_delete_submit_requirements": "El envío también comprueba los bloqueos temporales y el trabajo interno pendiente. Esta revisión no confirma que estén resueltos.",
-  "auth_account_delete_retention_limits": "Los registros que deban conservarse siguen las excepciones de retención adoptadas. Los respaldos y las copias externas son independientes; esta página no confirma su borrado."
+  "auth_account_delete_retention_limits": "Los registros que deban conservarse siguen las excepciones de retención adoptadas. Los respaldos y las copias externas son independientes; esta página no confirma su borrado.",
+  "auth_organization_delete_authentication_required": "Autentícate para revisar esta selección. El ID seleccionado no está verificado; la identidad de la organización, tu permiso y los requisitos de eliminación solo estarán disponibles tras la autorización.",
+  "auth_organization_delete_authenticate": "Autenticarse para revisar",
+  "auth_organization_delete_advice": "Esta revisión observa el permiso actual; no autoriza la eliminación ni verifica todos los requisitos. Al confirmar, se comprueban de nuevo la autenticación reciente y los requisitos actuales."
 }

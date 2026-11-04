@@ -1,52 +1,53 @@
 import { authPost } from './api';
-import {
-  loadAccountSession,
-  runAccountOperation,
-  type AccountOperationResult,
-  type AccountSessionResult,
-} from './account-operations';
-import { accountOperationProfile } from './account-operation-step-up';
+import { runAccountOperation, type AccountOperationResult } from './account-operations';
 import {
   isAccountId,
   readOrganizationDeleteUnknown,
+  readOrganizationDeleteStepUp,
+  organizationDeletePendingMatches,
   storeOrganizationDeleteUnknown,
   clearOrganizationDeleteUnknown,
   organizationDeleteReturnTo,
 } from './organization-delete-step-up';
 
-// Projection of the native private management read, never a public attribution
-// lookup or client-computed management decision. The adapter must authenticate
-// the real initiating human and apply current native read/manager authority.
+// One issuer observation binds the viewer and any privately admitted identity.
+// Browser selection and retained continuations grant no authority.
 export type OrganizationDeletionRead =
   | {
       kind: 'ready';
-      account: { id: string; kind: 'organization' | 'actor'; handle: string | null; displayName: string | null };
+      humanAccountId: string;
+      action: 'confirm';
+      account: { id: string; kind: 'organization'; handle: string | null; displayName: string | null };
     }
-  | { kind: 'signed-out' | 'hidden' | 'denied' | 'missing' | 'unavailable' };
-export type OrganizationDeletionReader = (input: {
-  humanAccountId: string;
-  organizationId: string;
-}) => Promise<OrganizationDeletionRead>;
+  | { kind: 'authentication-required'; humanAccountId: string; action: 'authenticate' }
+  | { kind: 'signed-out' | 'hidden' | 'denied' | 'missing' | 'changed' | 'unavailable' };
+export type OrganizationDeletionReader = (input: { organizationId: string }) => Promise<OrganizationDeletionRead>;
 
-// The browser selects only the organization. Auth binds the initiating human
-// from its real cookie session and returns only this closed native projection.
-export const readCurrentOrganizationForDeletion: OrganizationDeletionReader = async ({
-  humanAccountId,
-  organizationId,
-}) => {
+export const readCurrentOrganizationForDeletion: OrganizationDeletionReader = async ({ organizationId }) => {
   const result = await authPost('/account-management/organizations/deletion-review', { organizationId });
-  if (!result.ok)
-    return { kind: result.status === 401 ? 'signed-out' : result.status === 403 ? 'denied' : 'unavailable' };
+  if (!result.ok) return { kind: 'unavailable' };
   const body = result.body;
   if (!body || typeof body !== 'object' || !('kind' in body)) return { kind: 'unavailable' };
-  if (body.kind !== 'ready') {
-    return Object.keys(body).length === 1 && ['hidden', 'denied', 'missing', 'unavailable'].includes(String(body.kind))
-      ? { kind: body.kind as 'hidden' | 'denied' | 'missing' | 'unavailable' }
-      : { kind: 'unavailable' };
-  }
-  if (!('humanAccountId' in body) || body.humanAccountId !== humanAccountId) return { kind: 'denied' };
+  const keys = Object.keys(body).sort().join(',');
   if (
-    Object.keys(body).sort().join(',') !== 'account,humanAccountId,kind' ||
+    keys === 'kind' &&
+    ['signed-out', 'hidden', 'denied', 'missing', 'changed', 'unavailable'].includes(String(body.kind))
+  )
+    return { kind: body.kind } as OrganizationDeletionRead;
+  if (!('humanAccountId' in body) || !isAccountId(body.humanAccountId) || body.humanAccountId === organizationId)
+    return { kind: 'unavailable' };
+  if (
+    keys === 'action,humanAccountId,kind' &&
+    body.kind === 'authentication-required' &&
+    'action' in body &&
+    body.action === 'authenticate'
+  )
+    return { kind: 'authentication-required', humanAccountId: body.humanAccountId, action: 'authenticate' };
+  if (
+    keys !== 'account,action,humanAccountId,kind' ||
+    body.kind !== 'ready' ||
+    !('action' in body) ||
+    body.action !== 'confirm' ||
     !('account' in body) ||
     !body.account ||
     typeof body.account !== 'object'
@@ -67,6 +68,8 @@ export const readCurrentOrganizationForDeletion: OrganizationDeletionReader = as
     return { kind: 'unavailable' };
   return {
     kind: 'ready',
+    humanAccountId: body.humanAccountId,
+    action: 'confirm',
     account: { id: organizationId, kind: 'organization', handle: row.handle, displayName: row.displayName },
   };
 };
@@ -76,14 +79,12 @@ export type OrganizationDeletionTarget = {
   organizationId: string;
   handle: string | null;
   displayName: string | null;
-  session: Extract<AccountSessionResult, { kind: 'ready' }>;
 };
 export type OrganizationDeletionLoad =
   | { kind: 'ready'; target: OrganizationDeletionTarget }
-  | { kind: 'signed-out' | 'hidden' | 'denied' | 'missing' | 'unavailable' };
+  | { kind: 'authentication-required'; humanAccountId: string }
+  | { kind: 'signed-out' | 'hidden' | 'denied' | 'missing' | 'changed' | 'unavailable' };
 
-// The page owns browser liveness and pins the first discovered initiating human,
-// including when the following private read is unavailable.
 export type OrganizationDeletionReview = {
   humanAccountId?: string | undefined;
   isCurrent: () => boolean;
@@ -96,24 +97,20 @@ export async function loadOrganizationDeletion(
 ): Promise<OrganizationDeletionLoad> {
   if (review && !review.isCurrent()) return { kind: 'unavailable' };
   if (!isAccountId(organizationId)) return { kind: 'missing' };
-  const session = await loadAccountSession();
-  if (review && !review.isCurrent()) return { kind: 'unavailable' };
-  if (session.kind === 'signed-out') return session;
-  if (session.kind !== 'ready') return { kind: 'unavailable' };
-  if (review?.humanAccountId && review.humanAccountId !== session.accountId) return { kind: 'denied' };
-  if (review) review.humanAccountId = session.accountId;
-  if (!isAccountId(session.accountId) || session.accountId === organizationId) return { kind: 'denied' };
   try {
-    const result = await read({ humanAccountId: session.accountId, organizationId });
-    if (result.kind !== 'ready') return result;
+    const result = await read({ organizationId });
+    if (review && !review.isCurrent()) return { kind: 'unavailable' };
+    if (result.kind !== 'ready' && result.kind !== 'authentication-required') return result;
+    if (!isAccountId(result.humanAccountId) || result.humanAccountId === organizationId) return { kind: 'denied' };
+    if (review?.humanAccountId && review.humanAccountId !== result.humanAccountId) return { kind: 'changed' };
+    if (review) review.humanAccountId = result.humanAccountId;
+    if (result.kind === 'authentication-required') return { kind: result.kind, humanAccountId: result.humanAccountId };
     if (result.account.id !== organizationId || result.account.kind !== 'organization') return { kind: 'denied' };
-    // Only the current native read's allowlisted identity fields reach the page.
     return {
       kind: 'ready',
       target: {
-        humanAccountId: session.accountId,
+        humanAccountId: result.humanAccountId,
         organizationId,
-        session,
         handle: result.account.handle,
         displayName: result.account.displayName,
       },
@@ -144,20 +141,27 @@ export async function executeOrganizationDeletion(
   // approval and execution still revalidate every write operand independently.
   const current = await loadOrganizationDeletion(target.organizationId, read, review);
   if (review && !review.isCurrent()) return { ok: false, reason: 'failure' };
-  if (current.kind !== 'ready') return { ok: false, reason: current.kind === 'unavailable' ? 'unavailable' : 'denied' };
+  if (current.kind === 'authentication-required') return { ok: false, reason: 'step-up' };
+  if (current.kind !== 'ready')
+    return {
+      ok: false,
+      reason: current.kind === 'unavailable' ? 'unavailable' : current.kind === 'changed' ? 'changed' : 'denied',
+    };
   if (
     current.target.humanAccountId !== target.humanAccountId ||
     current.target.handle !== target.handle ||
     current.target.displayName !== target.displayName
   )
     return { ok: false, reason: 'changed' };
-  const expected = accountOperationProfile('delete');
+  // Released review I/O cannot replace an existing operation or unknown result.
+  if (readOrganizationDeleteUnknown(target.organizationId).kind !== 'absent') return { ok: false, reason: 'unknown' };
+  const continuation = readOrganizationDeleteStepUp();
   if (
-    current.target.session.clientId !== expected.client_id ||
-    current.target.session.scopes?.length !== 1 ||
-    current.target.session.scopes[0] !== expected.scope[0]
+    continuation.kind === 'invalid' ||
+    (continuation.kind === 'pending' &&
+      !organizationDeletePendingMatches(continuation.value, target.humanAccountId, target.organizationId, operationKey))
   )
-    return { ok: false, reason: 'step-up' };
+    return { ok: false, reason: 'changed' };
   // Persist a minimal uncertainty fence before sending. A crash or reload cannot
   // turn a lost response into a new approval. It contains no bearer or reference.
   const identity = {

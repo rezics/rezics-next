@@ -10,6 +10,8 @@ const second = '30000000-0000-0000-0000-000000000000';
 const body = { account_id: human, client_id: session('delete').clientId, scope: session('delete').scopes };
 const ready = (id: string): OrganizationDeletionRead => ({
   kind: 'ready',
+  humanAccountId: human,
+  action: 'confirm',
   account: { id, kind: 'organization', handle: id === first ? 'first' : 'second', displayName: null },
 });
 const content = (id: string, read: OrganizationDeletionReader) => (
@@ -32,13 +34,13 @@ test('unavailable review recovers the selected organization and freshly confirms
   expect(page.host.querySelector('form')).toBeNull();
   unavailable = false;
   await flush(() => button(page.host, 'Retry')!.click());
-  expect(selections).toEqual(Array(2).fill({ humanAccountId: human, organizationId: first }));
+  expect(selections).toEqual(Array(2).fill({ organizationId: first }));
   await confirm(page.host, 'wrong');
   expect(page.calls).toHaveLength(0);
   await confirm(page.host, '@FIRST');
   await flush(() => page.calls[0]!.resolve(approval()));
   await flush(() => page.calls[1]!.resolve(Response.json({ accountId: first })));
-  expect(page.host.textContent).toContain('command was accepted');
+  expect(page.host.textContent).toContain('Organization deletion committed');
   expect(page.host.textContent).toContain('complete erasure is not confirmed');
   expect(page.host.querySelector('form')).toBeNull();
 });
@@ -57,7 +59,7 @@ test('uncertainty retains the original identity through unavailable, missing, de
     expect(readOrganizationDeleteUnknown(first)).toEqual(saved);
     expect(page.host.querySelector('form')).toBeNull();
     expect(page.calls).toHaveLength(2);
-    expect(page.host.textContent).not.toContain('command was accepted');
+    expect(page.host.textContent).not.toContain('Organization deletion committed');
   }
   await page.render(
     <OrganizationDeleteContent
@@ -102,7 +104,7 @@ for (const phase of ['read', 'approval', 'execution', 'step-up'] as const)
               ),
       );
       expect(page.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
-      expect(page.host.textContent).not.toContain('command was accepted');
+      expect(page.host.textContent).not.toContain('Organization deletion committed');
       expect(assign).not.toHaveBeenCalled();
       const previousCalls = page.calls.length;
       await flush(() => newRead.resolve(ready(second)));
@@ -117,8 +119,15 @@ test('late initial reads and browser departure cannot restore private review; re
   const delayed = Promise.withResolvers<OrganizationDeletionRead>();
   const recovery = Promise.withResolvers<OrganizationDeletionRead>();
   let reads = 0;
+  let replaced = false;
   const read: OrganizationDeletionReader = async ({ organizationId }) =>
-    ++reads === 3 ? recovery.promise : organizationId === first ? delayed.promise : ready(second);
+    replaced
+      ? ({ ...ready(second), humanAccountId: first } as OrganizationDeletionRead)
+      : ++reads === 3
+        ? recovery.promise
+        : organizationId === first
+          ? delayed.promise
+          : ready(second);
   const page = await open(content(first, read), body);
   await page.render(content(second, read));
   await flush(() => delayed.resolve(ready(first)));
@@ -131,8 +140,47 @@ test('late initial reads and browser departure cannot restore private review; re
   await flush(leave);
   await flush(() => recovery.resolve(ready(second)));
   expect(page.host.querySelector('form')).toBeNull();
-  globalThis.fetch = (async () => Response.json({ ...body, account_id: first })) as typeof fetch;
+  replaced = true;
   await flush(() => button(page.host, 'Retry')!.click());
   expect(page.host.querySelector('form')).toBeNull();
-  expect(page.host.textContent).toContain('cannot currently manage');
+  expect(page.host.textContent).toContain('account, organization or request changed');
+});
+
+test('ordinary direct navigation authenticates without private facts, then renews explicit review with the same operation', async () => {
+  const { readOrganizationDeleteStepUp, selectOrganizationDeleteStepUp } =
+    await import('../src/organization-delete-step-up');
+  const { operationKeyFor } = await import('../src/account-operations');
+  const read: OrganizationDeletionReader = async () => ({
+    kind: 'authentication-required',
+    humanAccountId: human,
+    action: 'authenticate',
+  });
+  const page = await open(content(first, read), body);
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(page.host.textContent).toContain('selected ID is unverified');
+  expect(page.host.textContent).not.toContain('@first');
+  const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
+  try {
+    await flush(() => button(page.host, 'Authenticate to review')!.click());
+    expect(assign).toHaveBeenCalledTimes(1);
+    const saved = readOrganizationDeleteStepUp();
+    expect(saved).toMatchObject({
+      kind: 'pending',
+      value: {
+        humanAccountId: human,
+        organizationId: first,
+        operationKey: operationKeyFor({ kind: 'delete', accountId: first }, human),
+      },
+    });
+    expect(selectOrganizationDeleteStepUp(new URL(assign.mock.calls[0]![0], 'https://auth.test').search).kind).toBe(
+      'organization-delete',
+    );
+    await page.render(content(first, async () => ready(first)));
+    expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
+    expect(page.calls).toHaveLength(0);
+    await confirm(page.host, '@first');
+    expect(page.calls[0]!.body.operationKey).toBe(saved.kind === 'pending' ? saved.value.operationKey : 'missing');
+  } finally {
+    assign.mockRestore();
+  }
 });

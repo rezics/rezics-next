@@ -20,13 +20,20 @@ import { CommandUnavailableError, requireAccessDeadline } from './unavailable.ts
 
 export type OrganizationDeletionRead =
   | { kind: 'ready'; account: { id: string; kind: 'organization'; handle: string | null; displayName: string | null } }
-  | { kind: 'hidden' | 'denied' | 'missing' | 'unavailable' };
+  | { kind: 'hidden' | 'denied' | 'missing' | 'changed' | 'unavailable' };
 export interface OrganizationDeletionAccess {
   readOrganizationForDeletion(input: {
     human: SessionProof;
     organizationId: string;
     deadline: number;
   }): Promise<OrganizationDeletionRead>;
+}
+export interface OrganizationDeletionPageAccess extends OrganizationDeletionAccess {
+  readOrganizationDeletionPage(input: {
+    human: SessionProof;
+    organizationId: string;
+    deadline: number;
+  }): Promise<OrganizationDeletionRead | { kind: 'authentication-required' }>;
 }
 /** The management ENTRY authority already evaluates the installed deletion
  * formula. Reuse its private account source and native authority, without the
@@ -36,8 +43,29 @@ export function createOrganizationDeletionAccess(deps: {
   pool: Pool;
   access: Access;
   accessTokenForProof: AuthSessionPort['internal']['accessTokenForProof'];
-}): OrganizationDeletionAccess {
-  return {
+}): OrganizationDeletionPageAccess {
+  const source: OrganizationDeletionPageAccess = {
+    async readOrganizationDeletionPage(input) {
+      requireAccessDeadline(input.deadline);
+      const { human } = input;
+      if (
+        human.client_id !== AUTH_PAGE_OPERATION_CLIENT_ID ||
+        human.scope.length !== 1 ||
+        human.scope[0] !== AUTH_PAGE_OPERATION_SCOPES.delete[0] ||
+        human.amr.length !== 1 ||
+        !['pwd', 'pop'].includes(human.amr[0]!)
+      ) {
+        // Auth validates the live, unoperated human before and after this call.
+        // No selected account lookup, role evaluation or permission preparation.
+        return { kind: 'authentication-required' };
+      }
+      try {
+        return await source.readOrganizationForDeletion(input);
+      } catch (error) {
+        if (error instanceof AuthBindingDeniedError) return { kind: 'denied' };
+        throw error;
+      }
+    },
     async readOrganizationForDeletion({ human, organizationId, deadline }) {
       return within(deadline, async () => {
         requireAccessDeadline(deadline);
@@ -117,13 +145,20 @@ export function createOrganizationDeletionAccess(deps: {
             { account: target, relation: null },
             { deadline, time },
           );
-          if (actions.state === 'unavailable') return { kind: 'unavailable' };
-          const after = await snapshot();
+          let after: Awaited<ReturnType<typeof snapshot>>;
+          try {
+            after = await snapshot();
+          } catch (error) {
+            if (error instanceof CommandUnavailableError && ['fenced', 'moved'].includes(error.reason))
+              return { kind: 'changed' };
+            throw error;
+          }
           // The same private rows, lifecycle/floor and home epochs must survive
           // released Access preparation; include labels in that comparison.
           const stable = (value: unknown) =>
             JSON.stringify(value, (_, item) => (typeof item === 'bigint' ? item.toString() : item));
-          if (stable(before) !== stable(after)) return { kind: 'unavailable' };
+          if (stable(before) !== stable(after)) return { kind: 'changed' };
+          if (actions.state === 'unavailable') return { kind: 'unavailable' };
           if (!actions.operations.some((entry) => entry.operationId === 'auth.organization.delete'))
             return { kind: 'denied' };
           requireAccessDeadline(deadline);
@@ -142,4 +177,5 @@ export function createOrganizationDeletionAccess(deps: {
       });
     },
   };
+  return source;
 }

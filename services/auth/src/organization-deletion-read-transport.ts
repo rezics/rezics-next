@@ -10,7 +10,7 @@ export type OrganizationDeletionIdentity = {
 };
 export type OrganizationDeletionRead =
   | { kind: 'ready'; account: OrganizationDeletionIdentity }
-  | { kind: 'hidden' | 'denied' | 'missing' | 'unavailable' };
+  | { kind: 'hidden' | 'denied' | 'missing' | 'changed' | 'unavailable' };
 /** Private producer capability. The human comes only from Auth's live proof. */
 export interface OrganizationDeletionAccess {
   readOrganizationForDeletion(input: {
@@ -19,6 +19,18 @@ export interface OrganizationDeletionAccess {
     deadline: number;
   }): Promise<OrganizationDeletionRead>;
 }
+/** Trusted page composition only; ordinary readiness is never a workflow port. */
+export interface OrganizationDeletionPageAccess extends OrganizationDeletionAccess {
+  readOrganizationDeletionPage(input: {
+    human: SessionProof;
+    organizationId: string;
+    deadline: number;
+  }): Promise<OrganizationDeletionRead | { kind: 'authentication-required' }>;
+}
+export type OrganizationDeletionPage =
+  | { kind: 'authentication-required'; humanAccountId: string; action: 'authenticate' }
+  | { kind: 'ready'; humanAccountId: string; action: 'confirm'; account: OrganizationDeletionIdentity }
+  | { kind: 'signed-out' | 'hidden' | 'denied' | 'missing' | 'changed' | 'unavailable' };
 export const ORGANIZATION_DELETION_READ_PATH = '/account-management/organizations/deletion-review';
 export function organizationDeletionCaller(proof: SessionProof): boolean {
   return (
@@ -32,7 +44,7 @@ export function organizationDeletionCaller(proof: SessionProof): boolean {
 export function organizationDeletionReadTransport(
   service: AuthService,
   fallback: (request: Request) => Promise<Response>,
-  access: OrganizationDeletionAccess | undefined,
+  access: OrganizationDeletionPageAccess | undefined,
 ): (request: Request) => Promise<Response> {
   return async (request) => {
     const url = new URL(request.url);
@@ -59,44 +71,69 @@ export function organizationDeletionReadTransport(
         !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.organizationId)
       )
         throw new TransportDenied(400);
-      if (!access) throw new TransportDenied(503);
       const organizationId = body.organizationId;
       const deadline = Date.now() + 3000;
-      const result = await service.internal.withFreshHuman(
-        { headers: request.headers, fresh: false },
-        async (human) => {
-          if (!organizationDeletionCaller(human) || human.account_id === organizationId) throw new TransportDenied(403);
-          // Keep the exact session/profile live before and after all native I/O.
-          await service.internal.accessTokenForProof(human);
-          const read = await access.readOrganizationForDeletion({ human, organizationId, deadline });
-          await service.internal.accessTokenForProof(human);
-          if (Date.now() >= deadline) throw new TransportDenied(503);
-          if (read.kind !== 'ready') {
-            if (!['hidden', 'denied', 'missing', 'unavailable'].includes(read.kind)) throw new TransportDenied(503);
-            return { kind: read.kind };
-          }
-          const row = read.account;
-          if (
-            row.id !== organizationId ||
-            row.kind !== 'organization' ||
-            (row.handle !== null && typeof row.handle !== 'string') ||
-            (row.displayName !== null && typeof row.displayName !== 'string')
-          )
-            throw new TransportDenied(503);
-          return {
-            kind: 'ready',
-            humanAccountId: human.account_id,
-            account: { id: row.id, kind: row.kind, handle: row.handle, displayName: row.displayName },
-          };
-        },
+      const result = await boundedPageRead(deadline, () =>
+        service.internal.withFreshHuman(
+          { headers: request.headers, fresh: false },
+          async (human): Promise<OrganizationDeletionPage> => {
+            if (human.account_id === organizationId) return { kind: 'denied' };
+            // Keep the exact session/profile live before and after all native I/O.
+            await service.internal.accessTokenForProof(human);
+            if (!access) return { kind: 'unavailable' };
+            if (Date.now() >= deadline) throw new TransportDenied(503);
+            const read = await access.readOrganizationDeletionPage({ human, organizationId, deadline });
+            await service.internal.accessTokenForProof(human);
+            if (Date.now() >= deadline) throw new TransportDenied(503);
+            if (read.kind === 'authentication-required') {
+              if (organizationDeletionCaller(human)) return { kind: 'unavailable' };
+              return { kind: 'authentication-required', humanAccountId: human.account_id, action: 'authenticate' };
+            }
+            // A misbound producer cannot disclose a target to an ordinary profile.
+            if (!organizationDeletionCaller(human)) return { kind: 'unavailable' };
+            if (read.kind !== 'ready') {
+              if (!['hidden', 'denied', 'missing', 'changed', 'unavailable'].includes(read.kind))
+                throw new TransportDenied(503);
+              return { kind: read.kind };
+            }
+            const row = read.account;
+            if (
+              row.id !== organizationId ||
+              row.kind !== 'organization' ||
+              (row.handle !== null && typeof row.handle !== 'string') ||
+              (row.displayName !== null && typeof row.displayName !== 'string')
+            )
+              throw new TransportDenied(503);
+            return {
+              kind: 'ready',
+              humanAccountId: human.account_id,
+              action: 'confirm',
+              account: { id: row.id, kind: row.kind, handle: row.handle, displayName: row.displayName },
+            };
+          },
+        ),
       );
       return response(result);
     } catch (error) {
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
-      return response(
-        { error: 'organization_deletion_read_denied' },
-        typeof status === 'number' && [400, 401, 403, 413].includes(status) ? status : 503,
-      );
+      if (typeof status === 'number' && [400, 413].includes(status))
+        return response({ error: 'organization_deletion_read_denied' }, status);
+      return response({ kind: status === 401 ? 'signed-out' : status === 403 ? 'denied' : 'unavailable' });
     }
   };
+}
+
+/** Include Auth currentness and released native preparation in one response bound. */
+async function boundedPageRead<T>(deadline: number, read: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new TransportDenied(503)), Math.max(0, deadline - Date.now()));
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

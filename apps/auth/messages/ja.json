@@ -161,7 +161,7 @@
   "auth_organization_conflict": "組織を作成できませんでした。ハンドルはすでに使われている可能性があります。",
   "auth_organization_create": "組織を作成",
   "auth_organization_created": "組織 @{handle} を作成しました。",
-  "auth_organization_delete_accepted": "組織の削除コマンドを受け付けました。各データ所有者、共有コピー、外部コピーの消去は未完了の場合があります。完全な消去は確認されていません。",
+  "auth_organization_delete_accepted": "組織の削除が確定しました。各データ管理者による処理や共有・外部コピーの消去はまだ完了していない可能性があります。完全な消去は確認されていません。",
   "auth_organization_delete_changed": "アカウント、組織、またはリクエストが変更されました。現在の組織を確認し、新しいリクエストを確定してください。",
   "auth_organization_delete_denied": "ネイティブの削除検証で拒否されました。所有責任、保留中の移管、運用中のアカウントを処理してから、再度確認してください。",
   "auth_organization_delete_effect": "削除するとこの組織は永久に閉鎖され、元に戻せません。ネイティブデータ、共有コピー、外部コピーの消去は未完了の場合があります。",
@@ -460,5 +460,8 @@
   "auth_account_delete_advice_available": "現在の権限で削除を申請できます。送信時に前提条件と権限を再確認します。",
   "auth_account_delete_review_changed": "アカウントまたはセッションが変更されました。確認画面を再読み込みし、もう一度明示的に確認してください。",
   "auth_account_delete_submit_requirements": "送信時には一時的な保留や未完了の内部処理も確認します。この画面は、それらが解消済みであることを保証しません。",
-  "auth_account_delete_retention_limits": "保持が必要な記録には採用済みの保持例外が適用されます。バックアップの期限と外部コピーは別に扱われ、この画面ではその消去を確認できません。"
+  "auth_account_delete_retention_limits": "保持が必要な記録には採用済みの保持例外が適用されます。バックアップの期限と外部コピーは別に扱われ、この画面ではその消去を確認できません。",
+  "auth_organization_delete_authentication_required": "この選択を確認するには認証してください。選択した ID は未確認です。組織の情報、削除権限、削除の前提条件は、認可後にのみ確認できます。",
+  "auth_organization_delete_authenticate": "認証して確認する",
+  "auth_organization_delete_advice": "この確認画面は現在の権限を示すもので、削除を許可したり、すべての前提条件の充足を保証したりするものではありません。確定時に新しい認証と現在の前提条件が再確認されます。"
 }

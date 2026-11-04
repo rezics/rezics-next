@@ -11,6 +11,7 @@ import { accountOperationProfile } from '../src/account-operation-step-up';
 import { readOrganizationDeleteUnknown } from '../src/organization-delete-step-up';
 import {
   organizationDeletionReadTransport,
+  organizationDeletionCaller,
   ORGANIZATION_DELETION_READ_PATH,
   type OrganizationDeletionRead,
 } from '../../../services/auth/src/organization-deletion-read-transport';
@@ -49,13 +50,16 @@ function fixture() {
       },
     },
   } as unknown as AuthService;
+  const nativeRead = async (input: { human: SessionProof; organizationId: string }) => {
+    events.push('native');
+    expect(input.human).toBe(current);
+    expect(input.organizationId).toBe(organizationId);
+    return result;
+  };
   const handler = organizationDeletionReadTransport(service, async () => new Response(null, { status: 404 }), {
-    readOrganizationForDeletion: async (input) => {
-      events.push('native');
-      expect(input.human).toBe(current);
-      expect(input.organizationId).toBe(organizationId);
-      return result;
-    },
+    readOrganizationForDeletion: nativeRead,
+    readOrganizationDeletionPage: async (input) =>
+      organizationDeletionCaller(input.human) ? nativeRead(input) : { kind: 'authentication-required' },
   });
   const calls: { path: string; body: any }[] = [];
   globalThis.fetch = (async (path, init = {}) => {
@@ -99,7 +103,8 @@ test('default review uses the real server session and preserves original deletio
   const loaded = await loadOrganizationDeletion(organizationId);
   expect(loaded.kind).toBe('ready');
   expect(f.events).toEqual(['session', 'native', 'session']);
-  expect(f.calls[1]).toEqual({ path: ORGANIZATION_DELETION_READ_PATH, body: { organizationId } });
+  expect(f.calls).toHaveLength(1);
+  expect(f.calls[0]).toEqual({ path: ORGANIZATION_DELETION_READ_PATH, body: { organizationId } });
   expect(JSON.stringify(f.calls)).not.toContain('server-only');
   if (loaded.kind !== 'ready') throw new Error('review unavailable');
   expect(organizationDeleteConfirmed('@SELECTED', organizationDeleteConfirmation(loaded.target, 'fallback'))).toBe(
@@ -134,12 +139,18 @@ test('default review distinguishes safe outcomes and refuses changed sessions, p
     { ...proof, client_id: 'website' },
   ]) {
     f.profile(profile);
-    expect(await loadOrganizationDeletion(organizationId)).toEqual({ kind: 'denied' });
+    expect(await loadOrganizationDeletion(organizationId)).toEqual({
+      kind: 'authentication-required',
+      humanAccountId: human,
+    });
   }
   f.profile({ ...proof, account_id: '30000000-0000-7000-8000-000000000003' });
-  expect(await readCurrentOrganizationForDeletion({ humanAccountId: human, organizationId })).toEqual({
-    kind: 'denied',
-  });
+  expect(
+    await loadOrganizationDeletion(organizationId, readCurrentOrganizationForDeletion, {
+      humanAccountId: human,
+      isCurrent: () => true,
+    }),
+  ).toEqual({ kind: 'changed' });
   f.profile(proof);
   f.revoke();
   expect(await loadOrganizationDeletion(organizationId)).toEqual({ kind: 'signed-out' });

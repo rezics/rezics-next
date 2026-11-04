@@ -2,7 +2,7 @@ import { accountDeletionPageTransport, type AccountDeletionPageAccess } from './
 import { operatorOpeningPageTransport, type OperatorOpeningPageAccess } from './operator-opening-page.ts';
 import {
   organizationDeletionReadTransport,
-  type OrganizationDeletionAccess,
+  type OrganizationDeletionPageAccess,
 } from './organization-deletion-read-transport.ts';
 import { automatedOperatorTransport, type AutomatedOperatorAccess } from './automated-operator-transport.ts';
 import { accountProfileReadTransport, type AccountProfileAccess } from './account-profile-read-transport.ts';
@@ -327,9 +327,9 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
                     ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
                     : undefined,
                 ),
-                (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationDeletionAccess>)
-                  .readOrganizationForDeletion
-                  ? (options.trustedAccess as typeof options.trustedAccess & OrganizationDeletionAccess)
+                (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationDeletionPageAccess>)
+                  .readOrganizationDeletionPage
+                  ? (options.trustedAccess as typeof options.trustedAccess & OrganizationDeletionPageAccess)
                   : undefined,
               ),
               (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)
