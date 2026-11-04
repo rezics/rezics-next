@@ -256,7 +256,7 @@ export class NotificationEditor {
       this.update({ phase: 'uncertain', reason: 'unavailable' });
       return;
     }
-    const receipt = { notifications: result.notifications, version: result.version, page: result.page };
+    const receipt = snapshotFrom(result.page);
     if (!recovering) {
       const edited = !sameNotifications(this.state.draft, attempt.draft);
       const stale = receipt.version < this.minimumVersion();

@@ -15,8 +15,8 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const csrfToken = 'A'.repeat(22);
 const idempotencyKey = '123e4567-e89b-42d3-a456-426614174000';
-const reading = { spoilerLevel: 1, suitability: 'blur', version: 7 };
-const optional = { reply: false, mention: true, thread_watch: true, board_activity: true };
+const reading = { spoilerLevel: 1, suitability: 'blur', version: 7, shelf: {} };
+const optional = { reply: true, mention: true, thread_watch: true, board_activity: true };
 const page = settingsPreferencePage(optional, 7);
 const envelope = { ...reading, notifications: optional, page };
 
