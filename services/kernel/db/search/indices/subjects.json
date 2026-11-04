@@ -102,6 +102,42 @@
         "type": "text",
         "analyzer": "cjk_bigram_v2"
       },
+      "document_text_coverage": {
+        "type": "keyword"
+      },
+      "document_texts": {
+        "type": "nested",
+        "properties": {
+          "candidate": {
+            "type": "keyword"
+          },
+          "document": {
+            "type": "keyword"
+          },
+          "digest": {
+            "type": "keyword"
+          },
+          "language": {
+            "type": "keyword"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "recipe": {
+            "type": "keyword"
+          },
+          "extraction": {
+            "type": "keyword"
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "text",
+            "analyzer": "cjk_bigram_v2"
+          }
+        }
+      },
       "name_sort": {
         "type": "keyword",
         "normalizer": "name_key",

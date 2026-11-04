@@ -164,6 +164,9 @@ scores. Private notes, progress and label names add no public text fields.
 Decision: `textField` defaults to this existing all-catalogue text; `credited_creator` is an explicit choice limited
 to complete, currently public outgoing credits and remains part of query-share and cursor bindings.
 
+Decision: public document text is an explicit `textField: public_document` choice; catalogue text remains the default
+and the selected field is bound to opaque cursors.
+
 Default remains relevance with text and name without text. Preserve today's relevance `_score DESC, id ASC`,
 exact-name/phrase boosts, name, ID, public-Collection-count and both rating phases with their existing ties,
 missing treatment and guards. Ordinary mixed Library/scope, tag, quantity over one million words and text

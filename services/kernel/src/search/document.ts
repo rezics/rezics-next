@@ -3,6 +3,7 @@ import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { normalizePublicRatingFigure } from './rating-source.ts';
 import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
 import { discoveryIdentity, type AccountSnapshot } from './discovery.ts';
+import { DOCUMENT_TEXT_COST, DOCUMENT_TEXT_RECIPE } from './document-text.ts';
 
 export const MISSING_NAME = '\u{10FFFF}';
 export const MAX_NAME_SORT_CHARACTERS = 512;
@@ -40,6 +41,20 @@ export type SubjectDocument = {
   /** Published Global standard-question score and prior identity; absent figures omit both fields. */
   rating_score?: number | null;
   rating_prior_epoch?: number | null;
+  /** Coverage remains explicit when a bounded native projection is incomplete or unavailable. */
+  document_text_coverage?: 'complete' | 'partial' | 'unsupported' | 'preparing' | 'unavailable';
+  /** Nested documents keep phrases inside one document and one actual language. */
+  document_texts?: {
+    candidate: string;
+    document: string;
+    digest: string;
+    language: string;
+    revision: number;
+    recipe: string;
+    extraction: string;
+    complete: boolean;
+    text: string;
+  }[];
 };
 
 /** Public index allowlist. Live profile/verification/avatar data is always hydrated by Accounts. */
@@ -114,6 +129,65 @@ function subjectFacts(statements: readonly IndexedStatement[], calendarFormat?: 
   return facts;
 }
 
+function documentTextFields(subject: IndexedSubject, partition: number): Pick<
+  SubjectDocument,
+  'document_text_coverage' | 'document_texts'
+> {
+  const projection = subject.documentText;
+  if (!projection) return {};
+  const { selection } = projection;
+  if (
+    selection.subject !== subject.id ||
+    selection.partition !== partition ||
+    selection.securityRevision !== subject.securityRevision ||
+    selection.references.length > DOCUMENT_TEXT_COST.documents ||
+    projection.documents.length > DOCUMENT_TEXT_COST.documents
+  )
+    throw new TypeError('Document text projection is not bound to the indexed subject');
+  const admittedReferences = new Set(
+    selection.references.map((reference) =>
+      [reference.candidate, reference.document, reference.digest, reference.language].join('\0'),
+    ),
+  );
+  let textBytes = 0;
+  const documents = projection.documents.map(({ reference, revision, recipe, extraction, complete, text }) => {
+    if (
+      !admittedReferences.has(
+        [reference.candidate, reference.document, reference.digest, reference.language].join('\0'),
+      ) ||
+      !Number.isSafeInteger(revision) ||
+      revision < 1 ||
+      recipe !== DOCUMENT_TEXT_RECIPE ||
+      !/^[0-9a-f]{64}$/.test(extraction) ||
+      typeof complete !== 'boolean' ||
+      !text.isWellFormed()
+    )
+      throw new TypeError('Document text projection contains an invalid source value');
+    textBytes += Buffer.byteLength(text, 'utf8');
+    return {
+      candidate: reference.candidate,
+      document: reference.document,
+      digest: reference.digest,
+      language: reference.language,
+      revision,
+      recipe,
+      extraction,
+      complete,
+      text,
+    };
+  });
+  const serialized = { coverage: projection.coverage, documents };
+  if (
+    textBytes > DOCUMENT_TEXT_COST.textBytesPerSubject ||
+    Buffer.byteLength(JSON.stringify(serialized), 'utf8') > DOCUMENT_TEXT_COST.serializedBytesPerSubject
+  )
+    throw new TypeError('Document text projection exceeds its retained bounds');
+  return {
+    document_text_coverage: projection.coverage,
+    ...(documents.length === 0 ? {} : { document_texts: documents }),
+  };
+}
+
 function subjectDocument(partition: number, subject: IndexedSubject, calendarFormat?: 1): SubjectDocument {
   // The source owns standard-question proof; this boundary validates Global and exact subject binding.
   const rating =
@@ -139,6 +213,7 @@ function subjectDocument(partition: number, subject: IndexedSubject, calendarFor
     name_sort: labels[0]?.value ?? MISSING_NAME,
     statements: uniqueValues(subject.statements.map((item) => `${item.property}=${item.value}`)),
     facts: subjectFacts(subject.statements, calendarFormat),
+    ...documentTextFields(subject, partition),
     ...(rating === undefined ? {} : { rating_score: rating.score, rating_prior_epoch: rating.priorEpoch }),
     ...(subject.relationFacetOverflow === undefined || subject.relationFacetOverflow.length === 0
       ? {}

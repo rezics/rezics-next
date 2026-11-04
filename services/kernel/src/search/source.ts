@@ -3,6 +3,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { CalendarDate } from '@rezics/filter';
 import type { PublicRatingFigure } from './rating-source.ts';
 import type { CreditSearchProjection, CreditSearchSource } from './credit-search.ts';
+import type { DocumentTextProjection } from './document-text.ts';
 
 export type LanguageValue = { language: string; value: string };
 
@@ -71,6 +72,8 @@ export type IndexedSubject = {
   labels: LanguageValue[];
   aliases: LanguageValue[];
   descriptions: LanguageValue[];
+  /** Optional bounded, current public document text projection. Each document remains independent. */
+  documentText?: DocumentTextProjection;
   /**
    * Adopted Global statement values visible at snapshot build time; an item value is the target subject id.
    * Descriptive statements are unchanged. Outgoing relations include at most MAX_RELATION_FACET_VALUES
