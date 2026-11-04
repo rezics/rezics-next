@@ -58,9 +58,9 @@ function tables(): CrossMediaTables {
       }
       if (provider === 'bangumi' && table === 'episode') yield* episodes;
       if (provider === 'vndb' && table === 'vn_titles') {
-        yield { id: 'v81', lang: 'ja', title: 'STEINS;GATE', official: 't' };
-        yield { id: 'v82', lang: 'ja', title: 'CLANNAD', official: 't' };
-        yield { id: 'v83', lang: 'ja', title: 'Fate/stay night', official: 't' };
+        yield { id: 'v81', lang: 'ja', title: 'STEINS;GATE', latin: 'STEINS;GATE', official: 't' };
+        yield { id: 'v82', lang: 'ja', title: 'CLANNAD', latin: 'CLANNAD', official: 't' };
+        yield { id: 'v83', lang: 'ja', title: 'Fate/stay night', latin: 'Fate/stay night', official: 't' };
       }
       if (provider === 'vndb' && table === 'vn') {
         yield { id: 'v81', olang: 'ja', alias: null };
