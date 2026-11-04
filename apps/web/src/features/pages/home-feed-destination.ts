@@ -27,6 +27,7 @@ export function homeFeedDestination(item: FeedItem, locale: string): string | un
       item.key.kind !== 'collection' ||
       item.key.id !== destination.id ||
       item.summary.id !== destination.id ||
+      !('title' in item.summary) ||
       destination.title !== item.summary.title
     )
       return;
