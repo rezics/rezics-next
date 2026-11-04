@@ -1,3 +1,5 @@
+import { WorkContextView } from './work-context/view';
+import type { WorkContext } from './work-context/schema';
 import type { KernelClient } from '@rezics/client';
 import type { CalendarDate } from '@rezics/filter';
 import { pickText } from '@rezics/composition';
@@ -49,6 +51,7 @@ export type ResultHit = SubjectHit & {
   aliases?: Record<string, string[]>;
   figure?: NativeHit['figure'];
   storyOverlay?: boolean;
+  workContext?: WorkContext;
 };
 
 export function localizedLabel(labels: Record<string, string>, locale: string): { text: string; lang?: string } {
@@ -325,6 +328,11 @@ export function ResultRow({
                   />
                 </p>
               ) : null}
+            </ListRowControl>
+          ) : null}
+          {hit.summary?.creativeWork || hit.workContext ? (
+            <ListRowControl className="min-w-0">
+              <WorkContextView context={hit.workContext} locale={locale} subjectHrefFor={subjectHrefFor} />
             </ListRowControl>
           ) : null}
           {description.text ? (

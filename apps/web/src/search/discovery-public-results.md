@@ -34,18 +34,36 @@ The exact localized Subject title link remains the destination for additional fa
 sorts, context caches, private overlays or per-hit reads. Search's existing reader and request retirement still governs
 the entire page, including these labels.
 
-The **qualified work-context seam is unavailable** on the current native contract. `search/hits.ts:Fact` carries only
-item, calendar date, quantity and code values. It cannot distinguish empty from withheld credits, represent explicit
-unknown/no-value dates, or carry detailed roles, credited-as wording, directed associations or overflow destinations.
-`discovery-http.ts` exposes only Character/Person `contexts`; Web cannot treat those as work credits or synthesize
-new wire fields. Native facts remain useful without claiming that missing context is empty or concealed.
+The optional native `workContext` is owned by [Search](../../../../services/kernel/src/search/README.md#qualified-work-context-in-discovery-v1)
+and [Semantic](../../../../services/kernel/src/semantic/README.md#qualified-list-work-context). Admission validates
+its closed shape independently of generic facts: exact subject/Type/source identity, unique statement IDs across
+categories, outgoing property role, revision, definition release, rank, asserted original and terminal item identity,
+same-statement qualifiers, exact signed decimal strings and partial Gregorian dates. MusicAlbum remains a work.
+An absent field, an empty section, withheld context, unsupported context and each unavailable reason remain distinct.
+Withheld sections retain no identities or counts. Qualifiers never migrate between credits. Generic facts retain
+their independent four-visible-value presentation, property labels, date precision and item destinations.
 
-Search owns the producer handoff through its existing bounded discovery page, with Semantic retaining fact meaning:
-publish the smallest qualified creator/release projection with exact property/role, disclosed target identity and labels,
-directed work-versus-release association, original date precision/value state, explicit empty/withheld/unavailable state,
-and an admitted destination for overflow. Keep native order, match identity and currentness, with finite row/page budgets.
-The receiver must then add the qualified multi-kind navigation/return and retirement acceptance; it must not hydrate
-Subjects to work around this missing native projection.
+Each category contains at most three statements and each statement at most four qualifiers. Terms select at most
+one label language at 256 UTF-8 bytes. Admission validates the actual 16,384-byte hit and 262,144-byte page totals,
+including unavailable envelopes, before displaying any rows. A disclosed fourth statement sets passive overflow;
+it publishes no continuation destination. The receiver never crawls, hydrates or refills a Subject.
+
+Decision: qualified context uses the existing ResultRow metadata/control layer and exact localized Subject links;
+overflow is passive text, and the existing validated Search `via` return now accepts Global as well as Realm Search,
+retaining the original query/filter/language/layout/cursor bytes and the result-region fragment.
+
+The generated callable is an independent activation requirement. `work-context/availability.ts` checks its activation
+literal against the real `KernelClient.subjects.$search` return type. Until the retained root publisher installs the
+qualified discovery response and generated work-context declarations, native context admission remains bounded but
+production displays native-unavailable context. The standalone supplied-context story is a presentation preview,
+not installed callable or rendered integration acceptance. No generated declaration, wire DTO or producer is supplied
+by Web. Normal publication must be followed by receiving type reconciliation and production activation.
+
+The existing Search query and personal host share public entry currentness. Successful cache replacement retires
+an earlier entry even if structural sharing keeps the same data object. Address changes retire selected callbacks;
+the existing host cache subscription also retires reader/credential transitions, including A/B/A, before selection.
+Exact failed-cursor Retry retains its address. This public observation neither settles an uncertain personal command
+nor changes its original credentials, revision, body or operands.
 
 The retained default Search path includes ready Collection, review and Space producers in the shared kind
 directory and current-page guard. Collection rows include native public curator/member context; their private

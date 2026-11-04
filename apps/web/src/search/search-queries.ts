@@ -18,7 +18,7 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
     queryKey: ['search', 'discovery-v1', searchSessionLifetime(locale, params, reader)],
     queryFn: async ({ signal, client, queryKey }) => {
       try {
-        return await readSearch({
+        const result = await readSearch({
           locale,
           signal,
           data: {
@@ -37,6 +37,8 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
             ...(params.sort ? { sort: params.sort } : {}),
           },
         });
+        signal.throwIfAborted();
+        return result;
       } catch (error) {
         if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
         const previous = client.getQueryData<SearchPageData>(queryKey);

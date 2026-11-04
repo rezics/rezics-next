@@ -1,3 +1,4 @@
+import type { SearchPublicEntry } from './use-search-query';
 import { createSpaceEntryCommands, type SpaceEntryCommands } from './space-entry/commands';
 import { SpaceEntryControls } from './space-entry/controls';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -58,6 +59,7 @@ type Focus = { element: HTMLElement; row: string | undefined; index: number; x: 
 /** Public loader data stays public. The mounted reader obtains one complete private page through a POST seam. */
 export function useDiscoveryPersonalResults(input: {
   source: DiscoveryState | undefined;
+  publicEntry?: SearchPublicEntry | undefined;
   request: DiscoveryRequest | undefined;
   locale: string;
   returnTo: string;
@@ -111,26 +113,40 @@ export function useDiscoveryPersonalResults(input: {
     session.csrfToken,
     exposureOwner,
     admitted,
+    input.returnTo,
   ]);
+  const retiredPublicEntries = useRef(new WeakSet<SearchPublicEntry>());
+  const readerSignature = JSON.stringify([session.state, session.subject, session.csrfToken]);
   const regionRef = useRef<HTMLElement | null>(null);
   const pendingFocus = useRef<Focus | null>(null);
   const episodeRef = useRef<{
     signature: string;
+    readerSignature: string;
     source: DiscoveryState | undefined;
+    publicEntry: SearchPublicEntry | undefined;
     active: boolean;
     retired: boolean;
     abort: AbortController;
     id: string;
   } | null>(null);
-  if (!episodeRef.current || episodeRef.current.signature !== signature || episodeRef.current.source !== input.source) {
+  if (
+    !episodeRef.current ||
+    episodeRef.current.signature !== signature ||
+    episodeRef.current.source !== input.source ||
+    episodeRef.current.publicEntry !== input.publicEntry
+  ) {
     if (episodeRef.current) {
       captureFocus();
+      if (episodeRef.current.readerSignature !== readerSignature && episodeRef.current.publicEntry)
+        retiredPublicEntries.current.add(episodeRef.current.publicEntry);
       episodeRef.current.active = false;
       episodeRef.current.retired = true;
     }
     episodeRef.current = {
       signature,
+      readerSignature,
       source: input.source,
+      publicEntry: input.publicEntry,
       active: true,
       retired: false,
       abort: new AbortController(),
@@ -138,6 +154,7 @@ export function useDiscoveryPersonalResults(input: {
     };
   }
   const episode = episodeRef.current;
+  const [, setPublicRetirement] = useState(0);
   const [mounted, setMounted] = useState<{ owner: typeof episode; value: Mounted } | null>(null);
   const read = input.read ?? readDiscoveryPersonalPage;
   const nativeRegistry = commandRegistry(client);
@@ -197,6 +214,7 @@ export function useDiscoveryPersonalResults(input: {
         episode.active &&
         !lifetime.signal.aborted &&
         episodeRef.current === episode &&
+        (episode.publicEntry?.isCurrent() ?? true) &&
         now?.state === 'signed-in' &&
         now.subject === session.subject &&
         now.csrfToken === session.csrfToken &&
@@ -204,6 +222,24 @@ export function useDiscoveryPersonalResults(input: {
         latest.observation === exposureOwner &&
         client.getQueryData(exposureQuery.queryKey) === admitted
       );
+    };
+    // Reuse this host's existing cache subscription for the public entry as well. No second reader owner.
+    const publicOwns = () =>
+      episode.active &&
+      !episode.retired &&
+      episodeRef.current === episode &&
+      (episode.publicEntry?.isCurrent() ?? true);
+    const retire = () => {
+      if (!episode.active) return;
+      captureFocus();
+      episode.retired = true;
+      if (episode.publicEntry) retiredPublicEntries.current.add(episode.publicEntry);
+      episode.active = false;
+      episode.abort.abort();
+      current?.page.dispose();
+      current?.spaceCommands.dispose();
+      setMounted(null);
+      setPublicRetirement((value) => value + 1);
     };
     const ready =
       input.enabled &&
@@ -214,11 +250,22 @@ export function useDiscoveryPersonalResults(input: {
       session.csrfToken &&
       exposureOwner &&
       admitted?.subject === session.subject;
-    if (!ready)
+    if (!ready) {
+      const unsubscribe = client.getQueryCache().subscribe(() => {
+        const now = normalizeSessionObservation(client.getQueryData(sessionQuery.queryKey));
+        if (
+          !publicOwns() ||
+          (!anonymous &&
+            (now.state !== session.state || now.subject !== session.subject || now.csrfToken !== session.csrfToken))
+        )
+          retire();
+      });
       return () => {
         episode.active = false;
         lifetime.abort();
+        unsubscribe();
       };
+    }
     const request = structuredClone(input.request!);
     const binding = { expectedReader: session.subject!, expectedCredential: session.csrfToken! };
     const load = (signal: AbortSignal) => read({ data: { ...binding, request, locale: input.locale }, signal });
@@ -359,13 +406,7 @@ export function useDiscoveryPersonalResults(input: {
     // An observed cache retirement is terminal even if the old reader/exposure object returns before React renders.
     const unsubscribe = client.getQueryCache().subscribe(() => {
       if (!owns() && episode.active) {
-        captureFocus();
-        episode.retired = true;
-        episode.active = false;
-        episode.abort.abort();
-        current?.page.dispose();
-        current?.spaceCommands.dispose();
-        setMounted(null);
+        retire();
       }
     });
     void load(lifetime.signal)
@@ -383,7 +424,11 @@ export function useDiscoveryPersonalResults(input: {
   }, [episode]);
 
   const value = mounted?.owner === episode && episode.active ? mounted.value : undefined;
-  const source = value?.state ?? input.source;
+  const publicCurrent =
+    !episode.retired &&
+    (!episode.publicEntry || !retiredPublicEntries.current.has(episode.publicEntry)) &&
+    (episode.publicEntry?.isCurrent() ?? true);
+  const source = publicCurrent ? (value?.state ?? input.source) : { status: 'unavailable' as const };
   const publicDisplayPage =
     source?.status === 'ready'
       ? (() => {
@@ -578,5 +623,11 @@ export function useDiscoveryPersonalResults(input: {
       </div>
     );
   };
-  return { state: display, renderPersonal: input.enabled ? renderPersonal : undefined, regionRef };
+  return {
+    isCurrent: () =>
+      publicCurrent && !episode.retired && episodeRef.current === episode && (episode.publicEntry?.isCurrent() ?? true),
+    state: display,
+    renderPersonal: input.enabled ? renderPersonal : undefined,
+    regionRef,
+  };
 }

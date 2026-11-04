@@ -52,7 +52,7 @@ export type SearchResultsRegionProps = {
   retryState?: SearchLoaderDeps | undefined;
   retryFocus?: Pick<ReturnType<typeof useSearchRetryFocus>, 'regionRef' | 'retryRef' | 'captureRetryFocus'>;
   currentSearchHref?: string | undefined;
-  personal?: Pick<ReturnType<typeof useDiscoveryPersonalResults>, 'regionRef' | 'renderPersonal'>;
+  personal?: Pick<ReturnType<typeof useDiscoveryPersonalResults>, 'regionRef' | 'renderPersonal' | 'isCurrent'>;
 };
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
 function messageOptions(locale: string) {
@@ -173,6 +173,18 @@ export function SearchResultsRegion({
         tabIndex={-1}
         aria-label={m.search_results({}, options)}
         data-search-results
+        onClickCapture={(event) => {
+          if (personal && !personal.isCurrent()) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
+        onKeyDownCapture={(event) => {
+          if ((event.key === 'Enter' || event.key === ' ') && personal && !personal.isCurrent()) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
       >
         {data?.recovery &&
         data.recovery.status !== 'ready' &&

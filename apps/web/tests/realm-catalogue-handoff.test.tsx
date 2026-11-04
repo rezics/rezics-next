@@ -29,8 +29,8 @@ test('Realm catalogue subject links retain the same scoped Search intent and ret
   expect(html).toContain(`href="${href}"`);
 });
 
-test('Realm catalogue return rejects global, cross-locale, private, and oversized URLs', () => {
-  expect(realmCatalogueReturnHref('/en/search?q=Mira', 'en')).toBeUndefined();
+test('Realm catalogue return accepts Global Search and rejects cross-locale, private, and oversized URLs', () => {
+  expect(realmCatalogueReturnHref('/en/search?q=Mira', 'en')).toBe('/en/search?q=Mira#search-results');
   expect(realmCatalogueReturnHref(scopedVisit.replace('/en/search', '/ja/search'), 'en')).toBeUndefined();
   expect(realmCatalogueReturnHref(`${scopedVisit}&reader=private`, 'en')).toBeUndefined();
   expect(realmCatalogueReturnHref(`${scopedVisit}&layout=${'x'.repeat(2048)}`, 'en')).toBeUndefined();

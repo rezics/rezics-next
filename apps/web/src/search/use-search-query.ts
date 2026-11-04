@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { searchQueryOptions } from './search-queries';
 import { searchPageForRecovery, searchUnavailablePage } from './search-recovery';
 import { searchSessionLifetime } from './scoped-search-lifetime';
@@ -28,9 +28,28 @@ function keepsEarlierResults(status: string): boolean {
   return ['loading', 'sparse', 'exhausted', 'index-not-ready', 'source-not-ready', 'unavailable'].includes(status);
 }
 
+/** The mounted Search owner, shared by public rendering and its existing personal host. */
+export type SearchPublicEntry = { isCurrent: () => boolean };
+
 /** Retrying retires the old display immediately, including independently fetched facet labels. */
 export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?: string) {
-  const query = useQuery(searchQueryOptions(locale, params, reader));
+  const client = useQueryClient();
+  const options = searchQueryOptions(locale, params, reader);
+  const query = useQuery(options);
+  const native = client.getQueryCache().find({ queryKey: options.queryKey, exact: true });
+  const replacement = native?.state.dataUpdateCount;
+  const currentEntry = useRef<SearchPublicEntry | undefined>(undefined);
+  const publicEntry = useMemo<SearchPublicEntry>(() => {
+    let retired = false;
+    const entry: SearchPublicEntry = {
+      isCurrent: () => {
+        if (currentEntry.current !== entry || native?.state.dataUpdateCount !== replacement) retired = true;
+        return !retired;
+      },
+    };
+    return entry;
+  }, [native, replacement, locale, JSON.stringify(params), reader]);
+  currentEntry.current = publicEntry;
   const lifetime = searchSessionLifetime(locale, { ...params, cursor: undefined }, reader);
   const previous = useRef<{ lifetime: string; data: SearchPageData } | undefined>(undefined);
   if (query.data?.recovery?.status === 'ready' && (query.data.discovery?.status === 'ready' || query.data.result))
@@ -60,6 +79,7 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
   }, [lifetime, params, query.data, query.isFetching, query.isError, query.isPending]);
   return {
     data,
+    publicEntry,
     retry: () => {
       void query.refetch();
     },

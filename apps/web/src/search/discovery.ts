@@ -1,3 +1,5 @@
+import { qualifiedWorkContextInstalled } from './work-context/availability';
+import { workContextSchema, validWorkContextBinding, workContextPageWithinLimit } from './work-context/schema';
 import { accountContext } from './account-context/schema';
 import { resultFreshness } from './search-context/observation';
 import { spaceEntryPage, spaceEntryPresentation } from './space-entry/contract';
@@ -260,6 +262,7 @@ const hit = v.union([
     summary: v.object({ kind: v.literal('subject'), value: subjectSummary }),
     ...catalogueFields,
     contexts: v.exactOptional(characterPersonContexts),
+    workContext: v.exactOptional(workContextSchema),
   }),
   v.object({
     key: v.strictObject({ owner: v.literal('accounts'), kind: v.literal('account'), route, id: resourceId }),
@@ -432,6 +435,8 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
   if (result.emptyRecovery && new TextEncoder().encode(JSON.stringify(result.emptyRecovery)).byteLength > 16_384)
     return;
   if (!evidencePageWithinLimit(result.hits.map((hit) => hit.matchEvidence ?? { state: 'unavailable' }))) return;
+  if (!workContextPageWithinLimit(result.hits.flatMap((hit) => ('workContext' in hit ? [hit.workContext] : []))))
+    return;
   let reviewBytes = 0;
   for (const hit of result.hits) {
     if (hit.key.id !== hit.summary.value.id) return;
@@ -444,6 +449,9 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
         if (hit.key.owner !== 'semantic' || hit.key.kind !== hit.summary.value.type) return;
         const subject = hit as Extract<DiscoveryHit, { summary: { kind: 'subject' } }>;
         if (subject.facts && Object.keys(subject.facts).length > 4) return;
+        if (subject.workContext && !validWorkContextBinding(subject.workContext, subject.summary.value)) return;
+        if (subject.workContext && !qualifiedWorkContextInstalled)
+          subject.workContext = { state: 'unavailable', reason: 'native' };
         const contexts = subject.contexts;
         if (contexts && [contexts.credits, contexts.appearances].some((list) => list.next && list.items.length !== 3))
           return;

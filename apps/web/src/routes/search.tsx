@@ -151,7 +151,7 @@ function LoadedSearchResults({
   reader?: string;
   session: string | null;
 }) {
-  const { data, retry } = useSearchQuery(locale, deps, reader);
+  const { data, retry, publicEntry } = useSearchQuery(locale, deps, reader);
   const realms = useQuery({ ...realmDiscoveryQueryOptions(locale), enabled: isRealmDiscoverySearch(deps) });
   return (
     <SearchPage
@@ -159,6 +159,7 @@ function LoadedSearchResults({
       data={data}
       locale={locale}
       searchHref={searchHref}
+      publicEntry={publicEntry}
       onRetry={retry}
       session={session}
       {...(realms.data ? { realmDiscovery: realms.data } : {})}

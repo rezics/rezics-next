@@ -1,3 +1,4 @@
+import type { SearchPublicEntry } from './use-search-query';
 import { QueryTextRecovery } from './query-text-recovery';
 import { SearchResultsRegion } from './search-regions/results';
 import { QuerySharePreview } from './query-share-preview';
@@ -635,6 +636,7 @@ export function SearchPage({
   locale: localeProp,
   session = null,
   searchHref,
+  publicEntry,
 }: {
   query: string;
   cursor?: string;
@@ -647,6 +649,7 @@ export function SearchPage({
   locale?: string;
   session?: string | null;
   searchHref?: string | undefined;
+  publicEntry?: SearchPublicEntry | undefined;
 }) {
   const sourceData = data;
   const currentData = useRef(data);
@@ -660,6 +663,7 @@ export function SearchPage({
   const locale = localeProp ?? getLocale();
   const personal = useDiscoveryPersonalResults({
     source: data?.discovery,
+    publicEntry,
     request: data?.queryState ? discoveryRequest(data.queryState, requestLanguages(locale)) : undefined,
     locale,
     returnTo:

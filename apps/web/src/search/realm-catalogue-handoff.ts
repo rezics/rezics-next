@@ -1,7 +1,6 @@
 import * as v from 'valibot';
 import { locales } from '../paraglide/runtime.js';
 import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
-import { isSearchResourceScope } from './advanced-scope';
 import { RATING_POPULATION_FIELD } from './rating-population';
 import { searchLoaderDeps, searchParams } from './search-params';
 
@@ -22,7 +21,7 @@ const searchIntentKeys = new Set([
   'layout',
 ]);
 
-/** Keep the same bounded, same-locale Realm Search visit available from a Subject's Connections view. */
+/** Keep the same bounded, same-locale Search visit available from a Subject's Connections view. */
 export function realmCatalogueReturnHref(value: unknown, locale?: string): string | undefined {
   if (
     typeof value !== 'string' ||
@@ -50,7 +49,7 @@ export function realmCatalogueReturnHref(value: unknown, locale?: string): strin
     const parsed = v.safeParse(searchParams, params);
     if (!parsed.success) return;
     const deps = searchLoaderDeps(parsed.output as Record<string, unknown>);
-    if (deps.invalidInput || !isSearchResourceScope(deps.resourceScope) || deps.resourceScope.kind !== 'realm') return;
+    if (deps.invalidInput) return;
     return `${url.pathname}${url.search}${returnFragment}`;
   } catch {
     return;
