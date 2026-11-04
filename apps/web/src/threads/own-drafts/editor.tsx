@@ -81,6 +81,8 @@ export function OwnDraftEditor({
         if (!result.ok && result.reason === 'stale' && result.currentPost) {
           const post = result.currentPost;
           if (
+            post.availability !== 'available' ||
+            !('authorId' in post) ||
             post.id !== entry.id ||
             post.threadId !== entry.threadId ||
             post.authorId !== identity.accountId ||

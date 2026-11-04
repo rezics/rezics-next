@@ -94,7 +94,12 @@ test('generated selection validates native author, resource, draft visibility an
   let payload: unknown = { post };
   let etag: string | null = JSON.stringify(entry.revisionId);
   let status = 200;
-  let finish: (() => void) | undefined;
+  let pause = false;
+  let finish!: () => void;
+  let started!: () => void;
+  const pendingStart = new Promise<void>((resolve) => {
+    started = resolve;
+  });
   const reader = nativeOwnDraftRequests(
     createKernelClient('https://kernel.test', {
       async fetch() {
@@ -128,18 +133,19 @@ test('generated selection validates native author, resource, draft visibility an
     );
   status = 200;
   etag = JSON.stringify(entry.revisionId);
-  finish = () => {};
+  pause = true;
   const late = reader.resume(request, controller.signal);
+  await pendingStart;
   controller.abort();
-  finish!();
+  finish();
   expect(await late).toBe('unavailable');
 });
 
 test('native conflict inspection retires replaced revision advice and erase review restores keyboard focus', async () => {
   const reader = nativeOwnDraftRequests(
     createKernelClient('https://kernel.test', {
-      async fetch(input) {
-        return response(String(input).includes(`/${entry.id}?`) ? { post } : page);
+      async fetch(input, init) {
+        return response(new URL(new Request(input, init).url).pathname.endsWith(`/${entry.id}`) ? { post } : page);
       },
     }),
   );
@@ -167,8 +173,14 @@ test('native conflict inspection retires replaced revision advice and erase revi
     await fixture.click('Use server-saved body in editor');
     await fixture.click('Save changes');
     await fixture.click('Review current version');
-    expect(fixture.host.querySelector('[role="alertdialog"]')?.textContent).toContain('Exact native selected body');
-    await fixture.click('Replace draft with current');
+    expect(fixture.window.document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      'Exact native selected body',
+    );
+    await act(async () =>
+      [...fixture.window.document.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Replace draft with current')!
+        .click(),
+    );
     expect(fixture.host.textContent).toContain('Restart the inventory');
     expect(fixture.host.textContent).not.toContain('Exact native selected body');
     expect(fixture.host.textContent).not.toContain('Save changes');
