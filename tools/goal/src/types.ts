@@ -1,5 +1,6 @@
 import type { ProcessIdentity } from './process.ts';
 import type { AttemptRef, FirstFailure, ManagerEventKind } from './contracts.ts';
+import type { GuardId } from './guards.ts';
 
 export type Cli = 'codex' | 'grok' | 'cursor' | 'claude';
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -481,6 +482,8 @@ export type AttemptRecord = AttemptRef & {
   outsidePaths?: string[];
   /** A dev product diff beyond its estimate's tolerance, recorded instead of a scope stop; absent within it. */
   estimateOverrun?: { lines: number; files: number; estimate: { lines: number; files: number } };
+  /** Guard refusals and attempt endings that priced this record; absent on historical records. */
+  guardIds?: GuardId[];
   hostMs: number | null;
   classifierVersion: string;
   stepClasses: Record<StepClass, number>;

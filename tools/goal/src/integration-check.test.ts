@@ -242,7 +242,7 @@ test('a later check still runs when an earlier one fails as on dev, and its new 
   }
 });
 
-test('a branch whose only change is its frozen acceptance files is refused as having no work', async () => {
+test('a branch that changes frozen acceptance files keeps the typed refusal', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
@@ -265,7 +265,8 @@ test('a branch whose only change is its frozen acceptance files is refused as ha
 
     expect(h.head()).toBe(dev);
     expect(h.outcomes[0]?.passed).toBe(false);
-    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('No committed changes beyond');
+    expect(h.outcomes[0]?.refusal).toEqual({ kind: 'frozen-acceptance-change', paths: ['frozen.test.ts'] });
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain('Frozen acceptance files changed');
   } finally {
     h.dispose();
   }

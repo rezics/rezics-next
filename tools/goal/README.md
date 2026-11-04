@@ -929,7 +929,10 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 `report --flow [--since <time>] [--json]` reads durable, timestamped per-task and per-attempt flow events. It reports
 stage totals and p50/p90 durations, Goal totals and percentiles, working-time efficiency from dispatch through
 integration, attempts per integrated task, and the length and oldest age of the start, check, landing, verification
-and promotion queues. Missing lifecycle events stay unknown; reports do not backfill old tasks. Check-slot request,
+and promotion queues. Its guard ledger prices registered attempt endings and landing refusals over seven days by
+firings, attempt-hours, next-attempt hours, tokens, rewritten share and landed share; repeated guards with at least 20
+firings and under 10% rewritten are marked `repairable in place`. The hourly report groups guard endings by GuardId.
+Missing lifecycle events stay unknown; reports do not backfill old tasks. Check-slot request,
 acquisition and release events are distinct, so slot waiting is excluded from worker working time. The stage with the
 most waiting is named as the bottleneck.
 

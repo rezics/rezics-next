@@ -8,6 +8,8 @@ import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
 import { WorkerStore } from './store.ts';
+import { guardEndingCounts } from './guards.ts';
+import type { AttemptRecord } from './types.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 type ReportPolicy = ControlPolicy['hourlyReport'];
 
@@ -321,6 +323,20 @@ function usageSummary(db: Database, bucket: UtcHour): string {
   return `Recorded usage: ${sessionUsage}. Spend: unknown (no durable cost records). Worker diff churn: ${churn}; churn includes non-landed work and is not a delivered-journey count.`;
 }
 
+function guardEndingLine(db: Database, bucket: UtcHour): string {
+  if (!hasTable(db, 'worker_records')) return 'Guard endings in bucket: unknown (attempt history unavailable).';
+  const records = db
+    .query(
+      `SELECT body FROM worker_records WHERE json_extract(body, '$.endedAt') >= ? AND json_extract(body, '$.endedAt') < ?`,
+    )
+    .all(bucket.start, bucket.end)
+    .map((row) => JSON.parse((row as { body: string }).body) as AttemptRecord);
+  const counts = guardEndingCounts(records, bucket.start, bucket.end);
+  return counts.length
+    ? `Guard endings in bucket: ${counts.map(({ guardId, firings }) => `${guardId} ${firings}`).join('; ')}.`
+    : 'Guard endings in bucket: none recorded.';
+}
+
 function promotionSummary(db: Database, metrics: ReturnType<typeof lifecycleMetrics> | null): string {
   if (!hasTable(db, 'worker_promotions')) return 'Promotion: unknown (promotion state unavailable).';
   const row = db.query('SELECT body FROM worker_promotions WHERE id=1').get() as { body: string } | null;
@@ -530,6 +546,7 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
     promotionSummary(db, metrics),
     operatorAttention(metrics, policy),
     sharedIncidentSummary(incidents.incidents, incidents.available, policy),
+    guardEndingLine(db, bucket),
     'Next actions:',
     ...nextActions(metrics, incidents.incidents, policy),
     usageSummary(db, bucket),

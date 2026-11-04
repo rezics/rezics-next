@@ -9,6 +9,7 @@ import { WorkerJob } from './job.ts';
 import { importAttempt, importRunDirectory } from './import-attempt.ts';
 import { formatLifecycleMetrics, formatUsageReport, report } from './report.ts';
 import { flowReport, readFlow, readFlowTasks } from './flow.ts';
+import { formatGuardLedger, guardLedger } from './guards.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import type { LandingQueue, ManagerInbox } from './contracts.ts';
 import type { AttemptRecord, Effort, Settings, Task, TaskState, Tokens } from './types.ts';
@@ -254,6 +255,7 @@ export async function runWorkerCommand(
         const metrics = lifecycleMetrics(store.db, now, settings.policy);
         const result = {
           ...flowReport(readFlow(store.db, since), readFlowTasks(store.db), now.getTime()),
+          guards: guardLedger(store.records(), store.attempts(), now.getTime()),
           lifecycle: metrics,
         };
         if (json) print(JSON.stringify(result, null, 2));
@@ -268,6 +270,7 @@ export async function runWorkerCommand(
               ...result.queues.map(
                 (q) => `Queue ${q.stage}: ${q.length}, oldest ${Math.round(q.oldestAgeMs / 60000)}m`,
               ),
+              ...formatGuardLedger(result.guards),
               ...formatLifecycleMetrics(metrics),
             ].join('\n'),
           );

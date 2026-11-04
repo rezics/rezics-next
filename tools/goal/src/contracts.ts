@@ -175,10 +175,15 @@ export interface LandingQueue {
 }
 
 export type GateStage = 'setup' | 'rebase' | 'scope' | 'gate' | 'merge';
-export type GateOutcomeRefusal = {
-  kind: 'frozen-acceptance-change';
-  paths: readonly string[];
-};
+export type GateOutcomeRefusal =
+  | { kind: 'acceptance-failed' }
+  | { kind: 'setup-failed' }
+  | { kind: 'rebase-conflict'; paths?: readonly string[] }
+  | { kind: 'scope-failed'; paths?: readonly string[] }
+  | { kind: 'undeclared-risk-area'; paths?: readonly string[] }
+  | { kind: 'frozen-acceptance-change'; paths: readonly string[] }
+  | { kind: 'no-effect'; paths: readonly string[] }
+  | { kind: 'merge-failed'; paths?: readonly string[] };
 
 export type LandingConflictMethod = 'rerere' | 'mechanical' | 'resolver' | 'worker';
 export type LandingConflictResolution = {

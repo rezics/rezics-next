@@ -68,8 +68,8 @@ const cases: {
     estimateOverrun: { lines: 201, files: 1, estimate: { lines: 100, files: 4 } },
   },
   {
-    name: 'control-plane estimate exceeded twice over',
-    expected: 'scope-growth',
+    name: 'control-plane estimate exceeded twice over continues as a gate failure',
+    expected: 'new-failure',
     change: { stage: 'merge', diffLines: 201 },
     manager: true,
     controlPlane: true,

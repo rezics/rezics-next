@@ -58,6 +58,8 @@ and tokens it costs, and when no agent could repair the problem in place. Money 
 its guards: payments, payouts and balances. The efficiency review covers guards like any other step. A new guard
 states the defect it prevents and is measured from its first firing.
 
+Decision: guard rewrite and landed shares use observed immediate next attempts for firings in the trailing seven days; hours are summed, and token totals add input and output because cached input is already included in input.
+
 Guards are written into briefs before they are written into code: most control-plane refusals were specified by
 brief writers after one incident, and workers built exactly what they were asked. Prohibitions in briefs and prompts
 turn mismatches into stopped attempts. The evidence is in the
