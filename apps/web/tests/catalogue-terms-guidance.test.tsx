@@ -25,6 +25,9 @@ test('Multilingual terms show actionable field-specific corrections without chan
     Element: window.Element,
     Node: window.Node,
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: (callback: FrameRequestCallback) =>
+      setTimeout(() => callback(performance.now()), 0) as unknown as number,
+    cancelAnimationFrame: (handle: number) => clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));

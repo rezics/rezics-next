@@ -191,7 +191,7 @@ function SubjectTermsPageLive({
   const [saved, setSaved] = useState<Extract<TermsResult, { ok: true }>>();
   const [authorityOverride, setAuthorityOverride] = useState<{
     visit: TermsReadVisit;
-    scope: object;
+    transportKey: number;
     snapshot: TermsSnapshot;
     authority: TermsPageAuthority;
   }>();
@@ -252,10 +252,11 @@ function SubjectTermsPageLive({
         : undefined;
   const stale = failure?.reason === 'stale' || failure?.reason === 'conflict';
   const authoritySnapshot = stale && comparison?.state === 'ready' ? comparison.snapshot : base;
+  const authorityTransportKey = termsTransportKey(transport);
   const authorityQuery = useQuery({
     queryKey: [
       'catalogue-terms-authority',
-      termsTransportKey(transport),
+      authorityTransportKey,
       id,
       locale,
       session,
@@ -265,7 +266,7 @@ function SubjectTermsPageLive({
       authoritySnapshot?.etag,
     ],
     queryFn: async () => ({
-      scope: readScope,
+      transportKey: authorityTransportKey,
       id: authoritySnapshot!.subject.id,
       etag: authoritySnapshot!.etag,
       authority: transport.readAuthority ? await transport.readAuthority() : unavailableTermsAuthority,
@@ -281,13 +282,13 @@ function SubjectTermsPageLive({
   function authorityFor(snapshot: TermsSnapshot): TermsPageAuthority {
     if (
       authorityOverride?.visit === visit &&
-      authorityOverride.scope === readScope &&
+      authorityOverride.transportKey === authorityTransportKey &&
       authorityOverride.snapshot === snapshot
     )
       return authorityOverride.authority;
     const observed = authorityQuery.data;
     if (
-      observed?.scope === readScope &&
+      observed?.transportKey === authorityTransportKey &&
       observed.id === snapshot.subject.id &&
       observed.etag === snapshot.etag
     )
@@ -388,7 +389,7 @@ function SubjectTermsPageLive({
         (!stale && base !== snapshot)
       )
         return;
-      setAuthorityOverride({ visit, scope: readScope, snapshot, authority: next });
+      setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: next });
     } catch {
       if (
         lifetime.active() &&
@@ -396,7 +397,7 @@ function SubjectTermsPageLive({
         currentReadScope.current === readScope &&
         (stale ? comparison?.state === 'ready' && comparison.snapshot === snapshot : base === snapshot)
       )
-        setAuthorityOverride({ visit, scope: readScope, snapshot, authority: unavailableTermsAuthority });
+        setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: unavailableTermsAuthority });
     } finally {
       if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
         setAuthorityChecking(false);
@@ -790,7 +791,7 @@ function SubjectTermsPageLive({
         (!stale && base !== snapshot)
       )
         return;
-      setAuthorityOverride({ visit, scope: readScope, snapshot, authority: freshAuthority });
+      setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: freshAuthority });
       if (!termsCorrectionAllowed(freshAuthority, snapshot)) return;
 
       if (stale && confirmed && !pending.current) {
@@ -873,10 +874,10 @@ function SubjectTermsPageLive({
               currentVisit.current === visit &&
               currentReadScope.current === readScope
             )
-              setAuthorityOverride({ visit, scope: readScope, snapshot, authority: refreshed });
+              setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: refreshed });
           } catch {
             if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
-              setAuthorityOverride({ visit, scope: readScope, snapshot, authority: unavailableTermsAuthority });
+              setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: unavailableTermsAuthority });
           }
         }
       }
