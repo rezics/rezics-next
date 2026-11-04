@@ -420,6 +420,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
             {m.auth_automated_pending()}
           </p>
         ) : null}
+        {attempt?.submitted && status !== 'unknown' && !created ? <p>{m.auth_automated_unknown()}</p> : null}
         {status ? (
           <ErrorAlert ref={feedback} tabIndex={-1}>
             {notice(status)}

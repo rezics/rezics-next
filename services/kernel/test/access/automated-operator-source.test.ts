@@ -160,7 +160,7 @@ test('Existing credentialless automated creation loads minimal current operator 
 }, 60000);
 
 for (const kind of ['actor', 'organization'] as const)
-  test(`review does not authorize creation after account:manage is revoked on the ${kind} operator`, async () => {
+  test(`review does not authorize creation after current authority changes on the ${kind} operator`, async () => {
     const owner = await person(`review_revoke_${kind}`);
     let operatorAccountId = owner.accountId;
     if (kind === 'organization') {
@@ -192,17 +192,21 @@ for (const kind of ['actor', 'organization'] as const)
     const approved = await f
       .approval()
       .approve(owner.bearer, { operationKey, operation }, { pool, deadline: Date.now() + 10000 });
-    await f.bindings.grants.revoke(
-      { ...(await context(owner)), pool },
-      {
-        resource: { route: routeOf(operatorAccountId)!, id: operatorAccountId },
-        subjectId: owner.accountId,
-        subjectRole: '',
-        actions: ['account:manage'],
-        valid: '(,)',
-        key: key(),
-      },
-    );
+    if (kind === 'organization') {
+      await f.bindings.internalLifecycle.raiseFence({ accountId: operatorAccountId, key: key() });
+    } else {
+      await f.bindings.grants.revoke(
+        { ...(await context(owner)), pool },
+        {
+          resource: { route: routeOf(operatorAccountId)!, id: operatorAccountId },
+          subjectId: owner.accountId,
+          subjectRole: '',
+          actions: ['account:manage'],
+          valid: '(,)',
+          key: key(),
+        },
+      );
+    }
     expect(await (await point(owner, operatorAccountId)).json()).toMatchObject({
       readiness: 'refused',
       operator: null,
@@ -222,7 +226,7 @@ for (const kind of ['actor', 'organization'] as const)
 
 test('signed-out and operated callers cannot obtain human review; unavailable dependencies never become refusal', async () => {
   expect((await f.request('/account-management/automated/operator', { operatorAccountId: null })).status).toBe(401);
-  const owner = await person('review_operated_owner');
+  const owner = await f.person('review_operated_owner');
   const subject = await f.automated('review-operated-bot', owner);
   const operation = {
     kind: 'opening' as const,

@@ -239,10 +239,16 @@ export function saveAutomatedAttempt(attempt: AutomatedAttempt): boolean {
       (previous &&
         (previous.accountId !== parsed.accountId ||
           previous.operationKey !== parsed.operationKey ||
-          JSON.stringify(previous.operation) !== JSON.stringify(parsed.operation)))
+          JSON.stringify(previous.operation) !== JSON.stringify(parsed.operation) ||
+          JSON.stringify(previous.operator) !== JSON.stringify(parsed.operator)))
     )
       return false;
-    window.sessionStorage.setItem(storageKey, JSON.stringify(parsed));
+    const retained = {
+      ...parsed,
+      ...(previous?.submitted ? { submitted: true as const } : {}),
+      ...(previous?.reference && !parsed.reference ? { reference: previous.reference } : {}),
+    };
+    window.sessionStorage.setItem(storageKey, JSON.stringify(retained));
     return true;
   } catch {
     return false;
@@ -264,7 +270,10 @@ export function discardAutomatedReview(attempt: AutomatedAttempt | null): void {
     !attempt ||
     !saved ||
     saved === 'invalid' ||
+    saved.accountId !== attempt.accountId ||
     saved.operationKey !== attempt.operationKey ||
+    JSON.stringify(saved.operation) !== JSON.stringify(attempt.operation) ||
+    JSON.stringify(saved.operator) !== JSON.stringify(attempt.operator) ||
     saved.submitted ||
     saved.reference
   )
@@ -302,9 +311,12 @@ export async function submitAutomatedAttempt(
   input: AutomatedAttempt,
   isCurrent: () => boolean = () => true,
 ): Promise<AutomatedOutcome> {
-  const uncertain = !!(input.submitted || input.reference);
   let attempt = parseAutomatedAttempt(input);
   if (!isCurrent() || !attempt || !saveAutomatedAttempt(attempt)) return { kind: 'refused' };
+  const retained = restoreAutomatedAttempt();
+  if (!retained || retained === 'invalid') return { kind: 'unavailable' };
+  attempt = retained;
+  const uncertain = !!(attempt.submitted || attempt.reference);
   const denied = await boundSession(attempt.accountId);
   if (!isCurrent()) return { kind: 'unavailable' };
   if (denied) return uncertain && denied.kind === 'refused' ? { kind: 'unknown' } : denied;
