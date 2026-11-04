@@ -4,11 +4,11 @@ import { env } from 'cloudflare:workers';
 import { prepareSession, viewerCredential } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
 import { preparedPrivateReaderOrigin } from '../private-reader-origin';
-import type { PrivateReaderRead } from '../private-reader-lifetime';
+import type { ReporterHistoryRead } from './journey';
 import { reporterHistoryQuery } from './model';
-import { loadReporterHistory, type ReporterHistoryResult } from './read';
+import { loadReporterHistory } from './read';
 
-export type ReporterHistoryRead = PrivateReaderRead & { result: ReporterHistoryResult };
+export type { ReporterHistoryRead } from './journey';
 /** Preparation is session scoped; the browser supplies only cursor and exact report operands. */
 export const readReporterHistory = createServerFn({ method: 'GET' })
   .validator(reporterHistoryQuery)
