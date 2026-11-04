@@ -166,7 +166,12 @@ export function qualifiedRelationsPage(
       status: 200,
       body: {
         [read.kind === 'links' ? 'links' : 'relations']: rows,
-        next: node === 'characters' || later ? null : node === 'cast' && options.retryCastOnce ? 'retry-cast-once' : `${node}-next`,
+        next:
+          node === 'characters' || later
+            ? null
+            : node === 'cast' && options.retryCastOnce
+              ? 'retry-cast-once'
+              : `${node}-next`,
         freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },
       },
     };

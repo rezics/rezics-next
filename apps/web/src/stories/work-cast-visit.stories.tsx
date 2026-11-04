@@ -48,9 +48,7 @@ function credit(statement: string, characterIds: string[], locale: string, gated
   ];
   const assertion = {
     ...qualifiedStatement(statement, 'wdt:P725', performer, qualifiers),
-    references: [
-      { parts: [snak('schema:url', 'url', 'https://example.org/credits')] },
-    ],
+    references: [{ parts: [snak('schema:url', 'url', 'https://example.org/credits')] }],
   } as Stmt;
   const characters = [firstCharacter, secondCharacter].map((character, index) =>
     summary(character, index ? 'The Archivist / 記録係' : 'The Traveller / 旅人', 'wd:Q95074', 'ja'),
@@ -58,7 +56,9 @@ function credit(statement: string, characterIds: string[], locale: string, gated
   const related = {
     [performer]: summary(performer, 'Mina Sato / 佐藤ミナ', 'schema:Person', 'ja'),
     [role]: summary(role, 'Voice performer', 'skos:Concept'),
-    ...Object.fromEntries(characters.filter((entry) => characterIds.includes(entry.id)).map((entry) => [entry.id, entry])),
+    ...Object.fromEntries(
+      characters.filter((entry) => characterIds.includes(entry.id)).map((entry) => [entry.id, entry]),
+    ),
   };
   const qualified = qualifiedNotes(assertion, related, locale);
   const value: Item = {
@@ -85,7 +85,13 @@ function credit(statement: string, characterIds: string[], locale: string, gated
   return value;
 }
 
-function Visit({ scenario = 'qualified', visitor = 'Signed Out' }: { scenario?: Scenario; visitor?: 'Signed In' | 'Signed Out' }) {
+function Visit({
+  scenario = 'qualified',
+  visitor = 'Signed Out',
+}: {
+  scenario?: Scenario;
+  visitor?: 'Signed In' | 'Signed Out';
+}) {
   const locale = getLocale();
   const items =
     scenario === 'two-characters'
@@ -105,7 +111,11 @@ function Visit({ scenario = 'qualified', visitor = 'Signed Out' }: { scenario?: 
     context,
     link: PlainLink,
     reader: { spoilerLevel: 0, suitability: 'show' as const },
-    labels: { spoilerShow: m.subject_spoiler_show({}, { locale: locale as never }), spoilerHide: m.subject_spoiler_hide({}, { locale: locale as never }), cover: {} },
+    labels: {
+      spoilerShow: m.subject_spoiler_show({}, { locale: locale as never }),
+      spoilerHide: m.subject_spoiler_hide({}, { locale: locale as never }),
+      cover: {},
+    },
     unlabelled: m.subject_value_unlabelled({}, { locale: locale as never }),
     spoilerShow: m.subject_spoiler_show({}, { locale: locale as never }),
   } as unknown as RowValue & { subject: string; subjectLabel: string };
@@ -139,12 +149,7 @@ function Visit({ scenario = 'qualified', visitor = 'Signed Out' }: { scenario?: 
       <AppShell>
         <main className="mx-auto w-full max-w-5xl space-y-6 bg-background p-4 text-foreground sm:p-8">
           <h1 className="text-3xl font-semibold [overflow-wrap:anywhere]">{value.subjectLabel}</h1>
-          <WorkCastWindow
-            items={items}
-            value={value}
-            label="Voice credits"
-            navigation={navigation}
-          />
+          <WorkCastWindow items={items} value={value} label="Voice credits" navigation={navigation} />
         </main>
       </AppShell>
     </PatternStory>
@@ -169,7 +174,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const QualifiedPair: Story = { globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' } };
-export const SamePerformerTwoCharacters: Story = { args: { scenario: 'two-characters' }, globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'dark' } };
+export const SamePerformerTwoCharacters: Story = {
+  args: { scenario: 'two-characters' },
+  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'dark' },
+};
 export const ConcealedAssociation: Story = {
   args: { scenario: 'spoiler' },
   play: async ({ canvasElement }) => {
@@ -188,14 +196,25 @@ export const UnavailableCharacterTarget: Story = {
     await expect(canvas.getByRole('link', { name: /Mina Sato/ })).toHaveAttribute('target', '_blank');
   },
 };
-export const OriginalCreditUnavailable: Story = { args: { scenario: 'unavailable-credit' }, globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'light' } };
+export const OriginalCreditUnavailable: Story = {
+  args: { scenario: 'unavailable-credit' },
+  globals: { locale: 'ja', viewport: { value: 'desktop1440' }, theme: 'light' },
+};
 export const CurrentTargetReturn: Story = {
   globals: { locale: 'en', viewport: { value: 'desktop1440' }, theme: 'dark' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvasElement.querySelector('[data-slot="work-cast-window"]')).toHaveAttribute('data-presentation', 'character');
-    await expect(canvasElement.ownerDocument.activeElement).toBe(canvasElement.querySelector(`li[data-statement="${id(40)}"]`));
-    await expect(canvas.getByRole('link', { name: m.work_cast_previous_window() })).toHaveAttribute('href', expect.stringContaining('node=cast'));
+    await expect(canvasElement.querySelector('[data-slot="work-cast-window"]')).toHaveAttribute(
+      'data-presentation',
+      'character',
+    );
+    await expect(canvasElement.ownerDocument.activeElement).toBe(
+      canvasElement.querySelector(`li[data-statement="${id(40)}"]`),
+    );
+    await expect(canvas.getByRole('link', { name: m.work_cast_previous_window() })).toHaveAttribute(
+      'href',
+      expect.stringContaining('node=cast'),
+    );
   },
 };
 export const ChangedRowAfterReturn: Story = {
@@ -204,7 +223,10 @@ export const ChangedRowAfterReturn: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('status')).toHaveTextContent(m.work_cast_window_changed());
-    await expect(canvas.getByRole('link', { name: m.subject_relation_restart() })).toHaveAttribute('href', expect.stringContaining('node=cast'));
+    await expect(canvas.getByRole('link', { name: m.subject_relation_restart() })).toHaveAttribute(
+      'href',
+      expect.stringContaining('node=cast'),
+    );
   },
 };
 export const RetiredContextReading: Story = {
@@ -214,18 +236,38 @@ export const RetiredContextReading: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('status')).toHaveTextContent(m.work_cast_window_changed());
-    await expect(canvas.getByRole('link', { name: m.subject_relation_restart() })).toHaveAttribute('href', expect.stringContaining('node=cast'));
+    await expect(canvas.getByRole('link', { name: m.subject_relation_restart() })).toHaveAttribute(
+      'href',
+      expect.stringContaining('node=cast'),
+    );
   },
 };
-export const OrdinarySignedInPhoneLight: Story = { args: { visitor: 'Signed In' }, globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' } };
-export const OrdinarySignedInDesktopDark: Story = { args: { visitor: 'Signed In' }, globals: { locale: 'en', viewport: { value: 'desktop1440' }, theme: 'dark' } };
-export const SimplifiedChinesePhoneDark: Story = { globals: { locale: 'zh-Hans', viewport: { value: 'phone390' }, theme: 'dark' } };
-export const KoreanDesktopLight: Story = { globals: { locale: 'ko', viewport: { value: 'desktop1440' }, theme: 'light' } };
+export const OrdinarySignedInPhoneLight: Story = {
+  args: { visitor: 'Signed In' },
+  globals: { locale: 'en', viewport: { value: 'phone390' }, theme: 'light' },
+};
+export const OrdinarySignedInDesktopDark: Story = {
+  args: { visitor: 'Signed In' },
+  globals: { locale: 'en', viewport: { value: 'desktop1440' }, theme: 'dark' },
+};
+export const SimplifiedChinesePhoneDark: Story = {
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone390' }, theme: 'dark' },
+};
+export const KoreanDesktopLight: Story = {
+  globals: { locale: 'ko', viewport: { value: 'desktop1440' }, theme: 'light' },
+};
 export const FrenchPhoneLight: Story = { globals: { locale: 'fr', viewport: { value: 'phone390' }, theme: 'light' } };
-export const GermanDesktopDark: Story = { globals: { locale: 'de', viewport: { value: 'desktop1440' }, theme: 'dark' } };
-export const SpanishDesktopLight: Story = { globals: { locale: 'es', viewport: { value: 'desktop1440' }, theme: 'light' } };
+export const GermanDesktopDark: Story = {
+  globals: { locale: 'de', viewport: { value: 'desktop1440' }, theme: 'dark' },
+};
+export const SpanishDesktopLight: Story = {
+  globals: { locale: 'es', viewport: { value: 'desktop1440' }, theme: 'light' },
+};
 
-const retryRoute = new URL(subjectHref({ id: qualifiedSubject.id, label: qualifiedSubject.label }, 'en').href, 'https://rezics.test');
+const retryRoute = new URL(
+  subjectHref({ id: qualifiedSubject.id, label: qualifiedSubject.label }, 'en').href,
+  'https://rezics.test',
+);
 retryRoute.searchParams.set('realm', qualifiedRealm);
 export const CurrentRetryAfterReadFailure: Story = {
   name: 'Current retry after a fresh relation-read failure',

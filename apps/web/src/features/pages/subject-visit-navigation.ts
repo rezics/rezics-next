@@ -234,8 +234,10 @@ export function workCastVisitReturn(fragment: string): WorkCastVisitReturn | und
 export function workCastVisitReturnFragment(value: WorkCastVisitReturn, maxEncodedHistory = 16000): string {
   const history = value.history ? [...value.history].slice(-16) : undefined;
   const historyBudget = Math.max(0, Math.min(16000, Math.floor(maxEncodedHistory)));
-  while (history && history.length && encodeURIComponent(JSON.stringify(history)).length > historyBudget) history.shift();
-  const retainedHistory = history && encodeURIComponent(JSON.stringify(history)).length <= historyBudget ? history : undefined;
+  while (history && history.length && encodeURIComponent(JSON.stringify(history)).length > historyBudget)
+    history.shift();
+  const retainedHistory =
+    history && encodeURIComponent(JSON.stringify(history)).length <= historyBudget ? history : undefined;
   const params = new URLSearchParams({
     context: value.context,
     node: value.node,

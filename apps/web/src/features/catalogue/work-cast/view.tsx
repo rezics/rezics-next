@@ -4,7 +4,11 @@ import { CoverList } from '../../pages/cover-list';
 import type { Item, RowValue } from '../../pages/overview';
 import { SpoilerGate } from '../../pages/values';
 import { m } from '../../../paraglide/messages.js';
-import { withSubjectVisitReturn, workCastVisitReturn, workCastVisitReturnFragment } from '../../pages/subject-visit-navigation';
+import {
+  withSubjectVisitReturn,
+  workCastVisitReturn,
+  workCastVisitReturnFragment,
+} from '../../pages/subject-visit-navigation';
 import { subjectHref, subjectViewHref } from '../../../subject/subject-href';
 import { ValueExplanationEntry } from '../value-explanation-entry';
 import type { CreditVisit } from '../credit-inspection/model';
@@ -58,9 +62,10 @@ function returnAddress(
 ): string | undefined {
   if (!value.subject || !focus.statement) return;
   const identity = { id: value.subject, label: value.subjectLabel ?? value.unlabelled };
-  const href = navigation?.view && navigation.view !== 'overview'
-    ? subjectViewHref(identity, value.locale, navigation.view)
-    : subjectHref(identity, value.locale).href;
+  const href =
+    navigation?.view && navigation.view !== 'overview'
+      ? subjectViewHref(identity, value.locale, navigation.view)
+      : subjectHref(identity, value.locale).href;
   const url = new URL(href, 'https://rezics.invalid');
   const realm = value.realm ?? (value.context?.population.kind === 'realm' ? value.context.population.id : undefined);
   if (realm) url.searchParams.set('realm', realm);
@@ -79,15 +84,13 @@ function returnAddress(
   return castAddressAt(`${url.pathname}${url.search}`, returnSelection);
 }
 
-function restartAddress(
-  value: WorkCastValue,
-  navigation: WorkCastNavigation | undefined,
-): string | undefined {
+function restartAddress(value: WorkCastValue, navigation: WorkCastNavigation | undefined): string | undefined {
   if (!value.subject) return;
   const identity = { id: value.subject, label: value.subjectLabel ?? value.unlabelled };
-  const href = navigation?.view && navigation.view !== 'overview'
-    ? subjectViewHref(identity, value.locale, navigation.view)
-    : subjectHref(identity, value.locale).href;
+  const href =
+    navigation?.view && navigation.view !== 'overview'
+      ? subjectViewHref(identity, value.locale, navigation.view)
+      : subjectHref(identity, value.locale).href;
   const url = new URL(href, 'https://rezics.invalid');
   const realm = value.realm ?? (value.context?.population.kind === 'realm' ? value.context.population.id : undefined);
   if (realm) url.searchParams.set('realm', realm);
@@ -113,18 +116,14 @@ function InspectTab({ href, lang, className, children }: LinkProps) {
   );
 }
 
-function OriginalCredit({
-  item,
-  value,
-  returnTo,
-}: {
-  item: Item;
-  value: WorkCastValue;
-  returnTo: string | undefined;
-}) {
+function OriginalCredit({ item, value, returnTo }: { item: Item; value: WorkCastValue; returnTo: string | undefined }) {
   const options = { locale: value.locale as never };
   if (!item.credit)
-    return <p role="note" className="text-sm text-muted-foreground">{m.work_cast_inspection_unavailable({}, options)}</p>;
+    return (
+      <p role="note" className="text-sm text-muted-foreground">
+        {m.work_cast_inspection_unavailable({}, options)}
+      </p>
+    );
   return (
     <ValueExplanationEntry
       id={item.credit.holder}
@@ -154,7 +153,8 @@ export function WorkCastWindow({
   label: string;
   navigation?: WorkCastNavigation | undefined;
 }) {
-  const initialReturn = navigation?.returnState ?? (typeof window === 'undefined' ? undefined : workCastVisitReturn(window.location.hash));
+  const initialReturn =
+    navigation?.returnState ?? (typeof window === 'undefined' ? undefined : workCastVisitReturn(window.location.hash));
   const currentContext = contextId(value);
   const currentNode = navigation?.node ?? initialReturn?.node;
   const returnKey = JSON.stringify(initialReturn ?? null);
@@ -226,7 +226,11 @@ export function WorkCastWindow({
     const TargetLink = ({ href, lang, className, children }: LinkProps) => {
       const id = subjectIdFromHref(href);
       if (!id || !focus.statement || !disclosedTargets.has(id))
-        return <span lang={lang} className={className}>{children}</span>;
+        return (
+          <span lang={lang} className={className}>
+            {children}
+          </span>
+        );
       const address = returnAddress(value, navigation, presentation, focus);
       return (
         <a
@@ -247,10 +251,23 @@ export function WorkCastWindow({
       link: ({ href, lang, className, children }: LinkProps) => {
         const id = subjectIdFromHref(href);
         if (id) {
-          if (!disclosedTargets.has(id)) return <span lang={lang} className={className}>{children}</span>;
-          return <TargetLink href={href} lang={lang} className={className}>{children}</TargetLink>;
+          if (!disclosedTargets.has(id))
+            return (
+              <span lang={lang} className={className}>
+                {children}
+              </span>
+            );
+          return (
+            <TargetLink href={href} lang={lang} className={className}>
+              {children}
+            </TargetLink>
+          );
         }
-        return <CurrentLink href={href} lang={lang} className={className}>{children}</CurrentLink>;
+        return (
+          <CurrentLink href={href} lang={lang} className={className}>
+            {children}
+          </CurrentLink>
+        );
       },
     };
   }
@@ -270,7 +287,9 @@ export function WorkCastWindow({
       <SpoilerGate label={value.spoilerShow} hideLabel={value.labels.spoilerHide} unmountOnHide>
         {content}
       </SpoilerGate>
-    ) : content;
+    ) : (
+      content
+    );
   }
 
   return (
@@ -321,7 +340,12 @@ export function WorkCastWindow({
             const statement = item.statement;
             if (!statement) return null;
             return (
-              <li key={statement} data-statement={statement} data-work-cast-row={statement} className="min-w-0 rounded-md border p-2">
+              <li
+                key={statement}
+                data-statement={statement}
+                data-work-cast-row={statement}
+                className="min-w-0 rounded-md border p-2"
+              >
                 {card(item, { statement }, label)}
               </li>
             );
@@ -385,7 +409,11 @@ export function WorkCastWindow({
                           creditVisit={creditVisit}
                         />
                         <div className="ps-1">
-                          <OriginalCredit item={performer} value={value} returnTo={returnAddress(value, navigation, presentation, focus)} />
+                          <OriginalCredit
+                            item={performer}
+                            value={value}
+                            returnTo={returnAddress(value, navigation, presentation, focus)}
+                          />
                         </div>
                       </div>
                     </li>
@@ -401,7 +429,11 @@ export function WorkCastWindow({
                 {projected.unpaired.map((item, index) => {
                   const statement = item.statement ?? `unpaired-${index}`;
                   return (
-                    <div key={`${statement}:${index}`} data-work-cast-row={item.statement} className="min-w-0 rounded-md border p-2">
+                    <div
+                      key={`${statement}:${index}`}
+                      data-work-cast-row={item.statement}
+                      className="min-w-0 rounded-md border p-2"
+                    >
                       {card(item, { statement: item.statement ?? '' }, m.work_cast_unpaired({}, options))}
                     </div>
                   );
@@ -414,4 +446,3 @@ export function WorkCastWindow({
     </div>
   );
 }
-

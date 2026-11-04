@@ -29,7 +29,12 @@ const summary = (subject: string, label: string, type: string) => ({
   cover: type === 'schema:Person' || type === 'wd:Q95074' ? portrait : null,
 });
 
-function castPage(work: string, cursor: string | null, performerName = 'A. Performer', omitStatement?: string): Section {
+function castPage(
+  work: string,
+  cursor: string | null,
+  performerName = 'A. Performer',
+  omitStatement?: string,
+): Section {
   const performer = id(10);
   const unlabelledPerformer = id(18);
   const first = id(11);
@@ -283,9 +288,7 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
       presentation: 'character',
     });
     expect(
-      [...host.querySelectorAll('a')].some((link) =>
-        new URL(link.href).pathname.includes(`/subjects/${id(18)}/`),
-      ),
+      [...host.querySelectorAll('a')].some((link) => new URL(link.href).pathname.includes(`/subjects/${id(18)}/`)),
     ).toBe(false);
     expect(host.textContent).not.toContain(id(18));
     const more = host.querySelector('[data-slot="continue-group"]') as HTMLAnchorElement;

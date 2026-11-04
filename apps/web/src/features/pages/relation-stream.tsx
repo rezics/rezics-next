@@ -258,7 +258,9 @@ export function RelationStream(props: {
     },
     [],
   );
-  return <StreamState key={identity} identity={identity} routeHref={routeHref} registerOwner={registerOwner} {...props} />;
+  return (
+    <StreamState key={identity} identity={identity} routeHref={routeHref} registerOwner={registerOwner} {...props} />
+  );
 }
 
 function StreamState({
@@ -706,7 +708,7 @@ function StreamState({
           navigation={castNavigation}
         />
       ) : items.length ? (
-          <CoverList items={items} value={value} label={title} creditVisit={currentCreditVisit} />
+        <CoverList items={items} value={value} label={title} creditVisit={currentCreditVisit} />
       ) : !visibleError ? (
         <p role={!section.ok ? 'status' : undefined}>
           {section.ok ? m.subject_relation_empty_page({}, options) : failure(section.status, value.locale)}
