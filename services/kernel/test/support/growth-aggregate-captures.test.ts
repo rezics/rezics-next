@@ -91,11 +91,9 @@ test('mergeGrowthCaptures keeps trigger plans and shared buffers across a public
     'x-action': 'probe:read',
     'x-exposure': 'public',
   };
-  const app = createApp({ pool: primary.pool }).get(
-    '/growth-probe',
-    { detail },
-    async () => ({ id: await lockedRead() }),
-  );
+  const app = createApp({ pool: primary.pool }).get('/growth-probe', { detail }, async () => ({
+    id: await lockedRead(),
+  }));
   const measured = await capture(
     primary,
     async () => {
