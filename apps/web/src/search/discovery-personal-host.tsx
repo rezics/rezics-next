@@ -1,4 +1,3 @@
-import type { FollowWriteInput, FollowWriteResult } from '../library/follow-records';
 import { createSpaceEntryCommands, type SpaceEntryCommands } from './space-entry/commands';
 import { SpaceEntryControls } from './space-entry/controls';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -235,12 +234,12 @@ export function useDiscoveryPersonalResults(input: {
               page: {
                 ...result.state.page,
                 viewerFacts: null,
-                spaceEntries: undefined,
                 collectionFollows: { state: 'unavailable', reason: 'identity' },
               },
             }
           : result.state,
       );
+      if (!accepted && state.status === 'ready') delete state.page.spaceEntries;
       const viewer =
         state.status === 'ready' && state.page.viewerFacts?.state === 'current' ? state.page.viewerFacts : null;
       const observation: DiscoveryPersonalObservation = {
