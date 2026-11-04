@@ -2164,6 +2164,8 @@ participation or board Access step.
 The feed-local selected Subject reaction composition and its operation costs are owned by
 [Feeds](../../../../docs/feeds.md#selected-subject-reaction-composition); it uses these native writers and aggregates.
 
+Decision: already-satisfied reaction set/clear commands retain native no-effect receipts, so retrying their original key after a later choice acknowledges the original outcome without changing the newer selection or emitting an event.
+
 Exact post GETs include the current viewer slot and projected per-kind counts through the same readers as thread
 GETs, enabling a bounded point reconciliation after an uncertain reaction. This adds one actor-home slot seek and
 one target-home count read (at most seven kinds) without changing native commands, the relay or ranking.
