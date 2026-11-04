@@ -30,15 +30,38 @@ keyboard return restores its still-meaningful link or the reader heading. Only o
 open at a time, and its Back action restores the member control. Existing correction/classification owners retain
 all edits, ballot state, unknown-command and review recovery. Current Character destinations retain their owners.
 
+Decision: Previous reads the most recently admitted prior address again; Start clears the trail on success.
+Fresh stream discovery deliberately drops a rejected stream/cursor and asks the current native Subject for its
+released streams, preserving the exact arc filter for a member window. It never clears whole-reading retirement.
+
+One selected assertion inspection retains the original directed holder, statement, qualified position/range,
+disclosed association and references. Opening a member selects that same assertion. Each accepted replacement,
+even an equal response, clears selection, reveal consent and child state. Changing stream closes the child at
+once. Previous and Start remain deliberate recovery choices after unavailable continuation; Retry names the
+failed address while the prior admitted page is explicitly marked. Withheld/invalid results remove rows and
+all row targets, leaving exact Retry, current-stream discovery and the current Subject loader.
+
+Keyboard opening focuses the child only while the original opener still has focus; pointer opening and read
+settlement do not move focus. Close checks the original child lease before changing selection or restoring its
+current opener. Hiding its spoiler gate retires that child. Removed current content can fall back to the current
+heading only while focus remains unclaimed. Tab-return intent is cancelled by intervening focus/pointer activity.
+The installed browser observation/cache subscription and retiring address lease fence equal-success session,
+exposure, source, settings, Context, Realm, locale and page-departure replacements. Retired readings offer a fresh
+Subject load; they cannot be revived by Retry or a matching payload.
+
 ## Cost
 
-Each deliberate first/next/retry/restart/stream read costs one exact Subject read, the existing active-definition
+Each deliberate first/next/previous/retry/restart/stream read costs one exact Subject read, the existing active-definition
 and immutable Release pair, and at most one relations/links page. Opening a member's appearances repeats this plan
 for that exact work and arc filter. There are no per-row reads, target hydration, polling, prefetch, writes or
 session/exposure reads. At most one request per window is pending. One outer and one optional member window are
 retained, each with at most 20 rows, 128 KiB per native row and a 2,686,976-byte page cap; Subject input is capped
 at 4 MiB. Definitions retain the existing 4 MiB/1,024-Type/4,096-property limits and at most 64 streams. Cursors
-retain at most 4,096 UTF-16 units. Old windows replace rather than accumulate. Admission temporarily serializes
+retain at most 4,096 UTF-16 units. Old windows replace rather than accumulate. Each window also retains at most eight prior bounded addresses,
+evicting oldest first, plus one accepted and one pending address. Addresses carry only Subject/Context UUIDs,
+an optional arc UUID, one stream key (at most 256 UTF-16 units) and one cursor (at most 4,096 UTF-16 units).
+The two trails therefore retain at most 16 address records (about 142 KiB of UTF-16 string contents at the caps,
+plus object overhead); no prior row bodies, source objects or reveal consent are cached. Admission temporarily serializes
 input; normalized JS objects and transport overhead add to these serialized bounds. Projection and rendering
 are O(admitted bytes + rows), independent of total arc size.
 

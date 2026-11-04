@@ -17,7 +17,7 @@ mock.module('@tanstack/react-start/server', () => start);
 const { StoryArcReader } = await import('../src/features/catalogue/story-arc-reader/view');
 const { m } = await import('../src/paraglide/messages.js');
 
-async function ui() {
+export async function ui() {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -49,13 +49,13 @@ async function ui() {
       root.render(createElement(QueryClientProvider, { client }, createElement(StoryArcReader, props))),
     );
   };
-  const click = async (label: string) => {
-    const button = Array.from(host.querySelectorAll('button')).find((node) =>
+  const click = async (label: string, scope: ParentNode = host, detail = 0) => {
+    const button = Array.from(scope.querySelectorAll('button')).find((node) =>
       node.textContent?.trim().startsWith(label),
     );
     if (!button) throw new Error(`Missing button: ${label}`);
     button.focus();
-    await act(async () => button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
+    await act(async () => button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail })));
     return button;
   };
   const close = async () => {
@@ -90,6 +90,7 @@ test('arc journey gates whole narrative/appearance rows, opens current targets, 
     // The first gate belongs to this work's appearance; the later member also has its own gate.
     await mounted.click(m.subject_spoiler_show());
     expect(mounted.host.textContent).toContain('Secret character');
+    await mounted.click(m.arc_reader_inspect(), mounted.host.querySelector('[data-slot=arc-appearance-window]')!);
     expect(mounted.host.textContent).toContain('原典の範囲');
     const target = mounted.host.querySelector<HTMLAnchorElement>(`a[href*="${characterId}"]`)!;
     expect(target.target).toBe('_blank');
@@ -148,20 +149,23 @@ test('replacement exposure retires accepted controls and an in-flight continuati
     await act(async () => {
       mounted.client.setQueryData(['exposure', 'viewer'], { replacement: true });
     });
-    expect(mounted.host.querySelectorAll('a')).toHaveLength(0);
+    expect(mounted.host.querySelectorAll('a')).toHaveLength(1);
+    expect(mounted.host.querySelector('a')?.textContent).toContain(m.arc_reader_fresh_subject());
     expect(mounted.host.textContent).not.toContain('Later title');
     expect(document.activeElement?.tagName).toBe('H2');
     await act(async () => {
       resolve(initial);
     });
-    expect(mounted.host.querySelectorAll('a')).toHaveLength(0);
+    expect(mounted.host.querySelectorAll('a')).toHaveLength(1);
+    expect(mounted.host.querySelector('a')?.textContent).toContain(m.arc_reader_fresh_subject());
     await mounted.render(props);
     expect(mounted.host.textContent).toContain(m.arc_reader_unavailable());
     const recovered = { ...props, source: {}, transport: fixture.read };
     await mounted.render(recovered);
     expect(mounted.host.textContent).toContain('Later title');
     await mounted.render({ ...recovered, locale: 'ja' });
-    expect(mounted.host.querySelectorAll('a')).toHaveLength(0);
+    expect(mounted.host.querySelectorAll('a')).toHaveLength(1);
+    expect(mounted.host.querySelector('a')?.textContent).toContain(m.arc_reader_fresh_subject());
   } finally {
     await mounted.close();
   }
