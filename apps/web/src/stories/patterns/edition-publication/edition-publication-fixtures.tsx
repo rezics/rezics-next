@@ -144,7 +144,7 @@ export async function publicationFixture(state: PublicationExampleState) {
               viewerActions: [
                 {
                   action: resource.type === 'content.post' ? 'post:revise' : 'edition:sell',
-                  operations: [resource.type === 'content.post' ? 'post.revise' : 'content_edition.publish'],
+                  operations: [resource.type === 'content.post' ? 'content_edition.create' : 'content_edition.publish'],
                 },
               ],
             },
