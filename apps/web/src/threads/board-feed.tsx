@@ -258,7 +258,7 @@ function applyBoardPinReading(
     threads: result.threads as BoardThreadPage['threads'],
     next: result.next,
     rankRefreshedAt: result.rankRefreshedAt,
-    pinRevision: result.pinRevision,
+    ...(result.pinRevision === undefined ? {} : { pinRevision: result.pinRevision }),
   };
 }
 
