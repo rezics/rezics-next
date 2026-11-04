@@ -9,7 +9,7 @@ import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
 import { editorRequest } from './editor-request';
 import { CreateSubjectForm } from './create-subject-form';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import type { InitialSubject } from './create-subject';
 import { relationTargetSearch } from './relation-editor-search';
 import { createCatalogueMusicContext, loadMusicContextCreate } from './music-context-create-actions';
@@ -67,6 +67,7 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
 
   const transport = useMemo(
     () => ({
+      eligibility: () => readCatalogueCreateEligibility(),
       submit: (command: { item: InitialSubject; key: string }) =>
         createCatalogueMusicContext({
           data: editorRequest(command as MusicContextCreateCommand, work),
