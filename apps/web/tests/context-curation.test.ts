@@ -110,14 +110,11 @@ describe('Context curation through the generated native request seam', () => {
     expect(decision.ok && decision.kind).toBe('rejected');
     const adoption = await fixture.transport.confirm(command(fixture));
     expect(adoption).toEqual({ ok: false, reason: 'denied' });
-    expect(
-      fixture.calls
-        .filter((call) => call.method === 'POST' && /:(?:accept|reject|adopt)$/.test(call.path))
-        .map((call) => call.body?.expected_head),
-    ).toEqual([4, 7]);
-    expect(
-      fixture.calls.filter((call) => call.method === 'POST').every((call) => call.body?.context === fixture.context.id),
-    ).toBe(true);
+    const commands = fixture.calls.filter(
+      (call) => call.method === 'POST' && /:(?:accept|reject|adopt)$/.test(call.path),
+    );
+    expect(commands.map((call) => call.body?.expected_head)).toEqual([4, 7]);
+    expect(commands.every((call) => call.body?.context === fixture.context.id)).toBe(true);
   });
 
   test('409 reload supplies the actual new slot head; an uncertain retry preserves payload and key', async () => {
