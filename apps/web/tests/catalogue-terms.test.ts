@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient, type SubjectRead } from '@rezics/client';
+import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import { catalogueTermsFixture, termsSubjectId } from '../src/kernel/fake/catalogue-terms';
 import {
   isTermsCommand,
   languageDraft,
   patchedTerms,
   termsPatch,
+  termsCorrectionAllowed,
   type TermsCommand,
   type TermsRead,
 } from '../src/features/catalogue/subject-terms';
@@ -14,13 +16,70 @@ import {
   partitionTermChanges,
   resolutionKey,
 } from '../src/features/catalogue/subject-terms-resolution';
-import { patchSubjectTerms, readSubjectTerms } from '../src/features/catalogue/subject-terms-request';
+import { patchSubjectTerms, readSubjectTerms, readTermsPageAuthority } from '../src/features/catalogue/subject-terms-request';
 import type { SessionEnv } from '../src/session/client';
 
 function ready(read: TermsRead) {
   if (read.state !== 'ready') throw new Error(`Expected ready, got ${read.state}`);
   return read.snapshot;
 }
+
+test('Terms eligibility observes one exact mounted operation on the Global Context and keeps unavailable distinct from denial', async () => {
+  let body: unknown = {
+    resources: [
+      {
+        type: 'semantic.context',
+        id: PAGE_GLOBAL_CONTEXT,
+        viewerActions: [{ action: 'statement:propose', operations: ['subject.terms'] }],
+      },
+    ],
+  };
+  const requests: Request[] = [];
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: (async (input, init) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      requests.push(request);
+      return Response.json(body);
+    }) as typeof fetch,
+  });
+  const snapshot = ready(await catalogueTermsFixture().transport.read(termsSubjectId));
+
+  const allowed = await readTermsPageAuthority(client, 'signed-in', 'Bearer current');
+  expect(allowed).toEqual({
+    viewer: 'signed-in',
+    actions: { state: 'ready', actions: [{ action: 'statement:propose', operations: ['subject.terms'] }] },
+  });
+  expect(termsCorrectionAllowed(allowed, snapshot)).toBe(true);
+  expect(requests).toHaveLength(1);
+  expect(requests[0]!.method).toBe('POST');
+  expect(new URL(requests[0]!.url).pathname).toBe('/v1/viewerActions');
+  expect(requests[0]!.headers.get('authorization')).toBe('Bearer current');
+  expect(await requests[0]!.json()).toEqual({ resources: [{ type: 'semantic.context', id: PAGE_GLOBAL_CONTEXT }] });
+
+  body = {
+    resources: [
+      {
+        type: 'semantic.context',
+        id: PAGE_GLOBAL_CONTEXT,
+        viewerActions: [{ action: 'statement:propose', operations: ['subject.create'] }],
+      },
+    ],
+  };
+  const refused = await readTermsPageAuthority(client, 'signed-in', 'Bearer current');
+  expect(refused).toEqual({ viewer: 'signed-in', actions: { state: 'ready', actions: [] } });
+  expect(termsCorrectionAllowed(refused, snapshot)).toBe(false);
+
+  body = { resources: [{ type: 'semantic.context', id: PAGE_GLOBAL_CONTEXT, error: 'not_found' }] };
+  const unavailable = await readTermsPageAuthority(client, 'signed-in', 'Bearer current');
+  expect(unavailable).toEqual({ viewer: 'signed-in', actions: { state: 'unavailable' } });
+  expect(termsCorrectionAllowed(unavailable, snapshot)).toBe(false);
+  expect(await readTermsPageAuthority(client, 'signed-out')).toEqual({
+    viewer: 'signed-out',
+    actions: { state: 'ready', actions: [] },
+  });
+  expect(requests).toHaveLength(3);
+  expect(termsCorrectionAllowed(allowed, { ...snapshot, profileHref: '/en/account/profile' })).toBe(false);
+});
 const request = (csrf = 'AAAAAAAAAAAAAAAAAAAAAA') =>
   new Request('https://site.invalid/api', {
     method: 'POST',
