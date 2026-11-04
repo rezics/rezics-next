@@ -6,7 +6,7 @@ import { ExactEditionLink, isExactEdition } from '../src/features/pages/cover-li
 import { literaryFixture } from '../src/kernel/fake/catalogue-literary-profile';
 import {
   literaryAuthorityKey,
-  literaryReaderIdentity,
+  literaryWorkIdentity,
   literaryReaderRetired,
 } from '../src/features/catalogue/literary-reader/model';
 import { LiteraryReader } from '../src/features/catalogue/literary-reader/view';
@@ -17,7 +17,7 @@ test('literary work identity keeps multilingual names, and only exact editions l
   subject.labels = { en: 'The harbour', ja: '港' };
   subject.aliases = { en: ['Harbour stories'] };
   subject.descriptions = { en: 'A novel about a changing port town.' };
-  const identity = literaryReaderIdentity(subject, 'en');
+  const identity = literaryWorkIdentity(subject, 'en');
   const markup = renderToStaticMarkup(
     createElement(LiteraryReader, {
       identity,

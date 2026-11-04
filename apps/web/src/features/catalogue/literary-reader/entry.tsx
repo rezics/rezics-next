@@ -3,7 +3,7 @@ import { subjectViewHref } from '../../../subject/subject-href';
 import { useSession } from '../../../session/query';
 import type { Subject } from '../../../subject/types';
 import { useOverview, viewHref } from '../../pages/overview';
-import { literaryAuthorityKey, literaryReaderIdentity, literaryReaderRetired, type LiteraryReaderObservation } from './model';
+import { literaryAuthorityKey, literaryReaderRetired, literaryWorkIdentity, type LiteraryReaderObservation } from './model';
 import { LiteraryReader } from './view';
 
 export function LiteraryReaderEntry({
@@ -47,7 +47,7 @@ export function LiteraryReaderEntry({
   const matchingSource = value?.subject === work.id && (value.context?.id ?? null) === (context ?? null);
   const editionSection = editionView?.section;
   const editionHref =
-    matchingSource && editionSection?.ok && editionSection.read.kind === 'links'
+    matchingSource && value && editionSection?.ok && editionSection.read.kind === 'links'
       ? viewHref(value, 'editions') ?? undefined
       : undefined;
   const factsHref = matchingSource

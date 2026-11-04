@@ -10,7 +10,7 @@ export type LiteraryName = { language: string; text: string };
 
 export type LiteraryWorkIdentity = {
   id: string;
-  title: { text: string; lang?: string };
+  title: ReturnType<typeof pageText>;
   titles: LiteraryName[];
   aliases: LiteraryName[];
   descriptions: LiteraryName[];
