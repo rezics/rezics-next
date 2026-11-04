@@ -9,18 +9,17 @@ import {
   creditTypeSchemeUri,
   vndbStaffCreditConverterRevision,
 } from '../src/vndb-staff-credits.ts';
-import {
-  crossMediaAliases,
-  planCrossMediaSeed,
-  seedCrossMedia,
-  type CrossMediaPort,
-} from '../src/cross-media-seed.ts';
+import { crossMediaAliases, planCrossMediaSeed, seedCrossMedia, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import {
   prepareShowcaseVndbCreditVocabulary,
   publishedShowcaseVndbCreditReferences,
 } from '../src/showcase-vndb-credits.ts';
 import { buildShowcaseManifest } from '../src/showcase-manifest.ts';
-import { captureShowcaseCommands, ShowcaseJournal, type ShowcasePublicationResult } from '../src/showcase-publication.ts';
+import {
+  captureShowcaseCommands,
+  ShowcaseJournal,
+  type ShowcasePublicationResult,
+} from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 function selectedVn() {
@@ -312,9 +311,12 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       'vndb.credit_type:scenario',
     ]);
     const acknowledgements = journal.acknowledgedCommands();
-    const designRequirement = concepts.requirements.find((requirement) => requirement.sourceKey.endsWith(':chardesign'))!;
+    const designRequirement = concepts.requirements.find((requirement) =>
+      requirement.sourceKey.endsWith(':chardesign'),
+    )!;
     const designCreate = acknowledgements.find(
-      (entry) => entry.command.op === 'create' && entry.command.source.external_id === designRequirement.source.external_id,
+      (entry) =>
+        entry.command.op === 'create' && entry.command.source.external_id === designRequirement.source.external_id,
     )!;
     const designSubject = subjects.get(designCreate.subjectId!)!;
     designSubject.subject.statements['skos:inScheme'] = [{ value: { content: randomUUID() } }];
@@ -326,7 +328,8 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       .filter((requirement) => requirement !== designRequirement)
       .flatMap((requirement) => {
         const create = acknowledgements.find(
-          (entry) => entry.command.op === 'create' && entry.command.source.external_id === requirement.source.external_id,
+          (entry) =>
+            entry.command.op === 'create' && entry.command.source.external_id === requirement.source.external_id,
         );
         if (!create?.subjectId) return [];
         const read = subjects.get(create.subjectId);
@@ -392,9 +395,11 @@ test('local credit vocabulary stages from selected rows, recovers ACK UUIDs and 
       property: { id: 'wdt:P453' },
       value: { type: 'value', content: readings.get('c3') },
     });
-    expect(roleCommands.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:illustrator')).toBe(
-      false,
-    );
+    expect(
+      roleCommands.some(
+        (command) => command.op === 'propose' && command.statement.property.id === 'schema:illustrator',
+      ),
+    ).toBe(false);
     expect(current.vndbCreditDiagnostics).toContainEqual(
       expect.objectContaining({ code: 'chardesign', reason: 'missing_concept' }),
     );

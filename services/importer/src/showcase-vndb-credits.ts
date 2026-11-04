@@ -1,5 +1,11 @@
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { BATCH_LIMIT, checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
+import {
+  BATCH_LIMIT,
+  checkBatchWrite,
+  type BatchCommand,
+  type BatchReference,
+  type BatchStatement,
+} from '@rezics/definitions/bulk';
 import type { SourceVocabularyBindings, SourceVocabularyGap, SourceVocabularyRequest } from '@rezics/conversion';
 import { sourceVocabularyLimits } from '@rezics/conversion/source-vocabulary';
 import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
@@ -225,7 +231,7 @@ function vocabularyCommands(
       references: vocabularyReferences(requirement.sourceUri),
     });
   }
-  return (schemeId || !concept
+  return schemeId || !concept
     ? statements.map((statement) => ({
         op: 'propose' as const,
         key: `vndb-staff-credit-vocabulary:${commandKey([
@@ -238,7 +244,7 @@ function vocabularyCommands(
         subject: subjectId,
         statement,
       }))
-    : []);
+    : [];
 }
 
 function acknowledgedCreates(journal: ShowcaseJournal, requirements: readonly ShowcaseVocabularyRequirement[]) {
@@ -360,9 +366,7 @@ export function publishedShowcaseVndbCreditReferences(
 ): VndbCreditVocabularyReferences | undefined {
   const acknowledged = acknowledgedCreates(journal, requirements);
   const published = new Map(
-    publication.published
-      .filter((record) => record.provider === 'vndb')
-      .map((record) => [record.sourceKey, record]),
+    publication.published.filter((record) => record.provider === 'vndb').map((record) => [record.sourceKey, record]),
   );
   const scheme = requirements.find((requirement) => requirement.nativeType === 'skos:ConceptScheme');
   const schemeId = scheme && acknowledged.get(scheme.sourceKey);
@@ -391,14 +395,7 @@ export function publishedShowcaseVndbCreditReferences(
     const id = acknowledged.get(requirement.sourceKey);
     const record = published.get(requirement.sourceKey);
     const manifestRecord = publication.manifest.vocabulary.find((entry) => entry.sourceKey === requirement.sourceKey);
-    if (
-      !id ||
-      !record ||
-      record.nativeType !== 'skos:Concept' ||
-      record.subjectId !== id ||
-      !manifestRecord
-    )
-      return [];
+    if (!id || !record || record.nativeType !== 'skos:Concept' || record.subjectId !== id || !manifestRecord) return [];
     if (
       !record.assertions.some((assertion) => assertion.property === 'schema:url') ||
       !record.assertions.some((assertion) => assertion.property === 'skos:inScheme') ||
@@ -596,8 +593,7 @@ export async function prepareShowcaseVndbCredits(
     vocabularyAdmission,
     deliveryEdges(edges) {
       return edges.filter(
-        (edge) =>
-          edge.source !== 'vndb' || (edge.table !== 'vn_staff' && edge.table !== 'vn_seiyuu'),
+        (edge) => edge.source !== 'vndb' || (edge.table !== 'vn_staff' && edge.table !== 'vn_seiyuu'),
       );
     },
   };

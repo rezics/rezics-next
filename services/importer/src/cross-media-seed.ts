@@ -2061,12 +2061,7 @@ export async function seedCrossMedia(
 ) {
   const providers = extras?.providers ?? (['bangumi', 'vndb'] as const);
   const vndbCredits = providers.includes('vndb')
-    ? await prepareShowcaseVndbCredits(
-        plan,
-        port,
-        extras?.vndbCreditReferences,
-        extras?.readPublicSubject,
-      )
+    ? await prepareShowcaseVndbCredits(plan, port, extras?.vndbCreditReferences, extras?.readPublicSubject)
     : undefined;
   const characterProfile = providers.includes('vndb') ? planVndbCharacterProfile(plan) : undefined;
   const characterProfileAdmission =
@@ -2925,7 +2920,9 @@ export async function runCrossMediaSeedCli(
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   const publicClient = showcasePath ? createPublicBulkClient({ origin: api }) : undefined;
   let autoVndbCreditReferences: VndbCreditVocabularyReferences | undefined;
-  let vndbCreditVocabularyRequirements: Awaited<ReturnType<typeof prepareShowcaseVndbCreditVocabulary>>['requirements'] = [];
+  let vndbCreditVocabularyRequirements: Awaited<
+    ReturnType<typeof prepareShowcaseVndbCreditVocabulary>
+  >['requirements'] = [];
   let vndbCreditVocabularyIssues: Awaited<ReturnType<typeof prepareShowcaseVndbCreditVocabulary>>['issues'] = [];
   let creditResolution: BangumiCreditVocabularyResolution | undefined;
   try {

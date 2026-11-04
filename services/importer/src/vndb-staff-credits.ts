@@ -44,10 +44,7 @@ export type VndbStaffCredit = {
   characterId?: string;
 };
 export type VndbStaffCreditPlan = CrossMediaPlan & { staffCredits: VndbStaffCredit[] };
-export type VndbCreditVocabularyReadFailure = Readonly<
-  | { scope: 'scheme' }
-  | { scope: 'concept'; code: string }
->;
+export type VndbCreditVocabularyReadFailure = Readonly<{ scope: 'scheme' } | { scope: 'concept'; code: string }>;
 
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
