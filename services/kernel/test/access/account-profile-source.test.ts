@@ -34,7 +34,10 @@ beforeAll(async () => {
   auth = await nativeFixture(pool);
   const person = await auth.person('rename-source');
   accountId = person.accountId;
-  await pool.query('UPDATE access.account SET handle=NULL WHERE route=$1 AND account_id=$2', [routeOf(accountId), accountId]);
+  await pool.query('UPDATE access.account SET handle=NULL WHERE route=$1 AND account_id=$2', [
+    routeOf(accountId),
+    accountId,
+  ]);
   human = await proof();
 });
 afterAll(async () => {
@@ -61,14 +64,18 @@ test('native page composes a handleless profile with the real current rename act
     },
   });
   await expect(
-    access.readRenameAccountPage({ human: { ...human, scope: ['account:update', 'account:read'] }, accountId, deadline }),
+    access.readRenameAccountPage({
+      human: { ...human, scope: ['account:update', 'account:read'] },
+      accountId,
+      deadline,
+    }),
   ).rejects.toBeInstanceOf(AuthBindingDeniedError);
-  await expect(access.readRenameAccountPage({ human, accountId: '00000000-0000-4000-8000-000000000002', deadline })).rejects.toBeInstanceOf(
-    AuthBindingDeniedError,
+  await expect(
+    access.readRenameAccountPage({ human, accountId: '00000000-0000-4000-8000-000000000002', deadline }),
+  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
+  await pool.query(
+    'UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch+1 WHERE route=$1 AND account_id=$2',
+    [routeOf(accountId), accountId],
   );
-  await pool.query('UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch+1 WHERE route=$1 AND account_id=$2', [
-    routeOf(accountId),
-    accountId,
-  ]);
   await expect(access.readRenameAccountPage({ human, accountId, deadline: Date.now() + 10000 })).rejects.toThrow();
 });
