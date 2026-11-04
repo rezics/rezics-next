@@ -145,7 +145,7 @@ export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderD
   const filterInputs = filterInputsFromSearch(search);
   const filterValue = search.filter;
   const resourceScope =
-    typeof filterValue === 'string'
+    typeof filterValue === 'string' && new TextEncoder().encode(filterValue).length <= 16384
       ? parseSearchResourceScope(filterValue)
       : { scope: undefined, invalidInput: undefined };
   const invalidFilter =
