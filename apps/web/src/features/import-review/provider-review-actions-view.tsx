@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SubjectRead } from '@rezics/client';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
@@ -223,6 +223,9 @@ export function ProviderReviewActions({
   });
   const [batch, setBatch] = useState<ProviderBatch>();
   const [confirmation, setConfirmation] = useState<ProviderBatch>();
+  useEffect(() => {
+    if (!confirmation && !batch) onCustodyChange?.(false);
+  }, [confirmation, batch, onCustodyChange]);
   const confirmationOwner = useRef<ProviderBatch | null>(null);
   const batchOwner = useRef<ProviderBatch | null>(null);
   // Sealed presentation and transport stay with the original confirmation, just like native operands.
