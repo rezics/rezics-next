@@ -93,7 +93,7 @@ test('Rename an account through native approved handle workflow preserves exact 
   expect(await loadRenameTarget()).toEqual({ kind: 'unavailable' });
 });
 
-test('Ambiguous rename keeps the same closed operation and reference and needs current readback', async () => {
+test('Ambiguous rename keeps the exact operation and reference while acknowledgement and readback remain distinct', async () => {
   const writes: string[] = [];
   let executions = 0;
   const attempt = createRenameAttempt(target, 'new-handle')!;
@@ -105,12 +105,16 @@ test('Ambiguous rename keeps the same closed operation and reference and needs c
   }) as typeof fetch;
   expect(await runRenameAttempt(attempt, ready)).toEqual({ kind: 'unknown' });
   expect(attempt.submitted).toBe(true);
-  // An acknowledgement with a stale current profile is still unknown.
-  expect(await runRenameAttempt(attempt, ready)).toEqual({ kind: 'unknown' });
+  // Native acknowledgement settles the command, while stale readback cannot confirm the current desired handle.
+  expect(await runRenameAttempt(attempt, ready)).toEqual({
+    kind: 'acknowledged',
+    current: { kind: 'ready', target },
+  });
   expect(writes[0]).toBe(writes[1]);
   const observed = async (): Promise<RenameRead> => ({ kind: 'ready', target: { ...target, handle: 'new-handle' } });
   expect((await runRenameAttempt(attempt, observed)).kind).toBe('renamed');
-  expect(writes).toHaveLength(2);
+  expect(writes).toHaveLength(3);
+  expect(writes[2]).toBe(writes[1]);
   expect(
     (await runRenameAttempt(attempt, async () => ({ kind: 'ready', target: { ...target, accountId: 'different' } })))
       .kind,
@@ -162,7 +166,10 @@ test('Native conflict reloads the current handle and unavailable reads cannot ap
   globalThis.fetch = (async () => {
     throw new Error('Must not write without a current profile');
   }) as typeof fetch;
-  expect(await runRenameAttempt(attempt, async () => ({ kind: 'unavailable' }))).toEqual({ kind: 'unavailable' });
+  expect(await runRenameAttempt(attempt, async () => ({ kind: 'unavailable' }))).toEqual({
+    kind: 'unavailable',
+    current: { kind: 'unavailable' },
+  });
   expect(parseRenameProfile({ profile: { id: target.accountId, kind: 'actor' } }, target.accountId)).toBeNull();
   expect(
     parseRenameProfile({ profile: { id: target.accountId, kind: 'actor', handle: null } }, target.accountId),
