@@ -96,7 +96,7 @@ test('Stay preserves the uncertain publication intent; Discard returns to the or
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-in', subject: creatorId, csrfToken: 'csrf' });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
-  const createRoute = createRoute({
+  const createEditionRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/editions/new',
     validateSearch: editionCreateSearch,
@@ -118,7 +118,7 @@ test('Stay preserves the uncertain publication intent; Discard returns to the or
     },
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([createRoute, inventoryRoute]),
+    routeTree: rootRoute.addChildren([createEditionRoute, inventoryRoute]),
     history: createMemoryHistory({ initialEntries: [entry] }),
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
@@ -174,7 +174,7 @@ test('published Edition hands off its exact current identity and locale without 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-in', subject: edition.creatorAccountId, csrfToken: 'csrf' });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
-  const createRoute = createRoute({
+  const createEditionRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/editions/new',
     validateSearch: editionCreateSearch,
@@ -195,7 +195,7 @@ test('published Edition hands off its exact current identity and locale without 
     },
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([createRoute, offerRoute]),
+    routeTree: rootRoute.addChildren([createEditionRoute, offerRoute]),
     history: createMemoryHistory({ initialEntries: [entry] }),
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
