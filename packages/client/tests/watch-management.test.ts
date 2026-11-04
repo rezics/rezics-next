@@ -13,15 +13,18 @@ expectTypeOf<WatchManagementPage['items'][number]>().toEqualTypeOf<WatchManageme
 expectTypeOf<WatchManagementKind>().toEqualTypeOf<'thread' | 'board'>();
 type AvailableWatch = Extract<WatchManagementItem, { state: 'available' }>;
 type UnavailableWatch = Extract<WatchManagementItem, { state: 'unavailable' }>;
-expectTypeOf<keyof AvailableWatch>().toEqualTypeOf<'id' | 'kind' | 'revision' | 'createdAt' | 'state' | 'resourceId' | 'title'>();
+expectTypeOf<keyof AvailableWatch>().toEqualTypeOf<
+  'id' | 'kind' | 'revision' | 'createdAt' | 'state' | 'resourceId' | 'title'
+>();
 expectTypeOf<AvailableWatch['resourceId']>().toEqualTypeOf<string>();
 expectTypeOf<AvailableWatch['title']>().toEqualTypeOf<string | null>();
 expectTypeOf<UnavailableWatch['state']>().toEqualTypeOf<'unavailable'>();
 expectTypeOf<keyof UnavailableWatch>().toEqualTypeOf<'id' | 'kind' | 'revision' | 'createdAt' | 'state'>();
 type BoardWatch = ReturnType<KernelClient['boards']>['watch'];
-expectTypeOf<Awaited<ReturnType<BoardWatch['get']>>['data']>().toEqualTypeOf<
-  { watching: boolean; revision: number } | null
->();
+expectTypeOf<Awaited<ReturnType<BoardWatch['get']>>['data']>().toEqualTypeOf<{
+  watching: boolean;
+  revision: number;
+} | null>();
 expectTypeOf<Parameters<BoardWatch['put']>[0]>().toEqualTypeOf<{
   watching: boolean;
   expectedRevision: number;
@@ -53,7 +56,14 @@ test('installed watch inventory preserves sparse cursors, unavailable retry and 
   const identity = { revision: 2, createdAt: '2026-11-04T00:00:00.000Z' };
   const threadPage: WatchManagementPage = {
     items: [
-      { ...identity, id: threadId, kind: 'thread', state: 'available', resourceId: threadResource, title: 'Watched thread' },
+      {
+        ...identity,
+        id: threadId,
+        kind: 'thread',
+        state: 'available',
+        resourceId: threadResource,
+        title: 'Watched thread',
+      },
       { ...identity, id: `${threadId.slice(0, -1)}6`, kind: 'thread', state: 'unavailable' },
     ],
     next: null,
