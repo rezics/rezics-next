@@ -87,5 +87,3 @@ export function declareMembersPreparationParent(owners: MembersPreparationOwnerD
   const total = snapshot(sumOperationalWork(...Object.values(children)));
   return Object.freeze({ children: Object.freeze(children), total });
 }
-
-

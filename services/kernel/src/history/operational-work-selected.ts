@@ -168,11 +168,7 @@ async function original(tx: OperationalTransaction, identity: SelectedIdentity, 
   }
   return { o, reservation };
 }
-async function tuple(
-  tx: OperationalTransaction,
-  identity: SelectedIdentity,
-  locator: SelectedLocator,
-): Promise<Tuple> {
+async function tuple(tx: OperationalTransaction, identity: SelectedIdentity, locator: SelectedLocator): Promise<Tuple> {
   if (!(await selectedLocalQuery(tx, identity, SQL.present)).rows[0]?.present)
     unavailable('selected-runtime-commerce-native-episode-absent');
   const row = (
