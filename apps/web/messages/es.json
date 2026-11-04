@@ -6861,7 +6861,7 @@
   "concept_explore_unknown_role": "Rol de origen desconocido",
   "concept_explore_unsupported": "Este valor se conserva como evidencia y no es un concepto admitido.",
   "concept_explore_unreadable": "Este concepto no se puede leer ahora.",
-  "concept_explore_retired": "Este concepto de origen se publicó por última vez en una versión retirada. Esta página muestra la fuente y admisión que pueden leerse ahora.",
+  "concept_explore_retired": "Este concepto pertenece a una versión retirada. Se conservan su definición, versión y códigos originales.",
   "concept_explore_empty": "Esta página no devolvió entradas de jerarquía legibles.",
   "concept_explore_more": "Más jerarquía",
   "concept_explore_correct": "Corregir este hecho",
@@ -8191,7 +8191,7 @@
   "concept_explore_inverse_unsupported": "La definición admitida no ofrece un inverso más específico para esta relación.",
   "concept_explore_hierarchy_preparing": "La jerarquía más específica aún se está preparando. Vuelva a intentar esta página.",
   "concept_explore_hierarchy_lagging": "Esta página puede ir retrasada respecto a los cambios actuales del origen.",
-  "concept_explore_hierarchy_unavailable": "No se pudo leer esta página. La página anterior sigue disponible.",
+  "concept_explore_hierarchy_unavailable": "No se pudo leer esta página de conceptos más específicos. Reintenta la página solicitada.",
   "concept_explore_page_empty": "Esta página no devolvió entradas legibles; puede haber más páginas.",
   "concept_explore_no_narrower": "La lectura nativa actual confirma que no hay conceptos más específicos.",
   "concept_explore_retry": "Reintentar esta página",
@@ -8411,5 +8411,10 @@
   "library_summary_preparing": "Preparando los recuentos de la biblioteca…",
   "library_summary_stale": "Tu biblioteca ha cambiado. Actualiza los recuentos.",
   "library_summary_unavailable": "Los recuentos no están disponibles. Puedes seguir usando las entradas.",
-  "library_summary_retry": "Actualizar recuentos"
+  "library_summary_retry": "Actualizar recuentos",
+  "concept_explore_original_role": "Rol original de la fuente",
+  "concept_explore_role_evidence": "Rol de fuente desconocido: se conserva exactamente como se recibió; no otorga autoridad sobre conceptos ni correcciones.",
+  "concept_explore_scheme_withheld": "Destino del esquema oculto",
+  "concept_explore_retained_page": "Se muestra la página de jerarquía conservada {page} de esta revisión. La solicitud fallida no la ha sustituido.",
+  "concept_explore_hierarchy_navigation": "Páginas de jerarquía"
 }

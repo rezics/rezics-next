@@ -18,13 +18,13 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   returnTo?: string | undefined;
   pinUnsupported?: boolean | undefined;
 }) {
-  const work = useCatalogueLifetime('concept-explore');
+  const work = useCatalogueLifetime(JSON.stringify(['concept-explore', id, locale, role]));
   const { state } = useSession();
   const expectedReader = state === 'signed-in' ? work.reader : null;
   if (state === 'unknown') return <p>{m.concept_explore_loading({}, { locale: locale as never })}</p>;
   return (
     <SourceConceptView
-      key={`${id}:${locale}:${state}:${expectedReader ?? 'anonymous'}`}
+      key={work.generation}
       id={id}
       locale={locale}
       role={role}

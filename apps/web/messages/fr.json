@@ -6861,7 +6861,7 @@
   "concept_explore_unknown_role": "Rôle source inconnu",
   "concept_explore_unsupported": "Cette valeur est conservée comme preuve et n’est pas un concept admis.",
   "concept_explore_unreadable": "Ce concept ne peut pas être lu pour le moment.",
-  "concept_explore_retired": "Ce concept source a été publié pour la dernière fois dans une version retirée. Cette page montre la source et l’admission actuellement lisibles.",
+  "concept_explore_retired": "Ce concept appartient à une version retirée. Sa définition, sa version et ses codes d’origine sont conservés.",
   "concept_explore_empty": "Aucune entrée de hiérarchie lisible n’a été renvoyée sur cette page.",
   "concept_explore_more": "Plus de hiérarchie",
   "concept_explore_correct": "Corriger ce fait",
@@ -8191,7 +8191,7 @@
   "concept_explore_inverse_unsupported": "La définition admise ne fournit pas d’inverse plus spécifique pour cette relation.",
   "concept_explore_hierarchy_preparing": "La hiérarchie plus spécifique est en préparation. Réessayez cette page.",
   "concept_explore_hierarchy_lagging": "Cette page peut ne pas refléter les changements récents de la source.",
-  "concept_explore_hierarchy_unavailable": "Cette page n’a pas pu être lue. La page précédente reste disponible.",
+  "concept_explore_hierarchy_unavailable": "Cette page des concepts plus spécifiques n’a pas pu être lue. Réessayez la page demandée.",
   "concept_explore_page_empty": "Aucune entrée lisible sur cette page ; d’autres pages peuvent exister.",
   "concept_explore_no_narrower": "La lecture native actuelle confirme l’absence de concepts plus spécifiques.",
   "concept_explore_retry": "Réessayer cette page",
@@ -8411,5 +8411,10 @@
   "library_summary_preparing": "Préparation du nombre d’entrées…",
   "library_summary_stale": "Votre bibliothèque a changé. Actualisez les nombres.",
   "library_summary_unavailable": "Les nombres sont indisponibles. Les entrées restent accessibles.",
-  "library_summary_retry": "Actualiser les nombres"
+  "library_summary_retry": "Actualiser les nombres",
+  "concept_explore_original_role": "Rôle source original",
+  "concept_explore_role_evidence": "Rôle source inconnu : conservé tel que fourni ; il ne donne aucun droit sur les concepts ou les corrections.",
+  "concept_explore_scheme_withheld": "Destination du schéma masquée",
+  "concept_explore_retained_page": "La page de hiérarchie conservée {page} de cette révision est affichée. La requête échouée ne l’a pas remplacée.",
+  "concept_explore_hierarchy_navigation": "Pages de hiérarchie"
 }

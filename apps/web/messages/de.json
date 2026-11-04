@@ -6861,7 +6861,7 @@
   "concept_explore_unknown_role": "Unbekannte Quellenrolle",
   "concept_explore_unsupported": "Dieser Wert bleibt Beleg und ist kein zugelassener Begriff.",
   "concept_explore_unreadable": "Dieser Begriff kann derzeit nicht gelesen werden.",
-  "concept_explore_retired": "Dieser Quellenbegriff wurde zuletzt unter einer zurückgezogenen Veröffentlichung publiziert. Diese Seite zeigt die aktuell lesbare Quelle und Zulassung.",
+  "concept_explore_retired": "Dieses Quellkonzept gehört zu einer früheren Version. Seine ursprüngliche Definition, Version und Codes bleiben erhalten.",
   "concept_explore_empty": "Auf dieser Seite wurden keine lesbaren Hierarchieeinträge geliefert.",
   "concept_explore_more": "Weitere Hierarchie",
   "concept_explore_correct": "Diese Tatsache korrigieren",
@@ -8191,7 +8191,7 @@
   "concept_explore_inverse_unsupported": "Die zugelassene Definition bietet für diese Beziehung keine inverse Unterordnung.",
   "concept_explore_hierarchy_preparing": "Die untergeordnete Hierarchie wird noch vorbereitet. Wiederholen Sie diese Seite.",
   "concept_explore_hierarchy_lagging": "Diese Seite der Unterordnung kann hinter aktuellen Quellenänderungen zurückliegen.",
-  "concept_explore_hierarchy_unavailable": "Diese Seite der Unterordnung konnte nicht gelesen werden. Die vorherige Seite bleibt verfügbar.",
+  "concept_explore_hierarchy_unavailable": "Diese Seite der engeren Begriffe konnte nicht gelesen werden. Erneut versuchen.",
   "concept_explore_page_empty": "Auf dieser Hierarchieseite wurden keine lesbaren Einträge geliefert; weitere Seiten können folgen.",
   "concept_explore_no_narrower": "Die aktuelle native Lesung bestätigt keine untergeordneten Begriffe.",
   "concept_explore_retry": "Diese Seite erneut versuchen",
@@ -8411,5 +8411,10 @@
   "library_summary_preparing": "Bibliothekszahlen werden vorbereitet…",
   "library_summary_stale": "Deine Bibliothek hat sich geändert. Aktualisiere die Zahlen.",
   "library_summary_unavailable": "Bibliothekszahlen sind nicht verfügbar. Einträge können weiterhin genutzt werden.",
-  "library_summary_retry": "Zahlen aktualisieren"
+  "library_summary_retry": "Zahlen aktualisieren",
+  "concept_explore_original_role": "Ursprüngliche Quellrolle",
+  "concept_explore_role_evidence": "Unbekannte Quellrolle: unverändert übernommen; sie erteilt keine Konzept- oder Korrekturberechtigung.",
+  "concept_explore_scheme_withheld": "Schema-Ziel nicht offengelegt",
+  "concept_explore_retained_page": "Die gespeicherte Hierarchieseite {page} dieser Quellrevision wird angezeigt. Die fehlgeschlagene Anfrage hat sie nicht ersetzt.",
+  "concept_explore_hierarchy_navigation": "Hierarchieseiten"
 }

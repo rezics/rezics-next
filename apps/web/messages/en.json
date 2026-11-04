@@ -6938,7 +6938,7 @@
   "concept_explore_unknown_role": "Unknown source role",
   "concept_explore_unsupported": "This value is retained evidence and is not an admitted concept.",
   "concept_explore_unreadable": "This concept cannot be read right now.",
-  "concept_explore_retired": "This source concept was last published under a retired release. This page shows the current readable source and admission.",
+  "concept_explore_retired": "This source concept belongs to a retired release. Its original definition, release and codes are preserved.",
   "concept_explore_empty": "No readable hierarchy entries were returned on this page.",
   "concept_explore_more": "More hierarchy",
   "concept_explore_correct": "Correct this fact",
@@ -8286,7 +8286,7 @@
   "concept_explore_inverse_unsupported": "The admitted definition does not provide a narrower inverse for this relation.",
   "concept_explore_hierarchy_preparing": "The narrower hierarchy is still preparing. Retry this page.",
   "concept_explore_hierarchy_lagging": "This narrower page may be behind current source changes.",
-  "concept_explore_hierarchy_unavailable": "This narrower page could not be read. The earlier page is still available.",
+  "concept_explore_hierarchy_unavailable": "This narrower page could not be read. Retry the requested page.",
   "concept_explore_page_empty": "No readable entries were returned on this hierarchy page; more pages may remain.",
   "concept_explore_no_narrower": "The current native read confirms no narrower concepts.",
   "concept_explore_retry": "Retry this page",
@@ -8523,5 +8523,10 @@
   "library_summary_preparing": "Preparing Library counts…",
   "library_summary_stale": "Your Library changed. Refresh counts.",
   "library_summary_unavailable": "Library counts are unavailable. Entries can still be used.",
-  "library_summary_retry": "Refresh counts"
+  "library_summary_retry": "Refresh counts",
+  "concept_explore_original_role": "Original source role",
+  "concept_explore_role_evidence": "Unknown source role: retained exactly as supplied; it grants no concept or correction authority.",
+  "concept_explore_scheme_withheld": "Scheme endpoint withheld",
+  "concept_explore_retained_page": "Showing retained hierarchy page {page} for this source revision. The failed request has not replaced it.",
+  "concept_explore_hierarchy_navigation": "Hierarchy pages"
 }

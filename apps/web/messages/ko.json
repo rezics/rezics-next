@@ -6861,7 +6861,7 @@
   "concept_explore_unknown_role": "알 수 없는 출처 역할",
   "concept_explore_unsupported": "이 값은 증거로 유지되며 인정된 개념이 아닙니다.",
   "concept_explore_unreadable": "지금은 이 개념을 읽을 수 없습니다.",
-  "concept_explore_retired": "이 출처 개념은 폐기된 발행에서 마지막으로 공개되었습니다. 이 페이지에는 현재 읽을 수 있는 출처와 인정 상태가 표시됩니다.",
+  "concept_explore_retired": "이 출처 개념은 이전 릴리스에 속합니다. 원래 정의, 릴리스와 코드를 보존합니다.",
   "concept_explore_empty": "이 계층 페이지에서 읽을 수 있는 항목을 반환하지 않았습니다.",
   "concept_explore_more": "계층 더 보기",
   "concept_explore_correct": "이 사실 수정",
@@ -8191,7 +8191,7 @@
   "concept_explore_inverse_unsupported": "인정된 정의에서 이 관계의 하위 역방향을 제공하지 않습니다.",
   "concept_explore_hierarchy_preparing": "하위 계층을 준비 중입니다. 이 페이지를 다시 시도하세요.",
   "concept_explore_hierarchy_lagging": "이 페이지는 현재 출처 변경보다 늦을 수 있습니다.",
-  "concept_explore_hierarchy_unavailable": "이 하위 페이지를 읽을 수 없습니다. 이전 페이지는 계속 사용할 수 있습니다.",
+  "concept_explore_hierarchy_unavailable": "하위 개념 페이지를 읽을 수 없습니다. 요청한 페이지를 다시 시도하세요.",
   "concept_explore_page_empty": "이 계층 페이지에 읽을 수 있는 항목이 없습니다. 다음 페이지가 있을 수 있습니다.",
   "concept_explore_no_narrower": "현재 네이티브 읽기에서 하위 개념이 없음을 확인했습니다.",
   "concept_explore_retry": "이 페이지 다시 시도",
@@ -8411,5 +8411,10 @@
   "library_summary_preparing": "라이브러리 항목 수를 준비하는 중…",
   "library_summary_stale": "라이브러리가 변경되었습니다. 항목 수를 새로 고치세요.",
   "library_summary_unavailable": "항목 수를 불러올 수 없습니다. 항목은 계속 사용할 수 있습니다.",
-  "library_summary_retry": "항목 수 새로 고침"
+  "library_summary_retry": "항목 수 새로 고침",
+  "concept_explore_original_role": "원래 출처 역할",
+  "concept_explore_role_evidence": "알 수 없는 출처 역할입니다. 전달된 값을 그대로 보존하며 개념 승인이나 수정 권한을 부여하지 않습니다.",
+  "concept_explore_scheme_withheld": "체계 대상 비공개",
+  "concept_explore_retained_page": "이 출처 리비전의 보존된 계층 페이지 {page}을 표시합니다. 실패한 요청은 이 페이지를 대체하지 않았습니다.",
+  "concept_explore_hierarchy_navigation": "계층 페이지"
 }

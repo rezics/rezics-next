@@ -6861,7 +6861,7 @@
   "concept_explore_unknown_role": "未知来源角色",
   "concept_explore_unsupported": "此值作为证据保留，不是已承认的概念。",
   "concept_explore_unreadable": "目前无法读取此概念。",
-  "concept_explore_retired": "此来源概念最后发布于已退役版本。本页显示当前可读的来源和准入状态。",
+  "concept_explore_retired": "此来源概念属于已退役的发布版本。其原始定义、发布版本及代码均予保留。",
   "concept_explore_empty": "此层级页没有返回可读条目。",
   "concept_explore_more": "更多层级",
   "concept_explore_correct": "更正此事实",
@@ -8191,7 +8191,7 @@
   "concept_explore_inverse_unsupported": "获准定义未提供此关系的下位反向关系。",
   "concept_explore_hierarchy_preparing": "下位层级仍在准备中。请重试此页。",
   "concept_explore_hierarchy_lagging": "此下位页面可能落后于当前来源更改。",
-  "concept_explore_hierarchy_unavailable": "无法读取此下位页面。此前页面仍可查看。",
+  "concept_explore_hierarchy_unavailable": "无法读取此下位概念页面。请重试请求的页面。",
   "concept_explore_page_empty": "此层级页没有返回可读条目；可能还有后续页面。",
   "concept_explore_no_narrower": "当前原生读取确认没有下位概念。",
   "concept_explore_retry": "重试此页",
@@ -8411,5 +8411,10 @@
   "library_summary_preparing": "正在准备书库数量…",
   "library_summary_stale": "书库已更改，请刷新数量。",
   "library_summary_unavailable": "无法获取数量，仍可使用条目。",
-  "library_summary_retry": "刷新数量"
+  "library_summary_retry": "刷新数量",
+  "concept_explore_original_role": "原始来源角色",
+  "concept_explore_role_evidence": "未知来源角色：按收到的原值保留，不授予概念认可或订正权限。",
+  "concept_explore_scheme_withheld": "方案端点未公开",
+  "concept_explore_retained_page": "正在显示此来源修订保留的第 {page} 页层级。失败的请求尚未替换此页。",
+  "concept_explore_hierarchy_navigation": "层级分页"
 }
