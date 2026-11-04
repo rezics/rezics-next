@@ -68,7 +68,7 @@ test('the actual host returns safe rename readiness and never reads the private 
     };
     const trusted = trustedAccessPorts({
       readAccount: async () => null,
-      authorizeProvisioning: async () => null,
+      authorizeProvisioning: async (id) => ({ accountId: id }),
       readRenameAccountProfile: (async () => {
         reads.profile++;
         return { profile: { id: accountId, kind: 'actor', handle: 'current' } };
