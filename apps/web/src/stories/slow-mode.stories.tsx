@@ -40,7 +40,15 @@ function policy(
 ): Extract<SlowModeRead, { kind: 'available' }> {
   return {
     kind: 'available',
-    policy: { intervalSeconds, retryAt: nextEligibleAt, nextEligibleAt, canChange: true, exempt: false, admissionState: nextEligibleAt ? 'interval' : 'ready', retryAfterSeconds: 0 },
+    policy: {
+      intervalSeconds,
+      retryAt: nextEligibleAt,
+      nextEligibleAt,
+      canChange: true,
+      exempt: false,
+      admissionState: nextEligibleAt ? 'interval' : 'ready',
+      retryAfterSeconds: 0,
+    },
   };
 }
 
