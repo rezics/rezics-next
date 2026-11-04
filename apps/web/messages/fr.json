@@ -9082,5 +9082,19 @@
   "realm_question_grain": "Niveau de la question",
   "realm_question_author": "Auteur",
   "realm_question_confirm_retire_text": "Cette question restera consultable après son retrait, mais disparaîtra du répertoire actif.",
-  "realm_question_confirm_restore_text": "Le rétablissement replacera cette même définition dans le répertoire actif."
+  "realm_question_confirm_restore_text": "Le rétablissement replacera cette même définition dans le répertoire actif.",
+  "subject_synopsis_choice": "Choisir un résumé fourni",
+  "subject_synopsis_candidate": "Candidat {number}",
+  "subject_synopsis_evidence": "Éléments de preuve pour ce résumé",
+  "subject_synopsis_none": "Aucun résumé fourni de l’œuvre n’est disponible.",
+  "subject_synopsis_choices_unavailable": "Le choix des résumés est indisponible.",
+  "subject_synopsis_unavailable": "Aucun document n’est disponible pour ce résumé.",
+  "subject_synopsis_missing": "Le texte du résumé sélectionné n’est pas encore disponible.",
+  "subject_synopsis_loading": "Lecture du résumé sélectionné…",
+  "subject_synopsis_failed": "Le résumé sélectionné n’a pas pu être lu.",
+  "subject_synopsis_retry": "Réessayer la lecture",
+  "subject_short_description": "Description courte",
+  "subject_synopsis_advice_refused": "L’avis de correction indique que cette action est refusée.",
+  "subject_synopsis_advice_unavailable": "L’avis de correction est indisponible.",
+  "subject_synopsis_return": "Revenir à cette lecture"
 }

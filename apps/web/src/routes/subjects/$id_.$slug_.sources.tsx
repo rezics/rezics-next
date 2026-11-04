@@ -15,6 +15,7 @@ import { canonicalRedirect, subjectHref } from '../../subject/subject-href';
 import { sourceObservationSelection } from '../../features/catalogue/source-observation/contract';
 import type { SourceObservationRequest } from '../../features/catalogue/source-observation/contract';
 import { inspectSubjectSourceObservation } from '../../features/catalogue/source-observation/action';
+import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 
 const inspectSourceObservation = (request: SourceObservationRequest) =>
   inspectSubjectSourceObservation({ data: request });
@@ -28,6 +29,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
     const selection = sourceObservationSelection(search);
     return {
       realm: validatePageRealm(search.realm),
+      via: subjectVisitReturn(search.via, getLocale()),
       ...(selection ? { provider: selection.source, digest: selection.digest } : {}),
     };
   },
@@ -60,7 +62,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
 
 function SourcesRoute() {
   const { result, reader, visit } = Route.useLoaderData();
-  const { realm } = Route.useSearch();
+  const { realm, via } = Route.useSearch();
   const session = useSession();
   const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, session));
   const scope = JSON.stringify([visit, session.state, session.subject, session.csrfToken]);
@@ -99,21 +101,30 @@ function SourcesRoute() {
         ? current.result
         : { kind: 'loading' as const }
       : result;
-  return <SourcesPresentation result={currentReader ? selected : { kind: 'loading' }} reader={reader} />;
+  return (
+    <SourcesPresentation
+      result={currentReader ? selected : { kind: 'loading' }}
+      reader={reader}
+      {...(via ? { returnTo: via } : {})}
+    />
+  );
 }
 
 function SourcesError({ reset }: { reset: () => void }) {
-  return <SourcesPresentation result={{ kind: 'unavailable' }} reset={reset} />;
+  const via = Route.useSearch().via;
+  return <SourcesPresentation result={{ kind: 'unavailable' }} reset={reset} {...(via ? { returnTo: via } : {})} />;
 }
 
 function SourcesPresentation({
   result,
   reader = null,
   reset,
+  returnTo,
 }: {
   result: SourcesResult | { kind: 'loading' };
   reader?: string | null;
   reset?: () => void;
+  returnTo?: string;
 }) {
   const search = Route.useSearch();
   const { realm } = search;
@@ -145,5 +156,13 @@ function SourcesPresentation({
     loading: result.kind === 'loading',
     ...(reset ? { reset } : {}),
   });
-  return <SubjectSourcesPage result={result} locale={locale} {...(observation ? { observation } : {})} {...retry} />;
+  return (
+    <SubjectSourcesPage
+      result={result}
+      locale={locale}
+      {...(returnTo ? { returnTo } : {})}
+      {...(observation ? { observation } : {})}
+      {...retry}
+    />
+  );
 }

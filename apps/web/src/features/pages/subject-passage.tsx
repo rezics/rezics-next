@@ -25,16 +25,25 @@ export function SubjectPassage({
   language,
   locale,
   children,
+  open,
+  onOpenChange,
 }: {
   excerpt: Excerpt;
   language: string | undefined;
   locale: string;
   children: ReactNode;
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }) {
   if (excerpt.complete) return children;
   const options = { locale: locale as never };
   return (
-    <details data-slot="summary-disclosure" className="group space-y-3">
+    <details
+      data-slot="summary-disclosure"
+      className="group space-y-3"
+      {...(open === undefined ? {} : { open })}
+      {...(onOpenChange ? { onToggle: (event) => onOpenChange(event.currentTarget.open) } : {})}
+    >
       <summary className="min-h-11 min-w-11 cursor-pointer rounded-sm py-2 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4">
         {excerpt.text && (
           <span

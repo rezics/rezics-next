@@ -9082,5 +9082,19 @@
   "realm_question_grain": "Nivel de la pregunta",
   "realm_question_author": "Autor",
   "realm_question_confirm_retire_text": "La pregunta seguirá disponible para inspección tras retirarla, pero saldrá del directorio activo.",
-  "realm_question_confirm_restore_text": "Al restaurarla, esta misma definición volverá al directorio activo."
+  "realm_question_confirm_restore_text": "Al restaurarla, esta misma definición volverá al directorio activo.",
+  "subject_synopsis_choice": "Elegir un resumen proporcionado",
+  "subject_synopsis_candidate": "Candidato {number}",
+  "subject_synopsis_evidence": "Evidencia de este resumen",
+  "subject_synopsis_none": "No hay ningún resumen proporcionado de la obra.",
+  "subject_synopsis_choices_unavailable": "La selección de resúmenes no está disponible.",
+  "subject_synopsis_unavailable": "Este resumen no tiene ningún documento disponible.",
+  "subject_synopsis_missing": "El texto del resumen seleccionado aún no está disponible.",
+  "subject_synopsis_loading": "Leyendo el resumen seleccionado…",
+  "subject_synopsis_failed": "No se pudo leer el resumen seleccionado.",
+  "subject_synopsis_retry": "Volver a leer",
+  "subject_short_description": "Descripción breve",
+  "subject_synopsis_advice_refused": "La recomendación de corrección indica que esta acción no está permitida.",
+  "subject_synopsis_advice_unavailable": "La recomendación de corrección no está disponible.",
+  "subject_synopsis_return": "Volver a esta lectura"
 }

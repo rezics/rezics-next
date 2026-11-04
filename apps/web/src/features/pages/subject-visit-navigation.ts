@@ -28,6 +28,112 @@ export function connectionReturnGroup(window: ConnectionReturnWindow): 'relation
   return 'relations';
 }
 
+export type SummaryReadingReturn = {
+  candidateId: string;
+  documentId: string;
+  digest: string;
+  language: string;
+  locale: string;
+  context?: string;
+  realm?: string;
+  release?: string;
+  source?: string;
+  expanded?: boolean;
+  focus?: 'reading' | 'evidence';
+};
+
+const boundedToken = (value: string, max: number) =>
+  value.length > 0 && value.length <= max && !/[\u0000-\u0020\u007f]/u.test(value);
+
+/** A bounded locator for one public synopsis view; it contains no body, credentials, or editor state. */
+export function summaryReadingReturn(hash: string): SummaryReadingReturn | undefined {
+  if (!hash.startsWith('#subject-summary-reading?') || hash.length > 2048) return;
+  const params = new URLSearchParams(hash.slice('#subject-summary-reading?'.length));
+  const allowed = new Set([
+    'candidate',
+    'document',
+    'digest',
+    'language',
+    'locale',
+    'context',
+    'realm',
+    'release',
+    'source',
+    'expanded',
+    'focus',
+  ]);
+  const keys = [...params.keys()];
+  if (new Set(keys).size !== keys.length || keys.some((key) => !allowed.has(key))) return;
+  const candidateId = params.get('candidate');
+  const documentId = params.get('document');
+  const digest = params.get('digest');
+  const language = params.get('language');
+  const locale = params.get('locale');
+  const context = params.get('context');
+  const realm = params.get('realm');
+  const release = params.get('release');
+  const source = params.get('source');
+  const expanded = params.get('expanded');
+  const focus = params.get('focus');
+  if (
+    !candidateId ||
+    !boundedToken(candidateId, 128) ||
+    !documentId ||
+    !boundedToken(documentId, 128) ||
+    !digest ||
+    !boundedToken(digest, 128) ||
+    !language ||
+    !boundedToken(language, 35) ||
+    !/^([A-Za-z]{2,8})(-[A-Za-z0-9]{1,8})*$/u.test(language) ||
+    !locale ||
+    !boundedToken(locale, 35) ||
+    (context !== null && !boundedToken(context, 128)) ||
+    (realm !== null && !boundedToken(realm, 128)) ||
+    (release !== null && !boundedToken(release, 128)) ||
+    (source !== null && !boundedToken(source, 128)) ||
+    (expanded !== null && expanded !== '1') ||
+    (focus !== null && focus !== 'reading' && focus !== 'evidence')
+  )
+    return;
+  try {
+    if (Intl.getCanonicalLocales(language).length !== 1) return;
+    if (Intl.getCanonicalLocales(locale).length !== 1) return;
+  } catch {
+    return;
+  }
+  return {
+    candidateId,
+    documentId,
+    digest,
+    language,
+    locale,
+    ...(context ? { context } : {}),
+    ...(realm ? { realm } : {}),
+    ...(release ? { release } : {}),
+    ...(source ? { source } : {}),
+    ...(expanded === '1' ? { expanded: true } : {}),
+    ...(focus ? { focus: focus as 'reading' | 'evidence' } : {}),
+  };
+}
+
+export function summaryReadingFragment(value: SummaryReadingReturn): string | undefined {
+  const params = new URLSearchParams({
+    candidate: value.candidateId,
+    document: value.documentId,
+    digest: value.digest,
+    language: value.language,
+    locale: value.locale,
+    ...(value.context ? { context: value.context } : {}),
+    ...(value.realm ? { realm: value.realm } : {}),
+    ...(value.release ? { release: value.release } : {}),
+    ...(value.source ? { source: value.source } : {}),
+    ...(value.expanded ? { expanded: '1' } : {}),
+    ...(value.focus ? { focus: value.focus } : {}),
+  });
+  const fragment = `#subject-summary-reading?${params}`;
+  return summaryReadingReturn(fragment) ? fragment : undefined;
+}
+
 /** An opaque public locator, not rows, credentials, a reveal grant or a recursive opener. */
 export function connectionReturnWindow(hash: string): ConnectionReturnWindow | undefined {
   if (!hash.startsWith('#connections?') || hash.length > 28000) return;
@@ -192,6 +298,7 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
       fragment !== '#literary-reader' &&
       fragment !== '#connections' &&
       !(subject && connectionReturnWindow(fragment)) &&
+      !(subject && summaryReadingReturn(fragment)) &&
       fragment !== '#manga-reader' &&
       fragment !== '#screen-episode-list' &&
       screenEntry === null &&

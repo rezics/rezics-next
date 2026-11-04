@@ -9174,5 +9174,19 @@
   "realm_question_grain": "Question grain",
   "realm_question_author": "Author",
   "realm_question_confirm_retire_text": "Retiring this question keeps it inspectable but removes it from the active directory.",
-  "realm_question_confirm_restore_text": "Restoring this question returns the same definition to the active directory."
+  "realm_question_confirm_restore_text": "Restoring this question returns the same definition to the active directory.",
+  "subject_synopsis_choice": "Choose a supplied synopsis",
+  "subject_synopsis_candidate": "Candidate {number}",
+  "subject_synopsis_evidence": "Evidence for this synopsis",
+  "subject_synopsis_none": "No supplied work synopsis is available.",
+  "subject_synopsis_choices_unavailable": "Synopsis choices are unavailable.",
+  "subject_synopsis_unavailable": "This synopsis has no available document.",
+  "subject_synopsis_missing": "The selected synopsis text is not available yet.",
+  "subject_synopsis_loading": "Reading the selected synopsis…",
+  "subject_synopsis_failed": "The selected synopsis could not be read.",
+  "subject_synopsis_retry": "Retry reading",
+  "subject_short_description": "Short description",
+  "subject_synopsis_advice_refused": "Correction advice says this action is refused.",
+  "subject_synopsis_advice_unavailable": "Correction advice is unavailable.",
+  "subject_synopsis_return": "Return to this reading"
 }
