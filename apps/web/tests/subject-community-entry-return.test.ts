@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider, useLocation } from '@tanstack/react-router';
@@ -11,12 +11,18 @@ import {
 import type { CommunityRegion } from '../src/features/pages/subject-community';
 import { subjectCommunityVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { threadCreationPreset } from '../src/threads/thread-creation-lifetime';
-import { PageData } from '../src/features/pages/data';
-import { ReviewList, ThreadList } from '../src/features/pages/overview';
-import { SubjectCommunityContext } from '../src/features/pages/subject-community-view';
-import { subjectPageMessages } from '../src/features/pages/route-support';
 import type { CommunityThread, SubjectCommunity } from '../src/features/pages/subject-community';
 import { m } from '../src/paraglide/messages.js';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const [{ PageData }, { ReviewList, ThreadList }, { SubjectCommunityContext }, { subjectPageMessages }] =
+  await Promise.all([
+    import('../src/features/pages/data'),
+    import('../src/features/pages/overview'),
+    import('../src/features/pages/subject-community-view'),
+    import('../src/features/pages/route-support'),
+  ]);
+afterAll(() => mock.restore());
 
 const subjectId = '01a17a3b-0884-721b-91ef-d7ffd7bb58e4';
 const realmId = '01a17a3b-0884-721b-91ef-d7ffd7bb58e5';
