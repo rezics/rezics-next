@@ -18,13 +18,16 @@ export function ModerationDirectory({ page, search, onSearch, onRetry, isCurrent
   const [, setExpired] = useState(0);
   const current = useRef(page);
   current.current = page;
+  const observation = moderationDirectoryPage(page);
   useEffect(() => {
-    if (page?.state !== 'ready') return;
-    const timer = setTimeout(() => setExpired((version) => version + 1), Math.max(0, Date.parse(page.validUntil) - Date.now()));
+    if (observation.state !== 'ready') return;
+    const timer = setTimeout(() => setExpired((version) => version + 1), Math.max(0, Date.parse(observation.validUntil) - Date.now()));
     return () => clearTimeout(timer);
   }, [page]);
-  useEffect(() => () => { current.current = undefined; }, []);
-  const observation = moderationDirectoryPage(page);
+  useEffect(() => {
+    current.current = page;
+    return () => { if (current.current === page) current.current = undefined; };
+  }, [page]);
   const live = () => current.current === page && (!isCurrent || isCurrent()) &&
     page?.state === 'ready' && Date.now() < Date.parse(page.validUntil);
   if (observation.state !== 'ready') {

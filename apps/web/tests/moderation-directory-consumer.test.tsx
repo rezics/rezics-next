@@ -19,6 +19,7 @@ const { createRoot } = await import('react-dom/client');
 const { readWorkbench } = await import('../src/moderation/workbench-queue/read');
 const { workbenchSearch, workbenchReadKey, workbenchQueueHref } = await import('../src/moderation/workbench-queue/scope');
 const { WorkbenchView } = await import('../src/moderation/workbench-queue/view');
+const { moderationDirectoryPage } = await import('../src/moderation/workbench-queue/directory');
 const { m } = await import('../src/paraglide/messages.js');
 let root: ReturnType<typeof createRoot> | undefined;
 afterEach(async () => { if (root) await act(() => root!.unmount()); root = undefined; });
@@ -92,4 +93,18 @@ test('denied and expired directory advice cannot open scopes; absent binding nev
   expect(expired.querySelector('[data-moderation-scope]')).toBeNull();
   const unbound = source(directory()); delete unbound.directory;
   expect((await readWorkbench(unbound, search)).directory?.state).toBe('unavailable');
+});
+
+test('consumer bounds reject oversized, duplicate and unsupported advice and drop private fields', () => {
+  const page = directory();
+  if (page.state !== 'ready') throw new Error('fixture');
+  for (const invalid of [
+    { ...page, items: Array(21).fill(page.items[0]) },
+    { ...page, items: [page.items[0], page.items[0]] },
+    { ...page, items: [{ ...page.items[0], label: 'x'.repeat(1025) }] },
+    { ...page, items: [{ ...page.items[0], scope: { kind: 'catalogue' } }] },
+    { ...page, source: '' }, { ...page, next: 'x'.repeat(4097) },
+  ]) expect(moderationDirectoryPage(invalid).state).toBe('unavailable');
+  const result = moderationDirectoryPage({ ...page, reporter: 'private', count: 99 });
+  expect(result).not.toHaveProperty('reporter'); expect(result).not.toHaveProperty('count');
 });

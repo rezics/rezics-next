@@ -196,7 +196,8 @@ export function WorkbenchPage({
           onUnresolvedAppealChange={unresolvedChanged}
           refreshBlocked={refreshBlocked}
           onRestart={() => onSearch(workbenchWithoutContinuation(search))}
-          {...(!reading && search.queue === 'appeals' && search.case
+          {...(!reading && ((search.queue === 'appeals' && search.case) ||
+            (view.directory && view.directory.state !== 'ready' && view.directory.state !== 'stale'))
             ? { onRetry: (event?: MouseEvent<HTMLButtonElement>) => void retryInspection(event) }
             : !reading && onRetry
               ? {
