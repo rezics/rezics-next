@@ -205,6 +205,13 @@ export async function readCandidateAuthority(
   }
 }
 
+export function candidateViewerActionsFor(authority: CandidateAuthority, subject: string): CandidateViewerActions {
+  return {
+    context: authority.viewerActions?.context ?? unavailableViewerActions(),
+    subject: authority.viewerActions?.subjects[subject] ?? { state: 'not-requested' },
+  };
+}
+
 /** Optional producer metadata follows the existing subject Sources region's runtime compatibility read. */
 export function candidateSourceRecords(subject: object): {
   name: string;

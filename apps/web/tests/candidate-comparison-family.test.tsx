@@ -8,7 +8,7 @@ import { contextFixture } from '../src/kernel/fake/context-curation';
 import { relationFixture } from '../src/kernel/fake/catalogue-relations';
 import { relationDescriptorReader } from '../src/kernel/fake/relation-descriptor';
 import { readRelationEditor } from '../src/subject/relation-candidates';
-import { selectCandidate } from '../src/subject/candidates';
+import { candidateContext, selectCandidate } from '../src/subject/candidates';
 import type { CandidateCommand, CandidateRead, CandidateResult } from '../src/subject/candidates';
 import type { CandidateTransport } from '../src/subject/candidate-review';
 
@@ -202,6 +202,53 @@ test('candidate family preserves comparison, private whole selection, independen
     expect(include(host, fixture.candidate.id).getAttribute('aria-checked')).toBe('true');
     expect(rank(host, fixture.candidate.id).value).toBe('preferred');
     expect(fixture.calls.filter((call) => call.path.endsWith('/candidates'))).toHaveLength(3);
+
+    // A Global provider handoff keeps the anonymous public reading and its off-page selected member.
+    await render(null);
+    const global = candidateFixture('multiple');
+    await render(view(global, { context: candidateContext }));
+    await open(global);
+    expect(host.querySelector('#context-mode')).toBeNull();
+    await compare();
+    const selectedOffPage = global.candidates[2]!.id;
+    expect(include(host, selectedOffPage).getAttribute('aria-checked')).toBe('true');
+    expect(host.querySelector('[data-candidate-panel="current"]')!.textContent).toContain('en');
+    expect(host.querySelector('[data-candidate-panel="current"]')!.textContent).toContain('fr');
+    await click(host, m.candidate_adopt());
+    const globalConfirmation = confirmation(host, m.candidate_adopt());
+    expect(globalConfirmation.textContent).toContain(m.candidate_confirm_head({ head: '1' }));
+    await click(globalConfirmation, m.candidate_cancel());
+
+    // Missing action evidence stays unknown, leaves comparison readable and provides an explicit retry.
+    await render(null);
+    const unknown = candidateFixture('actions-unavailable');
+    await render(view(unknown));
+    await open(unknown);
+    await compare();
+    expect(host.textContent).toContain(m.candidate_actions_unavailable());
+    expect(button(host, m.candidate_accept()).disabled).toBe(true);
+    expect(button(host, m.candidate_adopt()).disabled).toBe(true);
+    await click(host, m.candidate_reload());
+    expect(posts(unknown)).toHaveLength(0);
+
+    // A confirmed concealed read retires the private draft and prevents it from being reused.
+    const concealed = candidateFixture('multiple');
+    let hideCandidate = false;
+    const concealedTransport: CandidateTransport = {
+      ...concealed.transport,
+      read: async (property, cursor, session, work) => {
+        if (hideCandidate) return { ok: false, reason: 'unavailable', clearPrivate: true };
+        return concealed.transport.read(property, cursor, session, work);
+      },
+    };
+    await render(view(concealed, { transport: concealedTransport }));
+    await open(concealed);
+    await compare();
+    expect(host.querySelector('[data-candidate-draft]')).not.toBeNull();
+    hideCandidate = true;
+    await click(host, m.candidate_more());
+    await until(() => host.querySelector('[data-candidate-draft]') === null);
+    expect(host.textContent).toContain(m.candidate_unavailable());
 
     // Whole multivalue draft keeps the public off-page value through native continuation.
     await render(null);
