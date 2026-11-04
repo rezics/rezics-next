@@ -3,12 +3,49 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
-import { VNDB_DUMP_HEADERS, VNDB_DUMP_TABLES } from '../../../scripts/datasets/fetch-dumps.ts';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { CrossMediaDumpFiles, crossMediaAliases, planCrossMediaSeed } from '../src/cross-media-seed.ts';
 import { vndbWorkLinkConverterRevision } from '../src/showcase-work-links.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from '../src/vndb-tables.ts';
+
+const VNDB_DUMP_TABLES = [
+  'anime',
+  'chars',
+  'chars_vns',
+  'entry_meta',
+  'extlinks',
+  'producers',
+  'producers_relations',
+  'producers_extlinks',
+  'releases',
+  'releases_extlinks',
+  'releases_producers',
+  'releases_supersedes',
+  'releases_titles',
+  'releases_vn',
+  'staff',
+  'staff_alias',
+  'staff_extlinks',
+  'tags',
+  'tags_parents',
+  'tags_vn',
+  'vn',
+  'vn_anime',
+  'vn_extlinks',
+  'vn_relations',
+  'vn_seiyuu',
+  'vn_staff',
+  'vn_titles',
+];
+const VNDB_DUMP_HEADERS = {
+  extlinks: ['id', 'site', 'value'],
+  producers_relations: ['id', 'pid', 'relation'],
+  tags: VNDB_PUBLIC_TAG_COLUMNS.tags,
+  tags_parents: VNDB_PUBLIC_TAG_COLUMNS.tags_parents,
+  tags_vn: VNDB_PUBLIC_TAG_COLUMNS.tags_vn,
+  vn_extlinks: ['id', 'link'],
+};
 
 async function copiedDumps(root: string) {
   const bangumi = join(root, 'bangumi');
