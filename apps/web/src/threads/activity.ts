@@ -52,8 +52,9 @@ export function feedConversationActivity(summary: unknown): ConversationActivity
 
 /** Additive activity on the existing native page uses the same closed display rules as Feed. */
 export function readingConversationActivity(page: ReadingPageResponse): ConversationActivityDisplay {
-  if (!record(page) || !Object.hasOwn(page, 'conversationActivity')) return { state: 'unavailable', retryable: true };
-  return conversationActivity(page.conversationActivity);
+  return Object.hasOwn(page, 'conversationActivity')
+    ? feedConversationActivity(page)
+    : { state: 'unavailable', retryable: true };
 }
 
 export function formatConversationReplyCount(count: ConversationReplyCount, locale: string): string {
