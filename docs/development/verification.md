@@ -150,8 +150,11 @@ cannot establish a successful full typecheck. Ledger Kernel typechecks on 2026-1
 `7a651ea717c21e8c659dc7f447d371e556a973d4`, ledger host `remote`, compiler exit 2, command 269–591s and wrapper
 330–1375s. A passing 2026-11-02 Kernel typecheck had command 223s and wrapper 1591s at slot wait 4.6s. File-cache
 pressure remains a correlation until a like-class b-host receipt records nested compiler phases, live producer hash,
-host, concurrency, slice memory/IO and compiler outcome. The one-run Kernel compiler database uses a labelled volume
-in the run slice, matching kernel check storage.
+host, concurrency, slice memory/IO and compiler outcome. Available receipts do not establish the deployed
+remote-check transport hash or whether the supermanager's reclaim stopgap remains active. The handoff needs those two
+facts and a comparable b-host receipt with command/source identity, concurrency, readable slice anon/file/inactive_file
+and IO pressure, nested phase durations and compiler outcome. The one-run Kernel compiler database uses a labelled
+volume in the run slice, matching kernel check storage.
 
 `worker-check`, `stack-run`, `check-run` and `remote-check` derive the performance pool from hosts explicitly marked
 `"performance": true` in the private hosts file. Missing or false flags exclude a host, including a or b; there is no
