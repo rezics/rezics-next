@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { creationFixture, button, dom, fill, flush, open as mount, send } from './creation-page-fixture';
 import { m } from '../src/paraglide/messages.js';
@@ -10,6 +10,12 @@ import {
 import { managementOperationProfile } from '../src/management-operations';
 
 creationFixture();
+const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+Object.defineProperty(globalThis, 'scrollTo', { value: () => {}, configurable: true, writable: true });
+afterAll(() => {
+  if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
 let cleanup = () => {};
 afterEach(() => cleanup());
 const { createRootRoute, createRoute, createRouter, createBrowserHistory, RouterProvider } =
@@ -127,15 +133,15 @@ test('fresh advice retires a previously available Continue action while its revi
   });
 
   await pageshow();
-  expect(button(page.host, m.auth_step_up_return_continue())).not.toBeNull();
+  expect(button(page.host, m.auth_step_up_return_continue())).toBeDefined();
   await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
   await started.promise;
-  expect(button(page.host, m.auth_step_up_return_continue())).toBeNull();
+  expect(button(page.host, m.auth_step_up_return_continue())).toBeUndefined();
   expect(page.host.textContent).toContain(m.auth_step_up_return_pending());
 
   refresh.resolve(nativeAdvice());
   await settle();
-  expect(button(page.host, m.auth_step_up_return_continue())).not.toBeNull();
+  expect(button(page.host, m.auth_step_up_return_continue())).toBeDefined();
   request.mockRestore();
   page.calls[0]!.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 }));
 });
@@ -183,7 +189,7 @@ test('a replaced management marker fails its released read without consuming rep
   expect(page.host.textContent).toContain(m.auth_step_up_return_unknown());
   expect(page.host.textContent).not.toContain('former@example.test');
   expect(page.host.textContent).not.toContain('replacement@example.test');
-  expect(button(page.host, m.auth_step_up_return_continue())).toBeNull();
+  expect(button(page.host, m.auth_step_up_return_continue())).toBeUndefined();
   expect(pendingRenameReviewStepUpState()).toEqual({
     kind: 'pending',
     value: expect.objectContaining({ accountId: replacementAccount, phase: 'awaiting' }),
