@@ -218,22 +218,16 @@ test('default seed publishes selected trait and role vocabulary without a UUID f
       ['skos:Concept', 'vndb.character-trait:i10'],
       ['skos:Concept', 'vndb.character-trait:i7'],
     ]);
-    expect(
+    const proposedUrl = (uri: string) =>
       commands.some(
         (command) =>
           command.op === 'propose' &&
           command.statement.property.id === 'schema:url' &&
-          command.statement.value.content === characterTraitSchemeUri,
-      ),
-    ).toBe(true);
-    expect(
-      commands.some(
-        (command) =>
-          command.op === 'propose' &&
-          command.statement.property.id === 'schema:url' &&
-          command.statement.value.content === appearanceRoleSchemeUri,
-      ),
-    ).toBe(true);
+          command.statement.value.type === 'value' &&
+          command.statement.value.content === uri,
+      );
+    expect(proposedUrl(characterTraitSchemeUri)).toBe(true);
+    expect(proposedUrl(appearanceRoleSchemeUri)).toBe(true);
     const current = await readShowcaseCharacterVocabulary({ tables, selectedPlan: selected, port, journal });
     expect(current.releaseDigest).toBe(bundledDigest);
     expect(current.concepts.map((concept) => concept.code).sort()).toEqual(['i10', 'i7', 'i73', 'main']);
@@ -341,7 +335,11 @@ test('lying, release-scoped, retracted and parent-contradictory rows withhold on
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
         command.op === 'propose' && command.statement.property.id === 'schema:keywords',
     );
-    expect(firstKeywords.some((command) => command.statement.value.content === hair.id)).toBe(true);
+    expect(
+      firstKeywords.some(
+        (command) => command.statement.value.type === 'value' && command.statement.value.content === hair.id,
+      ),
+    ).toBe(true);
 
     const hairSubject = port.subjects.get(hair.id)!.subject;
     hairSubject.statements['schema:url'] = [{ value: { content: 'https://rezics.com/schemes/vndb/character-traits/other' } }];
@@ -375,7 +373,11 @@ test('lying, release-scoped, retracted and parent-contradictory rows withhold on
         (command): command is Extract<BatchCommand, { op: 'propose' }> =>
           command.op === 'propose' && command.statement.property.id === 'schema:keywords',
       );
-    expect(laterKeywords.filter((command) => command.statement.value.content === hair.id)).toEqual([]);
+    expect(
+      laterKeywords.filter(
+        (command) => command.statement.value.type === 'value' && command.statement.value.content === hair.id,
+      ),
+    ).toEqual([]);
     expect(port.identities.get('c1')).toBe(createdCharacters.find(([key]) => key === 'c1')?.[1]);
     expect(JSON.stringify(commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:character'))).not.toContain(
       '/chars_vns/c2/v1/r9',

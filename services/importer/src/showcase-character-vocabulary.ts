@@ -75,8 +75,8 @@ export type VndbCharacterVocabularyRequirements = Readonly<{
 
 /** IDs are only lookup hints. composeVndbCharacterVocabularyBindings verifies every current public subject. */
 export type VndbCharacterVocabularyProfile = Readonly<{
-  traits: { schemeId: string; concepts: readonly { code: string; id: string }[] };
-  roles: { schemeId: string; concepts: readonly { code: string; id: string }[] };
+  traits?: { schemeId: string; concepts: readonly { code: string; id: string }[] };
+  roles?: { schemeId: string; concepts: readonly { code: string; id: string }[] };
 }>;
 
 export type ShowcaseCharacterVocabularyPlan = Readonly<{
@@ -676,6 +676,7 @@ export async function prepareShowcaseCharacterVocabulary(input: {
   const conceptProposals = conceptEntries.flatMap((term) => {
     const subjectId = conceptCreates.get(showcaseVocabularyExternalId(vocabularyKey(term.taxonomy, term.code)));
     const schemeId = currentSchemes.get(term.taxonomy);
+    const broaderIds = term.taxonomy === characterTraitTaxonomy ? parentIds.get(term.code) : undefined;
     return subjectId && schemeId
       ? vocabularyCommands({
           sourceKey: vocabularyKey(term.taxonomy, term.code),
@@ -684,9 +685,7 @@ export async function prepareShowcaseCharacterVocabulary(input: {
           nativeType: 'skos:Concept',
           labels: { [sourceNameLanguage(term.label)]: term.label },
           schemeId,
-          ...(term.taxonomy === characterTraitTaxonomy && parentIds.has(term.code)
-            ? { broaderIds: parentIds.get(term.code) }
-            : {}),
+          ...(broaderIds?.length ? { broaderIds } : {}),
           subjectId,
         })
       : [];
