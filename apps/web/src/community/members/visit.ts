@@ -231,7 +231,10 @@ export class RealmMembersVisit {
     });
   };
 
-  private async readSelected(address: MemberSelectionAddress): Promise<MemberSelectionRead | null> {
+  private async readSelected(
+    address: MemberSelectionAddress,
+    options: { allowEpisodeChange?: boolean } = {},
+  ): Promise<MemberSelectionRead | null> {
     if (!this.admitted() || this.value.read.kind !== 'ready') return null;
     const connection = this.connection;
     const operation = ++this.selectedOperation;
@@ -275,7 +278,13 @@ export class RealmMembersVisit {
         read.realmId !== address.realmId ||
         read.identity.accountId !== address.accountId ||
         (address.membershipInterval !== undefined && read.membershipInterval !== address.membershipInterval) ||
-        (read.membership === 'current' && !read.membershipInterval) ||
+        !read.membershipEpisode ||
+        (address.membershipInterval !== undefined && read.membershipEpisode !== address.membershipInterval) ||
+        (previousRead !== undefined &&
+          !options.allowEpisodeChange &&
+          read.membershipEpisode !== previousRead.membershipEpisode) ||
+        (read.membership === 'current' &&
+          (!read.membershipInterval || read.membershipEpisode !== read.membershipInterval)) ||
         (read.membership === 'none' && read.membershipInterval !== null))
     ) {
       // Currentness changes require a replacement page and a fresh deliberate selection.
@@ -308,7 +317,8 @@ export class RealmMembersVisit {
   refreshSelected = async () => {
     const selection = this.value.selection;
     if (!selection || selection.read.kind !== 'ready') return null;
-    return this.readSelected(selection.address);
+    // Explicit accepted-work readback may replace a selected absence with its new current episode.
+    return this.readSelected(selection.address, { allowEpisodeChange: true });
   };
 
   closeSelection = () => {

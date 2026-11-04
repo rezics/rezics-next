@@ -56,8 +56,27 @@ test.serial(
   'the manager reads actual members, inspects an exact account, and follows existing membership and ban outcomes',
   async () => {
     const currentRealm = await realm();
-    const empty = await json<{ items: unknown[]; next: string | null }>(await call('GET', memberPath(currentRealm)));
-    expect(empty).toEqual({ realmId: currentRealm.realmId, state: 'ready', items: [], next: null, selected: null });
+    const empty = await json<{
+      realmId: string;
+      realmLabel: string;
+      pageBound: number;
+      state: string;
+      viewer: { accountId: string; authority: string } | null;
+      items: unknown[];
+      next: string | null;
+      selected: null;
+    }>(await call('GET', memberPath(currentRealm)));
+    expect(empty).toMatchObject({
+      realmId: currentRealm.realmId,
+      realmLabel: 'Members Realm',
+      pageBound: 20,
+      state: 'ready',
+      viewer: { accountId: fixture.owner.id },
+      items: [],
+      next: null,
+      selected: null,
+    });
+    expect(empty.viewer?.authority).toMatch(/^mra1\.\d+\.[A-Za-z0-9_-]{43}$/);
     const ownerInspection = await json<{
       selected: { actions: { ban: { state: string; reason?: string } } };
     }>(await call('GET', `${memberPath(currentRealm)}?accountId=${fixture.owner.id}`));

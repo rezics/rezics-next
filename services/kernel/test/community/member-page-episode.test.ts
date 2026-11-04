@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import {
   realmMemberEpisodeToken,
+  realmMemberAuthorityToken,
   sameMemberAnchor,
   samePublicIdentityObservation,
   sameSelectedMember,
@@ -61,6 +62,23 @@ test('episode tokens bind the selected observation without disclosing native anc
   expect(token(original, { epoch: 4 })).not.toBe(selected);
   expect(selected).not.toContain(original.reservationId);
   expect(selected).not.toContain(original.transactionId);
+});
+
+test('page authority proof is stable and scoped to the admitted Realm viewer and partition epoch', () => {
+  const tokens = { current: 7, keys: new Map([[7, new Uint8Array(32).fill(41)]]) };
+  const token = (overrides: { realmId?: string; viewerAccountId?: string; epoch?: number } = {}) =>
+    realmMemberAuthorityToken({
+      tokens,
+      realmId: overrides.realmId ?? '00000000-0000-0000-0000-000000000011',
+      viewerAccountId: overrides.viewerAccountId ?? '00000000-0000-0000-0000-000000000010',
+      epoch: overrides.epoch ?? 3,
+    });
+  const admitted = token();
+  expect(token()).toBe(admitted);
+  expect(admitted).toMatch(/^mra1\.7\.[A-Za-z0-9_-]{43}$/);
+  expect(token({ realmId: '00000000-0000-0000-0000-000000000013' })).not.toBe(admitted);
+  expect(token({ viewerAccountId: '00000000-0000-0000-0000-000000000012' })).not.toBe(admitted);
+  expect(token({ epoch: 4 })).not.toBe(admitted);
 });
 
 test('public identity observations include names, handles, and erasure state', () => {

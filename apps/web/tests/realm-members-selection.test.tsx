@@ -34,6 +34,7 @@ test('selection uses exact account and interval, and a replacement page requires
         ...address,
         identity: { accountId: address.accountId, label: 'Same name', reference: address.accountId },
         membershipInterval: address.membershipInterval ?? null,
+        membershipEpisode: address.membershipInterval ?? `episode-${address.accountId}`,
         membership: 'current',
         advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
       };
@@ -69,6 +70,7 @@ test('opaque membership intervals are scoped to the selected Account', async () 
         ...address,
         identity: { accountId: address.accountId, reference: address.accountId, label: 'Exact account' },
         membershipInterval: address.membershipInterval ?? null,
+        membershipEpisode: address.membershipInterval ?? `episode-${address.accountId}`,
         membership: 'current',
         advice: { add: 'unavailable', ban: 'available', unban: 'available' },
       };
@@ -131,6 +133,7 @@ test('manual Account inspection does not infer an interval or move the roster cu
         authority: address.authority,
         identity: { accountId: address.accountId, label: 'Exact entered Account', reference: 'exact-account' },
         membershipInterval: null,
+        membershipEpisode: 'absence-entered-account',
         membership: 'none',
         advice: { add: 'available', ban: 'unavailable', unban: 'unavailable' },
       };
@@ -181,6 +184,7 @@ test('a newer selected account and a retired caller ignore delayed identity comp
     membershipInterval: 'producer-interval-a',
     identity: { accountId: 'a', reference: 'a', label: 'Retired person' },
     advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
+    membershipEpisode: 'producer-interval-a',
     membership: 'current',
   });
   await selecting;
@@ -190,8 +194,8 @@ test('a newer selected account and a retired caller ignore delayed identity comp
 
 test('an interval or authority replacement cannot reuse selected advice', async () => {
   for (const replacement of [
-    { membershipInterval: 'replacement-interval', authority: 'grant' },
-    { membershipInterval: 'producer-interval-a', authority: 'new-grant' },
+    { membershipInterval: 'replacement-interval', membershipEpisode: 'replacement-interval', authority: 'grant' },
+    { membershipInterval: 'producer-interval-a', membershipEpisode: 'producer-interval-a', authority: 'new-grant' },
   ]) {
     const visit = new RealmMembersVisit('realm', {
       pageBound: 20,
@@ -245,4 +249,61 @@ test('effect replay retains the original producer lifetime across an unsubscribe
     expect([observations, pages]).toEqual([1, state === 'current' ? 2 : state === 'changed' ? 1 : 0]);
     stop();
   }
+});
+
+test('selected episode changes retire stale inspection while explicit add readback updates the selection', async () => {
+  const identity = { accountId: 'entered-account', label: 'Exact account', reference: 'entered-account' };
+  const selected = (membership: 'none' | 'current', membershipEpisode: string): MemberSelectionRead => ({
+    kind: 'ready',
+    realmId: 'realm',
+    authority: 'grant',
+    identity,
+    membership,
+    membershipInterval: membership === 'current' ? membershipEpisode : null,
+    membershipEpisode,
+    advice: {
+      add: membership === 'none' ? 'available' : 'unavailable',
+      ban: 'unavailable',
+      unban: 'unavailable',
+    },
+  });
+
+  let pageReads = 0;
+  const readback = new RealmMembersVisit('realm', {
+    pageBound: 20,
+    readPage: async () => {
+      pageReads++;
+      return { kind: 'ready', page: page([]) };
+    },
+    readSelected: async () => (pageReads === 1 ? selected('none', 'absence-episode') : selected('current', 'new-member-episode')),
+  });
+  const stopReadback = readback.connect();
+  await settle();
+  await readback.inspectAccount('entered-account');
+  await readback.refreshSelected();
+  expect(readback.snapshot().selection?.read).toMatchObject({
+    kind: 'ready',
+    membership: 'current',
+    membershipInterval: 'new-member-episode',
+    membershipEpisode: 'new-member-episode',
+  });
+  expect(pageReads).toBe(1);
+  stopReadback();
+
+  let attempts = 0;
+  const retry = new RealmMembersVisit('realm', {
+    pageBound: 20,
+    readPage: async () => ({ kind: 'ready', page: page([]) }),
+    readSelected: async () => {
+      attempts++;
+      return attempts === 1 ? selected('current', 'original-member-episode') : attempts === 2 ? { kind: 'failed' } : selected('current', 'rejoined-member-episode');
+    },
+  });
+  const stopRetry = retry.connect();
+  await settle();
+  await retry.inspectAccount('entered-account');
+  await retry.refreshSelected();
+  await retry.retrySelected();
+  expect(retry.snapshot()).toMatchObject({ read: { kind: 'unavailable' }, selection: null });
+  stopRetry();
 });

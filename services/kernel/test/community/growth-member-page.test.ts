@@ -117,7 +117,17 @@ test.serial(
     const operation = async () => {
       const response = await driver.request({ actor: fixture.owner, method: 'GET', path });
       expect(response.status).toBe(200);
-      const page = (await response.json()) as { items: { accountId: string }[]; selected: { accountId: string } };
+      const page = (await response.json()) as {
+        realmLabel: string;
+        pageBound: number;
+        viewer: { accountId: string; authority: string } | null;
+        items: { accountId: string }[];
+        selected: { accountId: string };
+      };
+      expect(page.realmLabel.length).toBeGreaterThan(0);
+      expect(page.pageBound).toBe(20);
+      expect(page.viewer).toMatchObject({ accountId: fixture.owner.id });
+      expect(page.viewer?.authority).toMatch(/^mra1\.\d+\.[A-Za-z0-9_-]{43}$/);
       expect(page.items.map((member) => member.accountId)).toEqual([fixture.member.id]);
       expect(page.selected.accountId).toBe(fixture.member.id);
       return page;

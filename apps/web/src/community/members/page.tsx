@@ -119,6 +119,7 @@ export function RealmMembersPage({
           currentSelection.read.identity.reference === selected.identity.reference &&
           currentSelection.read.identity.label === selected.identity.label &&
           currentSelection.read.membershipInterval === selected.membershipInterval &&
+          currentSelection.read.membershipEpisode === selected.membershipEpisode &&
           currentSelection.read.membership === selected.membership &&
           currentSelection.read.advice.add === selected.advice.add &&
           currentSelection.read.advice.ban === selected.advice.ban &&
@@ -200,7 +201,7 @@ export function RealmMembersPage({
           </h2>
           {actionableSelected && read.kind === 'ready' ? (
             <MemberAddition
-              key={`${selection.address.accountId}:${selection.address.authority}:${selection.address.membershipInterval ?? 'entered'}`}
+              key={`${selection.address.accountId}:${selection.address.authority}:${selection.address.membershipInterval ?? 'entered'}:${selected.membershipEpisode}`}
               realmLabel={read.page.realm.label}
               selected={actionableSelected}
               address={selection.address}

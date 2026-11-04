@@ -1,4 +1,4 @@
-/** Consumer composition types, not native DTOs. Publication must replace the unavailable adapter. */
+/** Consumer composition types, not native DTOs. */
 export type MemberIdentity = {
   accountId: string;
   reference: string;
@@ -36,6 +36,8 @@ export type MemberSelectionRead =
       identity: MemberIdentity;
       /** Opaque selected Account interval proof, or null when no current interval can be asserted. */
       membershipInterval: string | null;
+      /** Exact producer episode for the selected observation, including absence. */
+      membershipEpisode: string;
       membership: 'current' | 'pending' | 'none' | 'unknown';
       /** Consumer composition advice; this is not a proposed native response shape. */
       advice: {
@@ -59,6 +61,7 @@ export type MemberAdditionIntent = Readonly<{
   realmId: string;
   accountId: string;
   membershipInterval: string | null;
+  membershipEpisode: string;
   authority: string;
   idempotencyKey: string;
 }>;
@@ -84,7 +87,7 @@ export interface RealmMembersSource {
   readonly addMember?: (intent: MemberAdditionIntent) => Promise<MemberAdditionResult>;
 }
 
-/** The installed producer still lacks generated GET declarations and a consumer-visible interval binding. */
+/** Explicitly unavailable fixture for compositions that have not installed the native source. */
 export const boundedRealmMemberPage: RealmMembersSource = Object.freeze({
   pageBound: 0,
   readPage: async () => ({ kind: 'unavailable' as const }),

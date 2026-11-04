@@ -32,13 +32,22 @@ export type NativeRealmMember = {
   banState: 'banned' | 'clear' | 'unknown';
   actions: Record<'addMember' | 'ban' | 'unban' | 'removeMember' | 'reviseRole', Action>;
 };
-export type NativeRealmMembersPage = {
+type NativeRealmMembersPageBase = {
   realmId: string;
-  state: 'ready' | 'preparing';
-  items: NativeRealmMember[];
+  realmLabel: string;
+  pageBound: number;
   next: string | null;
-  selected: NativeRealmMember | null;
 };
+export type NativeRealmMembersPage = NativeRealmMembersPageBase &
+  (
+    | { state: 'preparing'; viewer: null; items: []; selected: null }
+    | {
+        state: 'ready';
+        viewer: { accountId: string; authority: string };
+        items: NativeRealmMember[];
+        selected: NativeRealmMember | null;
+      }
+  );
 export type NativeRealmMembersRead =
   | { kind: 'ready'; page: NativeRealmMembersPage }
   | { kind: 'preparing' | 'denied' | 'concealed' | 'expired' | 'unavailable' | 'failed' };
@@ -76,6 +85,7 @@ function identity(value: unknown, accountId: string): boolean {
     : value.state === 'active' &&
         keys(value, ['id', 'kind', 'state', 'handle', 'displayName']) &&
         nullableText(value.handle, 64) &&
+        (value.handle === null || /^[a-z0-9][a-z0-9_-]{0,63}$/.test(String(value.handle))) &&
         nullableText(value.displayName, 4096);
 }
 
@@ -143,6 +153,7 @@ function member(value: unknown, realmId: string): value is NativeRealmMember {
     !['member', 'none'].includes(String(value.membership)) ||
     !identity(value.identity, value.accountId) ||
     !text(value.displayName, 4096) ||
+    !value.displayName ||
     !['banned', 'clear', 'unknown'].includes(String(value.banState)) ||
     !record(value.actions)
   )
@@ -157,15 +168,29 @@ function member(value: unknown, realmId: string): value is NativeRealmMember {
 function page(value: unknown, input: RealmMembersReadInput): value is NativeRealmMembersPage {
   if (
     !record(value) ||
-    !keys(value, ['realmId', 'state', 'items', 'next', 'selected']) ||
+    !keys(value, ['realmId', 'realmLabel', 'pageBound', 'state', 'viewer', 'items', 'next', 'selected']) ||
     value.realmId !== input.realmId ||
+    !text(value.realmLabel, 4096) ||
+    !value.realmLabel ||
+    !Number.isSafeInteger(value.pageBound) ||
+    (value.pageBound as number) < 1 ||
+    (value.pageBound as number) > 20 ||
     !['ready', 'preparing'].includes(String(value.state)) ||
     !Array.isArray(value.items) ||
-    value.items.length > 20 ||
+    value.items.length > (value.pageBound as number) ||
     !nullableText(value.next, 4096)
   )
     return false;
-  if (value.state === 'preparing') return value.items.length === 0 && value.selected === null;
+  if (value.state === 'preparing')
+    return value.items.length === 0 && value.selected === null && value.viewer === null;
+  if (
+    !record(value.viewer) ||
+    !keys(value.viewer, ['accountId', 'authority']) ||
+    value.viewer.accountId !== input.viewerId ||
+    !text(value.viewer.authority, 64) ||
+    !value.viewer.authority
+  )
+    return false;
   if (!value.items.every((row) => member(row, input.realmId) && row.membership === 'member')) return false;
   if (new Set(value.items.map((row) => row.accountId)).size !== value.items.length) return false;
   return (

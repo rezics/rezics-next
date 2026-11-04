@@ -76,6 +76,7 @@ function fixture(
               label: 'Alex Chen',
             },
             membershipInterval: address.membershipInterval ?? null,
+            membershipEpisode: address.membershipInterval ?? 'selected-absence-episode',
             membership: state === 'pending' ? 'pending' : state.startsWith('addition-') ? 'none' : 'current',
             advice: state.startsWith('addition-')
               ? { add: 'available', ban: 'unavailable', unban: 'unavailable' }
@@ -135,7 +136,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Illustrative connected consumer composition. No native roster or selected operation is installed. Command states and production acceptance remain deferred.',
+          'Deterministic source fixtures exercise the consumer. The production route uses the session-scoped native source; generated declarations and native/browser acceptance remain integration-owned.',
       },
     },
   },

@@ -21,7 +21,16 @@ const row = {
     reviseRole: unavailable,
   },
 };
-const page = { realmId, state: 'ready', items: [], next: null, selected: row };
+const page = {
+  realmId,
+  realmLabel: 'Members Realm',
+  pageBound: 20,
+  state: 'ready',
+  viewer: { accountId, authority: 'opaque-current-authority' },
+  items: [],
+  next: null,
+  selected: row,
+};
 
 test('exact selection and opaque frontier use one native GET with session credentials only', async () => {
   const requests: Request[] = [];
@@ -48,7 +57,7 @@ test('exact selection and opaque frontier use one native GET with session creden
 test('native preparation, denial, concealment and empty remain distinct', async () => {
   for (const [status, body, kind] of [
     [200, { ...page, selected: null }, 'ready'],
-    [200, { ...page, state: 'preparing', selected: null }, 'preparing'],
+    [200, { ...page, state: 'preparing', viewer: null, items: [], selected: null }, 'preparing'],
     [403, {}, 'denied'],
     [404, {}, 'concealed'],
     [503, {}, 'unavailable'],
@@ -65,6 +74,10 @@ test('malformed or mismatched native observations disclose no page', async () =>
   for (const body of [
     { ...page, realmId: accountId },
     { ...page, roles: ['private'] },
+    { ...page, viewer: { accountId: realmId, authority: 'another-viewer' } },
+    { ...page, viewer: { accountId, authority: 'x'.repeat(65) } },
+    { ...page, viewer: { accountId, authority: 'ok', private: 'extra' } },
+    { ...page, pageBound: 21 },
     {
       ...page,
       selected: { ...row, identity: { id: accountId, kind: 'actor', state: 'deleted', displayName: 'erased' } },
@@ -102,4 +115,56 @@ test('browser operands are projected and cannot supply credentials, authority or
     validateRealmMembersRead({ ...target, authorization: 'forged', authority: 'forged', episode: 'forged' }),
   ).toEqual(target);
   expect(() => validateRealmMembersRead({ ...target, cursor: 'x'.repeat(4097) })).toThrow();
+});
+
+test('closed action advice admits only the selected Realm and mounted Accounts or ban operands', async () => {
+  const advice = {
+    addMember: {
+      state: 'available',
+      method: 'POST',
+      path: `/v1/realms/${realmId}/members`,
+      body: { accountId },
+      expectedStatus: 202,
+      outcome: 'Accepted; a membership workflow may still be pending.',
+    },
+    ban: {
+      state: 'available',
+      method: 'PUT',
+      path: `/v1/realms/${realmId}/bans/${accountId}`,
+      body: { reason: '' },
+      expectedStatus: 200,
+      outcome: 'Ban commits; membership removal may still be pending.',
+    },
+    unban: {
+      state: 'available',
+      method: 'DELETE',
+      path: `/v1/realms/${realmId}/bans/${accountId}`,
+      body: null,
+      expectedStatus: 204,
+      outcome: 'Unban commits without restoring membership or follow.',
+    },
+    removeMember: unavailable,
+    reviseRole: unavailable,
+  };
+  const selected = {
+    ...row,
+    membership: 'none',
+    identity: { id: accountId, kind: 'actor', state: 'active', handle: null, displayName: 'Member' },
+    actions: advice,
+  };
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: async () => Response.json({ ...page, selected }),
+  });
+  expect(await readNativeRealmMembers(client, { ...target, cursor: undefined }, 'Bearer admitted')).toMatchObject({
+    kind: 'ready',
+    page: { selected: { actions: advice } },
+  });
+
+  const malformed = { ...selected, actions: { ...advice, removeMember: advice.ban } };
+  const rejectingClient = createKernelClient('https://kernel.invalid', {
+    fetch: async () => Response.json({ ...page, selected: malformed }),
+  });
+  expect(await readNativeRealmMembers(rejectingClient, { ...target, cursor: undefined }, 'Bearer admitted')).toEqual({
+    kind: 'failed',
+  });
 });

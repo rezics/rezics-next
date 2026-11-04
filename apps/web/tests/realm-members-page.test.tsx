@@ -7,6 +7,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { realmMembersLifetimeSource } from '../src/community/members/lifetime';
 import type { MembersCaller } from '../src/community/members/page';
 import type { MemberAdditionIntent, MemberPageRead, RealmMembersSource } from '../src/community/members/source';
+import type { NativeRealmMember, NativeRealmMembersRead, RealmMembersReadInput } from '../src/community/members/native';
 import type { SelectedRealmMember } from '../src/community/members/selected-account';
 import { loadRealmBans, writeRealmBan } from '../src/community/realm-bans';
 import { RealmBansControl } from '../src/community/realm-bans-control';
@@ -36,6 +37,7 @@ for (const [key, value] of Object.entries({
 }
 const { createRoot } = await import('react-dom/client');
 const { RealmMembersPage } = await import('../src/community/members/page');
+const { nativeRealmMembersSource } = await import('../src/community/members/native-source');
 const { RealmMembersEntry } = await import('../src/community/members/entry');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -92,6 +94,7 @@ function source(read?: MemberPageRead): RealmMembersSource {
       ...address,
       identity: { accountId: 'a', reference: 'account-a', label: 'Exact selected account' },
       membershipInterval: address.membershipInterval ?? null,
+      membershipEpisode: address.membershipInterval ?? 'selected-episode-a',
       membership: 'pending',
       advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
     }),
@@ -212,6 +215,57 @@ test('mounted roster inspects an exact current observation, keeps pending truthf
   expect(document.activeElement?.textContent).toBe(m.realm_members_inspect());
 });
 
+test('mounted native source renders producer viewer authority and preserves the selected membership episode', async () => {
+  const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
+  const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000301';
+  const viewerId = '0192f3a0-6c1e-7b2a-9d4e-000000000401';
+  const episode = 'mep1.7-native-membership-proof';
+  const unavailable = { state: 'unavailable', reason: 'no_mounted_method' } as const;
+  const member: NativeRealmMember = {
+    accountId,
+    episode,
+    membership: 'member',
+    identity: { id: accountId, kind: 'actor', state: 'active', handle: 'exact-member', displayName: 'Exact Member' },
+    displayName: 'Exact Member',
+    banState: 'unknown',
+    actions: {
+      addMember: unavailable,
+      ban: unavailable,
+      unban: unavailable,
+      removeMember: unavailable,
+      reviseRole: unavailable,
+    },
+  };
+  const operands: RealmMembersReadInput[] = [];
+  const native = nativeRealmMembersSource(viewerId, async (input) => {
+    operands.push(input);
+    return {
+      kind: 'ready',
+      page: {
+        realmId,
+        realmLabel: 'Producer Realm Label',
+        pageBound: 20,
+        state: 'ready',
+        viewer: { accountId: viewerId, authority: 'mra1.7-producer-authority' },
+        items: [member],
+        next: null,
+        selected: input.accountId === accountId ? member : null,
+      },
+    } satisfies NativeRealmMembersRead;
+  });
+
+  await render(native, realmId);
+  expect(host.textContent).toContain('Producer Realm Label');
+  expect(host.textContent).toContain('Exact Member');
+  await click(m.realm_members_inspect());
+  expect(host.textContent).toContain(m.realm_members_current());
+  expect(operands).toEqual([
+    { realmId, viewerId },
+    { realmId, accountId, viewerId },
+  ]);
+  expect(native.pageBound).toBe(20);
+});
+
 test('selected addition reviews the entered identity, retries one immutable command and waits for explicit readback', async () => {
   const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000301';
   const addresses: unknown[] = [];
@@ -239,6 +293,7 @@ test('selected addition reviews the entered identity, retries one immutable comm
           label: 'Exact inspected account',
         },
         membershipInterval: memberCurrent ? 'producer-new-membership-interval' : null,
+        membershipEpisode: memberCurrent ? 'producer-new-membership-interval' : 'selected-absence-episode',
         membership: memberCurrent ? 'current' : 'none',
         advice: { add: memberCurrent ? 'unavailable' : 'available', ban: 'unavailable', unban: 'unavailable' },
       };
@@ -461,6 +516,7 @@ test('Realm, locale and source replacement remove selected identity before delay
         realmId: 'realm',
         authority: 'grant',
         membershipInterval: 'producer-interval-a',
+        membershipEpisode: 'producer-interval-a',
         identity: { accountId: 'a', reference: 'account-a', label: 'Delayed retired account' },
         membership: 'current',
         advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
@@ -545,6 +601,7 @@ test('browser session and incarnation-keyed exposure changes retire mounted sele
         realmId: 'realm',
         authority: 'grant',
         membershipInterval: 'producer-interval-a',
+        membershipEpisode: 'producer-interval-a',
         membership: 'current',
         identity: { accountId: 'a', reference: 'account-a', label: 'Retired private identity' },
         advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
