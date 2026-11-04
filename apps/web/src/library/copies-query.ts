@@ -31,7 +31,8 @@ const requestedText = (value: unknown): string | null =>
 const requestedFilter = (value: unknown): string | null =>
   value === undefined ? null : typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
 const vocabularyId = /^[a-z][a-z0-9_.-]{0,63}(?![\s\S])/;
-const invalidVocabulary = (value: unknown) => value !== undefined && (typeof value !== 'string' || !vocabularyId.test(value));
+const invalidVocabulary = (value: unknown) =>
+  value !== undefined && (typeof value !== 'string' || !vocabularyId.test(value));
 
 export function copiesAddress(input: unknown, locale: string): CopiesAddress {
   const query = copiesQuery(input);
@@ -42,9 +43,9 @@ export function copiesAddress(input: unknown, locale: string): CopiesAddress {
         ? 'kind'
         : invalidVocabulary(query.status)
           ? 'status'
-      : !absent(query.cursor) && (typeof query.cursor !== 'string' || query.cursor.length > 2048)
-        ? 'cursor'
-        : undefined;
+          : !absent(query.cursor) && (typeof query.cursor !== 'string' || query.cursor.length > 2048)
+            ? 'cursor'
+            : undefined;
   return {
     subjectId: requestedText(query.subjectId),
     kind: requestedFilter(query.kind),

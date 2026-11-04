@@ -98,7 +98,9 @@ test('empty Subject and cursor mean the first all-copies page; filters and opaqu
   const opaque = 'not/decoded+%?='.repeat(100).padEnd(2048, 'x');
   const address = copiesAddress({ subjectId, kind: 'print', status: 'shelf', cursor: opaque }, 'ja');
   expect(address).toEqual({ subjectId, kind: 'print', status: 'shelf', cursor: opaque, locale: 'ja' });
-  expect(sameCopiesAddress(address, copiesAddress({ subjectId, kind: 'print', status: 'shelf', cursor: opaque }, 'ja'))).toBe(true);
+  expect(
+    sameCopiesAddress(address, copiesAddress({ subjectId, kind: 'print', status: 'shelf', cursor: opaque }, 'ja')),
+  ).toBe(true);
   expect(sameCopiesAddress(address, { ...address, locale: 'en' })).toBe(false);
   expect(sameCopiesAddress(address, { ...address, subjectId: null })).toBe(false);
   expect(sameCopiesAddress(address, { ...address, kind: 'ebook' })).toBe(false);
