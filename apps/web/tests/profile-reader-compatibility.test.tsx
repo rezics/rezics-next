@@ -741,7 +741,11 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(injectedMarkup).toContain(`value="${nativeProfile.displayName}"`);
     const injectedDocument = new window.DOMParser().parseFromString(injectedMarkup, 'text/html');
     expect(injectedDocument.querySelector('input[id$="-displayName"]')?.disabled).toBe(false);
-    expect([...injectedDocument.querySelectorAll('[role="switch"]')].every((item) => item.getAttribute('aria-disabled') !== 'true')).toBe(true);
+    expect(
+      [...injectedDocument.querySelectorAll('[role="switch"]')].every(
+        (item) => item.getAttribute('aria-disabled') !== 'true',
+      ),
+    ).toBe(true);
     const hiddenMarkup = renderToStaticMarkup(
       createElement(
         'div',

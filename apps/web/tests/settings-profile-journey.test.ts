@@ -299,26 +299,31 @@ test('Profile Retry-After deadlines stay independent and captured actions wait f
   try {
     const attempts: ProfileAttempt[] = [];
     let reads = 0;
-    const editor = new ProfileEditor({
-      save: async (attempt) => {
-        attempts.push(attempt);
-        return attempts.length === 1
-          ? { ok: false, status: 503, message: 'Unavailable', failure: { status: 503, retryAfter: '120' } }
-          : attempts.length === 3
-            ? { ok: false, status: 429, message: 'Wait', failure: { status: 429, retryAfter: '30' } }
-            : { ok: true, profile: attempt.after };
+    const editor = new ProfileEditor(
+      {
+        save: async (attempt) => {
+          attempts.push(attempt);
+          return attempts.length === 1
+            ? { ok: false, status: 503, message: 'Unavailable', failure: { status: 503, retryAfter: '120' } }
+            : attempts.length === 3
+              ? { ok: false, status: 429, message: 'Wait', failure: { status: 429, retryAfter: '30' } }
+              : { ok: true, profile: attempt.after };
+        },
+        read: () =>
+          ++reads === 1
+            ? Promise.reject(new EditableProfileReadError(503, { status: 503, retryAfter: '5' }))
+            : Promise.resolve(initial()),
       },
-      read: () =>
-        ++reads === 1
-          ? Promise.reject(new EditableProfileReadError(503, { status: 503, retryAfter: '5' }))
-          : Promise.resolve(initial()),
-    }, initial());
+      initial(),
+    );
     editor.edit({ displayName: 'Submitted name' });
     await editor.submit('profile');
-    const original = editor.snapshot().attempt, commandRetryAt = now + 120_000;
+    const original = editor.snapshot().attempt,
+      commandRetryAt = now + 120_000;
     expect(editor.snapshot().commandRetryAt).toBe(commandRetryAt);
     editor.edit({ displayName: 'Later draft' });
-    const retry = editor.retry.bind(editor), reload = editor.reload.bind(editor);
+    const retry = editor.retry.bind(editor),
+      reload = editor.reload.bind(editor);
     await reload();
     const readRetryAt = now + 5_000;
     expect(editor.snapshot().readRetryAt).toBe(readRetryAt);
@@ -335,7 +340,8 @@ test('Profile Retry-After deadlines stay independent and captured actions wait f
     expect(editor.snapshot().draft?.displayName).toBe('Later draft');
     editor.edit({ biography: 'First draft' });
     await editor.submit('profile');
-    const submit = editor.submit.bind(editor), submitRetryAt = now + 30_000;
+    const submit = editor.submit.bind(editor),
+      submitRetryAt = now + 30_000;
     expect(editor.snapshot().commandRetryAt).toBe(submitRetryAt);
     editor.edit({ biography: 'Later draft' });
     await submit('profile');
