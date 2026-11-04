@@ -187,9 +187,6 @@ export function ConditionEditor({
   useEffect(() => {
     if (disabled) recovery.current.cancel();
   }, [disabled]);
-  useEffect(() => {
-    recovery.current.cancel();
-  }, [conceptLookup?.lifetimeKey]);
   const publish = (next: FilterDocument | undefined, node: ConditionDraftNode | undefined) => {
     session = { value: next, node };
     setSession(session);
