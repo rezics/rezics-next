@@ -163,14 +163,15 @@ test('cache invalidation and viewer replacement retire mounted identity summarie
     sources: [source([activeId])],
     identities: [{ id: activeId, state: 'active', handle: 'alice' }],
   });
+  client.setQueryData(pageKey, { revision: 1 });
   const pageLease = new ThreadDocumentMentionLease(current, pageKey, () => true);
   const stopPage = pageLease.connect(client);
-  client.setQueryData(pageKey, { revision: 1 });
   expect(pageLease.project(post, 0, true).mentions).toEqual({ [activeId]: { handle: 'alice' } });
   await client.invalidateQueries({ queryKey: pageKey, exact: true });
   expect(pageLease.project(post, 0, true).mentions).toEqual({});
   stopPage();
 
+  client.setQueryData(sessionQueryKey, { state: 'signed-in', subject: activeId, csrfToken: null });
   const sessionLease = new ThreadDocumentMentionLease(current, pageKey, () => true);
   const stopSession = sessionLease.connect(client);
   client.setQueryData(sessionQueryKey, { state: 'signed-out' });
