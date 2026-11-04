@@ -4,7 +4,12 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { executeClassificationIntent, reviewClassificationIntent, readOwnClassificationsForViewer, prepareOwnClassificationsVisit } from '../../ratings/own-classifications/actions';
+import {
+  executeClassificationIntent,
+  reviewClassificationIntent,
+  readOwnClassificationsForViewer,
+  prepareOwnClassificationsVisit,
+} from '../../ratings/own-classifications/actions';
 import { useLibraryWorkspaceAdmission } from '../../library/library-workspace-admission';
 import { OwnVotesDeparture } from '../../ratings/own-votes/departure';
 import { useClassificationAddress } from '../../ratings/own-classifications/address';
@@ -53,12 +58,18 @@ function ClassificationAssessmentsRoute() {
       subject={origin.subject}
       state={state}
       isCurrent={() => address.isCurrent() && origin.current(0)}
-      read={(original, signal) => readOwnClassificationsForViewer({ data: classificationSearch(original), ...(signal ? { signal } : {}) })}
-      onNext={(next) => { if (address.isCurrent() && origin.current(0)) void navigate({ search: classificationSearch(next) }); }}
+      read={(original, signal) =>
+        readOwnClassificationsForViewer({ data: classificationSearch(original), ...(signal ? { signal } : {}) })
+      }
+      onNext={(next) => {
+        if (address.isCurrent() && origin.current(0)) void navigate({ search: classificationSearch(next) });
+      }}
       commands={{
         csrfToken: () => origin.credential(0) ?? null,
-        send: (intent, signal) => executeClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
-        review: (intent, signal) => reviewClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
+        send: (intent, signal) =>
+          executeClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
+        review: (intent, signal) =>
+          reviewClassificationIntent({ data: intent, signal, headers: { 'x-csrf-token': intent.csrfToken } }),
         departure: (dirty, locked, current) => <OwnVotesDeparture dirty={dirty} locked={locked} isCurrent={current} />,
       }}
     />

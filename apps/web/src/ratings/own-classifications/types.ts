@@ -20,22 +20,24 @@ export type OwnClassificationsState =
   | 'stale-continuation'
   | 'moved-home';
 
-export type OwnClassificationsRead = Readonly<{
-  state: Exclude<OwnClassificationsState, 'ready'>;
-  page: null;
-  subject: string | null;
-  locale: string;
-  frontier: ClassificationFrontier | null;
-}> | Readonly<{
-  state: 'ready';
-  page: OwnClassificationsPage;
-  subject: string;
-  locale: string;
-  frontier: ClassificationFrontier;
-  source: 'content.classification-ballot-own-page.v1';
-  credential: string;
-  observation: string;
-}>;
+export type OwnClassificationsRead =
+  | Readonly<{
+      state: Exclude<OwnClassificationsState, 'ready'>;
+      page: null;
+      subject: string | null;
+      locale: string;
+      frontier: ClassificationFrontier | null;
+    }>
+  | Readonly<{
+      state: 'ready';
+      page: OwnClassificationsPage;
+      subject: string;
+      locale: string;
+      frontier: ClassificationFrontier;
+      source: 'content.classification-ballot-own-page.v1';
+      credential: string;
+      observation: string;
+    }>;
 
 type SubjectClient = ReturnType<KernelClient['subjects']>;
 type AssociationClient = ReturnType<SubjectClient['classification-associations']>;

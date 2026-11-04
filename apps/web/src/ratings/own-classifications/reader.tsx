@@ -5,7 +5,10 @@ import { OwnClassificationsWorkspace } from './page';
 import type { ClassificationCommands } from './editor';
 import type { ClassificationFrontier, OwnClassificationsState } from './types';
 
-export type OwnClassificationsReadFn = (frontier: ClassificationFrontier, signal?: AbortSignal) => Promise<OwnClassificationsRead>;
+export type OwnClassificationsReadFn = (
+  frontier: ClassificationFrontier,
+  signal?: AbortSignal,
+) => Promise<OwnClassificationsRead>;
 
 /** Loader feedback cannot be borrowed by another account, locale or selected continuation. */
 export function classificationReadMatches(
@@ -18,7 +21,9 @@ export function classificationReadMatches(
     try {
       if (read.source !== OWN_CLASSIFICATIONS_SOURCE || read.page.viewer.accountId !== subject) return false;
       indexOwnClassifications(read.page, frontier);
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }
   return (
     (read.subject === subject || (read.state === 'signed-out' && read.subject === null)) &&
@@ -49,7 +54,15 @@ export function ClassificationsReader({
   commands?: Omit<ClassificationCommands, 'read'>;
   onNext?: (frontier: ClassificationFrontier) => void;
 }) {
-  const latest = useRef({ subject, locale, address: classificationAddressKey(frontier), initial, state, active: true, abort: new AbortController() });
+  const latest = useRef({
+    subject,
+    locale,
+    address: classificationAddressKey(frontier),
+    initial,
+    state,
+    active: true,
+    abort: new AbortController(),
+  });
   const address = classificationAddressKey(frontier);
   if (
     latest.current.subject !== subject ||
@@ -77,8 +90,12 @@ export function ClassificationsReader({
       visit.abort.abort();
     };
   }, [visit]);
-  const candidate = result?.visit === visit ? result.value : initial.state === 'ready'
-    ? { ...initial, state: 'preparing' as const, page: null } : initial;
+  const candidate =
+    result?.visit === visit
+      ? result.value
+      : initial.state === 'ready'
+        ? { ...initial, state: 'preparing' as const, page: null }
+        : initial;
   const admitted = !!subject && classificationReadMatches(candidate, subject, locale, frontier);
   const feedback = state ?? (admitted ? candidate.state : 'preparing');
   const refresh = async (original: ClassificationFrontier) => {

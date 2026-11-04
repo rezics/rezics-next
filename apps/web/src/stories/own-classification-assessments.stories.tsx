@@ -44,7 +44,18 @@ const available: OwnClassification = {
     readback: path,
   },
 };
-type Mode = 'ready' | 'empty' | 'sparse' | 'withheld' | 'binding-mismatch' | 'read-only' | 'unavailable' | 'long' | 'uncertain' | 'selected' | 'preparing';
+type Mode =
+  | 'ready'
+  | 'empty'
+  | 'sparse'
+  | 'withheld'
+  | 'binding-mismatch'
+  | 'read-only'
+  | 'unavailable'
+  | 'long'
+  | 'uncertain'
+  | 'selected'
+  | 'preparing';
 function sample(mode: Mode): OwnClassificationsPage {
   let row = structuredClone(available);
   if (mode === 'long' && row.state === 'available') {
@@ -78,7 +89,9 @@ function sample(mode: Mode): OwnClassificationsPage {
 }
 function Story({ mode }: { mode: Mode }) {
   const [page, replace] = useState(() => sample(mode));
-  const [state, setState] = useState<OwnClassificationsState>(mode === 'unavailable' ? 'unavailable' : mode === 'preparing' ? 'preparing' : 'ready');
+  const [state, setState] = useState<OwnClassificationsState>(
+    mode === 'unavailable' ? 'unavailable' : mode === 'preparing' ? 'preparing' : 'ready',
+  );
   return (
     <OwnClassificationsWorkspace
       state={state}
@@ -92,11 +105,29 @@ function Story({ mode }: { mode: Mode }) {
       }}
       onNext={() => replace(sample('empty'))}
       commands={{
-        read: { state: 'ready', page, frontier: { cursor: null, selected: null }, subject: subjectId, locale: getLocale(),
-          source: 'content.classification-ballot-own-page.v1', credential: 'ab'.repeat(32), observation: 'cd'.repeat(32) },
+        read: {
+          state: 'ready',
+          page,
+          frontier: { cursor: null, selected: null },
+          subject: subjectId,
+          locale: getLocale(),
+          source: 'content.classification-ballot-own-page.v1',
+          credential: 'ab'.repeat(32),
+          observation: 'cd'.repeat(32),
+        },
         csrfToken: () => 'story-csrf',
         send: async () => ({ kind: mode === 'uncertain' ? 'uncertain' : 'acknowledged' }),
-        review: async () => ({ kind: 'current', own: { associationId, hasBallot: false, assessment: null, falsePositive: false, revision: '2', pending: true } }),
+        review: async () => ({
+          kind: 'current',
+          own: {
+            associationId,
+            hasBallot: false,
+            assessment: null,
+            falsePositive: false,
+            revision: '2',
+            pending: true,
+          },
+        }),
       }}
     />
   );
@@ -146,7 +177,13 @@ export const UncertainWithdrawal: StoryType = {
     await expect(canvas.getByRole('button', { name: m.subject_classification_assessment_retry() })).toBeEnabled();
   },
 };
-export const Phone: StoryType = { args: { mode: 'long' }, globals: { viewport: { value: 'phone390', isRotated: false } } };
-export const Desktop: StoryType = { args: { mode: 'ready' }, globals: { viewport: { value: 'desktop1280', isRotated: false } } };
+export const Phone: StoryType = {
+  args: { mode: 'long' },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+};
+export const Desktop: StoryType = {
+  args: { mode: 'ready' },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
 export const SelectedOffPage: StoryType = { args: { mode: 'selected' } };
 export const Preparing: StoryType = { args: { mode: 'preparing' } };

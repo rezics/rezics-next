@@ -108,7 +108,10 @@ test('mounted unavailable admission fences late accounts and retries the origina
         read={read}
       />,
     );
-  const reply = (subject: string, state: Exclude<OwnClassificationsRead['state'], 'ready'> = 'unavailable'): OwnClassificationsRead => ({
+  const reply = (
+    subject: string,
+    state: Exclude<OwnClassificationsRead['state'], 'ready'> = 'unavailable',
+  ): OwnClassificationsRead => ({
     ...initial,
     subject,
     state,

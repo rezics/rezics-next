@@ -68,8 +68,12 @@ export function OwnClassificationsWorkspace({
       admitted = null;
     }
   }
-  const selectedKey = selection?.generation === generation ? selection.key :
-    commands && frontier.selected ? classificationPair(frontier.selected) : null;
+  const selectedKey =
+    selection?.generation === generation
+      ? selection.key
+      : commands && frontier.selected
+        ? classificationPair(frontier.selected)
+        : null;
   const selected = admitted && selectedKey ? index?.get(selectedKey) : null;
   const inspect = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -143,47 +147,64 @@ export function OwnClassificationsWorkspace({
             })}
           </ol>
           {selected ? (
-            <section key={`${generation}:${classificationPair(selected)}`} ref={inspect} tabIndex={-1} className="min-w-0 space-y-3 rounded-xl border p-4 wrap-anywhere">
+            <section
+              key={`${generation}:${classificationPair(selected)}`}
+              ref={inspect}
+              tabIndex={-1}
+              className="min-w-0 space-y-3 rounded-xl border p-4 wrap-anywhere"
+            >
               <h2 className="text-xl font-semibold">{m.subject_classification_assessment_provenance({}, options)}</h2>
-              {selected.state === 'available' ? <>
-              <p>
-                {m.own_classifications_original({}, options)}: {selected.subjectId} · {selected.associationId}
-              </p>
-              <p>
-                {selected.association.property} · {selected.association.release} · {selected.association.revision}
-              </p>
-              <dl className="space-y-2 break-all text-sm">
-                {(['bindingHash', 'statementDigest', 'qualifiersDigest'] as const).map((name) => (
-                  <div key={name}>
-                    <dt>{name}</dt>
-                    <dd>{selected.association[name]}</dd>
+              {selected.state === 'available' ? (
+                <>
+                  <p>
+                    {m.own_classifications_original({}, options)}: {selected.subjectId} · {selected.associationId}
+                  </p>
+                  <p>
+                    {selected.association.property} · {selected.association.release} · {selected.association.revision}
+                  </p>
+                  <dl className="space-y-2 break-all text-sm">
+                    {(['bindingHash', 'statementDigest', 'qualifiersDigest'] as const).map((name) => (
+                      <div key={name}>
+                        <dt>{name}</dt>
+                        <dd>{selected.association[name]}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="flex flex-wrap gap-3">
+                    {[selected.subject, selected.target].map((summary, position) => (
+                      <a
+                        key={position}
+                        className={`${control} inline-flex items-center underline`}
+                        href={subjectHref({ id: summary.id, label: '' }, locale).href}
+                        onClick={(event) => {
+                          if (!current()) event.preventDefault();
+                        }}
+                      >
+                        {summary.label ?? m.subject_value_unlabelled({}, options)}
+                      </a>
+                    ))}
                   </div>
-                ))}
-              </dl>
-              <div className="flex flex-wrap gap-3">
-                {[selected.subject, selected.target].map((summary, position) => (
-                  <a
-                    key={position}
-                    className={`${control} inline-flex items-center underline`}
-                    href={subjectHref({ id: summary.id, label: '' }, locale).href}
-                    onClick={(event) => {
-                      if (!current()) event.preventDefault();
-                    }}
-                  >
-                    {summary.label ?? m.subject_value_unlabelled({}, options)}
-                  </a>
-                ))}
-              </div>
-              <Aggregate row={selected} locale={locale} />
-              </> : <p>{m.own_classifications_withheld({}, options)}</p>}
-              {commands ? <ClassificationEditor
-                row={selected} commands={commands} locale={locale} isCurrent={current}
-                refresh={() => onRetry(frontier)} onProtection={protectEditor}
-              /> : <p role="status">
-                {selected.actions.state === 'read-only' || selected.actions.state === 'withheld'
-                  ? m.own_classifications_read_only({}, options)
-                  : m.own_classifications_commands_unavailable({}, options)}
-              </p>}
+                  <Aggregate row={selected} locale={locale} />
+                </>
+              ) : (
+                <p>{m.own_classifications_withheld({}, options)}</p>
+              )}
+              {commands ? (
+                <ClassificationEditor
+                  row={selected}
+                  commands={commands}
+                  locale={locale}
+                  isCurrent={current}
+                  refresh={() => onRetry(frontier)}
+                  onProtection={protectEditor}
+                />
+              ) : (
+                <p role="status">
+                  {selected.actions.state === 'read-only' || selected.actions.state === 'withheld'
+                    ? m.own_classifications_read_only({}, options)
+                    : m.own_classifications_commands_unavailable({}, options)}
+                </p>
+              )}
             </section>
           ) : null}
           {admitted.next !== null ? (
@@ -257,9 +278,14 @@ function Aggregate({ row, locale }: { row: OwnClassification; locale: string }) 
           options,
         )}
       </p>
-      {row.aggregate.supportFraction !== null ? <p>{m.subject_classification_assessment_support_fraction(
-        { fraction: number.format(row.aggregate.supportFraction * 100) }, options,
-      )}</p> : null}
+      {row.aggregate.supportFraction !== null ? (
+        <p>
+          {m.subject_classification_assessment_support_fraction(
+            { fraction: number.format(row.aggregate.supportFraction * 100) },
+            options,
+          )}
+        </p>
+      ) : null}
       <p>{m.subject_classification_assessment_as_of({ date: row.aggregate.asOf }, options)}</p>
       <p>{m.library_publication_published_generation({ generation: row.aggregate.generation }, options)}</p>
     </div>

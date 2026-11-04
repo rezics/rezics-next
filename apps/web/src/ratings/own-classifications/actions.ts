@@ -29,14 +29,26 @@ async function prepareNativeClient() {
   const csrfToken = requestCsrfToken(request);
   if (refused || !subject || !authorization || !csrfToken) return { locale, subject: null, client: null };
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
-  return { locale, subject, client: origin ? await createOwnClassificationClient({
-    origin, authorization, accountId: subject, csrfToken, locale, signal: request.signal,
-  }) : null };
+  return {
+    locale,
+    subject,
+    client: origin
+      ? await createOwnClassificationClient({
+          origin,
+          authorization,
+          accountId: subject,
+          csrfToken,
+          locale,
+          signal: request.signal,
+        })
+      : null,
+  };
 }
 
 const readFrontier = (input: unknown) =>
-    input && typeof input === 'object' && !Array.isArray(input)
-      ? classificationFrontier(input as Record<string, unknown>) : null;
+  input && typeof input === 'object' && !Array.isArray(input)
+    ? classificationFrontier(input as Record<string, unknown>)
+    : null;
 
 /** Router loader caches retain only session preparation, never private inventory rows. */
 export const prepareOwnClassificationsVisit = createServerFn({ method: 'GET' })
@@ -47,9 +59,15 @@ export const prepareOwnClassificationsVisit = createServerFn({ method: 'GET' })
     if (!data) return unavailableOwnClassifications(null, locale, null, 'invalid-address');
     try {
       const session = await prepareNativeClient();
-      return unavailableOwnClassifications(data, locale, session.subject,
-        !session.subject ? 'signed-out' : session.client ? 'preparing' : 'unavailable');
-    } catch { return unavailableOwnClassifications(data, locale, null); }
+      return unavailableOwnClassifications(
+        data,
+        locale,
+        session.subject,
+        !session.subject ? 'signed-out' : session.client ? 'preparing' : 'unavailable',
+      );
+    } catch {
+      return unavailableOwnClassifications(data, locale, null);
+    }
   });
 
 export const readOwnClassificationsForViewer = createServerFn({ method: 'GET' })
@@ -62,7 +80,9 @@ export const readOwnClassificationsForViewer = createServerFn({ method: 'GET' })
       const session = await prepareNativeClient();
       if (!session.subject) return unavailableOwnClassifications(data, locale, null, 'signed-out');
       return session.client ? session.client.read(data) : unavailableOwnClassifications(data, locale, session.subject);
-    } catch { return unavailableOwnClassifications(data, locale, null); }
+    } catch {
+      return unavailableOwnClassifications(data, locale, null);
+    }
   });
 
 export const executeClassificationIntent = createServerFn({ method: 'POST' })
@@ -70,8 +90,12 @@ export const executeClassificationIntent = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     try {
       const session = await prepareNativeClient();
-      return session.client ? session.client.execute(data) : { kind: session.subject ? 'unavailable' as const : 'denied' as const };
-    } catch { return { kind: 'unavailable' as const }; }
+      return session.client
+        ? session.client.execute(data)
+        : { kind: session.subject ? ('unavailable' as const) : ('denied' as const) };
+    } catch {
+      return { kind: 'unavailable' as const };
+    }
   });
 
 export const reviewClassificationIntent = createServerFn({ method: 'POST' })
@@ -80,5 +104,7 @@ export const reviewClassificationIntent = createServerFn({ method: 'POST' })
     try {
       const session = await prepareNativeClient();
       return session.client ? session.client.review(data) : { kind: 'unavailable' as const };
-    } catch { return { kind: 'unavailable' as const }; }
+    } catch {
+      return { kind: 'unavailable' as const };
+    }
   });

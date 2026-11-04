@@ -7,21 +7,38 @@ import type { ClassificationIntent } from '../src/ratings/own-classifications/in
 import type { OwnClassificationsRead } from '../src/ratings/own-classifications/types';
 import { accountId, associationId, classificationsPage, subjectId } from './own-classification-assessments-fixture';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/library/classification-assessments' });
-const globals = { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true,
-  requestAnimationFrame: (callback: FrameRequestCallback) => callback(0) };
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  IS_REACT_ACT_ENVIRONMENT: true,
+  requestAnimationFrame: (callback: FrameRequestCallback) => callback(0),
+};
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, value });
 afterAll(() => {
-  for (const [key, value] of previous) value ? Object.defineProperty(globalThis, key, value) : Reflect.deleteProperty(globalThis, key);
+  for (const [key, value] of previous)
+    value ? Object.defineProperty(globalThis, key, value) : Reflect.deleteProperty(globalThis, key);
   window.happyDOM.abort();
 });
 
 const frontier = { cursor: 'raw', selected: { subjectId, associationId } };
 function ready(): Extract<OwnClassificationsRead, { state: 'ready' }> {
-  return { state: 'ready', page: classificationsPage(), frontier, subject: accountId, locale: 'en',
-    source: 'content.classification-ballot-own-page.v1', credential: 'ab'.repeat(32), observation: 'cd'.repeat(32) };
+  return {
+    state: 'ready',
+    page: classificationsPage(),
+    frontier,
+    subject: accountId,
+    locale: 'en',
+    source: 'content.classification-ballot-own-page.v1',
+    credential: 'ab'.repeat(32),
+    observation: 'cd'.repeat(32),
+  };
 }
 function button(host: HTMLElement, label: string) {
   const value = [...host.querySelectorAll('button')].find((node) => node.textContent === label);
@@ -38,13 +55,44 @@ test('browser admission refreshes the selected frontier; readback leaves the ori
   let calls = 0;
   let active = true;
   const sent: ClassificationIntent[] = [];
-  const read = async () => { calls++; return new Promise<OwnClassificationsRead>((done) => { resolve = done; }); };
+  const read = async () => {
+    calls++;
+    return new Promise<OwnClassificationsRead>((done) => {
+      resolve = done;
+    });
+  };
   try {
-    await act(async () => root.render(<ClassificationsReader initial={initial} frontier={frontier} locale="en" subject={accountId}
-      state={null} isCurrent={() => active} read={read} commands={{ csrfToken: () => 'csrf',
-        send: async (intent) => { sent.push(intent); return { kind: 'uncertain' }; },
-        review: async () => ({ kind: 'current', own: { associationId, hasBallot: false, assessment: null, falsePositive: false, revision: '2', pending: true } }),
-      }} />));
+    await act(async () =>
+      root.render(
+        <ClassificationsReader
+          initial={initial}
+          frontier={frontier}
+          locale="en"
+          subject={accountId}
+          state={null}
+          isCurrent={() => active}
+          read={read}
+          commands={{
+            csrfToken: () => 'csrf',
+            send: async (intent) => {
+              sent.push(intent);
+              return { kind: 'uncertain' };
+            },
+            review: async () => ({
+              kind: 'current',
+              own: {
+                associationId,
+                hasBallot: false,
+                assessment: null,
+                falsePositive: false,
+                revision: '2',
+                pending: true,
+              },
+            }),
+          }}
+        />,
+      ),
+    );
     expect(calls).toBe(1);
     expect(host.textContent).not.toContain('Own-page subject');
     await act(async () => resolve(ready()));
@@ -64,7 +112,10 @@ test('browser admission refreshes the selected frontier; readback leaves the ori
     active = false;
     await act(async () => retry.click());
     expect(sent).toHaveLength(2);
-  } finally { await act(async () => root.unmount()); host.remove(); }
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
 });
 
 test('replacement aborts old admission and commands; away and return require a new native observation', async () => {
@@ -72,9 +123,19 @@ test('replacement aborts old admission and commands; away and return require a n
   const root = createRoot(host);
   const requests: { signal: AbortSignal | undefined; done: (value: OwnClassificationsRead) => void }[] = [];
   const initial = ready();
-  const render = (episode: string) => root.render(<ClassificationsReader key={episode} initial={initial} frontier={frontier}
-    locale="en" subject={accountId} state={null} isCurrent={() => true}
-    read={(_frontier, signal) => new Promise((done) => requests.push({ signal, done }))} />);
+  const render = (episode: string) =>
+    root.render(
+      <ClassificationsReader
+        key={episode}
+        initial={initial}
+        frontier={frontier}
+        locale="en"
+        subject={accountId}
+        state={null}
+        isCurrent={() => true}
+        read={(_frontier, signal) => new Promise((done) => requests.push({ signal, done }))}
+      />,
+    );
   try {
     await act(async () => render('credential-one'));
     await act(async () => render('credential-two'));
@@ -87,5 +148,7 @@ test('replacement aborts old admission and commands; away and return require a n
     await act(async () => render('return'));
     expect(requests).toHaveLength(3);
     expect(host.textContent).not.toContain('Own-page subject');
-  } finally { await act(async () => root.unmount()); }
+  } finally {
+    await act(async () => root.unmount());
+  }
 });
