@@ -158,7 +158,10 @@ test('eligible album create, revoked authority, unknown delivery, and exact-id r
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill(recoveredLabel);
   await stack.injectCreatedSubjectReadFailureOnce({ status: 503, body: '{"title":"Reader temporarily unavailable"}' });
   await confirmAlbum(page);
-  const outcome = page.locator('section').filter({ has: page.locator('code') }).first();
+  const outcome = page
+    .locator('section')
+    .filter({ has: page.locator('code') })
+    .first();
   await outcome.waitFor({ state: 'visible' });
   const recoveredId = (await outcome.locator('code').innerText()).trim();
   expect(recoveredId).toMatch(/^[0-9a-f-]{36}$/i);

@@ -26,11 +26,7 @@ import {
   type AlbumTransport,
 } from './album-profile';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
-import {
-  isAllowedCreateAuthority,
-  observedCreateAuthority,
-  type CreateAuthority,
-} from './identity-intake';
+import { isAllowedCreateAuthority, observedCreateAuthority, type CreateAuthority } from './identity-intake';
 import { CreateAuthorityStatus } from './identity-intake-view';
 import { QualifierInput } from './relation-editor';
 import type { StatementInput } from './statement-editor';
@@ -627,11 +623,13 @@ function AlbumProfileCreateLive({
       )}
       {review.status !== 'closed' && (
         <AlbumCreateReview
-          item={albumDraft(
-            release,
-            terms,
-            rows.map((row) => row.statement),
-          ).item}
+          item={
+            albumDraft(
+              release,
+              terms,
+              rows.map((row) => row.statement),
+            ).item
+          }
           rows={rows}
           release={release}
           locale={locale}

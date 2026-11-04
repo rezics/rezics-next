@@ -743,9 +743,9 @@ test('Album creation composes complete terms and initial facts while preserving 
     const disabled = await ready(signedOut, { session: 'signed-out' });
     expect(disabled.textContent).toContain(m.catalogue_create_signed_out());
     expect(disabled.querySelector('fieldset')!.matches(':disabled')).toBe(true);
-    expect((within(disabled).getByRole('button', { name: m.album_create_review() }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(
+      (within(disabled).getByRole('button', { name: m.album_create_review() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(writes(signedOut)).toHaveLength(0);
 
     // Reader changes retire actual positive writes and queued native events, including late failure/throw.

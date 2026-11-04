@@ -138,8 +138,7 @@ test('Album recovery retires every current surface and retains private drafts an
               session="signed-in"
               transport={{
                 ...fixture.transport,
-                load: async () =>
-                  initial.ok ? Object.assign({}, initial, { actions: inspectionActions }) : initial,
+                load: async () => (initial.ok ? Object.assign({}, initial, { actions: inspectionActions }) : initial),
               }}
               search={async () => []}
               editors={editors}
