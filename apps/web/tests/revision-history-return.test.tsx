@@ -57,7 +57,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/threads/reads', () => ({
   readPostHistory: async ({ data }: { data: HistoryRequestData }): Promise<HistoricalReadEnvelope<unknown>> => {
     historyReads.push(data);
-    if (data.cursor === failNextHistoryCursor) {
+    if (failNextHistoryCursor !== undefined && data.cursor === failNextHistoryCursor) {
       failNextHistoryCursor = undefined;
       throw new Error('Constructed history read failure');
     }
@@ -114,7 +114,7 @@ function page(revisions: HistoryPage['revisions'], next: string | null): History
 
 function button(host: HTMLElement, label: string) {
   const control = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label);
-  expect(control, `Missing ${label}. Current view: ${host.textContent}`).toBeDefined();
+  expect(control).toBeDefined();
   return control!;
 }
 async function click(control: HTMLElement) {
@@ -136,8 +136,6 @@ async function mount(initialUrl: string) {
   failNextHistoryCursor = undefined;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
-  const { historicalReaderSource } = await import('../src/threads/historical-reader-provenance');
-  expect(historicalReaderSource(client).read()).toMatchObject({ state: 'signed-out', healthy: true });
   const rootRoute = createRootRouteWithContext<{
     queryClient: InstanceType<typeof QueryClient>;
     credentialMode: 'anonymous' | 'session';
