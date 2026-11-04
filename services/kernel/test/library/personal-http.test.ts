@@ -744,13 +744,12 @@ test('following kind pages seek the selected population and bind cursors to kind
   const first = await json(await request('GET', '/v1/follows?targetType=collection&limit=1'));
   expect(first.follows[0]).toMatchObject({ targetId: expectedCollectionIds[0], targetType: 'collection' });
   expect(first.next).toEqual(expect.any(String));
-  await problem(
-    await request(
-      'GET',
-      `/v1/follows?targetType=subject&limit=1&cursor=${encodeURIComponent(first.next)}`,
-    ),
-    400,
-    'invalid_cursor',
+  const wrongKind = await capture(db, () =>
+    request('GET', `/v1/follows?targetType=subject&limit=1&cursor=${encodeURIComponent(first.next)}`),
+  );
+  await problem(wrongKind.value, 400, 'invalid_cursor');
+  expect(wrongKind.capture.statements.some((statement) => /FROM (?:library\.follow|core\.partition)\b/i.test(statement))).toBe(
+    false,
   );
   await problem(
     await request('GET', `/v1/follows?limit=1&cursor=${encodeURIComponent(first.next)}`),
@@ -785,3 +784,36 @@ test('following kind pages seek the selected population and bind cursors to kind
   await json(await request('DELETE', `/v1/follows/${space.spaceId}`));
   expect(await json(await request('GET', '/v1/follows?targetType=space'))).toEqual({ follows: [], next: null });
 });
+
+test('a kind page of 100 probes one more row from that kind', async () => {
+  const route = routeOf(accounts.owner)!;
+  const prefix = randomUUID().slice(0, 8);
+  await db.admin.query(
+    `INSERT INTO library.follow
+       (route, account_id, target_id, target_type, state, reason, created_at, updated_at, transaction_id)
+     SELECT $1, $2,
+            ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid,
+            'collection', 'following', 'explicit', '2099-01-01T00:00:00Z', '2099-01-01T00:00:00Z',
+            ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid
+     FROM generate_series(1, 101) AS n`,
+    [route, accounts.owner, prefix],
+  );
+  try {
+    const first = await json(await request('GET', '/v1/follows?targetType=collection&limit=100'));
+    expect(first.follows).toHaveLength(100);
+    expect(first.follows.every((follow: { targetId: string }) => follow.targetId.startsWith(`${prefix}-`))).toBe(true);
+    expect(first.next).toEqual(expect.any(String));
+    const last = await json(
+      await request('GET', `/v1/follows?targetType=collection&limit=100&cursor=${encodeURIComponent(first.next)}`),
+    );
+    expect(last.follows.filter((follow: { targetId: string }) => follow.targetId.startsWith(`${prefix}-`))).toHaveLength(
+      1,
+    );
+    expect(last.next).toBeNull();
+  } finally {
+    await db.admin.query(
+      'DELETE FROM library.follow WHERE route = $1 AND account_id = $2 AND target_id::text LIKE $3',
+      [route, accounts.owner, `${prefix}-%`],
+    );
+  }
+}, 120_000);
