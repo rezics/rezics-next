@@ -62,7 +62,7 @@ export function ThreadActivity({
                 {
                   time: new Intl.DateTimeFormat(locale, {
                     dateStyle: 'medium',
-                    timeStyle: 'short',
+                    timeStyle: 'long',
                     timeZone: 'UTC',
                   }).format(new Date(visible.lastActivityAt)),
                 },

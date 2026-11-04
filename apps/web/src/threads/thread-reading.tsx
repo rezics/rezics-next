@@ -136,8 +136,15 @@ function redactThreadReadingPage(page: ThreadReadingPage): ThreadReadingPage {
     void [_postAuthor, _revisedAt, _revisionId, _body, _mediaIds];
     return { ...safePost, body: empty, mediaIds: [], sha256: null } as unknown as typeof post;
   });
-  const { board: _board, realm: _realm, documentMedia: _documentMedia, composed: _composed, ...safePage } = page;
-  void [_board, _realm, _documentMedia, _composed];
+  const {
+    board: _board,
+    realm: _realm,
+    documentMedia: _documentMedia,
+    composed: _composed,
+    conversationActivity: _activity,
+    ...safePage
+  } = page;
+  void [_board, _realm, _documentMedia, _composed, _activity];
   return {
     ...safePage,
     thread: safeThread,
