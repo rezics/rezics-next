@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { consolidationClient, type Confirmation, type ConfirmationInput, type ConsolidationResult } from './client';
+import { consolidationClient, type Confirmation, type ConfirmationInput, type ConsolidationResult, type ConsolidationTransport } from './client';
 import { ConsolidationReview } from './review';
 
 type Operation = 'review' | 'confirm' | 'apply' | 'retry' | 'cancel' | 'result';
@@ -9,7 +9,7 @@ export type ConsolidationEnvelope = {
   /** Owner, address or reader retirement must notify synchronously, including A -> B -> A. */
   subscribeRetirement(retire: () => void): () => void;
 };
-type Transport = ReturnType<typeof consolidationClient>;
+type Transport = ConsolidationTransport;
 type Command =
   | { operation: 'confirm'; key: string; evidence: ConfirmationInput }
   | { operation: 'apply' | 'cancel'; key: string; confirmationId: string }
@@ -52,6 +52,12 @@ export class ConsolidationVisit {
     );
   }
 
+  get isRetired() {
+    return this.retired;
+  }
+  get hasRetainedCommand() {
+    return this.command !== null;
+  }
   get confirmation() {
     return structuredClone(this.confirmationValue);
   }

@@ -25,3 +25,10 @@ export function consolidationClient(client: KernelClient, sourceLabelId: string,
     result: (confirmationId: string) => label.consolidations({ confirmationId }).get({ headers }),
   };
 }
+
+/** Only serializable native payloads cross the existing Web server-function boundary. */
+export type ConsolidationTransport = {
+  [K in keyof ReturnType<typeof consolidationClient>]: (
+    ...args: Parameters<ReturnType<typeof consolidationClient>[K]>
+  ) => Promise<Pick<Awaited<ReturnType<ReturnType<typeof consolidationClient>[K]>>, 'data' | 'error'>>;
+};

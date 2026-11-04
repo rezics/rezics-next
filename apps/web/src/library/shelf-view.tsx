@@ -1,3 +1,4 @@
+import { useConsolidationSelection } from './label-consolidation/selection';
 import { ShelfWorkContextView } from './shelf-work-context/view';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { EntryRemoveForm } from './entry-undo';
@@ -1000,6 +1001,7 @@ export function LabelShelfEntries({
   size: ShelfSize;
   csrfToken: string | null;
 }) {
+  const selection = useConsolidationSelection();
   const removeAdmitted = useOperation('library_label.unassign');
   const display: ShelfDisplay = { layout, size, ...(columns ? { columns } : {}) };
   const title = (entry: LabelShelfEntry) =>
@@ -1049,6 +1051,7 @@ export function LabelShelfEntries({
           return (
             <CoverCard
               key={entry.id}
+              {...selection?.(entry)}
               href={href(entry)}
               title={title(entry)}
               cover={shelfCover(entry.subject)}
@@ -1097,6 +1100,7 @@ export function LabelShelfEntries({
           return (
             <ShelfListRow
               key={entry.id}
+              {...selection?.(entry)}
               href={href(entry)}
               cover={shelfCover(entry.subject)}
               title={title(entry)}
@@ -1151,6 +1155,8 @@ export function LabelShelfEntries({
     const progress = labelEntryProgress(entry, locale);
     return {
       id: entry.id,
+      ...selection?.(entry),
+      selectLabel: entryTitle.text,
       title: entryTitle.text,
       href: entry.subject ? href(entry) : '',
       cover: shelfCover(entry.subject),

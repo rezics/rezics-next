@@ -1,6 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from '@tanstack/react-router';
-import { useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { consolidationEnvelope } from './label-consolidation/envelope';
+import { consolidationTransport } from './label-consolidation/route';
+import { ConsolidationWorkspace } from './label-consolidation/workspace';
+import { m } from '../paraglide/messages.js';
 import { usePrivateReportOrigin, usePrivateReportPayload } from './private-report-current-origin';
 import { LabelShelfPage } from './entries-page';
 import {
@@ -226,13 +230,60 @@ function LabelShelfRead({
   const capturePayload = usePrivateReportPayload(client, key);
   const sameRead = capturePayload(query.data);
   const isCurrent = () => current() && sameRead();
+  const binding = useMemo(() => ({
+    id: crypto.randomUUID(),
+    envelope: consolidationEnvelope(origin, isCurrent, (notify) => client.getQueryCache().subscribe(notify)),
+  }), [origin, client, query.data, query.dataUpdatedAt, query.isError, episode]);
+  const [reopened, setReopened] = useState<{ binding: string; page: LabelShelfPageData } | null>(null);
+  const [refreshState, setRefreshState] = useState<'idle' | 'loading' | 'unavailable'>('idle');
+  const refreshing = useRef(false);
+  const refreshReaders = async (sourceId: string, targetId: string) => {
+    if (!isCurrent() || refreshing.current) return;
+    const captured = origin.capture(...readGroups);
+    refreshing.current = true;
+    setRefreshState('loading');
+    try {
+      const results = await Promise.allSettled([sourceId, targetId].map((labelId) => read({ data: {
+        labelId,
+        ...(labelId === sourceId && source.cursor !== null ? { cursor: source.cursor } : {}),
+      } })));
+      if (!isCurrent() || !captured()) return;
+      const sourceResult = results[0];
+      if (sourceResult?.status === 'fulfilled' && sourceResult.value.state === 'loaded' &&
+        sourceResult.value.provenance.subject === subject && sourceResult.value.provenance.locale === locale &&
+        sourceResult.value.label.id === sourceId) {
+        setReopened({ binding: binding.id, page: {
+          ...sourceResult.value,
+          ...(query.data?.state === 'loaded' && query.data.undo ? {
+            undo: query.data.undo, ...(query.data.undoKey ? { undoKey: query.data.undoKey } : {}),
+          } : {}),
+        } });
+      }
+      setRefreshState(results.every((result, index) => result.status === 'fulfilled' &&
+        result.value.state === 'loaded' && result.value.provenance.subject === subject &&
+        result.value.provenance.locale === locale && result.value.label.id === [sourceId, targetId][index])
+        ? 'idle' : 'unavailable');
+    } catch {
+      if (isCurrent()) setRefreshState('unavailable');
+    } finally { refreshing.current = false; }
+  };
   const write = origin.capture(...readGroups, 'library_label.unassign');
   const accepted = isCurrent() && query.data && matches(query.data, subject, source, locale) ? query.data : undefined;
   if (accepted?.state === 'loaded') payload.value = accepted;
   const page: LabelShelfPageData = accepted ?? { state: query.isError ? 'unavailable' : 'preparing' };
   const canUnassign = () => isCurrent() && page.state === 'loaded' && !!page.csrfToken?.trim() && write();
   // CSRF, revisions and command keys remain exactly those captured by this payload's originating read.
+  const shown = reopened?.binding === binding.id ? reopened.page : page;
+  if (page.state !== 'loaded') return <LabelShelfPage page={page} locale={locale} display={display} isCurrent={isCurrent} canUnassign={canUnassign} />;
   return (
-    <LabelShelfPage page={page} locale={locale} display={display} isCurrent={isCurrent} canUnassign={canUnassign} />
+    <ConsolidationWorkspace key={binding.id} page={shown.state === 'loaded' ? shown : page} viewer={subject}
+      locale={locale} envelope={binding.envelope} isCurrent={isCurrent}
+      transport={(headers) => consolidationTransport(subject, source.labelId, headers)}
+      refreshAssignments={(source, target) => { void refreshReaders(source, target); }}
+      canUndo={() => isCurrent() && origin.capture(...readGroups, 'library_label.unassign')()}
+      csrfToken={() => origin.read().csrfToken}>
+      {refreshState !== 'idle' ? <p role="status">{refreshState === 'loading' ? m.library_consolidation_refreshing() : m.library_consolidation_refresh_failed()}</p> : null}
+      <LabelShelfPage page={shown} locale={locale} display={display} isCurrent={isCurrent} canUnassign={canUnassign} />
+    </ConsolidationWorkspace>
   );
 }
