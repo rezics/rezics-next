@@ -1477,6 +1477,32 @@ END $$;
 
 
 --
+-- Name: reading_insights_progress_meaning_delete(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_progress_meaning_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  DELETE FROM library.reading_insights_progress_meaning WHERE route=OLD.route AND session_id=OLD.session_id;
+  RETURN OLD;
+END $$;
+
+
+--
+-- Name: reading_insights_progress_meaning_truncate(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_progress_meaning_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  TRUNCATE library.reading_insights_progress_meaning;
+  RETURN NULL;
+END $$;
+
+
+--
 -- Name: reading_insights_receive(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -4700,6 +4726,35 @@ CREATE TABLE library.reading_insights_profile (
 
 
 --
+-- Name: reading_insights_progress_meaning; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_progress_meaning (
+    route integer NOT NULL,
+    session_id uuid NOT NULL,
+    unit_id text NOT NULL COLLATE pg_catalog."C",
+    meaning_revision smallint NOT NULL,
+    mode text NOT NULL,
+    profile_pin jsonb NOT NULL,
+    dimension text,
+    "precision" smallint,
+    minimum numeric,
+    maximum numeric,
+    total_policy text,
+    identity_kind text NOT NULL,
+    structure_kind text NOT NULL,
+    CONSTRAINT reading_insights_progress_meaning_identity_kind_check CHECK ((identity_kind = ANY (ARRAY['none'::text, 'session_local'::text]))),
+    CONSTRAINT reading_insights_progress_meaning_meaning_revision_check CHECK ((meaning_revision = 1)),
+    CONSTRAINT reading_insights_progress_meaning_mode_check CHECK ((mode = ANY (ARRAY['scalar_amount'::text, 'cursor_position'::text, 'completed_units'::text]))),
+    CONSTRAINT reading_insights_progress_meaning_precision_check CHECK ((("precision" >= 0) AND ("precision" <= 6))),
+    CONSTRAINT reading_insights_progress_meaning_profile_pin_check CHECK ((jsonb_typeof(profile_pin) = 'object'::text)),
+    CONSTRAINT reading_insights_progress_meaning_structure_kind_check CHECK ((structure_kind = 'none'::text)),
+    CONSTRAINT reading_insights_progress_meaning_total_policy_check CHECK (((total_policy IS NULL) OR (total_policy = ANY (ARRAY['optional'::text, 'required'::text, 'forbidden'::text])))),
+    CONSTRAINT reading_insights_progress_meaning_unit_id_check CHECK (((char_length(unit_id) >= 1) AND (char_length(unit_id) <= 128)))
+);
+
+
+--
 -- Name: reading_insights_subject; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -6573,6 +6628,14 @@ ALTER TABLE ONLY library.reading_insights_owner
 
 ALTER TABLE ONLY library.reading_insights_profile
     ADD CONSTRAINT reading_insights_profile_pkey PRIMARY KEY (route, account_id, year, profile_key);
+
+
+--
+-- Name: reading_insights_progress_meaning reading_insights_progress_meaning_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_progress_meaning
+    ADD CONSTRAINT reading_insights_progress_meaning_pkey PRIMARY KEY (route, session_id, unit_id);
 
 
 --
@@ -8905,6 +8968,20 @@ CREATE TRIGGER published_log_fact_insert AFTER INSERT ON library.published_log F
 --
 
 CREATE TRIGGER published_log_fact_visibility AFTER UPDATE ON library.published_log FOR EACH ROW WHEN ((old.deleted IS DISTINCT FROM new.deleted)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: progress_session reading_insights_progress_meaning_delete; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reading_insights_progress_meaning_delete AFTER DELETE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.reading_insights_progress_meaning_delete();
+
+
+--
+-- Name: progress_session reading_insights_progress_meaning_truncate; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reading_insights_progress_meaning_truncate AFTER TRUNCATE ON library.progress_session FOR EACH STATEMENT EXECUTE FUNCTION library.reading_insights_progress_meaning_truncate();
 
 
 --
