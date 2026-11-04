@@ -14,6 +14,7 @@ import { extractBangumiGameNames } from './bangumi-game-names.ts';
 import { bangumiDiagnosticLimit, extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
 import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
+import { bangumiGameEnvironment } from './bangumi-game-environment.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -351,6 +352,14 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
   }
   const playerCount = bangumiGamePlayerCount(record);
+  let environment;
+  try {
+    environment = bangumiGameEnvironment(record, context);
+  } catch (error) {
+    if (error instanceof TypeError && error.message === 'invalid_reference_context')
+      invalid('', 'invalid_reference_context');
+    throw error;
+  }
   const proposals: BatchCommand[] = [];
   const propose = (
     statement: BatchStatement,
@@ -398,6 +407,35 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         ? { ...fact(item.property, item.content), qualifiers: [item.qualifier] }
         : fact(item.property, item.content);
       proposals.push(propose(statement, 'facts', item.field));
+    }
+    for (const item of environment.facts) {
+      let cited = recordUrl;
+      try {
+        const parsed = new URL(recordUrl);
+        parsed.hash = item.citationPath;
+        cited = parsed.href;
+      } catch {
+        cited = recordUrl;
+      }
+      proposals.push(
+        propose(
+          {
+            property: { id: item.property },
+            value: { type: 'value', content: item.content },
+            ...(item.qualifiers
+              ? {
+                  qualifiers: item.qualifiers.map((qualifier) => ({
+                    property: { id: qualifier.property },
+                    value: { type: 'value' as const, content: qualifier.content },
+                  })),
+                }
+              : {}),
+            references: references([cited]),
+          },
+          'facts',
+          item.field,
+        ),
+      );
     }
     if (document) {
       proposals.push({
@@ -460,10 +498,14 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         ...retainedFieldDiagnostics(
           record,
           extractedNames.diagnostics,
-          television.handledInfobox || playerCount.handledInfobox || bookTitleProfile,
+          television.handledInfobox ||
+            playerCount.handledInfobox ||
+            environment.handledInfobox ||
+            bookTitleProfile,
         ),
         ...television.diagnostics,
         ...playerCount.diagnostics,
+        ...environment.diagnostics,
       ]),
     ],
     coverAssets,

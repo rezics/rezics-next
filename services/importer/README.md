@@ -781,7 +781,7 @@ uses five metadata-only native envelopes and the ordinary account-key CLI: an ex
 subject, then live action, then returns as a revised Book under the same native key. Complete membership
 stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
 receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
-`bangumi@9` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
+`bangumi@11` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
 five-record launch checks. Its earlier ignored-type native child is superseded by typed 3/6 conversion.
 [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
 log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
@@ -1426,11 +1426,11 @@ bounds belong to the linked owners; conversion itself has no purge work.
 ### Import authored Bangumi television original-run and episode count
 
 - Touches: one admitted type-2 TVAnime infobox on the ordinary Bangumi JSON-lines
-  registration, the shared `bangumi@9` converter, and ordinary public
+  registration, the shared `bangumi@11` converter, and ordinary public
   batch/fence/candidate paths on that TVSeries. Selected-family seed reuses the
   same registration; this adds no publisher.
 - Bound: at most 64 infobox keys and three run facts inside the existing 64 KiB
-  projection, nine-command and journal budgets. Unknown `*`, weekday schedule
+  projection, 33-command and journal budgets. Unknown `*`, weekday schedule
   text and custom keys withhold only those fields. No extra reads, episode-row
   counts or broadcaster resolution.
 - Growth check: the focused importer case checks exact start/end/count
@@ -1442,7 +1442,7 @@ bounds belong to the linked owners; conversion itself has no purge work.
 ### Import authored Bangumi Game player count
 
 - Touches: one admitted type-4 Game infobox on the ordinary Bangumi JSON-lines
-  registration, the shared `bangumi@9` converter, and ordinary public
+  registration, the shared `bangumi@11` converter, and ordinary public
   batch/fence/candidate paths on that VideoGame. Selected-family seed reuses the
   same converter; this adds no publisher.
 - Bound: at most 64 infobox keys, 8 examined count occurrences and one player
@@ -2355,6 +2355,34 @@ positive integer or inclusive range; a lone count invents no minimum.
   converter refresh and a malformed-to-corrected same UUID. The connected
   selected-family caller is
   `services/kernel/test/imports/bangumi-game-player-count.test.ts`; native
+  execution remains controller-owned.
+
+### Bangumi Game platforms and software engine
+
+Ordinary Bangumi JSON-lines registration converts pinned Game infobox `平台`
+and `游戏引擎` on type 4 through `bangumi@11`, preserving Game names, player-count,
+Book grain and TVAnime work-evidence mapping. Selected-family type
+4 rows use that same converter.
+Current reviewed Concept reads supply the only native targets; a configuration
+UUID or identical label is a lookup hint. Concealed or wrong-source bindings
+withhold that occurrence and keep the VideoGame identity and sealed retry
+candidates. Top-level `platform` remains the profile selector. Engine version,
+platform or edition text is withheld because `wdt:P408` admits no qualifiers.
+No second vocabulary publisher or taxonomy release is introduced.
+Decision: Game environment admission stays on the combined `bangumi@11` revision; book
+grain stays on that combined revision. No infobox-field scheme URI is minted
+from `平台` or `游戏引擎`.
+
+- Touches: one ordinary or selected type-4 Game record, at most 16 platform
+  and 8 engine Concept relations, exact infobox field citations, and
+  independent accept/adopt/read of those properties.
+- Bound: 65,536 infobox bytes, 64 fields, depth 2, 16 diagnostics, 24 cached
+  current Concept reads, the 64 KiB command envelope and existing journal
+  limits. No catalogue label scan.
+- Growth check: `services/importer/tests/bangumi-game-environment.test.ts`
+  covers selected-family planning, ordinary registration, citations and
+  concealed/wrong-source withholding. The connected ordinary caller is
+  `services/kernel/test/imports/bangumi-game-environment.test.ts`; native
   execution remains controller-owned.
 
 ### Bangumi creator and voice credits
