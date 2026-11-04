@@ -224,7 +224,8 @@ function CharacterProfileLive({
       {session === 'unavailable' ? (
         <EditorFailure reason="unavailable" locale={locale} />
       ) : (
-        session !== 'signed-in' && (
+        session !== 'signed-in' &&
+        (character || created || !transport.eligibility) && (
           <p role="status">
             {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
           </p>
@@ -325,7 +326,7 @@ function CharacterProfileLive({
               <AuthoringDepartureBoundary>
                 <CharacterSelection key={id ?? 'creation'} onSelect={setId}>
                   {(select) => (
-                    <div hidden={session !== 'signed-in'}>
+                    <div hidden={session !== 'signed-in' && !transport.eligibility}>
                       <EntityPicker
                         label={m.character_choose_existing({}, o)}
                         value={[]}
@@ -340,12 +341,14 @@ function CharacterProfileLive({
                       />
                       <CatalogueCurrentReading
                         visible={currentRead}
-                        ready={currentRead && session === 'signed-in'}
+                        ready={currentRead && (session === 'signed-in' || !!transport.eligibility)}
                         revision={`${query.dataUpdatedAt}`}
                       >
                         <CharacterProfileCreate
                           release={current.release}
                           locale={locale}
+                          session={session}
+                          href={`/${locale}/catalogue/character${work ? `?work=${encodeURIComponent(work)}` : ''}`}
                           search={search}
                           transport={transport}
                           onCreated={setCreated}

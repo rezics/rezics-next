@@ -1,5 +1,6 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useId, useRef, useState, useLayoutEffect, type MouseEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -16,6 +17,8 @@ import { DefinitionMeaning } from './definition-meaning';
 import { EditorFailure, StatementFields, statementHolderKey, type StatementFieldsRead } from './statement-editor-view';
 import { emptyCreationStatement, editableScalar, type SnakInput, type StatementInput } from './statement-editor';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
+import { isAllowedCreateAuthority, observedCreateAuthority, type CreateAuthority } from './identity-intake';
+import { CreateAuthorityStatus } from './identity-intake-view';
 import {
   characterCreateCorrections,
   characterCorrectionTargets,
@@ -230,6 +233,8 @@ function CharacterItemValue({
 type CharacterProfileCreateProps = {
   release: Release;
   locale: string;
+  session?: string;
+  href?: string;
   transport: CharacterTransport;
   search?: EntityPickerSearch;
   onCreated: (result: Extract<CreateResult, { ok: true }>) => void;
@@ -250,15 +255,61 @@ export const CharacterProfileCreate = catalogueEditor(function CharacterProfileC
 function CharacterProfileCreateLive({
   release: suppliedRelease,
   locale,
+  session = 'signed-in',
+  href,
   transport,
   search,
   onCreated,
   onRefreshDefinitions,
 }: CharacterProfileCreateProps) {
   const lifetime = useEditorLifetime();
+  const client = useQueryClient();
   const retired = useRef(false);
   const isCurrent = () => lifetime.active() && !retired.current;
   const o = { locale: locale as never };
+  const createHref = href ?? `/${locale}/catalogue/character`;
+  const observesCreate = !!transport.eligibility;
+  const eligibilityKey = ['character-create', 'eligibility', locale, String(lifetime.generation), session];
+  const eligibilityQuery = useQuery({
+    queryKey: eligibilityKey,
+    queryFn: async () => {
+      if (session === 'signed-out') return { state: 'guest' } satisfies CreateAuthority;
+      if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' } satisfies CreateAuthority;
+      return observedCreateAuthority(await transport.eligibility());
+    },
+    enabled: observesCreate && session !== 'unknown',
+    retry: false,
+    staleTime: 0,
+  });
+  const observedAuthority: CreateAuthority | null = !observesCreate
+    ? null
+    : session === 'signed-out'
+      ? { state: 'guest' }
+      : session === 'unknown'
+        ? null
+        : eligibilityQuery.data
+          ? observedCreateAuthority(eligibilityQuery.data)
+          : eligibilityQuery.isError
+            ? { state: 'unknown', reason: 'unavailable' }
+            : null;
+  async function refreshCreateEligibility(): Promise<CreateAuthority> {
+    if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' };
+    if (session === 'signed-out') return { state: 'guest' };
+    try {
+      return observedCreateAuthority(
+        await client.fetchQuery({
+          queryKey: eligibilityKey,
+          queryFn: () => transport.eligibility!(),
+          staleTime: 0,
+          retry: false,
+        }),
+      );
+    } catch {
+      const next: CreateAuthority = { state: 'unknown', reason: 'unavailable' };
+      client.setQueryData(eligibilityKey, next);
+      return next;
+    }
+  }
   const termsId = useId();
   const [definitions, setDefinitions] = useState<{ source: Release; value: Release }>();
   const release = definitions?.source === suppliedRelease ? definitions.value : suppliedRelease;
@@ -342,6 +393,8 @@ function CharacterProfileCreateLive({
   const [busy, setBusy] = useState(false);
   const pending = useRef<CharacterCommand | null>(null);
   const running = useRef(false);
+  const eligibilityBlocksNewCreate =
+    observesCreate && !pending.current && !isAllowedCreateAuthority(observedAuthority);
   const [review, setReview] = useState<{ status: 'closed' | 'current' | 'stale'; fingerprint?: string }>({
     status: 'closed',
   });
@@ -455,7 +508,7 @@ function CharacterProfileCreateLive({
       await send();
       return;
     }
-    if (definitionsRequired) return;
+    if (eligibilityBlocksNewCreate || definitionsRequired) return;
     const draft = characterDraft(release, terms, facts);
     if (draft.errors.length) {
       reportFailure({ ok: false, reason: 'invalid', errors: draft.errors });
@@ -463,6 +516,11 @@ function CharacterProfileCreateLive({
       return;
     }
     if (review.status === 'current' && review.fingerprint === fingerprint) {
+      if (observesCreate) {
+        const current = await refreshCreateEligibility();
+        if (!isCurrent()) return;
+        if (!isAllowedCreateAuthority(current)) return;
+      }
       pending.current = { item: draft.item, key: crypto.randomUUID() };
       setReview({ status: 'closed' });
       await send();
@@ -489,6 +547,17 @@ function CharacterProfileCreateLive({
       >
         {m.catalogue_create_search({}, o)}
       </a>
+      {observesCreate ? (
+        <CreateAuthorityStatus
+          locale={locale}
+          authority={observedAuthority}
+          href={createHref}
+          {...(eligibilityQuery.isPending || eligibilityQuery.isFetching ? { pending: true } : {})}
+          onRetry={() => {
+            void refreshCreateEligibility();
+          }}
+        />
+      ) : null}
       <p className="text-sm text-muted-foreground">{m.character_create_help({}, o)}</p>
       <fieldset disabled={locked} className="min-w-0 space-y-5">
         <legend className="font-semibold">{m.catalogue_create_terms({}, o)}</legend>
@@ -1006,7 +1075,13 @@ function CharacterProfileCreateLive({
       <Button
         className={actionClassName}
         type="submit"
-        disabled={busy || refreshing || failure?.reason === 'conflict' || (definitionsRequired && !pending.current)}
+        disabled={
+          busy ||
+          refreshing ||
+          failure?.reason === 'conflict' ||
+          (definitionsRequired && !pending.current) ||
+          eligibilityBlocksNewCreate
+        }
       >
         {busy
           ? m.catalogue_create_saving({}, o)

@@ -217,6 +217,18 @@ may offer a later, independent appearance or credit proposal that selects the ne
 The association editor may show that UUID as the target title until a current character read exists. The exact returned UUID is
 reread before providing the canonical reader and correction address; concealed or unavailable readback offers a
 read retry without another create. Unknown create delivery keeps the same body and key.
+Creation eligibility is the current Global Context `subject.create` observation on that existing parent. A work
+query, classification return token, or the future UUID cannot confer creation, credit, classification proposal, or
+selection. Guest is session-derived. Admitted Character and work descriptors stay readable when creation is
+unavailable. Commands reauthorize at execution.
+Decision: Character identity creation uses the shared current parent `subject.create` observation, independent of
+work context, classification return, and later relation commands.
+
+### Create a Character identity
+
+- Touches: one current Global Context `subject.create` observation, admitted Character and optional work descriptors, one sealed create command, and one exact returned-identity read.
+- Bound: reuse the existing parent action observation, independently bounded definitions, and existing target/suggestion readers; no permission request per field or suggested identity, history scan, or polling. Retain existing field, statement, qualifier, serialized-command, and held-retry caps.
+- Growth check: hold one Character type, one optional work, and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing Character create fixture.
 
 Scalar corrections reuse the multi-field workspace, with unchanged fields excluded and independent per-field
 results. Classification targets use the existing subject picker and the same statement, qualifier, grouped-reference,
