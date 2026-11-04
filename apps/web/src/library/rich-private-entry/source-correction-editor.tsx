@@ -227,7 +227,7 @@ function PrivacyCorrectionField({
   draft: PrivacyCorrectionDraft;
   before: PersonalEntryObservation['privacy'];
   disabled: boolean;
-  issue?: SourceCorrectionIssue;
+  issue: SourceCorrectionIssue | undefined;
   onChange: (draft: PrivacyCorrectionDraft) => void;
 }) {
   const errorId = 'source-correction-privacy-error';
@@ -300,7 +300,7 @@ function TimestampCorrectionField({
   draft: TimestampCorrectionDraft;
   before: PersonalEntryObservation['sourceCreated'];
   disabled: boolean;
-  issue?: SourceCorrectionIssue;
+  issue: SourceCorrectionIssue | undefined;
   onChange: (draft: TimestampCorrectionDraft) => void;
 }) {
   const created = name === 'sourceCreated';
