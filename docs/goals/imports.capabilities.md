@@ -1203,7 +1203,7 @@ without a native alternate-name statement.
 
 The production cross-media planner now streams the acquired `chars_names` and
 `chars_alias` COPY tables and joins only exact selected character IDs from
-`chars_vns`. `cross-media-entities@7` preserves localized `schema:name` facts,
+`chars_vns`. `cross-media-entities@8` preserves localized `schema:name` facts,
 unqualified Romanized alternate names and alias alternate names with their
 exact `rezics:spoilerLevel` qualifier. Invalid qualification withholds the
 whole alias. Qualified text does not enter bootstrap labels or aliases, and

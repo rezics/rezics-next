@@ -22,7 +22,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@6';
+export const converter_revision = 'bangumi@7';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;

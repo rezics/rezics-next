@@ -1620,7 +1620,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB character names and qualified aliases
 
 - Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
-- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@7` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@8` makes newly supported rows available on refresh even when source bytes are unchanged.
 - Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
@@ -2103,7 +2103,7 @@ revision bump.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
-selected release payload and convert them through `cross-media-entities@7`.
+selected release payload and convert them through `cross-media-entities@8`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
@@ -2171,6 +2171,28 @@ absent from acquired COPY tables, and `rezics:sourceTagWeight` is not a
 released qualifier, so the journey keeps one bounded weight gap. Parent
 `tags_parents` edges stay review gaps until Semantic admits `skos:broader`
 for these source Concepts.
+
+### Bangumi TVAnime subject names
+
+Ordinary Bangumi registration and selected-family type 2 rows already reach
+`convertBangumi`; the selected-family registration supplies its combined
+`cross-media-entities@8` revision while the ordinary caller uses `bangumi@7`.
+Both use one pure TVAnime name extractor and the existing journal, source
+metadata admission, citations, candidate acceptance and adoption flow. No
+additional seed publisher or identity lookup is involved. The importer keeps the
+exact Bangumi subject alias and key, unversioned record state where no provider
+revision exists, the normalized digest and the acknowledged native UUID.
+
+- Touches: one selected source record, at most 24 name statements and 16 bounded
+  omission diagnostics; each name carries its exact Bangumi subject citation.
+- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
+  and the current source journal and batch limits; raw source values never enter
+  diagnostics.
+- Growth check: `services/importer/tests/bangumi-subject-names.test.ts` covers
+  selected-family JSONL planning, stable identity, unchanged and changed input,
+  exact citations and omissions. The connected ordinary caller is
+  `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
+  remains controller-owned.
 
 ### Bangumi creator and voice credits
 
@@ -2278,24 +2300,3 @@ The result carries provider and native type bindings, source keys, source and co
 - Bound: work is limited to the selected source family, source acknowledgements and required current subject/property reads. There is no catalogue-wide candidate scan or generic accept-all mode.
 - Growth check: `services/importer/tests/showcase-publication.test.ts` covers a compact dump plan, exact candidate selection and journal restart after a refusal. `services/kernel/test/imports/showcase-publication.test.ts` covers the native API publication path and anonymous read; its execution remains controller-owned and is not recorded as a local pass.
 
-### Bangumi TVAnime subject names
-
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@7` revision while the ordinary caller uses `bangumi@6`.
-Both use one pure TVAnime name extractor and the existing journal, source
-metadata admission, citations, candidate acceptance and adoption flow. No
-additional seed publisher or identity lookup is involved. The importer keeps the
-exact Bangumi subject alias and key, unversioned record state where no provider
-revision exists, the normalized digest and the acknowledged native UUID.
-
-- Touches: one selected source record, at most 24 name statements and 16 bounded
-  omission diagnostics; each name carries its exact Bangumi subject citation.
-- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
-  and the current source journal and batch limits; raw source values never enter
-  diagnostics.
-- Growth check: `services/importer/tests/bangumi-subject-names.test.ts` covers
-  selected-family JSONL planning, stable identity, unchanged and changed input,
-  exact citations and omissions. The connected ordinary caller is
-  `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
-  remains controller-owned.

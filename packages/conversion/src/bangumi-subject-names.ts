@@ -16,6 +16,13 @@ const fieldLimit = 64;
 const diagnosticLimit = 16;
 const textLimit = 500;
 const horizontalSpace = /^[\t ]+|[\t ]+$/gu;
+type NameField = {
+  key: string;
+  pointer: string;
+  form: 'empty' | 'scalar' | 'list';
+  values: string[];
+  unsupported: boolean;
+};
 
 function* sourceLines(text: string): Generator<{ line: string; number: number }> {
   let start = 0;
@@ -65,7 +72,6 @@ export function extractBangumiSubjectNames(record: {
   const seen = new Set<string>();
   const diagnostics: BangumiNameDiagnostic[] = [];
   let diagnosticOverflow = false;
-  let nameOverflow = false;
   let fieldOverflow = false;
 
   const omit = (pointer: string, code: string) => {
@@ -75,31 +81,19 @@ export function extractBangumiSubjectNames(record: {
       diagnosticOverflow = true;
     }
   };
-  const add = (
+  const addTopLevel = (
     property: BangumiSubjectName['property'],
     language: BangumiSubjectName['language'],
     raw: string,
-    pointer: string,
-    infoboxValue = false,
   ) => {
-    const text = infoboxValue ? plainName(raw) : raw;
-    if (text === undefined) {
-      omit(pointer, 'unsupported_infobox_name_form');
-      return;
-    }
-    const name = { property, language, text } as const;
-    const tuple = `${property}\u0000${language}\u0000${text}`;
+    const tuple = `${property}\u0000${language}\u0000${raw}`;
     if (seen.has(tuple)) return;
     seen.add(tuple);
-    if (names.length >= nameLimit) {
-      nameOverflow = true;
-      return;
-    }
-    names.push(name);
+    if (names.length < nameLimit) names.push({ property, language, text: raw });
   };
 
-  add('schema:name', 'und', record.name, '/name');
-  if (record.name_cn?.trim()) add('schema:name', 'zh', record.name_cn, '/name_cn');
+  addTopLevel('schema:name', 'und', record.name);
+  if (record.name_cn?.trim()) addTopLevel('schema:name', 'zh', record.name_cn);
   if (record.type !== 2 || record.infobox === undefined) return { names: names.sort(compareNames), diagnostics };
 
   const infobox = record.infobox;
@@ -121,20 +115,41 @@ export function extractBangumiSubjectNames(record: {
   let fields = 0;
   let closed = false;
   let trailing = false;
-  let active:
-    | {
-        key: string;
-        pointer: string;
-        hasInlineValue: boolean;
-        hasListValue: boolean;
-        hasContinuationValue: boolean;
-      }
-    | undefined;
+  let active: NameField | undefined;
 
-  const finishField = (field: typeof active) => {
-    if (!field) return;
-    if ((field.key === '中文名' || field.key === '别名') && field.hasInlineValue && field.hasListValue) {
+  const finishField = (field: NameField | undefined, complete = true) => {
+    if (!field || (field.key !== '中文名' && field.key !== '别名')) return;
+    if (!complete) {
+      omit(field.pointer, 'unsupported_infobox_structure');
+      return;
+    }
+    if (field.unsupported) {
       omit(field.pointer, 'unsupported_infobox_name_form');
+      return;
+    }
+    if (!field.values.length) return;
+
+    const property = field.key === '中文名' ? 'schema:name' : 'schema:alternateName';
+    const language = field.key === '中文名' ? 'zh' : 'und';
+    const staged = field.values.map((value) => plainName(value));
+    if (staged.some((text) => text === undefined)) {
+      omit(field.pointer, 'unsupported_infobox_name_form');
+      return;
+    }
+    const fieldNames = new Map<string, BangumiSubjectName>();
+    for (const text of staged) {
+      if (text === undefined) continue;
+      const tuple = `${property}\u0000${language}\u0000${text}`;
+      fieldNames.set(tuple, { property, language, text });
+    }
+    const additions = [...fieldNames].filter(([tuple]) => !seen.has(tuple));
+    if (names.length + additions.length > nameLimit) {
+      omit(field.pointer, 'infobox_name_limit');
+      return;
+    }
+    for (const [tuple, name] of additions) {
+      seen.add(tuple);
+      names.push(name);
     }
   };
 
@@ -178,13 +193,16 @@ export function extractBangumiSubjectNames(record: {
       active = {
         key,
         pointer,
-        hasInlineValue: Boolean(value),
-        hasListValue: false,
-        hasContinuationValue: false,
+        form: 'empty',
+        values: [],
+        unsupported: false,
       };
-      if (key === '中文名' && value) add('schema:name', 'zh', value, pointer, true);
-      else if (key === '别名' && value) add('schema:alternateName', 'und', value, pointer, true);
-      else if (key !== '中文名' && key !== '别名') omit(pointer, 'unsupported_infobox_key');
+      if (key === '中文名' || key === '别名') {
+        if (value) {
+          active.form = 'scalar';
+          active.values.push(value);
+        }
+      } else omit(pointer, 'unsupported_infobox_key');
       continue;
     }
     if (!active) {
@@ -194,24 +212,26 @@ export function extractBangumiSubjectNames(record: {
     if (active.key !== '中文名' && active.key !== '别名') continue;
     const continuation = cleanHorizontal(line);
     if (continuation.startsWith('*')) {
-      if (active.key !== '别名' || continuation.startsWith('**') || continuation === '*') {
-        omit(active.pointer, 'unsupported_infobox_name_form');
+      if (
+        active.key !== '别名' ||
+        continuation.startsWith('**') ||
+        continuation === '*' ||
+        active.form === 'scalar'
+      ) {
+        active.unsupported = true;
         continue;
       }
-      active.hasListValue = true;
-      add('schema:alternateName', 'und', continuation.slice(1), active.pointer, true);
+      active.form = 'list';
+      active.values.push(continuation.slice(1));
       continue;
     }
-    if (active.key === '别名' && !active.hasContinuationValue && !active.hasListValue && !active.hasInlineValue) {
-      active.hasContinuationValue = true;
-      add('schema:alternateName', 'und', continuation, active.pointer, true);
-    } else {
-      omit(active.pointer, 'unsupported_infobox_name_form');
-    }
+    if (active.key === '别名' && active.form === 'empty') {
+      active.form = 'scalar';
+      active.values.push(continuation);
+    } else active.unsupported = true;
   }
-  finishField(active);
+  finishField(active, closed);
   if (!closed) omit('/infobox', 'unsupported_infobox_structure');
   if (trailing) omit('/infobox', 'unsupported_infobox_structure');
-  if (nameOverflow) omit('/infobox', 'infobox_name_limit');
   return { names: names.sort(compareNames), diagnostics };
 }

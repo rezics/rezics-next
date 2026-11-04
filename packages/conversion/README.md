@@ -363,7 +363,7 @@ exact `0` is never a measured zero.
 
 ### VNDB release titles
 
-`cross-media-entities@7` projects admitted `releases_titles` rows onto
+`cross-media-entities@8` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -385,7 +385,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@7` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@8` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -464,7 +464,7 @@ Decision: platform and medium projections advance the converter from `@6` to `@7
 
 ### VNDB character names and aliases
 
-`cross-media-entities@7` projects selected `chars_names` and `chars_alias`
+`cross-media-entities@8` projects selected `chars_names` and `chars_alias`
 rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
 `schema:name`; its explicit romanized `latin` cell becomes an unqualified
 `schema:alternateName` using the source language with a `Latn` script subtag.
@@ -813,7 +813,7 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 
 ## Bangumi TVAnime subject names
 
-`bangumi@6` consumes only `中文名` and `别名` from the exact pinned
+`bangumi@7` consumes only `中文名` and `别名` from the exact pinned
 `{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The ordinary
 Bangumi converter and selected-family registrations share this pure extraction.
 The existing top-level `name` and `name_cn` bootstrap labels keep their current
@@ -827,4 +827,5 @@ language and exact-text tuples deduplicate; other spellings remain separate.
 Nested templates, links, unknown keys and unconsumed TVAnime fields are bounded
 omissions, with no source prose copied into diagnostics. Parsing scans at most 64
 field occurrences, retains at most 24 distinct name values, and emits at most 16
-omission diagnostics.
+omission diagnostics. Each field occurrence is staged until its complete scalar
+or bullet-list form is known; malformed or mixed occurrences contribute no names.
