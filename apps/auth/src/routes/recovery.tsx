@@ -20,6 +20,8 @@ import { ErrorAlert } from '../alert';
 import { RecoveryAttempt, useRecoveryAttempt } from '../recovery-attempt';
 import { definitiveRecoveryRefusal, recoveryFailure, recoverySubmission, type RecoverySubmission } from '../recovery';
 import { useRecoveryPage } from '../recovery-page';
+import { hasRecoveryHistory, unresolvedRecoveryHistory } from '../recovery-return';
+import { RecoveryHistory, RecoveryReturnView } from '../recovery-return-view';
 
 const emailId = 'recovery-email';
 const emailErrorId = 'recovery-email-error';
@@ -43,7 +45,15 @@ function RecoveryPage() {
 function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   const router = useRouter();
   const [hasFragment, setHasFragment] = useState<boolean | null>(null);
-  const advice = useRecoveryPage(hasFragment === null ? null : hasFragment ? 'complete' : 'start');
+  const [fresh, setFresh] = useState(false);
+  const historical = !hasFragment && hasRecoveryHistory(attempt.returned);
+  const advice = useRecoveryPage(
+    hasFragment === null
+      ? null
+      : hasFragment || (historical && !fresh && attempt.returned.complete)
+        ? 'complete'
+        : 'start',
+  );
   const page = advice.state.kind === 'ready' ? advice.state.page : null;
   const [credentials, setCredentials] = useState<{ accountId: string; token: string } | null>(null);
   const [email, setEmail] = useState('');
@@ -57,13 +67,28 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   const unresolved = useRef(false);
   const submission = useRef<RecoverySubmission | null>(null);
   const [unknown, setUnknown] = useState(false);
+  const [confirmResend, setConfirmResend] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+  const readStatus = useRef<HTMLDivElement>(null);
+  const focusAfterRead = useRef(false);
   const retiring = useRef(false);
   const initialized = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
-  const shouldWarn = useCallback(() => !retiring.current && (unsent.current || unresolved.current), []);
+  const shouldWarn = useCallback(
+    () => !retiring.current && (unsent.current || unresolved.current || unresolvedRecoveryHistory(attempt.returned)),
+    [attempt],
+  );
+  const retryAdvice = () => {
+    focusAfterRead.current = true;
+    advice.retry();
+  };
   const clearSecrets = useCallback(() => {
     retiring.current = true;
+    for (const input of form.current?.querySelectorAll('input') ?? []) {
+      input.value = '';
+      input.defaultValue = '';
+    }
     attempt.retire();
     unsent.current = false;
     unresolved.current = false;
@@ -78,6 +103,25 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     setNotice('');
     setPending(false);
   }, [attempt]);
+
+  useLayoutEffect(
+    () => () => {
+      // Clear detached input nodes too, before a document can enter the browser cache.
+      for (const input of form.current?.querySelectorAll('input') ?? []) {
+        input.value = '';
+        input.defaultValue = '';
+      }
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    if (!page) readStatus.current?.focus();
+    else if (focusAfterRead.current) {
+      focusAfterRead.current = false;
+      (emailInput.current ?? document.getElementById(passwordId) ?? readStatus.current)?.focus();
+    }
+  }, [page]);
 
   useLayoutEffect(() => {
     const unload = (event: BeforeUnloadEvent) => {
@@ -152,22 +196,33 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
       return;
     }
     setEmailError('');
+    if (unknown && !confirmResend) return;
     const finish = attempt.begin();
     if (!finish) return;
+    const settle = attempt.outcomes.dispatch('start');
     unresolved.current = true;
     setPending(true);
     setNotice('');
     setMessage('');
     const result = await authPost('/recovery/start', { email: email.trim() });
     if (!finish()) return;
-    unresolved.current = false;
+    settle(result);
+    // An unavailable acknowledgement may still have sent mail. A later refusal
+    // is about the new request, and cannot settle the earlier unknown send.
+    const uncertain = unknown || (!result.ok && !definitiveRecoveryRefusal(result));
+    unresolved.current = uncertain;
+    setUnknown(uncertain);
+    setConfirmResend(false);
     unsent.current = false;
     setPending(false);
     if (result.ok) {
       setNotice(m.auth_recovery_start_success());
+      if (uncertain) setMessage(m.auth_recovery_start_unknown());
       return;
     }
-    setMessage(failureMessage(result.status, result.code, result.retryAfter));
+    setMessage(
+      uncertain ? m.auth_recovery_start_unknown() : failureMessage(result.status, result.code, result.retryAfter),
+    );
   }
 
   async function submitComplete(event: FormEvent<HTMLFormElement>) {
@@ -191,12 +246,14 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     const finish = attempt.begin();
     if (!finish) return;
     const original = submission.current ?? recoverySubmission(credentials.accountId, credentials.token, password);
+    const settle = attempt.outcomes.dispatch('complete', submission.current !== null);
     submission.current = original;
     unresolved.current = true;
     setPending(true);
     setMessage('');
     const result = await authPost('/recovery/complete', original);
     if (!finish()) return;
+    settle(result);
     unsent.current = false;
     setPending(false);
     if (result.ok) {
@@ -232,15 +289,50 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
 
   const readAdvice =
     advice.state.kind === 'loading' ? (
-      <p role="status">{m.auth_inventory_loading()}</p>
+      <p role="status">{m.auth_recovery_advice_loading()}</p>
     ) : advice.state.kind === 'unavailable' ? (
       <>
         <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
-        <Button type="button" onClick={advice.retry}>
+        <Button type="button" onClick={retryAdvice}>
           {m.auth_login_retry()}
         </Button>
       </>
     ) : null;
+
+  if (historical && !fresh) {
+    return (
+      <AuthPage heading={m.auth_recovery_heading()}>
+        <RecoveryReturnView
+          summary={attempt.returned}
+          status={advice.state.kind}
+          retry={retryAdvice}
+          fresh={() => {
+            if (!page || !attempt.available) return;
+            focusAfterRead.current = true;
+            setFresh(true);
+          }}
+        />
+        <RecoveryDeparture
+          shouldWarn={shouldWarn}
+          leave={clearSecrets}
+          focus={() => document.getElementById('recovery-return-heading')?.focus()}
+        />
+      </AuthPage>
+    );
+  }
+
+  if (!page) {
+    return (
+      <AuthPage heading={m.auth_recovery_heading()}>
+        <div ref={readStatus} tabIndex={-1}>
+          {readAdvice}
+        </div>
+        {hasRecoveryHistory(attempt.returned) ? <RecoveryHistory summary={attempt.returned} /> : null}
+        <a href="/login">{m.auth_login_heading()}</a>
+        <RecoveryDeparture shouldWarn={shouldWarn} leave={clearSecrets} focus={() => readStatus.current?.focus()} />
+      </AuthPage>
+    );
+  }
 
   if (hasFragment && !credentials) {
     return (
@@ -259,6 +351,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
         {readAdvice}
         <p>{m.auth_recovery_consequences()}</p>
         <form
+          ref={form}
           className="auth-login-form"
           method="post"
           action="/recovery/complete"
@@ -320,7 +413,15 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   return (
     <AuthPage heading={m.auth_recovery_heading()}>
       {readAdvice}
-      <form className="auth-login-form" method="post" action="/recovery/start" noValidate onSubmit={submitStart}>
+      {historical ? <RecoveryHistory summary={attempt.returned} /> : null}
+      <form
+        ref={form}
+        className="auth-login-form"
+        method="post"
+        action="/recovery/start"
+        noValidate
+        onSubmit={submitStart}
+      >
         <Field data-invalid={Boolean(emailError)}>
           <FieldLabel htmlFor={emailId}>{m.auth_recovery_email()}</FieldLabel>
           <Input
@@ -336,6 +437,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
               unsent.current = Boolean(value.trim());
               setEmail(value);
               setEmailError('');
+              setConfirmResend(false);
             }}
             aria-invalid={emailError ? true : undefined}
             aria-describedby={emailError ? emailErrorId : undefined}
@@ -354,9 +456,26 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
             {message}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending || !page?.actions.start || !page.methods.email} aria-busy={pending}>
-          {m.auth_recovery_start_submit()}
-        </Button>
+        {unknown && !confirmResend ? (
+          <Button
+            type="button"
+            disabled={pending || !page.actions.start || !page.methods.email}
+            onClick={() => {
+              if (!attempt.available) return;
+              setConfirmResend(true);
+              retryAdvice();
+            }}
+          >
+            {m.auth_recovery_new_link()}
+          </Button>
+        ) : (
+          <>
+            {confirmResend ? <p>{m.auth_recovery_resend_confirmation()}</p> : null}
+            <Button type="submit" disabled={pending || !page.actions.start || !page.methods.email} aria-busy={pending}>
+              {confirmResend ? m.auth_recovery_resend_submit() : m.auth_recovery_start_submit()}
+            </Button>
+          </>
+        )}
       </form>
       <a href="/login">{m.auth_login_heading()}</a>
       <RecoveryDeparture shouldWarn={shouldWarn} leave={clearSecrets} focus={() => emailInput.current?.focus()} />
@@ -374,7 +493,7 @@ function RecoveryDeparture({
   focus: () => void;
 }) {
   const blocker = useBlocker({
-    shouldBlockFn: ({ next }) => shouldWarn() && next.pathname !== '/recovery',
+    shouldBlockFn: ({ next }) => shouldWarn() && !(next.pathname === '/recovery' && next.hash),
     enableBeforeUnload: false,
     withResolver: true,
   });

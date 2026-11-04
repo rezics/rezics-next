@@ -646,3 +646,38 @@ never inferred sign-out. Focus or visibility refresh removes old viewer advice; 
 late results. Browser WebAuthn support gates the passkey ceremony alongside the installed native method flag.
 
 The existing recovery completion notice is consumed only after current native sign-in advice is ready, so initial sign-in attempt replacement cannot discard it.
+
+### Returning to recovery
+
+The mounted recovery page retains only a fixed start/complete outcome classification: dispatched with unknown
+outcome, or acknowledged. It retains no account, email, token, password, payload or reconstructible link. This
+summary is never written to storage, a URL, history state or cookies; an ordinary reload makes no historical claim.
+Page departure immediately clears the inputs (including detached DOM nodes), retires command callbacks and aborts
+advice reads. Leaving cannot cancel a native effect. A retained document first reads current `/recovery/page` advice
+before enabling new work. Loading and read failure have visible states, fixed sign-in exits and an explicit read Retry.
+Focus moves to the generic return explanation or read result when private controls retire.
+
+A start acknowledgement confirms neither account existence nor mail delivery. An unavailable start response keeps
+its outcome unknown. Requesting another link is deliberate new work: the person reviews fresh start advice and
+confirms another send. A later refusal or another send's acknowledgement cannot settle an earlier unknown request.
+A first definitive refusal still establishes that submission was not executed. Completion retry keeps the exact
+original credentials only in its active attempt. After retirement, the fragment and credentials stay cleared;
+current advice or a successful sign-in cannot establish what the earlier reset did. Historical uncertainty never
+creates the login completion notice. Only native completion acknowledgement uses the existing notice owner.
+Stay preserves active work; explicit Leave clears it and warns that a sent request may still finish.
+
+Decision: deliberate fresh recovery opens an empty start form after current start advice, while generic earlier
+uncertainty remains visible and independent of the new request.
+
+Whole-call cost: summary capture and display make zero requests. Entry, retained return, focus/visibility refresh,
+explicit read Retry and deliberate transition from completion history to a fresh start each make at most one installed
+`POST /recovery/page` read (stage only), zero kernel reads and no command. The existing five-second/4 KiB bounds apply.
+A start or completion submit makes one existing Auth command request, with no reconciliation read, polling, inventory
+scan or speculative retry. Resend confirmation rereads one start advice response; its eventual explicit send makes
+one command. Language changes and displaying history make no requests. Read advice is never an execution receipt.
+
+Compared for presentation: `legacy-final:apps/accounts/features/auth/recovery-form.tsx`,
+`legacy-final:apps/accounts/features/auth/recovery-claim-form.tsx`,
+`legacy-final:apps/accounts/features/consent/consent-problem.tsx` and the earlier Web
+`apps/web/features/settings/pages/security-settings-page.tsx`: short outcomes attach a next step, failed reads have
+visible Retry, and deliberate departure retains confirmation. No legacy implementation was ported.

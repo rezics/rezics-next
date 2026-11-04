@@ -1,11 +1,18 @@
 import { useRouter } from '@tanstack/react-router';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { RecoveryReturnController } from './recovery-return';
 
 // Retiring an attempt only discards browser work; the native mutation may still finish.
 export class RecoveryAttempt {
   private active = true;
   private pending = false;
   scrubbingFragment = false;
+  readonly returned;
+
+  constructor(readonly outcomes = new RecoveryReturnController()) {
+    this.returned = outcomes.summary;
+  }
 
   get available() {
     return this.active && !this.pending;
@@ -43,16 +50,17 @@ export function useRecoveryAttempt() {
 
   useLayoutEffect(() => {
     let current: RecoveryAttempt | null = null;
+    const outcomes = new RecoveryReturnController();
     const replace = () => {
       current?.retire();
-      current = new RecoveryAttempt();
+      current = new RecoveryAttempt(outcomes);
       setJourney({ key: ++sequence.current, attempt: current });
     };
     const leave = () => {
       current?.retire();
       current = null;
       // Unmount the form, including all private inputs, even in a cached document.
-      setJourney(null);
+      flushSync(() => setJourney(null));
     };
     const unsubscribe = history.subscribe(({ location }) => {
       if (current?.scrubbingFragment) return;

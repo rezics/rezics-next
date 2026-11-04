@@ -121,6 +121,11 @@ test('current recovery keeps non-disclosing email results and invalid-link recov
       page.router.history.replace('/recovery');
       await page.router.load();
     });
+    await flush(() =>
+      [...page.host.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Request a new recovery link')!
+        .click(),
+    );
     await page.submit('retry@example.test');
     await page.respond();
     expect(page.host.querySelector('[role="status"]')).not.toBeNull();
@@ -162,13 +167,20 @@ for (const fragment of ['', link])
           await page.respond(status);
           expect(window.location.pathname).toBe('/recovery');
           expect(window.sessionStorage.getItem('auth.recovery.complete')).toBeNull();
-          expect(Boolean(page.host.querySelector('[role="status"]'))).toBe(false);
+          expect(Boolean(page.host.querySelector('[role="status"]'))).toBe(boundary === 'replace');
           expect(Boolean(page.host.querySelector('[role="alert"]'))).toBe(false);
           if (boundary === 'pagehide')
             await flush(() =>
               window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event),
             );
           if (boundary !== 'unmount') {
+            expect(page.host.querySelector('input')).toBeNull();
+            expect(page.host.textContent).toContain('result is unknown');
+            await flush(() =>
+              [...page.host.querySelectorAll('button')]
+                .find((button) => button.textContent === 'Request a new recovery link')!
+                .click(),
+            );
             expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
             expect(page.host.querySelector('input[name="new_password"]')).toBeNull();
             await page.submit('return@example.test');
