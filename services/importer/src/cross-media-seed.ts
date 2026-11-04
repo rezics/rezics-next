@@ -92,6 +92,22 @@ export type CrossMediaPlan = {
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
 }
+
+/** Production seed origins require HTTPS; local development may use loopback HTTP. */
+export function normalizeCrossMediaSeedOrigin(value: string): string {
+  const url = new URL(value);
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
+  ensure(
+    (url.protocol === 'https:' || (url.protocol === 'http:' && loopback)) &&
+      !url.username &&
+      !url.password &&
+      url.pathname === '/' &&
+      !url.search &&
+      !url.hash,
+    'Seed API and Auth require HTTPS origins or loopback HTTP origins',
+  );
+  return url.origin;
+}
 function text(row: Row, field: string): string {
   const value = row[field];
   ensure(typeof value === 'string' && value.length > 0, `Missing source field: ${field}`);
@@ -1337,16 +1353,8 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     values.set(flag, value);
   }
   for (const flag of requiredFlags) ensure(values.has(flag), `Missing seed option: ${flag}`);
-  const origin = (flag: string) => {
-    const url = new URL(values.get(flag)!);
-    ensure(
-      url.protocol === 'https:' && !url.username && !url.password && url.pathname === '/' && !url.search && !url.hash,
-      'Seed API and Auth require HTTPS origins',
-    );
-    return url.origin;
-  };
-  const api = origin('--api'),
-    auth = origin('--auth');
+  const api = normalizeCrossMediaSeedOrigin(values.get('--api')!),
+    auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
   const plan = await planCrossMediaSeed(input);
   const tokenProvider = await createAccountTokenProvider({

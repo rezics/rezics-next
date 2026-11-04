@@ -79,6 +79,10 @@ tasks:
     desc: Seed cross-media data (pass dump, state, result, API and Auth flags after --)
     cmds: ['bun scripts/datasets/cross-media-seed.ts {{.CLI_ARGS}}']
 
+  seed:dev:
+    desc: Fetch pinned cross-media dumps and seed the running local stack with its development persona
+    cmds: ['bun scripts/datasets/cross-media-seed.ts --dev']
+
   goal:service:install:
     desc: Install and start the Goal user systemd services
     cmds: ['bun tools/goal/src/cli.ts service install {{.CLI_ARGS}}']
