@@ -485,14 +485,15 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   These call production `runImportCli`, native key stage/approve/apply and native Auth/Access/public writes.
   Inputs use `bangumi@3` without a native revision (types 1/2/4 imported, 3/6 present and skipped),
   `open-library@3` edition revision 11 → 12 and the actual exported Wikidata converter revision, currently
-  `wikidata-4` from producer dependency `17183ec750d8f577bd7e86c570b9638c34b986da`. Synthetic Q571 retains
-  source revision 24681012 → 24681013 and identical fixture bytes. Only the converter-revision binding changed;
-  all business assertions remain. At tested revision `eceb114710`, current-producer acceptance passed all three
-  cases with 3,392 assertions (check `3d253830-6c17-40fd-9f11-25934deb5667`), logging actual `wikidata-4`.
-  The earlier receipt remains qualified to its original base.
-  Local formatting, direct conversion/importer compilers, caller TypeScript parsing and production module/registration
-  resolution passed. The direct kernel compiler needs a native database for Reylo SQL analysis, unavailable locally;
-  the passing named native check supplied it and wrote 683 analyses. No root or sibling regression check was repeated.
+  `wikidata-6`. Synthetic Q571 retains source revision 24681012 → 24681013.
+  Historical receipts remain qualified to their tested source and contract.
+  Released time/quantity fidelity now uses the actual public Definitions validator
+  on the complete cited candidate. The [source mapping contract](../../packages/conversion/README.md#conservative-exact-quantity-source-handoff)
+  preserves signed partial Gregorian/Julian time metadata and lexical quantity
+  bounds/unit, withholding unsupported values and incomplete exact measurements.
+  The [ordinary importer contract](../../services/importer/README.md#wikidata-released-time-and-quantity)
+  names the focused source-to-native scenarios and unchanged cost bounds. Native
+  acceptance and broader integration verification remain separate obligations.
   Cases assert actual tuple claims, retrieved cited candidates, unchanged reopen, supported refresh, independent
   community adoption, immutable bootstrap bytes/keys/receipts and malformed/truncated/mass-disappearance stops
   preserving the completed baseline with zero public writes. Their exact byte/seal/effect observations are

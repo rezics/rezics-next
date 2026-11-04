@@ -2,6 +2,7 @@ import { types as utilTypes } from 'node:util';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
 import type { PropertyDefinition } from '@rezics/definitions';
+import { checkStatementInput } from '@rezics/definitions/validate';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index';
 import {
   canonicalLanguageTag,
@@ -13,7 +14,7 @@ import {
   type ConversionContext,
 } from './support';
 
-export const converter_revision = 'wikidata-5';
+export const converter_revision = 'wikidata-6';
 export const wikidataLimits = Object.freeze({
   bytes: 128 * 1024,
   statements: 64,
@@ -244,7 +245,10 @@ export function convertWikidata(
     const result: Snak = { snaktype: snaktype as string, property, datatype };
     const expected =
       property === 'P31' ? 'wikibase-item' : property === 'P854' ? 'url' : mappings.get(property)!.definition.datatype;
-    if (datatype !== expected) fail('Mapped snak datatype mismatch', pointer);
+    if (datatype !== expected) {
+      diagnose('Mapped snak datatype mismatch', pointer);
+      return;
+    }
     if (snaktype !== 'value') return result;
     const data = object(read(body, 'datavalue', pointer), pointer);
     const kind = text(read(data, 'type', pointer), pointer, 64);
@@ -265,38 +269,27 @@ export function convertWikidata(
       )
         fail('Invalid Wikidata relation identity', pointer);
       projection = { 'entity-type': 'item', 'numeric-id': numericId, id: target };
-    } else if (datatype === 'time') {
-      if (kind !== 'time') fail('Invalid date datavalue', pointer);
-      const date = object(value, pointer);
+    } else if (datatype === 'time' || datatype === 'quantity') {
+      if (kind !== datatype) {
+        diagnose('Unsupported source datavalue type', pointer);
+        return;
+      }
+      const body = object(value, pointer);
       const copy = dictionary<unknown>();
-      for (const key of ['time', 'timezone', 'before', 'after', 'precision', 'calendarmodel']) {
-        const item = read(date, key, pointer);
-        if (key === 'time' || key === 'calendarmodel') copy[key] = text(item, pointer);
+      const keys = datatype === 'time'
+        ? ['time', 'timezone', 'before', 'after', 'precision', 'calendarmodel']
+        : ['amount', 'unit', 'lowerBound', 'upperBound'];
+      for (const key of keys) {
+        const item = read(body, key, pointer);
+        if (item === undefined) continue;
+        // Bound the source projection; the released validator owns semantic admission.
+        if (typeof item === 'string') copy[key] = text(item, pointer);
+        else if (typeof item === 'number') copy[key] = item;
         else {
-          if (typeof item !== 'number' || !Number.isSafeInteger(item)) fail('Malformed Wikidata date', pointer);
-          copy[key] = item;
+          diagnose('Unsupported source value component', pointer);
+          return;
         }
       }
-      if (
-        !/^[+-][0-9]{4,16}-[0-9]{2}-[0-9]{2}T00:00:00Z$/.test(copy.time as string) ||
-        !/^http:\/\/www.wikidata.org\/entity\/Q[1-9][0-9]*$/.test(copy.calendarmodel as string)
-      )
-        fail('Malformed Wikidata date or calendar URL', pointer);
-      projection = copy;
-    } else if (datatype === 'quantity') {
-      if (kind !== 'quantity') fail('Invalid quantity datavalue', pointer);
-      const quantity = object(value, pointer);
-      const copy = dictionary<unknown>();
-      for (const key of ['amount', 'unit', 'lowerBound', 'upperBound']) {
-        const part = read(quantity, key, pointer);
-        if (part !== undefined) copy[key] = text(part, pointer);
-      }
-      if (
-        typeof copy.amount !== 'string' ||
-        !/^[+-](?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(copy.amount) ||
-        typeof copy.unit !== 'string'
-      )
-        fail('Malformed Wikidata quantity', pointer);
       projection = copy;
     } else if (datatype === 'monolingualtext') {
       if (kind !== 'monolingualtext') fail('Invalid monolingual datavalue', pointer);
@@ -438,50 +431,6 @@ export function convertWikidata(
       if (resolved === undefined) return { type: 'somevalue' };
       if (typeof resolved !== 'string' || !uuid.test(resolved)) fail('Invalid resolved relation UUID', pointer);
       content = resolved;
-    } else if (definition.datatype === 'time') {
-      const date = content as {
-        time: string;
-        precision: number;
-        calendarmodel: string;
-        timezone: number;
-        before: number;
-        after: number;
-      };
-      if (
-        ![9, 10, 11].includes(date.precision) ||
-        date.calendarmodel !== 'http://www.wikidata.org/entity/Q1985727' ||
-        date.timezone !== 0 ||
-        date.before !== 0 ||
-        date.after !== 0
-      ) {
-        diagnose('Unsupported date precision, uncertainty, timezone or calendar', pointer);
-        return;
-      }
-      const pieces = /^[+-]([0-9]+)-([0-9]{2})-([0-9]{2})/.exec(date.time)!;
-      const year = Number(pieces[1]),
-        month = Number(pieces[2]),
-        day = Number(pieces[3]);
-      const days = [
-        31,
-        year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-      ];
-      if (
-        date.precision === 9
-          ? month !== 0 || day !== 0
-          : month < 1 || month > 12 || (date.precision === 10 ? day !== 0 : day < 1 || day > days[month - 1]!)
-      )
-        fail('Invalid source calendar date', pointer);
-      content = { time: date.time, precision: date.precision, calendarmodel: date.calendarmodel };
     } else if (definition.datatype === 'monolingualtext') {
       const term = content as { language?: unknown; text?: unknown };
       const language = typeof term.language === 'string' ? canonicalLanguageTag(term.language) : null;
@@ -490,33 +439,6 @@ export function convertWikidata(
         return;
       }
       content = { language, text: term.text };
-    } else if (definition.datatype === 'quantity') {
-      const quantity = content as { amount: string; unit: string; lowerBound?: string; upperBound?: string };
-      if (quantity.lowerBound !== undefined || quantity.upperBound !== undefined) {
-        diagnose('Unsupported quantity uncertainty', pointer);
-        return;
-      }
-      content = { amount: quantity.amount, unit: quantity.unit };
-    }
-    // Enforce source scalar constraints from the actual bundled property definition.
-    const scalar = definition.value as { pattern?: string };
-    if (typeof content === 'string' && scalar.pattern && new RegExp(scalar.pattern, 'u').exec(content)?.[0] !== content)
-      fail('Source value violates the mapped catalogue datatype', pointer);
-    if (definition.datatype === 'quantity' && (definition.minimum !== undefined || definition.maximum !== undefined)) {
-      const quantity = content as { amount: string; unit: string };
-      const schema = definition.value as { properties: { amount: { pattern: string } } };
-      if (
-        !new RegExp(schema.properties.amount.pattern).test(quantity.amount) ||
-        !definition.units?.includes(quantity.unit)
-      )
-        fail('Source quantity violates its mapped datatype or units', pointer);
-      const amount = Number((content as { amount: string }).amount);
-      if (
-        !Number.isFinite(amount) ||
-        amount < (definition.minimum ?? -Infinity) ||
-        amount > (definition.maximum ?? Infinity)
-      )
-        fail('Source quantity violates catalogue bounds', pointer);
     }
     return { type: 'value', content };
   }
@@ -633,13 +555,18 @@ export function convertWikidata(
         }
         if (parts.length) references.push({ parts });
       }
-      statements.push({
+      const candidate: BatchStatement = {
         property: { id: mapped },
         value,
         rank: claim.rank as 'normal' | 'preferred',
         ...(qualifiers.length ? { qualifiers } : {}),
         references,
-      });
+      };
+      if (checkStatementInput(candidate, bundledRelease).violations.length) {
+        diagnose('Complete source statement is unsupported by the released property', pointer);
+        continue;
+      }
+      statements.push(candidate);
     }
   }
   const proposals: BatchCommand[] = [];
