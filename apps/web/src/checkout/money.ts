@@ -1,5 +1,6 @@
 import { decodeRecordedMoneyUnit, decimalParts } from '@rezics/money';
 import { stripeRecordedMoneyUnits } from './money-schema';
+import { m } from '../paraglide/messages.js';
 
 // Adopted documented currency vocabulary, used only for placement. Exponents always come from recorded metadata.
 const displayCurrencies = new Set([
