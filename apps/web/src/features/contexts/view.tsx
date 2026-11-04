@@ -471,7 +471,7 @@ export function ContextCreateView({
         }
         let latest: SettingsRead;
         try {
-          latest = await loadSettings();
+          latest = (await loadSettings()) ?? { kind: 'unavailable' };
         } catch {
           latest = { kind: 'unavailable' };
         }
