@@ -36,14 +36,14 @@ is not this bound.
 A ready snapshot, with current facts and the response window fixed, does this native
 work per call:
 
-| Seek                            | Access path                                                                                                | Live rows                                                                     |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Partition position              | `core.partition` by partition                                                                              | 1                                                                             |
-| Requested Subjects              | `subject_pkey` plus `search_selection_state` readiness                                                     | `≤ B`                                                                         |
-| Current terms                   | `current_term_fact` via term heads, not statement history                                                  | current term slots                                                            |
+| Seek                            | Access path                                                                                                                                                                            | Live rows                                                                    |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Partition position              | `core.partition` by partition                                                                                                                                                          | 1                                                                            |
+| Requested Subjects              | `subject_pkey` plus `search_selection_state` readiness                                                                                                                                 | `≤ B`                                                                        |
+| Current terms                   | `current_term_fact` via term heads, not statement history                                                                                                                              | current term slots                                                           |
 | Current nonrelation statements  | `search_selected_nonrelation_page` equality `(route, subject_id)`, predicate `active AND relation IS FALSE`, ordered by `(property, slot_id, candidate_id)`, `LIMIT S·C+1` per Subject | at most `B·(S·C+1)` selected index rows, including one lookahead per Subject |
-| Disclosure / lifecycle / fences | existing point joins on those returned heads only                                                          | `O(returned heads)`                                                           |
-| Definition releases             | exact digest points for the returned pins                                                                  | distinct digests on the page                                                  |
+| Disclosure / lifecycle / fences | existing point joins on those returned heads only                                                                                                                                      | `O(returned heads)`                                                          |
+| Definition releases             | exact digest points for the returned pins                                                                                                                                              | distinct digests on the page                                                 |
 
 The per-Subject seek reads at most `S·C+1 = 16,385` selected rows. Across the largest
 submitted batch this is `B·(S·C+1) = 4,194,560` index rows. A successful read returns
