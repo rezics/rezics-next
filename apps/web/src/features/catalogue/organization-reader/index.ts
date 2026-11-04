@@ -1,7 +1,7 @@
 import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { PeopleRead } from '../people-profile';
-import { peopleAgentType, peopleBiographyGroups } from '../people-biography';
+import { peopleAgentType } from '../people-biography';
 import { producerHistoryStreams, producerHistoryUnreleased } from '../producer-history';
 
 export type OrganizationCurrent = Extract<PeopleRead, { ok: true }> & { public: SubjectRead };
@@ -30,8 +30,21 @@ export function organizationHistory(read: OrganizationReading, locale: string) {
   const { release, public: current } = read;
   const type = current.subject.type;
   if (peopleAgentType(release, type) !== 'schema:Organization') return;
-  const groups = peopleBiographyGroups(release, type, locale, current);
-  const affiliationIds = groups.flatMap((group) => group.fields.map((field) => field.id));
+  // The Organization owner admits directed relations targeting the Organization grain or its descendants.
+  const organizationTarget = (id: string, seen = new Set<string>()): boolean => {
+    if (id === 'schema:Organization') return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return (release.types[id]?.bases ?? []).some((base) => organizationTarget(base, seen));
+  };
+  const affiliationIds = (release.types[type]?.properties ?? []).filter((id) => {
+    const property = release.properties[id];
+    return (
+      property?.datatype === 'wikibase-item' &&
+      !!property.relation &&
+      property.targets?.some((id) => organizationTarget(id))
+    );
+  });
   const streams = producerHistoryStreams(release, type, locale).filter((stream) => stream.direction === 'forward');
   const credits = (release.types[type]?.properties ?? []).filter(
     (id) => release.properties[id]?.relation?.group === 'credit',
