@@ -27,9 +27,7 @@
         "@inlang/paraglide-js": "2.29.3",
         "@inlang/plugin-json": "5.1.64",
         "@rezics/auth-contract": "workspace:*",
-        "@rezics/search-text": ["@rezics/search-text@workspace:packages/search-text"],
-
-    "@rezics/ui": "workspace:*",
+        "@rezics/ui": "workspace:*",
         "@simplewebauthn/browser": "14.0.0",
         "@tailwindcss/vite": "4.3.3",
         "@tanstack/react-router": "1.170.46",
@@ -1066,6 +1064,8 @@
     "@rezics/kernel": ["@rezics/kernel@workspace:services/kernel"],
 
     "@rezics/progress": ["@rezics/progress@workspace:packages/progress"],
+
+    "@rezics/search-text": ["@rezics/search-text@workspace:packages/search-text"],
 
     "@rezics/ui": ["@rezics/ui@workspace:packages/ui"],
 
