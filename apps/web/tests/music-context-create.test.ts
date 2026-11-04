@@ -79,7 +79,12 @@ test('a contributor creates an admitted music-context identity with current elig
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   mock.module('cloudflare:workers', () => ({ env: {} }));
-  const { act, createElement as h, useMemo, useRef, useState } = await import('react');
+  const react = await import('react');
+  const act = react.act;
+  const h = react.createElement;
+  const useMemo = react.useMemo;
+  const useRef = react.useRef;
+  const useState = react.useState;
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
