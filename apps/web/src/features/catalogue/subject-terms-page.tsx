@@ -63,6 +63,17 @@ import { TermsConflictResolution } from './subject-terms-resolution-view';
 // Keep dense fine-pointer controls while allowing translated actions to grow onto multiple lines.
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+
+let nextTermsTransportKey = 0;
+const termsTransportKeys = new WeakMap<TermsTransport, number>();
+
+function termsTransportKey(transport: TermsTransport): number {
+  const existing = termsTransportKeys.get(transport);
+  if (existing !== undefined) return existing;
+  const key = ++nextTermsTransportKey;
+  termsTransportKeys.set(transport, key);
+  return key;
+}
 const inputClassName = 'min-h-11 md:pointer-fine:min-h-8';
 // Leave room for the shared frame's focus/hover surface within the phone column.
 const frameClassName = 'm-1 flex min-w-0 flex-col gap-4 p-3 sm:p-4';
@@ -243,6 +254,7 @@ function SubjectTermsPageLive({
   const authorityQuery = useQuery({
     queryKey: [
       'catalogue-terms-authority',
+      termsTransportKey(transport),
       id,
       locale,
       session,
