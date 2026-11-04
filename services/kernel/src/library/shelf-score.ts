@@ -75,6 +75,7 @@ export function createShelfScorePreparation(deps: { pool: Pool; access: Access; 
         const page = result.rows[0]!;
         return {
           value: { installation: page.ready ? ('installed' as const) : ('pending' as const), prepared: page.prepared },
+          events: [],
         };
       },
     );
