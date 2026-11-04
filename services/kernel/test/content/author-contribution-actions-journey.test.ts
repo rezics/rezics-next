@@ -176,7 +176,11 @@ test('post reaction recovery keeps its original key and registered freshness upd
     expect.objectContaining({ operationId: 'post.set_reaction', state: 'available' }),
   );
   const path = `/v1/posts/${post.id}/reaction`;
-  const sender = Object.freeze({ bearer: f.other.bearer, key: crypto.randomUUID(), body: Object.freeze({ kind: 'like' }) });
+  const sender = Object.freeze({
+    bearer: f.other.bearer,
+    key: crypto.randomUUID(),
+    body: Object.freeze({ kind: 'like' }),
+  });
   const send = () => f.call('PUT', path, sender);
   await expect(
     send().then((result) => {
@@ -229,7 +233,10 @@ test('source partition identity replacement during finish retires the whole sele
   const originalNode = before.rows[0]!.node as string;
   try {
     const changed = await f.duringAssembly(selected, () =>
-      f.admin.query('UPDATE core.partition SET node=$2 WHERE partition_no=$1', [partition, `${originalNode}-replacement`]),
+      f.admin.query('UPDATE core.partition SET node=$2 WHERE partition_no=$1', [
+        partition,
+        `${originalNode}-replacement`,
+      ]),
     );
     status(changed, 503);
     expect(changed.value.code).toBe('dependency_unavailable');
@@ -459,7 +466,7 @@ test('replacement viewer credentials retain the public selection and revoked cre
   const suspended = await f.duringAssembly(
     selected,
     () =>
-      f.admin.query('UPDATE access.account SET state=\'suspended\' WHERE route=$1 AND account_id=$2', [
+      f.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
         routeOf(f.other.accountId)!,
         f.other.accountId,
       ]),
@@ -467,7 +474,7 @@ test('replacement viewer credentials retain the public selection and revoked cre
   );
   status(suspended, 401);
   expect(suspended.value.code).toBe('invalid_credentials');
-  await f.admin.query('UPDATE access.account SET state=\'active\' WHERE route=$1 AND account_id=$2', [
+  await f.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
     routeOf(f.other.accountId)!,
     f.other.accountId,
   ]);
