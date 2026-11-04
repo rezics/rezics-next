@@ -13,6 +13,10 @@ const work = '00000000-0000-4000-8000-00000000b001';
 const quote = '00000000-0000-4000-8000-00000000b002';
 const speaker = '00000000-0000-4000-8000-00000000b003';
 const voice = '00000000-0000-4000-8000-00000000b004';
+const credited = '00000000-0000-4000-8000-00000000b005';
+const textStatement = '00000000-0000-4000-8000-00000000e011';
+const sourceHash = 'sha256:quotation-source-reference-1';
+const sourceUrl = 'https://archive.example.test/record/quotation-42';
 
 function item(
   id: string,
@@ -48,7 +52,7 @@ function admit(release: Release) {
     labels: { en: 'quotation' },
     mappings: [],
     bases: ['schema:CreativeWork', 'schema:Thing'],
-    properties: ['schema:text', 'schema:spokenByCharacter', 'schema:isPartOf', 'schema:recordedBy'],
+    properties: ['schema:text', 'schema:spokenByCharacter', 'schema:creator', 'schema:isPartOf', 'schema:recordedBy'],
     facets: [],
     coverRatio: '5:7',
     listPresentation: { imageAspect: 'portrait', keyFacts: [] },
@@ -81,15 +85,30 @@ function admit(release: Release) {
     iri: 'http://schema.org/recordedBy',
     labels: { en: 'voice' },
   };
+  release.properties['schema:creator'] = {
+    ...itemValue,
+    iri: 'http://schema.org/creator',
+    labels: { en: 'credited person' },
+  };
   release.properties['schema:text'] = {
     iri: 'http://schema.org/text',
     labels: { en: 'text' },
     descriptions: { en: 'text' },
     datatype: 'monolingualtext',
     mappings: [],
-    qualifiers: [],
+    qualifiers: ['schema:creator'],
     multivalued: false,
     value: { type: 'object' },
+  };
+  release.properties['schema:url'] = {
+    iri: 'http://schema.org/url',
+    labels: { en: 'source URL' },
+    descriptions: { en: 'source destination' },
+    datatype: 'url',
+    mappings: [],
+    qualifiers: [],
+    multivalued: true,
+    value: { type: 'string' },
   };
   release.types['schema:Book']!.properties.push('schema:hasPart');
   release.properties['schema:hasPart'] = {
@@ -101,7 +120,7 @@ function admit(release: Release) {
   return release;
 }
 
-function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable') {
+function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable' | 'withheld-source' | 'unsafe-source' | 'wrong-type') {
   const quotation = item(
     quote,
     'schema:Quotation',
@@ -109,12 +128,33 @@ function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable')
     {
       'schema:text': [
         {
-          id: '00000000-0000-4000-8000-00000000e011',
+          id: textStatement,
           rank: 'normal',
           property: { id: 'schema:text', data_type: 'monolingualtext' },
           value: { type: 'value', content: { text: 'I will return', language: 'en' } },
-          qualifiers: [],
-          references: [],
+          qualifiers: [
+            {
+              property: { id: 'schema:creator', data_type: 'wikibase-item' },
+              value: { type: 'value', content: credited },
+            },
+          ],
+          references: [
+            {
+              hash: sourceHash,
+              parts: [
+                {
+                  property: { id: 'schema:url', data_type: 'url' },
+                  value:
+                    mode === 'withheld-source'
+                      ? { type: 'somevalue' }
+                      : {
+                          type: 'value',
+                          content: mode === 'unsafe-source' ? 'javascript:alert(1)' : sourceUrl,
+                        },
+                },
+              ],
+            },
+          ],
         },
       ],
       'schema:spokenByCharacter':
@@ -140,6 +180,16 @@ function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable')
           references: [],
         },
       ],
+      'schema:creator': [
+        {
+          id: '00000000-0000-4000-8000-00000000e014',
+          rank: 'normal',
+          property: { id: 'schema:creator', data_type: 'wikibase-item' },
+          value: { type: 'value', content: credited },
+          qualifiers: [],
+          references: [],
+        },
+      ],
     },
     {
       [work]: { type: 'schema:Book', labels: { en: 'Work' } },
@@ -147,6 +197,7 @@ function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable')
         ? { [speaker]: { type: 'wd:Q95074', labels: {} } }
         : { [speaker]: { type: 'wd:Q95074', labels: { en: 'Hero' } } }),
       [voice]: { type: 'schema:Person', labels: { en: 'Voice' } },
+      [credited]: { type: 'schema:Person', labels: { en: 'Credited author' } },
     },
   );
   return {
@@ -173,7 +224,11 @@ function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable')
                     qualifiers: [],
                     references: [],
                   },
-                  summary: { id: quote, type: 'schema:Quotation', label: { value: 'I will return', language: 'en' } },
+                  summary: {
+                    id: quote,
+                    type: mode === 'wrong-type' ? 'schema:Book' : 'schema:Quotation',
+                    label: { value: 'I will return', language: 'en' },
+                  },
                   related: {},
                 },
               ],
@@ -207,14 +262,35 @@ test('quotation reading keeps multilingual text, two contexts, missing and restr
   } as Release);
   const current = await readQuotationPage(client('ok'), 'Bearer reader', definitions, quote, 'en', {});
   if (!current.ok) throw new Error('expected quotation');
-  expect(current.selected?.text).toBe('I will return');
-  expect(current.selected?.language).toBe('en');
+  expect(current.selected?.statements[0]?.text).toBe('I will return');
+  expect(current.selected?.statements[0]?.language).toBe('en');
   expect(current.selected?.contexts.map((context) => [context.kind, context.status])).toEqual([
     ['speaker', 'current'],
+    ['credited', 'current'],
     ['work', 'current'],
     ['voice', 'unknown'],
-    ['source', 'unknown'],
   ]);
+  expect(current.selected?.contexts.find((context) => context.kind === 'speaker')?.id).toBe(speaker);
+  expect(current.selected?.contexts.find((context) => context.kind === 'credited')?.id).toBe(credited);
+  expect(current.selected?.statements[0]?.statementId).toBe(textStatement);
+  expect(current.selected?.statements[0]?.qualifiers[0]?.id).toBe(credited);
+  expect(current.selected?.statements[0]?.references).toEqual([
+    {
+      statementId: textStatement,
+      hash: sourceHash,
+      status: 'current',
+      parts: [
+        {
+          property: 'schema:url',
+          label: 'source URL',
+          status: 'current',
+          value: sourceUrl,
+          href: sourceUrl,
+        },
+      ],
+    },
+  ]);
+  expect(current.selected?.statements[0]?.sourceStatus).toBe('current');
   const missing = await readQuotationPage(client('missing'), 'Bearer reader', definitions, quote, 'en', {});
   expect(missing.ok && missing.selected?.contexts.find((context) => context.kind === 'speaker')?.status).toBe(
     'missing',
@@ -223,6 +299,17 @@ test('quotation reading keeps multilingual text, two contexts, missing and restr
   expect(restricted.ok && restricted.selected?.contexts.find((context) => context.kind === 'speaker')?.status).toBe(
     'restricted',
   );
+  const withheld = await readQuotationPage(client('withheld-source'), 'Bearer reader', definitions, work, 'en', {});
+  expect(withheld.ok && withheld.selected?.statements[0]?.sourceStatus).toBe('withheld');
+  expect(
+    withheld.ok && withheld.selected?.statements[0]?.references[0]?.parts[0]?.status,
+  ).toBe('withheld');
+  const unsafe = await readQuotationPage(client('unsafe-source'), 'Bearer reader', definitions, work, 'en', {});
+  expect(unsafe.ok && unsafe.selected?.statements[0]?.sourceStatus).toBe('unsupported');
+  expect(unsafe.ok && unsafe.selected?.statements[0]?.references[0]?.parts[0]?.href).toBeUndefined();
+  const unrelated = await readQuotationPage(client('wrong-type'), 'Bearer reader', definitions, work, 'en', {});
+  expect(unrelated.ok && unrelated.rows).toEqual([]);
+  expect(unrelated.ok && unrelated.unsupportedCount).toBe(1);
   expect(await readQuotationPage(client('stale'), 'Bearer reader', definitions, work, 'en', { quote })).toEqual({
     ok: false,
     reason: 'stale',
@@ -291,6 +378,8 @@ test('quotation page returns from candidate review and names unavailable configu
             rows: [],
             selected: null,
             next: null,
+            observation: 'subject-observation',
+            unsupportedCount: 0,
           }),
         },
         initial: {
@@ -300,10 +389,13 @@ test('quotation page returns from candidate review and names unavailable configu
           rows: [],
           selected: null,
           next: null,
+          observation: 'subject-observation',
+          unsupportedCount: 0,
         },
       }),
     );
     expect(host.textContent).toContain(m.quotation_unsupported());
+    expect(host.textContent).toContain(m.quotation_facts());
     expect(
       [...host.querySelectorAll('a')].some((link) => link.getAttribute('href') === '/en/subjects/work/work/graph'),
     ).toBe(true);

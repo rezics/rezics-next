@@ -364,8 +364,8 @@ async function quotationRow(
   };
 }
 
-function rowFromRelation(row: ForwardPage['relations'][number]): QuotationRow | undefined {
-  if (!row.summary || row.summary.type !== quotationRequested.type) return;
+function rowFromRelation(release: Definitions, row: ForwardPage['relations'][number]): QuotationRow | undefined {
+  if (!row.summary || !typeExtends(release, row.summary.type, quotationRequested.type)) return;
   return {
     id: row.summary.id,
     state: 'pending',
@@ -441,7 +441,7 @@ export async function readQuotationPage(
       next = page.data.next;
       const relations = page.data.relations.slice(0, QUOTATION_PAGE_CAP);
       for (const relation of relations) {
-        const row = rowFromRelation(relation);
+        const row = rowFromRelation(release, relation);
         if (row) rows.push(row);
         else unsupportedCount += 1;
       }

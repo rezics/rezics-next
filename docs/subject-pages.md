@@ -1732,3 +1732,35 @@ existing document contract, retained here at 262,144 bytes for the composed deta
 O(G + sum L_i + sum B_i), independent of catalogue N. A further user expansion pays the same formula once and replaces
 the corresponding truncated page instead of accumulating history. Missing native bounds stay unavailable. Growth
 acceptance is `apps/web/tests/subject-graph-browser.test.tsx`.
+
+## Read an admitted quotation
+
+The `/quotations` companion follows only relation targets whose released type extends `schema:Quotation`. A quote's
+text comes from the first released `schema:text` or `schema:abstract` property on that type and one unambiguous
+best-ranked statement. The reader keeps that statement ID, its exact language, permitted qualifiers and reference
+hashes together. It never uses a relation label or a different text property as quotation text. A document value is
+read through the existing exact authored-document operation and rendered with `DocumentBody`; statement spoilers use
+the existing spoiler gate.
+
+`schema:spokenByCharacter` supplies a speaker. `schema:creator` supplies a credited person and never a speaker.
+`schema:isPartOf` and `schema:about` remain separate cited-work identities, as do recorded voice identities and the
+quotation subject itself. Missing roles remain unknown or missing according to the released field; restricted,
+withheld and unsupported values remain explicit. If quotation text configuration or the current subject's list
+property is absent, the companion explains that reading is unavailable and links back to the ordinary subject facts.
+
+Decision: quote sources come only from references attached to the exact admitted text statement; item-level source
+records do not imply textual attribution, and only a current release-admitted absolute HTTP(S) destination is linked.
+
+The reader retains each native reference hash and its admitted parts on the same text statement. It does not copy
+source prose or hydrate providers. A missing or withheld reference has a visible state and no destination link. A
+selected quote or source observation is retired while the bounded read is refreshed; a stale relation or quote
+address exposes no former attribution or source controls. Returning to the subject remains a stable, keyboard-visible
+link, and selecting a quotation moves focus to its detail region.
+
+### Cost
+
+Reading a quotation from a subject uses one current subject read, at most one relation page of 20 entries, one exact
+selected-quotation subject read and at most one exact document hydration. Direct quotation routes skip the relation
+page and selected-quotation read. Qualifiers and reference parts come from that same selected subject response; they
+add no provider or per-reference requests. Continuation replaces the visible 20-entry page. Focus revalidation repeats
+the same bounded read and hides old source controls until it completes.
