@@ -195,94 +195,77 @@ test('temporary read failure keeps the original until fresh advice is reviewed a
   expect(calls[1]).toBe(original);
 });
 
-test('a command refusal deadline survives reads and edits and retries the same original only after expiry', async () => {
+const withNow = async (start: number, run: (advance: (ms: number) => void) => Promise<void>) => {
   const realNow = Date.now;
-  let now = 1_000_000;
+  let now = start;
   Date.now = () => now;
   try {
-    const receipt = {
-      spoilerLevel: 0 as const,
-      suitability: 'blur' as const,
-      version: 4,
-      advice: readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' }),
-    };
+    await run((ms) => (now += ms));
+  } finally {
+    Date.now = realNow;
+  }
+};
+
+test('command Retry-After survives reads and edits, then retries the same original only after expiry', async () =>
+  withNow(1_000_000, async (advance) => {
+    const receipt = { spoilerLevel: 0 as const, suitability: 'blur' as const, version: 4, advice: readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' }) };
     const calls: unknown[] = [];
     let reads = 0;
     const editor = createEditor({
-      save: async (input) => {
-        calls.push(input);
-        return calls.length === 1
-          ? { ok: false as const, reason: 'unavailable' as const, failure: { status: 429, retryAfter: '2' } }
-          : { ok: true as const, preferences: receipt };
-      },
-      read: async () => ({
-        signedIn: true as const,
-        preferences: reads++ === 0 ? initial : receipt,
-        securityHref: null,
-      }),
+      save: async (input) => (calls.push(input), calls.length === 1
+        ? { ok: false as const, reason: 'unavailable' as const, failure: { status: 429, retryAfter: '2' } }
+        : { ok: true as const, preferences: receipt }),
+      read: async () => ({ signedIn: true as const, preferences: reads++ === 0 ? initial : receipt, securityHref: null }),
     });
-    const retryCapturedBeforeRefusal = () => editor.retry(false);
+    const retry = () => editor.retry(false);
     await editor.edit({ spoilerLevel: 0 });
     const original = editor.snapshot().pending;
     await editor.reload(false);
     await editor.edit({ suitability: 'show' });
     expect(editor.snapshot().pending).toBe(original);
-    expect(editor.snapshot().commandRetryAt).toBe(now + 2_000);
-    await retryCapturedBeforeRefusal();
+    expect(editor.snapshot().commandRetryAt).toBe(Date.now() + 2_000);
+    await retry();
     expect(calls).toHaveLength(1);
-    now += 2_000;
-    await Promise.resolve();
+    advance(2_000);
     expect(calls).toHaveLength(1);
-    await retryCapturedBeforeRefusal();
-    expect(calls).toHaveLength(2);
+    await retry();
     expect(calls[1]).toBe(original);
-    expect(editor.snapshot()).toMatchObject({
-      phase: 'review',
-      pending: null,
-      draft: { spoilerLevel: 0, suitability: 'show' },
-      known: { spoilerLevel: 0, suitability: 'blur', version: 4 },
-    });
-  } finally {
-    Date.now = realNow;
-  }
-});
+    expect(editor.snapshot()).toMatchObject({ phase: 'review', pending: null, draft: { spoilerLevel: 0, suitability: 'show' }, known: { spoilerLevel: 0, suitability: 'blur', version: 4 } });
+  })
+);
 
-test('an HTTP-date read deadline survives edits and fences retained reload callbacks without automatic reads', async () => {
-  const realNow = Date.now;
-  let now = Date.UTC(2026, 10, 5);
-  Date.now = () => now;
-  try {
-    const deadline = now + 5_000;
+test('HTTP-date read deadlines survive edits and fence retained reload callbacks without automatic reads', async () =>
+  withNow(Date.UTC(2026, 10, 5), async (advance) => {
+    const deadline = Date.now() + 5_000;
     let reads = 0;
     const editor = createEditor({
       save: async () => ({ ok: false as const, reason: 'unavailable' as const }),
-      read: async () =>
-        reads++ === 0
-          ? {
-              signedIn: true as const,
-              state: 'unavailable' as const,
-              failure: { status: 503, retryAfter: new Date(deadline).toUTCString() },
-              securityHref: null,
-            }
-          : { signedIn: true as const, preferences: initial, securityHref: null },
+      read: async () => reads++ === 0
+        ? { signedIn: true as const, state: 'unavailable' as const, failure: { status: 503, retryAfter: new Date(deadline).toUTCString() }, securityHref: null }
+        : { signedIn: true as const, preferences: initial, securityHref: null },
     });
-    const reloadCapturedBeforeRefusal = () => editor.reload(false);
-    await reloadCapturedBeforeRefusal();
+    const reload = () => editor.reload(false);
+    await reload();
     await editor.edit({ spoilerLevel: 0 });
-    await reloadCapturedBeforeRefusal();
-    now += 4_999;
-    await reloadCapturedBeforeRefusal();
+    await reload();
+    advance(4_999);
+    await reload();
+    expect([reads, editor.snapshot().readRetryAt]).toEqual([1, deadline]);
+    advance(1);
     expect(reads).toBe(1);
-    expect(editor.snapshot().readRetryAt).toBe(deadline);
-    now += 1;
-    await Promise.resolve();
-    expect(reads).toBe(1);
-    await reloadCapturedBeforeRefusal();
-    expect(reads).toBe(2);
-    expect(editor.snapshot()).toMatchObject({ readRetryAt: 0, draft: { spoilerLevel: 0 } });
-  } finally {
-    Date.now = realNow;
-  }
+    await reload();
+    expect([reads, editor.snapshot().readRetryAt, editor.snapshot().draft.spoilerLevel]).toEqual([2, 0, 0]);
+  })
+);
+
+test('retirement fences a late read retry deadline', async () => {
+  let active = true, finish!: (page: SettingsPage) => void;
+  const editor = createEditor({ save: async () => ({ ok: false, reason: 'unavailable' }), read: () => new Promise((resolve) => (finish = resolve)) }, () => active);
+  const loading = editor.reload();
+  active = false;
+  finish({ signedIn: true, state: 'unavailable', failure: { status: 503, retryAfter: '60' }, securityHref: null });
+  await loading;
+  expect(editor.snapshot().readRetryAt).toBe(0);
 });
 
 test('a late read refusal after retirement cannot install its retry deadline', async () => {
