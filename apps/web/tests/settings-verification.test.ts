@@ -540,15 +540,7 @@ test('uncertain withdrawal keeps confirmation, original key and native failures 
   await controller.reload();
   expect(controller.snapshot().attempt).toBeNull();
   expect(controller.snapshot().current?.verificationRequest?.state).toBe('withdrawn');
-  expect(calls.map((call) => call.operation)).toEqual([
-    'read',
-    'read',
-    'withdraw',
-    'read',
-    'withdraw',
-    'read',
-    'read',
-  ]);
+  expect(calls.map((call) => call.operation)).toEqual(['read', 'read', 'withdraw', 'read', 'withdraw', 'read', 'read']);
 });
 
 test('verification reads reject missing data and other accounts, and late commands cannot cross viewers', async () => {
