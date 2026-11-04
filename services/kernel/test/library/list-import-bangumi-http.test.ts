@@ -181,10 +181,12 @@ test('metadata review uses explicit field consent and keeps one selection per co
 test('mounted metadata retries recover only exact receipts after evidence expiry and never admit a started intent', async () => {
   const { uploadId } = await preview([record()]),
     sourceReview = await review(uploadId, 0),
-    metadata = await ok(await send('POST', `/${uploadId}:reviewMetadata`, {
-      ordinal: 0,
-      sourceReviewToken: sourceReview.token,
-    })),
+    metadata = await ok(
+      await send('POST', `/${uploadId}:reviewMetadata`, {
+        ordinal: 0,
+        sourceReviewToken: sourceReview.token,
+      }),
+    ),
     fields = [{ field: 'note', action: 'adopt' }],
     request = { ordinal: 0, reviewToken: metadata.reviewToken, fields };
   const accepted = await ok(await send('POST', `/${uploadId}:applyMetadata`, request));
@@ -209,9 +211,7 @@ test('mounted metadata retries recover only exact receipts after evidence expiry
     [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, uploadId],
   );
   expect((await send('GET', `/${uploadId}/metadata/0?reviewToken=${metadata.reviewToken}`)).status).toBe(404);
-  expect(
-    (await f.send('other', 'POST', `${root}/${uploadId}:applyMetadata`, request)).status,
-  ).toBe(404);
+  expect((await f.send('other', 'POST', `${root}/${uploadId}:applyMetadata`, request)).status).toBe(404);
   expect(await ok(await send('POST', `/${uploadId}:applyMetadata`, request))).toEqual(accepted);
 
   const page = {
@@ -236,10 +236,12 @@ test('mounted metadata retries recover only exact receipts after evidence expiry
 
   const { uploadId: unresolvedId } = await preview([{ ...record(), comment: 'unadmitted private note' }]),
     unresolvedSource = await review(unresolvedId, 0),
-    unresolved = await ok(await send('POST', `/${unresolvedId}:reviewMetadata`, {
-      ordinal: 0,
-      sourceReviewToken: unresolvedSource.token,
-    })),
+    unresolved = await ok(
+      await send('POST', `/${unresolvedId}:reviewMetadata`, {
+        ordinal: 0,
+        sourceReviewToken: unresolvedSource.token,
+      }),
+    ),
     controller = new AbortController();
   controller.abort();
   const engine = createBangumiImport({
@@ -250,8 +252,18 @@ test('mounted metadata retries recover only exact receipts after evidence expiry
     votes: createVoteCommands({ pool: f.pool, access: f.access }),
   });
   const unresolvedFields = [{ field: 'note', action: 'adopt' }];
-  expect((await engine.applyMetadata(f.owner.actor, unresolvedId, 0, unresolved.reviewToken, unresolvedFields, controller.signal)).fields)
-    .toEqual([{ field: 'note', status: 'unattempted' }]);
+  expect(
+    (
+      await engine.applyMetadata(
+        f.owner.actor,
+        unresolvedId,
+        0,
+        unresolved.reviewToken,
+        unresolvedFields,
+        controller.signal,
+      )
+    ).fields,
+  ).toEqual([{ field: 'note', status: 'unattempted' }]);
   await f.pool.query(
     `UPDATE library.bangumi_upload_row r SET review=jsonb_set(r.review,'{metadata}',
        (SELECT jsonb_agg(CASE WHEN m->>'token'=$5

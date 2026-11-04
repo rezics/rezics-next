@@ -674,19 +674,29 @@ export function createBangumiImport(deps: Dependencies) {
              AND m->'confirmation'->>$13=$14
              AND m->'confirmation'->>'selectionDigest'=$15
              AND ($16::text IS NULL OR m->'confirmation'->>'provenanceKind'=$16)
-             AND ${expiredOnly
-               ? "u.expires_at<=clock_timestamp() AND COALESCE(u.recovery_until,u.expires_at+interval '24 hours')>clock_timestamp()"
-               : "(u.expires_at>clock_timestamp() OR COALESCE(u.recovery_until,u.expires_at+interval '24 hours')>clock_timestamp())"}
+             AND ${
+               expiredOnly
+                 ? "u.expires_at<=clock_timestamp() AND COALESCE(u.recovery_until,u.expires_at+interval '24 hours')>clock_timestamp()"
+                 : "(u.expires_at>clock_timestamp() OR COALESCE(u.recovery_until,u.expires_at+interval '24 hours')>clock_timestamp())"
+             }
            FOR UPDATE OF u,r`,
           [
-            requireRoute(account.accountId), account.accountId, id, ordinal, recovery.token,
+            requireRoute(account.accountId),
+            account.accountId,
+            id,
+            ordinal,
+            recovery.token,
             recovery.sourceReviewToken,
-            recovery.subjectId, account.clientId, account.requestedBy ?? null,
+            recovery.subjectId,
+            account.clientId,
+            account.requestedBy ?? null,
             annotation ? 'annotationStarted' : 'provenanceStarted',
-            annotation ? 'annotationKey' : 'provenanceKey', key,
-            annotation ? 'annotationReceiptDigest' : 'provenanceReceiptDigest', digest,
+            annotation ? 'annotationKey' : 'provenanceKey',
+            key,
+            annotation ? 'annotationReceiptDigest' : 'provenanceReceiptDigest',
+            digest,
             confirmation.selectionDigest,
-            annotation ? null : confirmation.provenanceKind ?? null,
+            annotation ? null : (confirmation.provenanceKind ?? null),
           ],
         );
         if (!linked.rowCount) throw new LibraryNotFoundError();
@@ -801,7 +811,15 @@ export function createBangumiImport(deps: Dependencies) {
            WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3 AND r.ordinal=$4
              AND u.expires_at<=clock_timestamp()
              AND COALESCE(u.recovery_until,u.expires_at+interval '24 hours')>clock_timestamp()`,
-          [requireRoute(a.accountId), a.accountId, id, ordinal, reviewToken, account.clientId, account.requestedBy ?? null],
+          [
+            requireRoute(a.accountId),
+            a.accountId,
+            id,
+            ordinal,
+            reviewToken,
+            account.clientId,
+            account.requestedBy ?? null,
+          ],
         );
         return found.rows[0]?.recovery ?? null;
       });
@@ -811,7 +829,12 @@ export function createBangumiImport(deps: Dependencies) {
     },
     async readReceipt({ actor, id, ordinal }, review, phase) {
       if (!review.confirmation) return false;
-      return metadataReceipt({ actor, id, ordinal }, review as typeof review & { confirmation: EntryImportMetadataConfirmation }, phase, false);
+      return metadataReceipt(
+        { actor, id, ordinal },
+        review as typeof review & { confirmation: EntryImportMetadataConfirmation },
+        phase,
+        false,
+      );
     },
     async readView({ actor, id, ordinal }, reviewToken) {
       const current = await read(actor, async (tx, a) => {
@@ -932,23 +955,30 @@ export function createBangumiImport(deps: Dependencies) {
       const account = owner(actor),
         selectionDigest = reviewed.confirmation?.selectionDigest;
       if (!selectionDigest) throw new ProblemError('conflict');
-      const input = reviewed.confirmation?.nativeAdmission === 'bangumi-source-v1' ? {
-        source: 'bangumi-metadata-v1',
-        uploadId: id,
-        ordinal,
-        sourceReviewToken: reviewed.sourceReviewToken,
-        reviewToken: reviewed.token,
-        subjectId: reviewed.subjectId,
-        sourceDigest: reviewed.sourceDigest,
-        profileDigest: reviewed.profileDigest,
-        incarnationId: reviewed.incarnationId,
-        selectionDigest,
-      } : undefined;
+      const input =
+        reviewed.confirmation?.nativeAdmission === 'bangumi-source-v1'
+          ? {
+              source: 'bangumi-metadata-v1',
+              uploadId: id,
+              ordinal,
+              sourceReviewToken: reviewed.sourceReviewToken,
+              reviewToken: reviewed.token,
+              subjectId: reviewed.subjectId,
+              sourceDigest: reviewed.sourceDigest,
+              profileDigest: reviewed.profileDigest,
+              incarnationId: reviewed.incarnationId,
+              selectionDigest,
+            }
+          : undefined;
       return {
         input,
         async prepare() {
           return async (tx) => {
-            const current = await tx.query<{ cancelled: boolean; evidence: BangumiRow['evidence']; review: StoredReview | null }>(
+            const current = await tx.query<{
+              cancelled: boolean;
+              evidence: BangumiRow['evidence'];
+              review: StoredReview | null;
+            }>(
               `SELECT u.cancelled,r.evidence,r.review FROM library.bangumi_upload u
                JOIN library.bangumi_upload_row r USING(route,account_id,upload_id)
                WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3 AND r.ordinal=$4
@@ -960,7 +990,9 @@ export function createBangumiImport(deps: Dependencies) {
             const stored = current.rows[0],
               metadata = stored?.review?.metadata?.find((item) => item.token === reviewed.token);
             if (
-              !stored || stored.cancelled || !metadata ||
+              !stored ||
+              stored.cancelled ||
+              !metadata ||
               stored.review?.token !== reviewed.sourceReviewToken ||
               metadata.sourceReviewToken !== reviewed.sourceReviewToken ||
               metadata.subjectId !== reviewed.subjectId ||

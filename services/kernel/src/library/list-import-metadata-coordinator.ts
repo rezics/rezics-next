@@ -290,8 +290,7 @@ export function createListImportMetadataCoordinator<ReviewResult>(
     const review = await adapter.loadExpiredRecovery?.(input, reviewToken);
     const confirmation = review?.confirmation;
     if (!review) return null;
-    if (!confirmation)
-      return { reviewToken, fields: selections.map(({ field }) => ({ field, status: 'stale' })) };
+    if (!confirmation) return { reviewToken, fields: selections.map(({ field }) => ({ field, status: 'stale' })) };
     if (confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
     const old = new Map(
       (confirmation.outcome?.fields ?? confirmation.fieldOutcomes ?? []).map((field) => [field.field, field.status]),
@@ -392,8 +391,7 @@ export function createListImportMetadataCoordinator<ReviewResult>(
         if (recovered) return recovered;
         throw error;
       }
-      const
-        latest = state.review,
+      const latest = state.review,
         observation = state.observation;
       if (!latest?.confirmation || !observation) throw new ProblemError('conflict');
       if (latest.confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');

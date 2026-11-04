@@ -4,7 +4,12 @@ import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, noEffect, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  noEffect,
+  type AuthoritativeTime,
+  type CommandTransaction,
+} from '../command/command.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

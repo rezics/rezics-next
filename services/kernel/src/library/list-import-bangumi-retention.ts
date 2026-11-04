@@ -6,10 +6,7 @@ import { createLibraryCommandRunner } from './command-support.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { libraryCommandReceiptDigest, requireRoute } from './command-support.ts';
-import {
-  entryPersonalAnnotationRequestInput,
-  entryPersonalSourceObservationRequestInput,
-} from './entry-personal.ts';
+import { entryPersonalAnnotationRequestInput, entryPersonalSourceObservationRequestInput } from './entry-personal.ts';
 import type { EntryImportMetadataConfirmation, EntryImportMetadataReview } from './list-import-entry-metadata.ts';
 
 export const BANGUMI_RETENTION_SWEEP_WORKFLOW = 'library.bangumiRetentionSweep';
@@ -43,7 +40,10 @@ export async function nextExpiredBangumiUpload(pool: Pool, after: BangumiExpiryC
      ORDER BY due_at,route,account_id,upload_id LIMIT 1`;
   const result = after
     ? await pool.query<BangumiExpiryCursor & { recoveryUntil: string | null }>(query, [
-        after.dueAt ?? after.expiresAt, after.route, after.accountId, after.uploadId,
+        after.dueAt ?? after.expiresAt,
+        after.route,
+        after.accountId,
+        after.uploadId,
       ])
     : await pool.query<BangumiExpiryCursor & { recoveryUntil: string | null }>(query);
   return result.rows[0] ?? null;
@@ -70,30 +70,35 @@ function minimizeReview(review: Record<string, unknown> | null, accountId: strin
       principal: { kind: 'account' as const, id: accountId },
       basis: { clientId: item.clientId, requestedBy: item.requestedBy },
     };
-    const admissionInput = confirmation.nativeAdmission === 'bangumi-source-v1'
-      ? {
-          source: 'bangumi-metadata-v1',
-          uploadId: (review as { uploadId?: string }).uploadId,
-          ordinal: (review as { ordinal?: number }).ordinal,
-          sourceReviewToken: item.sourceReviewToken,
-          reviewToken: item.token,
-          subjectId: item.subjectId,
-          sourceDigest: item.sourceDigest,
-          profileDigest: item.profileDigest,
-          incarnationId: item.incarnationId,
-          selectionDigest: confirmation.selectionDigest,
-        }
-      : undefined;
+    const admissionInput =
+      confirmation.nativeAdmission === 'bangumi-source-v1'
+        ? {
+            source: 'bangumi-metadata-v1',
+            uploadId: (review as { uploadId?: string }).uploadId,
+            ordinal: (review as { ordinal?: number }).ordinal,
+            sourceReviewToken: item.sourceReviewToken,
+            reviewToken: item.token,
+            subjectId: item.subjectId,
+            sourceDigest: item.sourceDigest,
+            profileDigest: item.profileDigest,
+            incarnationId: item.incarnationId,
+            selectionDigest: confirmation.selectionDigest,
+          }
+        : undefined;
     let annotationReceiptDigest = confirmation.annotationReceiptDigest;
     if (confirmation.annotationStarted && !annotationReceiptDigest && confirmation.annotationInput) {
       annotationReceiptDigest = libraryCommandReceiptDigest(
         identity,
         'library.entry.annotations.put',
-        entryPersonalAnnotationRequestInput(item.subjectId, {
-          revision: confirmation.annotationInput.revision,
-          note: confirmation.annotationInput.note,
-          priority: confirmation.annotationInput.priority,
-        }, admissionInput),
+        entryPersonalAnnotationRequestInput(
+          item.subjectId,
+          {
+            revision: confirmation.annotationInput.revision,
+            note: confirmation.annotationInput.note,
+            priority: confirmation.annotationInput.priority,
+          },
+          admissionInput,
+        ),
       );
     }
     let provenanceReceiptDigest = confirmation.provenanceReceiptDigest;
@@ -101,10 +106,13 @@ function minimizeReview(review: Record<string, unknown> | null, accountId: strin
       const kind = confirmation.provenanceInput.kind;
       provenanceReceiptDigest = libraryCommandReceiptDigest(
         identity,
-        kind === 'admit'
-          ? 'library.entry.source-observation.admit'
-          : 'library.entry.source-observation.correct',
-        entryPersonalSourceObservationRequestInput(kind, item.subjectId, confirmation.provenanceInput.value, admissionInput),
+        kind === 'admit' ? 'library.entry.source-observation.admit' : 'library.entry.source-observation.correct',
+        entryPersonalSourceObservationRequestInput(
+          kind,
+          item.subjectId,
+          confirmation.provenanceInput.value,
+          admissionInput,
+        ),
       );
     }
     const outcomes = confirmation.outcome?.fields.map(({ field, status }) => ({ field, status }));
@@ -124,7 +132,9 @@ function minimizeReview(review: Record<string, unknown> | null, accountId: strin
       ...(annotationReceiptDigest === undefined ? {} : { annotationReceiptDigest }),
       ...(provenanceReceiptDigest === undefined ? {} : { provenanceReceiptDigest }),
       ...(confirmation.provenanceInput === undefined ? {} : { provenanceKind: confirmation.provenanceInput.kind }),
-      ...(outcomes === undefined ? {} : { outcome: { reviewToken: confirmation.outcome!.reviewToken, fields: outcomes } }),
+      ...(outcomes === undefined
+        ? {}
+        : { outcome: { reviewToken: confirmation.outcome!.reviewToken, fields: outcomes } }),
     };
     return {
       token: item.token,
@@ -192,7 +202,13 @@ export async function purgeExpiredBangumiUploadPage(
                 `UPDATE library.bangumi_upload_row SET evidence='{}'::jsonb,review=$5::jsonb,
                    choice=NULL,outcome=NULL,labels=NULL
                  WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
-                [route, input.accountId, input.uploadId, row.ordinal, minimized === null ? null : JSON.stringify(minimized)],
+                [
+                  route,
+                  input.accountId,
+                  input.uploadId,
+                  row.ordinal,
+                  minimized === null ? null : JSON.stringify(minimized),
+                ],
               );
             }
             const remaining = await tx.query(
@@ -211,11 +227,13 @@ export async function purgeExpiredBangumiUploadPage(
             return {
               value: { removed, complete },
               events: removed
-                ? [{
-                    type: 'com.rezics.library.account-graph.purged.v1',
-                    subject: input.accountId,
-                    data: { accountId: input.accountId, kind: 'bangumi_upload', removed },
-                  }]
+                ? [
+                    {
+                      type: 'com.rezics.library.account-graph.purged.v1',
+                      subject: input.accountId,
+                      data: { accountId: input.accountId, kind: 'bangumi_upload', removed },
+                    },
+                  ]
                 : [],
             };
           }
