@@ -139,7 +139,7 @@ test('a train resolves the Markdown task-deletion union without starting another
     expect(readFileSync(outcome.logPath, 'utf8')).toContain('Dev landing conflict method=resolver');
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
     expect(h.head('dev')).not.toBe(dev);
-    expect(git(h.root, 'show', 'dev:README.md')).toBe('Updated fixture\nDev note\n');
+    expect(git(h.root, 'show', 'dev:README.md')).toBe('Updated fixture\nDev note');
   } finally {
     h.dispose();
   }

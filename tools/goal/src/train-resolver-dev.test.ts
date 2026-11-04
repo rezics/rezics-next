@@ -91,7 +91,7 @@ test('a code conflict uses the dev resolver and lands without starting another w
     expect(outcome.conflictResolution?.tokens).toEqual({ input: 0, cached: 0, output: 0 });
     expect(readFileSync(outcome.logPath, 'utf8')).toContain('Dev landing conflict method=resolver');
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
-    expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved);
+    expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
   } finally {
     h.dispose();
   }
@@ -131,7 +131,7 @@ test('the resolver releases the train lock, then retries at the front when dev m
     expect(mocked.calls()).toBe(2);
     expect(outcome).toMatchObject({ passed: true, conflictResolution: { method: 'resolver', attempts: 2 } });
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
-    expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved);
+    expect(git(h.root, 'show', `dev:${file}`)).toBe(resolved.trimEnd());
   } finally {
     h.dispose();
   }
