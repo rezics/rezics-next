@@ -28,7 +28,6 @@ function ArtworkStory({
     value: { type: 'value', content: state === 'unsupported' ? 'unsupported-media' : image.id },
     qualifiers: [],
     references: [],
-    rezics: { release: 'sha256:0', revision: 1 },
   };
   const title =
     locale === 'ja'

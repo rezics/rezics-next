@@ -187,7 +187,10 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
     expect(host.querySelector('img')?.getAttribute('alt')).toBe('Portrait — Original subject');
     expect(host.textContent).toContain('Actual artist');
     expect(host.textContent).toContain('Other readable fact');
-    expect(statement.references[0]!.parts[0]!.value.content).toBe('https://evidence.test/original');
+    expect(
+      [...host.querySelectorAll('a')].some((link) => new URL(link.href).searchParams.get('statement') === statement.id),
+    ).toBe(true);
+    expect(host.textContent).not.toContain('https://evidence.test/original');
     const opener = button(m.document_image_inspect());
     await click(m.document_image_inspect());
     expect(window.document.querySelector('[role="dialog"]')).not.toBeNull();
@@ -217,6 +220,9 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
     authority++;
     await render();
     expect(host.querySelector('img')).toBeNull();
+    const beforeRetiredRead = calls.length;
+    await click(m.subject_artwork_reveal());
+    expect(calls).toHaveLength(beforeRetiredRead);
     const refreshed = structuredClone(body);
     await render(refreshed);
     hold = true;
@@ -232,6 +238,11 @@ test('ordinary artwork facts gate actual media, retain exact handoffs, recover i
       await reveal();
       await click(m.subject_artwork_view({}, { locale: locale as never }));
       expect(host.querySelector('img')?.getAttribute('alt')).toContain(locale === 'ja' ? '肖像画' : '人物肖像');
+    }
+    for (const field of ['context', 'release'] as const) {
+      body.subject[field] += '-replacement';
+      await render(body, 'show');
+      expect(host.querySelector('img')).toBeNull();
     }
     const unsupported = structuredClone(body);
     unsupported.subject.statements['schema:image']![0]!.value.content = 'https://external.test/private';
