@@ -182,21 +182,31 @@ export async function createCountedGrowthFixture() {
     const observeClient = (client: PoolClient) => {
       if (observed.has(client)) return;
       observed.add(client);
-      const query = client.query.bind(client) as (...args: unknown[]) => Promise<QueryResult>;
+      const query = client.query.bind(client) as (...args: unknown[]) => unknown;
       client.query = ((...args: unknown[]) => {
         const counters = measured.getStore();
-        const result = query(...args);
-        if (!counters) return result;
+        if (!counters) return query(...args);
         counters.poolQueries!++;
         counters[`${phase.getStore() ?? 'fixture'}Queries`]!++;
-        return result.then((result) => {
+        const materialized = (result: QueryResult | QueryResult[]) => {
           // Include controls and empty/negative query results; the shared harness owns plans and wire bytes.
           for (const page of Array.isArray(result) ? result : [result]) {
             counters.materializedRows! += page.rows.length;
             counters.materializedBytes! += bytes(page.rows);
           }
           return result;
-        });
+        };
+        // pool.query uses a callback to release its checkout. Preserve that calling convention exactly.
+        const last = args.length - 1;
+        if (typeof args[last] === 'function') {
+          const callback = args[last] as (error: Error | null, result: QueryResult) => unknown;
+          args[last] = (error: Error | null, result: QueryResult) => {
+            if (!error) materialized(result);
+            return callback(error, result);
+          };
+          return query(...args);
+        }
+        return (query(...args) as Promise<QueryResult>).then(materialized);
       }) as PoolClient['query'];
     };
     db.pool.on('acquire', observeClient);
