@@ -1,3 +1,6 @@
+import type { FollowWriteInput, FollowWriteResult } from '../library/follow-records';
+import { createSpaceEntryCommands, type SpaceEntryCommands } from './space-entry/commands';
+import { SpaceEntryControls } from './space-entry/controls';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useQuery, QueryClient, QueryClientContext } from '@tanstack/react-query';
 import { AnonymousSessionContext, sessionQuery } from '../session/query';
@@ -48,6 +51,7 @@ type Mounted = DiscoveryBoundPage & {
   page: DiscoveryPersonalPage;
   observation: DiscoveryPersonalObservation;
   suppressed: boolean;
+  spaceCommands: SpaceEntryCommands;
 };
 type Focus = { element: HTMLElement; row: string | undefined; index: number; x: number; y: number };
 
@@ -64,6 +68,7 @@ export function useDiscoveryPersonalResults(input: {
     headers: Record<string, string>;
   }) => Promise<FollowWriteResult>;
   writeEntry?: (command: SubjectLibraryMutation & ExpectedReader) => Promise<SubjectLibraryMutationResponse>;
+  writeSpaceFollow?: (command: FollowWriteInput & ExpectedReader) => Promise<FollowWriteResult>;
   writeVote?: (command: QuestionBoundRatingInput) => Promise<'successful' | 'rejected' | 'uncertain'>;
 }) {
   const connected = useContext(QueryClientContext);
@@ -220,6 +225,7 @@ export function useDiscoveryPersonalResults(input: {
     const install = (result: DiscoveryBoundPage) => {
       if (!owns()) return;
       current?.page.dispose();
+      current?.spaceCommands.dispose();
       // Exposure observations are independent of the native entry facts and must agree before mounting writes.
       const accepted = result.capabilities?.exposure === discoveryExposureKey(admitted!.admitted);
       const state = structuredClone<DiscoveryState>(
@@ -229,6 +235,7 @@ export function useDiscoveryPersonalResults(input: {
               page: {
                 ...result.state.page,
                 viewerFacts: null,
+                spaceEntries: undefined,
                 collectionFollows: { state: 'unavailable', reason: 'identity' },
               },
             }
@@ -305,7 +312,46 @@ export function useDiscoveryPersonalResults(input: {
           }
         },
       });
-      current = { state, capabilities: accepted ? result.capabilities : null, page, observation, suppressed: false };
+      const installed: Mounted = {
+        state,
+        capabilities: accepted ? result.capabilities : null,
+        page,
+        observation,
+        suppressed: false,
+        spaceCommands: createSpaceEntryCommands({
+          reader: binding,
+          current: () => owns() && current === installed,
+          registry: nativeRegistry.commands,
+          write: async (command) => {
+            if (!owns() || current !== installed) return { ok: false, reason: 'unavailable' };
+            if (input.writeSpaceFollow) return input.writeSpaceFollow(command);
+            const { writeSearchSpaceFollow } = await import('./space-entry/server');
+            if (!owns() || current !== installed) return { ok: false, reason: 'unavailable' };
+            return writeSearchSpaceFollow({ data: command });
+          },
+          suppress: () => {
+            if (!owns() || current !== installed) return;
+            installed.suppressed = true;
+            setMounted({ owner: episode, value: { ...installed } });
+          },
+          refresh: async () => {
+            let fresh: DiscoveryBoundPage;
+            try {
+              fresh = await load(lifetime.signal);
+            } catch {
+              fresh = { state: { status: 'unavailable' }, capabilities: null };
+            }
+            if (!owns() || current !== installed) return;
+            if (fresh.state.status === 'unavailable' && installed.state.status === 'ready') {
+              const { spaceEntries: _, ...publicPage } = installed.state.page;
+              fresh = { state: { status: 'ready', page: { ...publicPage, viewerFacts: null } }, capabilities: null };
+            }
+            captureFocus();
+            install(fresh);
+          },
+        }),
+      };
+      current = installed;
       setMounted({ owner: episode, value: current });
     };
     // An observed cache retirement is terminal even if the old reader/exposure object returns before React renders.
@@ -316,6 +362,7 @@ export function useDiscoveryPersonalResults(input: {
         episode.active = false;
         episode.abort.abort();
         current?.page.dispose();
+        current?.spaceCommands.dispose();
         setMounted(null);
       }
     });
@@ -328,20 +375,45 @@ export function useDiscoveryPersonalResults(input: {
       episode.active = false;
       lifetime.abort();
       current?.page.dispose();
+      current?.spaceCommands.dispose();
       unsubscribe();
     };
   }, [episode]);
 
   const value = mounted?.owner === episode && episode.active ? mounted.value : undefined;
   const source = value?.state ?? input.source;
+  const publicDisplayPage =
+    source?.status === 'ready'
+      ? (() => {
+          const { spaceEntries, ...page } = source.page;
+          return { ...page, ...(spaceEntries?.reader === null ? { spaceEntries } : {}), viewerFacts: null, collectionFollows: { state: 'unavailable' as const, reason: 'identity' as const } };
+        })()
+      : undefined;
   const display: DiscoveryState | undefined =
-    source?.status === 'ready' && (!value || value.suppressed)
-      ? {
-          ...source,
-          page: { ...source.page, viewerFacts: null, collectionFollows: { state: 'unavailable', reason: 'identity' } },
-        }
-      : source;
+    source?.status === 'ready' && (!value || value.suppressed) ? { ...source, page: publicDisplayPage! } : source;
   const renderPersonal = (hit: DiscoveryHit, title: string) => {
+    if (hit.summary.kind === 'space') {
+      const privatePage =
+        value?.state.status === 'ready' && !value.suppressed ? value.state.page.spaceEntries : undefined;
+      const publicPage =
+        input.source?.status === 'ready' && input.source.page.spaceEntries?.reader === null
+          ? input.source.page.spaceEntries
+          : undefined;
+      const row = (
+        session.state === 'signed-out' ? publicPage : privatePage?.reader === session.subject ? privatePage : undefined
+      )?.rows.find((row) => row.id === hit.key.id);
+      return (
+        <SpaceEntryControls
+          key={`${value?.observation.scope.page ?? episode.id}:${hit.key.id}`}
+          id={hit.key.id}
+          row={row}
+          locale={input.locale}
+          returnTo={input.returnTo}
+          signedOut={session.state === 'signed-out'}
+          commands={value && !value.suppressed ? value.spaceCommands : undefined}
+        />
+      );
+    }
     const options = { locale: locales.find((locale) => locale === input.locale) ?? 'en' };
     if (hit.summary.kind === 'collection') {
       const card = hit.summary.value.card;

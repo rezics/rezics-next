@@ -47,6 +47,17 @@ export async function readBoundDiscoveryPage(
         page: {
           ...state.page,
           collectionFollows: { state: 'unavailable', reason: 'native' },
+          ...(state.page.spaceEntries
+            ? {
+                spaceEntries: {
+                  ...state.page.spaceEntries,
+                  rows: state.page.spaceEntries.rows.map((row) => ({
+                    ...row,
+                    follow: { state: 'unavailable' as const },
+                  })),
+                },
+              }
+            : {}),
           viewerFacts: { state: 'unavailable', reason: 'response_limit', retryable: false },
         },
       },

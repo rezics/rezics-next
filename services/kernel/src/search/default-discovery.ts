@@ -1,5 +1,7 @@
 import { boundWorkContexts } from './work-context.ts';
 import { readFollowDiscovery } from '../library/follow-discovery.ts';
+import { readSpaceDiscoveryEntryBatch, type SpaceEntryActionRuntime } from '../community/space-discovery-entry.ts';
+import { observeSearchSpaceEntries, spaceEntryFollowing, type SpaceEntryFollowProducer } from './space-entry.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -65,7 +67,11 @@ import {
   type PublicFilterCoveragePage,
 } from './public-filter-coverage-page.ts';
 
-export type DefaultDiscoverySearchConfig = DefaultPublicFilterRuntimeConfig & { keys: KeyRing };
+export type DefaultDiscoverySearchConfig = DefaultPublicFilterRuntimeConfig & {
+  keys: KeyRing;
+  spaceEntryActions?: SpaceEntryActionRuntime;
+  spaceEntryFollow?: SpaceEntryFollowProducer;
+};
 export type DefaultDiscoverySearch = Readonly<{
   search: DiscoverySearch;
   open: RetainedDiscoverySearch;
@@ -795,6 +801,14 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             ...context,
             descriptions: request.descriptions === true,
           });
+          const spaces = await observeSearchSpaceEntries({
+            page: enriched.page,
+            actor: context.actor,
+            deadline: context.deadline,
+            read: (ids) =>
+              readSpaceDiscoveryEntryBatch(config, context.actor, ids, context.deadline, config.spaceEntryActions),
+            follow: config.spaceEntryFollow ?? spaceEntryFollowing((actor, targets, deadline) => readFollowDiscovery(config, actor, targets, deadline)),
+          });
           const finalPresentation = await readListPresentationFacts(
             {
               pool: config.pool,
@@ -838,7 +852,8 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             ];
           });
           const collectionFollows = await readFollowDiscovery(config, context.actor, targets, context.deadline);
-          return { page: { ...enriched.page, collectionFollows }, viewerCurrent };
+          if (!(await spaces.finish())) throw new ProblemError('search_restart_required');
+          return { page: { ...spaces.page, collectionFollows }, viewerCurrent };
         } catch (error) {
           if (error instanceof ProblemError || error instanceof CollectionDiscoveryReadinessError) throw error;
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });

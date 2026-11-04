@@ -257,7 +257,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       rateAttribution: defaults.rateAttribution,
       clock: defaults.clock,
       access: defaults.access,
-      onAccessReady(access) {
+      onAccessReady(access, viewerActions) {
         if (openSearch && searchConfig) {
           publicFilters = createDefaultPublicFilterRuntime({
             pool,
@@ -268,6 +268,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             clock: defaults.clock,
           });
           discovery = createDefaultDiscoverySearch({
+            spaceEntryActions: viewerActions,
             pool,
             routeKey: config.routeKey,
             access,

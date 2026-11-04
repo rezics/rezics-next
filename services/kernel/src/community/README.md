@@ -2168,3 +2168,34 @@ comparison. No separately measured media operation stands in for either selected
   up to ten media preparations, two batched rules preparations and sixteen rules formulas.
   Controller-owned native execution and the complete three-scale result remain deferred;
   these source equations and focused cases establish no measured pass.
+
+### Search Space entry presentation
+
+`space-discovery-entry.ts` composes the existing anonymous `spaceDiscoveryRound` with current
+Space/Realm viewer-action resources, exact active address claims and native Realm presentation media.
+A carried Realm supplies the identity and avatar; a standalone Space supplies its own identity and no
+Realm avatar. No selected avatar, withheld selected media and unavailable media stay distinct. An
+occupied unreadable or removed Realm slot suppresses the Space; it cannot become standalone. An
+address replacement invalidates an old row. Index hints never supply presentation or destinations.
+
+Entry destinations use `following-space-contract` identities, while carried Realm entry takes the
+actual Realm home route even when its Space has an address. Readable resources alone do not permit
+entry: current mounted `realm.home` or `space.get` operations supply entry advice. `realm.join`
+supplies separate admission advice, without asserting membership or joining. The native Realm page
+continues to own rules acknowledgement and membership. Library owns Space follows.
+
+Decision: Search consumes Library’s published bounded follow-discovery adapter with exact native
+Space source hashes and a final snapshot check; unavailable native observations stay unavailable.
+It never substitutes Realm following or introduces another generic adapter or writer.
+
+Every observation reads at most 100 exact Space keys, grouped by native partition, and at most one
+carried Realm per Space. The existing owner round uses full-key Space/head and occupied-slot seeks
+(each `LIMIT 1`), full-key carried Realm/head seeks (`LIMIT 1`) and current source gates. Active
+address claims use batched exact address/native-route seeks, with one claim key per address. Action
+resources contain at most 2S references, split into at most two 100-resource batches; the native
+viewer-action producer retains its 64-action/256-operation binding limits per resource. Up to R
+selected Realm avatars use the existing native media producer (one selected media identity, at most
+12 variants); no Community checkout survives Access, Library or media preparation. An owner round
+after preparation discards changed bindings. Search repeats the complete observation at final
+disclosure, including current action and media bindings. This adds four bounded owner rounds for
+S ≤ 100 and R ≤ S, rather than any per-card HTTP detail reads or unrestricted scans.

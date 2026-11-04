@@ -448,6 +448,7 @@ export function searchRoutes<App>(
           });
         }
         async function mixed(): Promise<DiscoveryHttpPage> {
+          set.headers['cache-control'] = 'private, no-store';
           const check = await prepare();
           return admission.run('normal', job, async () => {
             if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
