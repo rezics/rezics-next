@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import type { LiteraryWorkIdentity } from './model';
 
@@ -10,31 +10,65 @@ export function LiteraryReader({
   locale,
   editionHref,
   factsHref,
-  retired = false,
+  retired: sourceRetired = false,
+  grainLabel,
+  scopeText,
+  recoveryHref,
+  children,
 }: {
   identity: LiteraryWorkIdentity;
   locale: string;
   editionHref?: string | undefined;
   factsHref?: string | undefined;
   retired?: boolean;
+  grainLabel?: ReactNode;
+  scopeText?: string;
+  recoveryHref?: string;
+  children?: ReactNode;
 }) {
   const section = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const [departed, setDeparted] = useState(false);
+  const retired = sourceRetired || departed;
   const heldFocus = typeof document !== 'undefined' && !!section.current?.contains(document.activeElement);
 
   useEffect(() => {
     if (retired && heldFocus) heading.current?.focus();
   }, [heldFocus, retired]);
+  useEffect(() => {
+    const leave = () => setDeparted(true);
+    const restore = () => {
+      if (document.activeElement !== document.body) return;
+      const target = opener.current;
+      if (target) (target.isConnected && !sourceRetired && !departed ? target : heading.current)?.focus();
+    };
+    const moved = (event: FocusEvent) => {
+      if (event.target instanceof Element && !section.current?.contains(event.target)) opener.current = null;
+    };
+    document.addEventListener('focusin', moved);
+    window.addEventListener('pagehide', leave);
+    window.addEventListener('focus', restore);
+    return () => {
+      document.removeEventListener('focusin', moved);
+      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('focus', restore);
+    };
+  }, [sourceRetired, departed]);
 
   const options = { locale: locale as never };
   const title = identity.title.text || m.subject_value_unlabelled({}, options);
 
   return (
     <section
+      id="literary-reader"
       ref={section}
       data-slot="literary-reader"
       aria-labelledby="literary-reader-title"
       className="min-w-0 space-y-4 rounded-lg border border-border p-4 sm:p-6"
+      onFocusCapture={(event) => {
+        opener.current = event.target as HTMLElement;
+      }}
     >
       <div className="space-y-2">
         <h2
@@ -49,13 +83,21 @@ export function LiteraryReader({
         {retired ? (
           <p role="status" className="text-sm text-muted-foreground">
             {m.literary_reader_stale({}, options)}
+            {recoveryHref && (
+              <a className={linkClass} href={recoveryHref}>
+                {m.subject_relation_restart({}, options)}
+              </a>
+            )}
           </p>
         ) : (
           <>
-            <p className="max-w-prose text-sm text-muted-foreground">{m.literary_reader_scope({}, options)}</p>
+            <p className="max-w-prose text-sm text-muted-foreground">
+              {scopeText ?? m.literary_reader_scope({}, options)}
+            </p>
             <p lang={identity.title.lang} className="font-medium [overflow-wrap:anywhere]">
               {title}
             </p>
+            {grainLabel}
             {identity.titles.length > 1 && (
               <div className="space-y-1">
                 <h3 className="text-sm font-medium">{m.literary_reader_titles({}, options)}</h3>
@@ -108,6 +150,12 @@ export function LiteraryReader({
           </>
         )}
       </div>
+      {!retired && identity.limited && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.literary_grain_terms_more({}, options)}
+        </p>
+      )}
+      {!retired && children}
     </section>
   );
 }

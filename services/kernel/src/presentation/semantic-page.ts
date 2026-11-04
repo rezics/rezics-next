@@ -265,6 +265,7 @@ const catalogueGroupTypes = ['rezics:ReleaseGroup', 'wd:Q55327'];
 const catalogueMusicTypes = ['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'];
 const catalogueCharacterTypes = ['wd:Q95074'];
 const cataloguePeopleTypes = ['schema:Person', 'schema:Organization'];
+const catalogueLiteraryTypes = ['schema:Book', 'schema:BookSeries', 'bf:Instance'];
 
 function typeIsA(release: CataloguePageDefinitions, type: string, base: string, seen = new Set<string>()): boolean {
   if (type === base) return true;
@@ -290,15 +291,17 @@ export function cataloguePageMetadata(
     ...catalogueMusicTypes,
     ...catalogueCharacterTypes,
     ...cataloguePeopleTypes,
+    ...catalogueLiteraryTypes,
   ].includes(type);
   const file = catalogueFileTypes.some((base) => release && typeIsA(release, type, base));
   const group = catalogueGroupTypes.some((base) => release && typeIsA(release, type, base));
   const music = catalogueMusicTypes.some((base) => release && typeIsA(release, type, base));
   const character = catalogueCharacterTypes.some((base) => release && typeIsA(release, type, base));
   const people = peopleProducerTypeAdmitted(release, type);
-  if (!candidate && !file && !group && !music && !people) return;
+  const literary = catalogueLiteraryTypes.some((base) => release && typeIsA(release, type, base));
+  if (!candidate && !file && !group && !music && !people && !literary) return;
   if (!release || !digest) return { state: 'unavailable', type, directions: [] };
-  if (!release.types[type] || (!file && !group && !music && !character && !people))
+  if (!release.types[type] || (!file && !group && !music && !character && !people && !literary))
     return { state: 'unsupported', type, digest, directions: [] };
 
   const propertyIds = new Set(release.types[type]?.properties ?? []);
@@ -324,13 +327,17 @@ export function cataloguePageMetadata(
   const directions = [...directionProperties]
     .filter((id) => release.properties[id]?.relation)
     .sort()
-    .map((id) => resolveDirection.resolve(type, id, inversePropertyIds.has(id) ? 'inverse' : 'forward'));
+    .flatMap((id) => [
+      ...(inversePropertyIds.has(id) ? [resolveDirection.resolve(type, id, 'inverse')] : []),
+      ...(release.types[type]!.properties.includes(id) ? [resolveDirection.resolve(type, id, 'forward')] : []),
+    ]);
   const types = new Set<string>([type]);
   const addType = (id: string) => {
     if (types.has(id) || !release.types[id]) return;
     types.add(id);
     for (const base of release.types[id]?.bases ?? []) addType(base);
   };
+  for (const base of release.types[type]?.bases ?? []) addType(base);
   for (const property of Object.values(properties)) for (const target of property.targets ?? []) addType(target);
   for (const [owner, definition] of Object.entries(release.types))
     if ((definition.properties ?? []).some((id) => inversePropertyIds.has(id))) addType(owner);
