@@ -997,7 +997,7 @@ export function QuestionManagementPage({
         onLifecycle={onLifecycle}
         onRetryOriginal={retryOriginal}
         commandStates={commandStates}
-        history={history}
+        {...(history === undefined ? {} : { history })}
         onMoreHistory={(cursor) => setHistoryCursor(cursor)}
         onRetryHistory={() => setHistoryRetry((value) => value + 1)}
         onRestartHistory={() => {
