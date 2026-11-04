@@ -138,13 +138,20 @@ test('current Person credit returns from work, Character and Sources with exact 
       button.click();
     });
   try {
+    await import('../src/features/catalogue/credit-inspection/session');
     await render();
     await click(m.credit_inspect());
     await act(async () => {
       await import('../src/features/catalogue/credit-inspection/session');
     });
     const dialog = window.document.querySelector('[role="dialog"]');
-    if (!dialog) throw new Error(`Credit inspection did not open: ${window.document.body.innerHTML}`);
+    if (!dialog) {
+      const card = host.querySelector('button[data-credit-statement]')!;
+      let fiber = Reflect.get(card, Object.keys(card).find((key) => key.startsWith('__reactFiber'))!);
+      while (fiber && fiber.type?.name !== 'CoverList') fiber = fiber.return;
+      const state = fiber?.memoizedState?.next?.next?.memoizedState;
+      throw new Error(`Credit inspection did not open: ${JSON.stringify(state, (key, value) => key === 'trigger' ? value?.isConnected : value)}`);
+    }
     expect(dialog.textContent).toContain(labels['wdt:P1932']);
     expect(dialog.textContent).toContain('Original credit');
     expect(dialog.textContent).toContain('The traveler');
