@@ -214,8 +214,16 @@ export function useOwnVotesCurrentOrigin(
         )
           return false;
         const state = client.getQueryState(options.queryKey);
-        // The zero-retention query may be gone after leaving. A changed response on the old key retires its bookmark.
-        return !state || state.dataUpdateCount === responseCount;
+        // Keep custody through its own exact refresh response, but retire it for any other replacement.
+        if (!state || state.dataUpdateCount === responseCount) return true;
+        const exactRefreshResponse =
+          responseReads.current.started === requestNumber + 1 &&
+          responseReads.current.completed === requestNumber + 1 &&
+          responseReads.current.data === state.data &&
+          state.dataUpdateCount === responseCount + 1 &&
+          isOwnVotesRead(state.data) &&
+          matches(state.data, responseSubject, cursor, locale);
+        return exactRefreshResponse;
       },
       canRead,
       validateResult: (result) => {
