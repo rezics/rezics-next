@@ -22,10 +22,7 @@ export interface ContentShelfTitleInputs {
     | {
         status: 'current';
         version: string;
-        entries: readonly (
-          | ({ state: 'disclosed' } & ShelfTitleLabels)
-          | { state: 'unavailable'; subjectId: string }
-        )[];
+        entries: readonly (({ state: 'disclosed' } & ShelfTitleLabels) | { state: 'unavailable'; subjectId: string })[];
       }
   >;
 }

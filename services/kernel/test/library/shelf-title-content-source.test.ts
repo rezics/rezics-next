@@ -48,7 +48,8 @@ test('one complete-source observation batches exact originals and retains missin
   if (labels.status !== 'current') throw new Error('Expected complete batch');
   expect(calls).toEqual([[], [subjectId, missingId]]);
   expect(labels.entries.map((row) => shelfTitleKey(row.labels, ['fr', 'en'], row.originalLanguage).coverage)).toEqual([
-    'missing', 'labelled',
+    'missing',
+    'labelled',
   ]);
   expect(labels.entries[1]?.sourceId).toBe(subjectId);
 });
@@ -105,7 +106,15 @@ test('oversized and inexact batches never reach Content, while 100 subjects use 
   for (const ids of [Array.from({ length: 101 }, () => newId(0x7b20)), [subjectId, subjectId], ['unknown']])
     await expect(source.labels(owner, [], 'basis', ids, viewer)).rejects.toBeInstanceOf(RangeError);
   expect(calls).toBe(0);
-  expect(await source.labels(owner, [], 'basis', Array.from({ length: 100 }, () => newId(0x7b20)), viewer)).toEqual({
+  expect(
+    await source.labels(
+      owner,
+      [],
+      'basis',
+      Array.from({ length: 100 }, () => newId(0x7b20)),
+      viewer,
+    ),
+  ).toEqual({
     status: 'unavailable',
   });
   expect(calls).toBe(1);
