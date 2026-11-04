@@ -316,7 +316,11 @@ export class NotificationEditor {
     this.update({
       intent: intentNext,
       draft,
-      phase: edited ? (this.state.phase === 'idle' || this.state.phase === 'saved' ? 'review' : this.state.phase) : 'idle',
+      phase: edited
+        ? this.state.phase === 'idle' || this.state.phase === 'saved'
+          ? 'review'
+          : this.state.phase
+        : 'idle',
     });
   }
   async restore(version: number) {

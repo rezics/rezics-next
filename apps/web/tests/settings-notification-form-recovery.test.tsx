@@ -335,11 +335,15 @@ test('a later edit survives historical receipt and current read until the whole 
         .click(),
     );
   const switchNamed = (name: string) =>
-    [...host.querySelectorAll<HTMLElement>('[role="switch"]')].find((control) => control.getAttribute('aria-label') === name)!;
+    [...host.querySelectorAll<HTMLElement>('[role="switch"]')].find(
+      (control) => control.getAttribute('aria-label') === name,
+    )!;
   const submitKind = async (kind: string, enabled: boolean) => {
     await act(async () => {
       const form = [...host.querySelectorAll('form')].find((entry) =>
-        [...entry.querySelectorAll<HTMLInputElement>('input[name="notificationKind"]')].some((input) => input.value === kind),
+        [...entry.querySelectorAll<HTMLInputElement>('input[name="notificationKind"]')].some(
+          (input) => input.value === kind,
+        ),
       )!;
       const input = form.querySelector<HTMLInputElement>('input[name="enabled"]');
       if (input) input.checked = enabled;
@@ -366,7 +370,9 @@ test('a later edit survives historical receipt and current read until the whole 
     expect(host.textContent).toContain('legacy_digest');
     expect(switchNamed('Mentions of you').getAttribute('aria-checked')).toBe('false');
     expect(
-      [...host.querySelectorAll('[role="switch"]')].some((control) => control.getAttribute('aria-label') === 'legacy_digest'),
+      [...host.querySelectorAll('[role="switch"]')].some(
+        (control) => control.getAttribute('aria-label') === 'legacy_digest',
+      ),
     ).toBe(false);
     const reviewedSave = () =>
       [...host.querySelectorAll<HTMLButtonElement>('[role="alert"] button')].find(
