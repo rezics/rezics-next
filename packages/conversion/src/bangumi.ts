@@ -13,6 +13,7 @@ import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } f
 import { extractBangumiGameNames } from './bangumi-game-names.ts';
 import { bangumiDiagnosticLimit, extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
 import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
+import { bangumiTelevisionRun } from './bangumi-television-run.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
