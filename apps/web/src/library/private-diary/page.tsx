@@ -1,5 +1,5 @@
 import { useLocation, useRouter } from '@tanstack/react-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
@@ -7,9 +7,11 @@ import type { useSession } from '../../session/query';
 import type { PrivateDiaryLoadResult } from './server';
 import { cancelPrivateDiary } from './server';
 import { PRIVATE_DIARY_PAGE_BYTES, PRIVATE_DIARY_PAGE_LIMIT } from './native';
-import { consumptionStatistics, privateCount, reportedDate } from './presentation';
+import { ReadingOccurrence } from './reading-occurrence';
+import { ReadingPeriod } from './reading-period';
 
 type ReaderSession = ReturnType<typeof useSession>;
+const useReviewCommitEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 import { diarySearch, diaryReturnContext, sameDiaryAddress, safeReturnTo, type DiaryAddress } from './address';
 import { ReportedYearPanel } from './year-summary';
@@ -63,14 +65,45 @@ export function PrivateDiaryPage({
     (yearSummary?.kind === 'ready' &&
       page?.currentness?.revision === yearSummary.value.currentness.revision &&
       (address.snapshot === undefined || address.snapshot === page.currentness?.revision));
+  const stalePage =
+    authorizedLoad?.diary.kind === 'stale' ||
+    (page !== null &&
+      ((address.snapshot !== undefined && address.snapshot !== page.currentness?.revision) ||
+        (address.year !== undefined &&
+          yearSummary?.kind === 'ready' &&
+          page.currentness?.revision !== yearSummary.value.currentness.revision)));
   const visiblePage = currentPage ? page : null;
+  const reviewIdentity = {
+    loaded,
+    authorizedLoad,
+    page: visiblePage,
+    year: address.year,
+    month: address.month,
+    cursor: address.cursor,
+    snapshot: address.snapshot,
+  };
+  const previousReviewIdentity = useRef(reviewIdentity);
+  const [reviewGeneration, setReviewGeneration] = useState(0);
+  useReviewCommitEffect(() => {
+    const previous = previousReviewIdentity.current;
+    if (
+      previous.loaded === loaded &&
+      previous.authorizedLoad === authorizedLoad &&
+      previous.page === visiblePage &&
+      previous.year === address.year &&
+      previous.month === address.month &&
+      previous.cursor === address.cursor &&
+      previous.snapshot === address.snapshot
+    )
+      return;
+    previousReviewIdentity.current = reviewIdentity;
+    setReviewGeneration((generation) => generation + 1);
+  }, [loaded, authorizedLoad, visiblePage, address.year, address.month, address.cursor, address.snapshot]);
+  const reviewPageKey = `${authorizedLoad?.viewer ?? 'unavailable'}:${reviewGeneration}`;
   useEffect(() => {
     if (visiblePage && address.focus && visiblePage.occurrences.some((row) => row.id === address.focus))
       document.getElementById('diary-occurrence-' + address.focus)?.focus();
   }, [visiblePage, address.focus]);
-  const statistics =
-    !retired && authorizedLoad?.summary.kind === 'ready' ? consumptionStatistics(authorizedLoad.summary.value) : null;
-
   useEffect(() => {
     if (retired) window.location.assign(currentReturn);
   }, [currentReturn, retired]);
@@ -177,60 +210,21 @@ export function PrivateDiaryPage({
           retry={() => void router.invalidate()}
         />
       ) : null}
-      {statistics ? (
-        <section aria-labelledby="library-diary-statistics" className="rounded-lg border p-4">
-          <h2 id="library-diary-statistics" className="text-lg font-semibold">
-            {m.library_diary_statistics()}
-          </h2>
-          <dl className="mt-4 grid gap-4 sm:grid-cols-3">
-            <div>
-              <dt className="text-sm">{m.library_diary_completed()}</dt>
-              <dd className="text-xl font-semibold">{privateCount(statistics.completedOccurrences)}</dd>
-            </div>
-            <div>
-              <dt className="text-sm">{m.library_diary_distinct_subjects()}</dt>
-              <dd className="text-xl font-semibold">{privateCount(statistics.distinctCompletedSubjects)}</dd>
-            </div>
-            <div>
-              <dt className="text-sm">{m.library_diary_repeats()}</dt>
-              <dd className="text-xl font-semibold">{privateCount(statistics.repeatOccurrences)}</dd>
-            </div>
-          </dl>
-          <p className="mt-3 text-sm">
-            {m.library_diary_coverage({
-              native: statistics.coverage.nativeSessions,
-              other: statistics.coverage.otherHistory,
-              meaning: statistics.coverage.unitMeaning,
-              unknown: privateCount(statistics.completedOccurrencesWithUnknownProfile),
-            })}
-          </p>
-          <p className="mt-1 text-sm">{m.library_diary_statistics_scope({ scope: statistics.scope })}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {m.library_diary_currentness({
-              state: statistics.currentness.state,
-            })}
-          </p>
-        </section>
-      ) : !retired && authenticated && address.year === undefined ? (
-        <section aria-live="polite" className="rounded-lg border p-4">
-          <h2 className="font-semibold">{m.library_diary_statistics()}</h2>
-          <p>{m.library_diary_statistics_unavailable()}</p>
-          <button
-            type="button"
-            className="mt-2 min-h-11 rounded-md border px-3"
-            onClick={() => void router.invalidate()}
-          >
-            {m.library_selection_retry()}
-          </button>
-        </section>
+      {authenticated && !retired && authorizedLoad ? (
+        <ReadingPeriod
+          address={address}
+          returnTo={currentReturn}
+          allTime={authorizedLoad.summary}
+          reportedYear={authorizedLoad.reportedYear}
+          retry={() => void router.invalidate()}
+        />
       ) : null}
 
       {!authenticated ? (
         <p role="status" className="rounded-md border p-4">
           {m.library_diary_unavailable()}
         </p>
-      ) : retired ? null : authorizedLoad?.diary.kind === 'stale' ||
-        (page && !currentPage && yearSummary?.kind === 'ready') ? (
+      ) : retired ? null : stalePage ? (
         <section className="rounded-md border p-4">
           <p>{m.library_diary_stale()}</p>
           <Link
@@ -270,75 +264,17 @@ export function PrivateDiaryPage({
             </p>
           </div>
           {visiblePage.occurrences.length === 0 ? (
-            <p className="rounded-md border p-4">{m.library_diary_empty()}</p>
+            <p className="rounded-md border p-4">{m.library_diary_page_empty()}</p>
           ) : (
             <ol className="space-y-3">
               {visiblePage.occurrences.map((occurrence) => (
-                <li key={occurrence.id} className="rounded-lg border p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-semibold">
-                        {occurrence.subject?.label ?? m.library_diary_subject_unavailable()}
-                      </h3>
-                      {occurrence.subject?.language ? (
-                        <p className="text-sm text-muted-foreground">{occurrence.subject.language}</p>
-                      ) : null}
-                    </div>
-                    <span className="rounded-full border px-2 py-1 text-sm">
-                      {m.library_diary_state({ state: occurrence.state })}
-                    </span>
-                  </div>
-                  <dl className="mt-3 grid gap-x-5 gap-y-2 sm:grid-cols-2">
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_diary_reported_start()}</dt>
-                      <dd>
-                        {reportedDate(
-                          occurrence.reportedDates.availability === 'available'
-                            ? occurrence.reportedDates.startDate
-                            : null,
-                          m.library_diary_date_unknown(),
-                        )}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_diary_reported_finish()}</dt>
-                      <dd>
-                        {reportedDate(
-                          occurrence.reportedDates.availability === 'available'
-                            ? occurrence.reportedDates.finishDate
-                            : null,
-                          m.library_diary_date_unknown(),
-                        )}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_diary_recorded_start()}</dt>
-                      <dd>{occurrence.recordedStartedAt}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm font-medium">{m.library_diary_recorded_completion()}</dt>
-                      <dd>{occurrence.recordedCompletedAt ?? m.library_diary_not_completed()}</dd>
-                    </div>
-                  </dl>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Link
-                      className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 text-primary-foreground"
-                      id={'diary-occurrence-' + occurrence.id}
-                      to="/library/progress/$id"
-                      params={{ id: occurrence.id }}
-                      search={{
-                        history: diaryReturnContext({
-                          ...address,
-                          snapshot: visiblePage.currentness?.revision,
-                          focus: occurrence.id,
-                          returnTo: currentReturn,
-                        }),
-                      }}
-                    >
-                      {m.library_diary_open_occurrence()}
-                    </Link>
-                  </div>
-                </li>
+                <ReadingOccurrence
+                  key={`${reviewPageKey}:${occurrence.id}`}
+                  occurrence={occurrence}
+                  page={visiblePage}
+                  address={address}
+                  returnTo={currentReturn}
+                />
               ))}
             </ol>
           )}

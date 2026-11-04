@@ -208,3 +208,5 @@ and deferred to integration. Reference comparison read `legacy-final:apps/web/fe
 (twelve visible months), Yamtrack `src/app/statistics.py` (explicit date range selection) and Ryot
 `apps/frontend/app/components/routes/media-item/displays/history-item.tsx` (individual history identity), from the
 registered `shelves` reference checkouts. These supply journey comparisons only; no reference code was copied.
+
+Decision: the all-time summary supplies no finish-precision distribution; show precision only for selected reported-year/month buckets and never infer it from received rows.
