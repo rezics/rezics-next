@@ -14,7 +14,7 @@ import { eraseAuthoredField } from './authored-fields.ts';
 import { ContentNotFoundError } from './commands.ts';
 import { routeOf } from '../route/route.ts';
 
-type PublicDocumentView =
+export type PublicDocumentView =
   | Omit<Extract<DocumentView, { origin: 'import' }>, 'origin'>
   | Extract<DocumentView, { origin: 'account' }>;
 
@@ -39,7 +39,7 @@ const eraseFailures = {
 const sessionHeader = { [SESSION_HEADER]: t.String() };
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
 
-function publicDocument(document: DocumentView): PublicDocumentView {
+export function publicDocument(document: DocumentView): PublicDocumentView {
   if (document.origin === 'account') return document;
   const { origin: _origin, ...imported } = document;
   return imported;
@@ -76,24 +76,20 @@ const authoredMetadata = {
   language: metadata.language,
   digest: metadata.digest,
 };
-const response = t.Unsafe<{ document: PublicDocumentView }>(
-  t.Object(
-    {
-      document: t.Union([
-        t.Object(
-          { ...metadata, availability: t.Literal('available'), body: DocumentSnapshotSchema },
-          { additionalProperties: false },
-        ),
-        t.Object({ ...metadata, availability: t.Literal('erased'), body: t.Null() }, { additionalProperties: false }),
-        t.Object(
-          { ...authoredMetadata, availability: t.Literal('available'), body: DocumentSnapshotSchema },
-          { additionalProperties: false },
-        ),
-      ]),
-    },
-    { additionalProperties: false },
-  ),
+export const PublicDocumentViewSchema = t.Unsafe<PublicDocumentView>(
+  t.Union([
+    t.Object(
+      { ...metadata, availability: t.Literal('available'), body: DocumentSnapshotSchema },
+      { additionalProperties: false },
+    ),
+    t.Object({ ...metadata, availability: t.Literal('erased'), body: t.Null() }, { additionalProperties: false }),
+    t.Object(
+      { ...authoredMetadata, availability: t.Literal('available'), body: DocumentSnapshotSchema },
+      { additionalProperties: false },
+    ),
+  ]),
 );
+const response = t.Object({ document: PublicDocumentViewSchema }, { additionalProperties: false });
 
 export function documentRoutes(app: ReturnType<typeof mediaImportRoutes>, dependencies: DocumentReadDependencies) {
   return app

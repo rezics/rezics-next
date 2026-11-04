@@ -24,6 +24,30 @@ import {
   createReleasedRelationDirectionResolver,
   type ReleasedRelationDirectionResult,
 } from '../semantic/released-relation-direction.ts';
+import {
+  characterDocumentProperties,
+  type CharacterDocumentRelease,
+} from '../semantic/character-public-reading-documents.ts';
+
+/** The mounted Character profile renders released authored fields outside the template. */
+export function characterPageDocuments(
+  base: PageDocumentRead | null,
+  release: CharacterDocumentRelease | undefined,
+  type: string | null,
+  subject: string | null,
+  available: readonly string[],
+  context?: string,
+): PageDocumentRead | null {
+  if (!subject || !type) return base;
+  const extra = characterDocumentProperties(release, type, available);
+  if (!extra.length) return base;
+  return {
+    kind: 'documents',
+    id: subject,
+    ...(context ? { context } : {}),
+    properties: [...new Set([...(base?.properties ?? []), ...extra])].sort(),
+  };
+}
 
 /** Native correction operation on an admitted quotation; Type descriptors never grant this. */
 export const quotationCorrectionActions = [{ action: 'statement:propose', operationId: 'subject.propose' }] as const;

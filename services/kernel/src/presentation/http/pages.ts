@@ -47,6 +47,7 @@ import { profileSnapshot, ProfileInputError } from '../profile-cache.ts';
 import {
   cataloguePageMetadata,
   characterWorkIdentityOverlay,
+  characterPageDocuments,
   copyWorkDisclosureOverlay,
   pageViewerActions,
   quotationPageDocuments,
@@ -746,7 +747,14 @@ async function pageAnswer(input: {
   const properties =
     isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
   const documents = quotationPageDocuments(
-    documentRead(input.resolved.document, input.subject, properties, input.context?.id),
+    characterPageDocuments(
+      documentRead(input.resolved.document, input.subject, properties, input.context?.id),
+      input.release,
+      input.subjectType,
+      input.subject,
+      properties,
+      input.context?.id,
+    ),
     input.release,
     input.subjectType,
     input.subject,

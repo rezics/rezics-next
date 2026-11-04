@@ -2260,6 +2260,33 @@ remain integration-owned.
 
 ## Person and Character supplied names
 
+### Character document previews
+
+Decision: a direct native Character read opts into public document previews with `includeDocuments=true`; page
+composition keeps its existing dependent document plan, so a page does not hydrate each body twice.
+
+`GET /v1/subjects/:id?includeDocuments=true` adds `documents`, keyed by the selected original candidate UUID, for
+`wd:Q95074`. It selects only document properties admitted on the Character by its recorded release and actually
+present in the current Context observation. Best rank, requested language and original-language fallback use
+`pageDocumentReferences`, also used by the page reader. Spoiler-bearing document candidates remain excluded from
+this public preview selection. This field is independent of `includeViewerActions` and grants no operation.
+
+Each entry is the existing public `document.get` representation, including original source/rights or author/licence.
+The native document owner rechecks current Subject and candidate disclosure and imported source fences. A preview
+must match document ID, Subject, candidate, language and digest, with an available, canonical body whose SHA-256
+matches. Missing, erased, oversized and mismatched bodies have no map entry; their assertion remains readable and
+the existing unavailable/retry presentation applies. Reads containing this field are private/no-store and merge
+the document owner's session anchors.
+
+The direct preview admits at most 15 selected bodies, each with a 262,144-byte source cap enforced by the native
+bounded document read before body transfer. The complete serialized `documents` map, including keys, labels in body
+content and source attribution, retains at most 1,048,576 UTF-8 bytes. Reads are serial and release native connections
+between documents and source homes. Work is proportional to those exact document IDs; no candidate-history,
+work-population or relationship scan is added. Page composition retains its existing 15-document budget and native
+2-MiB document limit, and includes the Character profile's admitted document fields even when a template omits
+Summary. Character profile rendering accepts either the native or composed map through the same exact
+`statementDocument` binding. Appearance and qualified voice associations retain their separate relation authority.
+
 The existing public Person and Character profiles expose one compact supplied-names disclosure. The selected page
 label and a supplied fallback are distinguished from supplied labels and aliases. Matching text never joins a Person
 to a Character or implies a legal name, persona, romanization, original language or provider verification. Language
