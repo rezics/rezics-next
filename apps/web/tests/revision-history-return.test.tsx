@@ -114,7 +114,7 @@ function page(revisions: HistoryPage['revisions'], next: string | null): History
 
 function button(host: HTMLElement, label: string) {
   const control = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label);
-  expect(control).toBeDefined();
+  expect(control, `Missing ${label}. Current view: ${host.textContent}`).toBeDefined();
   return control!;
 }
 async function click(control: HTMLElement) {
