@@ -944,7 +944,11 @@ function NodeEditor({
           value={value.saved}
           locale={context.locale}
           canSelect={(id) => context.canSelectSavedFilter(path, id, 'replace')}
-          onSelect={(id) => context.selectSavedFilter(path, id, 'replace')}
+          onSelect={(id) => {
+            const replaced = context.selectSavedFilter(path, id, 'replace');
+            if (replaced) context.announce(m.condition_saved_filter_label({ id }, options), pointer);
+            return replaced;
+          }}
         />
       )}
       {'owner' in value && !extensionLeaf && (

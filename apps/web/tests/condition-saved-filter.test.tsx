@@ -26,7 +26,7 @@ test('released references append and replace only their addressed tree nodes whi
     and: [thing, { or: [{ saved: 'things/one' }, { not: thing }] }],
   };
   const admits = conditionTreeAdmission(metadata);
-  const appended = editSavedFilterTree(tree, ['and', 1, 'or'], 'things/two', 'append', admits);
+  const appended = editSavedFilterTree(tree, ['and', 1], 'things/two', 'append', admits);
   expect(appended).toEqual({
     and: [thing, { or: [{ saved: 'things/one' }, { not: thing }, { saved: 'things/two' }] }],
   });
