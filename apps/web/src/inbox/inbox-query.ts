@@ -16,7 +16,7 @@ import {
   type InboxSelection,
   type UnreadCount,
 } from './inbox-read';
-import { forInboxViewer, type InboxViewer } from './inbox-viewer';
+import { forInboxViewer, inboxViewerCsrfToken, type InboxViewer } from './inbox-viewer';
 
 const inboxKey = readQueryKey(['notifications', 'inbox'], 'session');
 
@@ -34,15 +34,27 @@ export function inboxPageQuery(
   cursor?: string,
   loadPage: InboxPageLoader = loadNativeInboxPage,
   selection: InboxSelection = DEFAULT_INBOX_SELECTION,
+  episode = 1,
+  ownerCurrent: () => boolean = () => viewer.isCurrent(),
 ) {
   const query: InboxPageQuery = { selection, ...(cursor ? { cursor } : {}) };
   return queryOptions({
     ...personalRead,
-    queryKey: [...inboxViewerQueryKey(viewer), selection, cursor ?? null],
-    queryFn: ({ signal }) => forInboxViewer(viewer, () => loadPage(query, signal), signal),
+    queryKey: [...inboxViewerQueryKey(viewer), episode, selection, cursor ?? null],
+    queryFn: ({ signal }) =>
+      forInboxViewer(
+        viewer,
+        async () => {
+          if (!ownerCurrent()) throw new DOMException('Inbox owner changed', 'AbortError');
+          const result = await loadPage(query, signal);
+          if (!ownerCurrent()) throw new DOMException('Inbox owner changed', 'AbortError');
+          return result;
+        },
+        signal,
+      ),
     retry: false,
     gcTime: 0,
-    enabled: typeof globalThis.window !== 'undefined' && viewer.isCurrent(),
+    enabled: typeof globalThis.window !== 'undefined' && ownerCurrent(),
   });
 }
 
@@ -115,6 +127,24 @@ type NoticeSeenTransport = (request: {
   headers: HeadersInit;
 }) => Promise<InboxSeenResult>;
 
+async function forInboxCredential<T>(
+  client: QueryClient,
+  viewer: InboxViewer,
+  csrfToken: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  const current = () => viewer.isCurrent() && inboxViewerCsrfToken(client, viewer) === csrfToken;
+  const assertCurrent = () => {
+    if (!current()) throw new DOMException('Inbox credential changed', 'AbortError');
+  };
+  assertCurrent();
+  try {
+    return await action();
+  } finally {
+    assertCurrent();
+  }
+}
+
 export async function markInboxViewerNoticeSeen(
   client: QueryClient,
   viewer: InboxViewer,
@@ -123,15 +153,17 @@ export async function markInboxViewerNoticeSeen(
   send: NoticeSeenTransport = markInboxItemSeen,
 ) {
   if (attempt.accountId !== viewer.subject) throw new InboxSeenError({ status: 403, code: 'forbidden' });
-  return forInboxViewer(viewer, async () => {
+  return forInboxCredential(client, viewer, csrfToken, async () => {
     const result = await forInboxViewer(viewer, () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }));
     if ('failure' in result) throw new InboxSeenError(result.failure);
     if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
     await Promise.all([
-      forInboxViewer(viewer, () =>
+      forInboxCredential(client, viewer, csrfToken, () =>
         client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
       ),
-      forInboxViewer(viewer, () => client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) })),
+      forInboxCredential(client, viewer, csrfToken, () =>
+        client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) }),
+      ),
     ]);
   });
 }
@@ -143,15 +175,17 @@ export async function markInboxViewerSeen(
   csrfToken: string,
   send: SeenTransport = markInboxSeen,
 ) {
-  return forInboxViewer(viewer, async () => {
+  return forInboxCredential(client, viewer, csrfToken, async () => {
     const result = await forInboxViewer(viewer, () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }));
     if ('failure' in result) throw new InboxSeenError(result.failure);
     if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
     await Promise.all([
-      forInboxViewer(viewer, () =>
+      forInboxCredential(client, viewer, csrfToken, () =>
         client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
       ),
-      forInboxViewer(viewer, () => client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) })),
+      forInboxCredential(client, viewer, csrfToken, () =>
+        client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) }),
+      ),
     ]);
   });
 }

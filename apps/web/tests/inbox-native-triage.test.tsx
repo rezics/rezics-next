@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
+import { createKernelClient, type NoticeInboxItem } from '@rezics/client';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { getLocale } from '../src/paraglide/runtime.js';
 import { threadLocation } from '../src/threads/thread-href';
 import {
@@ -18,7 +20,9 @@ const {
   nativeInboxEnvelope,
   resolveInboxItems,
 } = await import('../src/inbox/inbox-read');
-type Notice = import('../src/inbox/inbox-read').InboxNotice;
+const { InboxRows } = await import('../src/inbox/inbox-page');
+const { InboxNoticeDetailView } = await import('../src/inbox/inbox-notice-detail');
+type Notice = NoticeInboxItem;
 
 function notice(id: string, kind: Notice['kind']): Notice {
   const report = kind === 'moderation_decision';
@@ -125,6 +129,30 @@ test('Inbox uses one composed page for current disclosure, installed kinds and a
     'limit=20&selection=all&cursor=opaque%2F%2Binput%3D%3D',
   );
   expect(requests[0]!.headers.get('authorization')).toBe('Bearer alice');
+});
+
+test('list and detail share available actor identity while withheld and system labels stay distinct', async () => {
+  const resolved = await resolveInboxItems(nativeInboxEnvelope(composed, null, 'alice'));
+  const list = renderToStaticMarkup(createElement(InboxRows, { page: resolved }));
+  const availableDetail = renderToStaticMarkup(
+    createElement(InboxNoticeDetailView, { notice: composed[0]!, selection: 'all' }),
+  );
+  const withheldDetail = renderToStaticMarkup(
+    createElement(InboxNoticeDetailView, { notice: composed[1]!, selection: 'all' }),
+  );
+  const systemDetail = renderToStaticMarkup(
+    createElement(InboxNoticeDetailView, { notice: composed[4]!, selection: 'all' }),
+  );
+
+  expect(list).toContain('Momo');
+  expect(availableDetail).toContain('Momo');
+  expect(availableDetail).toContain('@momo');
+  expect(list).toContain('Community member');
+  expect(list).not.toContain('Former or unavailable account');
+  expect(withheldDetail).toContain('Community member');
+  expect(withheldDetail).toContain('Actor details are unavailable.');
+  expect(list).toContain('Moderation team');
+  expect(systemDetail).toContain('Moderation team');
 });
 
 test('sparse continuation preserves its cursor and a failed page remains unavailable', async () => {

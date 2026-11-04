@@ -1,8 +1,14 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement, Fragment } from 'react';
+import { act, createElement, Fragment, type MouseEvent } from 'react';
 import * as start from '../.storybook/react-start';
-import type { InboxPage, InboxPageQuery, InboxSeenAttempt, InboxSeenResult } from '../src/inbox/inbox-read';
+import type {
+  InboxNoticeSeenAttempt,
+  InboxPage,
+  InboxPageQuery,
+  InboxSeenAttempt,
+  InboxSeenResult,
+} from '../src/inbox/inbox-read';
 import { readyInboxPage } from '../src/inbox/inbox-read';
 
 let sessionSubject = 'alice';
@@ -60,7 +66,12 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvide
   await import('@tanstack/react-router');
 const buttonModule = await import('@rezics/ui/shadcn/button');
 const OriginalButton = buttonModule.Button;
-spyOn(buttonModule, 'Button').mockImplementation((props) => createElement(OriginalButton, props));
+const buttonCallbacks = new Map<string, (event: MouseEvent<HTMLButtonElement>) => void>();
+spyOn(buttonModule, 'Button').mockImplementation((props) => {
+  if (typeof props.children === 'string' && props.onClick)
+    buttonCallbacks.set(props.children, props.onClick as (event: MouseEvent<HTMLButtonElement>) => void);
+  return createElement(OriginalButton, props);
+});
 const reads = await import('../src/inbox/inbox-read');
 const countSpy = spyOn(reads, 'readUnreadCount').mockImplementation(async () => ({
   signedIn: true,
@@ -77,7 +88,7 @@ spyOn(reads, 'markInboxSeen').mockImplementation(async ({ data }) => {
 });
 const { InboxPageView } = await import('../src/inbox/inbox-page');
 const { UnreadBadge } = await import('../src/inbox/unread-badge');
-const { fetchInboxUnreadCount, unreadCountQueryFor } = await import('../src/inbox/inbox-query');
+const { fetchInboxUnreadCount, inboxViewerQueryKey, unreadCountQueryFor } = await import('../src/inbox/inbox-query');
 const { currentInboxViewer } = await import('../src/inbox/inbox-viewer');
 const { sessionQuery } = await import('../src/session/query');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -111,7 +122,11 @@ const tick = () =>
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-async function mount(loadPage: (query: InboxPageQuery) => Promise<InboxPage>, badge = false) {
+async function mount(
+  loadPage: (query: InboxPageQuery) => Promise<InboxPage>,
+  badge = false,
+  acknowledgeNotice?: (attempt: InboxNoticeSeenAttempt, csrfToken: string) => Promise<void>,
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, {
     state: 'signed-in',
@@ -136,7 +151,7 @@ async function mount(loadPage: (query: InboxPageQuery) => Promise<InboxPage>, ba
           Fragment,
           null,
           badge ? createElement(UnreadBadge) : null,
-          createElement(InboxPageView, { loadPage }),
+          createElement(InboxPageView, { loadPage, ...(acknowledgeNotice ? { acknowledgeNotice } : {}) }),
         ),
       ),
     );
@@ -212,6 +227,111 @@ test('bulk acknowledgement uses the owner-supplied through and retries that orig
     expect(seenCommands).toHaveLength(2);
     expect(seenCommands[1]).toEqual(original);
   } finally {
+    await view.unmount();
+  }
+});
+
+test('individual Retry-After survives a shorter page wait and one deliberate retry sends the same intent', async () => {
+  const { InboxSeenError } = reads;
+  buttonCallbacks.clear();
+  let pageReads = 0;
+  const attempts: InboxNoticeSeenAttempt[] = [];
+  const view = await mount(
+    async () => {
+      pageReads += 1;
+      return pageReads === 1
+        ? readyInboxPage([notice('chosen')], null, 'alice')
+        : { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true, retryAfter: '1' } };
+    },
+    false,
+    async (attempt) => {
+      attempts.push(attempt);
+      if (attempts.length === 1)
+        throw new InboxSeenError({ status: 503, retryable: true, retryAfter: '2' });
+    },
+  );
+  try {
+    await view.click(m.inbox_notice_mark_seen());
+    await tick();
+    expect(attempts).toHaveLength(1);
+    const retry = buttonCallbacks.get(m.inbox_notice_seen_retry());
+    expect(retry).toBeDefined();
+    const retryButton = () =>
+      [...view.host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent === m.inbox_notice_seen_retry(),
+      );
+    expect(retryButton()).toBeDefined();
+
+    const viewer = currentInboxViewer(view.client)!;
+    await act(async () => {
+      await view.client.refetchQueries({ queryKey: inboxViewerQueryKey(viewer) });
+    });
+    await tick();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_050));
+    });
+    await act(async () => retry!(undefined as unknown as MouseEvent<HTMLButtonElement>));
+    expect(attempts).toHaveLength(1);
+    expect(retryButton()?.disabled).toBe(true);
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_050));
+    });
+    await act(async () => {
+      retry!(undefined as unknown as MouseEvent<HTMLButtonElement>);
+      retry!(undefined as unknown as MouseEvent<HTMLButtonElement>);
+    });
+    await tick();
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]).toEqual(attempts[0]);
+    expect(view.host.textContent).toContain(m.inbox_notice_marked_seen());
+  } finally {
+    await view.unmount();
+  }
+});
+
+test('A to B to A retires individual acknowledgement custody and fences its late completion', async () => {
+  let finishOld: (() => void) | undefined;
+  const oldCompletion = new Promise<void>((resolve) => {
+    finishOld = resolve;
+  });
+  const attempts: InboxNoticeSeenAttempt[] = [];
+  const view = await mount(
+    async () => readyInboxPage([notice('chosen')], null, 'alice'),
+    false,
+    async (attempt) => {
+      attempts.push(attempt);
+      if (attempts.length === 1) await oldCompletion;
+    },
+  );
+  try {
+    await view.click(m.inbox_notice_mark_seen());
+    expect(attempts).toHaveLength(1);
+    await act(async () => {
+      view.client.setQueryData(sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: 'bob',
+        csrfToken: 'bob-token',
+      });
+      view.client.setQueryData(sessionQuery.queryKey, {
+        state: 'signed-in',
+        subject: 'alice',
+        csrfToken: 'original-token',
+      });
+    });
+    await view.rerender();
+    await tick();
+    finishOld!();
+    await tick();
+    expect(view.host.textContent).not.toContain(m.inbox_notice_marked_seen());
+    await view.click(m.inbox_notice_mark_seen());
+    await tick();
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1]!.accountId).toBe('alice');
+    expect(attempts[1]!.noticeId).toBe('chosen');
+    expect(attempts[1]!.idempotencyKey).not.toBe(attempts[0]!.idempotencyKey);
+  } finally {
+    finishOld?.();
     await view.unmount();
   }
 });
