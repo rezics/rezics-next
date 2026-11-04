@@ -192,6 +192,9 @@ const globals = {
   MutationObserver: window.MutationObserver,
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -415,7 +418,6 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
   } finally {
     globalThis.fetch = originalFetch;
     await act(async () => root.unmount());
-    router.dispose();
     host.remove();
     window.history.replaceState({}, '', originalHref);
     if (assignDescriptor) Object.defineProperty(window.location, 'assign', assignDescriptor);
