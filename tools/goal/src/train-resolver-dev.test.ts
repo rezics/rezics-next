@@ -74,7 +74,10 @@ function resolverAdapter(
         expect(options.prompt).toContain('git show :3:<path>');
         const target = targets[Math.min(calls - 1, targets.length - 1)]!;
         const targetLine = target.split(/\r?\n/).find((line) => /dev/i.test(line));
-        if (targetLine) expect(data.files.find((item: { path: string }) => item.path === expectedFile).conflictHunks).toContain(targetLine);
+        if (targetLine)
+          expect(data.files.find((item: { path: string }) => item.path === expectedFile).conflictHunks).toContain(
+            targetLine,
+          );
         inspectPrompt?.(options.prompt, data);
         started?.();
         if (writeDirectly) {

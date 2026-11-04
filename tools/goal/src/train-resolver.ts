@@ -39,11 +39,13 @@ const conflictHunkCharacters = 8_000;
 const conflictHunkLineCharacters = 1_000;
 
 function boundedConflictHunks(output: string): string {
-  const lines = output.split(/\r?\n/).map((line) =>
-    line.length > conflictHunkLineCharacters
-      ? `${line.slice(0, conflictHunkLineCharacters)} … [line excerpt; read the stage for the full line]`
-      : line,
-  );
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) =>
+      line.length > conflictHunkLineCharacters
+        ? `${line.slice(0, conflictHunkLineCharacters)} … [line excerpt; read the stage for the full line]`
+        : line,
+    );
   const normalized = lines.join('\n');
   if (normalized.length <= conflictHunkCharacters) return normalized;
   const excerptCharacters = Math.floor((conflictHunkCharacters - 100) / 2);
@@ -54,9 +56,7 @@ function compilerEvidence(output: string, logPath: string, inlineBytes: number):
   if (Buffer.byteLength(output) <= inlineBytes) return output;
   const lines = output.split(/\r?\n/);
   const excerpt = (line: string) =>
-    line.length > conflictHunkLineCharacters
-      ? `${line.slice(0, conflictHunkLineCharacters)} … [line excerpt]`
-      : line;
+    line.length > conflictHunkLineCharacters ? `${line.slice(0, conflictHunkLineCharacters)} … [line excerpt]` : line;
   const first = lines.slice(0, 12).map(excerpt);
   const last = lines.length > 12 ? lines.slice(-12).map(excerpt) : lines.slice(-1).map(excerpt);
   return [
@@ -446,11 +446,7 @@ export class TrainResolver {
     logPath: string,
   ): Promise<boolean> {
     return this.pass(request, tree, conflict, 'repair', conflict.conflictFiles, logPath, {
-      compilerOutput: compilerEvidence(
-        compilerOutput,
-        logPath,
-        this.store.policy.trainResolver.inputBytes,
-      ),
+      compilerOutput: compilerEvidence(compilerOutput, logPath, this.store.policy.trainResolver.inputBytes),
       candidate: this.git(tree, 'rev-parse', 'HEAD'),
     });
   }

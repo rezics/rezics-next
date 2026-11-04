@@ -820,53 +820,53 @@ protocol or representation meaning; they are not operator limits.
 Remaining operator bounds retain the package defaults below. Protocol widths, Git index modes,
 filesystem component sizes and systemd microsecond conversions are fixed representations.
 
-| Setting                                         | Default    | Purpose                                                                  |
-| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------ |
-| `policy.evidence.manifestCharacters`            | `8000`     | Retry evidence capture and prompt manifest: manifest characters.         |
-| `policy.evidence.outputLines`                   | `60`       | Retry evidence capture and prompt manifest: output lines.                |
-| `policy.evidence.outputCharacters`              | `2800`     | Retry evidence capture and prompt manifest: output characters.           |
-| `policy.evidence.fieldCharacters`               | `500`      | Retry evidence capture and prompt manifest: field characters.            |
-| `policy.evidence.approaches`                    | `3`        | Retry evidence capture and prompt manifest: approaches.                  |
-| `policy.evidence.approachCharacters`            | `140`      | Retry evidence capture and prompt manifest: approach characters.         |
-| `policy.evidence.approachResultCharacters`      | `160`      | Retry evidence capture and prompt manifest: approach result characters.  |
-| `policy.evidence.pathCharacters`                | `800`      | Retry evidence capture and prompt manifest: path characters.             |
-| `policy.evidence.visiblePathCharacters`         | `700`      | Retry evidence capture and prompt manifest: visible path characters.     |
-| `policy.evidence.commandCharacters`             | `250`      | Retry evidence capture and prompt manifest: command characters.          |
-| `policy.evidence.statCharacters`                | `250`      | Retry evidence capture and prompt manifest: stat characters.             |
-| `policy.evidence.failureCharacters`             | `4000`     | Retry evidence capture and prompt manifest: failure characters.          |
-| `policy.evidence.gitBufferBytes`                | `33554432` | Retry evidence capture and prompt manifest: git buffer bytes.            |
-| `policy.evidence.commandTimeoutMs`              | `30000`    | Retry evidence capture and prompt manifest: command timeout ms.          |
-| `policy.merge.gitBufferBytes`                   | `33554432` | Merge Git, gate cleanup and failure excerpt: git buffer bytes.           |
-| `policy.merge.commandTimeoutMs`                 | `30000`    | Merge Git, gate cleanup and failure excerpt: command timeout ms.         |
-| `policy.merge.cleanupCommandTimeoutMs`          | `10000`    | Merge Git, gate cleanup and failure excerpt: cleanup command timeout ms. |
-| `policy.merge.terminationGraceMs`               | `12000`    | Merge Git, gate cleanup and failure excerpt: termination grace ms.       |
-| `policy.merge.killGraceMs`                      | `1000`     | Merge Git, gate cleanup and failure excerpt: kill grace ms.              |
-| `policy.merge.pollMs`                           | `50`       | Merge Git, gate cleanup and failure excerpt: poll ms.                    |
-| `policy.merge.gateTimeoutMs`                    | `600000`   | Merge Git, gate cleanup and failure excerpt: gate timeout ms.            |
-| `policy.merge.outsideScopePaths`                | `20`       | Maximum example paths reported when a squash exceeds brief scope.        |
-| `policy.merge.affectedFailureLines`             | `20`       | Output tail lines for an affected failure that names no test file.       |
-| `policy.merge.failureLines`                     | `60`       | Merge Git, gate cleanup and failure excerpt: failure lines.              |
-| `policy.merge.failureHeadCharacters`            | `4000`     | Merge Git, gate cleanup and failure excerpt: failure head characters.    |
-| `policy.merge.failureCharacters`                | `8000`     | Merge Git, gate cleanup and failure excerpt: failure characters.         |
-| `policy.trainResolver.devAttempts`              | `3`        | Bounded resolver attempts for repeated dev landing conflicts.            |
+| Setting                                         | Default    | Purpose                                                                                                                        |
+| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `policy.evidence.manifestCharacters`            | `8000`     | Retry evidence capture and prompt manifest: manifest characters.                                                               |
+| `policy.evidence.outputLines`                   | `60`       | Retry evidence capture and prompt manifest: output lines.                                                                      |
+| `policy.evidence.outputCharacters`              | `2800`     | Retry evidence capture and prompt manifest: output characters.                                                                 |
+| `policy.evidence.fieldCharacters`               | `500`      | Retry evidence capture and prompt manifest: field characters.                                                                  |
+| `policy.evidence.approaches`                    | `3`        | Retry evidence capture and prompt manifest: approaches.                                                                        |
+| `policy.evidence.approachCharacters`            | `140`      | Retry evidence capture and prompt manifest: approach characters.                                                               |
+| `policy.evidence.approachResultCharacters`      | `160`      | Retry evidence capture and prompt manifest: approach result characters.                                                        |
+| `policy.evidence.pathCharacters`                | `800`      | Retry evidence capture and prompt manifest: path characters.                                                                   |
+| `policy.evidence.visiblePathCharacters`         | `700`      | Retry evidence capture and prompt manifest: visible path characters.                                                           |
+| `policy.evidence.commandCharacters`             | `250`      | Retry evidence capture and prompt manifest: command characters.                                                                |
+| `policy.evidence.statCharacters`                | `250`      | Retry evidence capture and prompt manifest: stat characters.                                                                   |
+| `policy.evidence.failureCharacters`             | `4000`     | Retry evidence capture and prompt manifest: failure characters.                                                                |
+| `policy.evidence.gitBufferBytes`                | `33554432` | Retry evidence capture and prompt manifest: git buffer bytes.                                                                  |
+| `policy.evidence.commandTimeoutMs`              | `30000`    | Retry evidence capture and prompt manifest: command timeout ms.                                                                |
+| `policy.merge.gitBufferBytes`                   | `33554432` | Merge Git, gate cleanup and failure excerpt: git buffer bytes.                                                                 |
+| `policy.merge.commandTimeoutMs`                 | `30000`    | Merge Git, gate cleanup and failure excerpt: command timeout ms.                                                               |
+| `policy.merge.cleanupCommandTimeoutMs`          | `10000`    | Merge Git, gate cleanup and failure excerpt: cleanup command timeout ms.                                                       |
+| `policy.merge.terminationGraceMs`               | `12000`    | Merge Git, gate cleanup and failure excerpt: termination grace ms.                                                             |
+| `policy.merge.killGraceMs`                      | `1000`     | Merge Git, gate cleanup and failure excerpt: kill grace ms.                                                                    |
+| `policy.merge.pollMs`                           | `50`       | Merge Git, gate cleanup and failure excerpt: poll ms.                                                                          |
+| `policy.merge.gateTimeoutMs`                    | `600000`   | Merge Git, gate cleanup and failure excerpt: gate timeout ms.                                                                  |
+| `policy.merge.outsideScopePaths`                | `20`       | Maximum example paths reported when a squash exceeds brief scope.                                                              |
+| `policy.merge.affectedFailureLines`             | `20`       | Output tail lines for an affected failure that names no test file.                                                             |
+| `policy.merge.failureLines`                     | `60`       | Merge Git, gate cleanup and failure excerpt: failure lines.                                                                    |
+| `policy.merge.failureHeadCharacters`            | `4000`     | Merge Git, gate cleanup and failure excerpt: failure head characters.                                                          |
+| `policy.merge.failureCharacters`                | `8000`     | Merge Git, gate cleanup and failure excerpt: failure characters.                                                               |
+| `policy.trainResolver.devAttempts`              | `3`        | Bounded resolver attempts for repeated dev landing conflicts.                                                                  |
 | `policy.trainResolver.inputBytes`               | `262144`   | Compiler-output inline threshold before first/last lines and the full-log path are used; conflicts are never refused for size. |
-| `policy.trainResolver.outputBytes`              | `262144`   | Isolated conflict resolver: output bytes.                                |
-| `policy.trainResolver.timeoutMs`                | `240000`   | Isolated conflict resolver: timeout ms.                                  |
-| `policy.trainResolver.killGraceMs`              | `5000`     | Isolated conflict resolver: kill grace ms.                               |
-| `policy.trainResolver.sourceContracts`          | `4`        | Isolated conflict resolver: source contracts.                            |
-| `policy.trainResolver.sourceContractCharacters` | `16000`    | Isolated conflict resolver: source contract characters.                  |
-| `policy.toolIncidents.threshold`                | `3`        | Shared tool-blocker incident: threshold.                                 |
-| `policy.toolIncidents.windowMs`                 | `1200000`  | Shared tool-blocker incident: window ms.                                 |
-| `policy.toolIncidents.probeMs`                  | `600000`   | Shared tool-blocker incident: probe ms.                                  |
-| `policy.toolIncidents.exampleTasks`             | `5`        | Shared tool-blocker incident: example tasks.                             |
-| `policy.toolIncidents.sourceBufferBytes`        | `1048576`  | Shared tool-blocker incident: source buffer bytes.                       |
-| `policy.toolIncidents.sourceTimeoutMs`          | `30000`    | Shared tool-blocker incident: source timeout ms.                         |
-| `policy.localSettings.diagnosticCharacters`     | `300`      | Last-valid local settings error: diagnostic characters.                  |
-| `policy.service.logLines`                       | `50`       | Systemd service diagnostics and readiness: log lines.                    |
-| `policy.service.socketTimeoutMs`                | `1000`     | Systemd service diagnostics and readiness: socket timeout ms.            |
-| `policy.service.diagnosticCharacters`           | `4096`     | Systemd service diagnostics and readiness: diagnostic characters.        |
-| `policy.worker.blockerFingerprintCharacters`    | `300`      | Normalized tool-blocker fingerprint: blocker fingerprint characters.     |
-| `policy.backlog.expiredTaskExamples`            | `5`        | Expired task notification examples: expired task examples.               |
+| `policy.trainResolver.outputBytes`              | `262144`   | Isolated conflict resolver: output bytes.                                                                                      |
+| `policy.trainResolver.timeoutMs`                | `240000`   | Isolated conflict resolver: timeout ms.                                                                                        |
+| `policy.trainResolver.killGraceMs`              | `5000`     | Isolated conflict resolver: kill grace ms.                                                                                     |
+| `policy.trainResolver.sourceContracts`          | `4`        | Isolated conflict resolver: source contracts.                                                                                  |
+| `policy.trainResolver.sourceContractCharacters` | `16000`    | Isolated conflict resolver: source contract characters.                                                                        |
+| `policy.toolIncidents.threshold`                | `3`        | Shared tool-blocker incident: threshold.                                                                                       |
+| `policy.toolIncidents.windowMs`                 | `1200000`  | Shared tool-blocker incident: window ms.                                                                                       |
+| `policy.toolIncidents.probeMs`                  | `600000`   | Shared tool-blocker incident: probe ms.                                                                                        |
+| `policy.toolIncidents.exampleTasks`             | `5`        | Shared tool-blocker incident: example tasks.                                                                                   |
+| `policy.toolIncidents.sourceBufferBytes`        | `1048576`  | Shared tool-blocker incident: source buffer bytes.                                                                             |
+| `policy.toolIncidents.sourceTimeoutMs`          | `30000`    | Shared tool-blocker incident: source timeout ms.                                                                               |
+| `policy.localSettings.diagnosticCharacters`     | `300`      | Last-valid local settings error: diagnostic characters.                                                                        |
+| `policy.service.logLines`                       | `50`       | Systemd service diagnostics and readiness: log lines.                                                                          |
+| `policy.service.socketTimeoutMs`                | `1000`     | Systemd service diagnostics and readiness: socket timeout ms.                                                                  |
+| `policy.service.diagnosticCharacters`           | `4096`     | Systemd service diagnostics and readiness: diagnostic characters.                                                              |
+| `policy.worker.blockerFingerprintCharacters`    | `300`      | Normalized tool-blocker fingerprint: blocker fingerprint characters.                                                           |
+| `policy.backlog.expiredTaskExamples`            | `5`        | Expired task notification examples: expired task examples.                                                                     |
 
 | Setting                                            | Default     | Purpose                                      |
 | -------------------------------------------------- | ----------- | -------------------------------------------- |
