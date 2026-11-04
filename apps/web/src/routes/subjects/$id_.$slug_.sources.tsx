@@ -43,7 +43,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
       if (result.page.id !== params.id || canonical.params.slug !== params.slug)
         throw redirect(canonicalRedirect(result.page.sourcesHref.split('?', 1)[0]!, location.searchStr, location.hash));
     }
-    return { result, reader };
+    return { result, reader, visit: crypto.randomUUID() };
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -59,11 +59,11 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
 });
 
 function SourcesRoute() {
-  const { result, reader } = Route.useLoaderData();
+  const { result, reader, visit } = Route.useLoaderData();
   const { realm } = Route.useSearch();
   const session = useSession();
   const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, session));
-  const scope = JSON.stringify([session.state, session.subject, session.csrfToken]);
+  const scope = JSON.stringify([visit, session.state, session.subject, session.csrfToken]);
   const [current, setCurrent] = useState<{ source: SourcesResult; scope: string; result: SourcesResult }>();
   useEffect(() => {
     let live = true;

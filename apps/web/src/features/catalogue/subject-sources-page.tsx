@@ -119,7 +119,11 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
   };
   const records = page.sources.records as { name: string; licence?: unknown; attribution?: string }[];
   return (
-    <article data-slot="subject-sources-detail" className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]">
+    <article
+      data-source-reader={page.viewer?.state}
+      data-slot="subject-sources-detail"
+      className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]"
+    >
       <SubjectFrame
         frame={{ id: page.id, type: '', title: page.title, summary: null }}
         locale={locale}

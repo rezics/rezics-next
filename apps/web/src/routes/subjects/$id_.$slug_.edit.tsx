@@ -1,5 +1,3 @@
-import { subjectHref } from '../../subject/subject-href';
-import { pageText } from '../../features/pages/shared';
 import { editorRequest } from '../../features/catalogue/editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
@@ -112,6 +110,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
 function CorrectionRoute() {
   const queryClient = useQueryClient();
   const { id } = Route.useLoaderData();
+  const { slug } = Route.useParams();
   const { property, statement, reviewProperty, candidate, context, returnTo, reviewInvalid } = Route.useSearch();
   const locale = getLocale();
   const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
@@ -250,10 +249,10 @@ function CorrectionRoute() {
     );
   return (
     <div className="space-y-4">
-      {returnTo === 'sources' && query.data.ok && (
+      {returnTo === 'sources' && (
         <a
           className="inline-flex min-h-11 items-center underline"
-          href={`${subjectHref({ id, label: pageText(query.data.public.subject.labels, locale).text }, locale).href}/sources#subject-sources-heading`}
+          href={`${`/${locale}/subjects/${id}/${encodeURIComponent(slug)}`}/sources#subject-sources-heading`}
         >
           {m.subject_sources()}
         </a>
