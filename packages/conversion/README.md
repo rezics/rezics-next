@@ -245,6 +245,14 @@ refreshes under this revision. Unknown or invalid types still fail with
 and retry keys. Platform and community tools use this same pure module;
 importer skipped-count accounting is separate.
 
+Cross-media entity revision `cross-media-entities@3` retains an admitted
+Bangumi `person.summary` for the source-selected `schema:Person` or
+`schema:Organization` identity. Its exact bytes enter the normalized digest;
+nonempty text becomes an `und` `schema:abstract` document proposal with the
+Bangumi citation and CC-BY-SA-3.0 attribution and ShareAlike rights. Empty and
+absent summaries produce no document. Summary commands remain in `summary`,
+separate from identity facts, metadata licences and image rights.
+
 Decision: type 3 uses admitted `schema:MusicAlbum` because Semantic has no music work/release/track split; type 6 uses `schema:Movie` for pinned movie platforms and `schema:TVSeries` for pinned TV-template platforms, sharing `liveActionWorkType`; archive integer platform ids stringify; unknown live-action platform codes stay ignored at `/platform`. MusicAlbum has no library profile. Bangumi episode records stay the graph continuation.
 
 For Bangumi, the canonical default source alias is `bangumi`; for VNDB it is

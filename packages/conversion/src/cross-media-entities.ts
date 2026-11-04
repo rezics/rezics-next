@@ -574,6 +574,8 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   if (kind === 'bangumi-person') {
     type = personType(raw);
     normalized.type = own(raw, 'type', '/type');
+    const summary = own(raw, 'summary', '/summary');
+    if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
   }
   if (kind === 'vndb-producer') {
     type = producerType(raw);
@@ -729,7 +731,9 @@ function convert(
   const proposals: BatchCommand[] = [];
   const summaryText =
     descriptionText ??
-    (sourceKind === 'bangumi' && kind === 'bangumi-character' && typeof projected.normalized.summary === 'string'
+    (sourceKind === 'bangumi' &&
+    (kind === 'bangumi-character' || kind === 'bangumi-person') &&
+    typeof projected.normalized.summary === 'string'
       ? projected.normalized.summary
       : undefined);
   const summaryPath = descriptionText === undefined ? '/summary' : '/description';

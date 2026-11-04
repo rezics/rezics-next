@@ -530,7 +530,7 @@ files:
           meaning: The original source name or a language-tagged Chinese name.
       - id: summary
         mapping:
-          status: proposed
+          status: existing
           term: schema:abstract
           'on': schema:Person
           wikidata: wd:Q333291

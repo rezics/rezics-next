@@ -1050,3 +1050,25 @@ The authored focused scenarios are:
 
 The Kernel scenario is authored but its native execution is deferred to the
 controller after integration. This entry records no native pass receipt.
+
+## Bangumi person biographies
+
+Authored source rows selected by a real `subject-persons` credit reach the
+current cross-media converter with their original summary. Person and
+Organization identities keep the exact Bangumi identifier and citation; a
+nonempty summary is proposed as an `und` text document with CC-BY-SA-3.0
+attribution and ShareAlike obligations. Summary bytes affect the normalized
+digest, and the existing tuple-home summary fence withholds later refreshes
+without fencing identity facts. Empty and absent summaries create no document;
+malformed and over-limit summaries fail at the pure conversion boundary.
+
+Focused scenarios: `authored Bangumi person summaries preserve profile,
+document rights and refresh digest` in
+`packages/conversion/tests/bangumi-people-biography.test.ts`; `cross-media
+seed preserves a credited person's raw biography for the current Bangumi
+registration` in `services/importer/test/bangumi-people-biography.test.ts`;
+and `authored Bangumi JSON-lines biographies are adopted and read on Person
+and Organization, refresh by digest, and respect the summary fence` in
+`services/kernel/test/imports/bangumi-people-biography.test.ts`. The kernel
+journey is authored, but its native execution is deferred to integration; no
+native pass is claimed.

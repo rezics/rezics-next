@@ -2062,3 +2062,24 @@ diagnostics.
   connected API scenario is
   `services/kernel/test/imports/bangumi-character-fidelity.test.ts`; it adds no
   physical-growth claim, and its native execution remains controller-owned.
+
+### Bangumi person biographies
+
+The bounded family seed follows only people actually selected by Bangumi
+`subject-persons` or `person-characters` rows. It passes each selected person
+row through the registered cross-media converter, preserving the source type,
+`person:<id>` identity and ordinary acknowledged create-or-resolve binding.
+Admitted nonempty summaries become attributed `schema:abstract` proposals on
+the resulting Person or Organization. The summary digest includes the source
+bytes and the tuple's existing summary fence governs refresh; identity facts
+remain independently useful. VNDB prose and other unknown-rights descriptions
+are not borrowed into this Bangumi mapping.
+
+Focused scenarios are `cross-media seed preserves a credited person's raw
+biography for the current Bangumi registration` in
+`services/importer/test/bangumi-people-biography.test.ts` and
+`authored Bangumi JSON-lines biographies are adopted and read on Person and
+Organization, refresh by digest, and respect the summary fence` in
+`services/kernel/test/imports/bangumi-people-biography.test.ts`. The native
+scenario uses the current released definitions and Auth/Access/public API;
+execution remains controller-owned and is not recorded as a local pass.
