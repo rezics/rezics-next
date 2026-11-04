@@ -2786,6 +2786,7 @@ export async function seedCrossMedia(
       characterDiagnostics: fidelity?.gaps ?? [],
       episodeDiagnostics,
       unresolved,
+      releaseSupersessions: graph.evidence(releaseSupersessionDrafts),
       ...(bangumiGenrePublication ? { bangumiGenrePublication } : {}),
     };
   } finally {
