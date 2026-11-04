@@ -1,38 +1,45 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { bundledRelease } from '@rezics/definitions/bundled';
-import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { createOwnedErasureFixture } from './support/erasure-worker.ts';
-import { sessionScopes } from './support/session-profile-fixture.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
+import { routeOf } from '../../src/route/route.ts';
 
-let native: NativeProfileFixture;
-let owner: NativeProfileFixture['owner'];
+let native: Awaited<ReturnType<typeof createOwnedErasureFixture>>;
+let owner: Awaited<ReturnType<typeof createOwnedErasureFixture>>['people']['bob'];
 let subject = '';
 let independent = '';
 const path = '/v1/libraryYearlyCompletionGoal';
 const metric = 'completed_consumption_occurrences';
 
 beforeAll(async () => {
-  native = await createProfileEntryFixture({ projectLinks: false });
-  owner = await native.identity(sessionScopes);
-  await native.activate(await native.publish(bundledRelease));
-  expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
-  for (const label of ['Occurrence goal work', 'Undated goal work']) {
-    const response = await native.send('owner', 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: label } });
-    expect(response.status).toBe(201);
-    const id = (await response.json()).subject.id as string;
-    if (!subject) subject = id;
-    else independent = id;
-  }
+  native = await createOwnedErasureFixture();
+  owner = native.people.bob;
+  subject = await native.subject();
+  independent = await native.subject();
 }, 120_000);
 
 afterAll(async () => {
   await native?.close();
 });
 
-async function call(method: string, url: string, body?: unknown, key = entryKey()) {
-  const response = await native.send(owner.bearer, method, url, body, key);
+type Identity = { accountId: string; bearer: string };
+
+async function request(as: Identity | null, method: string, url: string, body?: unknown, key = crypto.randomUUID()) {
+  return native.kernel.handle(
+    new Request(`http://kernel.test${url}`, {
+      method,
+      headers: {
+        ...(as ? { authorization: `Bearer ${as.bearer}` } : {}),
+        'idempotency-key': JSON.stringify(key),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+  );
+}
+
+async function call(method: string, url: string, body?: unknown, key = crypto.randomUUID(), as: Identity = owner) {
+  const response = await request(as, method, url, body, key);
   return { response, value: await response.json() };
 }
 
@@ -42,7 +49,12 @@ async function read(year: number) {
   return result.value;
 }
 
-async function change(year: number, target: number | null, expectedRevision: string | null, key = entryKey()) {
+async function change(
+  year: number,
+  target: number | null,
+  expectedRevision: string | null,
+  key = crypto.randomUUID(),
+) {
   return call('PUT', path, { year, metric, target, expectedRevision }, key);
 }
 
@@ -69,7 +81,7 @@ test('target edits keep the revision fence while native repeated and undated occ
   });
   expect(initial.progress.summary.completedOccurrences).toBe('0');
 
-  const key = entryKey();
+  const key = crypto.randomUUID();
   const created = await change(2026, 1, null, key);
   expect(created.response.status).toBe(200);
   expect(created.value).toMatchObject({ year: 2026, metric, target: 1, revision: '1' });
@@ -101,7 +113,7 @@ test('target edits keep the revision fence while native repeated and undated occ
 
 test('year and target operands reject coercion, fractions, and out-of-range values', async () => {
   for (const query of ['', '?year=0', '?year=10000', '?year=2026.5', '?year=2026&year=2027', '?year=2026&owner=x'])
-    expect((await native.send(owner.bearer, 'GET', path + query)).status).toBe(400);
+    expect((await request(owner, 'GET', path + query)).status).toBe(400);
   for (const body of [
     { year: 2026, metric, target: 1.5, expectedRevision: null },
     { year: 2026, metric, target: '2', expectedRevision: null },
@@ -109,8 +121,8 @@ test('year and target operands reject coercion, fractions, and out-of-range valu
     { year: 2026.5, metric, target: 2, expectedRevision: null },
     { year: 2026, metric, target: null, expectedRevision: null },
   ])
-    expect((await native.send(owner.bearer, 'PUT', path, body, entryKey())).status).toBe(400);
-  expect((await native.send('anonymous', 'GET', `${path}?year=2026`)).status).toBe(401);
+    expect((await request(owner, 'PUT', path, body)).status).toBe(400);
+  expect((await request(null, 'GET', `${path}?year=2026`)).status).toBe(401);
 }, 120_000);
 
 test('correction moves the occurrence between reported years without changing either goal revision', async () => {
@@ -145,12 +157,12 @@ test('clear and recreate advance the same fence, and concurrent first edits cann
 
 test('summary unavailability keeps an installed target readable and editable; target reads stay bounded at scale', async () => {
   const seeded = await change(2030, 4, null);
-  const route = await native.pool.query<{ route: number }>('SELECT route FROM access.account WHERE account_id=$1', [
-    owner.actor.accountId,
+  const route = await native.db.pool.query<{ route: number }>('SELECT route FROM access.account WHERE account_id=$1', [
+    owner.accountId,
   ]);
   const ownerRoute = route.rows[0]!.route;
   try {
-    await native.pool.query(
+    await native.db.pool.query(
       'UPDATE library.consumption_statistics_installation SET complete=false WHERE singleton=true',
     );
     const unavailable = await read(2030);
@@ -158,86 +170,81 @@ test('summary unavailability keeps an installed target readable and editable; ta
     expect(unavailable.viewer.actions.editTarget).toEqual({ allowed: true });
     expect((await change(2030, 6, seeded.value.revision)).response.status).toBe(200);
   } finally {
-    await native.pool.query(
+    await native.db.pool.query(
       'UPDATE library.consumption_statistics_installation SET complete=true WHERE singleton=true',
     );
   }
 
   for (const size of [64, 512, 4096]) {
-    await native.pool.query('DELETE FROM library.yearly_completion_goal WHERE route=$1 AND account_id=$2', [
+    await native.db.pool.query('DELETE FROM library.yearly_completion_goal WHERE route=$1 AND account_id=$2', [
       ownerRoute,
-      owner.actor.accountId,
+      owner.accountId,
     ]);
-    await native.pool.query(
+    await native.db.pool.query(
       `INSERT INTO library.yearly_completion_goal(route,account_id,year,target,revision)
        SELECT $1,$2,year,1,1 FROM generate_series(1,$3::integer) AS years(year)`,
-      [ownerRoute, owner.actor.accountId, size],
+      [ownerRoute, owner.accountId, size],
     );
     expect(await read(size)).toMatchObject({ target: { state: 'set', target: 1, revision: '1' } });
   }
-  await native.pool.query('DELETE FROM library.yearly_completion_goal WHERE route=$1 AND account_id=$2', [
+  await native.db.pool.query('DELETE FROM library.yearly_completion_goal WHERE route=$1 AND account_id=$2', [
     ownerRoute,
-    owner.actor.accountId,
+    owner.accountId,
   ]);
 }, 120_000);
 
 test('foreign owners see only their own goal state and account retirement erases goal rows', async () => {
-  await change(2040, 12, null);
-  const other = await native.identity(sessionScopes);
-  const hidden = await native.send(other.bearer, 'GET', `${path}?year=2040`);
+  await change(2041, 12, null);
+  const other = native.people.alice;
+  const hidden = await request(other, 'GET', `${path}?year=2041`);
   expect(hidden.status).toBe(200);
   expect((await hidden.json()).target).toEqual({ state: 'none', revision: null });
 
-  const erasure = await createOwnedErasureFixture();
-  try {
-    const retiring = erasure.people.bob;
-    const key = entryKey();
-    const commandBody = {
-      year: 2040,
-      metric,
-      target: 12,
-      expectedRevision: null,
-    };
-    const originalCommand = () =>
-      erasure.kernel.handle(
-        new Request(`http://kernel.test${path}`, {
-          method: 'PUT',
-          headers: {
-            authorization: `Bearer ${retiring.bearer}`,
-            'content-type': 'application/json',
-            'idempotency-key': JSON.stringify(key),
-          },
-          body: JSON.stringify(commandBody),
-        }),
-      );
-    const original = await originalCommand();
-    expect(original.status).toBe(200);
-    expect(await original.json()).toMatchObject({ target: 12, revision: '1' });
-    await deletePersona(erasure.options, retiring);
-    expect((await originalCommand()).status).toBe(401);
-    const ownerRoute = (
-      await erasure.db.pool.query<{ route: number }>('SELECT route FROM access.account WHERE account_id=$1', [
-        retiring.accountId,
-      ])
-    ).rows[0]!.route;
-    const erased = await purgeOwnedGraphPage(erasure.db.pool, {
-      accountId: retiring.accountId,
-      kind: 'yearly_completion_goals',
-      parent: null,
-      after: null,
-      ordinal: 0,
-      segment: 0,
-    });
-    expect(erased.removed).toBeGreaterThan(0);
-    expect(
-      (
-        await erasure.db.pool.query(
-          'SELECT 1 FROM library.yearly_completion_goal WHERE route=$1 AND account_id=$2 LIMIT 1',
-          [ownerRoute, retiring.accountId],
-        )
-      ).rowCount,
-    ).toBe(0);
-  } finally {
-    await erasure.close();
-  }
+  const key = crypto.randomUUID();
+  const commandBody = { year: 2040, metric, target: 12, expectedRevision: null };
+  const originalCommand = () =>
+    native.kernel.handle(
+      new Request(`http://kernel.test${path}`, {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${owner.bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(key),
+        },
+        body: JSON.stringify(commandBody),
+      }),
+    );
+  const original = await originalCommand();
+  expect(original.status).toBe(200);
+  expect(await original.json()).toMatchObject({ target: 12, revision: '1' });
+  const receipt = () =>
+    native.db.pool.query<{ request_digest: Buffer; response: unknown }>(
+      `SELECT request_digest,response FROM core.receipt
+       WHERE principal_id=$1 AND command_kind='library.yearly_completion_goal.change' AND idempotency_key=$2`,
+      [owner.accountId, key],
+    );
+  const receiptBefore = await receipt();
+  expect(receiptBefore.rows).toHaveLength(1);
+  await deletePersona(native.options, owner);
+  expect((await originalCommand()).status).toBe(401);
+  const ownerRoute = routeOf(owner.accountId)!;
+  const erased = await purgeOwnedGraphPage(native.db.pool, {
+    accountId: owner.accountId,
+    kind: 'yearly_completion_goals',
+    parent: null,
+    after: null,
+    ordinal: 0,
+    segment: 0,
+  });
+  expect(erased.removed).toBeGreaterThan(0);
+  expect(
+    (
+      await native.db.pool.query(
+        'SELECT 1 FROM library.yearly_completion_goal WHERE route=$1 AND account_id=$2 LIMIT 1',
+        [ownerRoute, owner.accountId],
+      )
+    ).rowCount,
+  ).toBe(0);
+  const receiptAfter = await receipt();
+  expect(receiptAfter.rows).toEqual(receiptBefore.rows);
 }, 120_000);
