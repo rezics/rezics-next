@@ -236,6 +236,9 @@ nativeTest(
       expect(response?.status()).toBe(200);
       await hydrate(page);
 
+      await page
+        .locator('[data-slot="subject-sources-detail"][data-source-reader="signed-out"]')
+        .waitFor({ state: 'visible' });
       const noCitationField = page
         .locator('[data-slot="source-property"]')
         .filter({ hasText: m.sources_no_citations() });
@@ -309,6 +312,9 @@ nativeTest(
       response = await page.goto(sourcesUrl, { waitUntil: 'domcontentloaded' });
       expect(response?.status()).toBe(200);
       await hydrate(page);
+      await page
+        .locator('[data-slot="subject-sources-detail"][data-source-reader="signed-out"]')
+        .waitFor({ state: 'visible' });
       const currentField = page
         .locator('[data-slot="source-property"]')
         .filter({ hasText: 'https://example.org/catalogue-sources/korean-citation' });

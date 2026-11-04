@@ -170,7 +170,7 @@ export function explainSubjectSources(
       facts,
       ...(comparable && allowed
         ? {
-            compareHref: `${subjectViewHref(identity, locale, 'details')}?${new URLSearchParams({ candidateField: property, via: returnTo, ...(facts.length === 1 && facts[0]?.statement ? { sourceStatement: facts[0].statement } : {}) })}#candidate-review`,
+            compareHref: `${subjectViewHref(identity, locale, 'details')}?${new URLSearchParams({ candidateField: property, via: returnTo, ...(facts.length === 1 && facts[0]?.correctionHref && facts[0].statement ? { sourceStatement: facts[0].statement } : {}) })}#candidate-review`,
           }
         : {}),
     });

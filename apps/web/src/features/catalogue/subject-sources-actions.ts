@@ -47,7 +47,10 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
         realm: data.realm,
         context: loaded.page.context,
         // A candidate comparison is a separate editorial journey with independent Context authority.
-        fields: page.fields.map(({ compareHref: _compare, ...field }) => field),
+        fields: page.fields.map(({ compareHref: _compare, ...field }) => ({
+          ...field,
+          facts: field.facts.map(({ correctionHref: _correction, ...fact }) => fact),
+        })),
         href: contextHref(page.href, data.realm),
         sourcesHref: contextHref(page.sourcesHref, data.realm),
       },
