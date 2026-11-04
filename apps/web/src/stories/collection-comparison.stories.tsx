@@ -58,9 +58,10 @@ const source = `/collections/${id(1)}?cursor=same-page&type=schema%3ABook&f.sche
 function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | 'grid'; unavailable?: boolean }) {
   const [replaced, replace] = useState(false);
   const [recovered, recover] = useState(false);
+  const [reference, visit] = useState<{ href: string; via: string } | null>(null);
   const locale = getLocale();
   const page: EditableCollectionPage = {
-    id: replaced ? id(90) : id(1),
+    id: id(1),
     title: replaced ? 'Replacement Collection' : 'Compare this Collection',
     description: null,
     visibility: null,
@@ -94,8 +95,17 @@ function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | '
     comparisonDefinitions: unavailable ? {} : definitions.release.properties,
   };
   return (
-    <PatternStory visitor="Signed Out" path={`${source}&layout=${layout}`}>
-      <div className="mx-auto max-w-6xl space-y-4 p-4">
+    <PatternStory visitor="Signed Out" path={reference ? reference.href : `${source}&layout=${layout}`}>
+      <div
+        className="mx-auto max-w-6xl space-y-4 p-4"
+        onClickCapture={(event) => {
+          const anchor = (event.target as Element).closest<HTMLAnchorElement>('[data-comparison-reference]');
+          if (!anchor) return;
+          event.preventDefault();
+          const url = new URL(anchor.href);
+          visit({ href: `${url.pathname}${url.search}`, via: url.searchParams.get('via')! });
+        }}
+      >
         <div className="flex flex-wrap gap-4">
           <button type="button" className="min-h-11 underline" onClick={() => recover(true)}>
             Recover same cursor
@@ -104,14 +114,29 @@ function Example({ layout = 'list', unavailable = false }: { layout?: 'list' | '
             Replace Collection during reference visit
           </button>
         </div>
-        <CollectionPage
-          key={page.id}
-          page={page}
-          queryKey={['comparison-example', page.id]}
-          cursor="same-page"
-          layout={layout}
-          refreshPage={async () => page}
-        />
+        {reference ? (
+          <section className="space-y-4">
+            <h1 className="text-xl font-semibold">Supplied reference</h1>
+            <a
+              className="inline-flex min-h-11 items-center underline"
+              href={reference.via}
+              onClick={(event) => {
+                event.preventDefault();
+                visit(null);
+              }}
+            >
+              Return to Collection
+            </a>
+          </section>
+        ) : (
+          <CollectionPage
+            page={page}
+            queryKey={['comparison-example', page.id, page.revision]}
+            cursor="same-page"
+            layout={layout}
+            refreshPage={async () => page}
+          />
+        )}
       </div>
     </PatternStory>
   );
@@ -155,4 +180,19 @@ export const Desktop1280: Story = {
 export const MissingDefinitionLabels: Story = {
   render: () => <Example unavailable />,
   play: async ({ canvasElement }) => recoverExample(canvasElement),
+};
+
+export const ReplacementDuringReferenceVisit: Story = {
+  render: () => <Example />,
+  play: async ({ canvasElement }) => {
+    const { userEvent } = await import('storybook/test');
+    await recoverExample(canvasElement);
+    const canvas = within(canvasElement);
+    await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-comparison-reference]')!);
+    await expect(await canvas.findByRole('heading', { name: 'Supplied reference' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace Collection during reference visit' }));
+    await userEvent.click(canvas.getByRole('link', { name: 'Return to Collection' }));
+    await expect(await canvas.findByRole('heading', { name: 'Replacement Collection' })).toBeVisible();
+    await expect(canvasElement.querySelector('[data-comparison-reference], textarea, [role="checkbox"]')).toBeNull();
+  },
 };
