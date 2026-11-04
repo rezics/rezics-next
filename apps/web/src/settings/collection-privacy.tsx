@@ -33,7 +33,9 @@ import {
 
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
 
-const visibilityOptions = ['private', 'unlisted', 'public'] as const;
+function visibilityOptions(collection: OwnedCollection): CollectionVisibility[] {
+  return [...new Set([collection.visibility, ...collection.allowedVisibilityActions])];
+}
 export function collectionPrivacyIO(
   owner: SettingsSessionOwner,
   transport = {
@@ -134,6 +136,12 @@ function CollectionRowView({
   const id = useId();
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const { current, desired, phase } = state;
+  if (!current) return null;
+  const options = [...new Set([
+    ...visibilityOptions(current),
+    ...(desired !== current.visibility ? [desired] : []),
+  ])];
+  const canChangeVisibility = current.revision !== null && current.allowedVisibilityActions.length > 0;
   if (state.readRefusal) {
     return (
       <ListRow className="py-3">
@@ -195,15 +203,16 @@ function CollectionRowView({
               restarting ||
               !mayWrite() ||
               !canSave ||
+              !canChangeVisibility ||
               (waiting && (phase === 'idle' || phase === 'saved'))
             }
             onChange={(event) => {
               if (pager?.snapshot().restarting) return;
-              const value = visibilityOptions.find((option) => option === event.target.value);
+              const value = current.allowedVisibilityActions.find((option) => option === event.target.value);
               if (value) void editor.edit(value);
             }}
           >
-            {visibilityOptions.map((value) => (
+            {options.map((value) => (
               <NativeSelectOption key={value} value={value}>
                 {label(value)}
               </NativeSelectOption>
@@ -264,7 +273,14 @@ function CollectionRowView({
                     <Button
                       className={preferenceActionClassName}
                       type="button"
-                      disabled={!mayWrite() || !canSave || busy || waiting || restarting}
+                      disabled={
+                        !mayWrite() ||
+                        !canSave ||
+                        !current.allowedVisibilityActions.includes(desired) ||
+                        busy ||
+                        waiting ||
+                        restarting
+                      }
                       onClick={() => {
                         if (!pager?.snapshot().restarting) void editor.submit();
                       }}

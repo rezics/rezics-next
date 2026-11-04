@@ -42,7 +42,7 @@ import {
 /** One bounded owner read for one page, made only by the browser query. */
 export const readOwnedCollectionsPage = createServerFn({ method: 'GET' })
   .validator((cursor: unknown) => {
-    if (cursor !== null && (typeof cursor !== 'string' || cursor.length > 2048)) throw new Error('Invalid cursor');
+    if (cursor !== null && (typeof cursor !== 'string' || cursor.length > 4096)) throw new Error('Invalid cursor');
     return cursor as string | null;
   })
   .handler(async ({ data }): Promise<CollectionPrivacyRead<OwnedCollectionsPage>> => {

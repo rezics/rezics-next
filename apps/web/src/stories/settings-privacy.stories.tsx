@@ -37,6 +37,7 @@ type Scenario =
   | 'conflict'
   | 'empty'
   | 'paging'
+  | 'owner-page-unavailable'
   | 'page-refused'
   | 'row-refused'
   | 'replay-refused';
@@ -44,13 +45,26 @@ type Scenario =
 const initial: OwnedCollection = {
   id: recording.collection.id,
   title: recording.collection.title,
+  kind: 'curated',
+  membershipKind: 'curated',
   revision: recording.collection.revision,
   visibility: 'public',
+  allowedVisibilityActions: ['private', 'unlisted'],
 };
+const withVisibility = (
+  collection: OwnedCollection,
+  visibility: OwnedCollection['visibility'],
+  revision = collection.revision,
+): OwnedCollection => ({
+  ...collection,
+  visibility,
+  revision,
+  allowedVisibilityActions: (['private', 'unlisted', 'public'] as const).filter((value) => value !== visibility),
+});
 
 function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
   const [transport] = useState(() => {
-    const first = scenario.endsWith('refused') ? { ...initial, visibility: 'private' as const } : initial;
+    const first = scenario.endsWith('refused') || scenario === 'private' ? withVisibility(initial, 'private') : initial;
     let current = first;
     let receipt = current;
     let originalKey: string | undefined;
@@ -62,16 +76,16 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
         if (scenario === 'row-refused') return { ok: false, reason: 'unavailable' };
         if (scenario === 'pending') return new Promise(() => {});
         if (scenario === 'conflict') {
-          current = { ...initial, visibility: 'unlisted', revision: initial.revision + 1 };
+          current = withVisibility(initial, 'unlisted', initial.revision + 1);
           return { ok: false, reason: 'conflict' };
         }
         if (originalKey === input.idempotencyKey) return { ok: true, collection: receipt };
         originalKey = input.idempotencyKey;
-        current = { ...current, visibility: input.visibility, revision: input.revision + 1 };
+        current = withVisibility(current, input.visibility, input.revision + 1);
         receipt = current;
         if (scenario === 'lost' || scenario === 'replay-refused') {
           // Another native write happened after the committed command whose response was lost.
-          current = { ...initial, revision: receipt.revision + 1 };
+          current = withVisibility(initial, initial.visibility, receipt.revision + 1);
           return { ok: false, reason: 'unavailable' };
         }
         return { ok: true, collection: current };
@@ -81,13 +95,14 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
           rowReads++;
           if (rowReads === 1) return { ok: false, reason: 'forbidden' };
           if (rowReads === 2) return { ok: false, reason: 'unavailable' };
-          return { ok: true, value: { ...first, visibility: 'unlisted', revision: first.revision + 3 } };
+          return { ok: true, value: withVisibility(first, 'unlisted', first.revision + 3) };
         }
         return { ok: true, value: current };
       },
     };
     const read: CollectionPrivacyPageRead = async (cursor) => {
       pageReads++;
+      if (scenario === 'owner-page-unavailable' && pageReads === 1) return { ok: false, reason: 'unavailable' };
       if (scenario === 'page-refused') {
         if (pageReads === 1) return { ok: true, value: { collections: [first], next: 'opaque-settings-page-2' } };
         if (pageReads === 2) return { ok: false, reason: 'forbidden' };
@@ -96,7 +111,7 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
           ok: true,
           value: {
             collections: [
-              { id: 'settings-current-collection', title: 'Current reading', visibility: 'private', revision: 3 },
+              withVisibility({ ...initial, id: 'settings-current-collection', title: 'Current reading', revision: 3 }, 'private'),
             ],
             next: null,
           },
@@ -112,7 +127,7 @@ function Example({ scenario = 'ready' }: { scenario?: Scenario }) {
       return {
         ok: true,
         value: {
-          collections: [{ id: 'settings-collection-3', title: 'Weekend reading', visibility: 'unlisted', revision: 2 }],
+          collections: [withVisibility({ ...initial, id: 'settings-collection-3', title: 'Weekend reading', revision: 2 }, 'unlisted')],
           next: null,
         },
       };
@@ -133,6 +148,16 @@ async function choosePrivate(canvasElement: HTMLElement) {
   return view;
 }
 export const Collections: Story = { render: () => <Example /> };
+export const PrivateCollection: Story = { render: () => <Example scenario="private" /> };
+export const PublicChangedPrivate: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <Example />,
+  play: async ({ canvasElement }) => {
+    const view = await choosePrivate(canvasElement);
+    await view.findByText(m.settings_saved());
+    await view.findByText(m.settings_privacy_current({ visibility: m.settings_privacy_private() }));
+  },
+};
 export const PendingSave: Story = {
   render: () => <Example scenario="pending" />,
   play: async ({ canvasElement }) => {
@@ -143,13 +168,23 @@ export const PendingSave: Story = {
   },
 };
 export const AmbiguousResponse: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <Example scenario="lost" />,
   play: async ({ canvasElement }) => {
-    const view = await choosePrivate(canvasElement);
+    const view = within(canvasElement);
+    const select = await view.findByRole('combobox', { name: m.settings_privacy_visibility_label() });
+    select.focus();
+    await userEvent.keyboard('{HOME}{ARROWDOWN}{ENTER}');
     await view.findByText(m.settings_privacy_uncertain_title());
-    await view.findByRole('button', { name: m.settings_privacy_retry_original() });
-    await expect(view.getByRole('combobox')).toHaveValue('private');
-    await expect(view.queryByText(m.settings_saved())).toBeNull();
+    const retry = view.getByRole('button', { name: m.settings_privacy_retry_original() });
+    retry.focus();
+    await userEvent.keyboard('{ENTER}');
+    await view.findByText(m.settings_privacy_review_title());
+    const save = view.getByRole('button', { name: m.settings_privacy_save_choice() });
+    save.focus();
+    await userEvent.keyboard('{ENTER}');
+    await view.findByText(m.settings_saved());
+    await view.findByText(m.settings_privacy_current({ visibility: m.settings_privacy_private() }));
   },
 };
 export const RetryWithLaterDraft: Story = {
@@ -183,6 +218,18 @@ export const EmptyOwnerPage: Story = {
     await view.findByText(m.settings_privacy_empty());
     await expect(view.queryByRole('combobox')).toBeNull();
     await expect(view.queryByRole('button', { name: m.settings_privacy_load_more() })).toBeNull();
+  },
+};
+export const OwnerPageUnavailable: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => <Example scenario="owner-page-unavailable" />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText(m.settings_privacy_list_load_failed());
+    await view.findByText(m.settings_privacy_list_retry());
+    await expect(view.queryByText(m.settings_privacy_empty())).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: m.settings_retry() }));
+    await view.findByRole('link', { name: initial.title });
   },
 };
 export const FailedNextPage: Story = {
@@ -300,7 +347,7 @@ function RetryDelayExample({ scenario }: { scenario: 'first-page' | 'independent
         }
         if (input !== original) throw new Error('Recovery must replay the exact original command');
         const row = rows.find((row) => row.id === input.collectionId)!;
-        return { ok: true, collection: { ...row, visibility: input.visibility, revision: input.revision + 1 } };
+        return { ok: true, collection: withVisibility(row, input.visibility, input.revision + 1) };
       },
       read: async (id) => {
         if (scenario === 'readback' && rowReads++ === 0)
@@ -432,7 +479,7 @@ function ListRestartExample({ scenario }: { scenario: 'cursor' | 'exhausted' | '
         }
         if (original && input.idempotencyKey === original.idempotencyKey && input !== original)
           throw new Error('Recovery must retain the original command');
-        current = { ...current, revision: input.revision + 1, visibility: input.visibility };
+        current = withVisibility(current, input.visibility, input.revision + 1);
         return { ok: true, collection: current };
       },
       read: async () => ({ ok: true, value: current }),
@@ -460,7 +507,7 @@ function ListRestartExample({ scenario }: { scenario: 'cursor' | 'exhausted' | '
         ok: true,
         value: {
           collections: [
-            { ...current, title: 'Current reading', visibility: 'unlisted', revision: current.revision + 2 },
+            withVisibility({ ...current, title: 'Current reading' }, 'unlisted', current.revision + 2),
           ],
           next: null,
         },
@@ -557,7 +604,7 @@ function StandaloneRowExample() {
   const [reads, setReads] = useState(0);
   const [transport] = useState(() => {
     let original: VisibilityAttempt | null = null;
-    let current = { ...initial, visibility: 'private' as const } as OwnedCollection;
+    let current = withVisibility(initial, 'private');
     const io: CollectionPrivacyIO = {
       save: async (input) => {
         setSends((count) => count + 1);
@@ -566,7 +613,7 @@ function StandaloneRowExample() {
           throw new Error('Illustrative response loss');
         }
         if (input !== original) throw new Error('Retry replaced the original command');
-        current = { ...current, visibility: input.visibility, revision: input.revision + 1 };
+        current = withVisibility(current, input.visibility, input.revision + 1);
         return { ok: true, collection: current };
       },
       read: async () => {
@@ -582,7 +629,7 @@ function StandaloneRowExample() {
         <output aria-label="Standalone row writes">{sends}</output>
         <output aria-label="Standalone row reads">{reads}</output>
         <ul>
-          <CollectionRow collection={{ ...initial, visibility: 'private' }} io={transport} />
+          <CollectionRow collection={withVisibility(initial, 'private')} io={transport} />
         </ul>
       </StrictMode>
     </QueryClientContext.Provider>

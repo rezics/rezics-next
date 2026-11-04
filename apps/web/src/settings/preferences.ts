@@ -120,7 +120,21 @@ export type PreferenceWriteResult =
       failure?: NativePreferenceFailure;
     };
 
-export type OwnedCollection = { id: string; title: string; visibility: CollectionVisibility; revision: number };
+export type OwnedCollection = {
+  id: string;
+  title: string;
+  kind: 'curated' | 'dynamic' | 'builtin';
+  membershipKind: 'curated' | 'dynamic';
+  builtinKind?: 'everything' | 'state' | 'liked';
+  builtin?:
+    | { kind: 'everything' | 'liked' }
+    | { kind: 'state'; profileId: string; stateSetId: string; stateId: string };
+  visibility: CollectionVisibility;
+  /** Logical built-ins have no command revision. */
+  revision: number | null;
+  /** Native advice lists only visibility changes the current viewer may make. */
+  allowedVisibilityActions: CollectionVisibility[];
+};
 export type OwnedCollectionsPage = { collections: OwnedCollection[]; next: string | null };
 export type CollectionVisibilityWrite =
   | { ok: true; collection: OwnedCollection }
@@ -134,12 +148,96 @@ type NativeOwnedCollection = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['collections']>['get']>>['data']
 >['collection'];
 
-function ownedCollection(value: NativeOwnedCollection): OwnedCollection {
+const collectionVisibilities = ['private', 'unlisted', 'public'] as const;
+type OwnerManagementRead = {
+  ownerManagement: 'owner';
+  ownerAccountId: string;
+  collections?: unknown;
+  next?: unknown;
+  collection?: unknown;
+};
+
+function ownedCollection(value: unknown, ownerAccountId: string): OwnedCollection {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== 'string' ||
+    value.id.length === 0 ||
+    value.curatorAccountId !== ownerAccountId ||
+    (value.visibility !== 'private' && value.visibility !== 'unlisted' && value.visibility !== 'public') ||
+    !Array.isArray(value.allowedVisibilityActions) ||
+    value.allowedVisibilityActions.some((action) => !collectionVisibilities.includes(action as CollectionVisibility))
+  )
+    throw new Error('Collection privacy unavailable');
+
+  const allowedVisibilityActions = value.allowedVisibilityActions as CollectionVisibility[];
+  if (
+    new Set(allowedVisibilityActions).size !== allowedVisibilityActions.length ||
+    allowedVisibilityActions.includes(value.visibility)
+  )
+    throw new Error('Collection privacy unavailable');
+
+  const native = value as unknown as NativeOwnedCollection;
+  const title = typeof value.title === 'string' ? value.title : dynamicCollectionTitle(native, getLocale());
+  if (!title) throw new Error('Collection privacy unavailable');
+
+  if ('builtinKind' in value) {
+    if (
+      value.membershipKind !== 'dynamic' ||
+      !['everything', 'state', 'liked'].includes(String(value.builtinKind)) ||
+      !isRecord(value.builtin) ||
+      value.builtin.kind !== value.builtinKind ||
+      value.visibility !== 'private' ||
+      allowedVisibilityActions.length !== 0
+    )
+      throw new Error('Collection privacy unavailable');
+    if (
+      value.builtin.kind === 'state' &&
+      (typeof value.builtin.profileId !== 'string' ||
+        typeof value.builtin.stateSetId !== 'string' ||
+        typeof value.builtin.stateId !== 'string')
+    )
+      throw new Error('Collection privacy unavailable');
+    return {
+      id: value.id,
+      title,
+      kind: 'builtin',
+      membershipKind: 'dynamic',
+      builtinKind: value.builtinKind as OwnedCollection['builtinKind'],
+      builtin: value.builtin as OwnedCollection['builtin'],
+      visibility: 'private',
+      revision: null,
+      allowedVisibilityActions: [],
+    };
+  }
+
+  if (value.membershipKind !== 'curated' && value.membershipKind !== 'dynamic')
+    throw new Error('Collection privacy unavailable');
+  if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 1)
+    throw new Error('Collection privacy unavailable');
   return {
     id: value.id,
-    title: 'builtinKind' in value ? dynamicCollectionTitle(value, getLocale()) : value.title,
+    title,
+    kind: value.membershipKind === 'curated' ? 'curated' : 'dynamic',
+    membershipKind: value.membershipKind,
     visibility: value.visibility,
-    revision: value.revision,
+    revision: value.revision as number,
+    allowedVisibilityActions,
+  };
+}
+
+function ownerPage(value: unknown, ownerAccountId: string): OwnedCollectionsPage {
+  if (
+    !isRecord(value) ||
+    value.ownerManagement !== 'owner' ||
+    value.ownerAccountId !== ownerAccountId ||
+    !Array.isArray(value.collections) ||
+    value.collections.length > 20 ||
+    (value.next !== null && typeof value.next !== 'string')
+  )
+    throw new Error('Collection privacy unavailable');
+  return {
+    collections: value.collections.map((collection) => ownedCollection(collection, ownerAccountId)),
+    next: value.next as string | null,
   };
 }
 
@@ -154,12 +252,21 @@ export async function readOwnedCollections(
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) throw new Error('Collection privacy forbidden');
-  const result = await client.accounts({ accountId }).collections.get({
-    query: { limit: 20, ...(cursor ? { cursor } : {}) },
+  const getOwnerPage = client.collections.get as unknown as (options: {
+    query: { curatorAccountId: string; limit: 20; ownerManagement: true; cursor?: string };
+    headers: { authorization: string };
+  }) => Promise<unknown>;
+  const result = await getOwnerPage({
+    query: {
+      curatorAccountId: accountId,
+      limit: 20,
+      ownerManagement: true,
+      ...(cursor !== null ? { cursor } : {}),
+    },
     headers: { authorization },
   });
-  const page = readCollectionPrivacyResult(result);
-  return { collections: page.collections.map(ownedCollection), next: page.next };
+  const page = readCollectionPrivacyResult(result as { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit }) as OwnerManagementRead;
+  return ownerPage(page, accountId);
 }
 
 export async function changeCollectionVisibility(
@@ -171,17 +278,26 @@ export async function changeCollectionVisibility(
   try {
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
-    if (!authorization || !sessionSubject(request)) return { ok: false, reason: 'forbidden' };
-    const result = await client.collections({ collectionId: input.collectionId }).patch(
+    const accountId = sessionSubject(request);
+    if (!authorization || !accountId) return { ok: false, reason: 'forbidden' };
+    const patchWithOwnerAdvice = client.collections({ collectionId: input.collectionId }).patch as unknown as (
+      body: { revision: number; visibility: CollectionVisibility },
+      options: {
+        query: { ownerManagement: true };
+        headers: { authorization: string; 'idempotency-key': string };
+      },
+    ) => Promise<{ data?: { collection?: unknown } | null; error?: unknown; status?: number; headers?: HeadersInit }>;
+    const result = await patchWithOwnerAdvice(
       { revision: input.revision, visibility: input.visibility },
       {
+        query: { ownerManagement: true },
         headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey) } as {
           'idempotency-key': string;
         },
       },
     );
     if (!result.error && result.data?.collection)
-      return { ok: true, collection: ownedCollection(result.data.collection) };
+      return { ok: true, collection: ownedCollection(result.data.collection, accountId) };
     const failure = collectionPrivacyFailureMetadata(result.error, result.status, result.headers);
     const metadata = failure ? { failure } : {};
     if (result.status === 409) return { ok: false, reason: 'conflict', ...metadata };
@@ -204,11 +320,18 @@ export async function reloadOwnedCollection(
 ): Promise<OwnedCollection> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
-  if (!authorization || !sessionSubject(request)) throw new Error('Collection privacy forbidden');
-  const result = await client
-    .collections({ collectionId })
-    .get({ query: { view: 'FULL' }, headers: { authorization } });
-  return ownedCollection(readCollectionPrivacyResult(result).collection);
+  const accountId = sessionSubject(request);
+  if (!authorization || !accountId) throw new Error('Collection privacy forbidden');
+  const getOwnerCollection = client.collections({ collectionId }).get as unknown as (options: {
+    query: { view: 'FULL'; ownerManagement: true };
+    headers: { authorization: string };
+  }) => Promise<unknown>;
+  const result = await getOwnerCollection({
+    query: { view: 'FULL', ownerManagement: true },
+    headers: { authorization },
+  });
+  const response = readCollectionPrivacyResult(result as { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit }) as OwnerManagementRead;
+  return ownedCollection(response.collection, accountId);
 }
 
 export type NotificationChange = {

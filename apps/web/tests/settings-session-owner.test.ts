@@ -14,6 +14,7 @@ import {
 import { readingMutation, sendReading } from '../src/settings/reading-preferences';
 import type {
   CollectionVisibilityWrite,
+  OwnedCollection,
   PreferenceWriteResult,
   NotificationWriteResult,
   SettingsPage,
@@ -44,7 +45,15 @@ const page = {
   preferences: { spoilerLevel: 2 as const, suitability: 'show' as const, version: 4 },
   notifications: { reply: true, mention: false },
 };
-const collection = { id: 'owned', title: 'Reading', visibility: 'private' as const, revision: 7 };
+const collection: OwnedCollection = {
+  id: 'owned',
+  title: 'Reading',
+  kind: 'curated' as const,
+  membershipKind: 'curated' as const,
+  visibility: 'private' as const,
+  revision: 7,
+  allowedVisibilityActions: ['unlisted', 'public'],
+};
 const empty: VerificationSnapshot = { accountId: 'alice', verificationRequest: null, subjectTitle: null };
 function deferred<T>() {
   let resolve!: (value: T) => void;

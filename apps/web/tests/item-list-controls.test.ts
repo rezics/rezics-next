@@ -6,7 +6,15 @@ mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
 mock.module('../src/kernel/query', () => ({ personalRead: { enabled: true } }));
 mock.module('../src/session/query', () => ({ useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }) }));
 mock.module('../src/settings/actions', () => ({
-  readOwnedCollection: async () => ({ id: 'collection-1', title: 'Reading list', visibility: 'private', revision: 7 }),
+  readOwnedCollection: async () => ({
+    id: 'collection-1',
+    title: 'Reading list',
+    kind: 'curated',
+    membershipKind: 'curated',
+    visibility: 'private',
+    revision: 7,
+    allowedVisibilityActions: ['unlisted', 'public'],
+  }),
   readOwnedCollectionsPage: async () => ({ collections: [], next: null }),
   saveCollectionVisibility: async () => ({ ok: true }),
 }));
@@ -23,8 +31,11 @@ test('a collection row keeps its navigation target while the visibility control 
   const collection: OwnedCollection = {
     id: 'collection-1',
     title: 'Reading list',
+    kind: 'curated',
+    membershipKind: 'curated',
     visibility: 'private',
     revision: 7,
+    allowedVisibilityActions: ['unlisted', 'public'],
   };
   const html = renderToStaticMarkup(createElement(CollectionRow, { collection }));
   const row = html.match(/<li\b[^>]*data-slot="list-row"[^>]*>[\s\S]*?<\/li>/)?.[0];
@@ -72,7 +83,15 @@ test('an explicitly injected standalone collection row retains independent enabl
   let dispatched = 0;
   const html = renderToStaticMarkup(
     createElement(CollectionRow, {
-      collection: { id: 'collection-1', title: 'Reading list', visibility: 'private', revision: 7 },
+      collection: {
+        id: 'collection-1',
+        title: 'Reading list',
+        kind: 'curated',
+        membershipKind: 'curated',
+        visibility: 'private',
+        revision: 7,
+        allowedVisibilityActions: ['unlisted', 'public'],
+      },
       io: {
         read: async () => {
           dispatched++;

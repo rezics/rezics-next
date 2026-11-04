@@ -58,6 +58,7 @@ export const collectionSchema = t.Object(
     title: t.String(),
     description: nullableString,
     visibility,
+    allowedVisibilityActions: t.Optional(t.Array(visibility, { uniqueItems: true })),
     presentationKind: nullableString,
     presentationKindSource: t.Union([t.Literal('owner'), t.Literal('mixed')]),
     cover: t.Optional(CoverSummarySchema),
@@ -94,6 +95,7 @@ const dynamicCollectionSchema = t.Object(
     title: nullableString,
     description: nullableString,
     visibility: t.Literal('private'),
+    allowedVisibilityActions: t.Optional(t.Array(visibility, { uniqueItems: true })),
     revision: t.Integer({ minimum: 0 }),
     presentationKind: collectionSchema.properties.presentationKind,
     presentationKindSource: collectionSchema.properties.presentationKindSource,
@@ -452,22 +454,38 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       ...(dependencies.workClient ? { workClient: dependencies.workClient } : {}),
       ...(dependencies.search ? { search: dependencies.search } : {}),
     }));
-  async function written(value: Collection, actor: Actor) {
+  async function written(value: Collection, actor: Actor, includeOwnerManagement = false) {
     // Receipt values retain their native revision. Only the current viewer's readable descriptor is added.
-    if (value.coverMediaId == null) return collectionView(value);
+    const hasCover = value.coverMediaId != null;
+    const ownerManagement =
+      includeOwnerManagement &&
+      actor.kind === 'account' &&
+      actor.accountId === value.curatorAccountId &&
+      actor.scopes.includes('collection:read');
+    if (!hasCover && !ownerManagement) return collectionView(value);
     // Native writes do not require collection:read. Preserve their receipt metadata;
     // descriptor enrichment requires the viewer's independent current read authority.
+    if (includeOwnerManagement && !ownerManagement) throw new ProblemError('not_found');
     if (actor.kind !== 'account' || !actor.scopes.includes('collection:read'))
       return { ...collectionView(value), coverMediaId: value.coverMediaId };
-    const current = await read().readCollection(actor, value.id);
+    const current = await read().readCollection(actor, value.id, undefined, undefined, ownerManagement);
+    if (
+      ownerManagement &&
+      (current.revision !== value.revision || current.visibility !== value.visibility)
+    )
+      throw new ProblemError('dependency_unavailable');
     const cover =
-      'coverMediaId' in current && current.revision === value.revision && current.coverMediaId === value.coverMediaId
+      hasCover && 'coverMediaId' in current && current.revision === value.revision && current.coverMediaId === value.coverMediaId
         ? current.cover
         : null;
     return {
       ...collectionView(value),
-      ...collectionPresentation(value, cover),
-      coverMediaId: value.coverMediaId,
+      ...(ownerManagement && 'allowedVisibilityActions' in current
+        ? { allowedVisibilityActions: current.allowedVisibilityActions }
+        : {}),
+      ...(hasCover
+        ? { ...collectionPresentation(value, cover), coverMediaId: value.coverMediaId }
+        : {}),
     };
   }
   async function writtenCurated(value: Collection, actor: Actor) {
@@ -634,6 +652,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           {
             curatorAccountId: t.Union([id, t.Null()]),
             ...pageQuery,
+            ownerManagement: t.Optional(t.Boolean()),
             preview: t.Optional(t.Numeric({ minimum: 3, maximum: 3, multipleOf: 1 })),
           },
           closed,
@@ -643,6 +662,8 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             {
               collections: t.Array(previewCollectionSchema),
               next: nullableString,
+              ownerManagement: t.Optional(t.Literal('owner')),
+              ownerAccountId: t.Optional(id),
             },
             closed,
           ),
@@ -660,7 +681,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             throw new ProblemError('invalid_request');
           const page = await read().listCollections(
             actor,
-            basicQuery(options),
+            { ...basicQuery(options), ...(query.ownerManagement === undefined ? {} : { ownerManagement: query.ownerManagement }) },
             preview === undefined ? undefined : { deadline: job.deadline },
           );
           return fullView(viewDependencies(), actor, query.view, {
@@ -701,7 +722,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
     .get(
       '/v1/collections/:collectionId',
       {
-        query: t.Object(viewQuery, closed),
+        query: t.Object({ ...viewQuery, ownerManagement: t.Optional(t.Boolean()) }, closed),
         params: collectionParams,
         response: {
           200: t.Object({ collection: embeddedCollectionSchema }, closed),
@@ -715,7 +736,9 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       async ({ params, query, actor, admission, job }) =>
         admission.run('normal', job, async () =>
           fullView(viewDependencies(), actor, query.view, {
-            collection: collectionReadView(await read().readCollection(actor, params.collectionId)),
+            collection: collectionReadView(
+              await read().readCollection(actor, params.collectionId, undefined, undefined, query.ownerManagement === true),
+            ),
           }),
         ),
     )
@@ -853,11 +876,13 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             closed,
           ),
         ),
+        query: t.Object({ ownerManagement: t.Optional(t.Boolean()) }, closed),
         response: { 200: collectionResponse, ...failures },
         detail: detail('collection.update', 'collection:update'),
       },
-      async ({ params, body, headers, actor, admission, job, session }) => {
+      async ({ params, body, query, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
+        if (query.ownerManagement === true) set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           mapped(() => write().updateCollection(actor, params.collectionId, body, key)),
@@ -867,7 +892,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
           epoch: result.epoch,
           position: result.position,
         });
-        return { collection: await written(result.value, actor) };
+        return { collection: await written(result.value, actor, query.ownerManagement === true) };
       },
     )
     .delete(

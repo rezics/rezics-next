@@ -70,6 +70,7 @@ type CuratorPageOptions = {
   curatorAccountId: string | null;
   cursor?: string | null;
   limit?: number;
+  ownerManagement?: boolean;
 };
 
 type QueryClient = Pick<PoolClient, 'query'>;
@@ -91,6 +92,8 @@ export type CollectionView = CollectionPresentation &
     description: string | null;
     visibility: 'private' | 'unlisted' | 'public';
     revision: number;
+    /** Present for the curator and derived from the same native update authority as the writer. */
+    allowedVisibilityActions?: readonly ('private' | 'unlisted' | 'public')[];
     memberCount: number;
     createdAt: string;
     updatedAt: string;
@@ -107,7 +110,12 @@ export type SavedDynamicCollectionView = Omit<
 > & {
   membershipKind: 'dynamic';
 };
-export type CollectionResourceView = CollectionView | SavedDynamicCollectionView | BuiltinCollectionView;
+export type CollectionResourceView =
+  | CollectionView
+  | SavedDynamicCollectionView
+  | (BuiltinCollectionView & {
+      allowedVisibilityActions?: readonly ('private' | 'unlisted' | 'public')[];
+    });
 
 /** Check the required wire fields without expanding the older curated caller guarantee. */
 export function collectionReadView(
@@ -453,12 +461,18 @@ export function createCollectionReads(
     id: string,
     deadline?: number,
     observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
+    ownerManagement = false,
   ): Promise<CollectionResourceView> {
     const logical = await builtins.read(viewer, id);
-    if (logical) return logical;
+    if (logical) {
+      if (!ownerManagement) return logical;
+      if (viewer.kind !== 'account' || viewer.accountId !== logical.curatorAccountId) throw notFound();
+      return { ...logical, allowedVisibilityActions: [] };
+    }
     const row = await loadCollection(viewer, id, deadline, observation);
     if (!row) throw notFound();
-    return present(viewer, row, deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS));
+    if (ownerManagement && (viewer.kind !== 'account' || viewer.accountId !== row.curatorAccountId)) throw notFound();
+    return present(viewer, row, deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS), ownerManagement);
   }
 
   async function withCurrentMetadataOwner<T>(
@@ -659,16 +673,16 @@ export function createCollectionReads(
       sourceGeneration: string;
     },
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+    ownerManagement = false,
   ): Promise<CuratedCollectionView | SavedDynamicCollectionView> {
+    const owner = ownerManagement && viewer.kind === 'account' && viewer.accountId === row.curatorAccountId;
     const cover =
       row.coverMediaId === null
         ? null
         : await readablePresentationCover(dependencies, viewer, row.coverMediaId, deadline);
     let editor = false;
     if (
-      row.coverMediaId !== null &&
-      viewer.kind === 'account' &&
-      viewer.accountId === row.curatorAccountId &&
+      owner &&
       viewer.scopes.includes('collection:update')
     ) {
       const check = await accessCheck(
@@ -680,7 +694,7 @@ export function createCollectionReads(
       );
       editor = await withConnection(pool, (client) => check(deadlineClient(client, deadline)));
     }
-    if (row.coverMediaId !== null) {
+    if (row.coverMediaId !== null || owner) {
       const final = await loadCollection(viewer, row.id, deadline);
       if (!final) throw notFound();
       if (
@@ -694,6 +708,13 @@ export function createCollectionReads(
     return {
       ...collectionView(row),
       ...collectionPresentation(row, cover),
+      ...(owner
+        ? {
+            allowedVisibilityActions: editor
+              ? (['private', 'unlisted', 'public'] as const).filter((value) => value !== row.visibility)
+              : [],
+          }
+        : {}),
       ...(editor && row.coverMediaId !== null ? { coverMediaId: row.coverMediaId } : {}),
     };
   }
@@ -729,8 +750,13 @@ export function createCollectionReads(
     options: CuratorPageOptions,
     publicOnly: boolean,
     preview?: { deadline: number },
-  ): Promise<{ collections: CollectionResourceView[]; next: string | null }> {
-    const page = pageRequest(options, ['curatorAccountId', 'cursor', 'limit']);
+  ): Promise<{
+    collections: CollectionResourceView[];
+    next: string | null;
+    ownerManagement?: 'owner';
+    ownerAccountId?: string;
+  }> {
+    const page = pageRequest(options, ['curatorAccountId', 'cursor', 'limit', 'ownerManagement']);
     const curatorAccountId = options.curatorAccountId;
     if (typeof curatorAccountId !== 'string') throw new TypeError('Collection list options need a curator account id');
     const route = routeOf(curatorAccountId);
@@ -741,9 +767,11 @@ export function createCollectionReads(
     const visible = publicViews.get(curatorAccountId)?.collections === true;
     const curator = (!publicOnly || !visible) && (await seesAll(viewer, curatorAccountId));
     const fullView = !publicOnly && curator;
+    const ownerManagement = options.ownerManagement === true;
+    if (ownerManagement && !fullView) throw notFound();
     const binding: CursorBinding = {
       operation: publicOnly ? 'library.account.collections' : 'library.collection.list',
-      parameters: { curatorAccountId, fullView },
+      parameters: { curatorAccountId, fullView, ...(ownerManagement ? { ownerManagement: true } : {}) },
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const builtinCursor = cursor?.after[0] === 'builtin';
@@ -796,8 +824,13 @@ export function createCollectionReads(
               : null,
       };
     });
-    const collections: CollectionResourceView[] = [...shownLogical];
-    for (const row of result.collections) collections.push(await present(viewer, row));
+    const collections: CollectionResourceView[] = shownLogical.map((collection) =>
+      ownerManagement ? { ...collection, allowedVisibilityActions: [] } : collection,
+    );
+    for (const row of result.collections)
+      collections.push(
+        await present(viewer, row, undefined, ownerManagement),
+      );
     if (preview) {
       const previews = await readCollectionPreviews(
         dependencies,
@@ -825,7 +858,11 @@ export function createCollectionReads(
           },
         );
     }
-    return { ...result, collections };
+    return {
+      ...result,
+      collections,
+      ...(ownerManagement ? { ownerManagement: 'owner' as const, ownerAccountId: curatorAccountId } : {}),
+    };
   }
 
   /** Common dynamic/curated reader; the native curated primitive retains its occurrence DTO. */
