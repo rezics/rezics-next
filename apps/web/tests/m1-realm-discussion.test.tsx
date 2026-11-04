@@ -49,6 +49,20 @@ async function render(component: ReactNode, path = '/') {
   }
 }
 
+async function withStoryRequest<T>(read: () => Promise<T>): Promise<T> {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { location: new URL('https://site.example.test/en/realms/atlas-member') },
+  });
+  try {
+    return await read();
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'window', previous);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+}
+
 test('the public Realm shelves lead to their exact work and board sources, then return to the same discussion window', async () => {
   const request = new Request('https://site.example.test/en/spaces/atlas-member');
   const page = await loadSpacePage(kernel, request, {}, { address: 'atlas-member' }, 'anonymous');
@@ -72,12 +86,14 @@ test('the public Realm shelves lead to their exact work and board sources, then 
     const board = page.realm.boards.find((candidate) => candidate.visibility === 'published');
     if (!board) throw new Error('The admitted Realm has no readable board');
     const boardId = board.id;
-    const boardRead = await readBoardPage({ data: { id: boardId, sort: 'new', credentialMode: 'anonymous' } });
+    const boardRead = await withStoryRequest(() =>
+      readBoardPage({ data: { id: boardId, sort: 'new', credentialMode: 'anonymous' } }),
+    );
     const thread = boardRead.page.threads.threads.find((candidate) => candidate.availability === 'available');
     if (!thread) throw new Error('The admitted board has no readable thread');
-    const threadPage = await readThreadPage({
-      data: { id: thread.id, credentialMode: 'anonymous' },
-    });
+    const threadPage = await withStoryRequest(() =>
+      readThreadPage({ data: { id: thread.id, credentialMode: 'anonymous' } }),
+    );
     if ('redirect' in threadPage) throw new Error('The native thread unexpectedly redirected');
 
     const openingId = threadPage.thread.firstPost.id;
