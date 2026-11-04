@@ -49,6 +49,7 @@ test('Album creation composes complete terms and initial facts while preserving 
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { AlbumProfile } = await import('../src/features/catalogue/album-profile-view');
+  const { AlbumProfileCreate } = await import('../src/features/catalogue/album-profile-create');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { albumFixture, albumId, artistId, roleId, seriesId, partId } =
     await import('../src/kernel/fake/catalogue-album-profile');
@@ -847,6 +848,176 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(readFixture.calls).toEqual(calls);
     expect(window.document.activeElement).toBe(outside);
     expect(host.querySelector('form')).not.toBeNull();
+
+    const admission = albumFixture('uncertain');
+    const admissionGate = deferred<{ state: 'allowed' }>();
+    let admissionReads = 0;
+    const obsoleteCommands: Parameters<typeof admission.transport.create>[0][] = [];
+    const obsoleteTransport = {
+      ...admission.transport,
+      eligibility: async () => {
+        admissionReads++;
+        return admissionReads === 2 ? admissionGate.promise : { state: 'allowed' as const };
+      },
+      create: async (command: Parameters<typeof admission.transport.create>[0]) => {
+        obsoleteCommands.push(command);
+        return admission.transport.create(command);
+      },
+    };
+    const currentCommands: Parameters<typeof admission.transport.create>[0][] = [];
+    const currentGate = deferred<{ state: 'allowed' }>();
+    let currentEligibilityReads = 0;
+    let currentAuthority: { state: 'allowed' } | { state: 'refused'; reason: 'permission' } = {
+      state: 'allowed',
+    };
+    const currentTransport = {
+      ...admission.transport,
+      eligibility: async () => {
+        currentEligibilityReads++;
+        if (currentEligibilityReads === 2) return currentGate.promise;
+        return currentAuthority;
+      },
+      create: async (command: Parameters<typeof admission.transport.create>[0]) => {
+        currentCommands.push(structuredClone(command));
+        return admission.transport.create(command);
+      },
+    };
+    let metadataCurrent = true;
+    const renderAdmission = (transport: typeof admission.transport, enabled = true, session = 'signed-in') =>
+      show(
+        <AlbumProfileCreate
+          release={admission.release}
+          metadataCurrent={() => metadataCurrent}
+          onReload={async () => {}}
+          locale="en"
+          transport={transport}
+          search={search(admission)}
+          session={session}
+          enabled={enabled}
+        />,
+      );
+    await renderAdmission(obsoleteTransport);
+    await until(() => !!host.querySelector('form') && host.textContent!.includes(m.identity_intake_authority_allowed()));
+    await fillTerms(host);
+    const contributor = await add(host, 'schema:contributor');
+    await chooseTarget(contributor, name(admission, 'schema:contributor'), 'Harbour', /The Harbour Ensemble/);
+    await select(contributor, m.relation_qualifier(), 'wdt:P1932');
+    await click(contributor, m.relation_add_qualifier());
+    await replace(textbox(contributor, name(admission, 'wdt:P1932')), 'Earlier credit');
+    await click(host, m.album_create_review());
+    await click(host, m.album_create());
+    await until(() => admissionReads === 2);
+    const repeatAdmission = queuedSubmit(host.querySelector('form')!);
+    await act(async () => {
+      repeatAdmission({ preventDefault() {} });
+      repeatAdmission({ preventDefault() {} });
+    });
+    expect(admissionReads).toBe(2);
+    expect(obsoleteCommands).toHaveLength(0);
+
+    await click(host, m.character_create_back());
+    const currentName = 'Harbour sessions after admission';
+    await replace(textbox(host, m.catalogue_create_label()), currentName);
+    const currentContributor = host.querySelector<HTMLElement>('fieldset[id^="album-row-"]')!;
+    await replace(textbox(currentContributor, name(admission, 'wdt:P1932')), 'Current credit');
+    const albumDefinition = admission.release.types['schema:MusicAlbum']!;
+    const originalAlbumProperties = [...albumDefinition.properties];
+    albumDefinition.properties = originalAlbumProperties.filter((id) => id !== 'schema:genre');
+    metadataCurrent = false;
+    await renderAdmission(currentTransport, false, 'admission-current');
+    await act(async () => {
+      admissionGate.resolve({ state: 'allowed' });
+      await admissionGate.promise;
+    });
+    await until(() => host.querySelector('form')?.getAttribute('aria-busy') === 'false');
+    expect(obsoleteCommands).toHaveLength(0);
+    expect((textbox(host, m.catalogue_create_label()) as HTMLInputElement).value).toBe(currentName);
+    expect((textbox(host, name(admission, 'wdt:P1932')) as HTMLInputElement).value).toBe('Current credit');
+    expect(host.textContent).toContain(m.catalogue_create_review_stale());
+    expect(host.textContent).toContain(m.album_missing());
+
+    albumDefinition.properties = originalAlbumProperties;
+    metadataCurrent = true;
+    await renderAdmission(currentTransport, true, 'admission-current');
+    await click(host, m.album_create_review());
+    await expect((within(host).getByRole('button', { name: m.album_create() }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    await click(host, m.album_create());
+    await until(() => currentEligibilityReads === 2);
+    const repeatCurrentAdmission = queuedSubmit(host.querySelector('form')!);
+    await act(async () => {
+      repeatCurrentAdmission({ preventDefault() {} });
+      repeatCurrentAdmission({ preventDefault() {} });
+    });
+    expect(currentCommands).toHaveLength(0);
+    await act(async () => {
+      currentGate.resolve({ state: 'allowed' });
+      await currentGate.promise;
+    });
+    await until(() => host.textContent!.includes(m.catalogue_create_uncertain()));
+    expect(currentCommands).toHaveLength(1);
+    expect(currentCommands[0]!.item.labels.en).toBe(currentName);
+    expect(currentCommands[0]!.item.statements['schema:contributor']![0]!.qualifiers).toContainEqual({
+      property: { id: 'wdt:P1932' },
+      value: { type: 'value', content: 'Current credit' },
+    });
+    const exactCommand = structuredClone(currentCommands[0]);
+    const eligibilityAtUncertainty = currentEligibilityReads;
+    currentAuthority = { state: 'refused', reason: 'permission' };
+    await click(host, m.catalogue_create_retry());
+    await until(() => host.textContent!.includes(m.catalogue_create_created()));
+    expect(currentCommands[1]).toEqual(exactCommand);
+    expect(currentCommands[1]!.key).toBe(exactCommand!.key);
+    expect(currentEligibilityReads).toBe(eligibilityAtUncertainty);
+
+    const retirement = albumFixture();
+    const retirementGate = deferred<{ state: 'allowed' }>();
+    let retirementReads = 0;
+    let retirementCreates = 0;
+    const retirementTransport = {
+      ...retirement.transport,
+      eligibility: async () => {
+        retirementReads++;
+        return retirementReads === 2 ? retirementGate.promise : { state: 'allowed' as const };
+      },
+      create: async (command: Parameters<typeof retirement.transport.create>[0]) => {
+        retirementCreates++;
+        return retirement.transport.create(command);
+      },
+    };
+    const retirementPage = (subject: string, csrfToken: string) => (
+      <CandidateReaderBoundary
+        address="album-admission-retirement"
+        observed={{ state: 'signed-in', subject, csrfToken }}
+      >
+        <AlbumProfileCreate
+          release={retirement.release}
+          metadataCurrent={() => true}
+          onReload={async () => {}}
+          locale="en"
+          transport={retirementTransport}
+          search={search(retirement)}
+          session="signed-in"
+          enabled
+        />
+      </CandidateReaderBoundary>
+    );
+    await show(retirementPage('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', 'AAAAAAAAAAAAAAAAAAAAAA'));
+    await until(() => !!host.querySelector('form') && host.textContent!.includes(m.identity_intake_authority_allowed()));
+    await replace(textbox(host, m.catalogue_create_label()), 'Retired admission');
+    await click(host, m.album_create_review());
+    await click(host, m.album_create());
+    await until(() => retirementReads === 2);
+    await show(retirementPage('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11', 'BBBBBBBBBBBBBBBBBBBBBB'));
+    await until(() => !!host.querySelector('form'));
+    await act(async () => {
+      retirementGate.resolve({ state: 'allowed' });
+      await retirementGate.promise;
+    });
+    await settle();
+    expect(retirementCreates).toBe(0);
+    expect(writes(retirement)).toHaveLength(0);
   } finally {
     await act(async () => root.unmount());
     client.clear();

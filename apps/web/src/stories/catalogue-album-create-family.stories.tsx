@@ -25,6 +25,8 @@ const longAlias = 'Alternative album name 別名 اسم آخر ' + 'UnabridgedAl
 const citation = 'https://artist.example/releases/' + 'original-source-'.repeat(16) + '?language=ja#credits';
 type Fixture = ReturnType<typeof albumFixture>;
 const mounted = new WeakMap<HTMLElement, Fixture>();
+type AdmissionGate = { reads: number; resolve?: (value: { state: 'allowed' }) => void };
+const admissionGates = new WeakMap<Fixture, AdmissionGate>();
 
 function AlbumCreateFamily({
   scenario = 'ready',
@@ -34,6 +36,7 @@ function AlbumCreateFamily({
   rtl = false,
   metadataFailure = false,
   missingDefinition = false,
+  deferredAdmission = false,
 }: {
   scenario?: AlbumScenario;
   longMetadata?: boolean;
@@ -42,12 +45,14 @@ function AlbumCreateFamily({
   rtl?: boolean;
   metadataFailure?: boolean;
   missingDefinition?: boolean;
+  deferredAdmission?: boolean;
 }) {
   const locale = getLocale();
   const fixtures = useMemo(
     () =>
       [0, 1].map(() => {
         const fixture = albumFixture(scenario, locale);
+        if (deferredAdmission) admissionGates.set(fixture, { reads: 0 });
         if (longMetadata) {
           for (const id of ['schema:contributor', 'wdt:P1932', 'schema:datePublished', 'schema:genre']) {
             const property = fixture.release.properties[id]!;
@@ -59,20 +64,35 @@ function AlbumCreateFamily({
         }
         return fixture;
       }),
-    [scenario, locale, longMetadata],
+    [scenario, locale, longMetadata, deferredAdmission],
   );
   const transports = useMemo(
     () =>
-      fixtures.map((fixture) => ({
-        ...fixture.transport,
-        load: async () => {
-          if (fixture.calls.some((call) => call.method === 'POST')) {
-            if (metadataFailure) return { ok: false as const, reason: 'unavailable' as const };
-            if (missingDefinition) delete fixture.release.properties['schema:datePublished'];
-          }
-          return fixture.transport.load();
-        },
-      })),
+      fixtures.map((fixture) => {
+        const gate = admissionGates.get(fixture);
+        return {
+          ...fixture.transport,
+          load: async () => {
+            if (fixture.calls.some((call) => call.method === 'POST')) {
+              if (metadataFailure) return { ok: false as const, reason: 'unavailable' as const };
+              if (missingDefinition) delete fixture.release.properties['schema:datePublished'];
+            }
+            return fixture.transport.load();
+          },
+          ...(gate
+            ? {
+                eligibility: async () => {
+                  gate.reads++;
+                  if (gate.reads === 2)
+                    return new Promise<{ state: 'allowed' }>((resolve) => {
+                      gate.resolve = resolve;
+                    });
+                  return { state: 'allowed' as const };
+                },
+              }
+            : {}),
+        };
+      }),
     [fixtures, metadataFailure, missingDefinition],
   );
   return (
@@ -385,6 +405,49 @@ export const CreatedReaderRecovery: Story = {
       expect.stringContaining(`/subjects/${albumId}/`),
     );
     await expect(writes(fixture)).toHaveLength(1);
+  },
+};
+export const EligibilityPending: Story = {
+  args: { deferredAdmission: true },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = await fill(canvasElement);
+    const fixture = fixtureFor(canvasElement);
+    await expect(await canvas.findByText(m.identity_intake_authority_allowed())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create_review() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await expect(await canvas.findByText(m.identity_intake_authority_reading(), { selector: 'p' })).toBeVisible();
+    await expect(writes(fixture)).toHaveLength(0);
+    await geometry(canvasElement);
+  },
+};
+export const StaleReviewRecovery: Story = {
+  args: { deferredAdmission: true },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = await fill(canvasElement);
+    const fixture = fixtureFor(canvasElement);
+    await expect(await canvas.findByText(m.identity_intake_authority_allowed())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create_review() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await expect(await canvas.findByText(m.identity_intake_authority_reading(), { selector: 'p' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.character_create_back() }));
+    const label = canvas.getByRole('textbox', { name: m.catalogue_create_label() });
+    const revised = `${longName} revised`;
+    await userEvent.clear(label);
+    await userEvent.type(label, revised);
+    const gate = admissionGates.get(fixture)!;
+    await expect(gate.resolve).toBeDefined();
+    gate.resolve!({ state: 'allowed' });
+    await expect(await canvas.findByText(m.catalogue_create_review_stale())).toBeVisible();
+    await expect(label).toHaveValue(revised);
+    await expect(writes(fixture)).toHaveLength(0);
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create_review() }));
+    await expect(canvas.getByText(revised)).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await expect(await canvas.findByText(m.catalogue_create_created())).toBeVisible();
+    await expect(writes(fixture)).toHaveLength(1);
+    await geometry(canvasElement);
   },
 };
 export const ReleasedTypeAbsent: Story = { args: { scenario: 'empty' } };
