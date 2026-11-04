@@ -94,7 +94,7 @@ export async function planVndbReleasePlatforms(
         field === 'platform'
           ? (() => {
               const mapping = mapSourceEnumeration('vndb', 'platform', code);
-              return mapping?.status === 'existing' && mapping.term === 'schema:gamePlatform';
+              return mapping?.term === 'schema:gamePlatform';
             })()
           : vndbReleaseMediumCodes.has(code);
       if (!allowed) {

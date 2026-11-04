@@ -120,7 +120,7 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         platform
           ? (() => {
               const mapping = mapSourceEnumeration('vndb', 'platform', code);
-              return mapping?.status === 'existing' && mapping.term === property;
+              return mapping?.term === property;
             })()
           : vndbReleaseMediumCodes.has(code);
       if (!admitted) {
