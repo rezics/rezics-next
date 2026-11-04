@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { catalogStatementBound, costOf } from './growth-cost.ts';
+import { admitAggregatedCaptures } from './growth-capture-evidence.ts';
+import { catalogStatementBound, costOf, type Capture } from './growth-cost.ts';
 import { mergeGrowthCaptures } from './growth-capture-merge.ts';
 import { statementAttributions, statementOccurrences } from './growth-report.ts';
 
@@ -110,3 +111,42 @@ test('rejects merged planDatabases that are not parallel to plans', () => {
     }),
   ).toThrow(/planDatabases has 0 items, but plans has 1/);
 });
+
+const nestedPlan = { Plan: { 'Node Type': 'Result', 'Actual Rows': 7, 'Shared Hit Blocks': 11 } };
+const nestedSource: Capture = {
+  statements: ['SELECT 1'],
+  plans: [],
+  requestBytes: [900],
+  responseBytes: [700],
+  backgroundStatements: ['SELECT nested_work()'],
+  backgroundPlans: [nestedPlan],
+  backgroundPlanStatements: [0],
+};
+
+for (const [title, merged] of [
+  [
+    'dropped background plan and bytes',
+    {
+      statements: ['SELECT 1'],
+      plans: [],
+      requestBytes: [0],
+      responseBytes: [0],
+      backgroundStatements: ['SELECT nested_work()'],
+    },
+  ],
+  ['same-count statement replacement', { ...nestedSource, statements: ['SELECT 2'] }],
+  ['same-count byte replacement', { ...nestedSource, requestBytes: [1], responseBytes: [1] }],
+  [
+    'same-count background plan replacement',
+    {
+      ...nestedSource,
+      backgroundPlans: [{ Plan: { 'Node Type': 'Result', 'Actual Rows': 1, 'Shared Hit Blocks': 0 } }],
+    },
+  ],
+] satisfies ReadonlyArray<readonly [string, Capture]>) {
+  test(`refuses aggregated capture ${title}`, () => {
+    expect(() =>
+      admitAggregatedCaptures(title, merged, [{ name: 'kernel', capture: nestedSource }], nestedSource),
+    ).toThrow(/aggregateCaptures omitted native statements, plans or background work/);
+  });
+}
