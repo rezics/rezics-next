@@ -529,9 +529,9 @@ test(
       expect(confirmations).toBe(1);
       expect(postBody('/passkeys/remove')).toEqual({ id: expect.any(String) });
       expect(postBody('/passkeys/remove').id).toBe(registered.response.id);
-      await rows.nth(2).waitFor({ state: 'detached' });
-      expect(await rows.count()).toBe(2);
-      expect(await list.innerText()).not.toContain('Phone');
+      await english.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
+      expect(await list.count()).toBe(0);
+      expect(await section.count()).toBe(0);
       expect(authCalls('/passkeys/remove')).toHaveLength(1);
     } finally {
       await english.context().close();
