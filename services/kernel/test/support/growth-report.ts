@@ -311,27 +311,44 @@ export function statementAttributions(capture: Capture | CostFoldedCapture): Sta
   }));
 }
 
-export type StatementOccurrence = {
+type StatementOccurrenceDetails = {
   readonly index: number;
   readonly statement: string;
   readonly backend: number | undefined;
   readonly error: { readonly code: string; readonly message: string } | null;
   readonly plans: readonly number[];
-  /** Native documents linked to this occurrence, retained after the capture is released. */
-  readonly planDocuments?: readonly unknown[];
-  /** Folded captures identify plan notice custody but do not retain raw documents. */
-  readonly planDocumentAvailability?: 'cost-folded';
   readonly rows: number;
   readonly blocks: number;
   readonly relationIdentities?: readonly RelationIdentity[];
   readonly limitations?: readonly string[];
 };
 
-export type StatementOccurrences = {
+export type StatementOccurrence = StatementOccurrenceDetails & {
+  /** Native documents linked to this occurrence, retained after the capture is released. */
+  readonly planDocuments: readonly unknown[];
+};
+
+export type CostFoldedStatementOccurrence = StatementOccurrenceDetails & {
+  /** Folded captures identify plan notice custody but do not retain raw documents. */
+  readonly planDocumentAvailability: 'cost-folded';
+  readonly planDocuments?: never;
+};
+
+export type RawStatementOccurrences = {
   readonly statements: readonly StatementOccurrence[];
   readonly backgroundStatements: readonly StatementOccurrence[];
 };
 
+export type FoldedStatementOccurrences = {
+  readonly statements: readonly CostFoldedStatementOccurrence[];
+  readonly backgroundStatements: readonly CostFoldedStatementOccurrence[];
+};
+
+export type StatementOccurrences = RawStatementOccurrences | FoldedStatementOccurrences;
+
+export function statementOccurrences(capture: Capture): RawStatementOccurrences;
+export function statementOccurrences(capture: CostFoldedCapture): FoldedStatementOccurrences;
+export function statementOccurrences(capture: Capture | CostFoldedCapture): StatementOccurrences;
 /** Costs each statement occurrence only from plans linked to it at capture time. */
 export function statementOccurrences(capture: Capture | CostFoldedCapture): StatementOccurrences {
   if (isCostFoldedCapture(capture)) {
@@ -341,7 +358,7 @@ export function statementOccurrences(capture: Capture | CostFoldedCapture): Stat
       messages: readonly (string | null)[],
       backends: readonly (number | undefined)[] | undefined,
       summaries: readonly import('./growth-cost-fold.ts').FoldedOccurrenceSummary[],
-    ): StatementOccurrence[] => {
+    ): CostFoldedStatementOccurrence[] => {
       const byIndex = new Map(summaries.map((summary) => [summary.index, summary]));
       return statements.map((statement, index) => {
         const summary = byIndex.get(index);

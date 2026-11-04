@@ -403,7 +403,7 @@ export class GrowthCostFolder {
       ownerSummary.blocks = checkedAdd(ownerSummary.blocks, evidence.blocks, 'Folded occurrence blocks');
       ownerSummary.planEntries++;
       ownerSummary.catalogOnly = ownerSummary.catalogOnly && catalogOnly;
-      ownerSummary.node = evidence.node ?? ownerSummary.node;
+      if (evidence.node !== undefined) ownerSummary.node = evidence.node;
       for (const relation of evidence.relationCosts) mergeRelation(ownerSummary.relations, relation, this.#budget, side);
       for (const limitation of limitations) {
         if (ownerSummary.limitations.has(limitation)) continue;
