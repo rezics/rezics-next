@@ -1542,6 +1542,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: O((P+E) log R) indexed importer work for admitted parents P and episodes E≤64, with the existing per-record converter, candidate (≤300) and journal budgets. Vocabulary bindings are re-read on each convert so unchanged source bytes cannot hide missing or retracted kind availability. Duration admits only explicit ISO-8601 or named second/minute/hour units as seconds (`wd:Q11574`); clock-style and unitless values stay unknown review gaps.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Import authored VNDB staff aliases and credited roles
+
+- Touches: one bounded authored VN (cap 8) plus at most 64 staff/voice credits, resolved person and character endpoints, the existing seed/importer caller, current native credit-type scheme/concept point reads supplied by the operator, and ordinary public batch/fence/candidate commands. Personal lists, local votes and source aggregates are not written. Alias IDs resolve to staff identities before proposal; credited spelling is the note, otherwise that alias's name.
+- Bound: O((V+S+C) log R) indexed importer work for admitted works V≤8, staff S and characters C, with sequential entity-then-work conversion so person identities exist before credit proposals. Existing per-record converter, candidate (≤300) and journal budgets apply. Vocabulary bindings are re-read on each convert so unchanged source bytes cannot hide missing or retracted detailed-role availability. Unknown roles, missing aliases, non-person staff kinds and unadmitted credited spelling withhold the whole credit.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
 ### Import run (processor)
 
 - Touches: per record, its conversion, its journal rows and its request bodies, each once. Every SQL text is prepared once per connection, the cover intent, batch and result bodies are validated once however many modules they cross (a small memory of accepted bodies, bounded in entries and bytes), a record's journals are written in one commit and its receipts in one commit, and a page of staged records shares one commit. Per record: at most five converter calls, 165 statements and 3 commits; no statement is prepared per call.

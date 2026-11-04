@@ -116,6 +116,15 @@ export type VndbVocabularyRow =
       creditedAs?: string;
     })
   | (RowBase & {
+      kind: 'voice-credit';
+      subject: NativeIdentity;
+      performer?: NativeIdentity;
+      performerCode: string;
+      character?: NativeIdentity;
+      characterCode: string;
+      creditedAs?: string;
+    })
+  | (RowBase & {
       kind: 'tag';
       subject: NativeIdentity;
       category: 'cont' | 'ero' | 'tech';

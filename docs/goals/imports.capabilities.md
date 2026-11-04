@@ -615,6 +615,19 @@ not additional check requests.
   ISO-8601 or named second/minute/hour units to seconds (`wd:Q11574`); clock-style and unitless values stay unknown;
   kind uses operator vocabulary rows over currently accepted/adopted scheme and concepts; disc stays omitted from
   identity.
+- `production operator imports two VNDB staff aliases through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-staff-credits.test.ts`.
+  Frozen scenario names:
+  `two aliases keep one person identity, exact roles, credited spelling and voice character`;
+  `missing alias, organization staff, unknown role, withdrawn concept and invalid spelling withhold the credit`;
+  `operator plans two aliases for one person and imports exact roles through the seed caller`;
+  `production operator imports two VNDB staff aliases through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: credited spelling is
+  `vn_staff.note` / `vn_seiyuu.note` when present, otherwise that alias's `staff_alias.name`; identity is the
+  resolved staff ID via `aid`, never the alias text. Organization or non-`s*` targets withhold the credit. Voice
+  keeps VN and character endpoints. Bindings are current accepted/adopted `vndb.credit_type` Concepts. Person
+  identities are imported before works so credit rows can name native holders.
 - `Ordinary operator exact ACK interruption and restart recovery`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-ack-recovery.test.ts`.
   The [ACK report](../research/imports-audit/cli-ack-recovery.md#native-receipt) records one native case,

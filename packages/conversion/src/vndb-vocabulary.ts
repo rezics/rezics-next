@@ -202,6 +202,17 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         );
         return;
       }
+      if (row.holder.type !== 'schema:Person') {
+        environment.pushGap({
+          path,
+          code,
+          endpoint: environment.sourceCode(row.holderCode) ?? undefined,
+          reason: 'incompatible_identity',
+          property,
+          requiredProfile: row.holder.type,
+        });
+        return;
+      }
       const resolved = exactConcept(environment, 'vndb.credit_type', code, path);
       if (!resolved) return;
       const qualifiers: { property: string; content: unknown; identity?: NativeIdentity }[] = [
@@ -228,6 +239,79 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         sourceEndpoint: row.holderCode,
         qualifiers,
         mappingRevision: 'staff-role@1',
+      });
+      return;
+    }
+    case 'voice-credit': {
+      const performer = row.performer;
+      if (!performer) {
+        rowGap(
+          environment,
+          row,
+          'missing_identity',
+          'wdt:P725',
+          environment.sourceCode(row.performerCode) ?? undefined,
+          environment.sourceCode(row.performerCode) ?? undefined,
+        );
+        return;
+      }
+      if (performer.type !== 'schema:Person' || !environment.identityId(performer)) {
+        environment.pushGap({
+          path,
+          endpoint: environment.sourceCode(row.performerCode) ?? undefined,
+          reason: 'incompatible_identity',
+          property: 'wdt:P725',
+          requiredProfile: performer.type,
+        });
+        return;
+      }
+      const character = row.character;
+      if (!character) {
+        rowGap(
+          environment,
+          row,
+          'missing_identity',
+          'wdt:P453',
+          environment.sourceCode(row.characterCode) ?? undefined,
+          environment.sourceCode(row.characterCode) ?? undefined,
+        );
+        return;
+      }
+      const characterId = environment.identityId(character);
+      if (!characterId) {
+        environment.pushGap({
+          path,
+          endpoint: environment.sourceCode(row.characterCode) ?? undefined,
+          reason: 'incompatible_identity',
+          property: 'wdt:P453',
+          requiredProfile: character.type,
+        });
+        return;
+      }
+      const qualifiers: { property: string; content: unknown; identity?: NativeIdentity }[] = [
+        { property: 'wdt:P453', content: characterId, identity: character },
+      ];
+      if (row.creditedAs !== undefined) {
+        if (
+          typeof row.creditedAs !== 'string' ||
+          !row.creditedAs.isWellFormed() ||
+          !row.creditedAs.trim() ||
+          row.creditedAs.length > 1500
+        ) {
+          rowGap(environment, row, 'invalid_source_value', 'wdt:P1932');
+          return;
+        }
+        qualifiers.push({ property: 'wdt:P1932', content: row.creditedAs });
+      }
+      environment.propose({
+        row,
+        subject: row.subject,
+        property: 'wdt:P725',
+        content: '',
+        target: performer,
+        sourceEndpoint: row.performerCode,
+        qualifiers,
+        mappingRevision: 'voice-credit@1',
       });
       return;
     }
@@ -297,6 +381,7 @@ export function mapVndbVocabulary(input: SourceVocabularyInput): SourceVocabular
     'release-supersedes',
     'release-work',
     'staff',
+    'voice-credit',
     'tag',
     'character-trait',
   ];

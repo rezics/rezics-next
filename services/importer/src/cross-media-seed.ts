@@ -16,6 +16,7 @@ import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.
 import { CrossMediaGraph, citedProviderBinding, type GraphEdgeDraft } from './cross-media-bindings.ts';
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
+import type { Claim, Owner } from './record-bindings.ts';
 import { createSourceRegistration } from './source-registry.ts';
 
 type Provider = 'bangumi' | 'vndb';
@@ -638,24 +639,58 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   for await (const row of input.rows('vndb', 'staff_alias'))
     if (aliases.has(text(row, 'aid'))) staff.add(text(row, 'id'));
   const aliasToStaff = new Map<string, string>();
+  const aliasNames = new Map<string, string>();
   const staffNames = new Map<string, string>();
   for await (const row of input.rows('vndb', 'staff_alias')) {
     if (!staff.has(text(row, 'id'))) continue;
     aliasToStaff.set(text(row, 'aid'), text(row, 'id'));
-    if (typeof row.name === 'string' && row.name) staffNames.set(text(row, 'id'), row.name);
+    if (typeof row.name === 'string' && row.name) {
+      aliasNames.set(text(row, 'aid'), row.name);
+      staffNames.set(text(row, 'id'), row.name);
+    }
   }
+  const staffRows = new Set<string>();
+  for await (const row of input.rows('vndb', 'staff')) if (staff.has(text(row, 'id'))) staffRows.add(text(row, 'id'));
+  const withheldCredits = new Set<GraphEdgeDraft>();
   for (const draft of plan.edges) {
     if (draft.source !== 'vndb' || !draft.target.startsWith('staff-alias:')) continue;
     const aid = draft.target.slice('staff-alias:'.length);
     const sid = aliasToStaff.get(aid);
     if (!sid) {
       gap('vndb', draft.table, draft.record, 'Missing target record for this source relation');
-      draft.target = aid;
+      withheldCredits.add(draft);
+      continue;
+    }
+    if (!/^s[1-9][0-9]*$/.test(sid) || !staffRows.has(sid)) {
+      gap('vndb', draft.table, draft.record, 'Staff kind is not a person identity');
+      withheldCredits.add(draft);
       continue;
     }
     draft.target = sid;
+    const note = draft.record.note;
+    const hasCreditedAs = draft.qualifiers?.some((qualifier) => qualifier.property === 'wdt:P1932');
+    if (note !== undefined && note !== null && note !== '') {
+      if (typeof note !== 'string' || !note.isWellFormed() || !note.trim() || note.length > 1500) {
+        gap('vndb', draft.table, draft.record, 'Credited spelling is not admitted as a native qualifier');
+        withheldCredits.add(draft);
+        continue;
+      }
+      if (!hasCreditedAs)
+        draft.qualifiers = [...(draft.qualifiers ?? []), { property: 'wdt:P1932', content: note }];
+    } else {
+      const aliasName = aliasNames.get(aid);
+      if (
+        aliasName &&
+        !hasCreditedAs &&
+        aliasName.isWellFormed() &&
+        aliasName.trim() &&
+        aliasName.length <= 1500
+      )
+        draft.qualifiers = [...(draft.qualifiers ?? []), { property: 'wdt:P1932', content: aliasName }];
+    }
     member({ source: 'vndb', key: sid, kind: 'person', membership: 'referenced' });
   }
+  if (withheldCredits.size) plan.edges = plan.edges.filter((draft) => !withheldCredits.has(draft));
   for await (const row of input.rows('vndb', 'chars')) {
     if (!chars.has(text(row, 'id'))) continue;
     if (typeof row.main === 'string' && /^c[1-9][0-9]*$/.test(row.main)) {
@@ -921,17 +956,31 @@ function subjectRoute(read: ReviewedSubjectRead): string {
   return id ? `/subjects/${id}/${subjectSlug(label)}` : '/subjects';
 }
 
+export type CrossMediaSeedExtras = {
+  vocabularyAdmission?: ImporterOptions['vocabularyAdmission'];
+  bindVocabularyAdmission?(input: {
+    claim(owner: Owner): Claim | null;
+  }): ImporterOptions['vocabularyAdmission'];
+  entitiesFirst?: boolean;
+  recordConcurrency?: number;
+};
+
 export async function seedCrossMedia(
   plan: CrossMediaPlan,
   path: string,
   port: CrossMediaPort,
   destination?: { origin: string },
-  extras?: { vocabularyAdmission?: ImporterOptions['vocabularyAdmission'] },
+  extras?: CrossMediaSeedExtras,
 ) {
-  const importer = createImporter({
+  let importer: ReturnType<typeof createImporter>;
+  const vocabularyAdmission = extras?.bindVocabularyAdmission
+    ? extras.bindVocabularyAdmission({ claim: (owner) => importer.session.bindings.claim(owner) })
+    : extras?.vocabularyAdmission;
+  importer = createImporter({
     path,
     ...(destination ? { destination } : {}),
-    ...(extras?.vocabularyAdmission ? { vocabularyAdmission: extras.vocabularyAdmission } : {}),
+    ...(vocabularyAdmission ? { vocabularyAdmission } : {}),
+    ...(extras?.recordConcurrency === undefined ? {} : { recordConcurrency: extras.recordConcurrency }),
     transport: {
       batchWrite: (request) => port.batch(request),
       setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
@@ -950,8 +999,13 @@ export async function seedCrossMedia(
         converterRevision: entityRevision,
       });
       async function* records() {
-        yield* plan.records[provider];
-        yield* plan.entities[provider];
+        if (extras?.entitiesFirst) {
+          yield* plan.entities[provider];
+          yield* plan.records[provider];
+        } else {
+          yield* plan.records[provider];
+          yield* plan.entities[provider];
+        }
       }
       const run = await importer.runRecords(registration, records());
       ensure(run.status === 'committed', `Cross-media ${provider} import failed: ${run.status}`);
