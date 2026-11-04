@@ -112,7 +112,7 @@ test('Share or retract consent for an own unsourced catalogue assertion through 
     expect(result.ok && result.public.state).toBe(scenario === 'pending' ? 'absent' : 'unavailable');
   }
   for (const [scenario, state, message] of [
-    ['actions-unavailable', 'unavailable', 'Current action eligibility could not be checked'],
+    ['actions-unavailable', 'unavailable', 'current action eligibility could not be checked'],
     ['actions-refused', 'refused', 'Your current account is not currently allowed'],
   ] as const) {
     const actionState = consentFixture(scenario);
@@ -241,7 +241,7 @@ test('Deleted tombstones withhold payload without claiming terminal retraction o
       }),
     );
     expect(html).toContain('This assertion is unavailable or cannot be shown.');
-    expect(html).toContain('Reload current values');
+    expect(html).toContain('Retry this page');
     expect(html).not.toContain('terminally retracted');
     expect(html).not.toContain('no undo');
     expect(html).not.toContain('>Share consent<');
