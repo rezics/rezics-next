@@ -20,21 +20,25 @@ const performerA = id(5, 'schema:Person');
 const performerB = id(6, 'schema:Person');
 const bindings: SourceVocabularyBindings = {
   releaseDigest: bundledDigest,
-  schemes: [{
-    taxonomy: 'bangumi.subject-characters.type',
-    id: id(7, 'skos:ConceptScheme').id,
-    uri: 'https://rezics.com/schemes/bangumi/appearance-roles',
-    type: 'skos:ConceptScheme',
-    releaseDigest: bundledDigest,
-  }],
-  concepts: [{
-    taxonomy: 'bangumi.subject-characters.type',
-    code: '1',
-    id: role.id,
-    type: 'skos:Concept',
-    schemeId: id(7, 'skos:ConceptScheme').id,
-    releaseDigest: bundledDigest,
-  }],
+  schemes: [
+    {
+      taxonomy: 'bangumi.subject-characters.type',
+      id: id(7, 'skos:ConceptScheme').id,
+      uri: 'https://rezics.com/schemes/bangumi/appearance-roles',
+      type: 'skos:ConceptScheme',
+      releaseDigest: bundledDigest,
+    },
+  ],
+  concepts: [
+    {
+      taxonomy: 'bangumi.subject-characters.type',
+      code: '1',
+      id: role.id,
+      type: 'skos:Concept',
+      schemeId: id(7, 'skos:ConceptScheme').id,
+      releaseDigest: bundledDigest,
+    },
+  ],
 };
 
 function sourceTables(order: unknown): CrossMediaTables {
@@ -77,7 +81,11 @@ function sourceTables(order: unknown): CrossMediaTables {
     ],
     'vndb/entry_meta': ['v1', 'v2', 'v3'].map((id) => ({ id, revision: '1' })),
   };
-  return { async *rows(provider, table) { yield* rows[`${provider}/${table}`] ?? []; } };
+  return {
+    async *rows(provider, table) {
+      yield* rows[`${provider}/${table}`] ?? [];
+    },
+  };
 }
 
 function metadata() {
@@ -96,13 +104,17 @@ function metadata() {
 
 test('selected Game rows keep role and exact Character-qualified performer evidence', async () => {
   const plan = await planCrossMediaSeed(sourceTables('unknown'));
-  expect(plan.characterAppearances?.map(({ subjectId, characterId }) => [subjectId, characterId])).toEqual([['101', 901]]);
+  expect(plan.characterAppearances?.map(({ subjectId, characterId }) => [subjectId, characterId])).toEqual([
+    ['101', 901],
+  ]);
   expect(plan.gameCharacterAppearances?.map(({ subjectId, characterId }) => [subjectId, characterId])).toEqual([
-    ['103', 902], ['103', 903],
+    ['103', 902],
+    ['103', 903],
   ]);
   const drafts = plan.credits.filter((draft) => draft.kind === 'voice-credit');
   expect(drafts.map(({ work, person, character }) => [work, person, character])).toEqual([
-    ['103', 'person:1001', 'character:902'], ['103', 'person:1002', 'character:903'],
+    ['103', 'person:1001', 'character:902'],
+    ['103', 'person:1002', 'character:903'],
   ]);
   expect(plan.entities.bangumi.some((record) => record.key === 'person:1004')).toBe(false);
 
@@ -156,7 +168,9 @@ test('selected Game rows keep role and exact Character-qualified performer evide
   });
   expect(rows.gaps).toEqual([]);
   const credits = mapBangumiVocabulary({ metadata: metadata(), bindings, rows: rows.rows });
-  const voice = credits.proposals.find((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P725');
+  const voice = credits.proposals.find(
+    (command) => command.op === 'propose' && command.statement.property.id === 'wdt:P725',
+  );
   if (!voice || voice.op !== 'propose') throw new Error('Missing Game voice-credit proposal');
   expect(credits.proposals).toHaveLength(2);
   expect(voice).toMatchObject({
@@ -169,5 +183,7 @@ test('selected Game rows keep role and exact Character-qualified performer evide
       ],
     },
   });
-  expect(JSON.stringify(voice?.statement.references)).toContain('https://bgm.tv/subject/103#/person-characters/103/1001/902');
+  expect(JSON.stringify(voice?.statement.references)).toContain(
+    'https://bgm.tv/subject/103#/person-characters/103/1001/902',
+  );
 });

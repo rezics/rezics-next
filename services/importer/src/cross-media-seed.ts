@@ -865,11 +865,7 @@ export async function planCrossMediaSeed(
       });
       continue;
     }
-    if (
-      !admittedAppearanceIndices.has(sourceIndex) ||
-      !selectedAnimeWorks.has(work) ||
-      !characters.has(characterId)
-    )
+    if (!admittedAppearanceIndices.has(sourceIndex) || !selectedAnimeWorks.has(work) || !characters.has(characterId))
       continue;
     const character = `character:${characterId}`;
     member({

@@ -11,7 +11,11 @@ import {
   type CrossMediaTables,
 } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
-import { captureShowcaseCommands, publishShowcase, ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
+import {
+  captureShowcaseCommands,
+  publishShowcase,
+  ShowcaseJournal,
+} from '../../../importer/src/showcase-publication.ts';
 import {
   prepareShowcaseBangumiGameCharacterVocabulary,
   readShowcaseBangumiGameCharacterVocabulary,
@@ -67,19 +71,20 @@ function sourceTables(order: unknown): CrossMediaTables {
   };
 }
 
-function subjectStatements(
-  read: Awaited<ReturnType<ReturnType<typeof createPublicBulkClient>['readSubject']>>,
-) {
-  return (
-    read.subject as {
-      id: string;
-      type: string;
-      statements: Record<
-        string,
-        { id?: string; value: { content: unknown }; qualifiers?: { property: { id: string }; value: { content: unknown } }[]; references?: unknown[] }[]
-      >;
-    }
-  );
+function subjectStatements(read: Awaited<ReturnType<ReturnType<typeof createPublicBulkClient>['readSubject']>>) {
+  return read.subject as {
+    id: string;
+    type: string;
+    statements: Record<
+      string,
+      {
+        id?: string;
+        value: { content: unknown };
+        qualifiers?: { property: { id: string }; value: { content: unknown } }[];
+        references?: unknown[];
+      }[]
+    >;
+  };
 }
 
 function activeRequirements(
@@ -186,9 +191,11 @@ test('selected Game characters and performers publish through current bindings a
 
     const params = new URLSearchParams({ property: 'schema:url', context: GLOBAL_CONTEXT, limit: '100' });
     const candidates = await editor.http(`/v1/subjects/${roleTwo.id}/candidates?${params}`);
-    const roleTwoUrl = (candidates.body as {
-      candidates: { id: string; source?: unknown; statement: { value: { content: unknown } } }[];
-    }).candidates.find(
+    const roleTwoUrl = (
+      candidates.body as {
+        candidates: { id: string; source?: unknown; statement: { value: { content: unknown } } }[];
+      }
+    ).candidates.find(
       (candidate) => candidate.source && candidate.statement.value.content === `${appearanceRolesUri}/2`,
     );
     expect(roleTwoUrl).toBeDefined();
@@ -267,9 +274,7 @@ test('selected Game characters and performers publish through current bindings a
       property: { id: 'wdt:P3831' },
       value: { content: roleOne.id },
     });
-    expect(JSON.stringify(appearance.references)).toContain(
-      'https://bgm.tv/subject/103#/subject-characters/1/type',
-    );
+    expect(JSON.stringify(appearance.references)).toContain('https://bgm.tv/subject/103#/subject-characters/1/type');
 
     const voices = game.statements['wdt:P725'] ?? [];
     expect(voices).toHaveLength(2);
@@ -285,7 +290,6 @@ test('selected Game characters and performers publish through current bindings a
     expect(voices.some((statement) => statement.value.content === acknowledged.get('person:1003'))).toBe(false);
     expect(characterA.statements['schema:keywords']?.length ?? 0).toBeGreaterThan(0);
     expect(characterB.statements['schema:keywords']?.length ?? 0).toBeGreaterThan(0);
-
   } finally {
     journal.close();
     await runtime.close();
