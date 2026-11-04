@@ -396,6 +396,10 @@ Search owns composition and presentation templates; agree named slots and sequen
 Accounts owns Auth behavior; content owns media and communities; commerce owns library and checkout semantics;
 semantic owns definitions and Zones. Correct shared visual defects as a class across consuming surfaces.
 
+### Subject graph selection and return
+
+Decision: filter and selection changes create normal browser history entries; companion and correction returns preserve only the admitted filter, direction, depth and exact selected node or edge identity, then reread the bounded native page and detail.
+
 ### Catalogue recovery
 
 Adopt the [catalogue family quality follow-up](../research/catalogue-family-quality-followup.md): retire refused

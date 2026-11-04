@@ -6827,6 +6827,7 @@
   "graph_explore_denied": "Ce graphe n’est pas disponible pour la session actuelle.",
   "graph_explore_stale": "Cette sélection n’est plus actuelle. Choisissez à nouveau un nœud ou un arc.",
   "graph_explore_loading": "Lecture du graphe…",
+  "graph_explore_retry": "Réessayer cette même lecture",
   "quotation_title": "Citations",
   "quotation_intro": "Lisez une citation admise avec l’orateur, l’œuvre et la voix comme identités distinctes. Le texte seul n’indique pas qui a parlé.",
   "quotation_text": "Texte de la citation",

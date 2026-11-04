@@ -51,6 +51,16 @@ export type GraphRelation = {
 export type GraphSelection =
   | { kind: 'node'; id: string }
   | { kind: 'edge'; statement: string; from: string; to: string; property: string };
+export type GraphBrowserRouteState = {
+  property?: string | undefined;
+  direction?: string | undefined;
+  depth?: number | undefined;
+  node?: string | undefined;
+  edge?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
+  edgeProperty?: string | undefined;
+};
 export type GraphDetail = {
   subject: SubjectRead;
   statement?: SubjectRead['subject']['statements'][string][number];
@@ -444,10 +454,25 @@ export async function readSubjectGraphPage(
       requestedSelection &&
       (requestedSelection.kind === 'node'
         ? graph.nodes.some((node) => node.id === requestedSelection.id)
-        : graph.edges.some((edge) => edge.statement === requestedSelection.statement))
+        : graph.edges.some(
+            (edge) =>
+              edge.statement === requestedSelection.statement &&
+              edge.from === requestedSelection.from &&
+              edge.to === requestedSelection.to &&
+              edge.property === requestedSelection.property,
+          ))
         ? requestedSelection
         : undefined;
+    if (requestedSelection && !selected) return { ok: false, reason: 'stale' };
     const inspected = await readDetail(client, release, locale, selected, headersOf(authorization, session), cost);
+    if (
+      requestedSelection?.kind === 'edge' &&
+      (!inspected.detail?.statement ||
+        inspected.detail.subject.subject.id !== requestedSelection.from ||
+        inspected.detail.statement.property.id !== requestedSelection.property)
+    )
+      return { ok: false, reason: 'stale' };
+    if (requestedSelection?.kind === 'node' && !inspected.detail) return candidateFailure(404);
     const retained = { graph, detail: inspected.detail, query };
     cost.bytesRetained = jsonBytes(retained);
     if (cost.bytesRetained > GRAPH_DETAIL_BYTE_CAP + jsonBytes(graph)) return candidateFailure(503);
@@ -471,7 +496,10 @@ export function replaceExploreSelection(read: Extract<GraphRead, { ok: true }>, 
   const detail =
     selection &&
     ((selection.kind === 'node' && read.detail?.subject.subject.id === selection.id) ||
-      (selection.kind === 'edge' && read.detail?.statement?.id === selection.statement))
+      (selection.kind === 'edge' &&
+        read.detail?.subject.subject.id === selection.from &&
+        read.detail?.statement?.id === selection.statement &&
+        read.detail.statement.property.id === selection.property))
       ? read.detail
       : null;
   return {

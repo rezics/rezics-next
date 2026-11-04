@@ -1,5 +1,4 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -11,6 +10,7 @@ import { ViewHeading } from '../view-heading';
 import {
   GRAPH_LIMIT,
   type GraphEdge,
+  type GraphBrowserRouteState,
   type GraphNode,
   type GraphRead,
   type GraphSelection,
@@ -50,12 +50,14 @@ function GraphList({
   nodes,
   edges,
   selected,
+  selectionConfirmed,
   onSelect,
   locale,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
   selected: string;
+  selectionConfirmed: boolean;
   onSelect: (selection: GraphSelection) => void;
   locale: string;
 }) {
@@ -81,7 +83,8 @@ function GraphList({
                   type="button"
                   variant="ghost"
                   className={actionClass}
-                  aria-pressed={selected === `node:${edge.from}`}
+                  data-graph-selection={`node:${edge.from}`}
+                  aria-pressed={selectionConfirmed && selected === `node:${edge.from}`}
                   onClick={() => onSelect({ kind: 'node', id: edge.from })}
                 >
                   {nodeOf(edge.from)?.label || m.subject_value_unlabelled({}, o)}
@@ -92,7 +95,8 @@ function GraphList({
                   type="button"
                   variant="ghost"
                   className={actionClass}
-                  aria-pressed={selected === key}
+                  data-graph-selection={key}
+                  aria-pressed={selectionConfirmed && selected === key}
                   onClick={() => onSelect({ kind: 'edge', ...edge })}
                 >
                   {edge.property}
@@ -103,7 +107,8 @@ function GraphList({
                   type="button"
                   variant="ghost"
                   className={actionClass}
-                  aria-pressed={selected === `node:${edge.to}`}
+                  data-graph-selection={`node:${edge.to}`}
+                  aria-pressed={selectionConfirmed && selected === `node:${edge.to}`}
                   onClick={() => onSelect({ kind: 'node', id: edge.to })}
                 >
                   {nodeOf(edge.to)?.label || m.subject_value_unlabelled({}, o)}
@@ -121,12 +126,14 @@ function GraphDiagram({
   nodes,
   edges,
   selected,
+  selectionConfirmed,
   onSelect,
   locale,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
   selected: string;
+  selectionConfirmed: boolean;
   onSelect: (selection: GraphSelection) => void;
   locale: string;
 }) {
@@ -163,7 +170,8 @@ function GraphDiagram({
                 size="sm"
                 variant={selected === key ? 'default' : 'outline'}
                 className={actionClass}
-                aria-pressed={selected === key}
+                data-graph-selection={key}
+                aria-pressed={selectionConfirmed && selected === key}
                 onClick={() => onSelect({ kind: 'edge', ...edge })}
               >
                 {index + 1}
@@ -183,7 +191,8 @@ function GraphDiagram({
               size="sm"
               variant={selected === key ? 'default' : 'outline'}
               className={actionClass}
-              aria-pressed={selected === key}
+              data-graph-selection={key}
+              aria-pressed={selectionConfirmed && selected === key}
               onClick={() => onSelect({ kind: 'node', id: node.id })}
               onKeyDown={(event) => move(event, node.id)}
             >
@@ -196,6 +205,194 @@ function GraphDiagram({
   );
 }
 
+type GraphSuccess = Extract<GraphRead, { ok: true }>;
+type GraphFailure = Extract<GraphRead, { ok: false }>;
+type GraphRoute = GraphBrowserRouteState;
+type GraphRequestKind = 'initial' | 'filter' | 'selection' | 'expansion';
+type GraphRequestInput = Parameters<GraphBrowserTransport['read']>[0];
+type GraphSource = { id: string; locale: string; reader?: string | undefined; transport: GraphBrowserTransport };
+type GraphRequestRecord = {
+  source: GraphSource;
+  route: GraphRoute;
+  routeKey: string;
+  kind: GraphRequestKind;
+  query: GraphRequestInput;
+  selection?: GraphSelection | undefined;
+};
+type GraphPageState = {
+  source: GraphSource;
+  route: GraphRoute;
+  routeKey: string;
+  status: 'idle' | 'pending' | 'success' | 'failure';
+  kind: GraphRequestKind;
+  requestId: number;
+  read?: GraphSuccess | undefined;
+  readRevision: number;
+  failure?: GraphFailure | undefined;
+  record?: GraphRequestRecord | undefined;
+  awaitingRoute?: boolean | undefined;
+  localOnly?: boolean | undefined;
+};
+
+function copyRoute(route: GraphRoute): GraphRoute {
+  return {
+    property: route.property,
+    direction: route.direction,
+    depth: route.depth,
+    node: route.node,
+    edge: route.edge,
+    from: route.from,
+    to: route.to,
+    edgeProperty: route.edgeProperty,
+  };
+}
+
+function routeKey(route: GraphRoute) {
+  return JSON.stringify([
+    route.property,
+    route.direction,
+    route.depth,
+    route.node,
+    route.edge,
+    route.from,
+    route.to,
+    route.edgeProperty,
+  ]);
+}
+
+function baseRouteKey(route: GraphRoute) {
+  return JSON.stringify([route.property, route.direction, route.depth]);
+}
+
+function requestedSelection(route: GraphRoute): GraphSelection | undefined {
+  if (route.node) return { kind: 'node', id: route.node };
+  if (route.edge && route.from && route.to && route.edgeProperty)
+    return { kind: 'edge', statement: route.edge, from: route.from, to: route.to, property: route.edgeProperty };
+  return undefined;
+}
+
+function hasRequestedSelection(route: GraphRoute) {
+  return !!route.node || !!route.edge;
+}
+
+function queryForRoute(route: GraphRoute, session?: string): GraphRequestInput {
+  return {
+    property: route.property,
+    direction: route.direction,
+    depth: route.depth,
+    node: route.node,
+    edge: route.edge,
+    from: route.from,
+    to: route.to,
+    edgeProperty: route.edgeProperty,
+    ...(session ? { session } : {}),
+  };
+}
+
+function responseMatchesRoute(read: GraphSuccess, route: GraphRoute) {
+  if (!hasRequestedSelection(route)) return true;
+  const selection = requestedSelection(route);
+  if (!selection) return false;
+  if (selection.kind === 'node') return read.detail?.subject.subject.id === selection.id;
+  return (
+    read.detail?.subject.subject.id === selection.from &&
+    read.detail.statement?.id === selection.statement &&
+    read.detail.statement.property.id === selection.property &&
+    read.graph.edges.some(
+      (edge) =>
+        edge.statement === selection.statement &&
+        edge.from === selection.from &&
+        edge.to === selection.to &&
+        edge.property === selection.property,
+    )
+  );
+}
+
+function canonicalRoute(read: GraphSuccess, route: GraphRoute): GraphRoute {
+  return {
+    ...route,
+    property: read.query.property.join(','),
+    direction: read.query.direction,
+    depth: read.query.depth,
+  };
+}
+
+function initialPageState(source: GraphSource, route: GraphRoute, initial: GraphRead | undefined): GraphPageState {
+  const key = routeKey(route);
+  const record: GraphRequestRecord = {
+    source,
+    route,
+    routeKey: key,
+    kind: 'initial',
+    query: queryForRoute(route),
+    selection: requestedSelection(route),
+  };
+  if (!initial) return { source, route, routeKey: key, status: 'idle', kind: 'initial', requestId: 0, readRevision: 0 };
+  if (!initial.ok) {
+    return {
+      source,
+      route,
+      routeKey: key,
+      status: 'failure',
+      kind: 'initial',
+      requestId: 0,
+      readRevision: 0,
+      failure: initial,
+      record,
+    };
+  }
+  if (!responseMatchesRoute(initial, route)) {
+    return {
+      source,
+      route,
+      routeKey: key,
+      status: 'failure',
+      kind: 'initial',
+      requestId: 0,
+      readRevision: 0,
+      failure: { ok: false, reason: 'stale' },
+      record,
+    };
+  }
+  return {
+    source,
+    route: canonicalRoute(initial, route),
+    routeKey: key,
+    status: 'success',
+    kind: 'initial',
+    requestId: 0,
+    readRevision: 0,
+    read: initial,
+  };
+}
+
+/** Build a same-origin graph return link from only admitted public query state. */
+export function graphBrowserReturnHref(
+  path: string,
+  query: GraphSuccess['query'],
+  selection?: GraphSelection | undefined,
+) {
+  if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\') || /[?#\\]/.test(path)) return undefined;
+  const params = new URLSearchParams({
+    property: query.property.join(','),
+    direction: query.direction,
+    depth: String(query.depth),
+  });
+  if (selection?.kind === 'node') params.set('node', selection.id);
+  if (selection?.kind === 'edge') {
+    params.set('edge', selection.statement);
+    params.set('from', selection.from);
+    params.set('to', selection.to);
+    params.set('edgeProperty', selection.property);
+  }
+  return `${path}?${params.toString()}`;
+}
+
+function appendReturnTo(href: string, returnTo: string | undefined) {
+  if (!returnTo) return href;
+  return `${href}${href.includes('?') ? '&' : '?'}${new URLSearchParams({ returnTo })}`;
+}
+
 export function GraphBrowserPage({
   id,
   locale,
@@ -204,8 +401,14 @@ export function GraphBrowserPage({
   depth,
   node,
   edge,
+  from,
+  to,
+  edgeProperty,
   transport,
   initial,
+  reader,
+  graphPath,
+  onNavigate,
 }: {
   id: string;
   locale: string;
@@ -214,114 +417,281 @@ export function GraphBrowserPage({
   depth?: number | undefined;
   node?: string | undefined;
   edge?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
+  edgeProperty?: string | undefined;
   transport: GraphBrowserTransport;
   initial?: GraphRead | undefined;
   reader?: string | undefined;
+  graphPath?: string | undefined;
+  onNavigate?: ((state: GraphBrowserRouteState) => void | Promise<unknown>) | undefined;
 }) {
   const o = option(locale);
   const relationId = useId();
   const directionId = useId();
   const depthId = useId();
   const failureRef = useRef<HTMLParagraphElement>(null);
-  const [session, setSession] = useState<string>();
-  const [page, setPage] = useState<Extract<GraphRead, { ok: true }>>();
-  const query = useQuery({
-    queryKey: ['graph-explore', id, locale, property, direction, depth, node, edge],
-    queryFn: () => transport.read({ property, direction, depth, node, edge, session }),
-    initialData: initial,
-    retry: false,
-    staleTime: Infinity,
-    gcTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+  const statusRef = useRef<HTMLParagraphElement>(null);
+  const relationRef = useRef<HTMLSelectElement>(null);
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null);
+  const pageRef = useRef<HTMLElement>(null);
+  const focusIntentRef = useRef<{ kind: 'selection'; key: string } | { kind: 'relation' }>();
+  const source = useMemo<GraphSource>(() => ({ id, locale, reader, transport }), [id, locale, reader, transport]);
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+  const route = useMemo(
+    () => copyRoute({ property, direction, depth, node, edge, from, to, edgeProperty }),
+    [property, direction, depth, node, edge, from, to, edgeProperty],
+  );
+  const propsRouteKey = routeKey(route);
+  const sequenceRef = useRef(0);
+  const sessionRef = useRef<{ source: GraphSource; token?: string | undefined }>({
+    source,
+    token: initial?.ok ? initial.session : undefined,
   });
-  const read = page ?? (query.data?.ok ? query.data : undefined);
-  const error =
-    !read && query.data && !query.data.ok
-      ? query.data
-      : !read && query.isError
-        ? { ok: false as const, reason: 'unavailable' as const }
+  const [current, setCurrent] = useState(() => initialPageState(source, route, initial));
+  const currentRef = useRef(current);
+  function publish(next: GraphPageState) {
+    currentRef.current = next;
+    setCurrent(next);
+  }
+  function makeRecord(
+    target: GraphRoute,
+    kind: GraphRequestKind,
+    extra: Partial<GraphRequestInput> = {},
+  ): GraphRequestRecord {
+    if (sessionRef.current.source !== source) sessionRef.current = { source };
+    const token = sessionRef.current.token;
+    return {
+      source,
+      route: copyRoute(target),
+      routeKey: routeKey(target),
+      kind,
+      query: { ...queryForRoute(target, token), ...extra },
+      selection: requestedSelection(target),
+    };
+  }
+  function runRecord(record: GraphRequestRecord, awaitingRoute = false, localOnly = false) {
+    const previous = currentRef.current;
+    if (sessionRef.current.source !== record.source) sessionRef.current = { source: record.source };
+    const retainRead =
+      (record.kind === 'selection' || record.kind === 'expansion') &&
+      previous.source === record.source &&
+      previous.read &&
+      baseRouteKey(previous.route) === baseRouteKey(record.route)
+        ? previous.read
         : undefined;
-  useEffect(() => {
-    if (read?.session) setSession(read.session);
-  }, [read?.session]);
-  useEffect(() => {
-    if (error) failureRef.current?.focus();
-  }, [error]);
-  const selection = read?.detail
-    ? read.detail.statement
-      ? {
-          kind: 'edge' as const,
-          statement: read.detail.statement.id,
-          from: read.detail.subject.subject.id,
-          to: '',
-          property: read.detail.statement.property.id,
+    const requestId = ++sequenceRef.current;
+    const pending: GraphPageState = {
+      source: record.source,
+      route: record.route,
+      routeKey: record.routeKey,
+      status: 'pending',
+      kind: record.kind,
+      requestId,
+      read: retainRead,
+      readRevision: retainRead ? previous.readRevision : 0,
+      record,
+      awaitingRoute,
+      localOnly,
+    };
+    publish(pending);
+    void (async () => {
+      try {
+        const result = await record.source.transport.read(record.query);
+        if (sequenceRef.current !== requestId || sourceRef.current !== record.source) return;
+        if (!result.ok) {
+          if (result.clearPrivate || result.reason === 'denied') sessionRef.current = { source: record.source };
+          publish({
+            ...pending,
+            status: 'failure',
+            failure: result,
+            read: result.clearPrivate || result.reason === 'denied' ? undefined : retainRead,
+          });
+          return;
         }
-      : { kind: 'node' as const, id: read.detail.subject.subject.id }
-    : node
-      ? { kind: 'node' as const, id: node }
-      : undefined;
+        if (result.session) sessionRef.current = { source: record.source, token: result.session };
+        if (!responseMatchesRoute(result, record.route)) {
+          publish({
+            ...pending,
+            status: 'failure',
+            failure: { ok: false, reason: 'stale' },
+            read: retainRead,
+          });
+          return;
+        }
+        publish({
+          ...pending,
+          route: canonicalRoute(result, record.route),
+          status: 'success',
+          read: result,
+          readRevision: requestId,
+          failure: undefined,
+          record: undefined,
+          awaitingRoute: false,
+          localOnly: false,
+        });
+      } catch {
+        if (sequenceRef.current !== requestId || sourceRef.current !== record.source) return;
+        publish({
+          ...pending,
+          status: 'failure',
+          failure: { ok: false, reason: 'unavailable' },
+          read: retainRead,
+        });
+      }
+    })();
+  }
+  useEffect(() => {
+    const previous = currentRef.current;
+    if (previous.source === source && previous.routeKey === propsRouteKey) {
+      if (previous.status === 'idle' || (previous.status === 'pending' && previous.requestId !== sequenceRef.current))
+        runRecord(makeRecord(route, 'initial'));
+      else if (previous.awaitingRoute) publish({ ...previous, awaitingRoute: false });
+      return;
+    }
+    runRecord(makeRecord(route, 'initial'));
+  }, [source, propsRouteKey]);
+  useEffect(
+    () => () => {
+      sequenceRef.current += 1;
+    },
+    [],
+  );
+
+  const stateMatchesRoute =
+    current.source === source && (current.routeKey === propsRouteKey || !!current.awaitingRoute || !!current.localOnly);
+  const active = stateMatchesRoute ? current : undefined;
+  const status = active?.status === 'idle' ? 'pending' : (active?.status ?? 'pending');
+  const activeRoute = active?.route ?? route;
+  const baseRead = active?.read;
+  const keepDetail = active?.status === 'success' || active?.kind === 'expansion';
+  const read = baseRead && !keepDetail ? { ...baseRead, detail: null } : baseRead;
+  const selection = requestedSelection(activeRoute);
   const selected = selectedKey(selection);
+  const selectionConfirmed = active?.status === 'success' && !!selection;
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const origin = subjectHref({ id, label: title.text }, locale);
-  const graphHref = catalogueEntries.graph({ id, label: title.text, locale }).href;
-  async function load(next: Parameters<GraphBrowserTransport['read']>[0]) {
-    const value = await transport.read({ ...next, session });
-    if (!value.ok) return;
-    setPage(value);
-    if (value.session) setSession(value.session);
-  }
-  function select(next: GraphSelection) {
-    void load(
-      next.kind === 'node'
-        ? { property: read?.query.property, direction: read?.query.direction, depth: read?.query.depth, node: next.id }
-        : {
-            property: read?.query.property,
-            direction: read?.query.direction,
-            depth: read?.query.depth,
-            edge: next.statement,
-            from: next.from,
-            to: next.to,
-            edgeProperty: next.property,
-          },
-    );
-  }
+  const returnTo =
+    active?.status === 'success' && read && graphPath
+      ? graphBrowserReturnHref(graphPath, read.query, selection)
+      : undefined;
+  const error = active?.status === 'failure' ? active.failure : undefined;
   const failed =
     error?.reason === 'denied'
       ? m.graph_explore_denied({}, o)
       : error?.reason === 'invalid' || error?.reason === 'stale'
         ? m.graph_explore_stale({}, o)
         : m.graph_explore_unavailable({}, o);
+
+  function request(
+    target: GraphRoute,
+    kind: GraphRequestKind,
+    extra: Partial<GraphRequestInput> = {},
+    writeHistory = true,
+  ) {
+    const routeTarget = copyRoute(target);
+    const targetKey = routeKey(routeTarget);
+    const shouldNavigate = !!writeHistory && !!onNavigate && targetKey !== propsRouteKey;
+    focusIntentRef.current =
+      kind === 'selection' || kind === 'expansion'
+        ? requestedSelection(routeTarget)
+          ? { kind: 'selection', key: selectedKey(requestedSelection(routeTarget)) }
+          : { kind: 'relation' }
+        : { kind: 'relation' };
+    runRecord(makeRecord(routeTarget, kind, extra), shouldNavigate, !onNavigate);
+    if (shouldNavigate) void onNavigate?.(routeTarget);
+  }
+
+  function select(next: GraphSelection) {
+    if (!read) return;
+    const target: GraphRoute = {
+      property: read.query.property.join(','),
+      direction: read.query.direction,
+      depth: read.query.depth,
+      ...(next.kind === 'node'
+        ? { node: next.id }
+        : { edge: next.statement, from: next.from, to: next.to, edgeProperty: next.property }),
+    };
+    request(target, 'selection');
+  }
+
+  function retry() {
+    if (!active?.record) return;
+    focusIntentRef.current = active.record.selection
+      ? { kind: 'selection', key: selectedKey(active.record.selection) }
+      : { kind: 'relation' };
+    runRecord(active.record, false, !onNavigate);
+  }
+
+  useEffect(() => {
+    if (!active) return;
+    if (active.status === 'pending' && focusIntentRef.current) statusRef.current?.focus();
+    if (active.status === 'failure') {
+      failureRef.current?.focus();
+      focusIntentRef.current = undefined;
+    }
+    if (active.status === 'success' && focusIntentRef.current) {
+      const intent = focusIntentRef.current;
+      if (intent.kind === 'selection') {
+        const target = [...(pageRef.current?.querySelectorAll<HTMLButtonElement>('[data-graph-selection]') ?? [])].find(
+          (button) => button.dataset.graphSelection === intent.key,
+        );
+        (target ?? detailHeadingRef.current ?? relationRef.current)?.focus();
+      } else relationRef.current?.focus();
+      focusIntentRef.current = undefined;
+    }
+  }, [active?.requestId, active?.status, source]);
+
   return (
     <article
+      ref={pageRef}
       className="mx-auto w-full min-w-0 max-w-5xl space-y-6 [overflow-wrap:anywhere]"
-      aria-busy={query.isPending}
+      aria-busy={status === 'pending'}
     >
       <ViewHeading label={m.graph_explore_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.graph_explore_intro({}, o)}</p>
-      {query.isPending && <p role="status">{m.graph_explore_loading({}, o)}</p>}
-      {error && (
-        <p ref={failureRef} role="alert" tabIndex={-1}>
-          {failed}
+      {status === 'pending' && (
+        <p ref={statusRef} role="status" tabIndex={-1}>
+          {m.graph_explore_loading({}, o)}
         </p>
+      )}
+      {error && (
+        <div>
+          <p ref={failureRef} role="alert" tabIndex={-1}>
+            {failed}
+          </p>
+          <Button type="button" className={actionClass} onClick={retry}>
+            {m.graph_explore_retry({}, o)}
+          </Button>
+        </div>
       )}
       {read && (
         <div className="space-y-6">
           <form
+            key={active?.readRevision ?? 0}
             className="flex min-w-0 flex-wrap gap-3"
             onSubmit={(event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
-              void load({
-                property: String(form.get('property') ?? ''),
-                direction: String(form.get('direction') ?? 'both'),
-                depth: Number(form.get('depth') ?? 1),
-              });
+              request(
+                {
+                  property: String(form.get('property') ?? ''),
+                  direction: String(form.get('direction') ?? 'both'),
+                  depth: Number(form.get('depth') ?? 1),
+                },
+                'filter',
+              );
             }}
           >
             <Field className="min-w-40 flex-1">
               <FieldLabel htmlFor={relationId}>{m.graph_explore_relation({}, o)}</FieldLabel>
-              <NativeSelect id={relationId} name="property" defaultValue={read.query.property[0] ?? ''}>
+              <NativeSelect
+                ref={relationRef}
+                id={relationId}
+                name="property"
+                defaultValue={read.query.property[0] ?? ''}
+              >
                 {read.relations.map((relation) => (
                   <NativeSelectOption key={relation.id} value={relation.id}>
                     {relation.label.text}
@@ -359,6 +729,7 @@ export function GraphBrowserPage({
               nodes={read.graph.nodes}
               edges={read.graph.edges}
               selected={selected}
+              selectionConfirmed={selectionConfirmed}
               onSelect={select}
               locale={locale}
             />
@@ -366,6 +737,7 @@ export function GraphBrowserPage({
               nodes={read.graph.nodes}
               edges={read.graph.edges}
               selected={selected}
+              selectionConfirmed={selectionConfirmed}
               onSelect={select}
               locale={locale}
             />
@@ -376,21 +748,38 @@ export function GraphBrowserPage({
               type="button"
               variant="outline"
               className={actionClass}
-              onClick={() =>
-                void load({
-                  property: read.query.property,
-                  direction: read.query.direction,
-                  depth: read.query.depth,
-                  expansion: entry,
-                })
-              }
+              onClick={() => {
+                const selection = requestedSelection(activeRoute);
+                request(
+                  {
+                    property: read.query.property.join(','),
+                    direction: read.query.direction,
+                    depth: read.query.depth,
+                    ...(selection?.kind === 'node'
+                      ? { node: selection.id }
+                      : selection?.kind === 'edge'
+                        ? {
+                            edge: selection.statement,
+                            from: selection.from,
+                            to: selection.to,
+                            edgeProperty: selection.property,
+                          }
+                        : {}),
+                  },
+                  'expansion',
+                  { expansion: entry },
+                  false,
+                );
+              }}
             >
               {m.graph_explore_continue({}, o)}
             </Button>
           ))}
           {read.detail && (
             <section className="space-y-3" aria-live="polite">
-              <h2 className="font-sans text-xl font-semibold">{m.graph_explore_inspect({}, o)}</h2>
+              <h2 ref={detailHeadingRef} tabIndex={-1} className="font-sans text-xl font-semibold">
+                {m.graph_explore_inspect({}, o)}
+              </h2>
               <p>{pickText(read.detail.subject.subject.labels, locale).text || m.subject_value_unlabelled({}, o)}</p>
               {read.detail.statement && (
                 <p>
@@ -414,25 +803,53 @@ export function GraphBrowserPage({
                 </a>
                 <a
                   className={linkClass}
-                  href={`${catalogueEntries.quotations({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}
+                  href={appendReturnTo(
+                    catalogueEntries.quotations({
+                      id: read.detail.subject.subject.id,
+                      label: pickText(read.detail.subject.subject.labels, locale).text,
+                      locale,
+                    }).href,
+                    returnTo,
+                  )}
                 >
                   {m.graph_explore_quotations({}, o)}
                 </a>
                 <a
                   className={linkClass}
-                  href={`${catalogueEntries.concepts({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}
+                  href={appendReturnTo(
+                    catalogueEntries.concepts({
+                      id: read.detail.subject.subject.id,
+                      label: pickText(read.detail.subject.subject.labels, locale).text,
+                      locale,
+                    }).href,
+                    returnTo,
+                  )}
                 >
                   {m.graph_explore_concepts({}, o)}
                 </a>
                 <a
                   className={linkClass}
-                  href={`${catalogueEntries.musicContext({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}
+                  href={appendReturnTo(
+                    catalogueEntries.musicContext({
+                      id: read.detail.subject.subject.id,
+                      label: pickText(read.detail.subject.subject.labels, locale).text,
+                      locale,
+                    }).href,
+                    returnTo,
+                  )}
                 >
                   {m.graph_explore_music({}, o)}
                 </a>
                 <a
                   className={linkClass}
-                  href={`${catalogueEntries.facts({ id: read.detail.subject.subject.id, label: pickText(read.detail.subject.subject.labels, locale).text, locale }).href}?${new URLSearchParams({ returnTo: graphHref })}`}
+                  href={appendReturnTo(
+                    catalogueEntries.facts({
+                      id: read.detail.subject.subject.id,
+                      label: pickText(read.detail.subject.subject.labels, locale).text,
+                      locale,
+                    }).href,
+                    returnTo,
+                  )}
                 >
                   {m.graph_explore_correct({}, o)}
                 </a>

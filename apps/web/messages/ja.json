@@ -6827,6 +6827,7 @@
   "graph_explore_denied": "現在のセッションではこのグラフを利用できません。",
   "graph_explore_stale": "この選択は古くなっています。節点または辺を選び直してください。",
   "graph_explore_loading": "グラフを読み込んでいます…",
+  "graph_explore_retry": "同じ条件で再読み込み",
   "quotation_title": "引用",
   "quotation_intro": "認められた引用を、話者・作品・声優を別の対象として読みます。本文だけでは誰が話したかは分かりません。",
   "quotation_text": "引用本文",

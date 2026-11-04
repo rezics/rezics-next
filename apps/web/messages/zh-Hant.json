@@ -6827,6 +6827,7 @@
   "graph_explore_denied": "目前工作階段無法使用此關係圖。",
   "graph_explore_stale": "此選擇已過時。請重新選擇一個節點或邊。",
   "graph_explore_loading": "正在讀取關係圖…",
+  "graph_explore_retry": "以相同條件重試讀取",
   "quotation_title": "引文",
   "quotation_intro": "閱讀已承認的引文，說話者、作品與配音是彼此獨立的對象。單憑正文不能推斷是誰說的。",
   "quotation_text": "引文正文",
