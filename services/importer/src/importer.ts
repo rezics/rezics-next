@@ -2102,12 +2102,15 @@ export class Importer {
       this.acknowledged(row.recordKey);
       return { kind, deferredCover: false, ...(observedConversion ? { conversion: observedConversion } : {}) };
     }
-    return {
-      kind: store.prepare(run, row.recordKey, {
+    if (owner.external_id === 'v1') console.error('showcase-credit v1 preparing store plan');
+    const preparedKind = store.prepare(run, row.recordKey, {
         commands,
         omissions,
         ...(deferredCover ? { deferredCover: true } : {}),
-      }),
+      });
+    if (owner.external_id === 'v1') console.error('showcase-credit v1 prepared store plan:', preparedKind);
+    return {
+      kind: preparedKind,
       deferredCover,
       ...(observedConversion ? { conversion: observedConversion } : {}),
     };
