@@ -9293,5 +9293,10 @@
   "work_tags_more_in_read": "表示できる主張の先頭24件を表示しています。この読み取りの残りは詳細へ、続きのページはプロパティの関連リーダーへ進んでください。",
   "work_tags_page_boundary": "これは提供されたページであり、タグ全体ではありません。詳細ではこの読み取りの事実と根拠を確認できます。続きのページと利用可否は関連リーダーが扱います。",
   "work_tags_details": "詳細で事実とタグの根拠を開く",
-  "work_tags_relation_reader": "{role} の続きを読む"
+  "work_tags_relation_reader": "{role} の続きを読む",
+  "work_franchise_preview_scope": "認められた主張の限られたプレビューです。シリーズ全体や読む順序を示すものではありません。",
+  "work_franchise_preview_more": "この関係には続きがある場合があります。「つながり」で確認できます。",
+  "work_franchise_stream_unsupported": "公開済みの定義では、この関係の方向はサポートされていません。",
+  "work_franchise_stream_refused": "この関係の読み取りは拒否されました。",
+  "work_franchise_stream_concealed": "この関係の情報は開示されていません。"
 }

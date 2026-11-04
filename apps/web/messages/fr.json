@@ -9290,5 +9290,10 @@
   "work_tags_more_in_read": "Cet aperçu montre les 24 premières assertions admises. Ouvrez les détails pour le reste de cette lecture ou poursuivez dans le lecteur de relations de la propriété.",
   "work_tags_page_boundary": "Il s’agit d’une page fournie, pas du catalogue complet des tags. Les détails présentent ses faits et éléments ; le lecteur de relations gère les pages suivantes et leur disponibilité.",
   "work_tags_details": "Ouvrir les faits et les éléments des tags dans les détails",
-  "work_tags_relation_reader": "Poursuivre : {role}"
+  "work_tags_relation_reader": "Poursuivre : {role}",
+  "work_franchise_preview_scope": "Aperçu limité des assertions admises, sans prétendre couvrir toute la franchise ni un ordre de lecture.",
+  "work_franchise_preview_more": "D’autres entrées peuvent être disponibles. Continuez dans Connexions.",
+  "work_franchise_stream_unsupported": "Les définitions publiées ne prennent pas en charge ce sens de relation.",
+  "work_franchise_stream_refused": "La consultation de cette relation a été refusée.",
+  "work_franchise_stream_concealed": "Aucune donnée de relation n’est divulguée."
 }

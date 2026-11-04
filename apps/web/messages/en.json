@@ -9386,5 +9386,10 @@
   "work_tags_more_in_read": "This preview shows the first 24 admitted assertions. Open Details for the rest of this reading, or continue in the property’s native relation reader.",
   "work_tags_page_boundary": "This is a supplied page, not a complete tag catalogue. Details keeps this reading’s facts and evidence; the relation reader owns further pages and their availability.",
   "work_tags_details": "Open facts and tag evidence in Details",
-  "work_tags_relation_reader": "Continue reading {role}"
+  "work_tags_relation_reader": "Continue reading {role}",
+  "work_franchise_preview_scope": "A bounded preview of admitted assertions, not a complete franchise or reading order.",
+  "work_franchise_preview_more": "More may be available in this stream. Continue in Connections.",
+  "work_franchise_stream_unsupported": "This relationship direction is not supported by the released definitions.",
+  "work_franchise_stream_refused": "This relationship reading was refused.",
+  "work_franchise_stream_concealed": "No relationship reading is disclosed."
 }

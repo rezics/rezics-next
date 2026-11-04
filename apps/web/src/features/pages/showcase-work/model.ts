@@ -161,3 +161,54 @@ export function workWindowRelations(id: string, window: ProfileRelationWindow): 
     [direction === 'in' ? 'links' : 'relations']: window.rows,
   });
 }
+
+/** Render at most twelve originals overall, at most three per returned stream, without starving later streams. */
+export const WORK_FRANCHISE_PREVIEW = { total: 12, perStream: 3 } as const;
+
+export function workFranchiseGroups(
+  id: string,
+  windows: readonly ProfileRelationWindow[],
+  definitions: Record<string, RelationDefinition>,
+) {
+  const groups = windows.map((window) => {
+    const definition = Object.hasOwn(definitions, window.property) ? definitions[window.property] : undefined;
+    const label = window.direction === 'inverse' ? definition?.label : definition?.forwardLabel;
+    const relations = label ? workWindowRelations(id, window) : undefined;
+    const current = window.caughtUp !== false;
+    const empty =
+      relations?.length === 0 &&
+      window.rows.length === 0 &&
+      window.complete &&
+      current &&
+      !window.next &&
+      (!window.count || window.count.value === 0);
+    return {
+      window,
+      label,
+      stream: `${window.direction === 'inverse' ? 'in' : 'out'}:${window.property}`,
+      relations: relations ?? [],
+      preview: [] as DirectedWorkRelation[],
+      state: !label
+        ? 'unsupported'
+        : !relations
+          ? 'unavailable'
+          : empty
+            ? 'empty'
+            : window.rows.length === 0 && (window.count?.value ?? 0) > 0
+              ? 'concealed'
+              : 'ready',
+      unavailable: !!relations && relations.length < window.rows.length,
+      more: !window.complete || !!window.next || !current,
+    };
+  });
+  let remaining = WORK_FRANCHISE_PREVIEW.total;
+  for (let row = 0; row < WORK_FRANCHISE_PREVIEW.perStream && remaining > 0; row++) {
+    for (const group of groups) {
+      const relation = group.relations[row];
+      if (!relation || remaining === 0) continue;
+      group.preview.push(relation);
+      remaining--;
+    }
+  }
+  return groups.map((group) => ({ ...group, more: group.more || group.preview.length < group.relations.length }));
+}

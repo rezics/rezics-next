@@ -1,3 +1,4 @@
+import { workFranchiseReturn } from '../catalogue/work-franchise-reading/navigation';
 import { subjectHref } from '../../subject/subject-href';
 import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
 import { isView } from '@rezics/composition';
@@ -373,6 +374,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const fragment = url.hash === '' ? '#connections' : url.hash;
     if (
       fragment !== '#literary-reader' &&
+      !(subject && !subject[2] && workFranchiseReturn(fragment)) &&
       fragment !== '#connections' &&
       !(subject && !subject[2] && fragment === '#supplied-names') &&
       !(subject && connectionReturnWindow(fragment)) &&
