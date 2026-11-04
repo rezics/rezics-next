@@ -46,7 +46,7 @@ export function SearchWindowControls({
       className="space-y-3"
     >
       <p role="status" className="text-sm text-muted-foreground" data-search-window-current>
-        {current
+        {current?.number !== undefined && current.number !== null
           ? m.search_window_current({ number: new Intl.NumberFormat(locale).format(current.number) }, options)
           : state.cursor
             ? m.search_window_address({}, options)

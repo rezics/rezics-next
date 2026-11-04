@@ -41,7 +41,12 @@ test('admitted addresses give bounded deliberate return with exact predicates an
 
 test('unknown cursors and repeated native addresses never fabricate a previous window or create a loop', () => {
   const empty = emptySearchWindows(first);
-  expect(admitSearchWindow(empty, 'direct').windows).toEqual([]);
+  const direct = admitSearchWindow(empty, 'direct');
+  expect(direct.windows).toEqual([{ cursor: 'direct', number: null }]);
+  expect(searchWindowPosition(direct, 'direct').previous).toBeUndefined();
+  const afterDirect = admitSearchWindow(direct, 'next-direct', 'direct');
+  expect(searchWindowPosition(afterDirect, 'next-direct').previous).toEqual({ cursor: 'direct', number: null });
+  expect(restoreSearchWindows(afterDirect, first)).toEqual(afterDirect);
   const firstPage = admitSearchWindow(empty, undefined);
   const second = admitSearchWindow(firstPage, 'second', null);
   const third = admitSearchWindow(second, 'third', 'second');

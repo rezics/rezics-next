@@ -4,7 +4,7 @@ export const SEARCH_CURSOR_LIMIT = 4864;
 export const SEARCH_ADDRESS_LIMIT = 131072;
 export const SEARCH_WINDOW_STATE = 'rezicsSearchWindows';
 
-export type SearchWindowAddress = Readonly<{ cursor: string | null; number: number }>;
+export type SearchWindowAddress = Readonly<{ cursor: string | null; number: number | null }>;
 export type SearchWindowHistory = Readonly<{
   version: 1;
   request: string;
@@ -35,11 +35,10 @@ export function restoreSearchWindows(value: unknown, request: string): SearchWin
       typeof entry !== 'object' ||
       (entry.cursor !== null &&
         (typeof entry.cursor !== 'string' || !entry.cursor || entry.cursor.length > SEARCH_CURSOR_LIMIT)) ||
-      !Number.isSafeInteger(entry.number) ||
-      entry.number < 1 ||
+      (entry.number !== null && (!Number.isSafeInteger(entry.number) || entry.number < 1)) ||
       (entry.cursor === null && entry.number !== 1) ||
       (entry.cursor !== null && entry.number === 1) ||
-      (windows.length > 0 && entry.number !== windows.at(-1)!.number + 1) ||
+      (windows.length > 0 && entry.number !== (windows.at(-1)!.number === null ? null : windows.at(-1)!.number! + 1)) ||
       seen.has(entry.cursor)
     )
       return empty;
@@ -61,10 +60,12 @@ export function admitSearchWindow(
   if (address.length === 0 || address.length > SEARCH_CURSOR_LIMIT) return history;
   const parent = from === undefined ? -1 : history.windows.findIndex((entry) => entry.cursor === from);
   // A direct cursor visit can be current, but its absolute page number is unknown.
-  if (parent < 0 || history.windows[parent]!.number >= Number.MAX_SAFE_INTEGER - 1) return history;
+  if (parent < 0) return { ...history, windows: [{ cursor: address, number: null }] };
+  const number = history.windows[parent]!.number;
+  if (number !== null && number >= Number.MAX_SAFE_INTEGER - 1) return history;
   const windows = [
     ...history.windows.slice(0, parent + 1),
-    { cursor: address, number: history.windows[parent]!.number + 1 },
+    { cursor: address, number: number === null ? null : number + 1 },
   ];
   return { ...history, windows: windows.slice(-SEARCH_WINDOW_LIMIT) };
 }
@@ -74,7 +75,9 @@ export function searchWindowPosition(history: SearchWindowHistory, cursor: strin
   return {
     current: index < 0 ? undefined : history.windows[index],
     previous: index > 0 ? history.windows[index - 1] : undefined,
-    clipped: (history.windows[0]?.number ?? 1) > 1,
+    clipped:
+      (history.windows[0]?.number ?? 1) > 1 ||
+      (history.windows[0]?.number === null && history.windows.length === SEARCH_WINDOW_LIMIT),
     index,
   };
 }
