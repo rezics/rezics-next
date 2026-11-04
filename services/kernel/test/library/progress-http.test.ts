@@ -719,9 +719,11 @@ test('owner discovery request cost stays bounded as a private library grows to 4
     responseBytes: number;
     sqlRows: number;
     sqlBlocks: number;
+    progressWrites: number;
     serializedBytes: number;
     backends: number;
     backgroundStatements: number;
+    plans: number;
   }[] = [];
   let previous = 1;
 
@@ -753,46 +755,70 @@ test('owner discovery request cost stays bounded as a private library grows to 4
     expect(result.value.body.progressSessions).toHaveLength(50);
     expect(typeof result.value.body.next).toBe('string');
     expect(new Set(result.value.body.progressSessions.map((row: Record<string, unknown>) => row['id'])).size).toBe(50);
-    expect(result.value.body.progressSessions.every((row: Record<string, unknown>) => row['subject'] !== null)).toBe(
-      true,
-    );
+    expect(
+      result.value.body.progressSessions.every(
+        (row: Record<string, unknown>) => typeof row['subject'] === 'object' && row['subject'] !== null,
+      ),
+    ).toBe(true);
 
     const captured = result.capture;
     const cost = costOf(captured);
     const sum = (values: readonly number[] | undefined) => (values ?? []).reduce((total, value) => total + value, 0);
+    const allStatements = [...captured.statements, ...(captured.backgroundStatements ?? [])];
     measurements.push({
       scale,
-      statements: captured.statements.length + (captured.backgroundStatements?.length ?? 0),
+      statements: allStatements.length,
       requestBytes: sum(captured.requestBytes) + sum(captured.backgroundRequestBytes),
       responseBytes: sum(captured.responseBytes) + sum(captured.backgroundResponseBytes),
       sqlRows: cost.rows + (cost.backgroundRows ?? 0),
       sqlBlocks: cost.blocks + (cost.backgroundBlocks ?? 0),
+      progressWrites: allStatements.filter(
+        (statement) =>
+          /\b(?:INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b/i.test(statement) &&
+          /\blibrary\.(?:progress_session|progress_discovery_generation|progress_unit|progress_change)\b/i.test(
+            statement,
+          ),
+      ).length,
       serializedBytes: Buffer.byteLength(JSON.stringify(result.value.body), 'utf8'),
       backends: new Set(captured.statementBackends ?? []).size,
       backgroundStatements: captured.backgroundStatements?.length ?? 0,
+      plans: captured.plans.length + (captured.backgroundPlans?.length ?? 0),
     });
     previous = scale;
   }
 
   const [small, medium, large] = measurements;
-  expect(medium).toMatchObject({
+  expect(small!.statements).toBeLessThanOrEqual(128);
+  expect(small!.requestBytes).toBeLessThanOrEqual(1_000_000);
+  expect(small!.responseBytes).toBeLessThanOrEqual(1_000_000);
+  expect(small!.sqlRows).toBeLessThanOrEqual(1024);
+  expect(small!.sqlBlocks).toBeLessThanOrEqual(256);
+  expect(small!.serializedBytes).toBeLessThanOrEqual(1_000_000);
+  expect(small!.plans).toBeLessThanOrEqual(small!.statements);
+  expect(small!.backends).toBe(1);
+  expect(small!.backgroundStatements).toBe(0);
+  expect(small!.progressWrites).toBe(0);
+  expect(medium!).toMatchObject({
     statements: small!.statements,
     requestBytes: small!.requestBytes,
     responseBytes: small!.responseBytes,
     sqlRows: small!.sqlRows,
+    progressWrites: small!.progressWrites,
     serializedBytes: small!.serializedBytes,
     backends: small!.backends,
     backgroundStatements: small!.backgroundStatements,
+    plans: small!.plans,
   });
-  expect(large).toMatchObject({
+  expect(large!).toMatchObject({
     statements: small!.statements,
     requestBytes: small!.requestBytes,
     responseBytes: small!.responseBytes,
     sqlRows: small!.sqlRows,
+    progressWrites: small!.progressWrites,
     serializedBytes: small!.serializedBytes,
     backends: small!.backends,
     backgroundStatements: small!.backgroundStatements,
+    plans: small!.plans,
   });
   expect(Math.max(small!.sqlBlocks, medium!.sqlBlocks, large!.sqlBlocks) - small!.sqlBlocks).toBeLessThanOrEqual(32);
-  console.info('progress discovery scale cost', measurements);
 });

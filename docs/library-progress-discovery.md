@@ -5,6 +5,8 @@ This document owns the private owner-wide index of native Library progress sessi
 
 Decision: Owner-wide progress discovery follows `(started_at DESC, session_id ASC)` and excludes retired sessions; it allows one typed state, profile, or mode filter at a time, optionally combined with an exact subject, so each bounded page has a native seek index.
 
+Decision: Inclusive request pricing counts every statement, plan row/block, and wire byte on the authenticated Kernel pool; fixture seeding and suite shutdown are accounted separately.
+
 ## Native read
 
 `GET /v1/progressSessionDiscovery` accepts optional `subjectId`, `state`, `mode`, `profileId`, `limit`, and `cursor`
@@ -71,9 +73,13 @@ partition-grouped bounded readers; disclosure and image checks remain required. 
 50 distinct release digests in one lookup. All batches are capped before serialization; no request performs detail
 polling per session.
 
-The inclusive 64/512/4096 growth counters, exact all-pool statement/block pricing, and corresponding native/browser
-acceptance are controller-owned and deferred to integration. This source-level model states the per-request caps; it is
-not a measured growth result.
+The focused native scale case seeds separate owner libraries at 64, 512, and 4096 sessions and captures the complete
+authenticated request on the Kernel pool. It bounds the request at 128 SQL statements, 1024 plan rows, 256 blocks, and
+1 MB each for SQL request bytes, SQL response bytes, and serialized response. Statement count, wire bytes, SQL rows,
+plan count, and response bytes must stay constant across the scales; block growth is capped at 32 over the 64-session
+case. Each request returns 50 hydrated sessions, performs no progress-graph writes or background SQL, and uses one
+backend. The separate admin pool seeds each growth step in one insert and runs `ANALYZE`; those setup statements are
+outside request pricing. The read has zero progress cleanup work, and the test database closes once after the suite.
 
 ## Page
 
@@ -95,29 +101,8 @@ details in a per-row loop, or duplicate editor and recovery logic.
 
 ## Focused verification
 
-Focused native HTTP coverage is in `services/kernel/test/library/progress-http.test.ts`; focused address and stale
-response coverage is in `apps/web/tests/progress-address.test.tsx` and
-`apps/web/tests/progress-index-current-origin.test.tsx`. Rendered page states are in
-`apps/web/src/stories/library-progress-discovery.stories.tsx`.
-
-On the current retry, `bun run --cwd services/kernel typecheck` failed with repository-wide Kernel errors, beginning
-with the missing Content-owned generated export:
-`../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.` The discovery Kernel route, store, SQL, presentation, and erasure changes had no Kernel diagnostics.
-
-`bun run --cwd apps/web typecheck` reported 3,748 errors while compiling the shared Web and Kernel source graph. It also
-cannot resolve the discovery SQL mapper when Web compiles Kernel source directly:
-`../../services/kernel/src/library/progress-discovery-presentation.ts(10,26): error TS2307: Cannot find module './progress-discovery-releases.sql' or its corresponding type declarations.` The installed client publication is still Content-owned and unavailable to Web.
-
-The focused Kernel command `bun run --cwd services/kernel check test/library/progress-http.test.ts` stopped during
-shared remote preparation before tests started:
-`remote-check: infrastructure failure: remote run timed out {"command": "bun [2 arguments]", "elapsedMs": 49275, "host": "c", "limitMs": 49071, "phase": "run-lifetime"}`.
-
-The Web focused command
-`bun apps/web/scripts/focused.ts --private-network -- bun test tests/progress-address.test.tsx tests/progress-index-current-origin.test.tsx`
-ran 11 tests: 5 passed and 6 failed in the existing current-origin action cases; all four address cases and the new
-stale-predicate case passed. This is not a passing focused suite. The callback harness now dispatches mounted form and
-input events, so those existing cases exercise the rendered page rather than private React props.
-
-Frozen broader acceptance, independent 64/512/4096 growth and inclusive cost derivation, generated client consumption,
-full Kernel checks, and seeded browser review remain deferred. The typed client integration and bounded scale cases are
-tracked in `.temp/continuation/progress-discovery-client.md`.
+The native HTTP route and growth bounds are covered in `services/kernel/test/library/progress-http.test.ts`. Web
+address and stale-response behavior is covered in `apps/web/tests/progress-address.test.tsx` and
+`apps/web/tests/progress-index-current-origin.test.tsx`; recorded page states live in
+`apps/web/src/stories/library-progress-discovery.stories.tsx`. Owner-wide Web reads depend on the Content-owned
+generated client publication and must use the installed method before rendered acceptance is recorded.
