@@ -92,6 +92,7 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
     revisions: [] as unknown[],
   };
   let choiceStatus = 200;
+  let actionStatus = 200;
   let decisionMode: 'normal' | 'unknown' = 'normal';
   const editorial = {
     id: '019a1b2c-3d4e-7000-8000-001000000001',
@@ -160,21 +161,17 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
       const context = url.pathname.includes(editorial.id) ? editorial : global;
       return json({ context });
     }
-    if (url.pathname === '/v1/viewerActions')
+    if (url.pathname === '/v1/viewerActions') {
+      if (actionStatus !== 200) return json({ code: 'dependency_unavailable' }, actionStatus);
+      if (!body || typeof body !== 'object' || !('resources' in body) || !Array.isArray(body.resources))
+        return json({}, 422);
       return json({
-        resources: [
-          {
-            type: 'semantic.context',
-            id: scope.context,
-            viewerActions: [
-              {
-                action: 'context:accept',
-                operations: page.actions.state === 'available' ? page.actions.operations : [],
-              },
-            ],
-          },
-        ],
+        resources: body.resources.map((reference: { type: string; id: string }) => ({
+          ...reference,
+          viewerActions: [{ action: 'context:accept', operations: page.actions.operations }],
+        })),
       });
+    }
     if (url.pathname === '/v1/review-candidates:prepare') {
       current = 'preparing';
       return json({ preparing: true }, 202);
@@ -299,6 +296,9 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
     setDirectory: (rows: typeof directory, next: string | null = null) => {
       directory = rows;
       directoryNext = next;
+    },
+    setActionStatus: (status: number) => {
+      actionStatus = status;
     },
     setChoiceStatus: (status: number) => {
       choiceStatus = status;

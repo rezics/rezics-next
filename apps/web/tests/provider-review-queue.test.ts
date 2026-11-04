@@ -189,11 +189,15 @@ test('unrelated Contexts Subjects candidates and revisions do not enlarge the ex
   }
 });
 
-test('unavailable action hydration preserves comparisons but grants no fresh queue decisions', () => {
+test('unavailable action hydration preserves comparisons but grants no fresh queue decisions', async () => {
   const fixture = providerQueueFixture();
-  if (fixture.initial.state !== 'ready') throw new Error('Expected page');
-  const initial = structuredClone(fixture.initial);
-  initial.page.actions = { state: 'unavailable' };
+  fixture.setActionStatus(503);
+  const initial = await fixture.transport.read(fixture.scope);
+  if (initial.state !== 'ready') throw new Error('Expected readable page');
+  expect(initial.page.actions).toEqual({ state: 'unavailable' });
+  expect(fixture.calls.filter((call) => call.path === '/v1/viewerActions')).toHaveLength(1);
+  expect(fixture.calls[0]!.body).toEqual({ resources: [{ type: 'semantic.context', id: fixture.scope.context }] });
+  expect(fixture.calls[1]!.path).toStartWith('/v1/review-candidates?');
   const html = renderToStaticMarkup(
     createElement(ProviderQueue, {
       transport: fixture.transport,
