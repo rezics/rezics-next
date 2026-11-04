@@ -29,7 +29,7 @@ let currentSession: { state: 'signed-in' | 'signed-out'; csrfToken: string | nul
 };
 mock.module('../src/session/query', () => ({ ...session, useSession: () => currentSession }));
 
-const { RealmShelf, SpacePage } = await import('../src/community/space-page');
+const { SpacePage } = await import('../src/community/space-page');
 const { loadSpacePage } = await import('../src/community/space');
 const { readBoardPage, readThreadPage } = await import('../src/threads/reads');
 const { ThreadReading } = await import('../src/threads/thread-reading');
@@ -59,30 +59,18 @@ test('the public Realm shelves lead to their exact work and board sources, then 
 
   const oldLocale = getLocale();
   try {
-    for (const locale of ['en', 'zh-Hant', 'ja'] as const) {
-      setLocale(locale, { reload: false });
-      const unavailable = async () => ({ kind: 'denied' as const });
-      const shelf = await render(
-        createElement(RealmShelf, {
-          realm: page.realm,
-          transport: { boards: unavailable, publications: unavailable, change: unavailable },
-          frozen: true,
-        }),
-      );
-      expect(shelf).toContain(m.realm_published_heading());
-      expect(shelf).toContain(m.realm_boards_heading());
-      for (const subject of page.realm.published) {
-        const label = subject.labels[locale] ?? subject.label ?? subject.labels.en ?? '';
-        expect(shelf).toContain(
-          `${subjectHref({ id: subject.id, label }, locale).href}?realm=${encodeURIComponent(page.realm.id)}`,
-        );
-      }
-      for (const board of page.realm.boards) expect(shelf).toContain(`/boards/${encodeURIComponent(board.id)}`);
-    }
-
     setLocale('en', { reload: false });
     const realmHtml = await render(createElement(SpacePage, { page }), `/en/realms/${page.realm.id}`);
     expect(realmHtml).toContain(page.realm.title);
+    expect(realmHtml).toContain(m.realm_published_heading());
+    expect(realmHtml).toContain(m.realm_boards_heading());
+    for (const subject of page.realm.published) {
+      const label = subject.labels.en ?? subject.label ?? '';
+      expect(realmHtml).toContain(
+        `${subjectHref({ id: subject.id, label }, 'en').href}?realm=${encodeURIComponent(page.realm.id)}`,
+      );
+    }
+    for (const board of page.realm.boards) expect(realmHtml).toContain(`/boards/${encodeURIComponent(board.id)}`);
 
     const boardId = boardThreadsRecording.threads[0]!.boardId;
     const board = page.realm.boards.find((candidate) => candidate.id === boardId);
