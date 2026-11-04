@@ -43,7 +43,7 @@ test('Album recovery retires every current surface and retains private drafts an
   const { albumFixture, albumId, artistId } = await import('../src/kernel/fake/catalogue-album-profile');
   const { m } = await import('../src/paraglide/messages.js');
   const testing = createRequire(require.resolve('storybook/test'));
-  const { within } = await import(testing.resolve('@testing-library/dom'));
+  const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
   const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
   const user = userEvent.setup({ document: window.document });
   const fixture = albumFixture();
@@ -259,6 +259,9 @@ test('Album recovery retires every current surface and retains private drafts an
     await click(m.facts_submit());
     expect(commands).toHaveLength(2);
     const exact = structuredClone(commands[1]!);
+    await waitFor(() =>
+      expect(within(field(properties[0]!)).getByRole('link', { name: m.correction_review() })).toBeDefined(),
+    );
     await act(async () => user.click(within(field(properties[0]!)).getByRole('link', { name: m.correction_review() })));
     await settle();
     expect(host.textContent).toContain(m.candidate_current());
