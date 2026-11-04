@@ -9,7 +9,7 @@ import type {
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<T extends true> = T;
-type ClassificationAPI = ReturnType<ReturnType<KernelClient['subjects']>['source-classifications']>;
+type ClassificationAPI = ReturnType<KernelClient['subjects']>['source-classifications'];
 type GeneratedPut = NonNullable<Awaited<ReturnType<ClassificationAPI['$put']['post']>>['data']>;
 type GeneratedClear = NonNullable<Awaited<ReturnType<ClassificationAPI['$clear']['post']>>['data']>;
 const generatedMutationClosure: [
