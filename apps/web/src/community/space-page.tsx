@@ -318,6 +318,7 @@ export function RealmShelf({
   const current = () => lease.active && lease.connected && (!lifetime || lifetime.current());
   const captureFocus = useRealmCompletionFocus();
   const commandFocus = useRef<RealmCompletionFocus | null>(null);
+  const currentControl = useRef<ReturnType<typeof usePublicationControls> | null>(null);
   const [completed, setCompleted] = useState<{
     input: PublicationChange;
     head: string;
@@ -453,7 +454,23 @@ export function RealmShelf({
       if (!onCompleted || !current() || !control.current()) return;
       const intent = {};
       const draftCurrent = control.current;
-      setCompleted({ input, head, intent, focus: commandFocus.current, current: () => current() && draftCurrent() });
+      setCompleted({
+        input,
+        head,
+        intent,
+        focus: commandFocus.current,
+        current: () => {
+          const live = currentControl.current;
+          return (
+            current() &&
+            draftCurrent() &&
+            live?.target?.id === input.subjectId &&
+            live.action === input.action &&
+            live.outcome?.kind === 'saved' &&
+            live.outcome.head === head
+          );
+        },
+      });
       // Use the existing shelf reader and its admission receipt, including the selected physical window.
       if (selection.node === 'publications' && selection.cursor) void publications.restore(selection.cursor, intent);
       else void publications.load(true, intent);
@@ -464,6 +481,7 @@ export function RealmShelf({
     preparePublication,
     realm,
   );
+  currentControl.current = control;
   useEffect(() => {
     const receipt = publications.continuation;
     if (

@@ -599,7 +599,7 @@ function PersonalMembership({
         if (!current()) return;
         await router.invalidate();
         if (!current()) return;
-        if (result.kind === 'settled' && cycle.target && result.viewer.state !== 'pending') {
+        if (result.kind === 'settled' && cycle.target && result.viewer && result.viewer.state !== 'pending') {
           const receiptCurrent = () =>
             cycle.caller.isCurrent() &&
             (!lifetime || lifetime.current()) &&
