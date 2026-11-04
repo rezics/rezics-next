@@ -381,6 +381,10 @@ test('subject preferences and own rating retire across the complete mounted read
     expect(main.ratings[0]?.expectedReader).toBe('reader-a');
     expect(main.readers[0]?.actualReader).toBe('reader-a'); // A null CSRF token still permits both read-only queries.
     await resolvePair(main, 0, 0, 2, 8);
+    expect(main.client.getQueryState(currentKey(main, 'data-reader-query'))).toMatchObject({
+      status: 'success',
+      data: { preferences: { spoilerLevel: 2, suitability: 'show' } },
+    });
     expect(value(main, 'preferences')).toBe('2:show');
     expect(value(main, 'own-rating')).toBe('8');
     expect(value(main, 'reader-id')).toBe('reader-a');
