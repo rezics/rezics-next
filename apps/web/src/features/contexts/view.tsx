@@ -400,6 +400,8 @@ export function ContextCreateView({
   const [rows, setRows] = useState<LabelRow[]>(() => [emptyLabelRow(locale)]);
   const [selected, setSelected] = useState<string | null>(null);
   const [inventory, setInventory] = useState<SettingsRead | null | undefined>(settings);
+  const inventoryRef = useRef<SettingsRead | null | undefined>(inventory);
+  inventoryRef.current = inventory;
   const [captured, setCaptured] = useState<SettingsRead | null>(null);
   const [changed, setChanged] = useState(false);
   const [preparing, setPreparing] = useState(false);
@@ -425,7 +427,13 @@ export function ContextCreateView({
     if (settings) setInventory(settings);
   }, [settings]);
   useEffect(() => {
-    if (!current() || !loadSettings || inventory) return;
+    if (
+      !current() ||
+      !loadSettings ||
+      (settings && settings.kind !== 'loading') ||
+      (inventoryRef.current && inventoryRef.current.kind !== 'loading')
+    )
+      return;
     let cancelled = false;
     setInventory({ kind: 'loading' });
     void loadSettings()
@@ -438,7 +446,7 @@ export function ContextCreateView({
     return () => {
       cancelled = true;
     };
-  }, [current, inventory, loadSettings]);
+  }, [current, loadSettings, settings]);
   const capturedDigest = createdContext?.settings?.release;
   useEffect(() => {
     if (!current() || !loadSettings || !capturedDigest) return;
