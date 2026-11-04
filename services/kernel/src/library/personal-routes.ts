@@ -27,6 +27,7 @@ import {
   EntryAnnotationCorrectionLimitError,
 } from './entry-annotation-correction.ts';
 import { CopyConflictError, CopyInvalidError, createCopyCommands } from './copies.ts';
+import { attachCopyListContext } from './copy-list-context.ts';
 import {
   createEntryCommands,
   LibraryConflictError,
@@ -199,6 +200,27 @@ const copyPresentationSchema = t.Object(
   },
   closed,
 );
+const copyListContextIdentitySchema = t.Object({ id, labels: t.Record(t.String(), t.String()) }, closed);
+const copyListContextSchema = t.Union([
+  t.Object(
+    {
+      state: t.Literal('available'),
+      work: t.Array(copyListContextIdentitySchema, { maxItems: 3 }),
+      facts: t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      state: t.Literal('unsupported'),
+      facts: t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
+    },
+    closed,
+  ),
+  ...(['scope', 'withheld', 'missing', 'unavailable'] as const).map((state) =>
+    t.Object({ state: t.Literal(state) }, closed),
+  ),
+]);
 const followSchema = t.Object(
   {
     targetId: id,
@@ -1230,17 +1252,41 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         query: t.Object({ ...pageQuery, subjectId: t.Optional(t.String({ format: 'uuid' })) }, closed),
         response: {
-          200: t.Object({ copies: t.Array(embedded(copySchema, subjectFields)), next: nullable }, closed),
+          200: t.Object(
+            { copies: t.Array(embedded(copySchema, { ...subjectFields, context: t.Optional(copyListContextSchema) })), next: nullable },
+            closed,
+          ),
+          413: problemSchema('content_too_large'),
           ...failures,
         },
         detail: detail('copy.list', 'copy:list'),
       },
-      async ({ actor, query, admission, job }) => {
+      async ({ actor, query, admission, job, request }) => {
         account(actor);
-        const result = await admission.run('normal', job, () =>
-          command(() => copies().listCopies(actor, basicQuery(query))),
+        const pageQuery = basicQuery(query);
+        const readPage = () =>
+          admission.run('normal', job, () => command(() => copies().listCopiesWithObservation(actor, pageQuery)));
+        const result = await readPage();
+        if (query.view !== 'FULL' || result.copies.length === 0)
+          return fullView(config(), actor, query.view, { copies: result.copies.map(copyView), next: result.next });
+
+        const copiesPage = await attachCopyListContext(
+          { ...config(), actor, deadline: job.deadline },
+          result.copies.map(copyView),
+          {
+            languages: languageRanges(request.headers.get('accept-language')),
+            async revalidate() {
+              const current = await readPage();
+              if (
+                JSON.stringify(current.copies) !== JSON.stringify(result.copies) ||
+                Boolean(current.next) !== Boolean(result.next) ||
+                current.accountEpoch !== result.accountEpoch
+              )
+                throw new ProblemError('semantic_not_ready');
+            },
+          },
         );
-        return fullView(config(), actor, query.view, { copies: result.copies.map(copyView), next: result.next });
+        return { copies: copiesPage, next: result.next };
       },
     )
     .get(

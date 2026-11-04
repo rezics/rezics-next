@@ -11,8 +11,13 @@ import { cookies, password } from '../../access/native-account-bindings-fixture.
 import { createListPresentationFixture } from '../../semantic/support/list-presentation-fixture.ts';
 
 /** Ordinary subject, identity, grant and Collection APIs supply every positive value. */
-export async function createCollectionListFactsFixture() {
-  const native = await createListPresentationFixture({ poolMax: 1 });
+export async function createCollectionListFactsFixture(
+  options: { db?: import('../../support/growth.ts').GrowthDatabase } = {},
+) {
+  const native = await createListPresentationFixture({
+    poolMax: 1,
+    ...(options.db === undefined ? {} : { db: options.db }),
+  });
   try {
     await native.checked('POST', '/v1/platform/exposure/collections:open', {}, 'operator');
     const deps = await native.deps('editor');

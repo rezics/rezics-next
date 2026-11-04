@@ -423,6 +423,7 @@ perform no copy or subject read. Decision: address recovery uses explicit read-o
 correcting a selector starts page one, while correcting or restarting a page position preserves its valid subject.
 The existing native invalid-cursor fallback remains bounded to one retry with the same subject and credentials,
 and visibly announces that it restarted at page one.
+Decision: FULL Copies preserves each native copy row and its existing `subject` summary, and adds per-copy `context` with the current bounded Semantic facts; only a completeness-aware disclosed `schema:exampleOfWork` result may identify a work/edition association, dates retain their native calendar granularity, and context grants no copy action. Until Semantic supplies that result, the association is `unsupported` and the 65,536-byte context budget refuses the rich page as `unavailable` without truncating identities.
 Detail/edit return and page recovery keep that subject. Decision: changed drafts prompt before closure or internal
 navigation; an unresolved command allows only Stay until its exact intent resolves.
 Decision: A definitive Copy update/delete conflict blocks new commands until explicit current-detail review and acceptance; accepting replaces the draft under the existing discard choice, uses a fresh key, and never submits a write. A concealed or unavailable detail cannot be accepted; uncertain commands keep their exact original retry.
