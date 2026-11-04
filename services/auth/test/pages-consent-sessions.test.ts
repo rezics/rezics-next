@@ -186,11 +186,19 @@ test('review-bound Allow and a nonempty reduction refuse grants added after the 
   });
   expect(staleReduction.status).toBe(409);
   expect(await staleReduction.json()).toMatchObject({ code: 'stale_review' });
-  const stored = await database.query<{ scopes: string[]; pending_scopes: string[] | null; pending_reference: string | null }>(
-    'SELECT scopes,pending_scopes,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2',
-    [person, external],
-  );
-  expect(stored.rows[0]).toEqual({ scopes: ['read', 'write', 'delete'], pending_scopes: null, pending_reference: null });
+  const stored = await database.query<{
+    scopes: string[];
+    pending_scopes: string[] | null;
+    pending_reference: string | null;
+  }>('SELECT scopes,pending_scopes,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2', [
+    person,
+    external,
+  ]);
+  expect(stored.rows[0]).toEqual({
+    scopes: ['read', 'write', 'delete'],
+    pending_scopes: null,
+    pending_reference: null,
+  });
   await database.query('DELETE FROM auth_consent WHERE account_id=$1 AND client_id=$2', [person, external]);
   await service.internal.registerClient({
     clientId: external,

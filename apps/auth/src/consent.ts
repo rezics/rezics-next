@@ -165,11 +165,7 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
 
 // Each mounted request owns one reader. Retrying keeps its exact client and scope;
 // disposing it makes every outstanding read inert.
-export function createConsentReview(
-  clientId: string,
-  scope: string,
-  publish: (review: ConsentReview) => void,
-) {
+export function createConsentReview(clientId: string, scope: string, publish: (review: ConsentReview) => void) {
   let active = true;
   let pending = false;
   let controller: AbortController | undefined;
@@ -212,7 +208,9 @@ function stringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.length <= maxScopes &&
-    value.every((item) => typeof item === 'string' && item.length > 0 && item.length <= 128 && scopePattern.test(item)) &&
+    value.every(
+      (item) => typeof item === 'string' && item.length > 0 && item.length <= 128 && scopePattern.test(item),
+    ) &&
     new Set(value).size === value.length
   );
 }
@@ -230,11 +228,7 @@ function requestedScopeSet(scope: string): string[] | null {
   const trimmed = scope.replace(/^ +| +$/gu, '');
   if (!trimmed) return [];
   const values = trimmed.split(/ +/u);
-  if (
-    values.length > maxScopes ||
-    values.some((value) => value.length > 128 || !scopePattern.test(value))
-  )
-    return null;
+  if (values.length > maxScopes || values.some((value) => value.length > 128 || !scopePattern.test(value))) return null;
   return [...new Set(values)];
 }
 

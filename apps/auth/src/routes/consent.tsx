@@ -30,22 +30,14 @@ function ConsentPage() {
   );
 }
 
-function ConsentRequest({
-  clientId,
-  scope,
-  invalid,
-}: {
-  clientId: string;
-  scope: string;
-  invalid: boolean;
-}) {
+function ConsentRequest({ clientId, scope, invalid }: { clientId: string; scope: string; invalid: boolean }) {
   const [{ state, consent, approved, pending, message, uncertain, unattributedUncertain }, setDecision] =
     useState<ConsentDecision>({
-    state: clientId && !invalid ? 'loading' : 'not-found',
-    pending: false,
-    uncertain: false,
-    unattributedUncertain: false,
-  });
+      state: clientId && !invalid ? 'loading' : 'not-found',
+      pending: false,
+      uncertain: false,
+      unattributedUncertain: false,
+    });
   const decision = useRef<ReturnType<typeof createConsentDecision> | null>(null);
   const alert = useRef<HTMLDivElement>(null);
 
@@ -134,7 +126,11 @@ function ConsentRequest({
               <p>{m.auth_consent_request()}</p>
               <p className="font-semibold wrap-anywhere">{consent.display_name ?? consent.client_id}</p>
             </div>
-            <p>{m.auth_login_current_account({ account: consent.acting_account.email ?? m.auth_security_rezics_account() })}</p>
+            <p>
+              {m.auth_login_current_account({
+                account: consent.acting_account.email ?? m.auth_security_rezics_account(),
+              })}
+            </p>
             {consent.pending_reduction ? <p role="status">{m.auth_inventory_consent_pending()}</p> : null}
             {consent.requested.length ? (
               <>
@@ -163,7 +159,12 @@ function ConsentRequest({
                   </Button>
                 ) : null}
                 {consent.decisions.decline ? (
-                  <Button type="button" variant="outline" disabled={pending} onClick={() => decision.current?.decline()}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() => decision.current?.decline()}
+                  >
                     {m.auth_consent_decline()}
                   </Button>
                 ) : null}

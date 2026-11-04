@@ -170,8 +170,7 @@ export function AuthStory({
       }
       if (mode === 'unknown' && ['/account-operations/execute', '/consent'].includes(path))
         throw new TypeError('Story: lost response');
-      if (mode === 'refused' && path === '/consent')
-        return Response.json({ code: 'stale_review' }, { status: 409 });
+      if (mode === 'refused' && path === '/consent') return Response.json({ code: 'stale_review' }, { status: 409 });
       const failure =
         mode === 'unavailable'
           ? 503

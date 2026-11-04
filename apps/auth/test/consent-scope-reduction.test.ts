@@ -73,14 +73,14 @@ test('Reduce selected existing app permissions through the native consent barrie
   expect(await result).toEqual({ kind: 'accepted' });
   expect(calls.map(({ path, body }) => ({ path, body }))).toEqual([
     { path: '/consent/third-party', body: null },
-      {
-        path: '/consent',
-        body: {
-          client_id: 'third-party',
-          scope: ['openid', 'subject:read'],
-          reviewed_scopes: ['openid', 'offline_access', 'subject:read'],
-        },
+    {
+      path: '/consent',
+      body: {
+        client_id: 'third-party',
+        scope: ['openid', 'subject:read'],
+        reviewed_scopes: ['openid', 'offline_access', 'subject:read'],
       },
+    },
   ]);
   expect(
     calls.every(

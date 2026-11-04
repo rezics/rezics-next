@@ -2155,12 +2155,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             if (currentClient.first_party) throw new Denied(404);
             return withConsent(before.account_id, clientId, async (connection) => {
               const identity = await readNativeAccountIdentity(database, before.account_id);
-              const consent = (
-                await connection.query<{ scopes: string[]; pending_scopes: string[] | null }>(
-                  'SELECT scopes,pending_scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2',
-                  [before.account_id, currentClient.client_id],
-                )
-              ).rows[0] ?? null;
+              const consent =
+                (
+                  await connection.query<{ scopes: string[]; pending_scopes: string[] | null }>(
+                    'SELECT scopes,pending_scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2',
+                    [before.account_id, currentClient.client_id],
+                  )
+                ).rows[0] ?? null;
               const afterClient = await clientFor(clientId, 404);
               const after = await humanProof(request.headers);
               const afterSource = proofSources.get(after);
@@ -2697,11 +2698,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           fields(body, ['client_id', 'scope', 'reviewed_account_id', 'reviewed_scopes', 'reviewed_requested']);
           const clientId = text(body.client_id);
           const granted = scopes(body.scope);
-          const reviewedAccountId =
-            body.reviewed_account_id === undefined ? undefined : text(body.reviewed_account_id);
+          const reviewedAccountId = body.reviewed_account_id === undefined ? undefined : text(body.reviewed_account_id);
           const reviewedScopes = body.reviewed_scopes === undefined ? undefined : scopes(body.reviewed_scopes);
           const reviewedRequested =
-            body.reviewed_requested === undefined ? undefined : normalizeConsentRequestedScopes(body.reviewed_requested);
+            body.reviewed_requested === undefined
+              ? undefined
+              : normalizeConsentRequestedScopes(body.reviewed_requested);
           if (
             (body.reviewed_requested !== undefined && !reviewedRequested) ||
             (reviewedAccountId !== undefined && (reviewedScopes === undefined || reviewedRequested === undefined)) ||
@@ -2944,9 +2946,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           return json({
             client_id: clientId,
             scope: granted,
-            ...(reviewedAccountId === undefined
-              ? {}
-              : { account_id: reviewedAccountId, requested: reviewedRequested }),
+            ...(reviewedAccountId === undefined ? {} : { account_id: reviewedAccountId, requested: reviewedRequested }),
           });
         }
         fields(body, []);

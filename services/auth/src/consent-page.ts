@@ -54,12 +54,12 @@ export function projectConsentPage(input: ConsentPageInput): ConsentPage | null 
     !normalizedRequested ||
     !identity.account_id ||
     identity.account_id.length > 1024 ||
-    (identity.email !== null &&
-      (identity.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(identity.email))) ||
+    (identity.email !== null && (identity.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(identity.email))) ||
     (consent !== null &&
       (!scopeSet(consent.scopes) ||
         (consent.pending_scopes !== null &&
-          (!scopeSet(consent.pending_scopes) || consent.pending_scopes.some((scope) => !consent.scopes.includes(scope))))))
+          (!scopeSet(consent.pending_scopes) ||
+            consent.pending_scopes.some((scope) => !consent.scopes.includes(scope))))))
   )
     return null;
 
@@ -85,7 +85,9 @@ function scopeSet(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
     value.length <= CONSENT_PAGE_MAX_SCOPES &&
-    value.every((scope) => typeof scope === 'string' && scope.length > 0 && scope.length <= 128 && scopePattern.test(scope)) &&
+    value.every(
+      (scope) => typeof scope === 'string' && scope.length > 0 && scope.length <= 128 && scopePattern.test(scope),
+    ) &&
     new Set(value).size === value.length
   );
 }

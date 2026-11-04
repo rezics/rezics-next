@@ -8,7 +8,12 @@ test('consent projection preserves unknown request names and shows the admitted 
   const requested = parseConsentRequestedScopes('read account:manage');
   expect(requested).toEqual(['read', 'account:manage']);
   expect(
-    projectConsentPage({ client, identity, requested: requested!, consent: { scopes: ['openid'], pending_scopes: null } }),
+    projectConsentPage({
+      client,
+      identity,
+      requested: requested!,
+      consent: { scopes: ['openid'], pending_scopes: null },
+    }),
   ).toEqual({
     client_id: 'reader',
     display_name: 'Reader',

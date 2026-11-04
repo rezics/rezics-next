@@ -49,10 +49,7 @@ test('consent reviews and decisions belong to the current visit and survive sign
     decisions: { allow: true, decline: true, switch_account: true },
   };
   const requestScope = 'openid offline_access library:read unknown openid';
-  dom.sessionStorage.setItem(
-    `auth.consent.pending:${JSON.stringify([body.client_id, 'library:read'])}`,
-    'pending',
-  );
+  dom.sessionStorage.setItem(`auth.consent.pending:${JSON.stringify([body.client_id, 'library:read'])}`, 'pending');
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
