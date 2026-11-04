@@ -77,7 +77,7 @@ test('People correction focus stays current and profile creation keeps authority
         <QueryClientProvider client={client}>
           <CandidateReaderBoundary
             observed={{ state: 'signed-in', subject: 'viewer', csrfToken: 'token' }}
-            address={selectedFixture.id}
+            address={id ?? selectedFixture.work.subject.id}
           >
             <PeopleProfileEditor
               {...(id ? { id } : {})}
