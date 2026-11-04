@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   FILTER_LIMITS,
   facetProperties,
@@ -10,8 +10,10 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { EntityPicker } from '@rezics/ui/entity-picker';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
+import { coverSrc } from '../media/cover-src';
 import { localizedLabel } from './results';
 import { ConditionRangeInput } from './condition-range-input';
 import { ConditionLanguages } from './condition-languages';
@@ -35,6 +37,16 @@ import { conditionDraftNodeAt, createConditionEditFocus } from './condition-edit
 import { createRequestResourceConditionExtension } from './resource-condition-editor';
 import type { RequestResourceInput } from './resource-condition-model';
 import {
+  appendConditionEntity,
+  conditionEntityRequestIdentity,
+  ConditionEntityLookupError,
+  isConditionEntityIdentifier,
+  resolveConditionEntityLabels,
+  searchConditionEntities,
+  type ConditionEntityContext,
+  type ConditionEntityFailure,
+} from './condition-entity';
+import {
   conditionTreeCanSubmit,
   createConditionDraftNode,
   editConditionDraftNode,
@@ -53,8 +65,10 @@ type EditorContext = {
   metadata: ConditionMetadata;
   locale: string;
   options: MessageOptions;
+  disabled: boolean;
   issues: readonly ConditionIssue[];
   values: Record<string, Choice[]>;
+  entityLookup?: ConditionEntityContext | undefined;
   announce(message: string, pointer: string): void;
   canEditTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
   editTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
@@ -106,6 +120,7 @@ export function ConditionEditor({
   issues = [],
   values = {},
   disabled = false,
+  entityLookup,
   languages,
   onLanguages,
   extension,
@@ -119,6 +134,7 @@ export function ConditionEditor({
   issues?: readonly ConditionIssue[];
   values?: Record<string, Choice[]>;
   disabled?: boolean;
+  entityLookup?: ConditionEntityContext | undefined;
   languages?: string[] | undefined;
   onLanguages?(languages: string[]): void;
   extension?: ConditionExtension;
@@ -142,6 +158,15 @@ export function ConditionEditor({
       current: () => Boolean(root.current?.isConnected) && !disabledRef.current,
     }),
   );
+  const focusOwner = JSON.stringify([
+    locale,
+    entityLookup ? conditionEntityRequestIdentity('condition-editor', '', [], entityLookup) : null,
+  ]);
+  const focusOwnerRef = useRef(focusOwner);
+  if (focusOwnerRef.current !== focusOwner) {
+    recovery.current.cancel();
+    focusOwnerRef.current = focusOwner;
+  }
   // Only documents emitted by this session inherit its drafts. Revert and external
   // replacements start fresh, even when they reuse an earlier document object.
   if (session.value !== value) {
@@ -237,8 +262,10 @@ export function ConditionEditor({
         metadata,
         locale,
         options,
+        disabled,
         issues,
         values,
+        ...(entityLookup ? { entityLookup } : {}),
         announce,
         canEditTree,
         editTree,
@@ -373,6 +400,36 @@ function EditorField({
   );
 }
 
+type QualifierDraftIdentity = {
+  draftKey: string;
+  values: readonly FilterQualifier[];
+  keys: string[];
+};
+
+function reconcileQualifierKeys(
+  previous: QualifierDraftIdentity | undefined,
+  draftKey: string,
+  values: readonly FilterQualifier[],
+  nextKey: () => string,
+): QualifierDraftIdentity {
+  if (!previous || previous.draftKey !== draftKey)
+    return { draftKey, values, keys: values.map(() => nextKey()) };
+  const used = new Set<number>();
+  const keys = values.map((value, index) => {
+    const sameOccurrence = previous.values.findIndex((candidate, at) => candidate === value && !used.has(at));
+    if (sameOccurrence >= 0) {
+      used.add(sameOccurrence);
+      return previous.keys[sameOccurrence]!;
+    }
+    if (previous.values[index]?.property === value.property && !used.has(index)) {
+      used.add(index);
+      return previous.keys[index]!;
+    }
+    return nextKey();
+  });
+  return { draftKey, values, keys };
+}
+
 function NodeEditor({
   value,
   draft,
@@ -387,6 +444,16 @@ function NodeEditor({
   context: EditorContext;
 }) {
   const { options } = context;
+  const qualifierIdentity = useRef<QualifierDraftIdentity | undefined>(undefined);
+  const qualifierSerial = useRef(0);
+  const qualifiers = 'statement' in value ? (value.statement.qualifiers ?? []) : [];
+  const qualifierDraft = reconcileQualifierKeys(
+    qualifierIdentity.current,
+    draft.key,
+    qualifiers,
+    () => `qualifier-${++qualifierSerial.current}`,
+  );
+  qualifierIdentity.current = qualifierDraft;
   const onChange = (next: FilterDocument | undefined) => {
     const replacesRange =
       next &&
@@ -736,13 +803,23 @@ function NodeEditor({
                 pointer={`${pointer}/statement/in`}
                 values={value.statement.in}
                 choices={context.values[property ?? '']}
+                entity={
+                  definition?.datatype === 'wikibase-item' && property
+                    ? {
+                        property,
+                        targets: definition.targets ?? [],
+                        occurrence: `${draft.key}:statement`,
+                        nodeKey: draft.key,
+                      }
+                    : undefined
+                }
                 onChange={(selected) => replaceStatement({ in: selected })}
               />
             )
           )}
           {value.statement.qualifiers?.map((qualifier, index) => (
             <FieldSet
-              key={index}
+              key={qualifierDraft.keys[index]}
               className="min-w-0 gap-3 border-t border-border/60 pt-3"
               data-condition-pointer={`${pointer}/statement/qualifiers/${index}`}
               tabIndex={-1}
@@ -773,6 +850,16 @@ function NodeEditor({
                 pointer={`${pointer}/statement/qualifiers/${index}/in`}
                 values={qualifier.in}
                 choices={context.values[qualifier.property]}
+                entity={
+                  context.metadata.properties[qualifier.property]?.datatype === 'wikibase-item'
+                    ? {
+                        property: qualifier.property,
+                        targets: context.metadata.properties[qualifier.property]?.targets ?? [],
+                        occurrence: `${draft.key}:${qualifierDraft.keys[index]}`,
+                        nodeKey: draft.key,
+                      }
+                    : undefined
+                }
                 onChange={(selected) =>
                   replaceStatement({
                     qualifiers: value.statement.qualifiers!.map((entry, at) =>
@@ -865,6 +952,265 @@ function NodeEditor({
   );
 }
 
+function conditionEntityFailure(error: unknown): ConditionEntityFailure {
+  return error instanceof ConditionEntityLookupError ? error.failure : 'unavailable';
+}
+
+function conditionEntityFailureText(failure: ConditionEntityFailure, options: MessageOptions): string {
+  if (failure === 'restart') return m.search_suggestions_restart({}, options);
+  if (failure === 'credentials') return m.search_suggestions_credentials({}, options);
+  if (failure === 'invalid') return m.search_suggestions_invalid({}, options);
+  if (failure === 'metadata') return m.condition_metadata_unavailable({}, options);
+  return m.search_suggestions_unavailable({}, options);
+}
+
+function ConditionEntityValues({
+  values,
+  onChange,
+  pointer,
+  property,
+  targets,
+  occurrence,
+  nodeKey,
+  lookup,
+  context,
+}: {
+  values: readonly string[];
+  onChange(values: string[]): void;
+  pointer: string;
+  property: string;
+  targets: readonly string[];
+  occurrence: string;
+  nodeKey: number;
+  lookup: ConditionEntityContext;
+  context: EditorContext;
+}) {
+  const { options } = context;
+  const targetsKey = JSON.stringify(targets);
+  const valuesKey = JSON.stringify(values);
+  const requestIdentity = conditionEntityRequestIdentity(occurrence, property, targets, lookup);
+  const requestContext = useMemo(() => lookup, [requestIdentity]);
+  const targetTypes = useMemo(() => targets, [targetsKey]);
+  const identifiers = [...new Set(values.filter(isConditionEntityIdentifier).map((value) => value.toLowerCase()))].slice(
+    0,
+    FILTER_LIMITS.in,
+  );
+  const [resolved, setResolved] = useState<Record<string, { label: string; type: string }>>({});
+  const [resolveFailure, setResolveFailure] = useState<ConditionEntityFailure>();
+  const [suggestionFailure, setSuggestionFailure] = useState<ConditionEntityFailure>();
+  const [resolving, setResolving] = useState(identifiers.length > 0 && !context.disabled);
+  const [retry, setRetry] = useState(0);
+  const attempted = useRef(new Set<string>());
+  const [withheld, setWithheld] = useState<string[]>([]);
+  const emptyValueIndex = values.findIndex((value) => value === '');
+  const pickerNumber = emptyValueIndex >= 0 ? emptyValueIndex + 1 : values.length + 1;
+  const chooserPointer = `${pointer}/chooser`;
+
+  useEffect(() => {
+    const current = new Set(identifiers);
+    for (const id of attempted.current) if (!current.has(id)) attempted.current.delete(id);
+    setResolved((previous) => Object.fromEntries(Object.entries(previous).filter(([id]) => current.has(id))));
+    setWithheld((previous) => previous.filter((id) => current.has(id)));
+    setResolveFailure(undefined);
+    setSuggestionFailure(undefined);
+  }, [identifiers.join('|')]);
+
+  useEffect(() => {
+    if (context.disabled) {
+      setResolving(false);
+      return;
+    }
+    const needed = identifiers.filter((id) => !resolved[id] && !attempted.current.has(id));
+    if (!needed.length) {
+      setResolving(false);
+      return;
+    }
+    if (!requestContext.available || targetTypes.length === 0) {
+      setResolveFailure(requestContext.available ? 'metadata' : 'unavailable');
+      setResolving(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    let completed = false;
+    for (const id of needed) attempted.current.add(id);
+    setResolveFailure(undefined);
+    setResolving(true);
+    void resolveConditionEntityLabels(needed, targetTypes, requestContext, controller.signal)
+      .then(({ labels, withheld: hidden }) => {
+        if (!active) return;
+        completed = true;
+        setResolved((previous) => ({ ...previous, ...labels }));
+        setWithheld((previous) => [...new Set([...previous.filter((id) => !needed.includes(id)), ...hidden])]);
+      })
+      .catch((error) => {
+        if (!active || controller.signal.aborted) return;
+        completed = true;
+        setResolveFailure(conditionEntityFailure(error));
+      })
+      .finally(() => {
+        if (active) setResolving(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+      if (!completed) for (const id of needed) attempted.current.delete(id);
+    };
+  }, [context.disabled, identifiers.join('|'), requestContext, retry, resolved, targetTypes]);
+
+  const search = useCallback(
+    async (query: string, signal: AbortSignal) => {
+      setSuggestionFailure(undefined);
+      try {
+        return await searchConditionEntities(query, targetTypes, requestContext, signal);
+      } catch (error) {
+        if (!signal.aborted) setSuggestionFailure(conditionEntityFailure(error));
+        throw error;
+      }
+    },
+    [requestContext, targetTypes],
+  );
+
+  const removeValue = (index: number) => {
+    const next = values.filter((_, at) => at !== index);
+    onChange(next.length ? next : ['']);
+    context.announce(
+      m.condition_removed({}, options),
+      requestContext.available && targetTypes.length > 0 ? chooserPointer : pointer.replace(/\/(type|statement).*$/, ''),
+    );
+  };
+  const unresolved = identifiers.filter((id) => !resolved[id]);
+  const hasInvalidOperand = values.some((value) => value !== '' && !isConditionEntityIdentifier(value));
+  const hasWithheld = unresolved.some((id) => withheld.includes(id));
+  const failure = suggestionFailure ?? resolveFailure;
+  const missingLabel = !resolving && unresolved.length > 0;
+  const repairText = hasInvalidOperand
+    ? m.condition_entity_invalid({}, options)
+    : hasWithheld
+      ? m.condition_entity_unresolved({}, options)
+      : failure
+        ? conditionEntityFailureText(failure, options)
+        : missingLabel
+          ? m.search_suggestions_unavailable({}, options)
+          : undefined;
+  const canResolve = requestContext.available && targetTypes.length > 0 && !context.disabled;
+  const retryLabels = () => {
+    const retryIds = new Set(unresolved);
+    for (const id of retryIds) attempted.current.delete(id);
+    setWithheld((previous) => previous.filter((id) => !retryIds.has(id)));
+    setResolveFailure(undefined);
+    setRetry((version) => version + 1);
+  };
+
+  return (
+    <div
+      className="min-w-0 space-y-2"
+      data-condition-entity-property={property}
+      data-condition-pointer={pointer}
+      data-condition-node={nodeKey}
+      aria-busy={resolving}
+    >
+      {values.map((value, index) => {
+        const selected = resolved[value.toLowerCase()];
+        return (
+          <div key={`${occurrence}:${index}`} className="flex items-end gap-1">
+            <EditorField
+              context={context}
+              pointer={`${pointer}/${index}`}
+              label={m.condition_value({ number: index + 1 }, options)}
+            >
+              {(props) => (
+                <div className="min-w-0 flex-1 space-y-1">
+                  {selected ? (
+                    <p dir="auto" className="break-words text-sm font-medium">
+                      {selected.label}
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">{selected.type}</span>
+                    </p>
+                  ) : null}
+                  <Input {...props} readOnly value={value} placeholder={m.condition_choose_value({}, options)} />
+                </div>
+              )}
+            </EditorField>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={m.refinement_remove(
+                { value: m.condition_value({ number: index + 1 }, options) },
+                options,
+              )}
+              onClick={() => removeValue(index)}
+            >
+              {m.condition_remove({}, options)}
+            </Button>
+          </div>
+        );
+      })}
+      {values.length === 0 ? (
+        <div className="flex items-end gap-1">
+          <EditorField
+            context={context}
+            pointer={`${pointer}/0`}
+            label={m.condition_value({ number: 1 }, options)}
+          >
+            {(props) => <Input {...props} readOnly value="" placeholder={m.condition_choose_value({}, options)} />}
+          </EditorField>
+        </div>
+      ) : null}
+      {requestContext.available && targetTypes.length > 0 ? (
+        <Field
+          className="min-w-0"
+          data-condition-pointer={chooserPointer}
+          data-condition-node={nodeKey}
+          tabIndex={-1}
+        >
+          <FieldLabel>{m.condition_value({ number: pickerNumber }, options)}</FieldLabel>
+          <EntityPicker
+            key={`${occurrence}:${valuesKey}`}
+            search={search}
+            src={coverSrc}
+            label={m.condition_value({ number: pickerNumber }, options)}
+            placeholder={m.condition_choose_value({}, options)}
+            value={[]}
+            onValueChange={(selected) => {
+              const candidate = selected[0];
+              if (!candidate) return;
+              const next = appendConditionEntity(values, candidate.id);
+              if (next.some((entry, index) => entry !== values[index])) {
+                onChange(next);
+                context.announce(m.condition_added({}, options), chooserPointer);
+              }
+            }}
+            disabled={context.disabled || (values.length >= FILTER_LIMITS.in && !values.includes(''))}
+            className="min-w-0"
+          />
+        </Field>
+      ) : null}
+      {repairText ? (
+        <p role="alert" className="text-sm text-destructive">
+          {repairText}
+        </p>
+      ) : null}
+      {canResolve && missingLabel && !context.disabled ? (
+        <Button type="button" variant="outline" size="sm" onClick={retryLabels}>
+          {m.subject_view_retry({}, options)}
+        </Button>
+      ) : null}
+      {!requestContext.available && !repairText ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_suggestions_unavailable({}, options)}
+        </p>
+      ) : null}
+      {requestContext.available && targetTypes.length === 0 && !repairText ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.condition_metadata_unavailable({}, options)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function ValueFields({
   values,
   choices,
@@ -872,6 +1218,7 @@ function ValueFields({
   pointer,
   context,
   closed = false,
+  entity,
 }: {
   values: readonly string[];
   choices?: Choice[] | undefined;
@@ -879,7 +1226,23 @@ function ValueFields({
   pointer: string;
   context: EditorContext;
   closed?: boolean;
+  entity?: { property: string; targets: readonly string[]; occurrence: string; nodeKey: number } | undefined;
 }) {
+  if (entity && context.entityLookup)
+    return (
+      <ConditionEntityValues
+        key={conditionEntityRequestIdentity(entity.occurrence, entity.property, entity.targets, context.entityLookup)}
+        values={values}
+        onChange={onChange}
+        pointer={pointer}
+        property={entity.property}
+        targets={entity.targets}
+        occurrence={entity.occurrence}
+        nodeKey={entity.nodeKey}
+        lookup={context.entityLookup}
+        context={context}
+      />
+    );
   const choicesId = useId();
   const options = closed
     ? conditionChoiceLabels(

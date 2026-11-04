@@ -4133,6 +4133,8 @@
   "condition_choose_value": "Choisir une valeur",
   "condition_add_value": "Ajouter une valeur",
   "condition_metadata_unavailable": "Les définitions sont indisponibles. Vos conditions sont conservées.",
+  "condition_entity_unresolved": "Le libellé public actuel de cet élément est indisponible. Supprimez-le ou choisissez un autre élément.",
+  "condition_entity_invalid": "Cette valeur n’est pas un identifiant d’élément natif. Supprimez-la ou choisissez un résultat pour la remplacer.",
   "condition_retained": "Cette condition existante est conservée. Sa sélection et sa modification ne sont pas disponibles ici.",
   "condition_saved_filter_label": "Filtre enregistré : {id}",
   "condition_saved_filter_reference": "Référence du filtre enregistré",

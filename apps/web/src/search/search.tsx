@@ -57,6 +57,7 @@ import { useDiscoveryPersonalResults } from './discovery-personal-host';
 
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 import { ConditionEditor } from './condition-editor';
+import type { ConditionEntityContext } from './condition-entity';
 import { SearchRealmDiscovery } from './realm-discovery';
 import { isRealmDiscoverySearch, type RealmDiscoveryReader } from './realm-discovery-loader';
 import { readScopedSearchReader } from './search-reader';
@@ -137,6 +138,46 @@ export type SearchPageData = {
   ratingPopulations?: readonly RealmRatingPopulationOption[];
   ratingReadiness?: RealmRatingReadiness;
 };
+
+function conditionEntityLookupContext(
+  data: SearchPageData | undefined,
+  locale: string,
+  reader: string | null,
+): ConditionEntityContext | undefined {
+  if (!data?.conditionMetadata) return undefined;
+  const base = {
+    locale,
+    ...(reader ? { reader } : {}),
+    ...(data.conditionMetadata.digest ? { release: data.conditionMetadata.digest } : {}),
+  };
+  if (!data.queryState) return { ...base, available: false };
+  const state = data.queryState;
+  const parsedScope = parseSearchResourceScope(state.filter);
+  const scope = state.resourceScope ?? parsedScope.scope;
+  const scopeMismatch =
+    parsedScope.scope !== undefined &&
+    scope !== undefined &&
+    (parsedScope.scope.kind !== scope.kind || parsedScope.scope.id !== scope.id.toLowerCase());
+  const missingScope = parsedScope.scope !== undefined && scope === undefined;
+  const otherReaderBound = searchRequiresCurrentReader({
+    ...state,
+    resourceScope: undefined,
+    ratingPopulation: undefined,
+  });
+  return {
+    ...base,
+    ...(scope ? { resourceScope: scope } : {}),
+    available:
+      typeof data.conditionMetadata.digest === 'string' &&
+      data.conditionMetadata.digest.length > 0 &&
+      !parsedScope.invalidInput &&
+      !scopeMismatch &&
+      !missingScope &&
+      state.ratingPopulation === undefined &&
+      !otherReaderBound &&
+      (scope === undefined || reader !== null),
+  };
+}
 /** At most this many facet properties are asked for on a single-type search. */
 const FACT_PROPERTIES = 2;
 /** At most this many time properties are asked for to give hits their year. */
@@ -1202,6 +1243,7 @@ export function SearchPage({
         onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
         metadata={data?.conditionMetadata}
         locale={locale}
+        entityLookup={conditionEntityLookupContext(data, locale, session)}
         issues={issues}
         values={Object.fromEntries(
           data?.refinement?.initial?.status === 'ready'

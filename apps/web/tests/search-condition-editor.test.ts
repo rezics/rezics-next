@@ -18,6 +18,7 @@ import { discoverySearchHref, searchFormFields, searchLoaderDeps, searchParams }
 import { discoveryRequest, readSearchPage } from '../src/search/search-request';
 import { readDiscovery } from '../src/search/discovery';
 import { facetProblem } from '../src/search/refinement/request';
+import { changeQualifierProperty, changeStatementProperty } from '../src/search/condition-property-edit';
 
 const metadata = conditionMetadata(recording.release);
 const tree: FilterDocument = {
@@ -173,6 +174,116 @@ test('same-statement qualifiers and released datatype/unit values survive editin
     'unsupported',
   );
   expect(html).not.toMatch(/owner\.presence|account selector|Save filter/);
+});
+
+test('item operands show stable native identities through entity controls while literals keep their datatype editor', () => {
+  const itemId = '0192f3a0-6c1e-7b2a-9d4e-000000000021';
+  const qualifierId = '0192f3a0-6c1e-7b2a-9d4e-000000000022';
+  const definitions: ConditionMetadata = {
+    types: { 'ex:Work': { labels: { en: 'Work' }, facets: ['ex:related'] }, 'ex:Language': { labels: { en: 'Language' } } },
+    properties: {
+      'ex:related': {
+        labels: { en: 'Related work' },
+        datatype: 'wikibase-item',
+        targets: ['ex:Work'],
+        qualifiers: ['ex:language'],
+      },
+      'ex:language': { labels: { en: 'Language' }, datatype: 'wikibase-item', targets: ['ex:Language'] },
+      'ex:caption': { labels: { en: 'Caption' }, datatype: 'string' },
+    },
+  };
+  const lookup = { locale: 'en', reader: 'reader-a', release: 'release-a', available: true };
+  const html = renderToStaticMarkup(
+    createElement(ConditionEditor, {
+      value: {
+        statement: {
+          property: 'ex:related',
+          in: [itemId],
+          qualifiers: [{ property: 'ex:language', in: [qualifierId] }],
+        },
+      },
+      metadata: definitions,
+      onChange() {},
+      locale: 'en',
+      entityLookup: lookup,
+    }),
+  );
+  expect(html).toContain('data-condition-entity-property="ex:related"');
+  expect(html).toContain('data-condition-entity-property="ex:language"');
+  expect(html).toContain(`data-condition-pointer="${CONDITION_POINTER}/statement/in/chooser"`);
+  expect(html).toContain(`value="${itemId}"`);
+  expect(html).toContain(`value="${qualifierId}"`);
+  expect(html).toContain('readonly=""');
+  expect(html).not.toContain('datalist');
+
+  const condition: FilterDocument = {
+    statement: {
+      property: 'ex:related',
+      in: [itemId],
+      qualifiers: [{ property: 'ex:language', in: [qualifierId] }],
+    },
+  };
+  expect(
+    conditionAdmission(definitions)(condition, { ...state, condition, kinds: undefined, facets: {}, ranges: {} }),
+  ).toEqual([]);
+  const submitted = discoveryRequest({ ...state, condition }, ['ja']);
+  expect(JSON.stringify(submitted.filter)).toContain(itemId);
+  expect(JSON.stringify(submitted.filter)).toContain(qualifierId);
+
+  const literal = renderToStaticMarkup(
+    createElement(ConditionEditor, {
+      value: { statement: { property: 'ex:caption', in: ['Original wording'] } },
+      metadata: definitions,
+      onChange() {},
+      locale: 'en',
+      entityLookup: lookup,
+    }),
+  );
+  expect(literal).not.toContain('data-condition-entity-property="ex:caption"');
+  expect(literal).toContain('value="Original wording"');
+  expect(literal).not.toContain('readonly=""');
+
+  const invalidItem = renderToStaticMarkup(
+    createElement(ConditionEditor, {
+      value: { statement: { property: 'ex:related', in: ['Typed name'] } },
+      metadata: definitions,
+      onChange() {},
+      locale: 'en',
+      entityLookup: lookup,
+    }),
+  );
+  expect(invalidItem).toContain('This value is not a native item ID.');
+  expect(invalidItem).toContain('value="Typed name"');
+});
+
+test('item property changes retain IDs only for an unchanged released target domain', () => {
+  const operand = '0192f3a0-6c1e-7b2a-9d4e-000000000031';
+  const definitions: ConditionMetadata['properties'] = {
+    'ex:work': { datatype: 'wikibase-item', targets: ['ex:Work'], labels: {} },
+    'ex:otherWork': { datatype: 'wikibase-item', targets: ['ex:Work'], labels: {} },
+    'ex:language': { datatype: 'wikibase-item', targets: ['ex:Language'], labels: {} },
+    'ex:unbounded': { datatype: 'wikibase-item', labels: {} },
+  };
+  const statement: FilterDocument = { statement: { property: 'ex:work', in: [operand] } };
+  expect(changeStatementProperty(statement, 'ex:otherWork', definitions)).toMatchObject({
+    requiresConfirmation: false,
+    next: { statement: { property: 'ex:otherWork', in: [operand] } },
+  });
+  expect(changeStatementProperty(statement, 'ex:language', definitions)).toMatchObject({
+    requiresConfirmation: true,
+    next: { statement: { property: 'ex:language', in: [''] } },
+  });
+  expect(changeStatementProperty(statement, 'ex:unbounded', definitions)).toMatchObject({
+    requiresConfirmation: true,
+    next: { statement: { property: 'ex:unbounded', in: [''] } },
+  });
+  const qualified: FilterDocument = {
+    statement: { property: 'ex:work', in: [''], qualifiers: [{ property: 'ex:work', in: [operand] }] },
+  };
+  expect(changeQualifierProperty(qualified, 0, 'ex:language', definitions)).toMatchObject({
+    requiresConfirmation: true,
+    next: { statement: { qualifiers: [{ property: 'ex:language', in: [''] }] } },
+  });
 });
 
 test('shared admission enforces all grammar ceilings, byte bounds and invalid ranges while unfinished controls retain their input', () => {

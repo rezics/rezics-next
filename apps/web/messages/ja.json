@@ -4136,6 +4136,8 @@
   "condition_choose_value": "値を選択",
   "condition_add_value": "値を追加",
   "condition_metadata_unavailable": "条件定義を利用できません。送信した条件は保持されています。",
+  "condition_entity_unresolved": "この項目の現在の公開ラベルを取得できません。項目を削除するか、別の項目を選択してください。",
+  "condition_entity_invalid": "この値はネイティブ項目IDではありません。削除するか、検索結果を選んで置き換えてください。",
   "condition_retained": "既存の条件は保持されます。ここでは選択や編集はできません。",
   "condition_saved_filter_label": "保存済みフィルター: {id}",
   "condition_saved_filter_reference": "保存済みフィルター参照",

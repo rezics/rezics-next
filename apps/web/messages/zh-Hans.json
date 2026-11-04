@@ -4133,6 +4133,8 @@
   "condition_choose_value": "选择值",
   "condition_add_value": "添加值",
   "condition_metadata_unavailable": "条件定义暂不可用。已保留提交的条件。",
+  "condition_entity_unresolved": "目前无法获取此项目的公开标签。请移除该项目或选择其他项目。",
+  "condition_entity_invalid": "此值不是原生项目 ID。请移除它，或选择搜索结果将其替换。",
   "condition_retained": "已保留此现有条件。此处暂不支持选择或编辑。",
   "condition_saved_filter_label": "已保存筛选条件：{id}",
   "condition_saved_filter_reference": "已保存筛选条件引用",

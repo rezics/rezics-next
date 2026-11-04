@@ -24,6 +24,12 @@ function sameUnits(left: PropertyDefinition, right: PropertyDefinition): boolean
   return canonical([...(left?.units ?? [])].sort()) === canonical([...(right?.units ?? [])].sort());
 }
 
+function sameTargets(left: PropertyDefinition, right: PropertyDefinition): boolean {
+  const previous = [...new Set(left?.targets ?? [])].sort();
+  const next = [...new Set(right?.targets ?? [])].sort();
+  return previous.length > 0 && canonical(previous) === canonical(next);
+}
+
 function sameValueDefinition(left: PropertyDefinition, right: PropertyDefinition): boolean {
   return (
     !!left &&
@@ -31,6 +37,7 @@ function sameValueDefinition(left: PropertyDefinition, right: PropertyDefinition
     !!left.datatype &&
     left.datatype === right.datatype &&
     sameUnits(left, right) &&
+    (left.datatype !== 'wikibase-item' || sameTargets(left, right)) &&
     canonical(left.value) === canonical(right.value)
   );
 }

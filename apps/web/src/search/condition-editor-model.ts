@@ -11,9 +11,13 @@ import type { SearchLoaderDeps } from './search-params';
 import { facetProblem } from './refinement/request';
 import { requestResourceAdmissionShadow } from './resource-condition-model';
 
-export type ConditionMetadata = Omit<FilterRelease, 'filters'> & {
+export type ConditionMetadata = Omit<FilterRelease, 'filters' | 'properties'> & {
+  digest?: string;
   types: Record<string, FilterRelease['types'][string] & { labels?: Record<string, string> }>;
-  properties: Record<string, FilterRelease['properties'][string] & { labels?: Record<string, string> }>;
+  properties: Record<
+    string,
+    FilterRelease['properties'][string] & { labels?: Record<string, string>; targets?: readonly string[] }
+  >;
   filters?: Record<string, { filter: FilterDocument }>;
 };
 export type ConditionIssue = { pointer: string; code: string };
@@ -36,7 +40,7 @@ export function conditionChoiceLabels(choices: readonly { value: string; label: 
 
 /** Only released public grammar metadata crosses the BFF; no Library profiles or owner fields. */
 export function conditionMetadata(
-  release: FilterRelease & Pick<ConditionMetadata, 'types' | 'properties'>,
+  release: FilterRelease & Pick<ConditionMetadata, 'types' | 'properties'> & { digest?: string },
 ): ConditionMetadata {
   const filters: NonNullable<ConditionMetadata['filters']> = {};
   for (const [id, definition] of Object.entries(release.filters ?? {})) {
@@ -63,6 +67,7 @@ export function conditionMetadata(
         {
           labels: definition.labels ?? {},
           datatype: definition.datatype,
+          ...(definition.targets ? { targets: definition.targets } : {}),
           ...(definition.relation ? { relation: { group: definition.relation.group } } : {}),
           ...(definition.qualifiers ? { qualifiers: definition.qualifiers } : {}),
           ...(definition.units ? { units: definition.units } : {}),
@@ -70,6 +75,7 @@ export function conditionMetadata(
         },
       ]),
     ),
+    ...(release.digest ? { digest: release.digest } : {}),
     ...(release.filters ? { filters } : {}),
   };
 }

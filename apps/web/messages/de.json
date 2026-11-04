@@ -4133,6 +4133,8 @@
   "condition_choose_value": "Wert auswählen",
   "condition_add_value": "Wert hinzufügen",
   "condition_metadata_unavailable": "Bedingungsdefinitionen sind nicht verfügbar. Übermittelte Bedingungen bleiben erhalten.",
+  "condition_entity_unresolved": "Die aktuelle öffentliche Bezeichnung dieses Eintrags ist nicht verfügbar. Entfernen Sie ihn oder wählen Sie einen anderen Eintrag.",
+  "condition_entity_invalid": "Dieser Wert ist keine native Element-ID. Entfernen Sie ihn oder wählen Sie ein Ergebnis als Ersatz.",
   "condition_retained": "Diese bestehende Bedingung bleibt erhalten. Auswahl und Bearbeitung sind hier nicht verfügbar.",
   "condition_saved_filter_label": "Gespeicherter Filter: {id}",
   "condition_saved_filter_reference": "Referenz auf gespeicherten Filter",
