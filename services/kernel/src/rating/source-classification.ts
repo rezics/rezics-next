@@ -30,7 +30,7 @@ import {
   type ClassificationAssociationResolution,
 } from './source-classification-semantic.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
-import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import {
   classificationEvidence,
   classificationProvenanceMatches,

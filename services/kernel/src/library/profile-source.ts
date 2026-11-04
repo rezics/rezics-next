@@ -12,7 +12,7 @@ import { activeRelease } from '../semantic/definitions.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readSubjectReference } from '../semantic/references.ts';
-import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { readItemTypes, type SubjectComponent } from '../semantic/subject.ts';
 import { selectLibraryProfile, type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
 import { resolveSubject } from './subject-anchor.ts';

@@ -10,7 +10,7 @@ import type {
   NativeIdentityReceivingRecord,
 } from '../semantic/identity-receiving-effects-types.ts';
 import type { SearchWriterBarrierLocator } from './writer-guard.ts';
-import { serializeIdentityValue } from '../semantic/identity-epoch-store.ts';
+import { serializeIdentityValue } from '../semantic/identity-adapters/index.ts';
 
 /** An operational locator. Resolving it must read committed native custody. */
 export type SearchIdentityReceivingLocator = Readonly<{

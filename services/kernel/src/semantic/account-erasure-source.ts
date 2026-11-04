@@ -13,7 +13,7 @@ import { withReadTransaction } from './read.ts';
 import type { HistoryBarrier } from '../history/registry.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { readIdentityMappings } from './identity-epoch-read.ts';
+import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
 import { refreshSemanticErasureSourceRecord, SEMANTIC_ERASURE_PROGRESS } from './account-erasure.ts';
 import { readSemanticSourceDisposition, recordSemanticSourceCommit } from './erasure-producer.ts';
 import type {

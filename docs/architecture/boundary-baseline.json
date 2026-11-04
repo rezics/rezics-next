@@ -635,7 +635,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/access/account-canonical-targets.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -1160,12 +1160,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification-identity-retention.ts",
-          "edge": "value import \"../semantic/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity-retention.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
         },
         {
           "rule": "rule 2",
@@ -1200,12 +1195,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification-identity-reversal.ts",
-          "edge": "value import \"../semantic/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity-reversal.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
         },
         {
           "rule": "rule 2",
@@ -1290,32 +1280,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-binding.ts\" #2 => services/kernel/src/semantic/identity-epoch-binding.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #2 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #3 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #4 => services/kernel/src/semantic/identity-epoch-store.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #2 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts"
         },
         {
           "rule": "rule 2",
@@ -1341,11 +1311,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/agent-verification-work.ts",
           "edge": "value import \"../semantic/agents.ts\" #1 => services/kernel/src/semantic/agents.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/agent-verification-work.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -1871,11 +1836,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/access/erasure-native-consumers.ts",
           "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/access/erasure-native-consumers.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -4085,12 +4045,12 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity-retention.ts",
-          "edge": "value import \"../semantic/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity-retention.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -4115,12 +4075,12 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity-reversal.ts",
-          "edge": "value import \"../semantic/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity-reversal.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -4160,32 +4120,32 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-binding.ts\" #2 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-binding.ts\" #2 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #2 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #2 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #3 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #3 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/agent-verification-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #4 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #4 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -4640,7 +4600,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/access/erasure-native-consumers.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -6536,12 +6496,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/commerce/subject-offer-work.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/commerce/subject-offer-work.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -6606,7 +6561,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/commerce/subject-offers.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -13539,7 +13494,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/content/realm-subject-census.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -13670,11 +13625,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/content/realm-subject-lifecycle.ts",
           "edge": "value import \"../semantic/events.ts\" #1 => services/kernel/src/semantic/events.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/content/realm-subject-lifecycle.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -16140,7 +16090,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/builtin-runtime.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -16236,11 +16186,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/canonical-source-store.ts",
           "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/canonical-source-store.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -17115,7 +17060,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/collection-list-facts.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -18430,7 +18375,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -18800,7 +18745,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/copy-list-context.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -19584,11 +19529,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/library/follow-activity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/library/follow-count-health.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
         },
@@ -19691,11 +19631,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/follow-count-target.ts",
           "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/follow-count-target.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -19845,11 +19780,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/identity-epoch-participant.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/identity-epoch-participant.ts",
           "edge": "value import \"../semantic/identity-receiving-effects.ts\" #1 => services/kernel/src/semantic/identity-receiving-effects.ts"
         },
         {
@@ -19945,11 +19875,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/identity-native-planner-work.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/identity-native-planner-work.ts",
           "edge": "value import \"../semantic/identity-source-consumer-maintenance.ts\" #1 => services/kernel/src/semantic/identity-source-consumer-maintenance.ts"
         },
         {
@@ -20005,11 +19930,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/identity-native-planner.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/identity-native-planner.ts",
           "edge": "value import \"../semantic/identity-source-consumer-maintenance.ts\" #1 => services/kernel/src/semantic/identity-source-consumer-maintenance.ts"
         },
         {
@@ -20046,11 +19966,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/identity-scope-effects.ts",
           "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/identity-scope-effects.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -21580,7 +21495,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/loan-commands.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -22305,11 +22220,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/owner-identity.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/owner-identity.ts",
           "edge": "value import \"../semantic/identity-receiving-effects.ts\" #1 => services/kernel/src/semantic/identity-receiving-effects.ts"
         },
         {
@@ -22811,11 +22721,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/library/profile-source.ts",
           "edge": "value import \"../semantic/eligibility.ts\" #1 => services/kernel/src/semantic/eligibility.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/profile-source.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -23725,11 +23630,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/subject-anchor.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/library/subject-anchor.ts",
           "edge": "value import \"../semantic/merges.ts\" #1 => services/kernel/src/semantic/merges.ts"
         },
         {
@@ -23875,7 +23775,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/library/viewer-facts.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -24255,7 +24155,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/builtin-runtime.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -24330,7 +24230,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/canonical-source-store.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -24565,7 +24465,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/collection-list-facts.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -25170,7 +25070,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/continue-query.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -25575,7 +25475,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/follow-count-target.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -25620,7 +25520,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/identity-native-planner-work.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -25655,7 +25555,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/identity-native-planner.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -25720,7 +25620,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/identity-scope-effects.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -26265,7 +26165,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/profile-source.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -26800,7 +26700,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/subject-anchor.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -26890,7 +26790,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/library/viewer-facts.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -29167,22 +29067,12 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/merge-job.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/merge-job.ts",
           "edge": "value import \"../work/retries.ts\" #1 => services/kernel/src/work/retries.ts"
         },
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/own-votes-counted.ts",
           "edge": "type import \"../request/access.ts\" #1 => services/kernel/src/request/access.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/own-votes-counted.ts",
-          "edge": "type import \"../semantic/identity-epoch-contract.ts\" #1 => services/kernel/src/semantic/identity-epoch-contract.ts"
         },
         {
           "rule": "rule 2",
@@ -29213,11 +29103,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/own-votes-counted.ts",
           "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/own-votes-counted.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -29303,11 +29188,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/own-votes-page.ts",
           "edge": "value import \"../semantic/definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/own-votes-page.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -30122,11 +30002,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/rating/source-classification-semantic.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-classification-semantic.ts",
           "edge": "value import \"../semantic/item-identity.ts\" #1 => services/kernel/src/semantic/item-identity.ts"
         },
         {
@@ -30193,11 +30068,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/rating/source-classification.ts",
           "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/rating/source-classification.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -30572,7 +30442,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/rating/own-votes-counted.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -30627,7 +30497,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/rating/own-votes-page.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -30887,7 +30757,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/rating/source-classification-semantic.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -30927,7 +30797,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/rating/source-classification.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -31318,7 +31188,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/search/account-context-native.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts"
         },
         {
           "rule": "rule 2",
@@ -32198,11 +32068,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/search/identity-epoch-participant.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/identity-epoch-participant.ts",
           "edge": "value import \"../semantic/identity-receiving-effects.ts\" #1 => services/kernel/src/semantic/identity-receiving-effects.ts"
         },
         {
@@ -32232,11 +32097,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/search/identity-receiving-native-contract.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "services/kernel/src/search/identity-receiving-native-internal.ts",
           "edge": "type import \"../semantic/identity-epoch-contract.ts\" #1 => services/kernel/src/semantic/identity-epoch-contract.ts"
         },
@@ -32254,11 +32114,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/identity-receiving-native-store.ts",
           "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/identity-receiving-native-store.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -32284,11 +32139,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/search/identity-receiving-native.ts",
           "edge": "value import \"../request/deadline.ts\" #1 => services/kernel/src/request/deadline.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/identity-receiving-native.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
         },
         {
           "rule": "rule 2",
@@ -33388,11 +33238,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/scope-source.ts",
           "edge": "value import \"../semantic/identity-scoped-observations.ts\" #1 => services/kernel/src/semantic/identity-scoped-observations.ts"
         },
         {
@@ -33783,11 +33628,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/search/writer-guard.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/search/writer-guard.ts",
           "edge": "value import \"../semantic/read.ts\" #1 => services/kernel/src/semantic/read.ts"
         },
         {
@@ -33838,7 +33678,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/search/account-context-native.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -34418,7 +34258,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/search/identity-receiving-native-contract.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -34428,7 +34268,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/search/identity-receiving-native-store.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -34453,7 +34293,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/search/identity-receiving-native.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -35233,7 +35073,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/search/scope-source.ts",
-          "edge": "value import \"../semantic/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -35438,7 +35278,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/search/writer-guard.ts",
-          "edge": "value import \"../semantic/identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"../semantic/identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -36823,38 +36663,38 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../access/agent-verification-identity-retention.ts\" #1 => services/kernel/src/access/agent-verification-identity-retention.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../access/agent-verification-identity-retention.ts\" #1 => services/kernel/src/access/agent-verification-identity-retention.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../access/agent-verification-identity.ts\" #1 => services/kernel/src/access/agent-verification-identity.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../access/agent-verification-identity.ts\" #1 => services/kernel/src/access/agent-verification-identity.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../access/agent-verification-identity.ts\" #2 => services/kernel/src/access/agent-verification-identity.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../access/agent-verification-identity.ts\" #2 => services/kernel/src/access/agent-verification-identity.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../access/unavailable.ts\" #1 => services/kernel/src/access/unavailable.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../request/deadline.ts\" #1 => services/kernel/src/request/deadline.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../request/deadline.ts\" #1 => services/kernel/src/request/deadline.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../route/route.ts\" #1 => services/kernel/src/route/route.ts"
         },
         {
           "rule": "rule 2",
@@ -36888,8 +36728,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-contract.ts",
-          "edge": "type import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-contract.ts",
+          "edge": "type import \"../../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
@@ -36978,38 +36818,38 @@
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-read.ts",
-          "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts",
+          "edge": "value import \"../../route/route.ts\" #1 => services/kernel/src/route/route.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"../access/agent-verification-identity.ts\" #1 => services/kernel/src/access/agent-verification-identity.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../../access/agent-verification-identity.ts\" #1 => services/kernel/src/access/agent-verification-identity.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../../command/command.ts\" #1 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"../command/command.ts\" #2 => services/kernel/src/command/command.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../../command/command.ts\" #2 => services/kernel/src/command/command.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../../partition/partition.ts\" #1 => services/kernel/src/partition/partition.ts"
         },
         {
           "rule": "rule 2",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"../route/route.ts\" #1 => services/kernel/src/route/route.ts"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../../route/route.ts\" #1 => services/kernel/src/route/route.ts"
         },
         {
           "rule": "rule 2",
@@ -39279,12 +39119,12 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/account-agent-identity-recovery.ts",
-          "edge": "value import \"./identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/account-agent-identity-recovery.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39319,12 +39159,12 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/account-agents.ts",
-          "edge": "value import \"./identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/account-agents.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39369,7 +39209,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/account-erasure-source.ts",
-          "edge": "value import \"./identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39764,7 +39604,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-epoch-admission.ts",
-          "edge": "value import \"./identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39779,7 +39619,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-epoch-admission.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39793,43 +39633,43 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../access/agent-verification-identity-retention.ts\" #1 => services/kernel/src/access/agent-verification-identity-retention.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../access/agent-verification-identity-retention.ts\" #1 => services/kernel/src/access/agent-verification-identity-retention.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../access/agent-verification-identity.ts\" #1 => services/kernel/src/access/agent-verification-identity.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../access/agent-verification-identity.ts\" #1 => services/kernel/src/access/agent-verification-identity.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../access/agent-verification-identity.ts\" #2 => services/kernel/src/access/agent-verification-identity.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../access/agent-verification-identity.ts\" #2 => services/kernel/src/access/agent-verification-identity.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"./erasure-producer.ts\" #1 => services/kernel/src/semantic/erasure-producer.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../erasure-producer.ts\" #1 => services/kernel/src/semantic/erasure-producer.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"./index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"./identity-source-consumer-maintenance.ts\" #1 => services/kernel/src/semantic/identity-source-consumer-maintenance.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../identity-source-consumer-maintenance.ts\" #1 => services/kernel/src/semantic/identity-source-consumer-maintenance.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-binding.ts",
-          "edge": "value import \"./read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
+          "edge": "value import \"../read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39844,7 +39684,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-epoch-bootstrap.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39879,7 +39719,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-epoch-mapping.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39899,7 +39739,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-epoch-prearm-custody.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39924,7 +39764,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-epoch-prearm.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -39938,68 +39778,68 @@
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-read.ts",
-          "edge": "value import \"./read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts",
+          "edge": "value import \"../read.ts\" #1 => services/kernel/src/semantic/read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"../access/agent-verification-identity.ts\" #1 => services/kernel/src/access/agent-verification-identity.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../../access/agent-verification-identity.ts\" #1 => services/kernel/src/access/agent-verification-identity.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../../command/command.ts\" #1 => services/kernel/src/command/command.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"../command/command.ts\" #2 => services/kernel/src/command/command.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../../command/command.ts\" #2 => services/kernel/src/command/command.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"./definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../definitions.ts\" #1 => services/kernel/src/semantic/definitions.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"./erasure-producer.ts\" #1 => services/kernel/src/semantic/erasure-producer.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../erasure-producer.ts\" #1 => services/kernel/src/semantic/erasure-producer.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"./identity-epoch-admission.ts\" #1 => services/kernel/src/semantic/identity-epoch-admission.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../identity-epoch-admission.ts\" #1 => services/kernel/src/semantic/identity-epoch-admission.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"./identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"./identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"./identity-epoch-bootstrap.ts\" #1 => services/kernel/src/semantic/identity-epoch-bootstrap.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../identity-epoch-bootstrap.ts\" #1 => services/kernel/src/semantic/identity-epoch-bootstrap.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"./identity-epoch-prearm.ts\" #1 => services/kernel/src/semantic/identity-epoch-prearm.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../identity-epoch-prearm.ts\" #1 => services/kernel/src/semantic/identity-epoch-prearm.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"./identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"./identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"./identity-receiving-effects.ts\" #1 => services/kernel/src/semantic/identity-receiving-effects.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../identity-receiving-effects.ts\" #1 => services/kernel/src/semantic/identity-receiving-effects.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
-          "file": "services/kernel/src/semantic/identity-epoch-store.ts",
-          "edge": "value import \"./identity-terminal-closure.ts\" #1 => services/kernel/src/semantic/identity-terminal-closure.ts (value-import cycle)"
+          "file": "services/kernel/src/semantic/identity-adapters/index.ts",
+          "edge": "value import \"../identity-terminal-closure.ts\" #1 => services/kernel/src/semantic/identity-terminal-closure.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40024,17 +39864,17 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-public-output-capture.ts",
-          "edge": "value import \"./identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-public-output-capture.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-public-output-capture.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #2 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #2 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40059,7 +39899,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-rating-admission.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40094,7 +39934,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-receiving-effects.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40129,7 +39969,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-scope-native-association.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40179,7 +40019,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-scoped-observations.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40219,7 +40059,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-scoped-prearm.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40239,7 +40079,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-scoped-public-source.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40349,12 +40189,12 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-source-consumer-custody.ts",
-          "edge": "value import \"./identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/identity-epoch-binding.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-source-consumer-custody.ts",
-          "edge": "value import \"./identity-epoch-binding.ts\" #2 => services/kernel/src/semantic/identity-epoch-binding.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/identity-epoch-binding.ts\" #2 => services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40364,7 +40204,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-source-consumer-custody.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40429,7 +40269,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-source-support.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40459,7 +40299,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-terminal-closure-command.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40484,7 +40324,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/identity-terminal-closure.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40574,7 +40414,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/list-presentation.ts",
-          "edge": "value import \"./identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-epoch-read.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/identity-epoch-read.ts\" #1 => services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -40869,7 +40709,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/search-source.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -41134,7 +40974,7 @@
         {
           "rule": "rule 3",
           "file": "services/kernel/src/semantic/subject.ts",
-          "edge": "value import \"./identity-epoch-store.ts\" #1 => services/kernel/src/semantic/identity-epoch-store.ts (value-import cycle)"
+          "edge": "value import \"./identity-adapters/index.ts\" #1 => services/kernel/src/semantic/identity-adapters/index.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -42550,16 +42390,36 @@
           "file": "apps/web/src/subject/write-review.tsx",
           "edge": "value import \"../threads/review-policy\" #1 => apps/web/src/threads/review-policy.ts"
         },
-        { "rule": "rule 3", "file": "<module:web-app>", "edge": "web-app => web-commerce (module dependency cycle)" },
-        { "rule": "rule 3", "file": "<module:web-app>", "edge": "web-app => web-content (module dependency cycle)" },
-        { "rule": "rule 3", "file": "<module:web-app>", "edge": "web-app => web-library (module dependency cycle)" },
+        {
+          "rule": "rule 3",
+          "file": "<module:web-app>",
+          "edge": "web-app => web-commerce (module dependency cycle)"
+        },
+        {
+          "rule": "rule 3",
+          "file": "<module:web-app>",
+          "edge": "web-app => web-content (module dependency cycle)"
+        },
+        {
+          "rule": "rule 3",
+          "file": "<module:web-app>",
+          "edge": "web-app => web-library (module dependency cycle)"
+        },
         {
           "rule": "rule 3",
           "file": "<module:web-app>",
           "edge": "web-app => web-performance (module dependency cycle)"
         },
-        { "rule": "rule 3", "file": "<module:web-app>", "edge": "web-app => web-search (module dependency cycle)" },
-        { "rule": "rule 3", "file": "<module:web-app>", "edge": "web-app => web-semantic (module dependency cycle)" },
+        {
+          "rule": "rule 3",
+          "file": "<module:web-app>",
+          "edge": "web-app => web-search (module dependency cycle)"
+        },
+        {
+          "rule": "rule 3",
+          "file": "<module:web-app>",
+          "edge": "web-app => web-semantic (module dependency cycle)"
+        },
         {
           "rule": "rule 3",
           "file": "apps/web/src/kernel/exposure.ts",
@@ -55802,7 +55662,11 @@
           "file": "<module:web-search>",
           "edge": "web-search => web-accounts (module dependency cycle)"
         },
-        { "rule": "rule 3", "file": "<module:web-search>", "edge": "web-search => web-app (module dependency cycle)" },
+        {
+          "rule": "rule 3",
+          "file": "<module:web-search>",
+          "edge": "web-search => web-app (module dependency cycle)"
+        },
         {
           "rule": "rule 3",
           "file": "<module:web-search>",

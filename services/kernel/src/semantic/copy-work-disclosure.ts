@@ -24,7 +24,7 @@ import { currentRelationFacts, currentRelationKey, type CurrentRelationCandidate
 import { activeRelease } from './definitions.ts';
 import { relatedReadEligibility, subjectReadEligibility } from './eligibility.ts';
 import { candidateSources, fenceKey, sourceTuple } from './fences.ts';
-import { readIdentityMappings } from './identity-epoch-read.ts';
+import { readIdentityMappings } from './identity-adapters/identity-epoch-read.ts';
 import { isRelationProperty } from './item.ts';
 import subjectsSQL from './list-presentation-subjects.sql';
 import { withReadTransaction } from './read.ts';

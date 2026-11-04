@@ -4,7 +4,7 @@ import { within } from '../access/authenticate.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
-import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { decodeCursor, encodeCursor } from '../content/feed-source-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';

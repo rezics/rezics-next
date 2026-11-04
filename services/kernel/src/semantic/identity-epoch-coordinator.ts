@@ -19,7 +19,7 @@ import type {
   WaitIdentityEpochPublished,
 } from './identity-epoch-contract.ts';
 import { stepIdentityEpochMapping } from './identity-epoch-mapping.ts';
-import { identityEpochStore, identityJobPartition, IdentityEpochStoreError } from './identity-epoch-store.ts';
+import { identityEpochStore, identityJobPartition, IdentityEpochStoreError } from './identity-adapters/index.ts';
 import control from './identity-epoch-coordinator-control.sql';
 import { withReadTransaction } from './read.ts';
 

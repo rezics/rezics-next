@@ -4,7 +4,7 @@ import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { withReadTransaction } from './read.ts';
-import { identityJobPartition, serializeIdentityValue as json } from './identity-epoch-store.ts';
+import { identityJobPartition, serializeIdentityValue as json } from './identity-adapters/index.ts';
 import jobSQL from './identity-epoch-prearm-custody-job.sql';
 import directorySQL from './identity-epoch-prearm-custody-directory.sql';
 import pagesSQL from './identity-epoch-prearm-custody-pages.sql';

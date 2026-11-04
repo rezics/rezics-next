@@ -31,7 +31,7 @@ import { readPartition } from '../partition/partition.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
 import { withIdentitySourceSupportJob } from './identity-source-support-scope.ts';
-import { identityEpochStore } from './identity-epoch-store.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
 import type { IdentityJobRef } from './identity-epoch-contract.ts';
 import type {
   PublicFilterCost,

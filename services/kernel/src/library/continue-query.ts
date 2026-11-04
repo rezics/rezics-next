@@ -6,7 +6,7 @@ import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import { ProblemError } from '../http/problem.ts';
 import { systemClock } from '../clock.ts';
 import { routeOf } from '../route/route.ts';
-import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { zeroScopeWork } from '../search/scope-execution.ts';
 import type { PoolClient } from 'pg';
 import { builtinCollectionId } from './builtin-identity.ts';

@@ -4,7 +4,7 @@ import { partitionReadClient } from '../database/read-snapshot.ts';
 import { withReadTransaction } from './read.ts';
 import { VoteReviewStaleError, VoteReviewUnavailableError, type VoteReviewEpoch } from '../rating/own-votes-review.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { identityEpochStore } from './identity-epoch-store.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
 import type { IdentityEpochState } from './identity-epoch-contract.ts';
 import admission from './identity-rating-admission.sql';
 

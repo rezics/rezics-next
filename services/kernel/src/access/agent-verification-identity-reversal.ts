@@ -17,8 +17,8 @@ import {
   identityBindingData,
   readAcceptedAccountIdentityBinding,
   readAccountIdentityUndo,
-} from '../semantic/identity-epoch-binding.ts';
-import { identityEpochStore, identityJobPartition } from '../semantic/identity-epoch-store.ts';
+} from '../semantic/identity-adapters/identity-epoch-binding.ts';
+import { identityEpochStore, identityJobPartition } from '../semantic/identity-adapters/index.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type {
   IdentitySourceConsumerReference,

@@ -17,7 +17,7 @@ import {
   identityBindingDigest,
   type IdentityBindingData,
   type IdentityAdmissionSource,
-} from './identity-epoch-binding.ts';
+} from './identity-adapters/identity-epoch-binding.ts';
 import type {
   IdentityAdmissionInput,
   IdentityIntent,
@@ -26,7 +26,7 @@ import type {
   IdentityReceipt,
   IdentityStepProgress,
 } from './identity-epoch-contract.ts';
-import { identityReceiptKey, serializeIdentityValue } from './identity-epoch-store.ts';
+import { identityReceiptKey, serializeIdentityValue } from './identity-adapters/index.ts';
 import { withReadTransaction } from './read.ts';
 import sourceSql from './account-agent-identity-recovery-source.sql';
 import jobSql from './account-agent-identity-recovery-job.sql';

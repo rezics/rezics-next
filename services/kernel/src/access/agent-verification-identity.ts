@@ -31,7 +31,7 @@ import type {
   IdentityJobRef,
   IdentityReceipt,
 } from '../semantic/identity-epoch-contract.ts';
-import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
+import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
 import insert from './agent-verification-identity-insert.sql';
 import read from './agent-verification-identity-read.sql';
 import {
@@ -470,7 +470,7 @@ export function deliverAccountIdentity(pool: Pool, receipt: AccountReceipt): Pro
 async function deliverAccountIdentityBounded(pool: Pool, receipt: AccountReceipt): Promise<IdentityJobRef> {
   const source = await loadAccountIdentitySource(pool, receipt);
   const native = await coordinator();
-  const { identityEpochStore, identityJobPartition } = await import('../semantic/identity-epoch-store.ts');
+  const { identityEpochStore, identityJobPartition } = await import('../semantic/identity-adapters/index.ts');
   const job = await identityEpochStore.prepareAdmission(pool, {}, source.input);
   await native.resumeIdentityEpochJob(pool, job);
   await native.waitIdentityEpochPublished(pool, job);
@@ -504,9 +504,9 @@ export async function publishedAccountIdentityUndo(
   source: AccountIdentitySource;
 }> {
   const receipt: AccountReceipt = { kind: 'account-agent.verify', account, receipt: verificationReceipt };
-  const { readAccountIdentityUndo } = await import('../semantic/identity-epoch-binding.ts');
+  const { readAccountIdentityUndo } = await import('../semantic/identity-adapters/identity-epoch-binding.ts');
   const existing = await readAccountIdentityUndo(pool, receipt);
-  const { identityEpochStore, identityJobPartition } = await import('../semantic/identity-epoch-store.ts');
+  const { identityEpochStore, identityJobPartition } = await import('../semantic/identity-adapters/index.ts');
   const saved = (
     await runIdentityTerminalCommand(pool, { partition: identityJobPartition(existing.job) }, async (tx) =>
       noEffect(await identityEpochStore.readJob(tx, existing.job)),
@@ -586,8 +586,8 @@ export function probeAccountIdentityPublication(pool: Pool, receipt: AccountRece
 }
 async function probeAccountIdentityPublicationBounded(pool: Pool, receipt: AccountReceipt): Promise<IdentityJobRef> {
   const source = await loadAccountIdentitySource(pool, receipt);
-  const { lookupIdentityBinding } = await import('../semantic/identity-epoch-binding.ts');
-  const { identityEpochStore, identityJobPartition } = await import('../semantic/identity-epoch-store.ts');
+  const { lookupIdentityBinding } = await import('../semantic/identity-adapters/identity-epoch-binding.ts');
+  const { identityEpochStore, identityJobPartition } = await import('../semantic/identity-adapters/index.ts');
   const binding = await lookupIdentityBinding(pool, {}, source.input);
   if (!binding) throw accountIdentityUnavailable(`missing published binding ${keyOf(receipt)}`);
   const saved = (

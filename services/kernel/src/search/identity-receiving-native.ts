@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { currentCommandResources, runCommand } from '../command/command.ts';
 import { createIdentitySourceSupportReader } from '../semantic/identity-source-support.ts';
-import { serializeIdentityValue } from '../semantic/identity-epoch-store.ts';
+import { serializeIdentityValue } from '../semantic/identity-adapters/index.ts';
 import {
   PublicFilterSourceDefinitionError,
   readPublicFilterSourceDefinition,

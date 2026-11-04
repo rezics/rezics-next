@@ -17,7 +17,7 @@ import {
 } from '../command/command.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { IdentityEpochStoreError } from './identity-epoch-store.ts';
+import { IdentityEpochStoreError } from './identity-adapters/index.ts';
 import {
   bindIdentityTerminalMutation,
   cancelUnregisteredIdentityTerminalCapture,

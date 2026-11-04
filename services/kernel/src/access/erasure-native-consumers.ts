@@ -5,7 +5,7 @@ import type { ErasureDiscoveryPage } from './erasure-progress.ts';
 import { routeOf } from '../route/route.ts';
 import { readAuthNativeConsumption } from './shared-history-auth.ts';
 import { publishedAccountIdentityUndo } from './agent-verification-identity.ts';
-import { IdentityEpochStoreError } from '../semantic/identity-epoch-store.ts';
+import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
 import type { NativeStoreBlocker } from './erasure-native-stores.ts';
 import { authConsumerBlocker, isAuthConsumerStore, type AuthConsumerRetirement } from './erasure-auth-consumers.ts';
 

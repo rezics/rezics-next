@@ -17,7 +17,7 @@ import {
   identitySourceConsumerLibraryWork,
   type IdentitySourceConsumerMaintenanceContext,
 } from './identity-source-consumer-maintenance.ts';
-import { recordIdentityEpochNativeCommit, serializeIdentityValue as json } from './identity-epoch-store.ts';
+import { recordIdentityEpochNativeCommit, serializeIdentityValue as json } from './identity-adapters/index.ts';
 import { IDENTITY_SCOPE_NATIVE_ASSOCIATED, IDENTITY_SCOPE_DIRECTORY_ENROLLED } from './events.ts';
 import insert from './identity-scope-native-association-insert.sql';
 import native from './identity-epoch-store-insert-native-commit.sql';

@@ -15,7 +15,7 @@ import {
   IdentityEpochStoreError,
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
-} from '../semantic/identity-epoch-store.ts';
+} from '../semantic/identity-adapters/index.ts';
 import { bindSemanticProducerRoles, identityErasureRoles } from '../semantic/erasure-producer.ts';
 import {
   installSearchIdentityReceivingNative,

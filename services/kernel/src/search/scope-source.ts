@@ -18,7 +18,7 @@ import { bindOwnerFilterRead } from '../library/owner-filter-plan.ts';
 import { withOwnerFilterNativeRead } from '../library/owner-filter-native-binding.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
-import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';

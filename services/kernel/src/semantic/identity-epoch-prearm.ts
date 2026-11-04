@@ -13,7 +13,7 @@ import {
   identityJobPartition,
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
-} from './identity-epoch-store.ts';
+} from './identity-adapters/index.ts';
 import { bindSemanticProducerRoles, identityErasureRoles } from './erasure-producer.ts';
 import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from './events.ts';
 import { receiveIdentityScopePrearm, cancelIdentityScopePrearm } from './identity-scoped-prearm.ts';

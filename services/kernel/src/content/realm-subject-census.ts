@@ -1,5 +1,5 @@
 import type { Pool, QueryResultRow } from 'pg';
-import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import {
   createRealmSubjectCandidates,
   realmSubjectHome,

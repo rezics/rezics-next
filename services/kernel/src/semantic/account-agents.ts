@@ -20,7 +20,7 @@ import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import syncLabel from './account-agent-sync-label.sql';
 import insertSubject from './create-subject.sql';
 import createRevision from './create-revision.sql';
-import { identityEpochStore } from './identity-epoch-store.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
 
 type Queryable = Pick<PoolClient, 'query'>;
 type Account = string | Pick<AccountActor, 'accountId'>;
@@ -346,7 +346,7 @@ export async function verifyAccountAgent(
   const source = await loadAccountIdentitySource(pool, receipt);
   if (source.input.intent.kind !== 'merge' || source.input.intent.survivor !== options.catalogue)
     throw accountIdentityUnavailable('caller catalogue does not match original verification');
-  const { lookupIdentityBinding } = await import('./identity-epoch-binding.ts');
+  const { lookupIdentityBinding } = await import('./identity-adapters/identity-epoch-binding.ts');
   // An admitted original delivery owns its recovery even while mapping is between native commits.
   const bound = await lookupIdentityBinding(pool, {}, source.input);
   if (!bound) {

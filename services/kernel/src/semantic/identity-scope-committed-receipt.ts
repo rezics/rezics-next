@@ -22,7 +22,7 @@ import {
   identitySourceConsumerLibraryWork,
   type IdentitySourceConsumerMaintenanceContext,
 } from './identity-source-consumer-maintenance.ts';
-import { serializeIdentityValue as json } from './identity-epoch-store.ts';
+import { serializeIdentityValue as json } from './identity-adapters/index.ts';
 import { withReadTransaction } from './read.ts';
 import current from './identity-scope-committed-receipt-current.sql';
 import repair from './identity-scope-committed-receipt-repair.sql';

@@ -27,7 +27,7 @@ import {
   identityJobPartition,
   recordIdentityEpochNativeCommit,
   serializeIdentityValue as json,
-} from './identity-epoch-store.ts';
+} from './identity-adapters/index.ts';
 import type { IdentityNativeReceipt, NativeStepWork } from './identity-epoch-contract.ts';
 import type {
   IdentityReceivingBinding,

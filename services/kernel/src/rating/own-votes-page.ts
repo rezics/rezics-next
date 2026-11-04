@@ -12,7 +12,7 @@ import { readableSubjects, SubjectIdentityUnavailableError } from '../library/su
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
-import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { admitIdentityRatingEffect } from '../semantic/identity-rating-admission.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { activeRelease } from '../semantic/definitions.ts';
