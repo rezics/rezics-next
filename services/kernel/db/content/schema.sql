@@ -717,6 +717,32 @@ END;
 $$;
 
 
+--
+-- Name: register_moderation_directory_reference(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.register_moderation_directory_reference() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM 1 FROM content.moderation_directory_install WHERE singleton FOR UPDATE;
+  IF TG_OP = 'DELETE' THEN
+    DELETE FROM content.moderation_directory_reference WHERE route=OLD.route AND board_id=OLD.board_id;
+  ELSE
+    IF TG_OP = 'UPDATE' AND ROW(OLD.route,OLD.board_id) IS DISTINCT FROM ROW(NEW.route,NEW.board_id) THEN
+      DELETE FROM content.moderation_directory_reference WHERE route=OLD.route AND board_id=OLD.board_id;
+    END IF;
+    INSERT INTO content.moderation_directory_reference(route,board_id,realm_id)
+    VALUES(NEW.route,NEW.board_id,NEW.realm_id)
+    ON CONFLICT(route,board_id) DO UPDATE SET realm_id=EXCLUDED.realm_id;
+  END IF;
+  -- Labels stay in their owner. Even a same-key replacement retires frontiers.
+  UPDATE content.moderation_directory_install SET generation=generation+1 WHERE singleton;
+  RETURN NULL;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -1560,6 +1586,38 @@ CREATE TABLE content.moderation_decision_board (
     CONSTRAINT moderation_decision_board_check1 CHECK ((((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)) = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
     CONSTRAINT moderation_decision_board_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT moderation_decision_board_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text])))
+);
+
+
+--
+-- Name: moderation_directory_install; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.moderation_directory_install (
+    singleton boolean DEFAULT true NOT NULL,
+    generation bigint DEFAULT 1 NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    cut_route integer NOT NULL,
+    cut_id uuid NOT NULL,
+    after_route integer DEFAULT '-1'::integer NOT NULL,
+    after_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    CONSTRAINT moderation_directory_install_after_route_check CHECK (((after_route >= '-1'::integer) AND (after_route <= 65535))),
+    CONSTRAINT moderation_directory_install_cut_route_check CHECK (((cut_route >= '-1'::integer) AND (cut_route <= 65535))),
+    CONSTRAINT moderation_directory_install_generation_check CHECK ((generation > 0)),
+    CONSTRAINT moderation_directory_install_singleton_check CHECK (singleton)
+);
+
+
+--
+-- Name: moderation_directory_reference; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.moderation_directory_reference (
+    route integer NOT NULL,
+    board_id uuid NOT NULL,
+    realm_id uuid,
+    CONSTRAINT moderation_directory_reference_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT moderation_directory_reference_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -2920,6 +2978,22 @@ ALTER TABLE ONLY content.moderation_decision
 
 
 --
+-- Name: moderation_directory_install moderation_directory_install_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_directory_install
+    ADD CONSTRAINT moderation_directory_install_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: moderation_directory_reference moderation_directory_reference_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.moderation_directory_reference
+    ADD CONSTRAINT moderation_directory_reference_pkey PRIMARY KEY (route, board_id);
+
+
+--
 -- Name: notice_ack notice_ack_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -3660,6 +3734,13 @@ CREATE INDEX moderation_decision_board_page_idx ON content.moderation_decision_b
 
 
 --
+-- Name: moderation_directory_reference_realm; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX moderation_directory_reference_realm ON content.moderation_directory_reference USING btree (realm_id, route, board_id);
+
+
+--
 -- Name: notice_finalization_recipient_created_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -3958,6 +4039,13 @@ CREATE TRIGGER media_realm_claim_guard BEFORE DELETE OR UPDATE ON content.media 
 --
 
 CREATE TRIGGER media_security_guard BEFORE UPDATE ON content.media FOR EACH ROW EXECUTE FUNCTION content.guard_media_security();
+
+
+--
+-- Name: board moderation_directory_registration; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER moderation_directory_registration AFTER INSERT OR DELETE OR UPDATE ON content.board FOR EACH ROW EXECUTE FUNCTION content.register_moderation_directory_reference();
 
 
 --
