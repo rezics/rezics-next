@@ -399,6 +399,9 @@ The page distinguishes the canonical work (`schema:exampleOfWork`) from this con
 region, format, publisher, developer and identifiers stay on the release. A missing work link, a concealed related
 work and an unreadable work identity are separate states. Work, edition, alternative release and provider file stay
 distinct objects.
+Decision: native `readCopyWorkDisclosure` is the completeness-aware copy/release-to-work batch; the ordinary
+Subject relation adapter shows complete-empty and withheld work controls without leaking hidden members, and
+Commerce keeps FullCopies and inventory adaptation.
 
 Release date uses the released time property. Exact day, partial year/month, explicit TBA (`somevalue`), explicit
 no-value, an absent statement, invalid concrete values and unsupported precision or calendars remain distinct. Only
