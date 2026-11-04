@@ -7,10 +7,10 @@ import { feedReactionTargetFor } from './feed-reactions.ts';
 import { readingPageOperationState, type ReadingPageViewerActionRuntime } from './reading-page.ts';
 import type { Pool } from 'pg';
 
-type ContentReactionItem = Extract<
-  FeedItem,
-  { key: { owner: 'content'; kind: 'thread' | 'post' | 'review' } }
->;
+type ContentReviewItem = Extract<FeedItem, { source: 'discovery'; key: { owner: 'content'; kind: 'review' } }>;
+type ContentThreadItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content'; kind: 'thread' } }>;
+type ContentPostItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content'; kind: 'post' } }>;
+type ContentReactionItem = ContentReviewItem | ContentThreadItem | ContentPostItem;
 type ResourceType = 'content.thread' | 'content.post';
 type SelectedReaction = Readonly<{
   target: FeedReactionTarget;
@@ -29,11 +29,49 @@ export type FeedReactionAdviceComposition = Readonly<{
 
 const unavailable = (target: FeedReactionTarget): FeedReactionAdvice => ({ target, state: 'unavailable' });
 
+function isDiscoveryReview(item: FeedItem): item is ContentReviewItem {
+  return item.source === 'discovery' && item.key.owner === 'content' && item.key.kind === 'review';
+}
+
+function isFollowingThread(item: FeedItem): item is ContentThreadItem {
+  return item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'thread';
+}
+
+function isFollowingPost(item: FeedItem): item is ContentPostItem {
+  return item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'post';
+}
+
 function isContentReactionItem(item: FeedItem): item is ContentReactionItem {
-  return (
-    item.key.owner === 'content' &&
-    (item.key.kind === 'thread' || item.key.kind === 'post' || item.key.kind === 'review')
-  );
+  return isDiscoveryReview(item) || isFollowingThread(item) || isFollowingPost(item);
+}
+
+function postBinding(item: ContentReactionItem) {
+  return isFollowingPost(item)
+    ? { threadId: item.summary.threadId, parentContext: item.summary.parentContext ?? null }
+    : {};
+}
+
+function withoutReactionAdvice(item: ContentReactionItem): FeedItem {
+  if (isDiscoveryReview(item)) {
+    const { reactionAdvice: _previous, ...summary } = item.summary;
+    return { ...item, summary };
+  }
+  if (isFollowingThread(item)) {
+    const { reactionAdvice: _previous, ...summary } = item.summary;
+    return { ...item, summary };
+  }
+  if (isFollowingPost(item)) {
+    const { reactionAdvice: _previous, ...summary } = item.summary;
+    return { ...item, summary };
+  }
+  return item;
+}
+
+function withReactionAdvice(item: FeedItem, advice: FeedReactionAdvice): FeedItem {
+  if (isDiscoveryReview(item)) return { ...item, summary: { ...item.summary, reactionAdvice: advice } };
+  if (isFollowingThread(item)) return { ...item, summary: { ...item.summary, reactionAdvice: advice } };
+  if (isFollowingPost(item)) return { ...item, summary: { ...item.summary, reactionAdvice: advice } };
+  return item;
 }
 
 function bindingWitness(item: ContentReactionItem, contextWitness: string | undefined): string {
@@ -43,9 +81,7 @@ function bindingWitness(item: ContentReactionItem, contextWitness: string | unde
     key: item.key,
     destination: item.destination,
     summaryId: item.summary.id,
-    ...(item.key.kind === 'post'
-      ? { threadId: item.summary.threadId, parentContext: item.summary.parentContext ?? null }
-      : {}),
+    ...postBinding(item),
     contextWitness,
   });
 }
@@ -106,9 +142,7 @@ export function prepareFeedReactionAdvice(
     const contextWitness = contextWitnesses.get(item.id);
     const targetWitness = JSON.stringify({
       target,
-      ...(item.key.kind === 'post'
-        ? { threadId: item.summary.threadId, parentContext: item.summary.parentContext ?? null }
-        : {}),
+      ...postBinding(item),
       contextWitness,
     });
     const witness = bindingWitness(item, contextWitness);
@@ -127,8 +161,7 @@ export function prepareFeedReactionAdvice(
     const priorTarget = targets.get(targetKey);
     if (priorTarget && priorTarget.targetWitness !== targetWitness) ambiguousTargets.add(targetKey);
     else targets.set(targetKey, row);
-    const { reactionAdvice: _previous, ...summary } = item.summary;
-    return { ...item, summary };
+    return withoutReactionAdvice(item);
   });
 
   let finished = false;
@@ -222,7 +255,7 @@ export function prepareFeedReactionAdvice(
         const original = live.get(item.id);
         if (!original) return item;
         const advice = adviceByTarget.get(`${original.resourceType}/${original.resourceId}`);
-        return advice ? { ...item, summary: { ...item.summary, reactionAdvice: advice } } : item;
+        return advice ? withReactionAdvice(item, advice) : item;
       });
     },
   };

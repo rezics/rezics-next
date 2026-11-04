@@ -766,7 +766,10 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         reactionAdvice = prepareFeedReactionAdvice(
           feedItems,
           contextWitnesses,
-          { pool: deps.pool, viewerActionRuntime: deps.viewerActionRuntime },
+          {
+            pool: deps.pool,
+            ...(deps.viewerActionRuntime === undefined ? {} : { viewerActionRuntime: deps.viewerActionRuntime }),
+          },
           actor,
           deadline,
         );

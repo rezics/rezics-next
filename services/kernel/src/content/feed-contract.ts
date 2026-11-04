@@ -253,7 +253,7 @@ const discoveryReviewSummary = t.Unsafe<
   PublicReviewDiscoverySummary &
     Pick<
       FeedContentSummary,
-      'reactionTarget' | 'reactions' | 'viewerReaction' | 'reviewContext' | 'conversationActivity'
+      'reactionTarget' | 'reactions' | 'viewerReaction' | 'reviewContext' | 'conversationActivity' | 'reactionAdvice'
     >
 >(
   t.Object(
