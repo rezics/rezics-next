@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { ACCOUNT_ROLE_BITS } from '../../src/history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../../src/history/record.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { listSubjectLinks, listSubjectRelations } from '../../src/semantic/links.ts';
@@ -26,6 +28,24 @@ const actor = {
   requestedBy: null,
   authnEpoch: 1,
 };
+const historyAccounts = [
+  {
+    accountRoute: route,
+    accountId: actor.accountId,
+    roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
+  },
+];
+function creationAuthorization(target: { route: number; id: string }) {
+  return {
+    action: 'subject:create',
+    resource: target,
+    denied: () => new Error('Subject creation is not authorized'),
+    async authorize(tx: Parameters<typeof bindCommandHistoryEvidence>[0]) {
+      bindCommandHistoryEvidence(tx, historyAccounts);
+      return 'execute' as const;
+    },
+  };
+}
 beforeAll(async () => {
   db = await openGrowthDatabase(url);
   configureTestReceiptKeys(db.pool);
@@ -37,7 +57,7 @@ beforeAll(async () => {
     digest: new Uint8Array(32),
     item: { type: 'wd:Q95074', labels: { en: 'Anchor character' } },
     release: { digest, release: bundledRelease },
-    authorize: async () => true,
+    authorization: creationAuthorization({ route, id: character }),
   });
   await createSubject(db.pool, {
     actor,
@@ -46,7 +66,7 @@ beforeAll(async () => {
     digest: new Uint8Array(32),
     item: { type: 'schema:VideoGame', labels: { en: 'Holder work' } },
     release: { digest, release: bundledRelease },
-    authorize: async () => true,
+    authorization: creationAuthorization({ route: route + 16, id: holder }),
   });
 });
 afterAll(async () => {
