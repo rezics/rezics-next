@@ -405,7 +405,7 @@ test('Album recovery retires every current surface and retains private drafts an
     const text = (name: string, scope = host) => {
       const match = [...scope.querySelectorAll('input,textarea')].find((el) => {
         if (!el.id) return false;
-        const label = scope.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+        const label = scope.querySelector(`label[for="${el.id}"]`);
         return (label?.textContent ?? '').trim() === name;
       });
       if (!match) throw new Error(`Expected textbox ${name}`);
