@@ -91,13 +91,16 @@ test('native rows open one exact membership inspection and accepted navigation c
       expect(mounted.host.textContent).toContain(initial.count.exact ? m.work_parts_exact() : m.work_parts_at_least());
       expect(mounted.host.textContent).toContain(String(initial.count.value));
     }
-    expect(Array.from(mounted.host.querySelector('nav')!.querySelectorAll('button')).map((button) => button.textContent)).toEqual(
-      initial.streams.map((stream) => stream.label.text || stream.property),
+    expect(
+      Array.from(mounted.host.querySelector('nav')!.querySelectorAll('button')).map((button) => button.textContent),
+    ).toEqual(initial.streams.map((stream) => stream.label.text || stream.property));
+    const rowButtons = Array.from(
+      mounted.host.querySelectorAll<HTMLButtonElement>('[data-slot="album-track-inspect"]'),
     );
-    const rowButtons = Array.from(mounted.host.querySelectorAll<HTMLButtonElement>('[data-slot="album-track-inspect"]'));
     expect(rowButtons.map((button) => button.getAttribute('aria-label'))).toEqual(
       initial.rows.map(
-        (row) => `${m.album_tracks_inspect()}: ${row.summary?.label?.value || m.work_parts_unresolved()}; ${row.holder}; ${row.statementId}`,
+        (row) =>
+          `${m.album_tracks_inspect()}: ${row.summary?.label?.value || m.work_parts_unresolved()}; ${row.holder}; ${row.statementId}`,
       ),
     );
     const repeated = initial.rows.filter((row) => row.summary?.id === exampleRecording);
@@ -126,7 +129,9 @@ test('native rows open one exact membership inspection and accepted navigation c
     expect(target.href).toBe(`https://site.example/en/subjects/${exampleRecording}/harbour`);
     expect(target.target).toBe('_blank');
     expect(target.rel).toBe('noopener');
-    const correction = inspection.querySelector<HTMLAnchorElement>(`a[href*="${repeated[0]!.holder}"][href$="relation-edit"]`)!;
+    const correction = inspection.querySelector<HTMLAnchorElement>(
+      `a[href*="${repeated[0]!.holder}"][href$="relation-edit"]`,
+    )!;
     expect(correction.target).toBe('_blank');
     expect(correction.rel).toBe('noopener');
     const selectedText = mounted.host.textContent;
@@ -189,11 +194,14 @@ test('unsupported, empty and withheld album windows remain different states', as
       expect(mounted.host.querySelectorAll('[data-slot="album-track-inspection"]')).toHaveLength(0);
       if (scenario === 'withheld') {
         expect(mounted.host.querySelector('a')?.textContent).toBe(m.album_tracks_subject_recovery());
-        expect(Array.from(mounted.host.querySelectorAll('button')).some((button) => button.textContent === m.work_parts_restart())).toBe(true);
+        expect(
+          Array.from(mounted.host.querySelectorAll('button')).some(
+            (button) => button.textContent === m.work_parts_restart(),
+          ),
+        ).toBe(true);
       }
     } finally {
       await mounted.close();
     }
   }
 });
-

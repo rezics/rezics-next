@@ -88,7 +88,9 @@ export function AlbumTrackWindow({
   const [failure, setFailure] = useState<Failure | undefined>(initial && !initial.ok ? initial : undefined);
   const [busy, setBusy] = useState(!initial);
   const [streams, setStreams] = useState<Ready['streams']>(initial?.ok ? initial.streams : []);
-  const [selectedStream, setSelectedStream] = useState<string | undefined>(initial?.ok ? initial.stream?.key : undefined);
+  const [selectedStream, setSelectedStream] = useState<string | undefined>(
+    initial?.ok ? initial.stream?.key : undefined,
+  );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [previousCount, setPreviousCount] = useState(0);
   const inspectionId = useId();
@@ -209,14 +211,13 @@ export function AlbumTrackWindow({
     };
     // The parent remounts this window for every source, address, viewer or locale observation.
   }, []);
-  const request = (address: AlbumTrackAddress, isPrevious = false) => (event: MouseEvent<HTMLButtonElement>) => {
-    if (!busy) void read(address, event.currentTarget, event.detail === 0, isPrevious);
-  };
+  const request =
+    (address: AlbumTrackAddress, isPrevious = false) =>
+    (event: MouseEvent<HTMLButtonElement>) => {
+      if (!busy) void read(address, event.currentTarget, event.detail === 0, isPrevious);
+    };
   const selected = page?.rows.find((row) => `${row.holder}:${row.statementId}` === selectedKey);
-  const currentSubjectHref = contextHref(
-    subjectHref({ id, label: page?.album.label.text ?? '' }, locale).href,
-    realm,
-  );
+  const currentSubjectHref = contextHref(subjectHref({ id, label: page?.album.label.text ?? '' }, locale).href, realm);
 
   const closeInspection = () => {
     const opener = selectionOpener.current;
@@ -333,12 +334,14 @@ export function AlbumTrackWindow({
                       </span>
                       {summary ? (
                         <span className="text-sm">
-                          {m.album_tracks_kind({}, o)}: <span lang={type?.lang ?? undefined}>{type?.text || summary.type}</span>
+                          {m.album_tracks_kind({}, o)}:{' '}
+                          <span lang={type?.lang ?? undefined}>{type?.text || summary.type}</span>
                         </span>
                       ) : null}
                       <span className="text-sm text-muted-foreground">{m.album_tracks_inspect({}, o)}</span>
                       <span className="text-xs text-muted-foreground">
-                        {m.work_parts_holder({}, o)}: {row.holder} · {m.album_tracks_membership({}, o)}: {row.statementId}
+                        {m.work_parts_holder({}, o)}: {row.holder} · {m.album_tracks_membership({}, o)}:{' '}
+                        {row.statementId}
                       </span>
                     </button>
                   </ContentItemFrame>
@@ -346,136 +349,167 @@ export function AlbumTrackWindow({
               );
             })}
           </ul>
-          {selected ? (() => {
-            const summary = selected.summary;
-            const type = summary ? page.types[summary.type] : undefined;
-            const targetHref = summary
-              ? contextHref(subjectHref({ id: summary.id, label: summary.label?.value ?? '' }, locale).href, realm)
-              : undefined;
-            const holderLabel = selected.holder === id ? page.album.label.text : summary?.label?.value ?? '';
-            const holder = contextHref(subjectHref({ id: selected.holder, label: holderLabel }, locale).href, realm);
-            const correction = contextHref(`${holder.split('?')[0]}/relation-edit`, realm);
-            return (
-              <section
-                data-slot="album-track-inspection"
-                id={inspectionId}
-                role="region"
-                aria-labelledby={inspectionHeadingId}
-                className="min-w-0 space-y-4 rounded-lg border border-border p-4"
-              >
-                <header className="flex min-w-0 items-start justify-between gap-3">
-                  <h3 id={inspectionHeadingId} ref={inspectionHeading} tabIndex={-1} className="font-semibold [overflow-wrap:anywhere]">
-                    {summary?.label?.value || m.work_parts_unresolved({}, o)}
-                  </h3>
-                  <button
-                    type="button"
-                    className={`${buttonVariants({ variant: 'outline' })} ${action} shrink-0`}
-                    onClick={closeInspection}
+          {selected
+            ? (() => {
+                const summary = selected.summary;
+                const type = summary ? page.types[summary.type] : undefined;
+                const targetHref = summary
+                  ? contextHref(subjectHref({ id: summary.id, label: summary.label?.value ?? '' }, locale).href, realm)
+                  : undefined;
+                const holderLabel = selected.holder === id ? page.album.label.text : (summary?.label?.value ?? '');
+                const holder = contextHref(
+                  subjectHref({ id: selected.holder, label: holderLabel }, locale).href,
+                  realm,
+                );
+                const correction = contextHref(`${holder.split('?')[0]}/relation-edit`, realm);
+                return (
+                  <section
+                    data-slot="album-track-inspection"
+                    id={inspectionId}
+                    role="region"
+                    aria-labelledby={inspectionHeadingId}
+                    className="min-w-0 space-y-4 rounded-lg border border-border p-4"
                   >
-                    {m.candidate_close({}, o)}
-                  </button>
-                </header>
-                <p className="text-sm text-muted-foreground">
-                  {page.stream.direction === 'forward'
-                    ? m.work_parts_order_forward({}, o)
-                    : m.work_parts_order_inverse({}, o)}
-                </p>
-                {summary ? (
-                  <div className="space-y-2">
-                    <p className="text-sm">
-                      <span>{m.album_tracks_kind({}, o)}: </span>
-                      <span lang={type?.lang ?? undefined}>{type?.text || summary.type}</span>
+                    <header className="flex min-w-0 items-start justify-between gap-3">
+                      <h3
+                        id={inspectionHeadingId}
+                        ref={inspectionHeading}
+                        tabIndex={-1}
+                        className="font-semibold [overflow-wrap:anywhere]"
+                      >
+                        {summary?.label?.value || m.work_parts_unresolved({}, o)}
+                      </h3>
+                      <button
+                        type="button"
+                        className={`${buttonVariants({ variant: 'outline' })} ${action} shrink-0`}
+                        onClick={closeInspection}
+                      >
+                        {m.candidate_close({}, o)}
+                      </button>
+                    </header>
+                    <p className="text-sm text-muted-foreground">
+                      {page.stream.direction === 'forward'
+                        ? m.work_parts_order_forward({}, o)
+                        : m.work_parts_order_inverse({}, o)}
                     </p>
-                    {targetHref ? (
-                      <a className={link} href={targetHref} target="_blank" rel="noopener" onClick={returnFocus}>
-                        {m.album_tracks_open({}, o)}
-                      </a>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p>{m.work_parts_unresolved({}, o)}</p>
-                )}
-                <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
-                  <div>
-                    <dt className="text-sm text-muted-foreground">{m.work_parts_holder({}, o)}</dt>
-                    <dd className="[overflow-wrap:anywhere]">{selected.holder}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-muted-foreground">{m.album_tracks_membership({}, o)}</dt>
-                    <dd className="[overflow-wrap:anywhere]">{selected.statementId}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-muted-foreground">{m.work_parts_relation({}, o)}</dt>
-                    <dd className="[overflow-wrap:anywhere]">{page.stream.property}</dd>
-                  </div>
-                  {summary ? (
-                    <div>
-                      <dt className="text-sm text-muted-foreground">{m.album_tracks_target({}, o)}</dt>
-                      <dd className="[overflow-wrap:anywhere]">{summary.id}</dd>
-                    </div>
-                  ) : null}
-                </dl>
-                {selected.statement ? (
-                  <div className="space-y-3">
-                    <h4 className="font-medium">{m.album_tracks_membership({}, o)}</h4>
-                    <div>
-                      <p className="text-sm text-muted-foreground">{m.album_tracks_target({}, o)}</p>
-                      <CandidateValue
-                        snak={selected.statement}
-                        related={selected.statement.value.type === 'value' ? {} : selected.related}
-                        locale={locale}
-                      />
-                    </div>
-                    {selected.statement.qualifiers.length ? (
-                      <dl className="space-y-2">
-                        {selected.statement.qualifiers.map((snak, index) => (
-                          <div key={index}>
-                            <dt className="text-sm text-muted-foreground" lang={page.labels[snak.property.id]?.lang ?? undefined}>
-                              {page.labels[snak.property.id]?.text || snak.property.id}
-                            </dt>
-                            <dd><CandidateValue snak={snak} related={selected.related} locale={locale} /></dd>
-                          </div>
-                        ))}
-                      </dl>
-                    ) : null}
-                    <details className="min-w-0 rounded-lg border border-border p-3">
-                      <summary className={`${action} cursor-pointer`}>{m.sources_citations({}, o)}</summary>
-                      {selected.statement.references.length ? (
-                        selected.statement.references.map((reference, index) => (
-                          <dl key={index} className="mt-3 space-y-2">
-                            {reference.parts.map((snak, part) => (
-                              <div key={part}>
-                                <dt lang={page.labels[snak.property.id]?.lang ?? undefined}>
+                    {summary ? (
+                      <div className="space-y-2">
+                        <p className="text-sm">
+                          <span>{m.album_tracks_kind({}, o)}: </span>
+                          <span lang={type?.lang ?? undefined}>{type?.text || summary.type}</span>
+                        </p>
+                        {targetHref ? (
+                          <a className={link} href={targetHref} target="_blank" rel="noopener" onClick={returnFocus}>
+                            {m.album_tracks_open({}, o)}
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p>{m.work_parts_unresolved({}, o)}</p>
+                    )}
+                    <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
+                      <div>
+                        <dt className="text-sm text-muted-foreground">{m.work_parts_holder({}, o)}</dt>
+                        <dd className="[overflow-wrap:anywhere]">{selected.holder}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm text-muted-foreground">{m.album_tracks_membership({}, o)}</dt>
+                        <dd className="[overflow-wrap:anywhere]">{selected.statementId}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-sm text-muted-foreground">{m.work_parts_relation({}, o)}</dt>
+                        <dd className="[overflow-wrap:anywhere]">{page.stream.property}</dd>
+                      </div>
+                      {summary ? (
+                        <div>
+                          <dt className="text-sm text-muted-foreground">{m.album_tracks_target({}, o)}</dt>
+                          <dd className="[overflow-wrap:anywhere]">{summary.id}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                    {selected.statement ? (
+                      <div className="space-y-3">
+                        <h4 className="font-medium">{m.album_tracks_membership({}, o)}</h4>
+                        <div>
+                          <p className="text-sm text-muted-foreground">{m.album_tracks_target({}, o)}</p>
+                          <CandidateValue
+                            snak={selected.statement}
+                            related={selected.statement.value.type === 'value' ? {} : selected.related}
+                            locale={locale}
+                          />
+                        </div>
+                        {selected.statement.qualifiers.length ? (
+                          <dl className="space-y-2">
+                            {selected.statement.qualifiers.map((snak, index) => (
+                              <div key={index}>
+                                <dt
+                                  className="text-sm text-muted-foreground"
+                                  lang={page.labels[snak.property.id]?.lang ?? undefined}
+                                >
                                   {page.labels[snak.property.id]?.text || snak.property.id}
                                 </dt>
-                                <dd><CandidateValue snak={snak} related={selected.related} locale={locale} /></dd>
+                                <dd>
+                                  <CandidateValue snak={snak} related={selected.related} locale={locale} />
+                                </dd>
                               </div>
                             ))}
                           </dl>
-                        ))
-                      ) : (
-                        <p>{m.music_reader_source_unavailable({}, o)}</p>
-                      )}
+                        ) : null}
+                        <details className="min-w-0 rounded-lg border border-border p-3">
+                          <summary className={`${action} cursor-pointer`}>{m.sources_citations({}, o)}</summary>
+                          {selected.statement.references.length ? (
+                            selected.statement.references.map((reference, index) => (
+                              <dl key={index} className="mt-3 space-y-2">
+                                {reference.parts.map((snak, part) => (
+                                  <div key={part}>
+                                    <dt lang={page.labels[snak.property.id]?.lang ?? undefined}>
+                                      {page.labels[snak.property.id]?.text || snak.property.id}
+                                    </dt>
+                                    <dd>
+                                      <CandidateValue snak={snak} related={selected.related} locale={locale} />
+                                    </dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            ))
+                          ) : (
+                            <p>{m.music_reader_source_unavailable({}, o)}</p>
+                          )}
+                        </details>
+                      </div>
+                    ) : (
+                      <p>{m.work_parts_assertion_unavailable({}, o)}</p>
+                    )}
+                    <details className="min-w-0 rounded-lg border border-border p-3">
+                      <summary className={`${action} cursor-pointer`}>{m.catalogue_technical_details({}, o)}</summary>
+                      <dl className="mt-3 space-y-2 text-sm [overflow-wrap:anywhere]">
+                        <div>
+                          <dt>{m.work_parts_holder({}, o)}</dt>
+                          <dd>{selected.holder}</dd>
+                        </div>
+                        <div>
+                          <dt>{m.album_tracks_membership({}, o)}</dt>
+                          <dd>{selected.statementId}</dd>
+                        </div>
+                        {summary ? (
+                          <div>
+                            <dt>{m.album_tracks_target({}, o)}</dt>
+                            <dd>{summary.id}</dd>
+                          </div>
+                        ) : null}
+                        <div>
+                          <dt>{m.work_parts_relation({}, o)}</dt>
+                          <dd>{page.stream.property}</dd>
+                        </div>
+                      </dl>
                     </details>
-                  </div>
-                ) : (
-                  <p>{m.work_parts_assertion_unavailable({}, o)}</p>
-                )}
-                <details className="min-w-0 rounded-lg border border-border p-3">
-                  <summary className={`${action} cursor-pointer`}>{m.catalogue_technical_details({}, o)}</summary>
-                  <dl className="mt-3 space-y-2 text-sm [overflow-wrap:anywhere]">
-                    <div><dt>{m.work_parts_holder({}, o)}</dt><dd>{selected.holder}</dd></div>
-                    <div><dt>{m.album_tracks_membership({}, o)}</dt><dd>{selected.statementId}</dd></div>
-                    {summary ? <div><dt>{m.album_tracks_target({}, o)}</dt><dd>{summary.id}</dd></div> : null}
-                    <div><dt>{m.work_parts_relation({}, o)}</dt><dd>{page.stream.property}</dd></div>
-                  </dl>
-                </details>
-                <a className={link} href={correction} target="_blank" rel="noopener" onClick={returnFocus}>
-                  {m.album_tracks_correction({}, o)}
-                </a>
-              </section>
-            );
-          })() : null}
+                    <a className={link} href={correction} target="_blank" rel="noopener" onClick={returnFocus}>
+                      {m.album_tracks_correction({}, o)}
+                    </a>
+                  </section>
+                );
+              })()
+            : null}
         </>
       ) : null}
       {page && !page.next && page.stream ? <p role="status">{m.album_tracks_complete({}, o)}</p> : null}
@@ -501,7 +535,9 @@ export function AlbumTrackWindow({
             type="button"
             className={`${buttonVariants({ variant: 'outline' })} ${action}`}
             disabled={busy}
-            onClick={(event) => read(pending.current, event.currentTarget, event.detail === 0, pendingIsPrevious.current)}
+            onClick={(event) =>
+              read(pending.current, event.currentTarget, event.detail === 0, pendingIsPrevious.current)
+            }
           >
             {m.album_tracks_retry({}, o)}
           </button>

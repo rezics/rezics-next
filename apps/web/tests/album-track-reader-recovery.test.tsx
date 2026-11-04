@@ -3,11 +3,7 @@ import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
-import {
-  albumTrackExample,
-  exampleAddress,
-  exampleAlbum,
-} from '../src/features/catalogue/album-track-reader/examples';
+import { albumTrackExample, exampleAddress, exampleAlbum } from '../src/features/catalogue/album-track-reader/examples';
 import type { AlbumTrackRead, AlbumTrackTransport } from '../src/features/catalogue/album-track-reader/model';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
@@ -82,10 +78,13 @@ test('Previous retains only eight exact prior addresses; Start and Retry perform
     await mounted.render({ ...exampleAddress, locale: 'en', source: {}, reader: null, transport, initial });
     await mounted.click(m.work_parts_more());
     for (let page = 2; page <= 9; page++) await mounted.click(m.work_parts_more());
-    expect(addresses.map((address) => address.cursor)).toEqual(Array.from({ length: 9 }, (_, index) => `cursor-${index + 1}`));
-    const previous = () => Array.from(mounted.host.querySelectorAll('button')).find(
-      (button) => button.textContent === m.album_tracks_previous(),
-    )!;
+    expect(addresses.map((address) => address.cursor)).toEqual(
+      Array.from({ length: 9 }, (_, index) => `cursor-${index + 1}`),
+    );
+    const previous = () =>
+      Array.from(mounted.host.querySelectorAll('button')).find(
+        (button) => button.textContent === m.album_tracks_previous(),
+      )!;
     expect(previous().disabled).toBe(false);
     for (let count = 0; count < 8; count++) await mounted.click(m.album_tracks_previous());
     expect(addresses.slice(9).map((address) => address.cursor)).toEqual(
