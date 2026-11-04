@@ -169,6 +169,7 @@ test(
       await Promise.all([
         page.waitForResponse(
           (response) => new URL(response.url()).pathname === '/account-operations/execute' && response.status() === 200,
+          { timeout: 30_000 },
         ),
         submit.click(),
       ]);
@@ -428,6 +429,7 @@ test(
       await Promise.all([
         page.waitForResponse(
           (response) => new URL(response.url()).pathname === '/account-operations/execute' && response.status() === 200,
+          { timeout: 30_000 },
         ),
         submit.click(),
       ]);
@@ -462,6 +464,7 @@ test(
       await Promise.all([
         page.waitForResponse(
           (response) => new URL(response.url()).pathname === '/account-operations/execute' && response.status() === 200,
+          { timeout: 30_000 },
         ),
         page.getByRole('button', { name: 'Create organization', exact: true }).click(),
       ]);

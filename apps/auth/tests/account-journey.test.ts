@@ -268,6 +268,15 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         expect(response?.status()).toBe(200);
         await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+        if (path.startsWith('/account/delete')) {
+          const beforeReview = writes.length;
+          const confirmation = page.locator('#account-delete-input');
+          const retry = page.getByRole('button', { name: copy.auth_account_delete_retry, exact: true });
+          await confirmation.or(retry).first().waitFor();
+          if (await retry.isVisible()) await retry.click();
+          await confirmation.waitFor();
+          expect(writes).toHaveLength(beforeReview);
+        }
       }
       async function boundedReview() {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -591,7 +600,7 @@ test('Default Security and deletion flows show a genuine recognizable current si
       await page.locator('section[aria-labelledby="security-sessions-heading"] article button').first().click();
       await page.waitForURL(`${origin}/login`);
       releaseIdentity!();
-      await page.waitForLoadState('networkidle');
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
       expect(await page.locator('.auth-card').innerText()).not.toContain(secondEmail);
       expect(await page.locator('.auth-account-identity').count()).toBe(0);
 
