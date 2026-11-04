@@ -143,7 +143,7 @@ export function VndbRowReview({
         <VndbScoreReview
           row={row}
           busy={busy}
-          scoreNotice={scoreNotice}
+          {...(scoreNotice ? { scoreNotice } : {})}
           targetId={targetId ?? row.target?.targetId ?? null}
           onReview={onReview}
         />

@@ -54,16 +54,19 @@ export function VndbReviewPage({
         </details>
       ) : null}
       <ul className="space-y-6">
-        {current.map((row) => (
-          <li key={`${snap.uploadId}:${row.ordinal}`}>
-            <VndbRowReview
-              row={row}
-              busy={busy || snap.cancelled}
-              scoreNotice={snap.scoreNotices.find((item) => item.ordinal === row.ordinal)}
-              onReview={onReview}
-            />
-          </li>
-        ))}
+        {current.map((row) => {
+          const scoreNotice = snap.scoreNotices.find((item) => item.ordinal === row.ordinal);
+          return (
+            <li key={`${snap.uploadId}:${row.ordinal}`}>
+              <VndbRowReview
+                row={row}
+                busy={busy || snap.cancelled}
+                {...(scoreNotice ? { scoreNotice } : {})}
+                onReview={onReview}
+              />
+            </li>
+          );
+        })}
       </ul>
       <div className="flex flex-wrap gap-3">
         {snap.offset > 0 ? (
