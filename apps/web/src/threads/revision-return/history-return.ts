@@ -54,13 +54,7 @@ export function parseHistoryReturnIntent(search: string): HistoryReturnIntent | 
   const token = parseHistoryReturnToken(values.get('historyReturn'));
   const postId = values.get('post');
   const revisionId = values.get('historyRevision');
-  if (
-    !token ||
-    !postId ||
-    postId.length > maxIdentityLength ||
-    !revisionId ||
-    revisionId.length > maxIdentityLength
-  )
+  if (!token || !postId || postId.length > maxIdentityLength || !revisionId || revisionId.length > maxIdentityLength)
     return undefined;
   return { token, postId, revisionId };
 }
@@ -86,7 +80,8 @@ function currentThreadOrigin(pathname: string, search: string, locale: string): 
   }
   if (parsed.origin !== 'https://rezics.invalid' || parsed.pathname !== pathname) return undefined;
   const segments = pathname.split('/');
-  if (segments.length !== 5 || segments[1] !== encodeURIComponent(locale) || segments[2] !== 'threads') return undefined;
+  if (segments.length !== 5 || segments[1] !== encodeURIComponent(locale) || segments[2] !== 'threads')
+    return undefined;
   const threadId = decodeSegment(segments[3]!);
   const slug = decodeSegment(segments[4]!);
   if (!threadId || !slug || threadId === '.' || threadId === '..' || slug === '.' || slug === '..') return undefined;
@@ -185,7 +180,12 @@ export function retireHistoryReturnReceiptOnDeparture(token: string | undefined)
   retire(token);
 }
 
-function current(receipt: Receipt, source: HistoricalReaderSource | undefined, locale: string, mode: ReadCredentialMode) {
+function current(
+  receipt: Receipt,
+  source: HistoricalReaderSource | undefined,
+  locale: string,
+  mode: ReadCredentialMode,
+) {
   if (
     !source ||
     source !== receipt.source ||

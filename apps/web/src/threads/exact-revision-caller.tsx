@@ -5,10 +5,7 @@ import { isPlatformClosedError } from '../kernel/platform-closed';
 import { EditionCreateEntry } from '../content-editions/edition-create-entry';
 import { ExactRevisionView } from './exact-revision-view';
 import type { ExactRevisionIdentity, ExactRevisionState } from './exact-revision';
-import {
-  resolveHistoryReturnTarget,
-  retireHistoryReturnReceiptOnDeparture,
-} from './revision-return/history-return';
+import { resolveHistoryReturnTarget, retireHistoryReturnReceiptOnDeparture } from './revision-return/history-return';
 import {
   createHistoricalReadBinding,
   historicalActualMatches,
@@ -320,13 +317,7 @@ export function ExactRevisionCaller({
 
   const ready =
     page.state === 'ready' && admissionMatches && ownsConnection(visit, generation) && !retiredVisits.has(visit);
-  const historyReturn = resolveHistoryReturnTarget(
-    historyReturnToken,
-    identity,
-    locale,
-    credentialMode,
-    source,
-  );
+  const historyReturn = resolveHistoryReturnTarget(historyReturnToken, identity, locale, credentialMode, source);
   return (
     <>
       <ExactRevisionView

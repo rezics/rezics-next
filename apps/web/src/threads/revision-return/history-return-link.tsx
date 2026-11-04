@@ -34,13 +34,7 @@ export function HistoryReturnLink({
   );
 }
 
-export function ExactRevisionInHistoryButton({
-  onOpen,
-  className,
-}: {
-  onOpen: () => void;
-  className: string;
-}) {
+export function ExactRevisionInHistoryButton({ onOpen, className }: { onOpen: () => void; className: string }) {
   return (
     <Button type="button" variant="ghost" onClick={onOpen} className={className}>
       {m.revision_return_open_here()}

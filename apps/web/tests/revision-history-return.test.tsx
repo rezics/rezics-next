@@ -71,7 +71,11 @@ mock.module('../src/threads/reads', () => ({
   },
 }));
 mock.module('../src/threads/exact-revision-read', () => ({
-  readExactRevision: async ({ data }: { data: ExactRequestData }): Promise<HistoricalReadEnvelope<ExactRevisionState>> => {
+  readExactRevision: async ({
+    data,
+  }: {
+    data: ExactRequestData;
+  }): Promise<HistoricalReadEnvelope<ExactRevisionState>> => {
     exactReads.push(data);
     return {
       data: { state: 'unavailable', status: 404 },
@@ -123,7 +127,9 @@ function page(revisions: HistoryPage['revisions'], next: string | null): History
 }
 
 function button(host: HTMLElement, label: string) {
-  const control = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent?.trim() === label);
+  const control = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent?.trim() === label,
+  );
   expect(control).toBeDefined();
   return control!;
 }
@@ -254,9 +260,8 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
     await click(button(view.host, m.thread_history_show()));
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined]);
     const binding = historyReads[0]!.binding;
-    const { historicalActualMatches, historicalBindingCurrent, historicalReaderSource } = await import(
-      '../src/threads/historical-reader-provenance'
-    );
+    const { historicalActualMatches, historicalBindingCurrent, historicalReaderSource } =
+      await import('../src/threads/historical-reader-provenance');
     expect(historicalActualMatches(binding, anonymousReader)).toBe(true);
     expect(historicalBindingCurrent(historicalReaderSource(view.client), binding, anonymousReader)).toBe(true);
     await click(button(view.host, m.thread_history_more()));
@@ -273,9 +278,7 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
     expect(view.host.textContent).not.toContain('The original edition leaves room for the reader to pause.');
     expect(view.router.state.location.href).toContain('historyReturn=');
     expect(view.router.state.location.href).not.toContain(cursor);
-    const { resolveHistoryReturnTarget } = await import(
-      '../src/threads/revision-return/history-return'
-    );
+    const { resolveHistoryReturnTarget } = await import('../src/threads/revision-return/history-return');
     const token = new URL(view.router.state.location.href, 'https://site.test').searchParams.get('historyReturn')!;
     const returnTarget = resolveHistoryReturnTarget(
       token,
