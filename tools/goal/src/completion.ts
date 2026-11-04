@@ -1,14 +1,12 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { gateRunner, policyGit, type GateRunner } from './merge.ts';
+import { gateRunner, git, type GateRunner } from './merge.ts';
 import type { CompletionEvidence } from './managers.ts';
 import { parseCapabilityManifest, validateGoalCapabilitiesText, validateScenarioReport } from './capabilities.ts';
 
 export type GoalCondition = { taskIds: readonly string[]; gate: readonly string[] };
 export type CompletionOptions = {
-  policy?: ControlPolicy | undefined;
   mainCheckout: string;
   stateDirectory: string;
   worktreeRoot: string;
@@ -20,8 +18,6 @@ export type CompletionOptions = {
 };
 
 export function completionChecker(options: CompletionOptions): (goal: string) => Promise<CompletionEvidence> {
-  const policy = options.policy ?? defaultPolicy;
-  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy.merge);
   return async (goal) => {
     const token = randomUUID();
     mkdirSync(options.stateDirectory, { recursive: true });
@@ -61,14 +57,10 @@ export function completionChecker(options: CompletionOptions): (goal: string) =>
       mkdirSync(options.worktreeRoot, { recursive: true });
       git(options.mainCheckout, 'worktree', 'add', '--detach', tree, base);
       added = true;
-      const gated = await (options.runGate ?? gateRunner(undefined, undefined, undefined, undefined, policy.merge))(
-        condition.gate,
-        tree,
-        evidencePath,
-      );
+      const gated = await (options.runGate ?? gateRunner())(condition.gate, tree, evidencePath);
       if (!gated.passed)
         return fail(
-          `Main gate failed${gated.timedOut ? ' (timed out)' : ''}: ${gated.output.slice(0, policy.completion.diagnosticCharacters).replace(/[\r\n]+/g, ' ')}`,
+          `Main gate failed${gated.timedOut ? ' (timed out)' : ''}: ${gated.output.slice(0, 1000).replace(/[\r\n]+/g, ' ')}`,
         );
       if (manifestText !== null) {
         const manifest = parseCapabilityManifest(manifestText, goal);
@@ -83,13 +75,9 @@ export function completionChecker(options: CompletionOptions): (goal: string) =>
           if (command[0] !== 'bun' || command[1] !== 'test')
             return fail(`Capability acceptance command must be a native bun test command: ${command.join(' ')}`);
           const registered = [...command, '--reporter=junit', '--reporter-outfile=.temp/goal-capability-results.xml'];
-          const outcome = await (
-            options.runGate ?? gateRunner(undefined, undefined, undefined, undefined, policy.merge)
-          )(registered, tree, evidencePath);
+          const outcome = await (options.runGate ?? gateRunner())(registered, tree, evidencePath);
           if (!outcome.passed)
-            return fail(
-              `Capability acceptance failed: ${outcome.output.slice(0, policy.completion.diagnosticCharacters).replace(/[\r\n]+/g, ' ')}`,
-            );
+            return fail(`Capability acceptance failed: ${outcome.output.slice(0, 1000).replace(/[\r\n]+/g, ' ')}`);
           let report: string;
           try {
             report = readFileSync(join(tree, '.temp/goal-capability-results.xml'), 'utf8');

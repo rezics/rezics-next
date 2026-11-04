@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
-import { defaultPolicy, readControlPolicy } from './policy.ts';
+import { readControlPolicy } from './policy.ts';
 export { readControlPolicy } from './policy.ts';
 import type { DerivedFile, Pool, PromotionPlacementSettings, Settings } from './types.ts';
 import { validatePath } from './briefs.ts';
@@ -27,10 +27,10 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { SharedInboxQueries } from './inbox-shared.ts';
 import { deliverDueReminders, parseNotes } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
-import { watch, sshProbe } from './watchdog.ts';
+import { watch } from './watchdog.ts';
 import { readRouting } from './routing.ts';
 import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
-import { promote } from './promotion.ts';
+import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
 import { preparePromotionGate } from './promotion-placement.ts';
 import { verifyDev } from './dev-verifier.ts';
 import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
@@ -55,13 +55,13 @@ import type { BriefContinuation } from './types.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
-export function readDerivedFiles(value: unknown = defaults.derivedFiles, policy = defaultPolicy.brief): DerivedFile[] {
+export function readDerivedFiles(value: unknown = defaults.derivedFiles): DerivedFile[] {
   if (!Array.isArray(value)) throw new Error('derivedFiles must be an array');
   return value.map((item, index) => {
     const file = object(item, `derivedFiles[${index}]`);
     keys(file, ['path', 'stage', 'command', 'inputs'], `derivedFiles[${index}]`);
     const path = text(file.path, `derivedFiles[${index}].path`);
-    validatePath(path, policy);
+    validatePath(path);
     if (file.stage !== 'integration' && file.stage !== 'promotion')
       throw new Error(`invalid derivedFiles[${index}].stage`);
     if (
@@ -76,7 +76,7 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles, policy 
     )
       throw new Error(`derivedFiles[${index}].inputs must be a path array`);
     const inputs = (file.inputs as string[] | undefined)?.map((input) => {
-      validatePath(input, policy);
+      validatePath(input);
       return input;
     });
     return { path, stage: file.stage, command: [...file.command], ...(inputs ? { inputs } : {}) };
@@ -85,7 +85,6 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles, policy 
 export function readIntegrationChecks(
   value: unknown = defaults.integrationChecks,
   label = 'integrationChecks',
-  policy = defaultPolicy.brief,
 ): IntegrationCheck[] {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
   return value.map((item, index) => {
@@ -97,7 +96,7 @@ export function readIntegrationChecks(
       check.paths.some((part) => typeof part !== 'string' || !part)
     )
       throw new Error(`${label}[${index}].paths must be a path list`);
-    for (const path of check.paths) validatePath(path, policy);
+    for (const path of check.paths) validatePath(path);
     if (
       !Array.isArray(check.command) ||
       !check.command.length ||
@@ -326,27 +325,22 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     throw new Error('formatCommand must be a command array');
   const integrationChecks = readIntegrationChecks(
     local.integrationChecks === undefined ? defaults.integrationChecks : local.integrationChecks,
-    'integrationChecks',
-    policy.brief,
   );
   const affectedTests = readIntegrationChecks(
     local.affectedTests === undefined ? defaults.affectedTests : local.affectedTests,
     'affectedTests',
-    policy.brief,
   );
-  const defaultVerifierChecks = readIntegrationChecks(defaults.verifierChecks ?? [], 'verifierChecks', policy.brief);
+  const defaultVerifierChecks = readIntegrationChecks(defaults.verifierChecks ?? [], 'verifierChecks');
   const verifierChecks =
     local.verifierChecks === undefined
       ? verifierChecksFromLegacy(
           defaultVerifierChecks,
-          readIntegrationChecks(defaults.affectedTests, 'affectedTests', policy.brief),
+          readIntegrationChecks(defaults.affectedTests),
           local.affectedTests === undefined ? [] : affectedTests,
-          local.integrationChecks === undefined
-            ? undefined
-            : readIntegrationChecks(local.integrationChecks, 'integrationChecks', policy.brief),
+          local.integrationChecks === undefined ? undefined : readIntegrationChecks(local.integrationChecks),
           local.affectedTests !== undefined,
         )
-      : readIntegrationChecks(local.verifierChecks, 'verifierChecks', policy.brief);
+      : readIntegrationChecks(local.verifierChecks, 'verifierChecks');
   const siblingTests = readSiblingTests(local.siblingTests === undefined ? defaults.siblingTests : local.siblingTests);
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
@@ -377,9 +371,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     mainCheckout: main,
     stateDirectory,
     worktreeRoot: path(local.worktreeRoot, '.temp/worktrees', env.GOAL_WORKTREE_ROOT),
-    ...(local.sharedWebModules === undefined
-      ? {}
-      : { sharedWebModules: readWebModules(local.sharedWebModules, policy.brief) }),
+    ...(local.sharedWebModules === undefined ? {} : { sharedWebModules: readWebModules(local.sharedWebModules) }),
     localFile,
     mainBranch: text(local.mainBranch ?? defaults.mainBranch, 'mainBranch'),
     branchPrefix: text(local.branchPrefix ?? defaults.branchPrefix, 'branchPrefix'),
@@ -394,10 +386,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     verifierChecks,
     siblingTests,
     affectedTests,
-    derivedFiles: readDerivedFiles(
-      local.derivedFiles === undefined ? defaults.derivedFiles : local.derivedFiles,
-      policy.brief,
-    ),
+    derivedFiles: readDerivedFiles(local.derivedFiles === undefined ? defaults.derivedFiles : local.derivedFiles),
     riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
     pools,
     notes: parseNotes(local.notes),
@@ -525,13 +514,13 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     startedCodeVersion === undefined || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
   const databasePath = join(settings.stateDirectory, 'goal.sqlite');
   mkdirSync(settings.stateDirectory, { recursive: true });
-  const db = options.db ?? options.tasks?.store.db ?? openDb(databasePath, settings.policy?.storage);
+  const db = options.db ?? options.tasks?.store.db ?? openDb(databasePath);
   if (options.tasks && options.tasks.store.db !== db)
     throw new Error('Runtime modules must share one database connection');
-  const store = options.tasks?.store ?? new WorkerStore(db, settings.policy);
+  const store = options.tasks?.store ?? new WorkerStore(db);
   const tasks = options.tasks ?? new WorkerTasks(settings, store);
   const queue = new SqliteLandingQueue(db, store);
-  const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory, undefined, settings.policy?.inbox);
+  const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
   const problem = configurationProblem(settings);
   if (problem && !problem.reported) {
     const summary = `Local settings ${problem.file} are invalid: ${problem.error}. Goal keeps using the last valid version of that file until it changes; validate an edit with \`goal config check\` first.`;
@@ -539,7 +528,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       if (managerId) inbox.deliver({ managerId, kind: 'instruction', summary });
     reportedConfigurationProblem(problem);
   }
-  const sharedInbox = new SharedInboxQueries(db, settings.policy?.inbox);
+  const sharedInbox = new SharedInboxQueries(db);
   const checkResultOptions = {
     root: settings.mainCheckout,
     results: store.checkResults,
@@ -558,38 +547,29 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     settings.stateDirectory,
     LANDING_CHECK_ENVIRONMENT,
     checkResultOptions,
-    settings.policy?.merge,
   );
   const runGate: GateRunner = options.runGate ?? execute;
   // Promotion runs the full root gate, which outlasts the integration gate's limit.
   const promotionGate: GateRunner =
     options.runGate ??
     gateRunner(
-      Math.max(settings.integration.gateTimeoutMs, (settings.policy ?? defaultPolicy).promotion.gateTimeoutMs),
+      Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS),
       settings.stateDirectory,
       {},
       checkResultOptions,
-      settings.policy?.merge,
     );
   // The dev verifier checks after integration at ordinary priority: at landing priority its checks held every host's
   // ordinary admission at zero, and workers waited an hour behind one run (2026-10-30).
   const verifierGate: GateRunner =
     options.runGate ??
     gateRunner(
-      Math.max(settings.integration.gateTimeoutMs, (settings.policy ?? defaultPolicy).verifier.gateTimeoutMs),
+      Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS),
       undefined,
       {},
       checkResultOptions,
-      settings.policy?.merge,
     );
   // The prelanding compiler guard is a direct process group. It never enters remote check-host slot admission.
-  const typecheckGate = processGroupRunner(
-    settings.integration.gateTimeoutMs,
-    settings.stateDirectory,
-    process.env,
-    true,
-    settings.policy?.merge,
-  );
+  const typecheckGate = processGroupRunner(settings.integration.gateTimeoutMs, settings.stateDirectory, process.env);
   let train!: MergeTrain;
   const pump = () => train.pump();
   const managerContext = () => {
@@ -631,7 +611,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       });
     });
   train = new MergeTrain({
-    policy: settings.policy,
     mainCheckout: settings.mainCheckout,
     stateDirectory: settings.stateDirectory,
     worktreeRoot: settings.worktreeRoot,
@@ -666,13 +645,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     // Every control-plane release must execute its complete mandatory proof on the exact final candidate.
     runControlPlaneGate:
       options.runGate ??
-      gateRunner(
-        settings.integration.gateTimeoutMs,
-        settings.stateDirectory,
-        LANDING_CHECK_ENVIRONMENT,
-        undefined,
-        settings.policy?.merge,
-      ),
+      gateRunner(settings.integration.gateTimeoutMs, settings.stateDirectory, LANDING_CHECK_ENVIRONMENT),
     gateIdentity: JSON.stringify(settings.gate),
     codeIsCurrent,
     handOff,
@@ -705,7 +678,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const managerLand: NonNullable<IntegrationRuntime['managerLand']> = (taskId, managerId) =>
     requestManagerLanding(taskId, managerId, store, queue, landing);
   const checkCompletion = completionChecker({
-    policy: settings.policy,
     ...settings,
     runGate,
     condition(goal) {
@@ -723,12 +695,10 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     join(settings.mainCheckout, 'tools/goal/src/cli.ts'),
   ];
   const managerServices: ManagerServices = {
-    policy: settings.policy ?? defaults.policy,
     command,
     backlogDirectory: backlogDirectory(settings.stateDirectory),
     checkCompletion,
     windows: new TermspacesWindows({
-      policy: settings.policy?.windows,
       socket: settings.integration.tmuxSocket,
       session: settings.integration.tmuxSession,
       tmuxCommand: settings.integration.tmuxCommand,
@@ -793,21 +763,15 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     handoffTrain: handOff,
     manager,
     pump,
-    deliverReminders: async () => {
-      const probes: Promise<void>[] = [];
+    hostCommand: command,
+    codeIsCurrent,
+    deliverReminders: () => {
       const deliver = (summary: string) =>
         inbox.deliver({ managerId: settings.integration.supermanager, kind: 'instruction', summary } as never);
-      refreshCodexSchedule(settings.stateDirectory, Date.now(), undefined, settings.policy?.pacing);
-      const delivered =
+      refreshCodexSchedule(settings.stateDirectory);
+      return (
         deliverDueReminders(settings.notes ?? [], settings.stateDirectory, deliver) +
-        alertUnspentAllowances(
-          settings.pools,
-          (pool) => tasks.reader(pool),
-          settings.stateDirectory,
-          deliver,
-          Date.now(),
-          settings.policy?.pacing,
-        ) +
+        alertUnspentAllowances(settings.pools, (pool) => tasks.reader(pool), settings.stateDirectory, deliver) +
         watch(
           tasks.store,
           settings.mainCheckout,
@@ -820,37 +784,15 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
               summary,
             }),
           Date.now(),
-          (host, complete) => {
-            probes.push(
-              new Promise<void>((resolve) => {
-                sshProbe(
-                  host,
-                  (result) => {
-                    try {
-                      complete(result);
-                    } finally {
-                      resolve();
-                    }
-                  },
-                  spawn,
-                  undefined,
-                  settings.policy,
-                );
-              }),
-            );
-          },
+          undefined,
           (task) =>
-            readRouting(settings.routingFile, settings.policy?.routing).classes[
-              task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
-            ].maxMs,
-          settings.policy,
-        );
-      // A oneshot CLI exits after this method: persist every bounded probe before closing the runtime.
-      await Promise.all(probes);
-      return delivered;
+            readRouting(settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>]
+              .maxMs,
+        )
+      );
     },
     sweepWidth: async () => {
-      await sweepWidthGovernor(db, inbox, new Date(), { policy: settings.policy });
+      await sweepWidthGovernor(db, inbox);
     },
     // Runs in the host's single-flight `backlog dispatch` child: dispatch is synchronous Git and install work.
     backlog: () =>
@@ -879,14 +821,9 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     promote: () => promoteNow(),
     verify: () => verifyDev({ settings, store, inbox, runGate: verifierGate }),
     async evaluateFlow() {
-      const flowInbox = new SqliteManagerInbox(
-        db,
-        settings.integration.inboxDirectory,
-        undefined,
-        settings.policy?.inbox,
-      );
+      const flowInbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
       const now = new Date();
-      const metrics = await lifecycleMetricsAsync(db, now, settings.policy);
+      const metrics = await lifecycleMetricsAsync(db, now);
       const flow = flowReport(
         readFlow(db, new Date(now.getTime() - (settings.policy ?? defaults.policy).flowHistoryMs).toISOString()),
         readFlowTasks(db),
@@ -899,7 +836,6 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         (summary) => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
         now,
         flowThresholds,
-        settings.policy,
       );
     },
     dispatchDailyStepAudit() {

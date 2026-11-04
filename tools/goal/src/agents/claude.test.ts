@@ -90,24 +90,3 @@ test('afterExit keeps a usable in-memory reading when reset data and cache persi
     rmSync(`${cache}.${process.pid}`, { force: true });
   }
 });
-
-test('caller refresh and stale bounds apply to shared observations at the exact boundary', async () => {
-  const { readControlPolicy } = await import('../policy.ts');
-  const policy = readControlPolicy({ provider: { claudeRefreshMs: 1500, claudeStaleMs: 2500 } }).provider;
-  const pool = makePool(),
-    cache = cachePath(pool),
-    now = Date.now();
-  const observedAt = new Date(now - 1000).toISOString();
-  writeFileSync(
-    cache,
-    JSON.stringify({ ...parseClaudeUsage('{"five_hour":{"utilization":25}}', pool, now), observedAt }),
-  );
-  try {
-    expect(readClaudeUsage(pool, now, policy).observedAt).toBe(observedAt);
-    expect(readClaudeUsage(pool, now + 1499, policy).observedAt).toBe(observedAt);
-    expect(readClaudeUsage(pool, now + 1500, policy).observedAt).toBeNull();
-    expect(readClaudeUsage(pool, now + 1500).observedAt).toBe(observedAt);
-  } finally {
-    rmSync(cache, { force: true });
-  }
-});
