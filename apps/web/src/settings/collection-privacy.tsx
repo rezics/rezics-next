@@ -157,7 +157,9 @@ function CollectionRowView({
   );
   useLayoutEffect(() => pager?.registerRow(editor), [editor, pager]);
   useLayoutEffect(() => editor.receive(collection), [collection, editor]);
-  const waiting = usePreferenceRetry(state.nativeFailure);
+  const commandWaiting = usePreferenceRetry(undefined, editor.commandRetryDeadline());
+  const readWaiting = usePreferenceRetry(undefined, editor.currentReadRetryDeadline());
+  const waiting = commandWaiting || readWaiting;
   const id = useId();
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const busy = state.phase === 'saving' || state.phase === 'reloading' || !!pageState?.loading;
@@ -227,7 +229,7 @@ function CollectionRowView({
                 className={preferenceActionClassName}
                 type="button"
                 variant="outline"
-                disabled={!canRead || busy || waiting || !!pageState?.restarting}
+                disabled={!canRead || busy || readWaiting || !!pageState?.restarting}
                 onClick={() => {
                   if (!pageState?.restarting) {
                     if (state.attempt) void editor.reload();
@@ -303,6 +305,7 @@ function CollectionRowView({
               {phase === 'saving' ? m.settings_saving() : m.settings_privacy_reading()}
             </p>
           ) : null}
+          {waiting ? <p role="status">{m.settings_privacy_row_retry_wait()}</p> : null}
           {phase === 'saved' ? (
             <p role="status" className="text-sm text-muted-foreground">
               {m.settings_saved()}
@@ -341,14 +344,13 @@ function CollectionRowView({
                           : failureText(state.failure)}
                 </p>
                 {state.failure && phase !== 'refused' ? <p>{failureText(state.failure)}</p> : null}
-                {waiting ? <p role="status">{m.settings_privacy_row_retry_wait()}</p> : null}
                 <div className="flex min-w-0 flex-wrap gap-2">
                   {phase === 'uncertain' ? (
                     <Button
                       className={preferenceActionClassName}
                       type="button"
                       variant="outline"
-                      disabled={!mayWrite() || !canSave || busy || waiting}
+                      disabled={!mayWrite() || !canSave || busy || commandWaiting}
                       onClick={() => {
                         if (!pageState?.loading) void editor.retry();
                       }}
@@ -365,7 +367,7 @@ function CollectionRowView({
                         !canSave ||
                         !current.allowedVisibilityActions.includes(desired) ||
                         busy ||
-                        waiting
+                        commandWaiting
                       }
                       onClick={() => {
                         if (!pageState?.loading) void editor.submit();
@@ -379,7 +381,7 @@ function CollectionRowView({
                     className={preferenceActionClassName}
                     type="button"
                     variant="outline"
-                    disabled={!canRead || busy || waiting}
+                    disabled={!canRead || busy || readWaiting}
                     onClick={() => {
                       if (!pageState?.loading) void editor.reload();
                     }}
@@ -424,7 +426,9 @@ export function CollectionPrivacyView({
   );
   useSettingsDisposal(pager.dispose);
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);
-  const waiting = usePreferenceRetry(state.nativeFailure);
+  const retryWaiting = usePreferenceRetry(undefined, pager.retryDeadline());
+  const restartWaiting = usePreferenceRetry(undefined, pager.restartDeadline());
+  const waiting = retryWaiting || restartWaiting;
   const retryButton = useRef<HTMLButtonElement>(null);
   const refreshButton = useRef<HTMLButtonElement>(null);
   const loadMoreButton = useRef<HTMLButtonElement>(null);
@@ -475,7 +479,7 @@ export function CollectionPrivacyView({
                   className={preferenceActionClassName}
                   type="button"
                   variant="outline"
-                  disabled={state.loading || waiting || (state.restartBlocked && pager.retryReplacesRows())}
+                  disabled={state.loading || retryWaiting || (state.restartBlocked && pager.retryReplacesRows())}
                   onClick={() => {
                     focusAfterPage.current = true;
                     void pager.load();
@@ -507,7 +511,7 @@ export function CollectionPrivacyView({
                 className={preferenceActionClassName}
                 type="button"
                 variant="outline"
-                disabled={state.loading || waiting || state.restartBlocked}
+                disabled={state.loading || restartWaiting || state.restartBlocked}
                 aria-describedby={state.restartBlocked ? 'settings-privacy-refresh-blocked' : undefined}
                 onClick={() => {
                   focusAfterPage.current = true;
