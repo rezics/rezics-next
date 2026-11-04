@@ -15,7 +15,13 @@ import { AccountIdentitySummary } from '../account-identity-view';
 import { failureMessage } from '../api';
 import { ErrorAlert } from '../alert';
 import { SecurityInventory, type InventorySource } from '../security-inventory-view';
-import type { SecurityPageEnvelope, SecurityAdvice, ConsentReviewOperation } from '../security-inventory';
+import { ConnectedApplicationHistory } from '../connected-application-review-view';
+import type {
+  SecurityPageEnvelope,
+  SecurityAdvice,
+  ConsentReviewHistory,
+  ConsentReviewOperation,
+} from '../security-inventory';
 import { privateAuthRead } from '../private-auth-read';
 import { waitForSecurityAction } from '../security-target-operation';
 import {
@@ -173,7 +179,7 @@ function SecurityPageView({
   const [page, setPage] = useState<SecurityPageEnvelope | null>(null);
   const [sessions, setSessions] = useState<SecuritySession[]>([]);
   const [loadMessage, setLoadMessage] = useState('');
-  const [consentReduced, setConsentReduced] = useState(false);
+  const [consentHistory, setConsentHistory] = useState<ConsentReviewHistory>('none');
   const [passwordError, setPasswordError] = useState('');
   const [passwordDraftPresent, setPasswordDraftPresent] = useState(false);
   const [passwordLimits, setPasswordLimits] = useState<PasswordChangeLimits | null>(null);
@@ -222,6 +228,10 @@ function SecurityPageView({
   const sessionStatus = useRef<HTMLDivElement>(null);
   const signedOutStatus = useRef<HTMLParagraphElement>(null);
   const targetReturnStatus = useRef<HTMLDivElement>(null);
+  const consentHistoryRef = useRef<HTMLDivElement>(null);
+  const consentHistoryAttempt = useRef(0);
+  const consentHistoryValue = useRef<ConsentReviewHistory>('none');
+  const focusConsentHistory = useRef(false);
   const passwordInput = useRef<HTMLInputElement>(null);
   const passwordAlert = useRef<HTMLDivElement>(null);
   const currentPasswordAdvice = useRef<SecurityAdvice | undefined>(page?.actions.change_password);
@@ -239,6 +249,12 @@ function SecurityPageView({
     },
     identitySource,
   );
+
+  useLayoutEffect(() => {
+    if (!focusConsentHistory.current) return;
+    focusConsentHistory.current = false;
+    consentHistoryRef.current?.focus();
+  }, [consentHistory, loadState]);
 
   useLayoutEffect(() => {
     const held = activeOperation.current;
@@ -267,7 +283,6 @@ function SecurityPageView({
       if (!active || departed || pending) return;
       pending = true;
       clearPrivateData('loading');
-      setConsentReduced(false);
       const generation = authorityGeneration.current;
       const signal = lifetime.current.signal;
       const result =
@@ -356,7 +371,6 @@ function SecurityPageView({
       flushSync(() => {
         setEnrollment(enrollmentController.current.snapshot());
         clearPrivateData('loading');
-        setConsentReduced(false);
       });
     }
     function restore(event: PageTransitionEvent) {
@@ -469,14 +483,29 @@ function SecurityPageView({
     }
   }
 
+  function setConsentHistoryValue(history: ConsentReviewHistory) {
+    consentHistoryValue.current = history;
+    setConsentHistory(history);
+    if (history === 'acknowledged' || history === 'unknown' || history === 'refused')
+      focusConsentHistory.current = true;
+  }
+
+  function recordConsentHistory(attempt: number, history: Exclude<ConsentReviewHistory, 'none' | 'unsent'>) {
+    if (attempt !== consentHistoryAttempt.current) return;
+    setConsentHistoryValue(history);
+  }
+
   function beginConsentReview(): ConsentReviewOperation | null {
     if (activeOperation.current || !activeAccount.current) return null;
     const held: SecurityOperation = { kind: 'consent' };
     const generation = authorityGeneration.current;
+    const attempt = ++consentHistoryAttempt.current;
+    setConsentHistoryValue('unsent');
     updateOperation(held);
     const isCurrent = () => authorityGeneration.current === generation && activeOperation.current === held;
     return {
       isCurrent,
+      record: (history) => recordConsentHistory(attempt, history),
       finish: () => {
         // A disposed review cannot release a later page authority's operation.
         if (isCurrent()) updateOperation(null);
@@ -493,6 +522,10 @@ function SecurityPageView({
     if (outcome) rememberTargetReturn(outcome);
     captureRetiredPasswordOperation();
     if (departure) departure.current.protected = false;
+    const held = activeOperation.current;
+    if (held?.kind === 'consent' && consentHistoryValue.current === 'dispatched')
+      recordConsentHistory(consentHistoryAttempt.current, 'unknown');
+    if (consentHistoryValue.current !== 'none') focusConsentHistory.current = true;
     authorityGeneration.current++;
     adviceGeneration.current++;
     lifetime.current.abort();
@@ -1074,7 +1107,7 @@ function SecurityPageView({
             check={() => {}}
             finish={() => {}}
           />
-          {consentReduced ? <p role="status">{m.auth_inventory_reduced()}</p> : null}
+          <ConnectedApplicationHistory history={consentHistory} reference={consentHistoryRef} />
           {!passwordReturnHistory ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
         </div>
       </AuthPage>
@@ -1093,6 +1126,7 @@ function SecurityPageView({
           ) : null}
           {passwordReturnView}
           <ErrorAlert>{loadMessage}</ErrorAlert>
+          <ConnectedApplicationHistory history={consentHistory} reference={consentHistoryRef} />
           <PasskeyEnrollmentView
             state={enrollment}
             reading={false}
@@ -1143,6 +1177,7 @@ function SecurityPageView({
           aria-busy={loadState === 'loading' || (operationBlocked && operation?.kind !== 'review')}
         >
           {passwordReturnView}
+          <ConnectedApplicationHistory history={consentHistory} reference={consentHistoryRef} />
           {loadState === 'loading' ? (
             <p role="status">{m.auth_inventory_loading()}</p>
           ) : (
@@ -1416,10 +1451,7 @@ function SecurityPageView({
                 lifetime={lifetime.current.signal}
                 {...(inventorySource ? { source: inventorySource } : {})}
                 operation={{ blocked: operationBlocked, begin: beginConsentReview }}
-                onSessionEnded={(reduced) => {
-                  setConsentReduced(reduced);
-                  clearPrivateData('signed-out');
-                }}
+                onSessionEnded={() => clearPrivateData('signed-out')}
               />
 
               <section aria-labelledby="security-organizations-heading">

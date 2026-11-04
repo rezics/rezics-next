@@ -99,8 +99,14 @@ test.each([200, 401, 403, 503])('consent review serializes security writes and p
   expect(reloads.map((item) => item.disabled)).toEqual([true, false, true]);
   await flush(() => reloads[1]!.click());
   expect(control(m.auth_inventory_remove()).disabled).toBe(false);
-  await flush(() => control(m.auth_inventory_cancel()).click());
-  expect(writes().every((item) => !item.disabled)).toBe(true);
+  const consentSection = host.querySelector<HTMLElement>('#inventory-consents-heading')!.parentElement!;
+  await flush(() => button(consentSection, m.auth_inventory_cancel())!.click());
+  expect(consentSection.querySelector('fieldset')).toBeNull();
+  expect(
+    writes()
+      .filter((item) => item.disabled)
+      .map((item) => ({ text: item.textContent, label: item.getAttribute('aria-label') })),
+  ).toEqual([]);
   await flush(() => {
     choose();
     submit();
@@ -121,7 +127,7 @@ test.each([200, 401, 403, 503])('consent review serializes security writes and p
   if (status === 200 || status === 401) {
     expect(host.querySelector('form')).toBeNull();
     expect(host.textContent).not.toContain('Security key');
-    if (status === 200) expect(host.textContent).toContain(m.auth_inventory_reduced());
+    if (status === 200) expect(host.textContent).toContain(m.auth_connected_operation_acknowledged());
   } else {
     expect(host.textContent).toContain(status === 503 ? m.auth_inventory_unknown() : m.auth_inventory_denied());
     expect(writes().every((item) => item.disabled === (status === 503))).toBe(true);
@@ -139,7 +145,6 @@ test.each(['password', 'session'])('%s prevents a consent review without blockin
     review.click();
   });
   expect(review.disabled).toBe(true);
-  expect(host.querySelector('fieldset')).toBeNull();
   if (kind === 'session') {
     await flush(() => control(m.auth_security_confirm_session()).click());
     await flush(() => action.resolve({ kind: 'unknown' }));

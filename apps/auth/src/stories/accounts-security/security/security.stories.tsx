@@ -149,7 +149,7 @@ export const ConsentReduced = {
     );
     control.click();
     (await waitFor(() => button(canvasElement, m.auth_inventory_remove()))).click();
-    await waitFor(() => canvasElement.textContent?.includes(m.auth_inventory_reduced()));
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_connected_operation_acknowledged()));
   },
 };
 export const Denied = {

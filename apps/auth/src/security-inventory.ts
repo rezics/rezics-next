@@ -311,14 +311,16 @@ export async function loadPasskeyInventory(signal?: AbortSignal) {
 }
 
 export type ConsentReductionResult = {
-  kind: 'accepted' | 'pending' | 'signed-out' | 'denied' | 'stale-review' | 'unknown' | 'unavailable';
+  kind: 'accepted' | 'pending' | 'signed-out' | 'denied' | 'stale-review' | 'unknown' | 'unavailable' | 'retired';
 };
+export type ConsentReviewHistory = 'none' | 'unsent' | 'dispatched' | 'acknowledged' | 'unknown' | 'refused';
 /** The page lends its existing write boundary to a mounted consent review.
  * Acquisition is synchronous; release only ends the operation that acquired it.
  * An uncertain write keeps the lease and must never be automatically replayed.
  */
 export type ConsentReviewOperation = {
   isCurrent: () => boolean;
+  record: (history: Exclude<ConsentReviewHistory, 'none' | 'unsent'>) => void;
   finish: () => void;
 };
 export type ConsentOperationBoundary = {
@@ -363,16 +365,21 @@ export function createConsentReduction(consent: GrantedConsent, retained: readon
 export async function reduceConsent(
   consent: GrantedConsent,
   retained: readonly string[],
+  operation?: ConsentReviewOperation,
 ): Promise<ConsentReductionResult> {
   // Snapshot before the first await: caller edits cannot retarget an in-flight write.
   const target = createConsentReduction(consent, retained);
   if (!target) return { kind: 'denied' };
+  if (operation && !operation.isCurrent()) return { kind: 'retired' };
   // Empty replacement cannot add authority. Preserve the original remove-all
   // transport; SecurityInventory refreshes its current native DTO for either path.
   // A nonempty replacement also checks the exact native granted set so it cannot
   // restore a permission removed since the selection was made.
   if (target.retained.length > 0) {
     const current = await readConsent(target.clientId);
+    // The mounted route may have retired while native review was outstanding.
+    // That read authorizes no browser dispatch by itself.
+    if (operation && !operation.isCurrent()) return { kind: 'retired' };
     if (!current.ok) {
       return {
         kind:
@@ -393,16 +400,31 @@ export async function reduceConsent(
     )
       return { kind: 'denied' };
   }
+  // Check once after every awaited preflight and again immediately before the
+  // existing native send. Retiring the page never cancels an already sent write.
+  if (operation && !operation.isCurrent()) return { kind: 'retired' };
+  operation?.record('dispatched');
+  if (operation && !operation.isCurrent()) return { kind: 'retired' };
   const response = await authPost<unknown>('/consent', {
     client_id: target.clientId,
     scope: target.retained,
     ...(target.retained.length > 0 ? { reviewed_scopes: [...target.current] } : {}),
   });
   if (!response.ok) {
-    if (response.status === 401) return { kind: 'signed-out' };
-    if (response.status === 409 && response.code === 'stale_review') return { kind: 'stale-review' };
-    if (response.status === 403 || response.status === 409) return { kind: 'denied' };
+    if (response.status === 401) {
+      operation?.record('refused');
+      return { kind: 'signed-out' };
+    }
+    if (response.status === 409 && response.code === 'stale_review') {
+      operation?.record('refused');
+      return { kind: 'stale-review' };
+    }
+    if (response.status === 403 || response.status === 409) {
+      operation?.record('refused');
+      return { kind: 'denied' };
+    }
     // Once sent, an outage/ambiguous acknowledgement may have applied the barrier.
+    operation?.record('unknown');
     return { kind: 'unknown' };
   }
   if (
@@ -411,8 +433,11 @@ export async function reduceConsent(
     response.body.client_id !== target.clientId ||
     !scopeSet(response.body.scope) ||
     !sameScopes(response.body.scope, target.retained)
-  )
+  ) {
+    operation?.record('unknown');
     return { kind: 'unknown' };
+  }
+  operation?.record('acknowledged');
   return { kind: 'accepted' };
 }
 
