@@ -7218,7 +7218,7 @@
   "release_fidelity_retry_current": "Diese Auswahl erneut lesen",
   "release_fidelity_restart": "Mit der ersten Beziehungsseite neu beginnen",
   "release_fidelity_selection_stale": "Dieses Beziehungsvorkommen ist nicht mehr auf der aktuellen Seite. Wähle einen aktuellen Eintrag aus, um ihn zu prüfen.",
-  "release_fidelity_selection_local": "Beziehungsauswahlen bleiben auf diesen Besuch beschränkt. Nach dem Neuladen oder in einem neuen Tab beginnst du bei der aktuellen Ausgabe und wählst eine Beziehung erneut aus; frühere Auswahlen werden nicht wiederhergestellt.",
+  "release_fidelity_selection_local": "Rücklinks lesen diese Ausgabe erneut und stellen nur eine noch aktuelle Aussage wieder her. Ohne Rückadresse beginnen Sie mit der aktuellen Liste.",
   "release_fidelity_origin": "Zur Ausgabe zurückkehren",
   "release_fidelity_files_unavailable": "Katalogdatei- und Release-Group-Typen sind in den aktuellen Definitionen nicht enthalten.",
   "release_fidelity_leave": "Diese Veröffentlichungsseite verlassen? Ungesendete Korrekturen dieses Besuchs werden verworfen.",
@@ -10232,5 +10232,7 @@
   "release_search_child_preview": "Vorschau verwandter Veröffentlichungen.",
   "release_search_child_window": "Aktuelles Fenster: {count} Veröffentlichungen.",
   "release_search_child_restart_needed": "Starten Sie neu, um das erste Fenster zu öffnen.",
-  "release_search_child_first": "Erstes Fenster"
+  "release_search_child_first": "Erstes Fenster",
+  "release_fidelity_visit_unsupported": "Dieses Ziel kann diesen Context nicht beibehalten. Bleiben Sie hier oder wählen Sie eine unterstützte Ansicht.",
+  "release_fidelity_visit_changed": "Diese Aussage oder Ansicht hat sich geändert. Wählen Sie eine aktuelle Zeile oder beginnen Sie die Liste neu."
 }

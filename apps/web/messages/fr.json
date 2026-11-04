@@ -7218,7 +7218,7 @@
   "release_fidelity_retry_current": "Relire cette sélection",
   "release_fidelity_restart": "Recommencer à la première page des relations",
   "release_fidelity_selection_stale": "Cette occurrence de relation n’apparaît plus sur la page actuelle. Choisissez une ligne actuelle pour l’inspecter.",
-  "release_fidelity_selection_local": "Les sélections de relation restent locales à cette visite. Après un rechargement ou dans un nouvel onglet, repartez de l’édition actuelle et choisissez de nouveau une relation ; aucune sélection précédente n’est restaurée.",
+  "release_fidelity_selection_local": "Les liens de retour relisent cette édition avant de rétablir une occurrence encore actuelle. Sans adresse de retour, commencez par la liste actuelle.",
   "release_fidelity_origin": "Retourner à l’édition",
   "release_fidelity_files_unavailable": "Les types fichier de catalogue et groupe de parution ne figurent pas dans les définitions actuelles.",
   "release_fidelity_leave": "Quitter cette page de parution ? Les corrections non envoyées de cette visite seront abandonnées.",
@@ -10232,5 +10232,7 @@
   "release_search_child_preview": "Aperçu des éditions associées.",
   "release_search_child_window": "Fenêtre actuelle : {count} éditions.",
   "release_search_child_restart_needed": "Recommencez pour explorer depuis la première fenêtre.",
-  "release_search_child_first": "Première fenêtre"
+  "release_search_child_first": "Première fenêtre",
+  "release_fidelity_visit_unsupported": "Cette destination ne peut pas conserver ce Context. Restez ici ou choisissez une lecture compatible.",
+  "release_fidelity_visit_changed": "Cette assertion ou cette lecture a changé. Choisissez une ligne actuelle ou recommencez la liste."
 }

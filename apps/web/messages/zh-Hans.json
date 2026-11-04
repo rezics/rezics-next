@@ -7218,7 +7218,7 @@
   "release_fidelity_retry_current": "重新读取此选择",
   "release_fidelity_restart": "从第一页关系重新开始",
   "release_fidelity_selection_stale": "当前页已没有这条关系记录。请选择当前行重新查看。",
-  "release_fidelity_selection_local": "关系选择仅在本次访问期间保留。重新加载或打开新标签页后，请从当前发行版重新选择关系；先前的选择不会恢复。",
+  "release_fidelity_selection_local": "返回链接会重新读取此发行版本，再还原仍有效的陈述位置。没有返回地址时，请从当前的关联流开始。",
   "release_fidelity_origin": "返回发行版",
   "release_fidelity_files_unavailable": "当前定义中没有目录文件和发布组类型。",
   "release_fidelity_leave": "离开此发行版页面？本次访问中未发送的更正将被丢弃。",
@@ -10239,5 +10239,7 @@
   "release_search_child_preview": "相关发行版本预览。",
   "release_search_child_window": "当前窗口：{count} 个发行版本。",
   "release_search_child_restart_needed": "重新开始以从首个窗口浏览。",
-  "release_search_child_first": "首个窗口"
+  "release_search_child_first": "首个窗口",
+  "release_fidelity_visit_unsupported": "此目标页面无法保留当前的 Context。请留在此页，或选择支持的阅读范围。",
+  "release_fidelity_visit_changed": "此陈述或阅读范围已更改。请选择当前条目，或重新开始浏览。"
 }

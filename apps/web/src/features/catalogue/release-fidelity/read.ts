@@ -1,9 +1,11 @@
+import { releaseVisit, type ReleaseVisit } from './navigation';
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { candidateContext, candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import {
   encodedBytes,
+  admitVisitComponent,
   emptyVisit,
   historicalStatement,
   isReleaseType,
@@ -80,6 +82,7 @@ export type ReleaseFidelityRead =
       detail?: SubjectRead;
       visit: VisitWork;
       session?: string;
+      returned?: 'restored' | 'changed';
     };
 
 export type ReleaseReadQuery = {
@@ -90,6 +93,7 @@ export type ReleaseReadQuery = {
   cursor?: string | undefined;
   detail?: string | undefined;
   session?: string | undefined;
+  returning?: ReleaseVisit | undefined;
 };
 
 function relatedMap(values: ForwardPage['relations'][number]['related']): SubjectRead['related'] {
@@ -128,9 +132,10 @@ function workIdentity(read: SubjectRead, locale: string, digest: string): WorkId
   if (!id) return { readability: 'unreadable', historical, ...(completeness ? { completeness } : {}) };
   const readability = relatedReadable(read.related, id);
   const labels = read.related[id]?.labels ?? {};
+  const label = pickText(labels, locale);
   return {
     id,
-    readability,
+    readability: readability === 'readable' && !label.text.trim() ? 'unreadable' : readability,
     historical,
     ...(readability === 'readable' ? { label: pickText(labels, locale) } : {}),
     ...(completeness ? { completeness } : {}),
@@ -205,6 +210,11 @@ export async function readReleaseFidelity(
     return { ok: false, reason: 'invalid' };
   const context = query.context ?? candidateContext;
   if (!releaseUuid.test(context)) return { ok: false, reason: 'invalid' };
+  if (
+    query.returning &&
+    (!releaseVisit(query.returning) || query.returning.id !== query.id || query.returning.context !== context)
+  )
+    return { ok: false, reason: 'invalid' };
   if (query.cursor && !query.stream) return { ok: false, reason: 'invalid' };
   const headers = { authorization, ...(query.session ? { 'rezics-session-token': query.session } : {}) };
   let work = emptyVisit();
@@ -216,10 +226,20 @@ export async function readReleaseFidelity(
     if (subject.data.subject.id !== query.id || subject.data.subject.context !== context)
       return { ok: false, reason: 'stale' };
     const digest = subject.data.subject.release;
+    const sameVisit =
+      !query.returning ||
+      (query.returning.digest === digest && query.returning.revision === subject.data.subject.revision);
+    const cursor = sameVisit ? query.cursor : undefined;
     const bundle = await client.definitions.releases({ digest }).get({ headers });
     if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== digest) return candidateFailure(bundle.status);
     const release = bundle.data.release as Release;
-    if (!release.types || !release.properties) return { ok: false, reason: 'unavailable' };
+    if (
+      !release.types ||
+      !release.properties ||
+      !admitVisitComponent('descriptor', release, Object.keys(release.types).length) ||
+      !admitVisitComponent('subject', subject.data, Object.keys(subject.data.subject.statements).length)
+    )
+      return { ok: false, reason: 'unavailable' };
     work = recordComponent(work, {
       id: 'descriptor',
       calls: 1,
@@ -256,7 +276,7 @@ export async function readReleaseFidelity(
         context,
         language: query.locale,
         limit: RELEASE_ASSOCIATION_LIMIT,
-        ...(query.cursor ? { cursor: query.cursor } : {}),
+        ...(cursor ? { cursor } : {}),
       };
       const result =
         stream.direction === 'forward'
@@ -273,6 +293,8 @@ export async function readReleaseFidelity(
                 : 'unavailable';
       } else {
         const page = result.data;
+        const admittedRows = 'relations' in page ? page.relations.length : page.links.length;
+        if (!admitVisitComponent('association', page, admittedRows)) return { ok: false, reason: 'unavailable' };
         rows = pageRows(query.id, digest, page, stream.direction);
         next = page.next;
         if ('count' in page && page.count) count = page.count;
@@ -298,7 +320,24 @@ export async function readReleaseFidelity(
       });
     }
     let detail: SubjectRead | undefined;
-    if (query.detail) {
+    const returnedOccurrence = query.returning?.occurrence;
+    const exactReturn =
+      !query.returning ||
+      (sameVisit &&
+        (!returnedOccurrence ||
+          rows.some(
+            (row) =>
+              row.readability === 'readable' &&
+              row.holder === returnedOccurrence.holder &&
+              row.statementId === returnedOccurrence.statementId &&
+              row.statement?.rezics.revision === returnedOccurrence.revision &&
+              stream?.key === returnedOccurrence.stream &&
+              stream.property === returnedOccurrence.relation &&
+              stream.direction === returnedOccurrence.direction &&
+              (stream.direction === 'inverse' ? row.holder : row.statement && relatedTarget(row.statement)) ===
+                returnedOccurrence.target,
+          )));
+    if (query.detail && exactReturn) {
       const listed = listedOnPage(rows, query.detail, query.id);
       if (!listed) return { ok: false, reason: 'invalid' };
       const selected = await client.subjects({ id: query.detail }).get({
@@ -313,7 +352,7 @@ export async function readReleaseFidelity(
         rowCap: RELEASE_VISIT_CAPS.detail.rows,
         byteCap: RELEASE_VISIT_CAPS.detail.bytes,
       });
-      if (selected.status === 200 && selected.data) {
+      if (selected.status === 200 && selected.data && admitVisitComponent('detail', selected.data, 1)) {
         if (selected.data.subject.id !== query.detail || selected.data.subject.context !== context)
           return { ok: false, reason: 'stale' };
         detail = selected.data;
@@ -362,6 +401,7 @@ export async function readReleaseFidelity(
       ...(detail ? { detail } : {}),
       visit: work,
       ...(session ? { session } : {}),
+      ...(query.returning ? { returned: exactReturn ? ('restored' as const) : ('changed' as const) } : {}),
     };
   } catch {
     return candidateFailure(503);

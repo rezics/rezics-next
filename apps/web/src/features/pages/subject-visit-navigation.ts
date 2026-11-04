@@ -1,3 +1,4 @@
+import { releaseVisitReturn } from '../catalogue/release-fidelity/navigation';
 import { creditReturn } from '../catalogue/credit-inspection/navigation';
 import { realmReadingReturn } from '../../community/realm-reading-return';
 import {
@@ -689,6 +690,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
 
 /** A public return address may restore one admitted Subject or Collection view window. */
 export function subjectVisitReturn(value: unknown, locale?: string): string | undefined {
+  const release = releaseVisitReturn(value, locale);
+  if (release) return release;
   return subjectVisitReturnAt(value, locale, false);
 }
 

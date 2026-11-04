@@ -22,11 +22,13 @@ function ReleaseFidelitySessionLive({
   context,
   realm,
   initialReview,
+  returnTo,
 }: {
   id: string;
   locale: string;
   context?: string | undefined;
   realm?: string | undefined;
+  returnTo?: string | undefined;
   initialReview?: { property: string; candidate: string } | undefined;
 }) {
   const editorWork = useCatalogueLifetime('transport');
@@ -53,10 +55,14 @@ function ReleaseFidelitySessionLive({
       locale={locale}
       search={search}
       initialReview={initialReview}
+      returnTo={returnTo}
       transport={{
-        read: (stream, cursor, detail, session) =>
+        read: (stream, cursor, detail, session, returning) =>
           readSubjectReleaseFidelity({
-            data: editorRequest({ id, context: selectedContext, stream, cursor, detail, session }, editorWork),
+            data: editorRequest(
+              { id, context: selectedContext, stream, cursor, detail, session, returning },
+              editorWork,
+            ),
             headers: csrfHeaders(),
           }),
         facts: {
