@@ -633,8 +633,9 @@ not additional check requests.
   `operator plans authored COPY character measurements and imports exact supported facts through the seed caller`;
   `production operator imports authored VNDB character measurements through ordinary accept and current reads`.
   Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
-  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: COPY `\N` and exact `0`
-  are unknown measurement sentinels, not measured zero; height stays centimetres and weight kilograms.
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: dump-unknown height is
+  COPY `0` (`smallint NOT NULL DEFAULT 0`); dump-unknown weight is COPY `\N`; exact `0` is never a measured zero;
+  height stays centimetres and weight kilograms.
 - `production operator imports authored VNDB release dates, states and work completeness through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-release-fidelity.test.ts`.
   Frozen scenario names:

@@ -60,7 +60,7 @@ async function authoredDump(directory: string, heroine = { height: '157', weight
     ],
     chars: [
       charsHeader,
-      `${charsLine('c1', heroine.height, heroine.weight)}\n${charsLine('c2', '161', '52')}\n${charsLine('c3', '\\N', '0')}`,
+      `${charsLine('c1', heroine.height, heroine.weight)}\n${charsLine('c2', '161', '52')}\n${charsLine('c3', '0', '\\N')}`,
     ],
     chars_vns: ['id\tvid\trid\trole\tspoil', 'c1\tv1\t\\N\tmain\t0\nc2\tv1\t\\N\tside\t0\nc3\tv1\t\\N\tside\t0'],
     producers_relations: ['id\tpid\trelation', ''],

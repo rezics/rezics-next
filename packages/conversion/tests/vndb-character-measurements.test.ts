@@ -30,7 +30,7 @@ function quantities(proposals: readonly BatchCommand[]) {
 }
 
 test('production caller publishes exact COPY height and weight and keeps unknown measurements absent', () => {
-  expect(converter_revision).not.toBe('cross-media-entities@3');
+  expect(converter_revision).toBe('cross-media-entities@4');
   const registration = createSourceRegistration('vndb', {
     source: 'vndb_cross_media',
     converterRevision: converter_revision,
@@ -49,8 +49,8 @@ test('production caller publishes exact COPY height and weight and keeps unknown
   expect(cited.statement.references).toEqual([
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://vndb.org/c1' } }] },
   ]);
-  const unknown = convertCrossMediaEntity(character({ height: null, weight: '0' }), { subjectId });
-  expect(unknown.normalizedRecord).toMatchObject({ height: null, weight: '0' });
+  const unknown = convertCrossMediaEntity(character({ height: '0', weight: null }), { subjectId });
+  expect(unknown.normalizedRecord).toMatchObject({ height: '0', weight: null });
   expect(quantities(unknown.proposals)).toEqual({});
   expect(unknown.diagnostics).toEqual([]);
   expect(
@@ -74,7 +74,9 @@ test('source sentinels, malformed numeric cells and withdrawn units never become
   expect(bound({ height: 157 }).diagnostics).toContainEqual({ pointer: '/height', code: 'invalid_source_value' });
   expect(vndbCharacterQuantity('157', 'schema:height')).toEqual({ amount: '+157', unit: centimeter });
   expect(vndbCharacterQuantity('0', 'schema:height')).toBe('unknown');
+  expect(vndbCharacterQuantity('0', 'schema:weight')).toBe('unknown');
   expect(vndbCharacterQuantity(null, 'schema:weight')).toBe('unknown');
+  expect(vndbCharacterQuantity('\\N', 'schema:height')).toBe('invalid');
   const withdrawn = structuredClone(bundledRelease) as Release;
   withdrawn.properties['schema:height']!.units = ['http://www.wikidata.org/entity/Q11573'];
   expect(vndbCharacterQuantity('157', 'schema:height', withdrawn)).toBe('unadmitted');

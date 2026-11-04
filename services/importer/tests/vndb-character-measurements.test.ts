@@ -66,7 +66,7 @@ function families(extra: Record<string, Record<string, unknown>[]> = {}): CrossM
     ],
     'vndb/chars': [
       { id: 'c1', name: 'Authored heroine', height: '157', weight: '48' },
-      { id: 'c2', name: 'Authored side', height: null, weight: '0' },
+      { id: 'c2', name: 'Authored side', height: '0', weight: null },
     ],
     ...extra,
   };
@@ -157,12 +157,12 @@ test('operator plans authored COPY character measurements and imports exact supp
     await writeFile(join(dump, 'db/chars.header'), `${VNDB_CHARS_COLUMNS.join('\t')}\n`);
     await writeFile(
       join(dump, 'db/chars'),
-      `${charsCopy('c1', '157', '48')}\n${charsCopy('c2', '\\N', '0')}\n${charsCopy('c3', '-1', '48.2')}\n`,
+      `${charsCopy('c1', '157', '48')}\n${charsCopy('c2', '0', '\\N')}\n${charsCopy('c3', '-1', '48.2')}\n`,
     );
     const copyRows = await Array.fromAsync(new CrossMediaDumpFiles(dump, dump).rows('vndb', 'chars'));
     expect(copyRows).toEqual([
       expect.objectContaining({ id: 'c1', height: '157', weight: '48' }),
-      expect.objectContaining({ id: 'c2', height: null, weight: '0' }),
+      expect.objectContaining({ id: 'c2', height: '0', weight: null }),
       expect.objectContaining({ id: 'c3', height: '-1', weight: '48.2' }),
     ]);
     const copied = convertCrossMediaEntity(
@@ -209,7 +209,7 @@ test('operator plans authored COPY character measurements and imports exact supp
         families({
           'vndb/chars': [
             { id: 'c1', name: 'Authored heroine', height: '158', weight: '48' },
-            { id: 'c2', name: 'Authored side', height: null, weight: '0' },
+            { id: 'c2', name: 'Authored side', height: '0', weight: null },
           ],
         }),
       ),

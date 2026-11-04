@@ -337,13 +337,16 @@ statistics, or publication capability.
 `cross-media-entities@4` projects admitted `chars.height` and `chars.weight`
 COPY cells onto `wd:Q95074` as exact `schema:height` and `schema:weight`
 quantities. Height stays centimetres (`wd:Q174728`) and weight kilograms
-(`wd:Q11570`); values are not converted. The dump cell is a PostgreSQL COPY
-smallint: `\N` and exact `0` are unknown sentinels, not a measured zero.
-Malformed, signed, nonfinite, fractional or over-smallint cells stay
-addressable diagnostics. Withdrawn property or centimetre/kilogram admission
-withholds the fact. Missing measurements leave character identity intact.
-Decision: COPY `\N` and exact `0` are unknown measurement sentinels, not
-measured zero.
+(`wd:Q11570`); values are not converted. The pinned dump COPY is PostgreSQL
+text TSV: height is `smallint NOT NULL DEFAULT 0`, so unknown height is the
+cell `0`; weight is nullable, so unknown weight is `\N` after COPY decode.
+Exact `0` is never a measured zero. Malformed, signed, nonfinite, fractional
+or over-smallint cells stay addressable diagnostics. Withdrawn property or
+centimetre/kilogram admission withholds the fact. Missing measurements leave
+character identity intact. Measurement cells enter the source digest, so
+unchanged dump bytes still refresh under this revision.
+Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
+exact `0` is never a measured zero.
 
 ### VNDB release titles
 
