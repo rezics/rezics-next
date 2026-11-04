@@ -22,25 +22,17 @@ const publicItem = (item: Record<string, unknown>) =>
   (item.availability === undefined || item.availability === 'available') &&
   (item.visibility === undefined || item.visibility === 'published' || item.visibility === 'protected');
 
+function threadAddress(id: string, title: unknown): { id: string; title?: string | null } {
+  return typeof title === 'string' || title === null ? { id, title } : { id };
+}
+
 /** Native IDs select destinations; the title supplies only the optional canonical slug. */
 export function contributionDestination(item: Record<string, unknown>, kind: ContributionKind, locale: string) {
   if (!key(item.id)) return undefined;
-  if (kind !== 'reply')
-    return threadLocation(locale, {
-      id: item.id,
-      title: typeof item.title === 'string' || item.title === null ? item.title : undefined,
-    });
+  if (kind !== 'reply') return threadLocation(locale, threadAddress(item.id, item.title));
   if (!key(item.threadId)) return undefined;
   const thread = isRecord(item.thread) && item.thread.id === item.threadId ? item.thread : undefined;
-  return threadLocation(
-    locale,
-    {
-      id: item.threadId,
-      title: typeof thread?.title === 'string' || thread?.title === null ? thread.title : undefined,
-    },
-    undefined,
-    item.id,
-  );
+  return threadLocation(locale, threadAddress(item.threadId, thread?.title), undefined, item.id);
 }
 
 /** Content owns the missing author-page card context; no recursive thread/Subject fallback is permitted. */
@@ -203,10 +195,7 @@ function ContributionVisit({
               <span>{m.home_card_kind_discussion({}, options)}: </span>
               {key(item.threadId) ? (
                 <a
-                  href={threadLocation(locale, {
-                    id: item.threadId,
-                    title: typeof thread.title === 'string' || thread.title === null ? thread.title : undefined,
-                  })}
+                  href={threadLocation(locale, threadAddress(item.threadId, thread.title))}
                   className={feedCardLinkClassName}
                 >
                   <bdi>{title}</bdi>
@@ -223,14 +212,7 @@ function ContributionVisit({
           ) : null}
           {kind === 'reply' && key(item.threadId) ? (
             parent ? (
-              <PublicReplyParent
-                context={parent}
-                locale={locale}
-                thread={{
-                  id: item.threadId,
-                  title: typeof thread.title === 'string' || thread.title === null ? thread.title : undefined,
-                }}
-              />
+              <PublicReplyParent context={parent} locale={locale} thread={threadAddress(item.threadId, thread.title)} />
             ) : item.parentId !== null ? (
               <ContextUnavailable locale={locale} />
             ) : null
