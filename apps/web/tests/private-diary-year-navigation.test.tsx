@@ -6,6 +6,7 @@ import { diarySearch, diaryReturnContext, historyReturn } from '../src/library/p
 import {
   readDiaryPage,
   readReportedYearSummary,
+  type ConsumptionSummary,
   type DiaryPage,
   type ReportedYearSummary,
 } from '../src/library/private-diary/native';
@@ -76,6 +77,39 @@ const summary: ReportedYearSummary = {
     unitMeaning: 'not_evaluated',
   },
   currentness: { state: 'snapshot', revision: 'opaque' },
+};
+const bucket = (
+  completedOccurrences: string,
+  distinctCompletedSubjects: string,
+  repeatOccurrences: string,
+  finishPrecision: { year: string; month: string; day: string },
+) => ({
+  completedOccurrences,
+  distinctCompletedSubjects,
+  repeatOccurrences,
+  completedOccurrencesWithUnknownProfile: '0',
+  finishPrecision,
+});
+const periodSummary: ReportedYearSummary = {
+  ...summary,
+  ...bucket('7', '2', '5', { year: '2', month: '3', day: '2' }),
+  months: Array.from({ length: 12 }, (_, i) => ({
+    ...bucket('0', '0', '0', { year: '0', month: '0', day: '0' }),
+    month: i + 1,
+  })).map((value) =>
+    value.month === 2 ? { ...bucket('5', '2', '3', { year: '1', month: '2', day: '2' }), month: 2 } : value,
+  ),
+  monthUnallocated: bucket('2', '1', '1', { year: '2', month: '0', day: '0' }),
+  currentness: { state: 'snapshot', revision: 'period-revision' },
+};
+const allTimeSummary: ConsumptionSummary = {
+  scope: 'retained_native_sessions',
+  completedOccurrences: '9007199254740993',
+  distinctCompletedSubjects: '2',
+  repeatOccurrences: '9007199254740991',
+  completedOccurrencesWithUnknownProfile: '1',
+  coverage: { nativeSessions: 'complete', otherHistory: 'unavailable', unitMeaning: 'not_evaluated' },
+  currentness: { state: 'snapshot', revision: 'all-time-revision' },
 };
 const loaded: PrivateDiaryLoad = {
   kind: 'ready',
@@ -180,6 +214,202 @@ test('mounted year counts keep year-only separate, open exact buckets and remove
   }
 });
 
+test('active period reads native all-time, year, month and unallocated counts without deriving page totals', async () => {
+  const emptyPage = (revision: string) => ({
+    kind: 'ready' as const,
+    page: {
+      occurrences: [],
+      order: 'recorded_started_desc_id_desc' as const,
+      currentness: { state: 'snapshot' as const, revision },
+      next: null,
+      continuation: 'same-slot',
+      expiresAt: null,
+    },
+  });
+  const h = await mount({});
+  try {
+    const allTimeLoad: PrivateDiaryLoad = {
+      ...loaded,
+      address: {},
+      reportedYear: null,
+      summary: { kind: 'ready', value: allTimeSummary },
+      diary: emptyPage(allTimeSummary.currentness.revision),
+    };
+    await h.show(allTimeLoad);
+    expect(h.host.querySelector('#library-diary-active-period')?.textContent).toBe(m.library_diary_period_all_time());
+    expect(h.host.textContent).toContain('9,007,199,254,740,993');
+    expect(h.host.textContent).toContain(m.library_diary_period_precision_unavailable());
+    expect(h.host.textContent).toContain(m.library_diary_page_empty());
+
+    await h.navigate({ year: 2020 });
+    const yearLoad: PrivateDiaryLoad = {
+      ...loaded,
+      address: { year: 2020 },
+      reportedYear: { kind: 'ready', value: periodSummary },
+      summary: { kind: 'not-selected' },
+      diary: emptyPage(periodSummary.currentness.revision),
+    };
+    await h.show(yearLoad);
+    expect(h.host.querySelector('#library-diary-active-period')?.textContent).toBe(
+      m.library_diary_period_year({ year: 2020 }),
+    );
+    expect(h.host.textContent).toContain(m.library_diary_year_precision_counts({ year: '2', month: '3', day: '2' }));
+    expect(h.host.textContent).toContain(m.library_diary_period_owner_scope());
+    expect(h.host.textContent).toContain(m.library_diary_period_coverage_scope());
+    expect(h.host.textContent).toContain(
+      m.library_diary_year_coverage({
+        initialized: '9,007,199,254,740,993',
+        retained: '9,007,199,254,740,993',
+        missing: '2',
+        unsupported: '0',
+      }),
+    );
+
+    await h.navigate({ year: 2020, month: 1 });
+    await h.show({ ...yearLoad, address: { year: 2020, month: 1 } });
+    const januaryPeriod = h.host.querySelector('#library-diary-active-period')?.closest('section')!;
+    expect([...januaryPeriod.querySelectorAll('dd')].slice(0, 3).map((value) => value.textContent)).toEqual([
+      '0',
+      '0',
+      '0',
+    ]);
+    expect(h.host.textContent).toContain(m.library_diary_page_empty());
+
+    await h.navigate({ year: 2020, month: 2 });
+    await h.show({ ...yearLoad, address: { year: 2020, month: 2 } });
+    expect(h.host.querySelector('#library-diary-active-period')?.textContent).toBe(
+      m.library_diary_period_month({ month: 'February', year: 2020 }),
+    );
+    expect(h.host.textContent).toContain(m.library_diary_year_precision_counts({ year: '1', month: '2', day: '2' }));
+
+    await h.navigate({ year: 2020, month: 'unallocated' });
+    await h.show({ ...yearLoad, address: { year: 2020, month: 'unallocated' } });
+    expect(h.host.querySelector('#library-diary-active-period')?.textContent).toBe(
+      m.library_diary_period_unallocated({ year: 2020 }),
+    );
+    expect(h.host.textContent).toContain(m.library_diary_year_precision_counts({ year: '2', month: '0', day: '0' }));
+
+    await h.navigate({});
+    await h.show({ ...allTimeLoad, summary: { kind: 'unavailable' } });
+    expect(h.host.textContent).toContain(m.library_diary_statistics_unavailable());
+    expect(h.host.textContent).toContain(m.library_diary_page_empty());
+    expect(h.host.textContent).not.toContain('9,007,199,254,740,993');
+  } finally {
+    await h.close();
+  }
+});
+
+test('received occurrences keep repeated identity, supplied labels, date precision and optional assessment meaning', async () => {
+  const firstId = '00000000-0000-4000-8000-000000000011';
+  const secondId = '00000000-0000-4000-8000-000000000012';
+  const thirdId = '00000000-0000-4000-8000-000000000013';
+  const common = {
+    subjectId: 'same-subject',
+    subject: { id: 'same-subject', label: 'Repeated title', language: 'en' },
+    recordedStartedAt: '2025-03-04T05:06:07.123456Z',
+    recordedCompletedAt: '2025-03-05T06:07:08.654321Z',
+    reportedDates: {
+      availability: 'available' as const,
+      revision: 4,
+      startDate: { year: 1 },
+      finishDate: { year: 2020, month: 2 },
+    },
+  };
+  const rows: DiaryPage['occurrences'] = [
+    {
+      ...common,
+      id: firstId,
+      versionSubjectId: 'version-one',
+      versionSubject: { id: 'version-one', label: 'Supplied version', language: 'ja' },
+      state: 'completed',
+      revision: 7,
+      assessment: { meaningRevision: 1, units: 0 },
+    },
+    {
+      ...common,
+      id: secondId,
+      versionSubjectId: null,
+      versionSubject: null,
+      state: 'active',
+      revision: 8,
+      reportedDates: { availability: 'available', revision: 5, startDate: null, finishDate: null },
+      recordedCompletedAt: null,
+      assessment: { meaningRevision: 1, units: null },
+    },
+    {
+      ...common,
+      id: thirdId,
+      versionSubjectId: 'version-three',
+      versionSubject: null,
+      subject: null,
+      state: 'abandoned',
+      revision: 9,
+      reportedDates: { availability: 'unavailable' },
+    },
+  ];
+  const address = { cursor: 'native-cursor/+?=exact' };
+  const value: PrivateDiaryLoad = {
+    ...loaded,
+    address,
+    reportedYear: null,
+    summary: { kind: 'ready', value: allTimeSummary },
+    diary: {
+      kind: 'ready',
+      page: {
+        occurrences: rows,
+        order: 'recorded_started_desc_id_desc',
+        currentness: { state: 'snapshot', revision: 'received-page-revision' },
+        next: null,
+        continuation: 'same-slot',
+        expiresAt: null,
+      },
+    },
+  };
+  const previousFetch = globalThis.fetch;
+  let requestCount = 0;
+  globalThis.fetch = ((...args: Parameters<typeof fetch>) => {
+    requestCount += 1;
+    return previousFetch(...args);
+  }) as typeof fetch;
+  const h = await mount(address);
+  try {
+    await h.show(value);
+    const items = [...h.host.querySelectorAll('li')].filter((item) => item.querySelector('details'));
+    expect(items).toHaveLength(3);
+    expect(h.host.textContent).toContain('Repeated title');
+    expect(h.host.textContent).toContain('Supplied version');
+    expect(h.host.textContent).toContain('0001');
+    expect(h.host.textContent).toContain('2020-02');
+    expect(h.host.textContent).toContain(m.library_diary_reported_not_reported());
+    expect(h.host.textContent).toContain(m.library_diary_reported_unavailable());
+    expect(h.host.textContent).toContain(m.library_diary_assessment_value({ value: '0' }));
+    expect(h.host.textContent).toContain(m.library_diary_assessment_cleared());
+    expect(h.host.textContent).toContain(m.library_occurrence_assessment_unavailable());
+    expect(h.host.textContent).toContain(m.library_diary_version_not_attached());
+    expect(h.host.textContent).toContain(m.library_diary_version_unavailable());
+    expect(h.host.textContent).toContain('received-page-revision');
+    expect(h.host.textContent).toContain(m.library_diary_occurrence_revision());
+    expect(h.host.textContent).toContain('2025-03-04T05:06:07.123456Z');
+
+    for (const [index, id] of [firstId, secondId, thirdId].entries()) {
+      const item = items[index]!;
+      const details = item.querySelector('details')!;
+      details.open = true;
+      expect(details.open).toBe(true);
+      details.open = false;
+      expect(details.open).toBe(false);
+      const editor = item.querySelector<HTMLAnchorElement>('[id="diary-occurrence-' + id + '"]')!;
+      expect(new URL(editor.href).pathname).toBe('/library/progress/' + id);
+      expect(historyReturn(new URL(editor.href).searchParams.get('history'))).toMatchObject({ cursor: address.cursor });
+    }
+    expect(window.location.pathname).toBe('/library/history');
+    expect(requestCount).toBe(0);
+  } finally {
+    globalThis.fetch = previousFetch;
+    await h.close();
+  }
+});
+
 test('return context preserves exact opaque page/year/caller and refuses external destinations', () => {
   const address = {
     year: 1,
@@ -272,6 +502,24 @@ test('bucket return restores exact frontier/focus and rejects old bucket or chan
       await h.navigate(returned);
       await h.show({ ...value, address: returned });
       expect(h.host.querySelector('ol')).not.toBeNull();
+
+      h.host.querySelector('details')!.open = true;
+      await h.navigate({ year: 2020, month: 'unallocated' });
+      await h.show({ ...value, address: { year: 2020, month: 'unallocated' } });
+      expect(h.host.querySelector('details')).toBeNull();
+      await h.navigate(returned);
+      await h.show({ ...value, address: returned });
+      expect(h.host.querySelector('details')?.open).toBe(false);
+
+      h.host.querySelector('details')!.open = true;
+      const receivedPage = value.diary.kind === 'ready' ? value.diary.page : undefined;
+      await h.show({
+        ...value,
+        address: returned,
+        diary: receivedPage ? { kind: 'ready', page: { ...receivedPage } } : value.diary,
+      });
+      expect(h.host.querySelector('details')?.open).toBe(false);
+      h.host.querySelector('details')!.open = true;
       await h.show({
         ...value,
         address: returned,
@@ -282,6 +530,14 @@ test('bucket return restores exact frontier/focus and rejects old bucket or chan
       });
       expect(h.host.textContent).toContain(m.library_diary_stale());
       expect(h.host.querySelector('ol')).toBeNull();
+      const originalAssign = window.location.assign;
+      window.location.assign = (() => {}) as typeof window.location.assign;
+      try {
+        await h.show({ ...value, address: returned, diary: { kind: 'retired' } });
+        expect(h.host.querySelector('details')).toBeNull();
+      } finally {
+        window.location.assign = originalAssign;
+      }
       await h.show({
         ...value,
         address: returned,
