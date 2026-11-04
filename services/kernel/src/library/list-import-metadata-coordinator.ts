@@ -3,7 +3,7 @@ import type { CommandOutcome } from '../command/command.ts';
 import type { Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { createEntryPersonalCommands } from './entry-personal.ts';
+import type { createEntryPersonalCommands } from './entry-personal.ts';
 import type { PersonalEntry } from './entry-personal-model.ts';
 import {
   applyEntryImportMetadataCommands,

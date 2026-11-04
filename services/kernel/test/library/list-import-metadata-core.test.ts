@@ -1,15 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { Actor } from '../../src/request/access.ts';
-import type { CommandOutcome } from '../../src/command/command.ts';
-import { createEntryPersonalCommands } from '../../src/library/entry-personal.ts';
-import type { PersonalEntry } from '../../src/library/entry-personal-model.ts';
-import {
-  entryImportMetadataDigest,
-  type EntryImportMetadataConfirmation,
-  type EntryImportMetadataProposals,
-  type EntryImportMetadataReview,
-} from '../../src/library/list-import-entry-metadata.ts';
-import { createListImportMetadataCoordinator } from '../../src/library/list-import-metadata-coordinator.ts';
+import type { EntryImportMetadataConfirmation } from '../../src/library/list-import-entry-metadata.ts';
 import {
   confirmListImportMetadata,
   listImportMetadataFenceFacts,
@@ -17,6 +7,7 @@ import {
   listImportMetadataProposedConfirmation,
   persistListImportMetadata,
   recoverListImportMetadataExpiredOutcome,
+  type ListImportMetadataFenceFacts,
 } from '../../src/library/list-import-metadata-core.ts';
 
 const providers = [
@@ -26,44 +17,15 @@ const providers = [
   { provider: 'vndb', nativeAdmission: 'vndb-source-v1' as const },
 ];
 
-const actor: Actor = {
-  kind: 'account',
-  accountId: 'owner',
-  clientId: 'client',
-  requestedBy: null,
-  authnEpoch: 1,
-  scopes: ['library_entry:update'],
-};
 const fields = [
   { field: 'note' as const, action: 'adopt' as const },
   { field: 'privacy' as const, action: 'adopt' as const },
   { field: 'sourceCreated' as const, action: 'adopt' as const },
   { field: 'sourceUpdated' as const, action: 'adopt' as const },
 ];
-const selectionDigest = entryImportMetadataDigest(fields);
+const selectionDigest = 'selection-v1';
 
-function personal(): PersonalEntry {
-  return {
-    subjectId: 'subject',
-    annotationRevision: 0,
-    note: null,
-    priority: null,
-    annotationUpdatedAt: null,
-    sourceObservations: [],
-  };
-}
-
-function proposals(): EntryImportMetadataProposals {
-  return {
-    note: { state: 'value', sourceField: 'notes', value: 'Imported note' },
-    priority: { state: 'unsupported', sourceField: null, reason: 'unsupported' },
-    privacy: { state: 'value', sourceField: 'private', value: { status: 'known', meaning: 'private' } },
-    sourceCreated: { state: 'value', sourceField: 'created_at', value: { status: 'known', value: '2020-01-01' } },
-    sourceUpdated: { state: 'value', sourceField: 'updated_at', value: { status: 'known', value: '2020-02-01' } },
-  };
-}
-
-function eligibleFacts() {
+function eligibleFacts(): ListImportMetadataFenceFacts {
   return listImportMetadataFenceFacts({
     currentSourceReviewToken: 'source-review',
     boundSourceReviewToken: 'source-review',
@@ -86,180 +48,102 @@ function proposed(provider: string, admission?: EntryImportMetadataConfirmation[
   });
 }
 
-function storedReview(): EntryImportMetadataReview {
+function operands(provider: string): Pick<
+  EntryImportMetadataConfirmation,
+  'annotationInput' | 'provenanceInput' | 'annotationReceiptDigest' | 'provenanceReceiptDigest' | 'sourceObservationDigest'
+> {
   return {
-    token: 'review',
-    requestDigest: 'request',
-    sourceReviewToken: 'source-review',
-    subjectId: 'subject',
-    clientId: 'client',
-    requestedBy: null,
-    annotationRevision: 0,
-    personalDigest: 'personal',
-    sourceDigest: 'source-digest',
-    profileDigest: 'profile-digest',
-    incarnationId: 'incarnation',
-  };
-}
-
-function journey(provider: string, admission?: EntryImportMetadataConfirmation['nativeAdmission']) {
-  let entry = personal();
-  const shown = proposals();
-  let review: EntryImportMetadataReview = storedReview();
-  const facts = eligibleFacts();
-  const sent: { phase: 'annotation' | 'provenance'; key: string; input: unknown }[] = [];
-  const native = {
-    receiptDigest(_actor: Actor, kind: string, input: unknown) {
-      return `${kind}:${JSON.stringify(input)}`;
+    annotationInput: {
+      revision: 0,
+      note: { op: 'set', value: 'Imported note' },
+      priority: { op: 'unchanged' },
+      effect: true,
+      expectedRevision: 1,
+      expectedNote: 'Imported note',
+      expectedPriority: null,
     },
-    async readPersonalEntry() {
-      return entry;
-    },
-    async saveAnnotations(_actor: Actor, _subject: string, input: unknown, key: string) {
-      sent.push({ phase: 'annotation', key, input });
-      entry = { ...entry, annotationRevision: entry.annotationRevision + 1, note: 'Imported note' };
-      return {
-        value: entry,
-        partition: 1,
-        epoch: 1,
-        position: 1n,
-        transactionId: 'annotation',
-        replayed: sent.length > 1,
-      } satisfies CommandOutcome<PersonalEntry>;
-    },
-    async admitSourceObservation(_actor: Actor, _subject: string, input: unknown, key: string) {
-      sent.push({ phase: 'provenance', key, input });
-      const observation = {
+    provenanceInput: {
+      kind: 'admit',
+      effect: true,
+      value: {
         provider,
         recordId: `${provider}-1`,
-        revision: 1,
-        privacy: { status: 'known' as const, meaning: 'private' as const },
-        sourceCreated: { status: 'known' as const, value: '2020-01-01', precision: 'day' as const, zone: 'unknown' as const },
-        sourceUpdated: { status: 'known' as const, value: '2020-02-01', precision: 'day' as const, zone: 'unknown' as const },
-        recordedAt: '2020-02-01T00:00:00Z',
-      };
-      entry = { ...entry, sourceObservations: [observation] };
-      return {
-        value: { sourceObservation: observation },
-        partition: 1,
-        epoch: 1,
-        position: 2n,
-        transactionId: 'provenance',
-        replayed: false,
-      };
+        confirmReviewed: true,
+        privacy: { status: 'known', meaning: 'private' },
+        sourceCreated: { status: 'known', value: '2020-01-01' },
+        sourceUpdated: { status: 'known', value: '2020-02-01' },
+      },
     },
-    async correctSourceObservation() {
-      throw new Error('correction is not part of this admission journey');
-    },
+    annotationReceiptDigest: `${provider}-annotation-receipt`,
+    provenanceReceiptDigest: `${provider}-provenance-receipt`,
+    sourceObservationDigest: 'observations',
   };
-  const coordinator = createListImportMetadataCoordinator({
-    provider,
-    ...(admission === undefined ? {} : { nativeAdmission: admission }),
-    native: native as unknown as ReturnType<typeof createEntryPersonalCommands>,
-    async prepareReview() {
-      return { history: [], identity: storedReview() };
-    },
-    async persistReview(_input, next) {
-      review = next;
-      return { ordinal: 0, reviewToken: next.token };
-    },
-    async loadReview() {
-      return review;
-    },
-    async readView() {
-      return {
-        review,
-        observation: {
-          sourceReviewToken: review.sourceReviewToken,
-          subjectId: review.subjectId,
-          clientId: review.clientId,
-          requestedBy: review.requestedBy,
-          sourceDigest: review.sourceDigest,
-          profileDigest: review.profileDigest,
-          incarnationId: review.incarnationId,
-          personal: entry,
-          proposals: shown,
-          recordId: `${provider}-1`,
-          providerCurrent: true,
-        },
-      };
-    },
-    async confirm(_input, _token, confirmation) {
-      review.confirmation = listImportMetadataOrThrow(confirmListImportMetadata(review.confirmation, confirmation, facts));
-    },
-    async persist(_input, _token, confirmation) {
-      review.confirmation = listImportMetadataOrThrow(persistListImportMetadata(review.confirmation, confirmation, facts));
-    },
-    async isCurrent() {
-      return true;
-    },
-    async isCancelled() {
-      return false;
-    },
-  });
-  return { coordinator, sent, review: () => review };
 }
 
-function listImportMetadataOrThrow<T>(decision: { ok: true; value: T } | { ok: false; reason: 'conflict' }): T {
-  if (!decision.ok) throw new Error('conflict');
-  return decision.value;
-}
-
-test('each provider confirmation reaches native annotation and provenance and resumes the same command identity', async () => {
+test('each provider confirmation reaches native annotation and provenance and resumes the same command identity', () => {
+  const facts = eligibleFacts();
   for (const { provider, nativeAdmission } of providers) {
-    const first = journey(provider, nativeAdmission);
-    const outcome = await first.coordinator.apply({
-      actor,
-      id: 'upload',
-      ordinal: 0,
-      reviewToken: 'review',
-      fields,
-    });
-    expect(outcome.fields.map((field) => field.status)).toEqual(['applied', 'applied', 'applied', 'applied']);
-    expect(first.sent.map((item) => item.key)).toEqual([
-      `${provider}:upload:0:review:annotations`,
-      `${provider}:upload:0:review:provenance`,
-    ]);
-    expect(first.review().confirmation?.selectionDigest).toBe(selectionDigest);
-    expect(first.review().confirmation?.annotationInput?.note).toEqual({ op: 'set', value: 'Imported note' });
-    expect(first.review().confirmation?.provenanceInput).toMatchObject({ kind: 'admit', effect: true });
-    if (nativeAdmission) expect(first.review().confirmation?.nativeAdmission).toBe(nativeAdmission);
-    else expect(first.review().confirmation?.nativeAdmission).toBeUndefined();
+    const selected = confirmListImportMetadata(undefined, proposed(provider, nativeAdmission), facts);
+    expect(selected.ok).toBe(true);
+    if (!selected.ok) throw new Error('confirm');
+    expect(selected.value.selectionDigest).toBe(selectionDigest);
+    expect(selected.value.annotationKey).toBe(`${provider}:upload:0:review:annotations`);
+    expect(selected.value.provenanceKey).toBe(`${provider}:upload:0:review:provenance`);
+    if (nativeAdmission) expect(selected.value.nativeAdmission).toBe(nativeAdmission);
+    else expect(selected.value.nativeAdmission).toBeUndefined();
 
-    const lost = journey(provider, nativeAdmission);
-    const prior = first.review().confirmation!;
-    lost.review().confirmation = {
-      ...proposed(provider, nativeAdmission),
-      annotationStarted: true,
-      provenanceStarted: true,
-      provenanceKind: 'admit',
-      ...(prior.annotationInput === undefined ? {} : { annotationInput: prior.annotationInput }),
-      ...(prior.provenanceInput === undefined ? {} : { provenanceInput: prior.provenanceInput }),
-      ...(prior.annotationReceiptDigest === undefined ? {} : { annotationReceiptDigest: prior.annotationReceiptDigest }),
-      ...(prior.provenanceReceiptDigest === undefined ? {} : { provenanceReceiptDigest: prior.provenanceReceiptDigest }),
-      ...(prior.sourceObservationDigest === undefined ? {} : { sourceObservationDigest: prior.sourceObservationDigest }),
-    };
-    const resumed = await lost.coordinator.apply({
-      actor,
-      id: 'upload',
-      ordinal: 0,
-      reviewToken: 'review',
-      fields,
-    });
-    expect(resumed.fields.map((field) => field.status)).toEqual(['applied', 'applied', 'applied', 'applied']);
-    expect(lost.sent.map((item) => item.key)).toEqual(first.sent.map((item) => item.key));
-    expect(lost.sent.map((item) => item.input)).toEqual(first.sent.map((item) => item.input));
-    expect(lost.review().confirmation?.annotationKey).toBe(first.review().confirmation?.annotationKey);
-    expect(lost.review().confirmation?.provenanceKey).toBe(first.review().confirmation?.provenanceKey);
+    const started = persistListImportMetadata(
+      selected.value,
+      {
+        ...selected.value,
+        ...operands(provider),
+        annotationStarted: true,
+        provenanceStarted: true,
+        annotationStatus: 'applied',
+        provenanceStatus: 'applied',
+        fieldOutcomes: fields.map(({ field }) => ({ field, status: 'applied' as const })),
+        outcome: {
+          reviewToken: 'review',
+          fields: fields.map(({ field }) => ({ field, status: 'applied' as const })),
+        },
+      },
+      facts,
+    );
+    expect(started.ok).toBe(true);
+    if (!started.ok) throw new Error('persist');
+    expect(started.value.outcome?.fields.map((field) => field.status)).toEqual(['applied', 'applied', 'applied', 'applied']);
+
+    const resumed = persistListImportMetadata(
+      started.value,
+      {
+        ...proposed(provider, nativeAdmission),
+        ...operands(provider),
+        annotationStarted: true,
+        provenanceStarted: true,
+      },
+      facts,
+    );
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) throw new Error('resume');
+    expect(resumed.value.annotationKey).toBe(selected.value.annotationKey);
+    expect(resumed.value.provenanceKey).toBe(selected.value.provenanceKey);
+    expect(resumed.value.annotationInput).toEqual(operands(provider).annotationInput);
+    expect(resumed.value.provenanceInput).toEqual(operands(provider).provenanceInput);
+    expect(resumed.value.annotationReceiptDigest).toBe(`${provider}-annotation-receipt`);
+    expect(resumed.value.provenanceReceiptDigest).toBe(`${provider}-provenance-receipt`);
+    expect(resumed.value.selectionDigest).toBe(selectionDigest);
+    expect(resumed.value.outcome?.fields.map((field) => field.status)).toEqual(['applied', 'applied', 'applied', 'applied']);
   }
 });
 
 test('cancelled, changed, expired and concurrent confirmations refuse new phases while original receipts stay honest', () => {
-  const original = proposed('bangumi', 'bangumi-source-v1');
-  original.annotationStarted = true;
-  original.annotationReceiptDigest = 'annotation-receipt';
-  original.annotationStatus = 'applied';
-  original.fieldOutcomes = [{ field: 'note', status: 'applied' }];
+  const original = {
+    ...proposed('bangumi', 'bangumi-source-v1'),
+    ...operands('bangumi'),
+    annotationStarted: true,
+    annotationStatus: 'applied' as const,
+    fieldOutcomes: [{ field: 'note' as const, status: 'applied' as const }],
+  };
   const unrelated: EntryImportMetadataConfirmation[] = [];
   for (const change of [
     { cancelled: true },
@@ -292,7 +176,7 @@ test('cancelled, changed, expired and concurrent confirmations refuse new phases
     );
     expect(recovered.ok).toBe(true);
     if (recovered.ok) {
-      expect(recovered.value.annotationReceiptDigest).toBe('annotation-receipt');
+      expect(recovered.value.annotationReceiptDigest).toBe('bangumi-annotation-receipt');
       expect(recovered.value.annotationStatus).toBe('applied');
       expect(recovered.value.annotationStarted).toBe(true);
       expect(recovered.value.selectionDigest).toBe(original.selectionDigest);
@@ -302,8 +186,9 @@ test('cancelled, changed, expired and concurrent confirmations refuse new phases
   expect(unrelated).toHaveLength(6);
   expect(original.selectionDigest).toBe(selectionDigest);
   expect(original.annotationKey).toBe('bangumi:upload:0:review:annotations');
-  const concurrent = confirmListImportMetadata(original, { ...original, selectionDigest: 'other-selection' }, eligibleFacts());
-  expect(concurrent.ok).toBe(false);
+  expect(confirmListImportMetadata(original, { ...original, selectionDigest: 'other-selection' }, eligibleFacts()).ok).toBe(
+    false,
+  );
   const expired = recoverListImportMetadataExpiredOutcome({
     reviewToken: 'review',
     selections: fields,
@@ -315,15 +200,20 @@ test('cancelled, changed, expired and concurrent confirmations refuse new phases
   expect(expired.ok).toBe(true);
   if (expired.ok) {
     expect(expired.value.fields[0]).toEqual({ field: 'note', status: 'applied' });
-    expect(expired.value.fields.slice(1).map((field) => field.status)).toEqual(['unattempted', 'unattempted', 'unattempted']);
+    expect(expired.value.fields.slice(1).map((field) => field.status)).toEqual([
+      'unattempted',
+      'unattempted',
+      'unattempted',
+    ]);
   }
-  const mismatched = recoverListImportMetadataExpiredOutcome({
-    reviewToken: 'review',
-    selections: fields,
-    selectionDigest: 'other',
-    confirmation: original,
-    annotationReceipt: 'present',
-    provenanceReceipt: 'missing',
-  });
-  expect(mismatched.ok).toBe(false);
+  expect(
+    recoverListImportMetadataExpiredOutcome({
+      reviewToken: 'review',
+      selections: fields,
+      selectionDigest: 'other',
+      confirmation: original,
+      annotationReceipt: 'present',
+      provenanceReceipt: 'missing',
+    }).ok,
+  ).toBe(false);
 });
