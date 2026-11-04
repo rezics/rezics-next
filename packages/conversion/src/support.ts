@@ -217,7 +217,7 @@ export function projectVndbReleaseMinimumAge(
   value: unknown,
   present: boolean,
 ): {
-  sourceValue?: string | number | boolean | null;
+    sourceValue?: string | number | boolean | null | undefined;
   quantity?: { amount: string; unit: 'http://www.wikidata.org/entity/Q577' };
   diagnostic?: 'missing_minimum_age' | 'unknown_minimum_age' | 'invalid_minimum_age' | 'non_integral_minimum_age' | 'out_of_range_minimum_age';
 } {

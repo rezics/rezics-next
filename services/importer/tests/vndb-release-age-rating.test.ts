@@ -62,7 +62,7 @@ function port(commands: BatchCommand[], ids: Map<string, string>): CrossMediaPor
     batch: api.batchWrite,
     setSourceRecordMetadata: api.setSourceRecordMetadata!,
     async fence(tuple) {
-      return api.readFence(tuple);
+      return api.readFence({ source: tuple.source, external_id: tuple.externalId, field_group: tuple.fieldGroup });
     },
     async writeSourceStatistic() {
       throw new Error('No statistic in this authored fixture');
@@ -124,7 +124,9 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
       destination: { origin: 'https://kernel.import.test' },
     });
     expect(JSON.stringify(commands.slice(0, previousCount))).toBe(previousReceipts);
-    const ages = commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P2899');
+    const isAge = (command: BatchCommand): command is Extract<BatchCommand, { op: 'propose' }> =>
+      command.op === 'propose' && command.statement.property.id === 'wdt:P2899';
+    const ages = commands.filter(isAge);
     const content = (command: (typeof ages)[number]) => command.statement.value.type === 'value' ? command.statement.value.content : undefined;
     expect(ages.map((command) => [command.source.external_id, content(command)])).toEqual([
       ['r1', { amount: '+15', unit: 'http://www.wikidata.org/entity/Q577' }],
@@ -145,7 +147,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
       destination: { origin: 'https://kernel.import.test' },
     });
     expect(idOf(changed.readings.find((row) => row.externalId === 'r1')!)).toBe(releaseId);
-    expect(commands.some((command) => command.op === 'propose' && command.source.external_id === 'r1' && command.statement.property.id === 'wdt:P2899' && JSON.stringify(command.statement.value).includes('+16'))).toBe(true);
+    expect(commands.some((command) => isAge(command) && command.source.external_id === 'r1' && JSON.stringify(command.statement.value).includes('+16'))).toBe(true);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
