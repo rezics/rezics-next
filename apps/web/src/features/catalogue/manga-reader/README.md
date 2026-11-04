@@ -26,7 +26,8 @@ identified by native node, direction, property, original holder, assertion ID an
 separate composition nodes remain separate choices. Selection retains one locator, never a copy of the evidence
 or a previous page. A replaced read collapses inspection and permanently retires the preceding callbacks, including
 equal successful replacement, account/credential, reader, release, Subject, Context, Realm, locale, address and A/B/A
-changes. Browser pagehide also retires it; BFCache cannot revive the old reading.
+changes. The two ordinary Subject composition query options disable structural sharing so an equal successful
+response still establishes a new source incarnation. Browser pagehide also retires it; BFCache cannot revive the old reading.
 
 The inspector renders only the supplied native assertion using the ordinary value surface. Qualifiers retain native
 order. Each native reference remains a separate group, including empty groups; no references means none were disclosed

@@ -1,11 +1,10 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { act, createElement } from 'react';
 import { dirname } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot } from 'react-dom/client';
 import { defaultReader } from '../src/subject/reader';
 import type { Subject } from '../src/subject/types';
-import { MangaReader } from '../src/features/catalogue/manga-reader/view';
 import { dateText } from '../src/features/pages/overview';
 import {
   mangaReaderMeasures,
@@ -16,6 +15,9 @@ import {
 } from '../src/features/catalogue/manga-reader/model';
 import type { ProfileRelationWindow } from '../src/features/pages/views';
 import type { RelationDefinition } from '../src/subject/relations';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { MangaReader } = await import('../src/features/catalogue/manga-reader/view');
 
 const seriesId = '0192f3a0-6c1e-7b2a-9d4e-000000000901';
 const volumeTwoId = '0192f3a0-6c1e-7b2a-9d4e-000000000902';

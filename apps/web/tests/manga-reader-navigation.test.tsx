@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { mangaReaderAddress } from '../src/features/catalogue/manga-reader/navigation';
 import {
   subjectRouteSearchLimit,
@@ -59,7 +59,6 @@ import { createRoot } from 'react-dom/client';
 import { dirname } from 'node:path';
 import type { Subject } from '../src/subject/types';
 import { defaultReader } from '../src/subject/reader';
-import { MangaReaderEntry } from '../src/features/catalogue/manga-reader/entry';
 import {
   mangaOccurrenceFragment,
   mangaOccurrenceFromFragment,
@@ -76,6 +75,9 @@ const occurrence = {
   statement: 'original-assertion',
   target: volumeId,
 };
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { MangaReaderEntry } = await import('../src/features/catalogue/manga-reader/entry');
 
 test('an occurrence opener remains a finite single-hop intent through actual part and holder destinations', () => {
   const address = mangaReaderAddress({

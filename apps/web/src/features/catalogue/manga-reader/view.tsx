@@ -124,7 +124,7 @@ export function MangaReader({
           window.direction === 'forward'
             ? definitions[window.property]?.forwardLabel || definitions[window.property]?.label || ''
             : definitions[window.property]?.label || '',
-        status: mangaReaderWindowStatus([window], definitions, reader),
+        status: mangaReaderWindowStatus([window], definitions, reader, subject.id),
         next: window.next,
         kind: mangaReaderWindowScope([window], definitions, 'editions').length
           ? ('editions' as const)
@@ -158,7 +158,7 @@ export function MangaReader({
     select(null);
     rowControls.current.clear();
   }, [retired]);
-  const measures = retired ? [] : mangaReaderMeasures(current, definitions, reader);
+  const measures = retired ? [] : mangaReaderMeasures(current, definitions, reader, subject.id);
   const groups = new Map<
     string,
     { property: string; relation: string; kind: 'contents' | 'editions'; direction: string; rows: MangaReaderRow[] }
@@ -228,9 +228,15 @@ export function MangaReader({
       ) : (
         <>
           {missingOrigin ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {m.manga_reader_origin_missing({}, options(locale))}
-            </p>
+            <div role="status" className="space-y-1 text-sm text-muted-foreground">
+              <p>{m.manga_reader_origin_missing({}, options(locale))}</p>
+              <a
+                className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center`}
+                href={mangaRestartAddress(recoveryHref)}
+              >
+                {m.manga_reader_restart({}, options(locale))}
+              </a>
+            </div>
           ) : null}
           <p className="sr-only" role="status" aria-live="polite">
             {active

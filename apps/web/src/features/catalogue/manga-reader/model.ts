@@ -2,11 +2,12 @@ import type { RelationDefinition } from '../../../subject/relations';
 import { WORK_PARTS_PAGE_CAP } from '../work-parts';
 import { listView, type ProfileRelationWindow } from '../../pages/views';
 import { qualifiedNotes } from '../../pages/qualified-relations';
-import { isRecord, spoilerLevel, type Stmt } from '../../pages/shared';
+import { isRecord, pageText, spoilerLevel, type Stmt } from '../../pages/shared';
 import { relationItemRows } from '../../pages/relation-item-identity';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import type { SubjectLinksResponse, SubjectRead } from '@rezics/client';
 import type { Subject } from '../../../subject/types';
+import { originalLanguage } from '../../../subject/language';
 import { mangaOccurrenceKey, type MangaOccurrence } from './navigation';
 
 export type MangaAssertion = NonNullable<SubjectLinksResponse['links'][number]['assertion']>;
@@ -147,7 +148,7 @@ function admittedAssertion(value: Record<string, unknown>): value is MangaAssert
   );
 }
 
-function admittedRows(window: ProfileRelationWindow): Record<string, unknown>[] | undefined {
+function admittedRows(window: ProfileRelationWindow, subject?: string): Record<string, unknown>[] | undefined {
   const rows = relationItemRows(window.rows, window.direction === 'inverse' ? 'links' : 'relations');
   if (!rows) return;
   for (const row of rows) {
@@ -163,6 +164,13 @@ function admittedRows(window: ProfileRelationWindow): Record<string, unknown>[] 
     )
       return;
     if (row.related !== undefined && (!isRecord(row.related) || Object.keys(row.related).length > MANGA_RELATED_CAP))
+      return;
+    const target = window.direction === 'forward' ? row.target : subject;
+    if (
+      assertion &&
+      typeof target === 'string' &&
+      (!isRecord(assertion.value) || assertion.value.type !== 'value' || assertion.value.content !== target)
+    )
       return;
   }
   return rows;
@@ -184,22 +192,13 @@ export function mangaReaderRows(
   for (const window of windows) {
     const group = relationGroup(window, definitions);
     if (!group || window.status !== 200 || !window.valid || window.rows.length > WORK_PARTS_PAGE_CAP) continue;
-    const rows = admittedRows(window);
+    const rows = admittedRows(window, subject?.id);
     if (!rows) continue;
     for (const row of rows) {
       const id = window.direction === 'inverse' ? row.subject : row.target;
       if (typeof id !== 'string' || !id.trim()) continue;
       const assertion = assertionOf(row, window.direction);
       if (!disclosedToReader(assertion, reader)) continue;
-      // Validate the main value's association against the native window, not the displayed target's facts.
-      if (
-        assertion &&
-        subject &&
-        (!isRecord(assertion.value) ||
-          assertion.value.type !== 'value' ||
-          assertion.value.content !== (window.direction === 'inverse' ? subject.id : id))
-      )
-        continue;
       const summary = isRecord(row.summary) ? row.summary : undefined;
       const summaryLabel = summary && isRecord(summary.label) ? summary.label.value : undefined;
       const labelLanguage =
@@ -221,7 +220,7 @@ export function mangaReaderRows(
         window.direction === 'inverse'
           ? { id, label, ...(labelLanguage ? { language: labelLanguage } : {}) }
           : subject
-            ? { id: subject.id, label: String(subject.labels[locale] ?? '') }
+            ? { id: subject.id, label: pageText(subject.labels, locale, originalLanguage(subject)).text }
             : undefined;
       const occurrence = holder
         ? {
@@ -283,11 +282,12 @@ export function mangaReaderMeasures(
   windows: readonly ProfileRelationWindow[],
   definitions: Record<string, RelationDefinition>,
   reader: Reader = defaultReader,
+  subject?: string,
 ): MangaReaderMeasure[] {
   return windows.flatMap((window) => {
     if (window.status !== 200 || !window.valid || window.rows.length > WORK_PARTS_PAGE_CAP) return [];
     if (!relationGroup(window, definitions) || !window.count) return [];
-    const rows = admittedRows(window);
+    const rows = admittedRows(window, subject);
     if (!rows || rows.some((row) => !disclosedToReader(assertionOf(row, window.direction), reader))) return [];
     return [
       {
@@ -307,6 +307,7 @@ export function mangaReaderWindowStatus(
   windows: readonly ProfileRelationWindow[],
   definitions: Record<string, RelationDefinition>,
   reader: Reader = defaultReader,
+  subject?: string,
 ): MangaWindowStatus {
   const selected = windows.filter((window) => !!relationGroup(window, definitions));
   if (selected.length === 0) return 'unsupported';
@@ -314,13 +315,16 @@ export function mangaReaderWindowStatus(
   if (
     selected.some(
       (window) =>
-        window.status !== 200 || !window.valid || window.rows.length > WORK_PARTS_PAGE_CAP || !admittedRows(window),
+        window.status !== 200 ||
+        !window.valid ||
+        window.rows.length > WORK_PARTS_PAGE_CAP ||
+        !admittedRows(window, subject),
     )
   )
     return 'unavailable';
   if (
     selected.some((window) =>
-      admittedRows(window)!.some((row) => disclosedToReader(assertionOf(row, window.direction), reader)),
+      admittedRows(window, subject)!.some((row) => disclosedToReader(assertionOf(row, window.direction), reader)),
     )
   )
     return 'populated';
