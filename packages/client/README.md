@@ -21,6 +21,10 @@ token returned by the kernel. Use `onSession` to observe token changes, for exam
 The declarations in `src/kernel/` are generated through managed compiler placement by
 `bun run --cwd services/kernel typecheck --emit-client`.
 
+Decision: until declaration emission succeeds, the Copy list compatibility seam mirrors the mounted native
+kind/status query and filterOptions schema; Web derives its wire types only from this official client.
+The seam automatically yields to the generated method when its filterOptions envelope is published.
+
 Decision: `GET /v1/accounts/{accountId}/verification` (`account.read_verification_request`) closes
 `{ verificationRequest, viewerActions }`. e9314e51 publishes that generated closure; this Settings consumer
 decodes the extra JSON field strictly and does not hand-edit declarations or emit a second client.

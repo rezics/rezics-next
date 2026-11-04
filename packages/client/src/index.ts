@@ -346,10 +346,40 @@ export type SourceClassificationPutResult = MethodResult<ClassificationMethod<'$
 export type SourceClassificationClearInput = MethodBody<ClassificationMethod<'$clear'>>;
 export type SourceClassificationClearResult = MethodResult<ClassificationMethod<'$clear'>>;
 
+type GeneratedCopyListGet = GeneratedKernelClient['copies']['get'];
+type CopyListOptions = NonNullable<Parameters<GeneratedCopyListGet>[0]>;
+type WithCopyInventory<Read> = Read extends { data: infer Data }
+  ? Omit<Read, 'data'> & {
+      data: Data extends object ? Data & { filterOptions: import('./copy-inventory.ts').CopyInventory } : Data;
+    }
+  : Read;
+// Compatibility for the mounted native route while declaration emission is unavailable.
+// Prefer the generated method automatically once its filterOptions envelope is published.
+type CopiesClient =
+  NonNullable<Awaited<ReturnType<GeneratedCopyListGet>>['data']> extends { filterOptions: unknown }
+    ? GeneratedKernelClient['copies']
+    : Omit<GeneratedKernelClient['copies'], 'get' | keyof Function> &
+        ((...args: Parameters<GeneratedKernelClient['copies']>) => ReturnType<GeneratedKernelClient['copies']>) & {
+          get(
+            options?: Omit<CopyListOptions, 'query'> & {
+              query?: NonNullable<CopyListOptions['query']> & { kind?: string; status?: string };
+            },
+          ): Promise<WithCopyInventory<Awaited<ReturnType<GeneratedCopyListGet>>>>;
+        };
+
 export type KernelClient = Omit<
   GeneratedKernelClient,
-  'accounts' | 'boards' | 'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms'
+  | 'accounts'
+  | 'boards'
+  | 'posts'
+  | 'subjects'
+  | 'libraryEntries'
+  | 'libraryExports'
+  | 'moderation-decisions'
+  | 'realms'
+  | 'copies'
 > & {
+  copies: CopiesClient;
   posts: PostsClient;
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
