@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OwnedCollection } from '../src/settings/preferences';
+import { CollectionPrivacyEditor } from '../src/settings/collection-privacy-recovery';
 
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -55,6 +56,15 @@ test('visibility options follow native advice and logical built-ins remain read-
   expect(logical).toMatch(/<option[^>]*value="private" selected="">/);
   expect(logical).not.toMatch(/<option[^>]*value="unlisted">/);
   expect(logical).not.toMatch(/<option[^>]*value="public">/);
+});
+
+test('current owner advice remains usable when the retry target already matches', () => {
+  const current = { ...privateCurated, visibility: 'public' as const, allowedVisibilityActions: ['private', 'unlisted'] as const };
+  const editor = new CollectionPrivacyEditor(current, io);
+  expect(editor.hasCurrentUpdateAdvice()).toBe(true);
+  editor.receive({ ...current, allowedVisibilityActions: [] });
+  expect(editor.hasCurrentUpdateAdvice()).toBe(false);
+  editor.dispose();
 });
 
 test('a retired viewer cannot restore its old credential after A to B to A', () => {
