@@ -665,7 +665,7 @@ export function useShelfRows(
         headers: review.manifest.readHeaders,
       });
       if (!bulkReviewIsCurrent(review)) return;
-      if (result.outcomes.some((outcome) => outcome.outcome === 'applied')) summaryAcknowledged?.();
+      if (result.outcomes.some((outcome) => outcome.state === 'applied')) summaryAcknowledged?.();
       updateBulkStatusReview({
         ...review,
         operation: result.operation,
