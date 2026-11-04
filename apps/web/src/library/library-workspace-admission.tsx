@@ -3,4 +3,4 @@ export {
   workspaceAdmission as libraryWorkspaceAdmission,
   useWorkspaceAdmission as useLibraryWorkspaceAdmission,
   type WorkspaceAdmission as LibraryWorkspaceAdmission,
-} from '../session';
+} from '../session/reader';
