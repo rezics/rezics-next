@@ -6,6 +6,7 @@ import type { CollectionMember, CollectionVisibility } from '../reads';
 import type { CollectionTypeOption } from '../collection-presentation';
 import type { EditableCollectionPage } from '../collection-load';
 import { useState } from 'react';
+import { remainingCollectionMemberOperations } from '../collection-member-edit-plan';
 import type {
   CollectionMetadataChange,
   CollectionSaveReviewPlan,
@@ -17,6 +18,18 @@ import { CollectionPresentationSummary } from '../showcase-collection/presentati
 import { Button } from '@rezics/ui/shadcn/button';
 
 type BasisState = 'idle' | 'reading' | 'ready' | 'unavailable';
+export type CollectionSaveCurrentBasis = Pick<
+  EditableCollectionPage,
+  | 'id'
+  | 'revision'
+  | 'title'
+  | 'description'
+  | 'visibility'
+  | 'members'
+  | 'presentationKind'
+  | 'presentationTypes'
+  | 'coverMediaId'
+>;
 
 export type CollectionSaveReviewProps = {
   plan: CollectionSaveReviewPlan;
@@ -27,7 +40,7 @@ export type CollectionSaveReviewProps = {
   complete?: boolean;
   recoverCurrent?: boolean;
   basisState?: BasisState;
-  currentBasis?: EditableCollectionPage | null;
+  currentBasis?: CollectionSaveCurrentBasis | null;
   rebaseIssue?: { operation: ReviewedCollectionMemberOperation; reason: 'member-missing' | 'anchor-missing' } | null;
   onRetry?: () => void;
   onReadCurrent?: () => void;
@@ -488,6 +501,7 @@ function CurrentBasis({
   currentBasis,
   initial,
   desired,
+  remainingOperations,
   metadataChanges,
   types,
   onReadCurrent,
@@ -498,9 +512,10 @@ function CurrentBasis({
   canReviewCurrent,
 }: {
   basisState: BasisState;
-  currentBasis: EditableCollectionPage | null;
+  currentBasis: CollectionSaveCurrentBasis | null;
   initial: readonly CollectionMember[];
   desired: readonly CollectionMember[];
+  remainingOperations: readonly ReviewedCollectionMemberOperation[];
   metadataChanges: readonly CollectionMetadataChange[];
   types?: readonly CollectionTypeOption[] | null | undefined;
   onReadCurrent?: () => void;
@@ -521,10 +536,9 @@ function CurrentBasis({
             <MetadataChanges changes={metadataChanges} types={types} members={[...initial, ...desired]} />
           ) : null}
           <ol className="space-y-2">
-            {desired.map((member, index) => (
-              <li key={member.id} className="rounded-md bg-muted/30 p-2" data-draft-member={member.id}>
-                <p>{m.library_member_occurrence({ title: titleOf(member), position: index + 1 })}</p>
-                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{formatNote(member.note)}</p>
+            {remainingOperations.map((entry) => (
+              <li key={entry.id} className="rounded-md bg-muted/30 p-2" data-draft-operation={entry.id}>
+                <MemberOperationText entry={entry} initial={initial} desired={desired} />
               </li>
             ))}
           </ol>
@@ -604,6 +618,7 @@ export function CollectionSaveReview({
   const metadataWasConfirmed = outcomes.some(
     (outcome) => outcome.stepId === 'metadata' && outcome.status === 'confirmed',
   );
+  const remainingOperations = remainingCollectionMemberOperations(plan, outcomes);
   const started = outcomes.some((outcome) => outcome.status !== 'not-sent');
   const actionLabel = unknown ? m.collection_save_retry_original() : m.collection_save_outcomes_heading();
   return (
@@ -665,6 +680,7 @@ export function CollectionSaveReview({
               currentBasis={currentBasis}
               initial={initial}
               desired={desired}
+              remainingOperations={remainingOperations}
               metadataChanges={metadataWasConfirmed ? [] : plan.metadataChanges}
               types={types}
               onReadCurrent={onReadCurrent}
