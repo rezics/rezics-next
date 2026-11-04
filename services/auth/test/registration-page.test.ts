@@ -54,5 +54,9 @@ test('missing verification and an unavailable session dependency stay explicit a
     requirements: { password: passwordLimits },
     actions: { register: false, continue: false },
   });
-  expect(dependency).toEqual({ kind: 'unavailable', reason: 'dependency', actions: { register: false, continue: false } });
+  expect(dependency).toEqual({
+    kind: 'unavailable',
+    reason: 'dependency',
+    actions: { register: false, continue: false },
+  });
 });

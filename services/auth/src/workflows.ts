@@ -1960,8 +1960,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           passwordLimits: () => auth.registrationPasswordLimits(),
           verificationConfigured: Boolean(options.turnstile),
         });
-        if (page.kind === 'unavailable' && page.reason === 'dependency')
-          return response({ error: 'unavailable' }, 503);
+        if (page.kind === 'unavailable' && page.reason === 'dependency') return response({ error: 'unavailable' }, 503);
         return response(page, 200);
       }
       if (

@@ -34,10 +34,7 @@ export function normalizeSignupHandle(handle: string): string | null {
   return /^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$/.exec(normalized)?.[0] === normalized ? normalized : null;
 }
 
-export async function submitSignup(
-  input: SignupBody,
-  limits: SignupPasswordLimits,
-): Promise<SignupSubmission> {
+export async function submitSignup(input: SignupBody, limits: SignupPasswordLimits): Promise<SignupSubmission> {
   if (!passwordAccepted(input.password, limits)) {
     return {
       ok: false,

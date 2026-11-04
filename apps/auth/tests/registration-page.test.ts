@@ -78,13 +78,16 @@ test('the Auth boundary only offers registration from native advice and preserve
 
 test('an already signed-in viewer gets the safe continuation and account replacement link', async () => {
   const query = '?client_id=showcase&scope=openid&return_to=%2Fwork%2Fseeded';
-  const page = await mount({
-    kind: 'already-signed-in',
-    viewer: { account_id: 'current-account' },
-    requirements,
-    verification: { configured: false },
-    actions: { register: false, continue: true },
-  }, query);
+  const page = await mount(
+    {
+      kind: 'already-signed-in',
+      viewer: { account_id: 'current-account' },
+      requirements,
+      verification: { configured: false },
+      actions: { register: false, continue: true },
+    },
+    query,
+  );
   const continuation = page.host.querySelector<HTMLAnchorElement>('a');
 
   expect(page.host.querySelector('[role="status"]')?.textContent).toContain('already signed in');
@@ -94,7 +97,11 @@ test('an already signed-in viewer gets the safe continuation and account replace
 });
 
 test('an unavailable registration read is explained and never renders a submit form', async () => {
-  const page = await mount({ kind: 'unavailable', reason: 'dependency', actions: { register: false, continue: false } });
+  const page = await mount({
+    kind: 'unavailable',
+    reason: 'dependency',
+    actions: { register: false, continue: false },
+  });
 
   expect(page.host.querySelector('[role="alert"]')?.textContent).toContain('Registration is temporarily unavailable');
   expect(page.host.querySelector('button')?.textContent).toContain('Try again');
