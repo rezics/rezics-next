@@ -170,12 +170,7 @@ test("Collection composes exact raw operands and preserves empty allowed and typ
     members: Array<{ id: string; subjectId: string }>;
     next: string | null;
   };
-  const actor = {
-    kind: "account" as const,
-    accountId: f.accounts.editor,
-    authnEpoch: 1,
-    scopes: ["subject:read"],
-  };
+  const { actor, access } = await f.deps('editor');
   let finalized = false;
   const viewerPersonalActions: ViewerPersonalActionsReader = async (
     viewer,
@@ -210,7 +205,7 @@ test("Collection composes exact raw operands and preserves empty allowed and typ
   };
   const reads = createCollectionReads({
     pool: f.pool,
-    access: f.access,
+    access,
     tokens: testTokens(),
     routeKey: listRouteKey,
     viewerPersonalActions,

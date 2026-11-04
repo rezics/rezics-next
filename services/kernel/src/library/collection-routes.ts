@@ -1,62 +1,41 @@
-import { t } from "elysia";
-import type { Pool } from "pg";
-import type { Static, TSchema } from "typebox";
-import { Compile } from "typebox/compile";
-import { GrantDeniedError } from "../access/grant-commands.ts";
-import {
-  SitemapQuerySchema,
-  SitemapBoardPageSchema,
-} from "../content/schemas.ts";
-import type { KernelClock } from "../clock.ts";
-import { customMethod } from "../http/custom-method.ts";
-import { ProblemError, problemSchema } from "../http/problem.ts";
-import { defineRateLimit } from "../http/rate-limit.ts";
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from "../http/request.ts";
-import {
-  AuthenticationError,
-  type Access,
-  type Actor,
-} from "../request/access.ts";
-import { languageRanges } from "../semantic/language.ts";
-import type { definitionRoutes } from "../semantic/http/definitions.ts";
-import { FactSchema } from "../search/http/routes.ts";
-import {
-  CoverSummarySchema,
-  SubjectSummarySchema,
-} from "../semantic/http/summaries.ts";
-import type { KeyRing } from "../tokens/seal.ts";
-import type { WorkClient } from "../work/client.ts";
-import type { SearchService } from "../search/service-scope.ts";
-import type { Collection, CollectionMember } from "./collection-model.ts";
-import {
-  collectionReadView,
-  createCollectionReads,
-} from "./collection-reads.ts";
-import { viewerPersonalActionsResponseSchema } from "./viewer-personal-actions-schema.ts";
-import type { ViewerPersonalActionsReader } from "./viewer-personal-actions.ts";
-import { createCollectionPublicationEpisodes } from "./collection-publication-episodes.ts";
-import { createCollectionCommands } from "./collections.ts";
-import { createCollectionStructureHistory } from "./collection-structure-history.ts";
-import { createCollectionPublications } from "./collection-publication.ts";
-import { createCollectionPublicationService } from "./collection-publication-service.ts";
+import { t } from 'elysia';
+import type { Pool } from 'pg';
+import type { Static, TSchema } from 'typebox';
+import { Compile } from 'typebox/compile';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import { SitemapQuerySchema, SitemapBoardPageSchema } from '../content/schemas.ts';
+import type { KernelClock } from '../clock.ts';
+import { customMethod } from '../http/custom-method.ts';
+import { ProblemError, problemSchema } from '../http/problem.ts';
+import { defineRateLimit } from '../http/rate-limit.ts';
+import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
+import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
+import { languageRanges } from '../semantic/language.ts';
+import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import { FactSchema } from '../search/http/routes.ts';
+import { CoverSummarySchema, SubjectSummarySchema } from '../semantic/http/summaries.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import type { WorkClient } from '../work/client.ts';
+import type { SearchService } from '../search/service-scope.ts';
+import type { Collection, CollectionMember } from './collection-model.ts';
+import { collectionReadView, createCollectionReads } from './collection-reads.ts';
+import { viewerPersonalActionsResponseSchema } from './viewer-personal-actions-schema.ts';
+import type { ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
+import { createCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
+import { createCollectionCommands } from './collections.ts';
+import { createCollectionStructureHistory } from './collection-structure-history.ts';
+import { createCollectionPublications } from './collection-publication.ts';
+import { createCollectionPublicationService } from './collection-publication-service.ts';
 import {
   collectionPublicationStatusSchema,
   collectionPublishQueryRequestSchema,
-} from "./collection-publication-http.ts";
-import { collectionPresentation } from "./collection-presentation.ts";
-import { collectionBulkRoutes } from "./collection-bulk-routes.ts";
-import { listSitemapCollections } from "./sitemap.ts";
+} from './collection-publication-http.ts';
+import { collectionPresentation } from './collection-presentation.ts';
+import { collectionBulkRoutes } from './collection-bulk-routes.ts';
+import { listSitemapCollections } from './sitemap.ts';
 
-import {
-  basicQuery,
-  curatorFields,
-  embedded,
-  fullMembers,
-  fullView,
-  subjectFields,
-  viewQuery,
-} from "./views.ts";
-import { assertMemberPageCurrent } from "./member-viewer-currentness.ts";
+import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
+import { assertMemberPageCurrent } from './member-viewer-currentness.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -72,30 +51,21 @@ const closed = { additionalProperties: false } as const;
 // Domain commands and reads distinguish malformed resource IDs from malformed JSON.
 const id = t.String();
 const nullableString = t.Union([t.String(), t.Null()]);
-const visibility = t.Union([
-  t.Literal("private"),
-  t.Literal("unlisted"),
-  t.Literal("public"),
-]);
+const visibility = t.Union([t.Literal('private'), t.Literal('unlisted'), t.Literal('public')]);
 const revision = t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
 export const collectionSchema = t.Object(
   {
     id,
-    membershipKind: t.Literal("curated"),
+    membershipKind: t.Literal('curated'),
     curatorAccountId: t.Union([id, t.Null()]),
     title: t.String(),
     description: nullableString,
     visibility,
     presentationKind: nullableString,
-    presentationKindSource: t.Union([t.Literal("owner"), t.Literal("mixed")]),
+    presentationKindSource: t.Union([t.Literal('owner'), t.Literal('mixed')]),
     cover: t.Optional(CoverSummarySchema),
-    coverSource: t.Union([
-      t.Literal("owner"),
-      t.Literal("member"),
-      t.Literal("none"),
-      t.Literal("pending"),
-    ]),
-    coverMediaId: t.Optional(t.Union([t.String({ format: "uuid" }), t.Null()])),
+    coverSource: t.Union([t.Literal('owner'), t.Literal('member'), t.Literal('none'), t.Literal('pending')]),
+    coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
     revision,
     memberCount: t.Integer(),
     orderEpoch: t.Integer({ minimum: 0 }),
@@ -108,18 +78,14 @@ const dynamicCollectionSchema = t.Object(
   {
     id,
     curatorAccountId: id,
-    membershipKind: t.Literal("dynamic"),
-    builtinKind: t.Union([
-      t.Literal("everything"),
-      t.Literal("state"),
-      t.Literal("liked"),
-    ]),
+    membershipKind: t.Literal('dynamic'),
+    builtinKind: t.Union([t.Literal('everything'), t.Literal('state'), t.Literal('liked')]),
     builtin: t.Union([
-      t.Object({ kind: t.Literal("everything") }, closed),
-      t.Object({ kind: t.Literal("liked") }, closed),
+      t.Object({ kind: t.Literal('everything') }, closed),
+      t.Object({ kind: t.Literal('liked') }, closed),
       t.Object(
         {
-          kind: t.Literal("state"),
+          kind: t.Literal('state'),
           profileId: t.String(),
           stateSetId: t.String(),
           stateId: t.String(),
@@ -130,12 +96,12 @@ const dynamicCollectionSchema = t.Object(
     builtinLabels: t.Optional(t.Record(t.String(), t.String())),
     title: nullableString,
     description: nullableString,
-    visibility: t.Literal("private"),
+    visibility: t.Literal('private'),
     revision: t.Integer({ minimum: 0 }),
     presentationKind: collectionSchema.properties.presentationKind,
     presentationKindSource: collectionSchema.properties.presentationKindSource,
     cover: t.Null(),
-    coverSource: t.Literal("none"),
+    coverSource: t.Literal('none'),
   },
   closed,
 );
@@ -148,20 +114,12 @@ const memberIds = t.Array(t.String(), {
   maxItems: 100,
   uniqueItems: true,
 });
-const memberSchema = t.Object(
-  { id, subjectId: id, note: nullableString, addedAt: t.String() },
-  closed,
-);
+const memberSchema = t.Object({ id, subjectId: id, note: nullableString, addedAt: t.String() }, closed);
 const previewFields = {
   previewMembers: t.Optional(
-    t.Array(
-      t.Object({ subjectId: id, subject: SubjectSummarySchema }, closed),
-      { maxItems: 3 },
-    ),
+    t.Array(t.Object({ subjectId: id, subject: SubjectSummarySchema }, closed), { maxItems: 3 }),
   ),
-  previewStatus: t.Optional(
-    t.Union([t.Literal("ready"), t.Literal("pending")]),
-  ),
+  previewStatus: t.Optional(t.Union([t.Literal('ready'), t.Literal('pending')])),
 };
 const {
   memberCount: _count,
@@ -171,25 +129,19 @@ const {
   ...dynamicMetadata
 } = collectionSchema.properties;
 export const savedDynamicCollectionSchema = t.Object(
-  { ...dynamicMetadata, membershipKind: t.Literal("dynamic") },
+  { ...dynamicMetadata, membershipKind: t.Literal('dynamic') },
   closed,
 );
 export const collectionPublicationSchema = t.Object(
   {
-    generation: t.String({ format: "uuid" }),
-    state: t.Literal("complete"),
+    generation: t.String({ format: 'uuid' }),
+    state: t.Literal('complete'),
     itemCount: t.Integer({ minimum: 0, maximum: 100 }),
   },
   closed,
 );
 export const collectionPublicationRequestSchema = t.Object(
-  {
-    revision,
-    subjectIds: t.Array(t.String({ format: "uuid" }), {
-      maxItems: 100,
-      uniqueItems: true,
-    }),
-  },
+  { revision, subjectIds: t.Array(t.String({ format: 'uuid' }), { maxItems: 100, uniqueItems: true }) },
   closed,
 );
 export const collectionResourceSchema = t.Union([
@@ -210,16 +162,13 @@ const previewCollectionSchema = t.Union([
   }),
   embedded(dynamicCollectionSchema, { ...curatorFields, ...previewFields }),
 ]);
-const collectionResponse = t.Object(
-  { collection: collectionResourceSchema },
-  closed,
-);
+const collectionResponse = t.Object({ collection: collectionResourceSchema }, closed);
 const metadataHistoryField = t.Union([
-  t.Literal("title"),
-  t.Literal("description"),
-  t.Literal("visibility"),
-  t.Literal("presentationKind"),
-  t.Literal("coverMediaId"),
+  t.Literal('title'),
+  t.Literal('description'),
+  t.Literal('visibility'),
+  t.Literal('presentationKind'),
+  t.Literal('coverMediaId'),
 ]);
 const metadataHistoryBasis = t.Object(
   {
@@ -233,20 +182,13 @@ const metadataHistoryBasis = t.Object(
 );
 const metadataHistoryCoverage = t.Object(
   {
-    coverage: t.Union([
-      t.Literal("complete"),
-      t.Literal("partial"),
-      t.Literal("unknown"),
-    ]),
+    coverage: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('unknown')]),
     knownFromRevision: t.Union([revision, t.Null()]),
     prunedBeforeRevision: t.Union([revision, t.Null()]),
   },
   closed,
 );
-const metadataHistoryActions = t.Object(
-  { review: t.Literal(true), reapply: t.Literal(false) },
-  closed,
-);
+const metadataHistoryActions = t.Object({ review: t.Literal(true), reapply: t.Literal(false) }, closed);
 const metadataHistoryPageResponse = t.Object(
   {
     collectionId: id,
@@ -257,10 +199,7 @@ const metadataHistoryPageResponse = t.Object(
         {
           revision,
           recordedAt: t.String(),
-          changedFields: t.Array(metadataHistoryField, {
-            minItems: 1,
-            maxItems: 5,
-          }),
+          changedFields: t.Array(metadataHistoryField, { minItems: 1, maxItems: 5 }),
         },
         closed,
       ),
@@ -272,12 +211,9 @@ const metadataHistoryPageResponse = t.Object(
   closed,
 );
 const historicalCover = t.Union([
-  t.Object({ state: t.Literal("none") }, closed),
-  t.Object({ state: t.Literal("unavailable") }, closed),
-  t.Object(
-    { state: t.Literal("available"), mediaId: id, summary: CoverSummarySchema },
-    closed,
-  ),
+  t.Object({ state: t.Literal('none') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+  t.Object({ state: t.Literal('available'), mediaId: id, summary: CoverSummarySchema }, closed),
 ]);
 const historicalSnapshot = t.Object(
   {
@@ -307,28 +243,24 @@ const createMetadata = {
   description: t.Optional(nullableString),
   visibility,
   presentationKind: t.Optional(nullableString),
-  coverMediaId: t.Optional(t.Union([t.String({ format: "uuid" }), t.Null()])),
+  coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
 };
 const ruleBody = { filter: t.Unknown(), sort: t.Optional(t.String()) };
 const memberResponse = t.Object({ member: memberSchema }, closed);
 const structurePlacementSchema = t.Union([
   t.Object(
     {
-      state: t.Literal("known"),
+      state: t.Literal('known'),
       beforeMemberId: nullableString,
       afterMemberId: nullableString,
     },
     closed,
   ),
-  t.Object({ state: t.Literal("unavailable") }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
 ]);
 const structureStateSchema = t.Object(
   {
-    presence: t.Union([
-      t.Literal("live"),
-      t.Literal("deleted"),
-      t.Literal("not_in_collection"),
-    ]),
+    presence: t.Union([t.Literal('live'), t.Literal('deleted'), t.Literal('not_in_collection')]),
     memberRevision: t.String(),
     note: nullableString,
     addedAt: nullableString,
@@ -341,20 +273,20 @@ const structureChangeSchema = t.Object(
   {
     address: t.String({ maxLength: 4096 }),
     operation: t.Union([
-      t.Literal("added"),
-      t.Literal("note_changed"),
-      t.Literal("moved"),
-      t.Literal("deleted"),
-      t.Literal("restored"),
-      t.Literal("transferred_in"),
-      t.Literal("transferred_out"),
+      t.Literal('added'),
+      t.Literal('note_changed'),
+      t.Literal('moved'),
+      t.Literal('deleted'),
+      t.Literal('restored'),
+      t.Literal('transferred_in'),
+      t.Literal('transferred_out'),
     ]),
     recordedAt: t.String(),
     occurrenceId: id,
     memberRevision: t.String(),
     before: t.Union([structureStateSchema, t.Null()]),
     after: t.Union([structureStateSchema, t.Null()]),
-    subjectContext: t.Object({ state: t.Literal("withheld") }, closed),
+    subjectContext: t.Object({ state: t.Literal('withheld') }, closed),
   },
   closed,
 );
@@ -365,8 +297,8 @@ const structureCoverageSchema = t.Object(
     latestRecordedChangeNo: nullableString,
     hasPrunedGaps: t.Boolean(),
     historyBeforeTracking: t.Union([
-      t.Literal("unknown_before_installation"),
-      t.Literal("collection_created_after_installation"),
+      t.Literal('unknown_before_installation'),
+      t.Literal('collection_created_after_installation'),
     ]),
   },
   closed,
@@ -391,7 +323,7 @@ const structureHistoryPageSchema = t.Object(
 );
 const structureHistoryComparisonSchema = t.Object(
   {
-    status: t.Union([t.Literal("ready"), t.Literal("retired")]),
+    status: t.Union([t.Literal('ready'), t.Literal('retired')]),
     changes: t.Array(structureChangeSchema, { maxItems: 2 }),
     coverage: structureCoverageSchema,
     basis: t.Union([structureBasisSchema, t.Null()]),
@@ -411,10 +343,7 @@ const subjectPage = t.Object(
         closed,
       ),
     ),
-    count: t.Object(
-      { value: t.Integer({ minimum: 0 }), exact: t.Literal(true) },
-      closed,
-    ),
+    count: t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Literal(true) }, closed),
     next: nullableString,
   },
   closed,
@@ -422,17 +351,12 @@ const subjectPage = t.Object(
 const fullSubjectPage = t.Object(
   {
     ...subjectPage.properties,
-    collections: t.Array(
-      embedded(subjectPage.properties.collections.items, curatorFields),
-    ),
+    collections: t.Array(embedded(subjectPage.properties.collections.items, curatorFields)),
   },
   closed,
 );
 const collectionParams = t.Object({ collectionId: id }, closed);
-const collectionPublicationParams = t.Object(
-  { id: t.String({ format: "uuid" }) },
-  closed,
-);
+const collectionPublicationParams = t.Object({ id: t.String({ format: 'uuid' }) }, closed);
 const memberParams = t.Object({ collectionId: id, memberId: id }, closed);
 const headers = t.Object({
   [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }),
@@ -440,63 +364,61 @@ const headers = t.Object({
 const pageQuery = {
   ...viewQuery,
   cursor: t.Optional(t.String({ maxLength: 4096 })),
-  limit: t.Optional(
-    t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 }),
-  ),
+  limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
 };
 const failures = {
-  400: problemSchema("invalid_request", "invalid_cursor"),
-  401: problemSchema("authentication_required", "invalid_credentials"),
-  403: problemSchema("forbidden"),
-  404: problemSchema("not_found"),
+  400: problemSchema('invalid_request', 'invalid_cursor'),
+  401: problemSchema('authentication_required', 'invalid_credentials'),
+  403: problemSchema('forbidden'),
+  404: problemSchema('not_found'),
   409: problemSchema(
-    "conflict",
-    "collection_full",
-    "stale_cursor",
-    "dynamic_membership_immutable",
-    "collection_move_unsupported",
+    'conflict',
+    'collection_full',
+    'stale_cursor',
+    'dynamic_membership_immutable',
+    'collection_move_unsupported',
   ),
-  422: problemSchema("idempotency_conflict", "unsupported_query"),
+  422: problemSchema('idempotency_conflict', 'unsupported_query'),
   503: problemSchema(
-    "semantic_not_ready",
-    "dependency_unavailable",
-    "overloaded",
-    "partition_unavailable",
-    "transaction_retry_exhausted",
-    "deadline_exceeded",
+    'semantic_not_ready',
+    'dependency_unavailable',
+    'overloaded',
+    'partition_unavailable',
+    'transaction_retry_exhausted',
+    'deadline_exceeded',
   ),
 };
 const batchFailures = {
   ...failures,
   409: problemSchema(
-    "conflict",
-    "collection_full",
-    "stale_cursor",
-    "dynamic_membership_immutable",
-    "collection_move_unsupported",
+    'conflict',
+    'collection_full',
+    'stale_cursor',
+    'dynamic_membership_immutable',
+    'collection_move_unsupported',
   ),
 };
 const memberRestoreFailures = {
   ...failures,
   409: problemSchema(
-    "conflict",
-    "collection_full",
-    "member_restore_stale",
-    "member_restore_occupied",
-    "member_restore_expired",
+    'conflict',
+    'collection_full',
+    'member_restore_stale',
+    'member_restore_occupied',
+    'member_restore_expired',
   ),
 };
-const writeRate = defineRateLimit({ family: "write", units: 1 });
+const writeRate = defineRateLimit({ family: 'write', units: 1 });
 function detail(operationId: string, action: string, anonymous = false) {
   return {
     operationId,
-    "x-exposure": "gate:collections",
-    "x-action": action,
-    ...(operationId.startsWith("collection_member.")
-      ? { "x-authority-resource-types": ["library.collection"] }
-      : { "x-resource-types": ["library.collection"] }),
+    'x-exposure': 'gate:collections',
+    'x-action': action,
+    ...(operationId.startsWith('collection_member.')
+      ? { 'x-authority-resource-types': ['library.collection'] }
+      : { 'x-resource-types': ['library.collection'] }),
     security: anonymous ? [{ bearerAuth: [] }, {}] : [{ bearerAuth: [] }],
-    ...(anonymous ? {} : { "x-rate-limit": writeRate }),
+    ...(anonymous ? {} : { 'x-rate-limit': writeRate }),
   };
 }
 
@@ -504,17 +426,15 @@ function detail(operationId: string, action: string, anonymous = false) {
 export function strict<S extends TSchema>(schema: S) {
   const validator = Compile(schema);
   return {
-    "~standard": {
+    '~standard': {
       version: 1 as const,
-      vendor: "typebox",
+      vendor: 'typebox',
       types: undefined as { input: Static<S>; output: Static<S> } | undefined,
       validate(value: unknown) {
         return validator.Check(value)
           ? { value: value as Static<S> }
           : {
-              issues: [
-                { message: "Value does not match the Collection schema" },
-              ],
+              issues: [{ message: 'Value does not match the Collection schema' }],
             };
       },
       jsonSchema: { input: () => schema, output: () => schema },
@@ -522,12 +442,9 @@ export function strict<S extends TSchema>(schema: S) {
   };
 }
 function requireAccount(actor: Actor) {
-  if (actor.kind !== "account") throw new AuthenticationError(401, "Bearer");
+  if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
 }
-async function mapped<T>(
-  run: () => Promise<T>,
-  denied: "forbidden" | "not_found" = "not_found",
-): Promise<T> {
+async function mapped<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_found' = 'not_found'): Promise<T> {
   try {
     return await run();
   } catch (error) {
@@ -548,7 +465,7 @@ function collectionView(value: Collection) {
     createdAt,
     updatedAt,
   } = value;
-  if (value.membershipKind === "dynamic")
+  if (value.membershipKind === 'dynamic')
     return {
       id,
       curatorAccountId,
@@ -556,7 +473,7 @@ function collectionView(value: Collection) {
       description,
       visibility,
       revision,
-      membershipKind: "dynamic" as const,
+      membershipKind: 'dynamic' as const,
       ...collectionPresentation(value),
     };
   return {
@@ -565,7 +482,7 @@ function collectionView(value: Collection) {
     title,
     description,
     visibility,
-    membershipKind: "curated" as const,
+    membershipKind: 'curated' as const,
     revision,
     memberCount,
     orderEpoch,
@@ -580,18 +497,13 @@ function memberView(value: CollectionMember) {
 }
 
 /** Transport only: the merged commands and reads own authorization, privacy and ordering. */
-export function collectionRoutes(
-  app: ReturnType<typeof definitionRoutes>,
-  dependencies: Dependencies,
-) {
+export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
   const { pool, tokens, clock } = dependencies;
   let commands: ReturnType<typeof createCollectionCommands> | undefined;
   let reads: ReturnType<typeof createCollectionReads> | undefined;
-  let structureHistory:
-    ReturnType<typeof createCollectionStructureHistory> | undefined;
+  let structureHistory: ReturnType<typeof createCollectionStructureHistory> | undefined;
   let publications: ReturnType<typeof createCollectionPublications> | undefined;
-  let wholeQueryPublications:
-    ReturnType<typeof createCollectionPublicationService> | undefined;
+  let wholeQueryPublications: ReturnType<typeof createCollectionPublicationService> | undefined;
   const wholeQuery = () =>
     (wholeQueryPublications ??= createCollectionPublicationService({
       pool,
@@ -615,11 +527,7 @@ export function collectionRoutes(
       access: dependencies.access(),
       clock,
       routeKey: dependencies.routeKey,
-      publication: createCollectionPublicationEpisodes({
-        pool,
-        access: dependencies.access(),
-        clock,
-      }),
+      publication: createCollectionPublicationEpisodes({ pool, access: dependencies.access(), clock }),
     }));
   const read = () =>
     (reads ??= createCollectionReads({
@@ -629,30 +537,25 @@ export function collectionRoutes(
       clock,
       viewerPersonalActions: dependencies.viewerPersonalActions,
       routeKey: dependencies.routeKey,
-      ...(dependencies.workClient
-        ? { workClient: dependencies.workClient }
-        : {}),
+      ...(dependencies.workClient ? { workClient: dependencies.workClient } : {}),
       ...(dependencies.search ? { search: dependencies.search } : {}),
     }));
   const history = () =>
     (structureHistory ??= createCollectionStructureHistory({
       pool,
       tokens,
-      current: (actor, collectionId, deadline) =>
-        read().readCollection(actor, collectionId, deadline),
+      current: (actor, collectionId, deadline) => read().readCollection(actor, collectionId, deadline),
     }));
   async function written(value: Collection, actor: Actor) {
     // Receipt values retain their native revision. Only the current viewer's readable descriptor is added.
     if (value.coverMediaId == null) return collectionView(value);
     // Native writes do not require collection:read. Preserve their receipt metadata;
     // descriptor enrichment requires the viewer's independent current read authority.
-    if (actor.kind !== "account" || !actor.scopes.includes("collection:read"))
+    if (actor.kind !== 'account' || !actor.scopes.includes('collection:read'))
       return { ...collectionView(value), coverMediaId: value.coverMediaId };
     const current = await read().readCollection(actor, value.id);
     const cover =
-      "coverMediaId" in current &&
-      current.revision === value.revision &&
-      current.coverMediaId === value.coverMediaId
+      'coverMediaId' in current && current.revision === value.revision && current.coverMediaId === value.coverMediaId
         ? current.cover
         : null;
     return {
@@ -663,22 +566,19 @@ export function collectionRoutes(
   }
   async function writtenCurated(value: Collection, actor: Actor) {
     const view = await written(value, actor);
-    if (!("memberCount" in view))
-      throw new ProblemError("dynamic_membership_immutable");
+    if (!('memberCount' in view)) throw new ProblemError('dynamic_membership_immutable');
     return view;
   }
   const sitemapQuery = strict(SitemapQuerySchema);
   return collectionBulkRoutes(app, {
     ...dependencies,
     reads: {
-      readCollection: (actor, id, deadline) =>
-        read().readCollection(actor, id, deadline),
-      readMembers: (actor, id, options, deadline) =>
-        read().readMembers(actor, id, options, deadline),
+      readCollection: (actor, id, deadline) => read().readCollection(actor, id, deadline),
+      readMembers: (actor, id, options, deadline) => read().readMembers(actor, id, options, deadline),
     },
   })
     .post(
-      customMethod("/v1/collections/:collectionId", "publish"),
+      customMethod('/v1/collections/:collectionId', 'publish'),
       {
         params: collectionParams,
         headers,
@@ -688,22 +588,13 @@ export function collectionRoutes(
           202: strict(collectionPublicationStatusSchema),
           ...failures,
         },
-        detail: detail("collection.publish_query", "collection:update"),
+        detail: detail('collection.publish_query', 'collection:update'),
       },
-      async ({
-        params,
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
-        set.headers["cache-control"] = "private, no-store";
+        set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
+        const result = await admission.run('normal', job, () =>
           mapped(() =>
             wholeQuery().begin(
               actor,
@@ -716,117 +607,75 @@ export function collectionRoutes(
             ),
           ),
         );
-        session.record({
-          partition: result.partition,
-          epoch: result.epoch,
-          position: result.position,
-        });
-        const status = await wholeQuery().status(
-          actor,
-          result.value.locator.publicationId,
-        );
-        set.status =
-          status.phase === "staging" || status.phase === "awaiting_activation"
-            ? 202
-            : 200;
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        const status = await wholeQuery().status(actor, result.value.locator.publicationId);
+        set.status = status.phase === 'staging' || status.phase === 'awaiting_activation' ? 202 : 200;
         return status;
       },
     )
     .get(
-      "/v1/collectionPublications/:id",
+      '/v1/collectionPublications/:id',
       {
         params: collectionPublicationParams,
-        response: {
-          200: strict(collectionPublicationStatusSchema),
-          ...failures,
-        },
-        detail: detail("collection_publication.get", "collection:update"),
+        response: { 200: strict(collectionPublicationStatusSchema), ...failures },
+        detail: detail('collection_publication.get', 'collection:update'),
       },
       async ({ params, actor, admission, job, set }) => {
         requireAccount(actor);
-        set.headers["cache-control"] = "private, no-store";
-        return admission.run("normal", job, () =>
-          wholeQuery().status(actor, params.id),
-        );
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () => wholeQuery().status(actor, params.id));
       },
     )
     .post(
-      customMethod("/v1/collections/:collectionId", "publishSelected"),
+      customMethod('/v1/collections/:collectionId', 'publishSelected'),
       {
         params: collectionParams,
         headers,
         body: strict(collectionPublicationRequestSchema),
         response: {
-          200: t.Object(
-            {
-              collection: savedDynamicCollectionSchema,
-              publication: collectionPublicationSchema,
-            },
-            closed,
-          ),
+          200: t.Object({ collection: savedDynamicCollectionSchema, publication: collectionPublicationSchema }, closed),
           ...failures,
         },
-        detail: detail("collection.publish_selected", "collection:update"),
+        detail: detail('collection.publish_selected', 'collection:update'),
       },
-      async ({
-        params,
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
-        set.headers["cache-control"] = "private, no-store";
+        set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            publish().publishSelected(actor, params.collectionId, body, key),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => publish().publishSelected(actor, params.collectionId, body, key)),
         );
-        session.record({
-          partition: result.partition,
-          epoch: result.epoch,
-          position: result.position,
-        });
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         const collection = await written(result.value.collection, actor);
-        if (collection.membershipKind !== "dynamic")
-          throw new ProblemError("dependency_unavailable");
+        if (collection.membershipKind !== 'dynamic') throw new ProblemError('dependency_unavailable');
         return { collection, publication: result.value.publication };
       },
     )
     .get(
-      "/v1/sitemap/collections",
+      '/v1/sitemap/collections',
       {
         query: SitemapQuerySchema,
         transform: ({ query }) => {
-          if ("issues" in sitemapQuery["~standard"].validate(query))
-            throw new ProblemError("invalid_request");
+          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
         response: { 200: strict(SitemapBoardPageSchema), ...failures },
         detail: {
-          operationId: "sitemap_collections.list",
+          operationId: 'sitemap_collections.list',
           description:
-            "Anonymous Collection sitemap feed in immutable route/id order. Each page visits at most four partitions and fetches at most 4 × limit candidates. Follow next through short or empty pages until null. lastModified is the stored Collection updated_at; external subject rendering changes do not advance it.",
-          "x-exposure": "public",
-          "x-action": "collection:read",
-          "x-resource-types": ["library.collection"],
+            'Anonymous Collection sitemap feed in immutable route/id order. Each page visits at most four partitions and fetches at most 4 × limit candidates. Follow next through short or empty pages until null. lastModified is the stored Collection updated_at; external subject rendering changes do not advance it.',
+          'x-exposure': 'public',
+          'x-action': 'collection:read',
+          'x-resource-types': ['library.collection'],
           security: [{ bearerAuth: [] }, {}],
         },
       },
       async ({ query, admission, job }) =>
-        admission.run("normal", job, () =>
-          listSitemapCollections(
-            { pool, tokens, clock, access: dependencies.access() },
-            job.deadline,
-            query,
-          ),
+        admission.run('normal', job, () =>
+          listSitemapCollections({ pool, tokens, clock, access: dependencies.access() }, job.deadline, query),
         ),
     )
     .post(
-      "/v1/collections",
+      '/v1/collections',
       {
         headers,
         body: strict(
@@ -835,7 +684,7 @@ export function collectionRoutes(
             t.Object(
               {
                 ...createMetadata,
-                membershipKind: t.Literal("dynamic"),
+                membershipKind: t.Literal('dynamic'),
                 rule: t.Object(ruleBody, closed),
               },
               closed,
@@ -844,25 +693,23 @@ export function collectionRoutes(
         ),
         response: { 201: collectionResponse, ...failures },
         detail: {
-          ...detail("collection.create", "collection:create"),
-          "x-resource-types": ["library.collection"],
+          ...detail('collection.create', 'collection:create'),
+          'x-resource-types': ['library.collection'],
         },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
-        set.headers["cache-control"] = "private, no-store";
+        set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
+        const result = await admission.run('normal', job, () =>
           mapped(
             () =>
               write().createCollection(
                 actor,
-                "membershipKind" in body
-                  ? body
-                  : { ...body, membershipKind: "curated" },
+                'membershipKind' in body ? body : { ...body, membershipKind: 'curated' },
                 key,
               ),
-            "forbidden",
+            'forbidden',
           ),
         );
         session.record({
@@ -875,15 +722,13 @@ export function collectionRoutes(
       },
     )
     .get(
-      "/v1/collections",
+      '/v1/collections',
       {
         query: t.Object(
           {
             curatorAccountId: t.Union([id, t.Null()]),
             ...pageQuery,
-            preview: t.Optional(
-              t.Numeric({ minimum: 3, maximum: 3, multipleOf: 1 }),
-            ),
+            preview: t.Optional(t.Numeric({ minimum: 3, maximum: 3, multipleOf: 1 })),
           },
           closed,
         ),
@@ -897,19 +742,16 @@ export function collectionRoutes(
           ),
           ...failures,
         },
-        detail: detail("collection.list", "collection:read", true),
+        detail: detail('collection.list', 'collection:read', true),
         transform: ({ set }) => {
-          set.headers["cache-control"] = "private, no-store";
+          set.headers['cache-control'] = 'private, no-store';
         },
       },
       async ({ query, actor, admission, job }) =>
-        admission.run("normal", job, async () => {
+        admission.run('normal', job, async () => {
           const { preview, ...options } = query;
-          if (
-            preview !== undefined &&
-            (query.view !== "FULL" || (query.limit ?? 20) > 20)
-          )
-            throw new ProblemError("invalid_request");
+          if (preview !== undefined && (query.view !== 'FULL' || (query.limit ?? 20) > 20))
+            throw new ProblemError('invalid_request');
           const page = await read().listCollections(
             actor,
             basicQuery(options),
@@ -922,7 +764,7 @@ export function collectionRoutes(
         }),
     )
     .get(
-      "/v1/accounts/:accountId/collections",
+      '/v1/accounts/:accountId/collections',
       {
         params: t.Object({ accountId: id }, closed),
         query: t.Object(pageQuery, closed),
@@ -936,10 +778,10 @@ export function collectionRoutes(
           ),
           ...failures,
         },
-        detail: detail("account.collections", "collection:read", true),
+        detail: detail('account.collections', 'collection:read', true),
       },
       async ({ params, query, actor, admission, job }) =>
-        admission.run("normal", job, async () => {
+        admission.run('normal', job, async () => {
           const page = await read().listAccountCollections(actor, {
             curatorAccountId: params.accountId,
             ...basicQuery(query),
@@ -951,7 +793,7 @@ export function collectionRoutes(
         }),
     )
     .get(
-      "/v1/collections/:collectionId",
+      '/v1/collections/:collectionId',
       {
         query: t.Object(viewQuery, closed),
         params: collectionParams,
@@ -959,159 +801,109 @@ export function collectionRoutes(
           200: t.Object({ collection: embeddedCollectionSchema }, closed),
           ...failures,
         },
-        detail: detail("collection.get", "collection:read", true),
+        detail: detail('collection.get', 'collection:read', true),
         transform: ({ set }) => {
-          set.headers["cache-control"] = "private, no-store";
+          set.headers['cache-control'] = 'private, no-store';
         },
       },
       async ({ params, query, actor, admission, job }) =>
-        admission.run("normal", job, async () =>
+        admission.run('normal', job, async () =>
           fullView(viewDependencies(), actor, query.view, {
-            collection: collectionReadView(
-              await read().readCollection(actor, params.collectionId),
-            ),
+            collection: collectionReadView(await read().readCollection(actor, params.collectionId)),
           }),
         ),
     )
     .get(
-      "/v1/collections/:collectionId/metadata-history",
+      '/v1/collections/:collectionId/metadata-history',
       {
         params: collectionParams,
         query: t.Object(
           {
             cursor: t.Optional(t.String({ maxLength: 4096 })),
-            limit: t.Optional(
-              t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1 }),
-            ),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1 })),
           },
           closed,
         ),
         response: { 200: metadataHistoryPageResponse, ...failures },
-        detail: detail("collection.metadata_history_list", "collection:update"),
+        detail: detail('collection.metadata_history_list', 'collection:update'),
         transform: ({ set }) => {
-          set.headers["cache-control"] = "private, no-store";
+          set.headers['cache-control'] = 'private, no-store';
         },
       },
       async ({ params, query, actor, admission, job }) => {
         requireAccount(actor);
-        return admission.run("normal", job, () =>
-          mapped(() =>
-            read().readCollectionMetadataHistory(
-              actor,
-              params.collectionId,
-              query,
-              job.deadline,
-            ),
-          ),
+        return admission.run('normal', job, () =>
+          mapped(() => read().readCollectionMetadataHistory(actor, params.collectionId, query, job.deadline)),
         );
       },
     )
     .get(
-      "/v1/collections/:collectionId/metadata-history/:revision",
+      '/v1/collections/:collectionId/metadata-history/:revision',
       {
         params: t.Object(
-          {
-            collectionId: id,
-            revision: t.Numeric({
-              minimum: 2,
-              maximum: Number.MAX_SAFE_INTEGER,
-              multipleOf: 1,
-            }),
-          },
+          { collectionId: id, revision: t.Numeric({ minimum: 2, maximum: Number.MAX_SAFE_INTEGER, multipleOf: 1 }) },
           closed,
         ),
         response: { 200: metadataHistoryChangeResponse, ...failures },
-        detail: detail(
-          "collection.metadata_history_change",
-          "collection:update",
-        ),
+        detail: detail('collection.metadata_history_change', 'collection:update'),
         transform: ({ set }) => {
-          set.headers["cache-control"] = "private, no-store";
+          set.headers['cache-control'] = 'private, no-store';
         },
       },
       async ({ params, actor, admission, job }) => {
         requireAccount(actor);
-        return admission.run("normal", job, () =>
+        return admission.run('normal', job, () =>
           mapped(() =>
-            read().readCollectionMetadataHistoryChange(
-              actor,
-              params.collectionId,
-              params.revision,
-              job.deadline,
-            ),
+            read().readCollectionMetadataHistoryChange(actor, params.collectionId, params.revision, job.deadline),
           ),
         );
       },
     )
     .get(
-      "/v1/collections/:collectionId/structure-history",
+      '/v1/collections/:collectionId/structure-history',
       {
         params: collectionParams,
         query: t.Object(
           {
-            limit: t.Optional(
-              t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1 }),
-            ),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1 })),
             cursor: t.Optional(t.String({ maxLength: 4096 })),
           },
           closed,
         ),
         response: { 200: strict(structureHistoryPageSchema), ...failures },
-        detail: detail(
-          "collection.structure_history.list",
-          "collection:update",
-        ),
+        detail: detail('collection.structure_history.list', 'collection:update'),
         transform: ({ set }) => {
-          set.headers["cache-control"] = "private, no-store";
+          set.headers['cache-control'] = 'private, no-store';
         },
       },
       async ({ params, query, actor, admission, job }) => {
         requireAccount(actor);
-        return admission.run("normal", job, () =>
-          history().page(actor, params.collectionId, query, job.deadline),
-        );
+        return admission.run('normal', job, () => history().page(actor, params.collectionId, query, job.deadline));
       },
     )
     .get(
-      "/v1/collections/:collectionId/structure-history/compare",
+      '/v1/collections/:collectionId/structure-history/compare',
       {
         params: collectionParams,
         query: t.Object(
-          {
-            addresses: t.Array(t.String({ maxLength: 4096 }), {
-              minItems: 1,
-              maxItems: 2,
-              uniqueItems: true,
-            }),
-          },
+          { addresses: t.Array(t.String({ maxLength: 4096 }), { minItems: 1, maxItems: 2, uniqueItems: true }) },
           closed,
         ),
-        response: {
-          200: strict(structureHistoryComparisonSchema),
-          ...failures,
-        },
-        detail: detail(
-          "collection.structure_history.compare",
-          "collection:update",
-        ),
+        response: { 200: strict(structureHistoryComparisonSchema), ...failures },
+        detail: detail('collection.structure_history.compare', 'collection:update'),
         transform: ({ set }) => {
-          set.headers["cache-control"] = "private, no-store";
+          set.headers['cache-control'] = 'private, no-store';
         },
       },
       async ({ params, query, actor, admission, job }) => {
         requireAccount(actor);
-        return admission.run("normal", job, () =>
-          history().compare(
-            actor,
-            params.collectionId,
-            query.addresses,
-            job.deadline,
-          ),
+        return admission.run('normal', job, () =>
+          history().compare(actor, params.collectionId, query.addresses, job.deadline),
         );
       },
     )
     .get(
-      "/v1/collections/:collectionId/rule",
+      '/v1/collections/:collectionId/rule',
       {
         params: collectionParams,
         response: {
@@ -1120,7 +912,7 @@ export function collectionRoutes(
               rule: t.Object(
                 {
                   filter: t.Unknown(),
-                  sort: t.Literal("id"),
+                  sort: t.Literal('id'),
                   releaseDigest: t.String(),
                   revision: t.Integer({ minimum: 0 }),
                   collectionRevision: revision,
@@ -1133,22 +925,20 @@ export function collectionRoutes(
           ),
           ...failures,
         },
-        detail: detail("collection_rule.get", "collection:update"),
+        detail: detail('collection_rule.get', 'collection:update'),
         transform: ({ set }) => {
-          set.headers["cache-control"] = "private, no-store";
+          set.headers['cache-control'] = 'private, no-store';
         },
       },
       async ({ params, actor, admission, job }) => {
         requireAccount(actor);
-        return admission.run("normal", job, async () => ({
-          rule: await mapped(() =>
-            read().readRule(actor, params.collectionId, job.deadline),
-          ),
+        return admission.run('normal', job, async () => ({
+          rule: await mapped(() => read().readRule(actor, params.collectionId, job.deadline)),
         }));
       },
     )
     .put(
-      "/v1/collections/:collectionId/rule",
+      '/v1/collections/:collectionId/rule',
       {
         params: collectionParams,
         headers,
@@ -1165,25 +955,14 @@ export function collectionRoutes(
           ),
         ),
         response: { 200: collectionResponse, ...batchFailures },
-        detail: detail("collection_rule.update", "collection:update"),
+        detail: detail('collection_rule.update', 'collection:update'),
       },
-      async ({
-        params,
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
-        set.headers["cache-control"] = "private, no-store";
+        set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().updateCollectionRule(actor, params.collectionId, body, key),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().updateCollectionRule(actor, params.collectionId, body, key)),
         );
         session.record({
           partition: result.partition,
@@ -1194,7 +973,7 @@ export function collectionRoutes(
       },
     )
     .patch(
-      "/v1/collections/:collectionId",
+      '/v1/collections/:collectionId',
       {
         params: collectionParams,
         headers,
@@ -1206,23 +985,19 @@ export function collectionRoutes(
               description: t.Optional(nullableString),
               visibility: t.Optional(visibility),
               presentationKind: t.Optional(nullableString),
-              coverMediaId: t.Optional(
-                t.Union([t.String({ format: "uuid" }), t.Null()]),
-              ),
+              coverMediaId: t.Optional(t.Union([t.String({ format: 'uuid' }), t.Null()])),
             },
             closed,
           ),
         ),
         response: { 200: collectionResponse, ...failures },
-        detail: detail("collection.update", "collection:update"),
+        detail: detail('collection.update', 'collection:update'),
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().updateCollection(actor, params.collectionId, body, key),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().updateCollection(actor, params.collectionId, body, key)),
         );
         session.record({
           partition: result.partition,
@@ -1233,7 +1008,7 @@ export function collectionRoutes(
       },
     )
     .delete(
-      "/v1/collections/:collectionId",
+      '/v1/collections/:collectionId',
       {
         params: collectionParams,
         headers,
@@ -1249,97 +1024,63 @@ export function collectionRoutes(
         ),
         response: { 204: t.Void(), ...failures },
         detail: {
-          ...detail("collection.delete", "collection:delete"),
+          ...detail('collection.delete', 'collection:delete'),
           responses: {
             204: {
-              description: "Collection deleted",
+              description: 'Collection deleted',
               headers: {
-                "Library-Collection-Deletion-Id": {
-                  schema: { type: "string", format: "uuid" },
+                'Library-Collection-Deletion-Id': {
+                  schema: { type: 'string', format: 'uuid' },
                 },
-                "Library-Collection-Deletion-Revision": {
-                  schema: { type: "string", pattern: "^[1-9][0-9]*$" },
+                'Library-Collection-Deletion-Revision': {
+                  schema: { type: 'string', pattern: '^[1-9][0-9]*$' },
                 },
               },
             },
           },
         },
       },
-      async ({
-        params,
-        query,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
+      async ({ params, query, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().deleteCollection(
-              actor,
-              params.collectionId,
-              query.revision,
-              key,
-            ),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().deleteCollection(actor, params.collectionId, query.revision, key)),
         );
         session.record({
           partition: result.partition,
           epoch: result.epoch,
           position: result.position,
         });
-        set.headers["cache-control"] = "private, no-store";
-        set.headers["Library-Collection-Deletion-Id"] = result.value.deletionId;
-        set.headers["Library-Collection-Deletion-Revision"] = String(
-          result.value.revision,
-        );
+        set.headers['cache-control'] = 'private, no-store';
+        set.headers['Library-Collection-Deletion-Id'] = result.value.deletionId;
+        set.headers['Library-Collection-Deletion-Revision'] = String(result.value.revision);
         set.status = 204;
       },
     )
     .post(
-      customMethod("/v1/collections/:collectionId", "restore"),
+      customMethod('/v1/collections/:collectionId', 'restore'),
       {
         params: collectionParams,
         headers,
-        body: strict(
-          t.Object(
-            { deletionId: t.String({ format: "uuid" }), revision },
-            closed,
-          ),
-        ),
+        body: strict(t.Object({ deletionId: t.String({ format: 'uuid' }), revision }, closed)),
         response: {
           200: collectionResponse,
           ...failures,
           409: problemSchema(
-            "conflict",
-            "collection_restore_occupied",
-            "collection_restore_stale",
-            "collection_restore_expired",
+            'conflict',
+            'collection_restore_occupied',
+            'collection_restore_stale',
+            'collection_restore_expired',
           ),
         },
-        detail: detail("collection.restore", "collection:update"),
+        detail: detail('collection.restore', 'collection:update'),
       },
-      async ({
-        params,
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
-        set.headers["cache-control"] = "private, no-store";
+        set.headers['cache-control'] = 'private, no-store';
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().restoreCollection(actor, params.collectionId, body, key),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().restoreCollection(actor, params.collectionId, body, key)),
         );
         session.record({
           partition: result.partition,
@@ -1350,7 +1091,7 @@ export function collectionRoutes(
       },
     )
     .get(
-      "/v1/collections/:collectionId/members",
+      '/v1/collections/:collectionId/members',
       {
         params: collectionParams,
         query: t.Object(
@@ -1368,25 +1109,15 @@ export function collectionRoutes(
                 t.Union([
                   embedded(memberSchema, {
                     ...subjectFields,
-                    facts: t.Optional(
-                      t.Record(
-                        t.String(),
-                        t.Array(FactSchema, { maxItems: 3 }),
-                        { maxProperties: 4 },
-                      ),
-                    ),
+                    facts: t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
                   }),
                   t.Object(
                     {
-                      kind: t.Literal("dynamic"),
+                      kind: t.Literal('dynamic'),
                       subjectId: id,
                       ...subjectFields,
                       facts: t.Optional(
-                        t.Record(
-                          t.String(),
-                          t.Array(FactSchema, { maxItems: 3 }),
-                          { maxProperties: 4 },
-                        ),
+                        t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }),
                       ),
                     },
                     closed,
@@ -1399,89 +1130,51 @@ export function collectionRoutes(
             closed,
           ),
           ...failures,
-          422: problemSchema("unsupported_query"),
+          422: problemSchema('unsupported_query'),
           202: t.Object({ preparing: t.Literal(true) }, closed),
         },
-        detail: detail("collection_member.list", "collection:read", true),
+        detail: detail('collection_member.list', 'collection:read', true),
       },
       async ({ params, query, actor, admission, job, set, request }) => {
-        set.headers["cache-control"] = "private, no-store";
-        const sourceOptions =
-          query.filter !== undefined || query.sort !== undefined
-            ? query
-            : basicQuery(query);
-        const listFactsAttached =
-          query.filter === undefined &&
-          query.sort === undefined &&
-          query.view === "FULL";
+        set.headers['cache-control'] = 'private, no-store';
+        const sourceOptions = query.filter !== undefined || query.sort !== undefined ? query : basicQuery(query);
+        const listFactsAttached = query.filter === undefined && query.sort === undefined && query.view === 'FULL';
         const sourcePage = () =>
-          admission.run("normal", job, () =>
-            read().readMembers(
-              actor,
-              params.collectionId,
-              sourceOptions,
-              job.deadline,
-            ),
+          admission.run('normal', job, () =>
+            read().readMembers(actor, params.collectionId, sourceOptions, job.deadline),
           );
-        const finalSource =
-          query.view === "FULL" && actor.kind === "account"
-            ? await read().observeMemberSource(
-                actor,
-                params.collectionId,
-                job.deadline,
-              )
-            : undefined;
-        let result = await admission.run("normal", job, () =>
+        const finalSource = query.view === 'FULL' && actor.kind === 'account'
+          ? await read().observeMemberSource(actor, params.collectionId, job.deadline)
+          : undefined;
+        let result = await admission.run('normal', job, () =>
           query.filter !== undefined || query.sort !== undefined
-            ? read().readMembers(
-                actor,
-                params.collectionId,
-                query,
-                job.deadline,
-              )
-            : query.view === "FULL"
+            ? read().readMembers(actor, params.collectionId, query, job.deadline)
+            : query.view === 'FULL'
               ? fullMembers(
                   viewDependencies(),
                   actor,
                   params.collectionId,
-                  {
-                    ...basicQuery(query),
-                    languages: languageRanges(
-                      request.headers.get("accept-language"),
-                    ),
-                  },
+                  { ...basicQuery(query), languages: languageRanges(request.headers.get('accept-language')) },
                   job.deadline,
                 )
-              : read().readMembers(
-                  actor,
-                  params.collectionId,
-                  basicQuery(query),
-                  job.deadline,
-                ),
+              : read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline),
         );
-        if ("members" in result && query.view === "FULL") {
+        if ('members' in result && query.view === 'FULL') {
           const admitted = result;
-          result = await read().withViewerFacts(
-            actor,
-            result,
-            job.deadline,
-            async () => {
-              assertMemberPageCurrent(admitted, await sourcePage(), {
-                listFactsAttached,
-              });
-              await finalSource?.();
-            },
-          );
+          result = await read().withViewerFacts(actor, result, job.deadline, async () => {
+            assertMemberPageCurrent(admitted, await sourcePage(), { listFactsAttached });
+            await finalSource?.();
+          });
         }
-        if ("preparing" in result) {
+        if ('preparing' in result) {
           set.status = 202;
-          set.headers["retry-after"] = "1";
+          set.headers['retry-after'] = '1';
         }
         return result;
       },
     )
     .post(
-      "/v1/collections/:collectionId/members",
+      '/v1/collections/:collectionId/members',
       {
         params: collectionParams,
         headers,
@@ -1496,24 +1189,13 @@ export function collectionRoutes(
           ),
         ),
         response: { 201: memberResponse, ...failures },
-        detail: detail("collection_member.create", "collection:update"),
+        detail: detail('collection_member.create', 'collection:update'),
       },
-      async ({
-        params,
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().addMember(actor, params.collectionId, body, key),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().addMember(actor, params.collectionId, body, key)),
         );
         session.record({
           partition: result.partition,
@@ -1525,7 +1207,7 @@ export function collectionRoutes(
       },
     )
     .post(
-      customMethod("/v1/collections/:collectionId/members", "batchRemove"),
+      customMethod('/v1/collections/:collectionId/members', 'batchRemove'),
       {
         params: collectionParams,
         headers,
@@ -1534,23 +1216,19 @@ export function collectionRoutes(
           200: t.Object(
             {
               collection: collectionSchema,
-              removed: t.Array(
-                t.Object({ memberId: id, deletionId: id, revision }, closed),
-              ),
+              removed: t.Array(t.Object({ memberId: id, deletionId: id, revision }, closed)),
             },
             closed,
           ),
           ...batchFailures,
         },
-        detail: detail("collection_member.batch_remove", "collection:update"),
+        detail: detail('collection_member.batch_remove', 'collection:update'),
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().batchRemoveMembers(actor, params.collectionId, body, key),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().batchRemoveMembers(actor, params.collectionId, body, key)),
         );
         session.record({
           partition: result.partition,
@@ -1564,7 +1242,7 @@ export function collectionRoutes(
       },
     )
     .post(
-      customMethod("/v1/collections/:collectionId/members", "move"),
+      customMethod('/v1/collections/:collectionId/members', 'move'),
       {
         params: collectionParams,
         headers,
@@ -1591,15 +1269,13 @@ export function collectionRoutes(
           ),
           ...batchFailures,
         },
-        detail: detail("collection_member.transfer", "collection:update"),
+        detail: detail('collection_member.transfer', 'collection:update'),
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().transferMembers(actor, params.collectionId, body, key),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().transferMembers(actor, params.collectionId, body, key)),
         );
         session.record({
           partition: result.partition,
@@ -1614,27 +1290,19 @@ export function collectionRoutes(
       },
     )
     .patch(
-      "/v1/collections/:collectionId/members/:memberId",
+      '/v1/collections/:collectionId/members/:memberId',
       {
         params: memberParams,
         headers,
         body: strict(t.Object({ note: nullableString }, closed)),
         response: { 200: memberResponse, ...failures },
-        detail: detail("collection_member.update", "collection:update"),
+        detail: detail('collection_member.update', 'collection:update'),
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().updateMemberNote(
-              actor,
-              params.collectionId,
-              params.memberId,
-              body,
-              key,
-            ),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().updateMemberNote(actor, params.collectionId, params.memberId, body, key)),
         );
         session.record({
           partition: result.partition,
@@ -1645,75 +1313,44 @@ export function collectionRoutes(
       },
     )
     .delete(
-      "/v1/collections/:collectionId/members/:memberId",
+      '/v1/collections/:collectionId/members/:memberId',
       {
         params: memberParams,
         headers,
         query: t.Object({ revision }, closed),
         response: { 204: t.Void(), ...failures },
-        detail: detail("collection_member.delete", "collection:update"),
+        detail: detail('collection_member.delete', 'collection:update'),
       },
-      async ({
-        params,
-        query,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
+      async ({ params, query, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().removeMember(
-              actor,
-              params.collectionId,
-              params.memberId,
-              query.revision,
-              key,
-            ),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().removeMember(actor, params.collectionId, params.memberId, query.revision, key)),
         );
         session.record({
           partition: result.partition,
           epoch: result.epoch,
           position: result.position,
         });
-        set.headers["Library-Collection-Member-Deletion-Id"] =
-          result.value.deletionId;
-        set.headers["Library-Collection-Member-Deletion-Revision"] = String(
-          result.value.revision,
-        );
+        set.headers['Library-Collection-Member-Deletion-Id'] = result.value.deletionId;
+        set.headers['Library-Collection-Member-Deletion-Revision'] = String(result.value.revision);
         set.status = 204;
       },
     )
     .post(
-      customMethod(
-        "/v1/collections/:collectionId/members/:memberId",
-        "restore",
-      ),
+      customMethod('/v1/collections/:collectionId/members/:memberId', 'restore'),
       {
         params: memberParams,
         headers,
         body: strict(t.Object({ deletionId: id, revision }, closed)),
         response: { 200: memberResponse, ...memberRestoreFailures },
-        detail: detail("collection_member.restore", "collection:update"),
+        detail: detail('collection_member.restore', 'collection:update'),
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().restoreMember(
-              actor,
-              params.collectionId,
-              params.memberId,
-              body,
-              key,
-            ),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().restoreMember(actor, params.collectionId, params.memberId, body, key)),
         );
         session.record({
           partition: result.partition,
@@ -1724,27 +1361,19 @@ export function collectionRoutes(
       },
     )
     .post(
-      customMethod("/v1/collections/:collectionId/members/:memberId", "move"),
+      customMethod('/v1/collections/:collectionId/members/:memberId', 'move'),
       {
         params: memberParams,
         headers,
         body: strict(t.Object({ after: t.Optional(nullableString) }, closed)),
         response: { 200: memberResponse, ...failures },
-        detail: detail("collection_member.move", "collection:update"),
+        detail: detail('collection_member.move', 'collection:update'),
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run("normal", job, () =>
-          mapped(() =>
-            write().moveMember(
-              actor,
-              params.collectionId,
-              params.memberId,
-              body,
-              key,
-            ),
-          ),
+        const result = await admission.run('normal', job, () =>
+          mapped(() => write().moveMember(actor, params.collectionId, params.memberId, body, key)),
         );
         session.record({
           partition: result.partition,
@@ -1755,24 +1384,20 @@ export function collectionRoutes(
       },
     )
     .get(
-      "/v1/subjects/:id/collections",
+      '/v1/subjects/:id/collections',
       {
         params: t.Object({ id }, closed),
         query: t.Object(pageQuery, closed),
         response: { 200: fullSubjectPage, ...failures },
-        detail: detail("subject_collection.list", "collection:read", true),
+        detail: detail('subject_collection.list', 'collection:read', true),
       },
       async ({ params, query, actor, admission, job }) =>
-        admission.run("normal", job, async () =>
+        admission.run('normal', job, async () =>
           fullView(
             viewDependencies(),
             actor,
             query.view,
-            await read().listSubjectCollections(
-              actor,
-              params.id,
-              basicQuery(query),
-            ),
+            await read().listSubjectCollections(actor, params.id, basicQuery(query)),
           ),
         ),
     );

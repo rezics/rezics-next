@@ -1,87 +1,74 @@
-import {
-  readLikedOriginalPage,
-  readLikedOriginalVersion,
-} from "./liked-source.ts";
-import { readOwnerMembers } from "./owner-index-members.ts";
-import type { KeyRing } from "../tokens/seal.ts";
-import { nextOwnerPin } from "./owner-index-metadata.ts";
-import type { Pool, PoolClient } from "pg";
-import { readAccount } from "../access/account-data.ts";
-import { deadlineClient } from "../access/authenticate.ts";
-import { withConnection } from "../database/pool.ts";
-import { ProblemError } from "../http/problem.ts";
-import type { Access, Actor, AccountActor } from "../request/access.ts";
-import { deadlineFor } from "../request/deadline.ts";
-import { routeOf } from "../route/route.ts";
-import { readIdentityMappings } from "../semantic/identity-epoch-read.ts";
-import {
-  builtinCollectionId,
-  type BuiltinCollectionKey,
-} from "./builtin-identity.ts";
-import { readBuiltinStateReference } from "./builtin-reference-store.ts";
-import {
-  readOwnerIndexFrontier,
-  readOwnerOriginalPrefix,
-  readOwnerOriginalTruth,
-} from "./owner-index.ts";
-import { WORK_STEP_DEADLINE_MS } from "./command-support.ts";
-import type { CollectionKind } from "./collection-kind.ts";
-import type { OwnerQueryDependencies } from "./builtin-runtime-query.ts";
-import type { FilterDocument } from "@rezics/filter";
+import { readLikedOriginalPage, readLikedOriginalVersion } from './liked-source.ts';
+import { readOwnerMembers } from './owner-index-members.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import { nextOwnerPin } from './owner-index-metadata.ts';
+import type { Pool, PoolClient } from 'pg';
+import { readAccount } from '../access/account-data.ts';
+import { deadlineClient } from '../access/authenticate.ts';
+import { withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
+import type { Access, Actor, AccountActor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { routeOf } from '../route/route.ts';
+import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
+import { builtinCollectionId, type BuiltinCollectionKey } from './builtin-identity.ts';
+import { readBuiltinStateReference } from './builtin-reference-store.ts';
+import { readOwnerIndexFrontier, readOwnerOriginalPrefix, readOwnerOriginalTruth } from './owner-index.ts';
+import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import type { CollectionKind } from './collection-kind.ts';
+import type { OwnerQueryDependencies } from './builtin-runtime-query.ts';
+import type { FilterDocument } from '@rezics/filter';
 
 export type BuiltinCollectionView = {
   id: string;
   curatorAccountId: string;
-  membershipKind: "dynamic";
-  builtinKind: "everything" | "state" | "liked";
+  membershipKind: 'dynamic';
+  builtinKind: 'everything' | 'state' | 'liked';
   builtin: BuiltinCollectionKey;
   builtinLabels?: Readonly<Record<string, string>>;
-  visibility: "private";
+  visibility: 'private';
   title: string | null;
   description: string | null;
   revision: number;
-  presentationKind: CollectionKind["presentationKind"];
-  presentationKindSource: CollectionKind["presentationKindSource"];
+  presentationKind: CollectionKind['presentationKind'];
+  presentationKindSource: CollectionKind['presentationKindSource'];
   cover: null;
-  coverSource: "none";
+  coverSource: 'none';
 };
-export type DynamicMemberView = { kind: "dynamic"; subjectId: string };
+export type DynamicMemberView = { kind: 'dynamic'; subjectId: string };
 
-function descriptor(
-  accountId: string,
-  key: BuiltinCollectionKey,
-): BuiltinCollectionView {
+function descriptor(accountId: string, key: BuiltinCollectionKey): BuiltinCollectionView {
   return {
     id: builtinCollectionId(accountId, key),
     curatorAccountId: accountId,
-    membershipKind: "dynamic",
+    membershipKind: 'dynamic',
     builtinKind: key.kind,
     builtin: key,
-    visibility: "private",
+    visibility: 'private',
     title: null,
     description: null,
     revision: 0,
     presentationKind: null,
-    presentationKindSource: "mixed",
+    presentationKindSource: 'mixed',
     cover: null,
-    coverSource: "none",
+    coverSource: 'none',
   };
 }
-type Client = Pick<PoolClient, "query">;
-type ReadScope = "collection:read" | "collection:update" | "collection:delete";
+type Client = Pick<PoolClient, 'query'>;
+type ReadScope = 'collection:read' | 'collection:update' | 'collection:delete';
 async function admitted(
   client: Client,
   actor: Actor,
-  scope: ReadScope = "collection:read",
+  scope: ReadScope = 'collection:read',
 ): Promise<AccountActor | null> {
-  if (actor.kind !== "account" || !actor.scopes.includes(scope)) return null;
+  if (actor.kind !== 'account' || !actor.scopes.includes(scope)) return null;
   const route = routeOf(actor.accountId);
   if (route === null) return null;
   const current = await readAccount(client, route, actor.accountId);
   if (
     !current ||
-    current.kind !== "actor" ||
-    current.state !== "active" ||
+    current.kind !== 'actor' ||
+    current.state !== 'active' ||
     current.fenced ||
     !Number.isSafeInteger(actor.authnEpoch) ||
     actor.authnEpoch < 1 ||
@@ -109,24 +96,21 @@ async function nativePresence(client: Client, actor: AccountActor) {
 
 /** Logical owner reads share the native account/scopes boundary. They create no header, grant, receipt or work. */
 export function createBuiltinRuntime(
-  config: Omit<OwnerQueryDependencies, "access"> & {
+  config: Omit<OwnerQueryDependencies, 'access'> & {
     access?: Access;
     tokens?: KeyRing;
   },
 ) {
-  async function snapshot<T>(
-    operation: (client: Client) => Promise<T>,
-    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
-  ) {
+  async function snapshot<T>(operation: (client: Client) => Promise<T>, deadline = deadlineFor(WORK_STEP_DEADLINE_MS)) {
     return withConnection(config.pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
-      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
         const result = await operation(client);
-        await client.query("COMMIT");
+        await client.query('COMMIT');
         return result;
       } catch (error) {
-        await client.query("ROLLBACK");
+        await client.query('ROLLBACK');
         throw error;
       }
     });
@@ -134,7 +118,7 @@ export function createBuiltinRuntime(
   async function read(
     actor: Actor,
     id: string,
-    scope: ReadScope = "collection:read",
+    scope: ReadScope = 'collection:read',
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
   ): Promise<BuiltinCollectionView | null> {
     if (routeOf(id) === null) return null;
@@ -142,12 +126,11 @@ export function createBuiltinRuntime(
       const owner = await admitted(client, actor, scope);
       if (!owner) return null;
       const ownEverything = builtinCollectionId(owner.accountId, {
-        kind: "everything",
+        kind: 'everything',
       });
       let key: BuiltinCollectionKey;
-      if (id === ownEverything) key = { kind: "everything" };
-      else if (id === builtinCollectionId(owner.accountId, { kind: "liked" }))
-        key = { kind: "liked" };
+      if (id === ownEverything) key = { kind: 'everything' };
+      else if (id === builtinCollectionId(owner.accountId, { kind: 'liked' })) key = { kind: 'liked' };
       else {
         // Exactly the delivered native reference point, with no tuple hint or historical-release walk.
         const reference = await readBuiltinStateReference(client, {
@@ -156,11 +139,8 @@ export function createBuiltinRuntime(
         });
         if (!reference || reference.accountId !== owner.accountId) return null;
         const coverage = await readOwnerIndexFrontier(client, owner.accountId);
-        if (
-          coverage?.phase !== "ready" ||
-          (await nextOwnerPin(client, owner.accountId)) !== undefined
-        )
-          throw new ProblemError("dependency_unavailable");
+        if (coverage?.phase !== 'ready' || (await nextOwnerPin(client, owner.accountId)) !== undefined)
+          throw new ProblemError('dependency_unavailable');
         const supported = await client.query(
           `SELECT 1 FROM library.owner_index_state s
           WHERE s.route=$1 AND s.account_id=$2 AND s.collection_id=$3 LIMIT 1`,
@@ -172,21 +152,17 @@ export function createBuiltinRuntime(
       return present(client, owner.accountId, key);
     }, deadline);
   }
-  async function present(
-    client: Client,
-    accountId: string,
-    key: BuiltinCollectionKey,
-  ): Promise<BuiltinCollectionView> {
+  async function present(client: Client, accountId: string, key: BuiltinCollectionKey): Promise<BuiltinCollectionView> {
     const value = descriptor(accountId, key);
     let labels: Readonly<Record<string, string>> | undefined;
-    if (key.kind === "state") {
+    if (key.kind === 'state') {
       // The index chooses presentation only, never state membership or disclosure.
       const meaning = await client.query<{ labels: Record<string, string> }>(
         `SELECT labels FROM library.owner_index_state WHERE route=$1 AND account_id=$2 AND collection_id=$3
          ORDER BY pin->>'releaseDigest',pin LIMIT 1`,
         [routeOf(accountId), accountId, value.id],
       );
-      if (!meaning.rows[0]) throw new ProblemError("semantic_not_ready");
+      if (!meaning.rows[0]) throw new ProblemError('semantic_not_ready');
       labels = meaning.rows[0].labels;
     }
     const stored = (
@@ -209,21 +185,13 @@ export function createBuiltinRuntime(
       )
     ).rows[0];
     if (stored) {
-      if (
-        stored.owner !== accountId ||
-        stored.kind !== key.kind ||
-        stored.membership !== "dynamic"
-      )
-        throw new ProblemError("dependency_unavailable");
-      if (stored.state !== "active") throw new ProblemError("not_found");
+      if (stored.owner !== accountId || stored.kind !== key.kind || stored.membership !== 'dynamic')
+        throw new ProblemError('dependency_unavailable');
+      if (stored.state !== 'active') throw new ProblemError('not_found');
       // Published output and configured covers use their owning current readers, never a private fallback.
-      if (
-        stored.visibility !== "private" ||
-        stored.presentationKind !== null ||
-        stored.coverMediaId !== null
-      )
-        throw new ProblemError("dependency_unavailable", {
-          detail: "The configured built-in presentation reader is unavailable.",
+      if (stored.visibility !== 'private' || stored.presentationKind !== null || stored.coverMediaId !== null)
+        throw new ProblemError('dependency_unavailable', {
+          detail: 'The configured built-in presentation reader is unavailable.',
         });
       return {
         ...value,
@@ -238,30 +206,20 @@ export function createBuiltinRuntime(
       ...(labels === undefined ? {} : { builtinLabels: labels }),
     };
   }
-  async function discover(
-    actor: Actor,
-    after: string | null = null,
-    limit = 100,
-  ): Promise<BuiltinCollectionView[]> {
+  async function discover(actor: Actor, after: string | null = null, limit = 100): Promise<BuiltinCollectionView[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 101)
-      throw new RangeError("Builtin descriptor limit must be 1..101");
+      throw new RangeError('Builtin descriptor limit must be 1..101');
     return snapshot(async (client) => {
       const owner = await admitted(client, actor);
       if (!owner) return [];
       const presence = await nativePresence(client, owner);
       if (presence.entry || presence.session || presence.copy) {
         const coverage = await readOwnerIndexFrontier(client, owner.accountId);
-        if (
-          coverage?.phase !== "ready" ||
-          (await nextOwnerPin(client, owner.accountId)) !== undefined
-        )
-          throw new ProblemError("semantic_not_ready");
+        if (coverage?.phase !== 'ready' || (await nextOwnerPin(client, owner.accountId)) !== undefined)
+          throw new ProblemError('semantic_not_ready');
       }
       // Always logical, even when no profile or native personal fact exists.
-      const keys: BuiltinCollectionKey[] = [
-        { kind: "everything" },
-        { kind: "liked" },
-      ];
+      const keys: BuiltinCollectionKey[] = [{ kind: 'everything' }, { kind: 'liked' }];
       // One indexed successor per descriptor skips all same-identity pins, including old release fanout.
       const states = await client.query<{
         profileId: string;
@@ -285,19 +243,14 @@ export function createBuiltinRuntime(
         ORDER BY k.collection_id`,
         [routeOf(owner.accountId), owner.accountId, after, limit],
       );
-      keys.push(
-        ...states.rows.map((state) => ({ kind: "state" as const, ...state })),
-      );
+      keys.push(...states.rows.map((state) => ({ kind: 'state' as const, ...state })));
       const selected = keys
         .map((key) => ({ key, id: builtinCollectionId(owner.accountId, key) }))
         .filter((value) => after === null || value.id > after)
-        .sort((left, right) =>
-          left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-        )
+        .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
         .slice(0, limit);
       const values: BuiltinCollectionView[] = [];
-      for (const value of selected)
-        values.push(await present(client, owner.accountId, value.key));
+      for (const value of selected) values.push(await present(client, owner.accountId, value.key));
       return values;
     });
   }
@@ -311,36 +264,32 @@ export function createBuiltinRuntime(
       query?: { filter: FilterDocument; releaseDigest: string };
     } = {},
   ): Promise<{ members: DynamicMemberView[]; next: string | null }> {
-    if (
-      !Number.isInteger(options.limit ?? 20) ||
-      (options.limit ?? 20) < 1 ||
-      (options.limit ?? 20) > 100
-    )
-      throw new ProblemError("invalid_request");
+    if (!Number.isInteger(options.limit ?? 20) || (options.limit ?? 20) < 1 || (options.limit ?? 20) > 100)
+      throw new ProblemError('invalid_request');
     const deadline = options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
-    const source = await read(actor, id, "collection:read", deadline);
-    if (!source) throw new ProblemError("not_found");
+    const source = await read(actor, id, 'collection:read', deadline);
+    if (!source) throw new ProblemError('not_found');
     // A directory miss is not an empty proof. The actual native data statement always runs.
     const empty = await snapshot(async (client) => {
       const owner = await admitted(client, actor);
-      if (!owner) throw new ProblemError("not_found");
-      if (source.builtinKind === "liked") {
+      if (!owner) throw new ProblemError('not_found');
+      if (source.builtinKind === 'liked') {
         const page = await readLikedOriginalPage(client, {
           actorAccountId: owner.accountId,
           limit: 1,
         });
         return page.subjects.length === 0 && page.next === null;
       }
-      if (source.builtinKind !== "everything") return false;
+      if (source.builtinKind !== 'everything') return false;
       const presence = await nativePresence(client, owner);
       return !Object.values(presence).some(Boolean);
     }, deadline);
     if (empty && options.cursor == null) return { members: [], next: null };
-    if (actor.kind !== "account") throw new ProblemError("not_found");
+    if (actor.kind !== 'account') throw new ProblemError('not_found');
     const { access, tokens } = config;
     if (!access || !tokens)
-      throw new ProblemError("dependency_unavailable", {
-        detail: "Built-in members require current Access and cursor keys.",
+      throw new ProblemError('dependency_unavailable', {
+        detail: 'Built-in members require current Access and cursor keys.',
       });
     return readOwnerMembers(
       { ...config, access, tokens },
@@ -352,8 +301,7 @@ export function createBuiltinRuntime(
         deadline,
         ...(options.query ? { query: options.query } : {}),
         async revalidateOwner() {
-          if (!(await read(actor, id, "collection:read", deadline)))
-            throw new ProblemError("not_found");
+          if (!(await read(actor, id, 'collection:read', deadline))) throw new ProblemError('not_found');
         },
         readSourceVersion: () => sourceVersion(actor, source, deadline),
       },
@@ -380,45 +328,25 @@ export function createBuiltinRuntime(
       return head?.generation ?? "absent";
     }, deadline);
   }
-  async function resolve(
-    actor: Actor,
-    key: Exclude<BuiltinCollectionKey, { kind: "liked" }>,
-    deadline?: number,
-  ) {
-    if (actor.kind !== "account") return null;
-    return read(
-      actor,
-      builtinCollectionId(actor.accountId, key),
-      "collection:read",
-      deadline,
-    );
+  async function resolve(actor: Actor, key: Exclude<BuiltinCollectionKey, { kind: 'liked' }>, deadline?: number) {
+    if (actor.kind !== 'account') return null;
+    return read(actor, builtinCollectionId(actor.accountId, key), 'collection:read', deadline);
   }
   return { read, discover, resolve, members, sourceVersion };
 }
 
 /** Internal native primitive for the real participant/retained plan integration. Never a successful member page. */
-export async function readBuiltinOriginalInputs(
-  pool: Pool,
-  accountId: string,
-  after: string | null,
-  limit: number,
-) {
+export async function readBuiltinOriginalInputs(pool: Pool, accountId: string, after: string | null, limit: number) {
   const facts = await withConnection(pool, async (client) => {
-    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
-      const originals = await readOwnerOriginalPrefix(
-        client,
-        accountId,
-        after,
-        limit,
-      );
+      const originals = await readOwnerOriginalPrefix(client, accountId, after, limit);
       const truth = [];
-      for (const original of originals)
-        truth.push(await readOwnerOriginalTruth(client, accountId, original));
-      await client.query("COMMIT");
+      for (const original of originals) truth.push(await readOwnerOriginalTruth(client, accountId, original));
+      await client.query('COMMIT');
       return truth;
     } catch (error) {
-      await client.query("ROLLBACK");
+      await client.query('ROLLBACK');
       throw error;
     }
   });

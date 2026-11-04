@@ -1,42 +1,30 @@
-import outputHeadForRetention from "./collection-source-output-head.sql";
-import {
-  createBuiltinRuntime,
-  type BuiltinCollectionView,
-} from "./builtin-runtime.ts";
-import type { Pool, PoolClient } from "pg";
-import { deadlineClient } from "../access/authenticate.ts";
-import { commandAccessContext } from "../access/command-admission.ts";
+import outputHeadForRetention from './collection-source-output-head.sql';
+import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
+import type { Pool, PoolClient } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
+import { commandAccessContext } from '../access/command-admission.ts';
 import {
   mintReadTime,
   releaseOperationalTime,
   type AuthoritativeTime,
   type CommandAttempt,
-} from "../command/command.ts";
-import { readAccount, type Account } from "../access/account-data.ts";
-import { readPublicViews } from "../access/index.ts";
-import { createResourcePublicEligibility } from "../access/public-eligibility.ts";
-import { withConnection } from "../database/pool.ts";
-import { ProblemError } from "../http/problem.ts";
-import { readPartition } from "../partition/partition.ts";
-import {
-  accessCheck,
-  type AccountActor,
-  type Actor,
-} from "../request/access.ts";
-import { deadlineFor } from "../request/deadline.ts";
-import { partitionOf, routeOf } from "../route/route.ts";
-import {
-  decodeCursor,
-  encodeCursor,
-  type CursorBinding,
-  type CursorKey,
-} from "../tokens/cursor.ts";
-import type { KeyRing } from "../tokens/seal.ts";
+} from '../command/command.ts';
+import { readAccount, type Account } from '../access/account-data.ts';
+import { readPublicViews } from '../access/index.ts';
+import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
+import { withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
+import { readPartition } from '../partition/partition.ts';
+import { accessCheck, type AccountActor, type Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import {
   collectionPresentation,
   readablePresentationCover,
   type CollectionPresentation,
-} from "./collection-presentation.ts";
+} from './collection-presentation.ts';
 import {
   COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE,
   COLLECTION_METADATA_HISTORY_PAGE_SIZE,
@@ -49,46 +37,36 @@ import {
   type CollectionMetadataHistoryDetail,
   type CollectionMetadataHistoryPage,
   type CollectionMetadataHistorySnapshot,
-} from "./collection-metadata-history.ts";
-import { subjectCollections } from "./listing.ts";
-import { isOrdinalKey } from "./ordinal.ts";
-import { WORK_STEP_DEADLINE_MS } from "./command-support.ts";
-import { readableSubjects, resolveSubject } from "./subject-anchor.ts";
-import collectionRead from "./collection-reads-collection.sql";
-import curatorPublicPage from "./collection-reads-curator-public.sql";
-import curatorPage from "./collection-reads-curator.sql";
-import memberPage from "./collection-reads-members.sql";
-import listingCounts from "./listing-counts.sql";
+} from './collection-metadata-history.ts';
+import { subjectCollections } from './listing.ts';
+import { isOrdinalKey } from './ordinal.ts';
+import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { readableSubjects, resolveSubject } from './subject-anchor.ts';
+import collectionRead from './collection-reads-collection.sql';
+import curatorPublicPage from './collection-reads-curator-public.sql';
+import curatorPage from './collection-reads-curator.sql';
+import memberPage from './collection-reads-members.sql';
+import listingCounts from './listing-counts.sql';
 import {
   authorizeCollectionRule,
   prepareCollectionRuleAuthority,
   readSavedCollectionRule,
-} from "./collection-rules.ts";
+} from './collection-rules.ts';
 import {
   admitCollectionMemberQuery,
   admitSavedCollectionMemberQuery,
   type CollectionMemberQuery,
-} from "./owner-filter.ts";
-import type { SearchService } from "../search/service-scope.ts";
-import { releaseNativeOwnerFilterRead } from "./owner-filter-native-binding.ts";
-import {
-  bindOwnerFilterRead,
-  readBoundOwnerFilterPage,
-  readOwnerFilterPage,
-} from "./owner-filter-plan.ts";
-import { readCollectionSourceMembers } from "./owner-index-members.ts";
-import {
-  readCollectionPreviews,
-  type CollectionPreview,
-} from "./collection-preview.ts";
-import {
-  createCollectionPreviewPreparation,
-  type PreviewPreparationDependencies,
-} from "./collection-preview-work.ts";
-import { STANDARD_QUESTION_ID } from "../rating/votes.ts";
-import type { ViewerPersonalActionsReader } from "./viewer-personal-actions.ts";
-import { readSubjectSummaryObservation } from "../semantic/summaries.ts";
-import { MAX_VIEWER_FACTS_ROWS } from "./viewer-facts-schema.ts";
+} from './owner-filter.ts';
+import type { SearchService } from '../search/service-scope.ts';
+import { releaseNativeOwnerFilterRead } from './owner-filter-native-binding.ts';
+import { bindOwnerFilterRead, readBoundOwnerFilterPage, readOwnerFilterPage } from './owner-filter-plan.ts';
+import { readCollectionSourceMembers } from './owner-index-members.ts';
+import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
+import { createCollectionPreviewPreparation, type PreviewPreparationDependencies } from './collection-preview-work.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import type { ViewerPersonalActionsReader } from './viewer-personal-actions.ts';
+import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
+import { MAX_VIEWER_FACTS_ROWS } from './viewer-facts-schema.ts';
 
 type CuratorPageOptions = {
   curatorAccountId: string | null;
@@ -96,10 +74,8 @@ type CuratorPageOptions = {
   limit?: number;
 };
 
-type QueryClient = Pick<PoolClient, "query">;
-type StoredCollection = NonNullable<
-  Awaited<ReturnType<typeof collectionRead.run>>
->;
+type QueryClient = Pick<PoolClient, 'query'>;
+type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
 type Sink = {
   seen: boolean;
@@ -109,13 +85,13 @@ type Sink = {
 export type CollectionView = CollectionPresentation &
   Partial<CollectionPreview> & {
     // Older internal callers may construct the curated presentation without wire-only fields.
-    membershipKind?: "curated";
+    membershipKind?: 'curated';
     orderEpoch?: number;
     id: string;
     curatorAccountId: string | null;
     title: string;
     description: string | null;
-    visibility: "private" | "unlisted" | "public";
+    visibility: 'private' | 'unlisted' | 'public';
     revision: number;
     memberCount: number;
     createdAt: string;
@@ -123,33 +99,31 @@ export type CollectionView = CollectionPresentation &
   };
 
 export type CuratedCollectionView = CollectionView & {
-  membershipKind: "curated";
+  membershipKind: 'curated';
   orderEpoch: number;
 };
 
 export type SavedDynamicCollectionView = Omit<
   CollectionView,
-  "membershipKind" | "memberCount" | "orderEpoch" | "createdAt" | "updatedAt"
+  'membershipKind' | 'memberCount' | 'orderEpoch' | 'createdAt' | 'updatedAt'
 > & {
-  membershipKind: "dynamic";
+  membershipKind: 'dynamic';
 };
-export type CollectionResourceView =
-  CollectionView | SavedDynamicCollectionView | BuiltinCollectionView;
+export type CollectionResourceView = CollectionView | SavedDynamicCollectionView | BuiltinCollectionView;
 
 /** Check the required wire fields without expanding the older curated caller guarantee. */
 export function collectionReadView(
   value: CollectionResourceView,
 ): CuratedCollectionView | SavedDynamicCollectionView | BuiltinCollectionView {
-  if ("membershipKind" in value && value.membershipKind === "dynamic")
-    return value;
+  if ('membershipKind' in value && value.membershipKind === 'dynamic') return value;
   if (
-    value.membershipKind !== "curated" ||
-    typeof value.orderEpoch !== "number" ||
+    value.membershipKind !== 'curated' ||
+    typeof value.orderEpoch !== 'number' ||
     !Number.isSafeInteger(value.orderEpoch) ||
     value.orderEpoch < 0
   )
-    throw new ProblemError("dependency_unavailable");
-  return { ...value, membershipKind: "curated", orderEpoch: value.orderEpoch };
+    throw new ProblemError('dependency_unavailable');
+  return { ...value, membershipKind: 'curated', orderEpoch: value.orderEpoch };
 }
 
 export type MemberView = {
@@ -169,16 +143,16 @@ export type PublicCollectionView = {
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 const MAX_CURSOR_LENGTH = 4096;
-const ABSENT_UPDATED_AT = "9999-12-31T23:59:59.999999Z";
-const ABSENT_ID = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+const ABSENT_UPDATED_AT = '9999-12-31T23:59:59.999999Z';
+const ABSENT_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 const UPDATED_AT_EXACT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
 function notFound(): ProblemError {
-  return new ProblemError("not_found");
+  return new ProblemError('not_found');
 }
 
 function invalidCursor(): ProblemError {
-  return new ProblemError("invalid_cursor");
+  return new ProblemError('invalid_cursor');
 }
 
 function queryOf(client: QueryClient): QueryClient {
@@ -203,13 +177,8 @@ function collectionView(row: {
   createdAt: string;
   updatedAt: string;
 }): CuratedCollectionView | SavedDynamicCollectionView {
-  if (
-    row.visibility !== "private" &&
-    row.visibility !== "unlisted" &&
-    row.visibility !== "public"
-  )
-    throw notFound();
-  if (row.membershipKind === "dynamic")
+  if (row.visibility !== 'private' && row.visibility !== 'unlisted' && row.visibility !== 'public') throw notFound();
+  if (row.membershipKind === 'dynamic')
     return {
       ...collectionPresentation(row),
       id: row.id,
@@ -218,11 +187,11 @@ function collectionView(row: {
       description: row.description,
       visibility: row.visibility,
       revision: row.revision,
-      membershipKind: "dynamic",
+      membershipKind: 'dynamic',
     };
   return {
     ...collectionPresentation(row),
-    membershipKind: "curated",
+    membershipKind: 'curated',
     id: row.id,
     curatorAccountId: row.curatorAccountId,
     title: row.title,
@@ -237,8 +206,7 @@ function collectionView(row: {
 }
 
 function memberView(row: MemberRow): MemberView {
-  if (row.addedAt === null)
-    throw new Error("A live Collection member must retain its added time");
+  if (row.addedAt === null) throw new Error('A live Collection member must retain its added time');
   return {
     id: row.id,
     subjectId: row.subjectId,
@@ -248,15 +216,12 @@ function memberView(row: MemberRow): MemberView {
 }
 
 function actor(viewer: Actor): viewer is AccountActor {
-  return viewer.kind === "account";
+  return viewer.kind === 'account';
 }
 
 /** Live account authority for a private Collection. A token cached before suspension is not enough. */
 export function grantCapable(
-  account: Pick<
-    Account,
-    "route" | "accountId" | "kind" | "state" | "fenced" | "minimumAuthnEpoch"
-  >,
+  account: Pick<Account, 'route' | 'accountId' | 'kind' | 'state' | 'fenced' | 'minimumAuthnEpoch'>,
   viewer: AccountActor,
 ): boolean {
   const route = routeOf(viewer.accountId);
@@ -264,13 +229,13 @@ export function grantCapable(
     route !== null &&
     account.route === route &&
     account.accountId === viewer.accountId &&
-    account.kind === "actor" &&
-    account.state === "active" &&
+    account.kind === 'actor' &&
+    account.state === 'active' &&
     account.fenced === false &&
     Number.isSafeInteger(viewer.authnEpoch) &&
     viewer.authnEpoch > 0 &&
     BigInt(viewer.authnEpoch) >= account.minimumAuthnEpoch &&
-    viewer.scopes.includes("collection:read")
+    viewer.scopes.includes('collection:read')
   );
 }
 
@@ -280,66 +245,40 @@ function disclose(
   account: Account | null,
   viewer: Actor,
 ): StoredCollection | null {
-  if (!row || row.state !== "active") return null;
-  if (row.visibility === "public" || row.visibility === "unlisted")
-    return allowed ? row : null;
-  if (
-    !allowed ||
-    !actor(viewer) ||
-    account === null ||
-    !grantCapable(account, viewer)
-  )
-    return null;
+  if (!row || row.state !== 'active') return null;
+  if (row.visibility === 'public' || row.visibility === 'unlisted') return allowed ? row : null;
+  if (!allowed || !actor(viewer) || account === null || !grantCapable(account, viewer)) return null;
   return row;
 }
 
-function pageRequest(
-  options: unknown,
-  allowed: readonly string[],
-): { limit: number; cursor: unknown } {
-  if (typeof options !== "object" || options === null || Array.isArray(options))
-    throw new TypeError("Page options must be an object");
+function pageRequest(options: unknown, allowed: readonly string[]): { limit: number; cursor: unknown } {
+  if (typeof options !== 'object' || options === null || Array.isArray(options))
+    throw new TypeError('Page options must be an object');
   const record = options as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (!allowed.includes(key))
-      throw new TypeError("Page options contain an unknown field");
+    if (!allowed.includes(key)) throw new TypeError('Page options contain an unknown field');
   }
   const limit = record.limit === undefined ? DEFAULT_PAGE_SIZE : record.limit;
-  if (
-    typeof limit !== "number" ||
-    !Number.isSafeInteger(limit) ||
-    limit < 1 ||
-    limit > MAX_PAGE_SIZE
-  )
-    throw new RangeError(
-      `Page limit must be an integer from 1 to ${MAX_PAGE_SIZE}`,
-    );
+  if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE_SIZE)
+    throw new RangeError(`Page limit must be an integer from 1 to ${MAX_PAGE_SIZE}`);
   return { limit, cursor: record.cursor };
 }
 
 function cursorToken(cursor: unknown): string | null {
   if (cursor === undefined || cursor === null) return null;
-  if (
-    typeof cursor !== "string" ||
-    cursor.length === 0 ||
-    cursor.length > MAX_CURSOR_LENGTH
-  )
-    throw invalidCursor();
+  if (typeof cursor !== 'string' || cursor.length === 0 || cursor.length > MAX_CURSOR_LENGTH) throw invalidCursor();
   return cursor;
 }
 
-async function readOnly<T>(
-  pool: Pool,
-  work: (client: PoolClient) => Promise<T>,
-): Promise<T> {
+async function readOnly<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   return withConnection(pool, async (client) => {
-    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
       const value = await work(client);
-      await client.query("COMMIT");
+      await client.query('COMMIT');
       return value;
     } catch (error) {
-      await client.query("ROLLBACK");
+      await client.query('ROLLBACK');
       throw error;
     }
   });
@@ -349,7 +288,7 @@ function readEligibility(route: number, id: string, sink: Sink) {
   const resource = Object.freeze({ route, id });
   return createResourcePublicEligibility({
     resource,
-    action: "collection:read",
+    action: 'collection:read',
     async prepare() {
       return { ready: true };
     },
@@ -359,9 +298,7 @@ function readEligibility(route: number, id: string, sink: Sink) {
         const row = await collectionRead.run(queryOf(client), { route, id });
         sink.seen = true;
         sink.row = row;
-        return (
-          row !== null && row.state === "active" && row.visibility !== "private"
-        );
+        return row !== null && row.state === 'active' && row.visibility !== 'private';
       } catch (error) {
         // Access fails closed on evidence errors. The owning read must still preserve an unavailable outcome.
         sink.failure = { error };
@@ -399,56 +336,36 @@ export function createCollectionReads(
   };
 
   /** Private definition read, independent of new meaning/execution admission and public metadata. */
-  async function readRule(
-    viewer: Actor,
-    id: string,
-    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
-  ) {
-    if (!actor(viewer)) throw new ProblemError("authentication_required");
+  async function readRule(viewer: Actor, id: string, deadline = deadlineFor(WORK_STEP_DEADLINE_MS)) {
+    if (!actor(viewer)) throw new ProblemError('authentication_required');
     const accountViewer = viewer;
     const route = routeOf(id);
     const accountRoute = routeOf(viewer.accountId);
     if (route === null || accountRoute === null) throw notFound();
-    const update = await accessCheck(
-      access,
-      viewer,
-      "collection:update",
-      { route, id },
-      { pool, deadline },
-    );
-    async function capture(
-      checks: readonly import("../request/access.ts").AccessCheck[] = [],
-      at?: AuthoritativeTime,
-    ) {
+    const update = await accessCheck(access, viewer, 'collection:update', { route, id }, { pool, deadline });
+    async function capture(checks: readonly import('../request/access.ts').AccessCheck[] = [], at?: AuthoritativeTime) {
       return readOnly(pool, async (connection) => {
         const client = deadlineClient(connection, deadline);
         const time = at ?? (await mintReadTime(client, dependencies.clock));
-        const account = await readAccount(
-          client,
-          accountRoute!,
-          accountViewer.accountId,
-        );
+        const account = await readAccount(client, accountRoute!, accountViewer.accountId);
         if (
           !account ||
-          account.kind !== "actor" ||
-          account.state !== "active" ||
+          account.kind !== 'actor' ||
+          account.state !== 'active' ||
           account.fenced ||
           !Number.isSafeInteger(accountViewer.authnEpoch) ||
           accountViewer.authnEpoch < 1 ||
           account.minimumAuthnEpoch > BigInt(accountViewer.authnEpoch)
         )
           throw notFound();
-        const row = await collectionRead.run(queryOf(client), {
-          route: route!,
-          id,
-        });
+        const row = await collectionRead.run(queryOf(client), { route: route!, id });
         // A broad management grant never grants another curator's personal predicates.
         if (
           !row ||
-          row.state !== "active" ||
+          row.state !== 'active' ||
           row.curatorAccountId !== accountViewer.accountId ||
-          row.membershipKind !== "dynamic" ||
-          !accountViewer.scopes.includes("collection:update") ||
+          row.membershipKind !== 'dynamic' ||
+          !accountViewer.scopes.includes('collection:update') ||
           !(await update(client, time))
         )
           throw notFound();
@@ -456,8 +373,7 @@ export function createCollectionReads(
         if (!rule) throw notFound();
         await authorizeCollectionRule(client, { time }, checks);
         const partition = await readPartition(client, partitionOf(route!));
-        if (!partition || partition.writeState !== "active")
-          throw new ProblemError("dependency_unavailable");
+        if (!partition || partition.writeState !== 'active') throw new ProblemError('dependency_unavailable');
         return {
           rule,
           time,
@@ -488,7 +404,7 @@ export function createCollectionReads(
       terminal.node !== original.node ||
       JSON.stringify(terminal.rule) !== JSON.stringify(original.rule)
     )
-      throw new ProblemError("dependency_unavailable");
+      throw new ProblemError('dependency_unavailable');
     return terminal.rule;
   }
 
@@ -498,49 +414,35 @@ export function createCollectionReads(
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
     observation?: { time: AuthoritativeTime; attempt?: CommandAttempt },
   ): Promise<StoredCollection | null> {
-    if (typeof id !== "string") return null;
+    if (typeof id !== 'string') return null;
     const route = routeOf(id);
     if (route === null) return null;
     const sink: Sink = { seen: false, row: null };
     const check = await accessCheck(
       access,
       viewer,
-      "collection:read",
+      'collection:read',
       { route, id, eligibility: readEligibility(route, id, sink) },
-      observation?.attempt
-        ? commandAccessContext({ pool, deadline }, observation.attempt)
-        : { pool, deadline },
+      observation?.attempt ? commandAccessContext({ pool, deadline }, observation.attempt) : { pool, deadline },
     );
     return readOnly(pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
       const account =
         actor(viewer) && routeOf(viewer.accountId) !== null
-          ? await readAccount(
-              client,
-              routeOf(viewer.accountId)!,
-              viewer.accountId,
-            )
+          ? await readAccount(client, routeOf(viewer.accountId)!, viewer.accountId)
           : null;
       const allowed = await check(client, observation?.time);
       if (sink.failure) throw sink.failure.error;
-      if (!sink.seen)
-        sink.row = await collectionRead.run(queryOf(client), { route, id });
+      if (!sink.seen) sink.row = await collectionRead.run(queryOf(client), { route, id });
       // Terminal owners cannot disclose private/unlisted payload or authorship, even before bounded work.
       if (sink.row?.curatorAccountId) {
         const curatorId = sink.row.curatorAccountId;
         const curatorRoute = routeOf(curatorId);
-        const curator =
-          curatorRoute === null
-            ? null
-            : await readAccount(client, curatorRoute, curatorId);
-        if (!curator || curator.state === "deleted") {
-          if (sink.row.visibility !== "public") return null;
-          if (sink.row.membershipKind === "dynamic") {
-            const output = await client.query(outputHeadForRetention.sql, [
-              route,
-              id,
-              sink.row.sourceGeneration,
-            ]);
+        const curator = curatorRoute === null ? null : await readAccount(client, curatorRoute, curatorId);
+        if (!curator || curator.state === 'deleted') {
+          if (sink.row.visibility !== 'public') return null;
+          if (sink.row.membershipKind === 'dynamic') {
+            const output = await client.query(outputHeadForRetention.sql, [route, id, sink.row.sourceGeneration]);
             if (!output.rows.length) return null;
           }
           sink.row = { ...sink.row, curatorAccountId: null };
@@ -567,24 +469,13 @@ export function createCollectionReads(
     viewer: Actor,
     id: string,
     deadline: number,
-    read: (
-      client: QueryClient,
-      row: StoredCollection,
-      account: Account,
-    ) => Promise<T>,
+    read: (client: QueryClient, row: StoredCollection, account: Account) => Promise<T>,
   ): Promise<T> {
-    if (!actor(viewer) || !viewer.scopes.includes("collection:update"))
-      throw notFound();
+    if (!actor(viewer) || !viewer.scopes.includes('collection:update')) throw notFound();
     const route = routeOf(id);
     const accountRoute = routeOf(viewer.accountId);
     if (route === null || accountRoute === null) throw notFound();
-    const check = await accessCheck(
-      access,
-      viewer,
-      "collection:update",
-      { route, id },
-      { pool, deadline },
-    );
+    const check = await accessCheck(access, viewer, 'collection:update', { route, id }, { pool, deadline });
     return readOnly(pool, async (connection) => {
       const client = deadlineClient(connection, deadline);
       const time = await mintReadTime(client, dependencies.clock);
@@ -594,7 +485,7 @@ export function createCollectionReads(
         !account ||
         !grantCapable(account, viewer) ||
         !row ||
-        row.state !== "active" ||
+        row.state !== 'active' ||
         row.curatorAccountId !== viewer.accountId ||
         !(await check(client, time))
       )
@@ -603,27 +494,14 @@ export function createCollectionReads(
     });
   }
 
-  function metadataHistoryBinding(
-    id: string,
-    viewer: AccountActor,
-    limit: number,
-  ): CursorBinding {
+  function metadataHistoryBinding(id: string, viewer: AccountActor, limit: number): CursorBinding {
     return {
-      operation: "library.collection.metadata-history",
-      parameters: {
-        collectionId: id,
-        curatorAccountId: viewer.accountId,
-        authnEpoch: viewer.authnEpoch,
-        limit,
-      },
+      operation: 'library.collection.metadata-history',
+      parameters: { collectionId: id, curatorAccountId: viewer.accountId, authnEpoch: viewer.authnEpoch, limit },
     };
   }
 
-  function historyBasis(
-    row: StoredCollection,
-    viewer: AccountActor,
-    account: Account,
-  ): CollectionMetadataHistoryBasis {
+  function historyBasis(row: StoredCollection, viewer: AccountActor, account: Account): CollectionMetadataHistoryBasis {
     if (row.curatorAccountId === null) throw notFound();
     return {
       collectionRevision: row.revision,
@@ -642,12 +520,8 @@ export function createCollectionReads(
   ): Promise<CollectionMetadataHistoryPage> {
     if (!actor(viewer)) throw notFound();
     const limit = options.limit ?? COLLECTION_METADATA_HISTORY_PAGE_SIZE;
-    if (
-      !Number.isSafeInteger(limit) ||
-      limit < 1 ||
-      limit > COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE
-    )
-      throw new ProblemError("invalid_request");
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE)
+      throw new ProblemError('invalid_request');
     const cursor = options.cursor ?? null;
     const binding = metadataHistoryBinding(id, viewer, limit);
     let afterRevision: number | null = null;
@@ -659,61 +533,55 @@ export function createCollectionReads(
       if (
         !decoded.ok ||
         decoded.after.length !== 2 ||
-        typeof decoded.after[0] !== "number" ||
-        typeof decoded.after[1] !== "string"
+        typeof decoded.after[0] !== 'number' ||
+        typeof decoded.after[1] !== 'string'
       )
         throw invalidCursor();
       cursorEpoch = decoded.epoch;
       afterRevision = decoded.after[0];
       cursorLifetime = decoded.after[1];
     }
-    return withCurrentMetadataOwner(
-      viewer,
-      id,
-      deadline,
-      async (client, row, account) => {
-        if (
-          cursorEpoch !== null &&
-          (cursorEpoch !== row.revision ||
-            cursorLifetime !== account.minimumAuthnEpoch.toString())
-        )
-          throw new ProblemError("stale_cursor");
-        const route = routeOf(id)!;
-        const coverage = await readCollectionMetadataHistoryState(client, {
-          route,
-          collectionId: id,
-          curatorAccountId: viewer.accountId,
-        });
-        const rows = await pageCollectionMetadataHistory(client, {
-          route,
-          collectionId: id,
-          curatorAccountId: viewer.accountId,
-          afterRevision,
-          limit: limit + 1,
-        });
-        const hasMore = rows.length > limit;
-        const items = rows.slice(0, limit).map((change) => ({
-          revision: change.revision,
-          recordedAt: new Date(change.recordedAt).toISOString(),
-          changedFields: collectionMetadataHistoryFields(change.changedFields),
-        }));
-        const last = items.at(-1);
-        return {
-          collectionId: id,
-          basis: historyBasis(row, viewer, account),
-          coverage,
-          items,
-          next:
-            hasMore && last
-              ? encodeCursor(tokens, binding, {
-                  epoch: row.revision,
-                  after: [last.revision, account.minimumAuthnEpoch.toString()],
-                })
-              : null,
-          actions: { review: true, reapply: false },
-        };
-      },
-    );
+    return withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+      if (
+        cursorEpoch !== null &&
+        (cursorEpoch !== row.revision || cursorLifetime !== account.minimumAuthnEpoch.toString())
+      )
+        throw new ProblemError('stale_cursor');
+      const route = routeOf(id)!;
+      const coverage = await readCollectionMetadataHistoryState(client, {
+        route,
+        collectionId: id,
+        curatorAccountId: viewer.accountId,
+      });
+      const rows = await pageCollectionMetadataHistory(client, {
+        route,
+        collectionId: id,
+        curatorAccountId: viewer.accountId,
+        afterRevision,
+        limit: limit + 1,
+      });
+      const hasMore = rows.length > limit;
+      const items = rows.slice(0, limit).map((change) => ({
+        revision: change.revision,
+        recordedAt: new Date(change.recordedAt).toISOString(),
+        changedFields: collectionMetadataHistoryFields(change.changedFields),
+      }));
+      const last = items.at(-1);
+      return {
+        collectionId: id,
+        basis: historyBasis(row, viewer, account),
+        coverage,
+        items,
+        next:
+          hasMore && last
+            ? encodeCursor(tokens, binding, {
+                epoch: row.revision,
+                after: [last.revision, account.minimumAuthnEpoch.toString()],
+              })
+            : null,
+        actions: { review: true, reapply: false },
+      };
+    });
   }
 
   async function readCollectionMetadataHistoryChange(
@@ -722,91 +590,52 @@ export function createCollectionReads(
     revision: number,
     deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
   ): Promise<CollectionMetadataHistoryDetail> {
-    if (!Number.isSafeInteger(revision) || revision < 2)
-      throw new ProblemError("invalid_request");
+    if (!Number.isSafeInteger(revision) || revision < 2) throw new ProblemError('invalid_request');
     if (!actor(viewer)) throw notFound();
     const route = routeOf(id);
     if (route === null) throw notFound();
-    const first = await withCurrentMetadataOwner(
-      viewer,
-      id,
-      deadline,
-      async (client, row, account) => {
-        const change = await readCollectionMetadataHistoryEntry(client, {
-          route,
-          collectionId: id,
-          curatorAccountId: viewer.accountId,
-          revision,
-        });
-        if (!change) throw notFound();
-        return {
-          basis: historyBasis(row, viewer, account),
-          change: collectionMetadataHistoryEntry(change),
-        };
-      },
-    );
+    const first = await withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+      const change = await readCollectionMetadataHistoryEntry(client, {
+        route,
+        collectionId: id,
+        curatorAccountId: viewer.accountId,
+        revision,
+      });
+      if (!change) throw notFound();
+      return { basis: historyBasis(row, viewer, account), change: collectionMetadataHistoryEntry(change) };
+    });
     const mediaIds = [
       ...new Set(
-        [
-          first.change.before.coverMediaId,
-          first.change.after.coverMediaId,
-        ].filter((value): value is string => value !== null),
+        [first.change.before.coverMediaId, first.change.after.coverMediaId].filter(
+          (value): value is string => value !== null,
+        ),
       ),
     ];
-    const covers = new Map<
-      string,
-      Awaited<ReturnType<typeof readablePresentationCover>>
-    >();
+    const covers = new Map<string, Awaited<ReturnType<typeof readablePresentationCover>>>();
     await Promise.all(
       mediaIds.map(async (mediaId) => {
-        covers.set(
-          mediaId,
-          await readablePresentationCover(
-            dependencies,
-            viewer,
-            mediaId,
-            deadline,
-          ),
-        );
+        covers.set(mediaId, await readablePresentationCover(dependencies, viewer, mediaId, deadline));
       }),
     );
-    const final = await withCurrentMetadataOwner(
-      viewer,
-      id,
-      deadline,
-      async (client, row, account) => {
-        const change = await readCollectionMetadataHistoryEntry(client, {
-          route,
-          collectionId: id,
-          curatorAccountId: viewer.accountId,
-          revision,
-        });
-        if (!change) throw new ProblemError("dependency_unavailable");
-        return {
-          basis: historyBasis(row, viewer, account),
-          change: collectionMetadataHistoryEntry(change),
-        };
-      },
-    );
-    if (JSON.stringify(first) !== JSON.stringify(final))
-      throw new ProblemError("dependency_unavailable");
-    const present = (
-      snapshot: typeof first.change.before,
-    ): CollectionMetadataHistorySnapshot => {
-      const summary =
-        snapshot.coverMediaId === null
-          ? null
-          : (covers.get(snapshot.coverMediaId) ?? null);
+    const final = await withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+      const change = await readCollectionMetadataHistoryEntry(client, {
+        route,
+        collectionId: id,
+        curatorAccountId: viewer.accountId,
+        revision,
+      });
+      if (!change) throw new ProblemError('dependency_unavailable');
+      return { basis: historyBasis(row, viewer, account), change: collectionMetadataHistoryEntry(change) };
+    });
+    if (JSON.stringify(first) !== JSON.stringify(final)) throw new ProblemError('dependency_unavailable');
+    const present = (snapshot: typeof first.change.before): CollectionMetadataHistorySnapshot => {
+      const summary = snapshot.coverMediaId === null ? null : (covers.get(snapshot.coverMediaId) ?? null);
       const cover =
         snapshot.coverMediaId === null
-          ? { state: "none" as const }
+          ? { state: 'none' as const }
           : summary
-            ? {
-                state: "available" as const,
-                mediaId: snapshot.coverMediaId,
-                summary,
-              }
-            : { state: "unavailable" as const };
+            ? { state: 'available' as const, mediaId: snapshot.coverMediaId, summary }
+            : { state: 'unavailable' as const };
       return {
         title: snapshot.title,
         description: snapshot.description,
@@ -838,29 +667,22 @@ export function createCollectionReads(
     const cover =
       row.coverMediaId === null
         ? null
-        : await readablePresentationCover(
-            dependencies,
-            viewer,
-            row.coverMediaId,
-            deadline,
-          );
+        : await readablePresentationCover(dependencies, viewer, row.coverMediaId, deadline);
     let editor = false;
     if (
       row.coverMediaId !== null &&
-      viewer.kind === "account" &&
+      viewer.kind === 'account' &&
       viewer.accountId === row.curatorAccountId &&
-      viewer.scopes.includes("collection:update")
+      viewer.scopes.includes('collection:update')
     ) {
       const check = await accessCheck(
         access,
         viewer,
-        "collection:update",
+        'collection:update',
         { route: routeOf(row.id)!, id: row.id },
         { pool, deadline },
       );
-      editor = await withConnection(pool, (client) =>
-        check(deadlineClient(client, deadline)),
-      );
+      editor = await withConnection(pool, (client) => check(deadlineClient(client, deadline)));
     }
     if (row.coverMediaId !== null) {
       const final = await loadCollection(viewer, row.id, deadline);
@@ -871,52 +693,33 @@ export function createCollectionReads(
         final.coverMediaId !== row.coverMediaId ||
         final.presentationKind !== row.presentationKind
       )
-        throw new ProblemError("dependency_unavailable");
+        throw new ProblemError('dependency_unavailable');
     }
     return {
       ...collectionView(row),
       ...collectionPresentation(row, cover),
-      ...(editor && row.coverMediaId !== null
-        ? { coverMediaId: row.coverMediaId }
-        : {}),
+      ...(editor && row.coverMediaId !== null ? { coverMediaId: row.coverMediaId } : {}),
     };
   }
 
-  async function seesAll(
-    viewer: Actor,
-    curatorAccountId: string,
-  ): Promise<boolean> {
-    if (
-      !actor(viewer) ||
-      viewer.accountId !== curatorAccountId ||
-      !viewer.scopes.includes("collection:read")
-    )
+  async function seesAll(viewer: Actor, curatorAccountId: string): Promise<boolean> {
+    if (!actor(viewer) || viewer.accountId !== curatorAccountId || !viewer.scopes.includes('collection:read'))
       return false;
     const route = routeOf(viewer.accountId);
     if (route === null) return false;
-    const account = await withConnection(pool, (client) =>
-      readAccount(client, route, viewer.accountId),
-    );
+    const account = await withConnection(pool, (client) => readAccount(client, route, viewer.accountId));
     return account !== null && grantCapable(account, viewer);
   }
 
-  function unseal(
-    token: string | null,
-    binding: CursorBinding,
-  ): { epoch: number; after: CursorKey[] } | null {
+  function unseal(token: string | null, binding: CursorBinding): { epoch: number; after: CursorKey[] } | null {
     if (token === null) return null;
     const decoded = decodeCursor(tokens, binding, token);
     if (!decoded.ok) throw invalidCursor();
     return { epoch: decoded.epoch, after: decoded.after };
   }
 
-  function listCollections(
-    viewer: Actor,
-    options: CuratorPageOptions,
-    preview?: { deadline: number },
-  ) {
-    if (preview && (options.limit ?? DEFAULT_PAGE_SIZE) > 20)
-      throw new ProblemError("invalid_request");
+  function listCollections(viewer: Actor, options: CuratorPageOptions, preview?: { deadline: number }) {
+    if (preview && (options.limit ?? DEFAULT_PAGE_SIZE) > 20) throw new ProblemError('invalid_request');
     return listCuratorPage(viewer, options, false, preview);
   }
 
@@ -931,51 +734,41 @@ export function createCollectionReads(
     publicOnly: boolean,
     preview?: { deadline: number },
   ): Promise<{ collections: CollectionResourceView[]; next: string | null }> {
-    const page = pageRequest(options, ["curatorAccountId", "cursor", "limit"]);
+    const page = pageRequest(options, ['curatorAccountId', 'cursor', 'limit']);
     const curatorAccountId = options.curatorAccountId;
-    if (typeof curatorAccountId !== "string")
-      throw new TypeError("Collection list options need a curator account id");
+    if (typeof curatorAccountId !== 'string') throw new TypeError('Collection list options need a curator account id');
     const route = routeOf(curatorAccountId);
     if (route === null) throw notFound();
     // Presentation visibility is read before opening the page transaction. A visible account path
     // needs no private account read; only a hidden view needs the existing curator exception.
     const publicViews = await readPublicViews(pool, [curatorAccountId]);
     const visible = publicViews.get(curatorAccountId)?.collections === true;
-    const curator =
-      (!publicOnly || !visible) && (await seesAll(viewer, curatorAccountId));
+    const curator = (!publicOnly || !visible) && (await seesAll(viewer, curatorAccountId));
     const fullView = !publicOnly && curator;
     const binding: CursorBinding = {
-      operation: publicOnly
-        ? "library.account.collections"
-        : "library.collection.list",
+      operation: publicOnly ? 'library.account.collections' : 'library.collection.list',
       parameters: { curatorAccountId, fullView },
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
-    const builtinCursor = cursor?.after[0] === "builtin";
+    const builtinCursor = cursor?.after[0] === 'builtin';
     if (
       builtinCursor &&
-      (cursor.after.length !== 2 ||
-        typeof cursor.after[1] !== "string" ||
-        routeOf(cursor.after[1]) !== route)
+      (cursor.after.length !== 2 || typeof cursor.after[1] !== 'string' || routeOf(cursor.after[1]) !== route)
     )
       throw invalidCursor();
     const after = builtinCursor ? null : listPosition(cursor, route);
     if (!visible && !curator) return { collections: [], next: null };
     const logical =
       fullView && (cursor === null || builtinCursor)
-        ? await builtins.discover(
-            viewer,
-            builtinCursor ? String(cursor.after[1]) : null,
-            page.limit + 1,
-          )
+        ? await builtins.discover(viewer, builtinCursor ? String(cursor.after[1]) : null, page.limit + 1)
         : [];
     const shownLogical = logical.slice(0, page.limit);
     const remaining = page.limit - shownLogical.length;
     const result = await readOnly(pool, async (client) => {
       const partition = await readPartition(client, partitionOf(route));
       if (cursor && cursor.epoch !== partition?.epoch) {
-        if (!partition) throw new ProblemError("partition_unavailable");
-        throw new ProblemError("stale_cursor");
+        if (!partition) throw new ProblemError('partition_unavailable');
+        throw new ProblemError('stale_cursor');
       }
       const statement = fullView ? curatorPage : curatorPublicPage;
       const rows = await statement.run(queryOf(client), {
@@ -988,8 +781,7 @@ export function createCollectionReads(
       });
       const hasMore = rows.length > remaining;
       const shown = rows.slice(0, remaining);
-      if (hasMore && !partition)
-        throw new ProblemError("partition_unavailable");
+      if (hasMore && !partition) throw new ProblemError('partition_unavailable');
       const last = shown.at(-1);
       const exact = last?.updatedAtExact;
       return {
@@ -998,19 +790,18 @@ export function createCollectionReads(
           logical.length > shownLogical.length && partition
             ? encodeCursor(tokens, binding, {
                 epoch: partition.epoch,
-                after: ["builtin", shownLogical.at(-1)!.id],
+                after: ['builtin', shownLogical.at(-1)!.id],
               })
             : hasMore && partition
               ? encodeCursor(tokens, binding, {
                   epoch: partition.epoch,
-                  after: last && exact ? [exact, last.id] : ["curated"],
+                  after: last && exact ? [exact, last.id] : ['curated'],
                 })
               : null,
       };
     });
     const collections: CollectionResourceView[] = [...shownLogical];
-    for (const row of result.collections)
-      collections.push(await present(viewer, row));
+    for (const row of result.collections) collections.push(await present(viewer, row));
     if (preview) {
       const previews = await readCollectionPreviews(
         dependencies,
@@ -1018,28 +809,23 @@ export function createCollectionReads(
         result.collections,
         preview.deadline,
         async (parent) => {
-          const current = await loadCollection(
-            viewer,
-            parent.id,
-            preview.deadline,
-          );
+          const current = await loadCollection(viewer, parent.id, preview.deadline);
           if (!current) throw notFound();
           if (
             current.revision !== parent.revision ||
             current.sourceGeneration !== parent.sourceGeneration ||
             current.membershipKind !== parent.membershipKind
           )
-            throw new ProblemError("dependency_unavailable");
+            throw new ProblemError('dependency_unavailable');
         },
-        (previews) =>
-          retainPreview(viewer, result.collections, previews, preview.deadline),
+        (previews) => retainPreview(viewer, result.collections, previews, preview.deadline),
       );
       for (const collection of collections)
         Object.assign(
           collection,
           previews.get(collection.id) ?? {
             previewMembers: [],
-            previewStatus: "pending",
+            previewStatus: 'pending',
           },
         );
     }
@@ -1053,27 +839,14 @@ export function createCollectionReads(
     options: CollectionMemberQuery = {},
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
   ) {
-    pageRequest(options, ["cursor", "limit", "filter", "sort", "view"]);
-    const logical = await builtins.read(
-      viewer,
-      collectionId,
-      "collection:read",
-      deadline,
-    );
-    const collection = logical
-      ? null
-      : await loadCollection(viewer, collectionId, deadline);
+    pageRequest(options, ['cursor', 'limit', 'filter', 'sort', 'view']);
+    const logical = await builtins.read(viewer, collectionId, 'collection:read', deadline);
+    const collection = logical ? null : await loadCollection(viewer, collectionId, deadline);
     if (!logical && !collection) throw notFound();
-    if (collection?.membershipKind === "dynamic")
-      return readDynamicMembers(viewer, collection, options, deadline);
+    if (collection?.membershipKind === 'dynamic') return readDynamicMembers(viewer, collection, options, deadline);
     if (options.filter !== undefined || options.sort !== undefined) {
       if (logical) {
-        const admission = await admitCollectionMemberQuery(
-          dependencies,
-          viewer,
-          options,
-          deadline,
-        );
+        const admission = await admitCollectionMemberQuery(dependencies, viewer, options, deadline);
         if (!admission.filter || !admission.releaseDigest)
           return builtins.members(viewer, collectionId, {
             ...options,
@@ -1088,13 +861,7 @@ export function createCollectionReads(
           },
         });
       }
-      return readOwnerFilterPage(
-        dependencies,
-        viewer,
-        collectionId,
-        options,
-        deadline,
-      );
+      return readOwnerFilterPage(dependencies, viewer, collectionId, options, deadline);
     }
     const page = {
       ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
@@ -1230,26 +997,19 @@ export function createCollectionReads(
         current.visibility !== collection.visibility ||
         current.curatorAccountId !== collection.curatorAccountId
       )
-        throw new ProblemError("stale_cursor");
+        throw new ProblemError('stale_cursor');
     };
     if (
-      collection.visibility !== "private" &&
-      !(
-        options.filter !== undefined &&
-        viewer.kind === "account" &&
-        viewer.accountId === collection.curatorAccountId
-      )
+      collection.visibility !== 'private' &&
+      !(options.filter !== undefined && viewer.kind === 'account' && viewer.accountId === collection.curatorAccountId)
     ) {
       // Explicit COMPLETE output is the entire public read authority. Never load the curator's rule here.
-      if (
-        options.filter !== undefined ||
-        (options.sort !== undefined && options.sort !== "id")
-      )
-        throw new ProblemError("unsupported_query");
+      if (options.filter !== undefined || (options.sort !== undefined && options.sort !== 'id'))
+        throw new ProblemError('unsupported_query');
       return readCollectionSourceMembers(dependencies, {
         actor: viewer,
         collectionId,
-        scope: "activated_output",
+        scope: 'activated_output',
         limit: options.limit ?? DEFAULT_PAGE_SIZE,
         ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
         ...(options.view === undefined ? {} : { view: options.view }),
@@ -1264,49 +1024,31 @@ export function createCollectionReads(
     // An explicit admitted owner query selects the private working graph even after public activation.
     // A management grant is insufficient to execute another curator's private predicates.
     if (
-      viewer.kind !== "account" ||
+      viewer.kind !== 'account' ||
       viewer.accountId !== collection.curatorAccountId ||
       routeOf(viewer.accountId) !== route
     )
       throw notFound();
-    const saved = await readOnly(pool, (client) =>
-      readSavedCollectionRule(client, route, collectionId),
-    );
-    if (!saved) throw new ProblemError("dependency_unavailable");
-    if (
-      saved.collectionRevision !== collection.revision ||
-      saved.sourceGeneration !== collection.sourceGeneration
-    )
-      throw new ProblemError("stale_cursor");
-    const admission = await admitSavedCollectionMemberQuery(
-      dependencies,
-      viewer,
-      saved,
-      options,
-      deadline,
-    );
-    const bound = await bindOwnerFilterRead(
-      dependencies,
-      viewer,
-      collectionId,
-      admission,
-      deadline,
-    );
-    if (bound.status !== "bound")
-      throw new ProblemError("dependency_unavailable");
+    const saved = await readOnly(pool, (client) => readSavedCollectionRule(client, route, collectionId));
+    if (!saved) throw new ProblemError('dependency_unavailable');
+    if (saved.collectionRevision !== collection.revision || saved.sourceGeneration !== collection.sourceGeneration)
+      throw new ProblemError('stale_cursor');
+    const admission = await admitSavedCollectionMemberQuery(dependencies, viewer, saved, options, deadline);
+    const bound = await bindOwnerFilterRead(dependencies, viewer, collectionId, admission, deadline);
+    if (bound.status !== 'bound') throw new ProblemError('dependency_unavailable');
     const { binding } = bound;
     try {
       if (
         binding.input.actor !== viewer ||
         binding.input.collectionId !== collectionId ||
         binding.input.deadline > deadline ||
-        binding.scope.key.source.kind !== "library" ||
-        binding.scope.key.source.identity.scope !== "private_builtin" ||
+        binding.scope.key.source.kind !== 'library' ||
+        binding.scope.key.source.identity.scope !== 'private_builtin' ||
         binding.scope.key.source.identity.accountId !== viewer.accountId ||
         binding.scope.key.source.identity.route !== route ||
         binding.scope.key.source.identity.generation !== saved.sourceGeneration
       )
-        throw new ProblemError("dependency_unavailable");
+        throw new ProblemError('dependency_unavailable');
       const authorize = async (time: AuthoritativeTime) => {
         const checks = await prepareCollectionRuleAuthority(
           dependencies,
@@ -1315,18 +1057,11 @@ export function createCollectionReads(
           { time, read: true },
           deadline,
         );
-        await readOnly(pool, (client) =>
-          authorizeCollectionRule(client, { time }, checks),
-        );
+        await readOnly(pool, (client) => authorizeCollectionRule(client, { time }, checks));
         await revalidate();
       };
       await authorize(binding.input.at);
-      const result = await readBoundOwnerFilterPage(
-        dependencies,
-        admission,
-        options,
-        binding,
-      );
+      const result = await readBoundOwnerFilterPage(dependencies, admission, options, binding);
       const finalTime = await withConnection(pool, (client) =>
         mintReadTime(deadlineClient(client, deadline), dependencies.clock),
       );
@@ -1343,10 +1078,10 @@ export function createCollectionReads(
 
   /** Sitemap timestamps belong to stored metadata, never to the public dynamic Collection DTO. */
   async function readSitemapCollection(collectionId: string, deadline: number) {
-    const viewer = { kind: "anonymous" } as const;
+    const viewer = { kind: 'anonymous' } as const;
     const collection = await loadCollection(viewer, collectionId, deadline);
-    if (!collection || collection.visibility !== "public") throw notFound();
-    if (collection.membershipKind === "dynamic") {
+    if (!collection || collection.visibility !== 'public') throw notFound();
+    if (collection.membershipKind === 'dynamic') {
       // Prove an actual selected output through the ordinary Source reader, including genuine empty output.
       await readDynamicMembers(viewer, collection, { limit: 1 }, deadline);
     }
@@ -1360,21 +1095,16 @@ export function createCollectionReads(
     options: { cursor?: string | null; limit?: number } = {},
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
   ): Promise<{ members: MemberView[]; next: string | null }> {
-    const page = pageRequest(options, ["cursor", "limit"]);
+    const page = pageRequest(options, ['cursor', 'limit']);
     const collection = await loadCollection(viewer, collectionId, deadline);
     if (!collection) throw notFound();
-    if (collection.membershipKind === "dynamic")
-      throw new ProblemError("unsupported_query");
+    if (collection.membershipKind === 'dynamic') throw new ProblemError('unsupported_query');
     const route = routeOf(collectionId)!;
     const binding: CursorBinding = {
-      operation: "library.collection.members",
+      operation: 'library.collection.members',
       parameters: { collectionId },
     };
-    const position = memberPosition(
-      unseal(cursorToken(page.cursor), binding),
-      route,
-      collection.orderEpoch,
-    );
+    const position = memberPosition(unseal(cursorToken(page.cursor), binding), route, collection.orderEpoch);
     const rows = await readOnly(pool, (client) =>
       memberPage.run(queryOf(client), {
         route,
@@ -1398,9 +1128,7 @@ export function createCollectionReads(
     );
     const last = considered.at(-1);
     return {
-      members: considered
-        .filter((row) => readable.has(row.subjectId))
-        .map(memberView),
+      members: considered.filter((row) => readable.has(row.subjectId)).map(memberView),
       next:
         hasMore && last
           ? encodeCursor(tokens, binding, {
@@ -1421,12 +1149,8 @@ export function createCollectionReads(
     count: { value: number; exact: true };
     next: string | null;
   }> {
-    const page = pageRequest(options, ["cursor", "limit"]);
-    if (
-      typeof subjectId !== "string" ||
-      (await resolveSubject(anchors, viewer, subjectId)) === null
-    )
-      throw notFound();
+    const page = pageRequest(options, ['cursor', 'limit']);
+    if (typeof subjectId !== 'string' || (await resolveSubject(anchors, viewer, subjectId)) === null) throw notFound();
     const route = routeOf(subjectId)!;
     const counts = await listingCounts.run(pool, {
       partition_no: partitionOf(route),
@@ -1434,24 +1158,17 @@ export function createCollectionReads(
     });
     const count = counts[0]?.publicCollectionCount ?? 0;
     const binding: CursorBinding = {
-      operation: "library.subject.collections",
+      operation: 'library.subject.collections',
       parameters: { subjectId },
     };
     const cursor = unseal(cursorToken(page.cursor), binding);
     const after = subjectPosition(cursor);
-    const partition = await withConnection(pool, (client) =>
-      readPartition(client, partitionOf(route)),
-    );
+    const partition = await withConnection(pool, (client) => readPartition(client, partitionOf(route)));
     if (cursor && cursor.epoch !== partition?.epoch) {
-      if (!partition) throw new ProblemError("partition_unavailable");
-      throw new ProblemError("stale_cursor");
+      if (!partition) throw new ProblemError('partition_unavailable');
+      throw new ProblemError('stale_cursor');
     }
-    const pairs = await subjectCollections(
-      pool,
-      subjectId,
-      after,
-      page.limit + 1,
-    );
+    const pairs = await subjectCollections(pool, subjectId, after, page.limit + 1);
     const considered = pairs.slice(0, page.limit);
     const shown: PublicCollectionView[] = [];
     if (considered.length > 0) {
@@ -1462,8 +1179,8 @@ export function createCollectionReads(
             id: pair.collectionId,
           });
           // Publication is eventual. A detected withdrawn positive cannot certify an exact count.
-          if (!row || row.state !== "active" || row.visibility !== "public")
-            throw new ProblemError("dependency_unavailable");
+          if (!row || row.state !== 'active' || row.visibility !== 'public')
+            throw new ProblemError('dependency_unavailable');
           if (row.curatorAccountId !== null) {
             const views = await readPublicViews(client, [row.curatorAccountId]);
             if (views.get(row.curatorAccountId)?.collections !== true) continue;
@@ -1478,7 +1195,7 @@ export function createCollectionReads(
       });
     }
     const hasMore = pairs.length > page.limit;
-    if (hasMore && !partition) throw new ProblemError("partition_unavailable");
+    if (hasMore && !partition) throw new ProblemError('partition_unavailable');
     const last = considered.at(-1);
     return {
       collections: shown,
@@ -1498,16 +1215,12 @@ function listPosition(
   cursor: { epoch: number; after: CursorKey[] } | null,
   route: number,
 ): { updatedAt: string; id: string } | null {
-  if (
-    cursor === null ||
-    (cursor.after.length === 1 && cursor.after[0] === "curated")
-  )
-    return null;
+  if (cursor === null || (cursor.after.length === 1 && cursor.after[0] === 'curated')) return null;
   const [updatedAt, id] = cursor.after;
   if (
     cursor.after.length !== 2 ||
-    typeof updatedAt !== "string" ||
-    typeof id !== "string" ||
+    typeof updatedAt !== 'string' ||
+    typeof id !== 'string' ||
     !UPDATED_AT_EXACT.test(updatedAt) ||
     !Number.isFinite(Date.parse(updatedAt)) ||
     routeOf(id) !== route
@@ -1525,50 +1238,39 @@ function memberPosition(
   const [ordinalKey, memberId] = cursor.after;
   if (
     cursor.after.length !== 2 ||
-    typeof ordinalKey !== "string" ||
-    typeof memberId !== "string" ||
+    typeof ordinalKey !== 'string' ||
+    typeof memberId !== 'string' ||
     !isOrdinalKey(ordinalKey) ||
     routeOf(memberId) !== route
   )
     throw invalidCursor();
-  if (
-    !Number.isSafeInteger(orderEpoch) ||
-    orderEpoch < 0 ||
-    cursor.epoch !== orderEpoch + 1
-  )
-    throw new ProblemError("stale_cursor");
+  if (!Number.isSafeInteger(orderEpoch) || orderEpoch < 0 || cursor.epoch !== orderEpoch + 1)
+    throw new ProblemError('stale_cursor');
   return { ordinalKey, memberId };
 }
 
-function subjectPosition(
-  cursor: { epoch: number; after: CursorKey[] } | null,
-): string | null {
+function subjectPosition(cursor: { epoch: number; after: CursorKey[] } | null): string | null {
   if (cursor === null) return null;
   const [collectionId] = cursor.after;
-  if (
-    cursor.after.length !== 1 ||
-    typeof collectionId !== "string" ||
-    routeOf(collectionId) === null
-  )
+  if (cursor.after.length !== 1 || typeof collectionId !== 'string' || routeOf(collectionId) === null)
     throw invalidCursor();
   return collectionId;
 }
 
 /** Batch form of the ordinary Collection read's public eligibility. Only the
  * requested full keys are examined; private rows remain available to Access grants. */
-export const collectionViewerActionResource: import("../access/viewer-actions.ts").ViewerActionResource =
-  {
-    readAction: "collection:read",
-    async read(client, ids) {
-      const result = await client.query<{ id: string; public: boolean }>(
-        `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
+export const collectionViewerActionResource: import('../access/viewer-actions.ts').ViewerActionResource = {
+  readAction: 'collection:read',
+  async read(client, ids) {
+    const result = await client.query<{ id: string; public: boolean }>(
+      `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
        CROSS JOIN LATERAL (
          SELECT collection_id AS id, state = 'active' AND visibility <> 'private' AS public
          FROM library.collection WHERE route = wanted.route AND collection_id = wanted.id
          ORDER BY route, collection_id LIMIT 1
        ) row`,
-        [ids.map((id) => routeOf(id)!), ids],
-      );
-      return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
-    },
-  };
+      [ids.map((id) => routeOf(id)!), ids],
+    );
+    return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
+  },
+};
