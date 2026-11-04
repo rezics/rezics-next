@@ -25,7 +25,7 @@ function conflictStages(root: string, file: string, base: string, dev: string, t
   expect(staged.status).toBe(0);
 }
 
-test('a Markdown union that retains a line deleted by the task is returned to the worker', () => {
+test('mechanical Markdown union rejects task-deleted lines so the train can resolve them', () => {
   const h = integrationHarness();
   try {
     const file = '.temp/deleted-union.md';
@@ -86,33 +86,39 @@ test('a conflicting JSON message replacement remains unresolved for the worker',
   }
 });
 
-test('a train resolves the Markdown task-deletion union without starting another worker attempt', async () => {
+test('a merge-stage Markdown union with task-deleted lines reaches the resolver and lands', async () => {
   const h = integrationHarness();
   try {
+    const base = 'before\nold permission\nafter\n';
+    const worker = 'before\nnew permission\nafter\n';
+    const devContent = 'before\nold permission\ndev note\nafter\n';
+    const resolved = 'before\nnew permission\ndev note\nafter\n';
+    writeFileSync(join(h.root, 'README.md'), base);
+    git(h.root, 'add', '--', 'README.md');
+    git(h.root, 'commit', '-m', 'Seed Markdown deletion resolver fixture');
     h.ensureDev();
     h.settings.integration.devLandingChecks = false;
     const task = h.dispatch('README.md');
     writeFileSync(
       join(task.worktree, '.temp/worker-plan.json'),
-      JSON.stringify({ file: 'README.md', content: 'Updated fixture\n' }),
+      JSON.stringify({ file: 'README.md', content: worker }),
     );
     await h.start(task);
-    const dev = h.advanceDev('README.md', 'Fixture\nDev note\n');
+    const dev = h.advanceDev('README.md', devContent);
 
     const adapter = {
       ...agentAdapter('codex'),
       start(options: Parameters<ReturnType<typeof agentAdapter>['start']>[0]): [string, string[]] {
         const data = JSON.parse(options.prompt.split('\nDATA:\n')[1]!);
         expect(data.sourceContract).toContain('goal: fixture');
-        expect(data.files[0]).toMatchObject({
-          path: 'README.md',
-          base: 'Fixture\n',
-          target: 'Fixture\nDev note\n',
-          source: 'Updated fixture\n',
-        });
+        expect(options.prompt).toContain('git show :1:<path>');
+        expect(data.files[0].path).toBe('README.md');
+        expect(data.files[0].conflictHunks).toContain('old permission');
+        expect(data.files[0].conflictHunks).toContain('new permission');
+        expect(data.files[0].conflictHunks).toContain('dev note');
         return [
           process.execPath,
-          ['-e', `require('node:fs').writeFileSync('README.md', 'Updated fixture\\nDev note\\n')`],
+          ['-e', `require('node:fs').writeFileSync('README.md', ${JSON.stringify(resolved)})`],
         ];
       },
     };
@@ -139,7 +145,7 @@ test('a train resolves the Markdown task-deletion union without starting another
     expect(readFileSync(outcome.logPath, 'utf8')).toContain('Dev landing conflict method=resolver');
     expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
     expect(h.head('dev')).not.toBe(dev);
-    expect(git(h.root, 'show', 'dev:README.md')).toBe('Updated fixture\nDev note');
+    expect(git(h.root, 'show', 'dev:README.md')).toBe(resolved.trimEnd());
   } finally {
     h.dispose();
   }
