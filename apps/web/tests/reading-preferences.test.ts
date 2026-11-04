@@ -62,6 +62,7 @@ test('malformed native reading choices do not become a guessed editor', async ()
   if (!('preferences' in page)) throw new Error('expected values');
   expect(page.preferences.advice).toBeUndefined();
   expect(ownerMayChangeReading(page.preferences.advice)).toBe(false);
+  expect(await readReading({ read: async () => page }, 0)).toMatchObject({ ok: false, reason: 'unavailable' });
 });
 
 test('shared-version interleaving keeps the original key and uses the newer reviewed version', async () => {
@@ -83,15 +84,21 @@ test('shared-version interleaving keeps the original key and uses the newer revi
 });
 
 test('reset is an explicit native-default patch of the reviewed version', () => {
+  const advice = readingAdviceFor({ spoilerLevel: 2, suitability: 'show' });
+  advice.reading.defaults = { spoilerLevel: 1, suitability: 'blur' };
   const known = {
     spoilerLevel: 2 as const,
     suitability: 'show' as const,
     version: 9,
-    advice: readingAdviceFor({ spoilerLevel: 2, suitability: 'show' }),
+    advice,
   };
   const reset = readingReset(known)!;
-  expect(reset).toMatchObject({ expectedVersion: 9, spoilerLevel: 0, suitability: 'blur' });
-  expect(readingReset({ ...known, spoilerLevel: 0, suitability: 'blur' })).toBeNull();
+  expect(reset).toMatchObject({ expectedVersion: 9, spoilerLevel: 1, suitability: 'blur' });
+  const atDefaultsAdvice = readingAdviceFor({ spoilerLevel: 1, suitability: 'blur' });
+  atDefaultsAdvice.reading.defaults = { spoilerLevel: 1, suitability: 'blur' };
+  const atDefaults = { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 9, advice: atDefaultsAdvice };
+  expect(readingReset(atDefaults)).toBeNull();
+  expect(readingReset({ ...known, advice: undefined })).toBeNull();
 });
 
 test('a lost acknowledgement never becomes success without current readback', async () => {
