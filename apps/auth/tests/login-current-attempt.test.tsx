@@ -2,6 +2,7 @@ import { afterAll, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { PasskeySignInResult } from '../src/passkeys';
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
 
 // Reuse the mounted Auth DOM fixture and story input helpers, without a server.
 const { Window } = await import(
@@ -59,7 +60,13 @@ async function open(path = '/login') {
   const router = createRouter({ history, routeTree: parent.addChildren([route, stepUp, away]) });
   const requests: ReturnType<typeof Promise.withResolvers<Response>>[] = [];
   const ceremonies: ReturnType<typeof Promise.withResolvers<PasskeySignInResult>>[] = [];
-  globalThis.fetch = ((path) => {
+  globalThis.fetch = ((path, init) => {
+    if (path === '/recovery/page')
+      return Promise.resolve(
+        Response.json(
+          recoveryPage(JSON.parse(String(init?.body)).stage, { minPasswordLength: 8, maxPasswordLength: 128 }),
+        ),
+      );
     if (path === '/signin/page')
       return Promise.resolve(
         Response.json({

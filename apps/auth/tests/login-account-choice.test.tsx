@@ -87,7 +87,7 @@ test.each(['password', 'passkey'])(
       oldSwitch.click(); // React has not rendered disabled yet.
       button(p.host, 'Review current session')!.click();
     });
-    expect(button(p.host, 'Continue')).toBeNull();
+    expect(button(p.host, 'Continue')).toBeUndefined();
     expect(p.host.querySelector<HTMLInputElement>('#login-email')!.value).toBe('b@example.test');
     expect(p.reads).toHaveLength(1);
     expect(p.calls).toHaveLength(method === 'password' ? 1 : 0);
@@ -107,7 +107,7 @@ test('switching A to B retires old Continue before render and during replacement
     oldContinue.click();
   });
   expect(p.assign).not.toHaveBeenCalled();
-  expect(button(p.host, 'Continue')).toBeNull();
+  expect(button(p.host, 'Continue')).toBeUndefined();
   expect(p.host.textContent).not.toContain('a@example.test');
   expect(document.activeElement?.id).toBe('login-email');
   await p.enter();
@@ -134,7 +134,7 @@ test.each(['a', 'b', null, 'unavailable'])(
     await flush(() => send(p.host));
     await flush(() => p.calls[0]!.resolve(new Response('', { status: 502 })));
     expect(p.host.textContent).toContain('outcome could not be confirmed');
-    expect(button(p.host, 'Continue')).toBeNull();
+    expect(button(p.host, 'Continue')).toBeUndefined();
     await p.review(viewer === 'unavailable' ? null : advice(viewer));
     expect(p.calls).toHaveLength(1);
     expect(p.reads).toHaveLength(2);
@@ -183,7 +183,7 @@ test('late reviewed advice is retired by pagehide; restoration observes before e
   await flush(() =>
     window.dispatchEvent(Object.assign(new dom.Event('pageshow'), { persisted: true }) as unknown as Event),
   );
-  expect(button(p.host, 'Continue')).toBeNull();
+  expect(button(p.host, 'Continue')).toBeUndefined();
   expect(p.reads).toHaveLength(3);
   await flush(() => p.reads[2]!.resolve(Response.json(advice('c'))));
   expect(p.host.textContent).toContain('c@example.test');
@@ -198,7 +198,7 @@ test.each(['method', 'browser'])(
       '?return_to=%2Fsecurity',
       kind !== 'browser',
     );
-    expect(button(p.host, 'Sign in with a passkey')).toBeNull();
+    expect(button(p.host, 'Sign in with a passkey')).toBeUndefined();
     expect(p.host.textContent).toContain(
       kind === 'method' ? 'Passkey sign-in is unavailable here' : 'not supported by this browser',
     );
@@ -226,9 +226,9 @@ test('session review for an account operation cannot bypass the installed step-u
   const confirm = spyOn(stepUp, 'confirmStepUp').mockResolvedValue({ ok: false, message: 'Retained review changed' });
   cleanup.push(() => confirm.mockRestore());
   const p = await setup(advice(), '?management_operation=rename&return_to=%2Faccount%2Frename');
-  expect(button(p.host, 'Continue')).toBeNull();
+  expect(button(p.host, 'Continue')).toBeUndefined();
   await p.review(advice('b'));
-  expect(button(p.host, 'Continue')).toBeNull();
+  expect(button(p.host, 'Continue')).toBeUndefined();
   await p.enter();
   await flush(() => send(p.host));
   expect(confirm).toHaveBeenCalledTimes(1);
