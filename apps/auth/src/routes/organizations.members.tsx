@@ -436,8 +436,9 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     setReauth(false);
     setNeedsProfile(true);
     setReviewCurrent(false);
-    setRecoveryBlocked(!exact);
-    setRecoveryStatus(exact ? kind : 'unavailable');
+    const retryable = exact && !!command.reference;
+    setRecoveryBlocked(!retryable);
+    setRecoveryStatus(retryable ? kind : 'unavailable');
     setNotice('unknown');
     setRevoked(true);
     setPage(result ?? null);
@@ -527,6 +528,13 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     const isActive = activity.current;
     const expected = command;
     if (!isActive() || lock.current || !expected || !isUnresolvedMembership(expected, observed)) return;
+    if (!expected.reference) {
+      setRecoveryBlocked(true);
+      setRecoveryStatus('unavailable');
+      setRevoked(true);
+      setReviewCurrent(false);
+      return;
+    }
     lock.current = true;
     setBusy(true);
     setRevoked(true);
@@ -824,8 +832,8 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             status={recoveryStatusMessage(recoveryStatus)}
             outcome={unresolved ? m.auth_members_unknown() : m.auth_members_recovery_unavailable()}
             pending={busy}
-            canRetry={!!command && unresolved && !recoveryBlocked}
-            canSignIn={!reauth && !!command && unresolved && !recoveryBlocked && !!membershipProfile()}
+            canRetry={!!command && unresolved && !!command.reference && !recoveryBlocked}
+            canSignIn={!reauth && !!command && unresolved && !!command.reference && !recoveryBlocked && !!membershipProfile()}
             retry={() => void reviewRecovery()}
             signIn={beginRecoverySignIn}
             headingRef={recoveryHeading}

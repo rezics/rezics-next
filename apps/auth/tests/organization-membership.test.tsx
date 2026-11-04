@@ -446,6 +446,18 @@ test('a replacement descriptor or inaccessible storage fails closed without dele
   host.remove();
   root = undefined;
   window.sessionStorage.clear();
+  const missingReference = membership.newMembershipCommand(accountId, saved.operation);
+  missingReference.unresolved = true;
+  expect(membership.saveMembershipCommand(missingReference)).toBe(true);
+  await mount();
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(button(m.auth_members_recovery_retry()).disabled).toBe(true);
+  expect(host.querySelector('#membership-confirmation')).toBeNull();
+
+  await flush(() => root!.unmount());
+  host.remove();
+  root = undefined;
+  window.sessionStorage.clear();
   const descriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
   Object.defineProperty(window, 'sessionStorage', { configurable: true, get: () => { throw new Error('storage denied'); } });
   try {
