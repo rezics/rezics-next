@@ -88,7 +88,7 @@ describe("documentation budgets and registry", () => {
     const before = await runDocsCheck(root);
     expect(output(before)).toContain("budget-shrank | docs/large.md | size 5 bytes is below baseline 8 bytes | remedy:");
     const lowered = await runDocsCheck(root, ["--update-baseline"]);
-    expect(lowered.exitCode).toBe(0);
+    expect(lowered.exitCode, output(lowered)).toBe(0);
     expect(output(lowered)).toContain("baseline-lowered | docs/large.md | size lowered to 5 bytes");
     expect(JSON.parse(readFileSync(path.join(root, "docs/budgets-baseline.json"), "utf8")).entries[0].bytes).toBe(5);
   });
