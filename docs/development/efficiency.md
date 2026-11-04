@@ -2,10 +2,17 @@
 
 ## Output and flow
 
-Use native journey receipts as the primary output measure: a user-visible journey in the
-[first public scope](../scope.md) working end to end on the integrated revision. Track a burn-down of the scope's
-remaining journeys. Lines, landings and attempts are diagnostics only; allowance and worker occupancy explain cost,
-not delivered output.
+Two measures run together, and neither replaces the other:
+
+- **Accepted journeys measure what is delivered.** A journey is a user-visible path in the
+  [first public scope](../scope.md). The list is fixed in owner documents before work starts, so splitting work
+  cannot create journeys. A journey is accepted only when it works end to end on the integrated revision, seen in the
+  running-product walkthrough, which runs at least every three hours, or by a native receipt. Track the burn-down of
+  the remaining journeys and the projected finish date.
+- **Landed product lines measure throughput**, against the hourly floor below. They show whether the work system is
+  producing at the rate the burn-down needs.
+
+Landings and attempts are diagnostics; allowance and worker occupancy explain cost.
 
 Throughput target: product code landed on the integrated branch, held steadily at 20,000 lines an hour and aiming
 for 40,000. Lines measure throughput; they are not the goal. The target is a lot of good code: quality comes first,
