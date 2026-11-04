@@ -225,8 +225,7 @@ export function waitForWorkerExit(
 ): Promise<WorkerExit> {
   const ownership = getProcessOwnershipAdapter();
   const waiting = (async () => {
-    if (identity)
-      await waitForProcess(identity, undefined, ownership.waiterStarted(logPath), policy);
+    if (identity) await waitForProcess(identity, undefined, ownership.waiterStarted(logPath), policy);
     return readWorkerExit(logPath);
   })();
   ownership.trackWait(logPath, waiting);
