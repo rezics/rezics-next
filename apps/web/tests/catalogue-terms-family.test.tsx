@@ -1,7 +1,9 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, useEffect, useState } from 'react';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
 
 // Authored UNRUN: mounted production interactions and native-shaped call witnesses,
 // not native execution, geometry, SSR privacy or whole-feature acceptance proof.
