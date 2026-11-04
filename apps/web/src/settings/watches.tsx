@@ -105,12 +105,15 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
           </div>
           {state.write === 'sending' ? <p role="status">{m.settings_watches_stopping()}</p> : null}
           {state.write === 'removed' ? <p role="status">{m.settings_watches_removed()}</p> : null}
+          {state.write === 'removed_current' ? (
+            <p role="status">{m.settings_watches_removed_current()}</p>
+          ) : null}
           {state.write === 'rejected' || state.write === 'conflict' || state.write === 'denied' ? (
             <Alert variant="destructive">
               <AlertDescription
-                data-response-status={state.problem?.status ?? ''}
-                data-response-code={state.problem?.code ?? ''}
-                data-retry-after={state.problem?.retryAfter}
+                data-response-status={state.writeProblem?.status ?? ''}
+                data-response-code={state.writeProblem?.code ?? ''}
+                data-retry-after={state.writeProblem?.retryAfter}
               >
                 {writeText}
               </AlertDescription>
@@ -143,9 +146,9 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
               <AlertTitle>{m.settings_watches_failed_title()}</AlertTitle>
               <AlertDescription className="space-y-3">
                 <p
-                  data-response-status={state.problem?.status ?? ''}
-                  data-response-code={state.problem?.code ?? ''}
-                  data-retry-after={state.problem?.retryAfter}
+                  data-response-status={state.readProblem?.status ?? ''}
+                  data-response-code={state.readProblem?.code ?? ''}
+                  data-retry-after={state.readProblem?.retryAfter}
                 >
                   {readText}
                 </p>

@@ -61,7 +61,11 @@ function setup(io: WatchManagementIO) {
 test('unavailable management stays distinct from an actual empty page', async () => {
   const { controller } = setup(unavailableWatchManagement);
   await controller.first();
-  expect(controller.snapshot()).toMatchObject({ read: 'unavailable', rows: [], problem: { status: null, code: null } });
+  expect(controller.snapshot()).toMatchObject({
+    read: 'unavailable',
+    rows: [],
+    readProblem: { status: null, code: null },
+  });
   const empty = setup({ read: async () => page([]), stop: async () => ({ kind: 'removed' }) }).controller;
   await empty.first();
   expect(empty.snapshot()).toMatchObject({ read: 'ready', rows: [], next: null, actions: { remove: 'available' } });
@@ -283,7 +287,7 @@ test('invalid cursors offer a cursor-free restart; transient failures retry the 
   expect(controller.snapshot()).toMatchObject({
     read: 'unavailable',
     cursor: opaque,
-    problem: { status: 503, code: 'dependency_unavailable' },
+    readProblem: { status: 503, code: 'dependency_unavailable' },
   });
   mode = 'page';
   await controller.refresh();

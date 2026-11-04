@@ -27,11 +27,12 @@ export type WatchState = Readonly<{
   next: string | null;
   viewer: WatchViewer | null;
   actions: WatchActions | null;
-  problem: NativeWatchProblem | null;
+  readProblem: NativeWatchProblem | null;
+  writeProblem: NativeWatchProblem | null;
   readRetryAt: number;
   writeRetryAt: number;
   command: StopWatchIntent | null;
-  write: 'idle' | 'sending' | 'uncertain' | 'rejected' | 'removed' | 'conflict' | 'denied';
+  write: 'idle' | 'sending' | 'uncertain' | 'rejected' | 'removed' | 'removed_current' | 'conflict' | 'denied';
   retired: boolean;
 }>;
 const initial: WatchState = {
@@ -42,7 +43,8 @@ const initial: WatchState = {
   next: null,
   viewer: null,
   actions: null,
-  problem: null,
+  readProblem: null,
+  writeProblem: null,
   readRetryAt: 0,
   writeRetryAt: 0,
   command: null,
@@ -157,7 +159,7 @@ export class WatchController {
       kind,
       viewer: null,
       actions: null,
-      problem: null,
+      readProblem: null,
     });
     try {
       const result = await withManagedReadDeadline(
@@ -172,20 +174,21 @@ export class WatchController {
           next: result.page.next,
           viewer: result.page.viewer,
           actions: result.page.actions,
-          problem: null,
+          readProblem: null,
           readRetryAt: 0,
         });
       } else if (result.kind === 'invalid_cursor' || result.kind === 'denied' || result.kind === 'unavailable') {
         this.update({
           read: result.kind,
-          problem: result.problem,
+          readProblem: result.problem,
           readRetryAt: preferenceRetryDeadline(result.problem.retryAfter),
         });
       } else {
-        this.update({ read: 'failed', readRetryAt: 0 });
+        this.update({ read: 'failed', readRetryAt: 0, readProblem: null });
       }
     } catch {
-      if (this.current() && generation === this.generation) this.update({ read: 'failed', readRetryAt: 0 });
+      if (this.current() && generation === this.generation)
+        this.update({ read: 'failed', readRetryAt: 0, readProblem: null });
     }
   }
 
@@ -218,15 +221,26 @@ export class WatchController {
       if (!this.current() || this.state.command !== command) return;
       const writeRetryAt = result.kind === 'uncertain' ? preferenceRetryDeadline(result.problem.retryAfter) : 0;
       if (result.kind === 'removed') {
+        const currentRevisionRemains = this.state.rows.some(
+          (row) =>
+            row.subscriptionId === command.watchId &&
+            row.kind === command.kind &&
+            row.revision !== command.expectedRevision,
+        );
         this.update({
-          rows: this.state.rows.filter((row) => row.subscriptionId !== command.watchId || row.kind !== command.kind),
+          rows: this.state.rows.filter(
+            (row) =>
+              row.subscriptionId !== command.watchId ||
+              row.kind !== command.kind ||
+              row.revision !== command.expectedRevision,
+          ),
           command: null,
-          write: 'removed',
-          problem: null,
+          write: currentRevisionRemains ? 'removed_current' : 'removed',
+          writeProblem: null,
           writeRetryAt,
         });
       } else if (result.kind === 'uncertain') {
-        this.update({ write: 'uncertain', problem: result.problem, writeRetryAt });
+        this.update({ write: 'uncertain', writeProblem: result.problem, writeRetryAt });
       } else if (result.kind === 'denied') {
         this.update({
           command: null,
@@ -236,7 +250,7 @@ export class WatchController {
           next: null,
           viewer: null,
           actions: null,
-          problem: result.problem,
+          writeProblem: result.problem,
           writeRetryAt,
         });
       } else {
@@ -248,13 +262,13 @@ export class WatchController {
           next: null,
           viewer: null,
           actions: null,
-          problem: result.problem,
+          writeProblem: result.problem,
           writeRetryAt,
         });
       }
     } catch {
       if (this.current() && this.state.command === command)
-        this.update({ write: 'uncertain', problem: { status: null, code: null }, writeRetryAt: 0 });
+        this.update({ write: 'uncertain', writeProblem: { status: null, code: null }, writeRetryAt: 0 });
     }
   }
 }
