@@ -6,6 +6,7 @@ import type {
   Decision,
   Fixture,
   Inbox,
+  InboxNoticeDetail,
   Notice,
   NoticeKind,
   Persona,
@@ -246,6 +247,24 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
     });
   }
 
+  async function readNotice(accountId: string, noticeId: string, actor: Persona): Promise<ApiResult<InboxNoticeDetail>> {
+    const result = await request('GET', `/v1/accounts/${accountId}/notifications/${noticeId}`, actor);
+    return resultMap(result, (body) => {
+      const raw = object(body, 'Inbox notice detail');
+      if (string(object(raw.viewer, 'Inbox notice viewer').state, 'viewer.state') !== 'current')
+        throw new TypeError('Inbox notice viewer is not current');
+      const item = object(raw.notice, 'Inbox notice item');
+      const notice = {
+        ...noticeOf(item),
+        currentActor: item.actor,
+        currentTarget: item.target,
+        summary: string(item.summary, 'notice.summary'),
+        actions: object(item.actions, 'notice.actions'),
+      } as InboxNoticeDetail['notice'];
+      return { viewer: { state: 'current' }, notice };
+    });
+  }
+
   const driver: ContentNotificationInterleavingDriver = {
     async close() {
       if (closed) return;
@@ -363,6 +382,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
       });
     },
     inbox: readInbox,
+    readNotice,
     async inboxDuringActorHydration(accountId, actor, query, transition) {
       return afterInboxActorProfile(setup.system.database.pool, transition, () => readInbox(accountId, actor, query));
     },
