@@ -14,6 +14,9 @@ and statement/adoption DTOs retain `normal`, `preferred` and `deprecated` ranks 
 The [catalogue editing contract](../../../../docs/catalogue-editing.md) owns ordinary multilingual corrections and
 minimal current-disclosure revision explanations. `correctTerms` is the native command; the mounted PATCH exports
 `TermsPatchSchema`/`TermsResultSchema` from `http/subjects.ts`. Native acceptance remains post-integration proof.
+The mounted `subject.terms` viewer-action binding observes `statement:propose` on the canonical Global Context;
+the Semantic Context resolver marks it applicable only there while Access decides the current grant. Subject Terms
+disclosure and revision stay on the separate Subject read, and command execution still reauthorizes natively.
 
 ## Public exposure boundary
 

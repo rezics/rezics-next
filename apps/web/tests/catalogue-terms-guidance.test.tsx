@@ -68,6 +68,10 @@ test('Multilingual terms show actionable field-specific corrections without chan
       let hold: Promise<void> | undefined;
       const transport: TermsTransport = {
         read: async () => ({ state: 'ready', snapshot }),
+        readAuthority: async () => ({
+          viewer: 'signed-in',
+          actions: { state: 'ready', actions: [{ action: 'statement:propose', operations: ['subject.terms'] }] },
+        }),
         submit: async (command) => {
           commands.push(structuredClone(command));
           if (hold) await hold;
@@ -134,8 +138,9 @@ test('Multilingual terms show actionable field-specific corrections without chan
         );
         return window.document.getElementById(associated?.htmlFor ?? '') as unknown as HTMLInputElement;
       };
-      const button = (text: string) =>
-        [...host.querySelectorAll('button')].find((button) => button.textContent === text)!;
+      const findButton = (text: string) =>
+        [...host.querySelectorAll('button')].find((button) => button.textContent === text);
+      const button = (text: string) => findButton(text)!;
       const click = (text: string) =>
         act(async () => {
           await user.click(button(text));
@@ -156,6 +161,14 @@ test('Multilingual terms show actionable field-specific corrections without chan
       const mode = (field: TermField, value: string) => select(`terms-${field}-mode`, value);
       const language = (value: string) => select('terms-language', value);
       const save = () => click(m.catalogue_terms_save({}, options));
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const saveButton = findButton(m.catalogue_terms_save({}, options));
+        if (saveButton && !saveButton.disabled) break;
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+      }
+      expect(button(m.catalogue_terms_save({}, options)).disabled).toBe(false);
       const described = (id: string) => {
         const ids = control(id).getAttribute('aria-describedby')?.split(' ') ?? [];
         expect(ids.length).toBeGreaterThan(0);
@@ -194,7 +207,16 @@ test('Multilingual terms show actionable field-specific corrections without chan
       const queuedChange = (element: object, value: string) => {
         const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
         const props = Reflect.get(element, key) as { onChange: (event: unknown) => unknown };
-        return () => props.onChange({ target: { value } });
+        const currentTarget = element as { value: string };
+        return () => {
+          const previousValue = currentTarget.value;
+          currentTarget.value = value;
+          try {
+            props.onChange({ target: { value }, currentTarget });
+          } finally {
+            currentTarget.value = previousValue;
+          }
+        };
       };
       await language('en');
       await mode('labels', 'set');
