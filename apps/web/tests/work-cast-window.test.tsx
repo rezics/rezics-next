@@ -5,6 +5,8 @@ import type { RelationGroupRequest } from '../src/features/pages/relation-stream
 import { qualifiedStatement } from '../src/kernel/fake/qualified-relations';
 import { workCastVisitReturn } from '../src/features/pages/subject-visit-navigation';
 
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const snak = (property: string, data_type: string, content: unknown) => ({
   property: { id: property, data_type },
