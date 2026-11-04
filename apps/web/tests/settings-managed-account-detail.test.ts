@@ -17,6 +17,7 @@ import {
   type ManagementDetail,
 } from '../src/settings/managed-account-detail-read';
 import { m } from '../src/paraglide/messages.js';
+import { AnonymousSessionContext } from '../src/session/query';
 
 const viewerId = '019a0000-0000-7000-8000-000000000001';
 const accountId = '019a0000-0000-7000-8000-000000000002';
@@ -55,7 +56,13 @@ function detail(): ManagementDetail {
 }
 const ready = (value = detail()): DetailResult => ({ ok: true, viewerId, value });
 const markup = (reader: ManagedAccountReader | null) =>
-  renderToStaticMarkup(createElement(ManagedAccountDetailCard, { reader, backHref }));
+  renderToStaticMarkup(
+    createElement(
+      AnonymousSessionContext,
+      { value: true },
+      createElement(ManagedAccountDetailCard, { reader, backHref }),
+    ),
+  );
 
 test('A native managed target opens from settings with independently paged current members and responsibilities; denied sections remain private and reconciling relations never become completed mutations', async () => {
   let body: unknown = detail();
@@ -175,9 +182,8 @@ test('the native boundary validates identities, closed response shape and the tw
 test('identity changes and authority losses discard private pages and reject late responses; nontransient page failures clear only that section', async () => {
   const pending: ((result: DetailResult) => void)[] = [];
   let defer = false;
-  const reader = new ManagedAccountReader(viewerId, accountId, async () =>
-    defer ? new Promise((resolve) => pending.push(resolve)) : ready(),
-  );
+  const read = async (): Promise<DetailResult> => (defer ? new Promise((resolve) => pending.push(resolve)) : ready());
+  let reader = new ManagedAccountReader(viewerId, accountId, read);
   await reader.load();
   defer = true;
   const lateMembers = reader.load('members', memberCursor);
@@ -199,6 +205,8 @@ test('identity changes and authority losses discard private pages and reject lat
   pending[2]!(ready());
   await stale;
   expect(reader.snapshot().detail).toBeUndefined();
+  await reader.load(); // Disposal never permits another request on that lifetime.
+  reader = new ManagedAccountReader(viewerId, accountId, read);
   defer = false;
   await reader.load();
   defer = true;
