@@ -1,5 +1,4 @@
 import { fromPlainText } from '@rezics/document';
-import type { PropertyDefinition } from '@rezics/definitions';
 import { peopleProfileFixture } from '../../../kernel/fake/catalogue-people-profile';
 import type { PersonStatement } from './model';
 
@@ -12,18 +11,6 @@ export function personReaderExample(state: 'admitted' | 'empty' | 'withheld' | '
   const document = '00000000-0000-4000-8000-00000000d203';
   const biography = '00000000-0000-4000-8000-00000000d204';
   const digest = 'a'.repeat(64);
-  const item = (label: string): PropertyDefinition => ({
-    iri: 'http://schema.org/knowsLanguage',
-    value: { type: 'string' },
-    labels: { en: label, ja: label === 'Occupation' ? '職業' : '使用言語' },
-    descriptions: {},
-    datatype: 'wikibase-item',
-    targets: ['skos:Concept'],
-    mappings: [],
-    qualifiers: ['schema:startDate'],
-    multivalued: true,
-    relation: { group: 'classification', order: 'name', inverse: 'none' },
-  });
   const statement = (
     property: string,
     content: unknown,
@@ -48,38 +35,39 @@ export function personReaderExample(state: 'admitted' | 'empty' | 'withheld' | '
     rezics: { release: 'sha256:example', revision: 1 },
   });
   const documents: Record<string, unknown> = {};
-  if (state !== 'unsupported') {
-    release.properties['wdt:P106'] = item('Occupation');
-    release.properties['schema:knowsLanguage'] = item('Working language');
-    for (const id of ['schema:abstract', 'wdt:P106', 'schema:knowsLanguage'] as const)
-      if (!release.types['schema:Person']!.properties.includes(id))
-        release.types['schema:Person']!.properties.push(id);
-    if (state !== 'empty') {
-      const bio = statement('schema:abstract', { document, language: 'en', digest }, 'document');
-      bio.id = biography;
-      read.subject.statements['schema:abstract'] = [bio];
-      const work = statement('wdt:P106', occupation, 'wikibase-item');
-      work.qualifiers.push({
-        property: { id: 'schema:startDate', data_type: 'time' },
-        value: { type: 'value', content: { time: '+2020-00-00T00:00:00Z', precision: 9 } },
-      });
-      read.subject.statements['wdt:P106'] = [work];
-      read.subject.statements['schema:knowsLanguage'] = [statement('schema:knowsLanguage', language, 'wikibase-item')];
-      read.related[occupation] = { type: 'skos:Concept', labels: { en: 'Director', ja: '監督' } };
-      read.related[language] = { type: 'skos:Concept', labels: { en: 'Japanese', ja: '日本語' } };
-      documents[biography] = {
-        id: document,
-        subjectId: read.subject.id,
-        candidateId: biography,
-        digest,
-        language: 'en',
-        availability: 'available',
-        body: fromPlainText('Mira directs independent films.'),
-      };
-      if (state === 'withheld') {
-        delete read.related[occupation];
-        delete documents[biography];
-      }
+  if (state === 'unsupported') {
+    delete release.properties['wdt:P106'];
+    delete release.properties['schema:knowsLanguage'];
+    const person = release.types['schema:Person'];
+    if (person)
+      person.properties = person.properties.filter(
+        (id) => id !== 'schema:abstract' && id !== 'wdt:P106' && id !== 'schema:knowsLanguage',
+      );
+  } else if (state !== 'empty') {
+    const bio = statement('schema:abstract', { document, language: 'en', digest }, 'document');
+    bio.id = biography;
+    read.subject.statements['schema:abstract'] = [bio];
+    const work = statement('wdt:P106', occupation, 'wikibase-item');
+    work.qualifiers.push({
+      property: { id: 'schema:startDate', data_type: 'time' },
+      value: { type: 'value', content: { time: '+2020-00-00T00:00:00Z', precision: 9 } },
+    });
+    read.subject.statements['wdt:P106'] = [work];
+    read.subject.statements['schema:knowsLanguage'] = [statement('schema:knowsLanguage', language, 'wikibase-item')];
+    read.related[occupation] = { type: 'skos:Concept', labels: { en: 'Director', ja: '監督' } };
+    read.related[language] = { type: 'skos:Concept', labels: { en: 'Japanese', ja: '日本語' } };
+    documents[biography] = {
+      id: document,
+      subjectId: read.subject.id,
+      candidateId: biography,
+      digest,
+      language: 'en',
+      availability: 'available',
+      body: fromPlainText('Mira directs independent films.'),
+    };
+    if (state === 'withheld') {
+      delete read.related[occupation];
+      delete documents[biography];
     }
   }
   return { release, read, documents, occupation, language, biography, statement };

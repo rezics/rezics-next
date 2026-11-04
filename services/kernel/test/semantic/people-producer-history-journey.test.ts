@@ -49,6 +49,19 @@ const reference = {
 const snak = (id: string, content: unknown) => ({ property: { id }, value: { type: 'value', content } });
 const year = (time: string) => ({ time, precision: 9, calendarmodel: GREGORIAN });
 
+function pageSubject(page: { reads: Record<string, { status: number; body: any }> }, id: string) {
+  const entry = Object.values(page.reads).find((read) => read.status === 200 && read.body?.subject?.id === id);
+  expect(entry).toBeDefined();
+  return entry!.body as { subject: any; documents?: Record<string, { availability?: string }> };
+}
+
+function correctionState(
+  page: { actions?: { action: string; operationId: string; state: string }[] },
+  action: string,
+) {
+  return page.actions?.find((entry) => entry.action === action);
+}
+
 async function call(method: string, path: string, as?: Persona, body?: unknown, key = randomUUID()) {
   const headers: Record<string, string> = {};
   if (as) {
@@ -189,8 +202,22 @@ test('a reader follows sourced biography occupations and languages and an editor
   expect(page.status, JSON.stringify(page.body)).toBe(200);
   expect(page.headers.get('cache-control')).toBe('private, no-store');
   expect(page.body.subject).toBe(person.id);
+  expect(page.body.viewer).toEqual({ kind: 'account' });
+  expect(correctionState(page.body, 'statement:propose')).toEqual({
+    action: 'statement:propose',
+    operationId: 'subject.propose',
+    state: 'allowed',
+  });
+  const filled = pageSubject(page.body, person.id);
+  expect(filled.subject.statements['schema:abstract']).toHaveLength(2);
+  expect(Object.values(filled.documents ?? {}).some((document) => document.availability === 'available')).toBe(true);
   const publicPage = await call('POST', '/v1/pages:read', undefined, { target: { subject: person.id } });
   expect(publicPage.status).toBe(200);
+  expect(publicPage.body.viewer).toEqual({ kind: 'anonymous' });
+  expect(correctionState(publicPage.body, 'statement:propose')).toMatchObject({
+    action: 'statement:propose',
+    state: 'denied',
+  });
   const anonymous = await call('POST', `/v1/subjects/${person.id}/candidates`, undefined, {
     statement: { ...snak('wdt:P106', director.id), references: [reference] },
   });
@@ -271,6 +298,9 @@ test('a reader follows directed parent and replacement history and returns to th
   const page = await call('POST', '/v1/pages:read', 'editor', { target: { subject: studio.id } });
   expect(page.status, JSON.stringify(page.body)).toBe(200);
   expect(page.body.subject).toBe(studio.id);
+  expect(page.body.viewer).toEqual({ kind: 'account' });
+  expect(correctionState(page.body, 'statement:propose')?.state).toBe('allowed');
+  expect(Object.keys(pageSubject(page.body, studio.id).documents ?? {}).length).toBeGreaterThan(0);
   const forward = await call(
     'GET',
     `/v1/subjects/${studio.id}/relations?property=${encodeURIComponent('wdt:P749')}&limit=20`,

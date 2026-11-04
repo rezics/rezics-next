@@ -219,6 +219,35 @@ ${prefixes}imports:
   expect(release.properties['schema:isbn']).toEqual(bundledRelease.properties['schema:isbn']!);
 });
 
+test('Person biography and Organization history admit sourced descriptors', () => {
+  const { types, properties } = bundledRelease;
+  expect(types['schema:Person']?.properties).toEqual(
+    expect.arrayContaining(['schema:abstract', 'wdt:P106', 'schema:knowsLanguage']),
+  );
+  expect(properties['wdt:P106']).toMatchObject({
+    targets: ['skos:Concept'],
+    relation: { group: 'classification', inverse: 'none' },
+  });
+  expect(properties['schema:knowsLanguage']).toMatchObject({ targets: ['skos:Concept'] });
+  expect(properties['schema:hasOccupation']).toBeUndefined();
+  expect(properties['schema:occupation']).toBeUndefined();
+  expect(types['schema:Organization']?.properties).toEqual(
+    expect.arrayContaining(['schema:abstract', 'wdt:P749', 'wdt:P1365', 'wdt:P1366']),
+  );
+  expect(properties['wdt:P749']).toMatchObject({
+    targets: ['schema:Organization'],
+    relation: { group: 'association', inverse: 'rezics:hasSubsidiary' },
+  });
+  expect(properties['wdt:P1365']).toMatchObject({
+    targets: ['schema:Organization'],
+    relation: { group: 'order', inverse: 'rezics:replacedBy' },
+  });
+  expect(properties['wdt:P1366']).toMatchObject({
+    targets: ['schema:Organization'],
+    relation: { group: 'order', inverse: 'rezics:replaces' },
+  });
+});
+
 test('every bundled term carries labels in all eight UI locales', () => {
   for (const definition of [...Object.values(bundledRelease.types), ...Object.values(bundledRelease.properties)])
     expect(Object.keys(definition.labels).sort()).toEqual(uiLocales);

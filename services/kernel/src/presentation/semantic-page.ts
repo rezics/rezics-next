@@ -1,9 +1,14 @@
 import { definedViews, resolveView, type PresentationProfile, type View } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import {
+  classifyUnavailability,
+  CommandUnavailableError,
+  requireAccessDeadline,
+} from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck } from '../request/access.ts';
+import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import type { Pool } from 'pg';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalReadEligibility, relatedReadEligibility } from '../semantic/eligibility.ts';
@@ -158,4 +163,89 @@ export async function preparePublicSemanticPageMetadata(deps: SummaryReaderDepen
       return result;
     },
   };
+}
+
+const peopleProducerRoots = new Set(['schema:Person', 'schema:Organization']);
+const peopleProducerCorrectionActions = [
+  { action: 'statement:propose', operationId: 'subject.propose' },
+  { action: 'context:accept', operationId: 'subject.accept_candidate' },
+  { action: 'context:adopt', operationId: 'subject.adopt' },
+] as const;
+
+export type PeopleProducerActionState =
+  | 'allowed'
+  | 'denied'
+  | 'unavailable'
+  | 'unsupported'
+  | 'absent'
+  | 'withheld';
+
+/** Person and Organization, including descendants, admit correction actions on the ordinary page. */
+export function peopleProducerTypeAdmitted(
+  release: { types: Record<string, { bases?: readonly string[] }> } | undefined,
+  type: string,
+) {
+  if (!release) return false;
+  const seen = new Set<string>();
+  const matches = (current: string): boolean => {
+    if (peopleProducerRoots.has(current)) return true;
+    if (seen.has(current)) return false;
+    seen.add(current);
+    return (release.types[current]?.bases ?? []).some(matches);
+  };
+  return matches(type);
+}
+
+export async function readPeopleProducerPageAuthority(
+  deps: { access: Access; pool: Pool },
+  actor: Actor,
+  deadline: number,
+): Promise<{
+  viewer: { kind: 'anonymous' | 'account' };
+  actions: { action: string; operationId: string; state: PeopleProducerActionState }[];
+}> {
+  const viewer = { kind: actor.kind === 'account' ? ('account' as const) : ('anonymous' as const) };
+  const unavailable = peopleProducerCorrectionActions.map((entry) => ({
+    action: entry.action,
+    operationId: entry.operationId,
+    state: 'unavailable' as const,
+  }));
+  try {
+    requireAccessDeadline(deadline);
+    const prepared = await Promise.all(
+      peopleProducerCorrectionActions.map(async (entry) => ({
+        ...entry,
+        check: await accessCheck(
+          deps.access,
+          actor,
+          entry.action,
+          { route: 0, id: GLOBAL_CONTEXT },
+          { pool: deps.pool, deadline },
+        ),
+      })),
+    );
+    requireAccessDeadline(deadline);
+    const actions = await withReadTransaction(
+      deps.pool,
+      async (client) => {
+        const states: { action: string; operationId: string; state: PeopleProducerActionState }[] = [];
+        for (const entry of prepared) {
+          let state: PeopleProducerActionState = 'denied';
+          try {
+            state = (await entry.check(client)) ? 'allowed' : 'denied';
+          } catch (error) {
+            if (classifyUnavailability(error)) state = 'unavailable';
+            else throw error;
+          }
+          states.push({ action: entry.action, operationId: entry.operationId, state });
+        }
+        return states;
+      },
+      deadline,
+    );
+    return { viewer, actions };
+  } catch (error) {
+    if (classifyUnavailability(error)) return { viewer, actions: unavailable };
+    throw error;
+  }
 }

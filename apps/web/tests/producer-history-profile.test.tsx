@@ -208,6 +208,19 @@ test('producer history page names unreleased fields, similar organizations, cont
         button.textContent === m.producer_history_correct() || button.textContent === m.producer_history_stale(),
     );
     expect(buttons.some((button) => button.textContent === m.producer_history_stale() && button.disabled)).toBe(true);
+
+    const denied = producerHistoryFixture('denied');
+    await show(
+      h(ProducerHistoryPage, {
+        key: 'denied',
+        id: denied.id,
+        locale: 'en',
+        search: async () => [],
+        transport: denied.transport,
+        initial: { ok: false, reason: 'denied' },
+      }),
+    );
+    expect(host.textContent).toContain(m.candidate_denied());
   } finally {
     await act(async () => root.unmount());
     client.clear();
