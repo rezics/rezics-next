@@ -272,9 +272,10 @@ function SecurityPageView({
       const signal = lifetime.current.signal;
       const result =
         provided ??
-        (await (securitySource?.load
-          ? securitySource.load(passkeysSupported(), signal)
-          : loadSecurity(passkeysSupported(), signal)
+        (await (
+          securitySource?.load
+            ? securitySource.load(passkeysSupported(), signal)
+            : loadSecurity(passkeysSupported(), signal)
         ).catch((): SecurityLoadResult => ({
           kind: 'failure',
           message: failureMessage(503, 'unavailable', null),
@@ -1012,12 +1013,7 @@ function SecurityPageView({
   }
 
   function reviewPasswordReturn() {
-    if (
-      loadState === 'loading' ||
-      loadState === 'signed-out' ||
-      activeOperation.current ||
-      passwordDraftPresent
-    )
+    if (loadState === 'loading' || loadState === 'signed-out' || activeOperation.current || passwordDraftPresent)
       return;
     retryLoad.current?.();
   }

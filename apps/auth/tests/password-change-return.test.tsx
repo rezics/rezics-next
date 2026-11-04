@@ -58,7 +58,15 @@ async function mount() {
     />,
     { account_id: storyAccount },
   );
-  return { ...ui, reads, readSignals, get identityReads() { return identityReads; }, inventoryReads };
+  return {
+    ...ui,
+    reads,
+    readSignals,
+    get identityReads() {
+      return identityReads;
+    },
+    inventoryReads,
+  };
 }
 
 async function begin(host: HTMLElement) {

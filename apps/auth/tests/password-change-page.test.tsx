@@ -30,7 +30,11 @@ function source() {
 async function mount(identitySource?: AccountIdentitySource) {
   const identity =
     identitySource ??
-    (async (): Promise<AccountIdentityResult> => ({ kind: 'ready', accountId: storyAccount, email: 'old.person@example.test' }));
+    (async (): Promise<AccountIdentityResult> => ({
+      kind: 'ready',
+      accountId: storyAccount,
+      email: 'old.person@example.test',
+    }));
   return open(
     <SecurityPage
       initial={securityPage()}
@@ -61,7 +65,10 @@ function staged(calls: { body: any }[]) {
   });
 }
 
-async function advanceTo(phase: 'stage' | 'approve' | 'apply', calls: { resolve: (response: Response) => void; body: any }[]) {
+async function advanceTo(
+  phase: 'stage' | 'approve' | 'apply',
+  calls: { resolve: (response: Response) => void; body: any }[],
+) {
   if (phase === 'stage') return;
   await flush(() => calls[0]!.resolve(staged(calls)));
   if (phase === 'approve') return;
@@ -85,31 +92,41 @@ const cases = [
   ['apply', () => m.auth_security_password_return_apply(), 3],
 ] as const;
 
-test.each(cases)('pagehide retains generic %s history and ignores a released native callback', async (phase, message, count) => {
-  const { host, calls } = await mount();
-  await begin(host);
-  await advanceTo(phase, calls);
-  await flush(leave);
+test.each(cases)(
+  'pagehide retains generic %s history and ignores a released native callback',
+  async (phase, message, count) => {
+    const { host, calls } = await mount();
+    await begin(host);
+    await advanceTo(phase, calls);
+    await flush(leave);
 
-  const summary = host.querySelector('[data-password-return-status]');
-  expect(summary?.textContent).toContain(message());
-  expect(host.textContent).not.toContain('retired password secret');
-  expect(host.textContent).not.toContain('old.person@example.test');
-  expect(host.textContent).not.toContain(storyAccount);
-  expect(host.querySelector('#security-new-password')).toBeNull();
-  expect(button(host, m.auth_signup_retry_original())).toBeUndefined();
-  const retiredValues = calls
-    .slice(0, count)
-    .flatMap(({ body }) => [body.key, body.subjectId, body.credential?.password, body.effectRef, body.digest, body.reference])
-    .filter(Boolean);
-  for (const value of retiredValues) expect(host.textContent).not.toContain(value);
-  expect(document.activeElement).toBe(summary);
+    const summary = host.querySelector('[data-password-return-status]');
+    expect(summary?.textContent).toContain(message());
+    expect(host.textContent).not.toContain('retired password secret');
+    expect(host.textContent).not.toContain('old.person@example.test');
+    expect(host.textContent).not.toContain(storyAccount);
+    expect(host.querySelector('#security-new-password')).toBeNull();
+    expect(button(host, m.auth_signup_retry_original())).toBeUndefined();
+    const retiredValues = calls
+      .slice(0, count)
+      .flatMap(({ body }) => [
+        body.key,
+        body.subjectId,
+        body.credential?.password,
+        body.effectRef,
+        body.digest,
+        body.reference,
+      ])
+      .filter(Boolean);
+    for (const value of retiredValues) expect(host.textContent).not.toContain(value);
+    expect(document.activeElement).toBe(summary);
 
-  await flush(() => calls[count - 1]!.resolve(lateResponse(phase, calls)));
-  expect(calls).toHaveLength(count);
-  expect(host.querySelector('[data-password-return-status]')?.textContent).toContain(message());
-  expect(document.activeElement).toBe(summary);
-});
+    await flush(() => calls[count - 1]!.resolve(lateResponse(phase, calls)));
+    expect(calls).toHaveLength(count);
+    expect(host.querySelector('[data-password-return-status]')?.textContent).toContain(message());
+    expect(document.activeElement).toBe(summary);
+  },
+);
 
 test('signed-out identity retirement keeps only generic password phase history', async () => {
   const identity = Promise.withResolvers<AccountIdentityResult>();

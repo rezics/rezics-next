@@ -19,7 +19,12 @@ test('known unsent work is discarded, while later application acknowledgement ke
 
 test('only a first native not-applied refusal is definitive', () => {
   const attempt = createPasswordChangeAttempt('account-secret', 'password-secret', 'old-key');
-  const refusal = { ok: false as const, status: 409, code: 'credential_effect_denied', effectStatus: 'not_applied' as const };
+  const refusal = {
+    ok: false as const,
+    status: 409,
+    code: 'credential_effect_denied',
+    effectStatus: 'not_applied' as const,
+  };
   expect(classifyPasswordChangeReply(attempt, refusal).kind).toBe('refused');
   expect(classifyPasswordChangeReply({ ...attempt, uncertain: true }, refusal).kind).toBe('unknown');
 });
