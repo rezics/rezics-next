@@ -1252,6 +1252,7 @@ export function SearchPage({
         />
       )}
       <ConditionEditor
+        requestIdentity={JSON.stringify([stateKey, session])}
         value={draft.condition}
         onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
         metadata={data?.conditionMetadata}

@@ -15,6 +15,9 @@ import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { coverSrc } from '../media/cover-src';
 import { localizedLabel } from './results';
+import { useWorkspaceAdmission, useReaderAddress } from '../session/reader';
+import { conditionPresetCatalogue, type ConditionPresetCatalogue } from './condition-preset-model';
+import { ConditionPresetName } from './condition-preset';
 import { ConditionRangeInput } from './condition-range-input';
 import { ConditionLanguages } from './condition-languages';
 import { ConditionSavedFilter, editSavedFilterTree, type SavedFilterEditMode } from './condition-saved-filter';
@@ -73,7 +76,8 @@ type EditorContext = {
   canEditTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
   editTree(path: ConditionTreePath, edit: ConditionTreeEdit): boolean;
   changeCondition(path: ConditionTreePath, value: FilterDocument | undefined, retain: boolean): void;
-  savedFilters: readonly string[];
+  presets: ConditionPresetCatalogue;
+  presetOwner: object;
   canSelectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
   selectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
   extension?: ConditionExtension | undefined;
@@ -88,6 +92,8 @@ export type ConditionExtension = {
     context?: { pointer: string; locale: string; issues: readonly ConditionIssue[] },
   ): ReactNode;
 };
+
+const PRESET_OPERATIONS = [] as const;
 
 const EMPTY_REQUEST_RESOURCES: RequestResourceInput = Object.freeze({});
 
@@ -126,6 +132,7 @@ export function ConditionEditor({
   extension,
   requestResources,
   embedded = false,
+  requestIdentity,
 }: {
   value?: FilterDocument | undefined;
   onChange(value: FilterDocument | undefined): void;
@@ -141,13 +148,22 @@ export function ConditionEditor({
   /** Optional native labels for request-only resource IDs; labels are display data and never resolve IDs. */
   requestResources?: RequestResourceInput | false;
   embedded?: boolean;
+  requestIdentity?: string | undefined;
 }) {
   const options = messageOptions(locale);
+  const { store, value: reader } = useWorkspaceAdmission(PRESET_OPERATIONS);
+  const address = useReaderAddress(null, undefined, locale);
+  const readerKey = JSON.stringify([reader.subject, reader.viewer, reader.observation?.id]);
+  const presetCurrent = () => {
+    const now = store.read();
+    return address.isCurrent() && readerKey === JSON.stringify([now.subject, now.viewer, now.observation?.id]);
+  };
   const root = useRef<HTMLDivElement>(null);
   const serial = useRef(0);
   const nextKey = () => ++serial.current;
   let [session, setSession] = useState(() => ({
     value,
+    lifetime: {},
     node: value ? createConditionDraftNode(value, nextKey) : undefined,
   }));
   const disabledRef = useRef(disabled);
@@ -160,10 +176,16 @@ export function ConditionEditor({
   );
   const focusOwner = JSON.stringify([
     locale,
+    readerKey,
+    address.key,
+    requestIdentity,
+    metadata?.digest,
     entityLookup ? conditionEntityRequestIdentity('condition-editor', '', [], entityLookup) : null,
   ]);
   const focusOwnerRef = useRef(focusOwner);
-  if (focusOwnerRef.current !== focusOwner) {
+  const focusMetadataRef = useRef(metadata);
+  if (focusOwnerRef.current !== focusOwner || focusMetadataRef.current !== metadata) {
+    focusMetadataRef.current = metadata;
     recovery.current.cancel();
     focusOwnerRef.current = focusOwner;
   }
@@ -171,7 +193,7 @@ export function ConditionEditor({
   // replacements start fresh, even when they reuse an earlier document object.
   if (session.value !== value) {
     recovery.current.cancel();
-    session = { value, node: value ? createConditionDraftNode(value, nextKey) : undefined };
+    session = { value, lifetime: {}, node: value ? createConditionDraftNode(value, nextKey) : undefined };
     setSession(session);
   }
   useEffect(() => {
@@ -182,7 +204,7 @@ export function ConditionEditor({
     if (disabled) recovery.current.cancel();
   }, [disabled]);
   const publish = (next: FilterDocument | undefined, node: ConditionDraftNode | undefined) => {
-    session = { value: next, node };
+    session = { value: next, node, lifetime: session.lifetime };
     setSession(session);
     onChange(next);
   };
@@ -204,9 +226,13 @@ export function ConditionEditor({
     publish(result.value, editConditionDraftNode(session.node!, path, edit, nextKey, retainReplacement));
     return true;
   };
-  const savedFilters = metadata ? Object.keys(metadata.filters ?? {}) : [];
+  const presets = useMemo(
+    () => (metadata ? conditionPresetCatalogue(metadata, locale) : undefined),
+    [metadata, locale],
+  );
+  const presetOwner = useMemo(() => ({}), [presets, focusOwner, session.lifetime]);
   const getSavedFilterEdit = (path: ConditionTreePath, id: string, mode: SavedFilterEditMode) => {
-    if (!value || !admitsCondition) return undefined;
+    if (!value || !admitsCondition || !presetCurrent()) return undefined;
     return editSavedFilterTree(value, path, id, mode, admitsCondition);
   };
   const canSelectSavedFilter = (path: ConditionTreePath, id: string, mode: SavedFilterEditMode) =>
@@ -271,7 +297,8 @@ export function ConditionEditor({
         editTree,
         changeCondition: (path, next, retain) =>
           editTree(path, next ? { type: 'replace', value: next } : { type: 'remove' }, retain),
-        savedFilters,
+        presets: presets!,
+        presetOwner,
         canSelectSavedFilter,
         selectSavedFilter,
         extension: activeExtension,
@@ -469,19 +496,24 @@ function NodeEditor({
   const extensionLabel = context.extension?.label?.(value, { locale: context.locale });
   const label =
     extensionLabel ??
-    (operator === 'and'
-      ? m.condition_and({}, options)
-      : operator === 'or'
-        ? m.condition_or({}, options)
-        : operator === 'not'
-          ? m.condition_not({}, options)
-          : 'saved' in value
-            ? m.condition_saved_filter_label({ id: value.saved }, options)
-            : 'type' in value
-              ? m.search_type({}, options)
-              : 'statement' in value
-                ? m.condition_statement({}, options)
-                : m.condition_leaf({}, options));
+    (operator === 'and' ? (
+      m.condition_and({}, options)
+    ) : operator === 'or' ? (
+      m.condition_or({}, options)
+    ) : operator === 'not' ? (
+      m.condition_not({}, options)
+    ) : 'saved' in value ? (
+      <>
+        {m.condition_saved_filter_reference({}, options)}:{' '}
+        <ConditionPresetName id={value.saved} catalogue={context.presets} />
+      </>
+    ) : 'type' in value ? (
+      m.search_type({}, options)
+    ) : 'statement' in value ? (
+      m.condition_statement({}, options)
+    ) : (
+      m.condition_leaf({}, options)
+    ));
   const extensionLeaf = context.extension?.render(value, onChange, {
     pointer,
     locale: context.locale,
@@ -657,7 +689,8 @@ function NodeEditor({
             </Button>
           ))}
           <ConditionSavedFilter
-            filters={context.savedFilters}
+            catalogue={context.presets}
+            owner={context.presetOwner}
             locale={context.locale}
             canSelect={(id) => context.canSelectSavedFilter(path, id, 'append')}
             onSelect={(id) => {
@@ -900,7 +933,8 @@ function NodeEditor({
       )}
       {'saved' in value && !extensionLeaf && (
         <ConditionSavedFilter
-          filters={context.savedFilters}
+          catalogue={context.presets}
+          owner={context.presetOwner}
           value={value.saved}
           locale={context.locale}
           canSelect={(id) => context.canSelectSavedFilter(path, id, 'replace')}

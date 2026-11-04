@@ -190,3 +190,23 @@ locale or request replacement, cancellation, leaving Search and a reader's focus
 
 A failed forward read retains its last admitted return address; uncertain authority clears rows and labels, and
 Previous re-reads that address rather than restoring its prior render. Refusal and restart keep explicit recovery.
+
+Released filter selection consumes only public definition labels and filters through the existing bounded metadata
+projection (at most 1024 released filters). Decision: choosing a candidate stages it for an explicit Add or Replace;
+Apply remains the execution boundary. Names use the existing language fallback and retain their language tags;
+references remain identity, appear beside names, and survive URL reload and Back without expansion into authored state.
+Missing names use the reference. Private Library filters never enter this catalogue.
+
+The picker examines at most 1024 names per narrowing operation, accepts 128 characters of narrowing text, and shows
+12 candidates per window plus a retained selection. Only the selected reference can open an inspection. Each
+catalogue owns a shared filter-construction snapshot; inspection uses its admitted expansion inside the request's
+outer AND, with the same cycle, depth and leaf limits. It grants no execution permission. Full-tree admission still
+checks Add, Replace and Apply. An unavailable reference remains explicitly repairable or removable.
+
+The optional current-definition preview uses the existing predicate presenter, showing at most 16 expression nodes,
+six operands per leaf, two qualifiers per statement, and 160 characters per displayed metadata label. Omitted
+structure and operands say the preview is shortened; range endpoints retain their precision and direction stays
+visible. It never reads matching subjects or opens operand lookups. Coverage describes the committed references,
+independently of the draft. Locale, public reader/address observation, accepted release replacement, external document
+replacement and node replacement/deletion retire inspection and picker state and pending tree-edit focus. Equivalent
+renders preserve deliberate edits. Existing saved-reference sharing refusal remains authoritative.

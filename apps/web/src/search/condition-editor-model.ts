@@ -18,7 +18,7 @@ export type ConditionMetadata = Omit<FilterRelease, 'filters' | 'properties'> & 
     string,
     FilterRelease['properties'][string] & { labels?: Record<string, string>; targets?: readonly string[] }
   >;
-  filters?: Record<string, { filter: FilterDocument }>;
+  filters?: Record<string, { filter: FilterDocument; labels?: Record<string, string> }>;
 };
 export type ConditionIssue = { pointer: string; code: string };
 export type SearchProblem = NonNullable<ReturnType<typeof facetProblem>>;
@@ -40,12 +40,16 @@ export function conditionChoiceLabels(choices: readonly { value: string; label: 
 
 /** Only released public grammar metadata crosses the BFF; no Library profiles or owner fields. */
 export function conditionMetadata(
-  release: FilterRelease & Pick<ConditionMetadata, 'types' | 'properties'> & { digest?: string },
+  release: Omit<FilterRelease, 'filters'> &
+    Pick<ConditionMetadata, 'types' | 'properties'> & {
+      digest?: string;
+      filters?: Record<string, { filter: unknown; labels?: Record<string, string> }>;
+    },
 ): ConditionMetadata {
   const filters: NonNullable<ConditionMetadata['filters']> = {};
   for (const [id, definition] of Object.entries(release.filters ?? {})) {
     try {
-      filters[id] = { filter: parseFilter(definition.filter) };
+      filters[id] = { filter: parseFilter(definition.filter), labels: { ...definition.labels } };
     } catch {
       // A malformed released reference stays unsupported; it never becomes an empty filter.
     }

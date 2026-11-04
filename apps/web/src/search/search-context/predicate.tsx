@@ -1,4 +1,5 @@
 import type { DiscoveryFilterDocument, FilterRange } from '@rezics/filter';
+import type { ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 
@@ -18,59 +19,90 @@ export function PredicateDescription({
   value,
   locale,
   label,
+  saved,
+  previewNodes,
 }: {
   value: DiscoveryFilterDocument;
   locale: string;
-  label: (id: string) => string;
+  label: (id: string) => ReactNode;
+  saved?: ((id: string) => ReactNode) | undefined;
+  previewNodes?: ReadonlySet<DiscoveryFilterDocument> | undefined;
 }) {
   const options = { locale: locales.find((item) => item === locale) ?? 'en' };
-  const child = (node: DiscoveryFilterDocument, index = 0) => (
-    <li key={index}>
-      <PredicateDescription value={node} locale={locale} label={label} />
-    </li>
+  const shortened = <span>{m.condition_preset_shortened({}, options)}</span>;
+  const terms = (ids: readonly string[]) => (
+    <>
+      {(previewNodes ? ids.slice(0, 6) : ids).map((id, i) => (
+        <span key={i}>
+          {i > 0 && ', '}
+          {label(id)}
+        </span>
+      ))}
+      {previewNodes && ids.length > 6 && shortened}
+    </>
   );
+  const children = (nodes: readonly DiscoveryFilterDocument[]) => {
+    const visible = previewNodes ? nodes.filter((node) => previewNodes.has(node)) : nodes;
+    return (
+      <ul>
+        {visible.map((node, index) => (
+          <li key={index}>
+            <PredicateDescription
+              value={node}
+              locale={locale}
+              label={label}
+              saved={saved}
+              previewNodes={previewNodes}
+            />
+          </li>
+        ))}
+        {visible.length < nodes.length && <li>{shortened}</li>}
+      </ul>
+    );
+  };
   if ('and' in value)
     return (
       <>
         {m.condition_and({}, options)}
-        <ul>{value.and.map(child)}</ul>
+        {children(value.and)}
       </>
     );
   if ('or' in value)
     return (
       <>
         {m.condition_or({}, options)}
-        <ul>{value.or.map(child)}</ul>
+        {children(value.or)}
       </>
     );
   if ('not' in value)
     return (
       <>
         {m.condition_not({}, options)}
-        <ul>{child(value.not)}</ul>
+        {children([value.not])}
       </>
     );
-  if ('saved' in value) return <>{m.condition_saved_filter_label({ id: value.saved }, options)}</>;
+  if ('saved' in value)
+    return <>{saved ? saved(value.saved) : m.condition_saved_filter_label({ id: value.saved }, options)}</>;
   if ('statement' in value) {
     const statement = value.statement;
     return (
       <>
-        {label(statement.property)}:{' '}
-        {'in' in statement ? statement.in.map(label).join(', ') : rangeDescription(statement.range)}
+        {label(statement.property)}: {'in' in statement ? terms(statement.in) : rangeDescription(statement.range)}
         {'inverse' in statement && statement.inverse ? ' ←' : null}
         {'in' in statement && statement.concept
           ? ` (${statement.concept.scheme}${statement.concept.includeChildren ? ' + ↓' : ''})`
           : null}
-        {statement.qualifiers?.map((qualifier, i) => (
+        {(previewNodes ? statement.qualifiers?.slice(0, 2) : statement.qualifiers)?.map((qualifier, i) => (
           <p key={i}>
-            {m.condition_qualifier({}, options)}: {label(qualifier.property)} = {qualifier.in.map(label).join(', ')}
+            {m.condition_qualifier({}, options)}: {label(qualifier.property)} = {terms(qualifier.in)}
           </p>
         ))}
+        {previewNodes && (statement.qualifiers?.length ?? 0) > 2 && shortened}
       </>
     );
   }
-  if ('type' in value) return <>{value.type.in.map(label).join(', ')}</>;
-  if ('kind' in value) return <>{value.kind.in.map(label).join(', ')}</>;
+  if ('type' in value) return <>{terms(value.type.in)}</>;
+  if ('kind' in value) return <>{terms(value.kind.in)}</>;
   if ('realm' in value) return <>Realm: {value.realm.id}</>;
   if ('ratingQuestion' in value)
     return <>{m.search_context_rating_question({ id: value.ratingQuestion.id }, options)}</>;
