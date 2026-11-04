@@ -50,6 +50,14 @@ test('malformed saved selectors and page positions retain their operands and per
       ...['not-a-uuid', '<script>alert(1)</script>', `${subjectId}/extra`, 'x'.repeat(129), 42, null, [subjectId]].map(
         (subjectId) => ({ subjectId }),
       ),
+      ...['', 'Print', 'print/other', 'print\n', 'x'.repeat(65), 42, null, ['print']].map((kind) => ({
+        subjectId,
+        kind,
+      })),
+      ...['', 'On-shelf', 'shelf/other', 'shelf\n', 'x'.repeat(65), 42, null, ['shelf']].map((status) => ({
+        subjectId,
+        status,
+      })),
       { subjectId, cursor: 'x'.repeat(2049) },
       { subjectId, cursor: 123 },
       { cursor: {} },
@@ -78,22 +86,33 @@ test('malformed saved selectors and page positions retain their operands and per
   }
 });
 
-test('empty selectors mean all copies, UUID selectors and bounded opaque cursors retain exact address identity', () => {
-  expect(copiesAddress({ subjectId: '', cursor: '' }, 'en')).toEqual({ subjectId: null, cursor: null, locale: 'en' });
+test('empty Subject and cursor mean the first all-copies page; filters and opaque cursors keep exact identity', () => {
+  expect(copiesAddress({ subjectId: '', cursor: '' }, 'en')).toEqual({
+    subjectId: null,
+    kind: null,
+    status: null,
+    cursor: null,
+    locale: 'en',
+  });
+  expect(copiesAddress({ kind: '', status: '' }, 'en')).toMatchObject({ kind: '', status: '', issue: 'kind' });
   const opaque = 'not/decoded+%?='.repeat(100).padEnd(2048, 'x');
-  const address = copiesAddress({ subjectId, cursor: opaque }, 'ja');
-  expect(address).toEqual({ subjectId, cursor: opaque, locale: 'ja' });
-  expect(sameCopiesAddress(address, copiesAddress({ subjectId, cursor: opaque }, 'ja'))).toBe(true);
+  const address = copiesAddress({ subjectId, kind: 'print', status: 'shelf', cursor: opaque }, 'ja');
+  expect(address).toEqual({ subjectId, kind: 'print', status: 'shelf', cursor: opaque, locale: 'ja' });
+  expect(sameCopiesAddress(address, copiesAddress({ subjectId, kind: 'print', status: 'shelf', cursor: opaque }, 'ja'))).toBe(true);
   expect(sameCopiesAddress(address, { ...address, locale: 'en' })).toBe(false);
   expect(sameCopiesAddress(address, { ...address, subjectId: null })).toBe(false);
+  expect(sameCopiesAddress(address, { ...address, kind: 'ebook' })).toBe(false);
+  expect(sameCopiesAddress(address, { ...address, status: 'loan' })).toBe(false);
   expect(sameCopiesAddress(address, { ...address, cursor: null })).toBe(false);
 });
 
-test('correction is deliberate GET navigation; selector correction clears page position, cursor recovery keeps subject and locale', () => {
+test('correction is GET navigation; predicate corrections restart cursors and retain the other selected filters', () => {
   for (const locale of ['en', 'zh-Hant']) {
     for (const query of [
       { subjectId: 'bad-selector', cursor: 'old' },
-      { subjectId, cursor: 'x'.repeat(2049) },
+      { subjectId, kind: 'Print', status: 'shelf', cursor: 'old' },
+      { subjectId, kind: 'print', status: 'On-shelf', cursor: 'old' },
+      { subjectId, kind: 'print', status: 'shelf', cursor: 'x'.repeat(2049) },
     ]) {
       const address = copiesAddress(query, locale);
       const document = window.document;
@@ -109,11 +128,24 @@ test('correction is deliberate GET navigation; selector correction clears page p
       if (address.issue === 'subject') {
         expect(form.querySelector('[name="subjectId"]')?.getAttribute('value')).toBe('bad-selector');
         expect(form.querySelector('[name="cursor"]')).toBeNull();
-        expect(target.search).toBe('');
+        expect(target.searchParams.has('subjectId')).toBe(false);
+        expect(target.searchParams.get('kind')).toBeNull();
       } else {
         expect(form.querySelector('[name="subjectId"]')?.getAttribute('value')).toBe(subjectId);
-        expect(form.querySelector('[name="cursor"]')?.getAttribute('maxlength')).toBe('2048');
-        expect(target.searchParams.get('subjectId')).toBe(subjectId);
+        if (address.issue === 'kind') {
+          expect(form.querySelector('[name="kind"]')?.getAttribute('maxlength')).toBe('64');
+          expect(form.querySelector('[name="status"]')?.getAttribute('value')).toBe('shelf');
+          expect(target.searchParams.get('status')).toBe('shelf');
+        } else if (address.issue === 'status') {
+          expect(form.querySelector('[name="status"]')?.getAttribute('maxlength')).toBe('64');
+          expect(form.querySelector('[name="kind"]')?.getAttribute('value')).toBe('print');
+          expect(target.searchParams.get('kind')).toBe('print');
+        } else {
+          expect(form.querySelector('[name="cursor"]')?.getAttribute('maxlength')).toBe('2048');
+          expect(target.searchParams.get('subjectId')).toBe(subjectId);
+          expect(target.searchParams.get('kind')).toBe('print');
+          expect(target.searchParams.get('status')).toBe('shelf');
+        }
       }
     }
   }

@@ -59,6 +59,8 @@ export type LoadedCopiesPageData = Omit<CopiesPageData, 'copies'> & { copies: Lo
 export type CopiesPageData = {
   signedIn: boolean;
   subjectId: string | null;
+  kind?: string | null;
+  status?: string | null;
   /** Original requested cursor, including when the existing invalid-cursor fallback reads page one. */
   requestedCursor?: string | null;
   cursorRestarted?: boolean;
@@ -312,13 +314,18 @@ async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promis
 async function readCopyPage(
   client: KernelClient,
   authorization: string,
-  subjectId?: string,
-  cursor?: string,
+  input: { subjectId?: string; kind?: string; status?: string; cursor?: string },
   recovered?: () => void,
 ) {
   const read = async (pageCursor?: string) => {
+    const query = {
+      ...libraryListQuery(pageCursor),
+      ...(input.subjectId ? { subjectId: input.subjectId } : {}),
+      ...(input.kind ? { kind: input.kind } : {}),
+      ...(input.status ? { status: input.status } : {}),
+    };
     const result = await client.copies.get({
-      query: { ...libraryListQuery(pageCursor), ...(subjectId ? { subjectId } : {}) },
+      query,
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
@@ -340,18 +347,39 @@ export async function loadCopiesPage(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { subjectId?: string; cursor?: string },
+  input: { subjectId?: string; kind?: string; status?: string; cursor?: string },
 ): Promise<LoadedCopiesPageData> {
   const refused = await prepareSession(request, sessionEnv);
   const authorization = refused ? null : viewerCredential(request);
   const subjectId = copiesSubjectId(input.subjectId) ?? null;
+  const kind = input.kind ?? null;
+  const status = input.status ?? null;
   const provenance = input.cursor ? { requestedCursor: input.cursor } : {};
   if (!authorization)
-    return { signedIn: false, subjectId, ...provenance, copies: [], next: null, addKey: crypto.randomUUID() };
+    return {
+      signedIn: false,
+      subjectId,
+      kind,
+      status,
+      ...provenance,
+      copies: [],
+      next: null,
+      addKey: crypto.randomUUID(),
+    };
   let cursorRestarted = false;
-  const page = await readCopyPage(client, authorization, subjectId ?? undefined, input.cursor, () => {
-    cursorRestarted = true;
-  });
+  const page = await readCopyPage(
+    client,
+    authorization,
+    {
+      ...(subjectId ? { subjectId } : {}),
+      ...(kind ? { kind } : {}),
+      ...(status ? { status } : {}),
+      ...(input.cursor ? { cursor: input.cursor } : {}),
+    },
+    () => {
+      cursorRestarted = true;
+    },
+  );
   // The activated profile choice is part of every current copy create request,
   // including an empty filtered page. Do not infer producer support from rows.
   const sendKind = true;
@@ -359,6 +387,8 @@ export async function loadCopiesPage(
   return {
     signedIn: true,
     subjectId,
+    kind,
+    status,
     ...provenance,
     ...(cursorRestarted ? { cursorRestarted: true } : {}),
     copies,

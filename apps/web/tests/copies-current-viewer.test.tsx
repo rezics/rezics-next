@@ -177,14 +177,23 @@ function copy(viewer: string, n = 1): CopyItem {
     subject: { id: id(10), type: 'Book', types: ['Book'], label: `Private edition ${viewer}`, cover: null },
   };
 }
-type Search = { subjectId?: string; cursor?: string; copyFailure?: string };
+type Search = { subjectId?: string; kind?: string; status?: string; cursor?: string; copyFailure?: string };
 function response(viewer: string, search: Search = { subjectId: id(10), cursor: 'first' }): CopiesCurrentRead {
   return {
     sessionSubject: viewer,
-    requested: { subjectId: search.subjectId ?? null, cursor: search.cursor ?? null, locale: 'en' },
+    requested: {
+      subjectId: search.subjectId ?? null,
+      kind: search.kind ?? null,
+      status: search.status ?? null,
+      cursor: search.cursor ?? null,
+      locale: 'en',
+    },
     page: {
       signedIn: true,
       subjectId: search.subjectId ?? null,
+      kind: search.kind ?? null,
+      status: search.status ?? null,
+      requestedCursor: search.cursor ?? null,
       copies: [copy(viewer)],
       next: `next-${viewer}`,
       addKey: id(90),
@@ -216,11 +225,13 @@ test('Actual server exports certify only the exact native preparation, preserve 
     preparation = 'active';
     refuseAfterPreparation = true;
     const before = prepareCalls;
-    const value = await actions.readCopiesCurrent({ data: { subjectId: id(10), cursor: 'bad/keyset+cursor' } });
+    const value = await actions.readCopiesCurrent({
+      data: { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'bad/keyset+cursor' },
+    });
     expect(value).toMatchObject({
       sessionSubject: 'A',
-      requested: { subjectId: id(10), cursor: 'bad/keyset+cursor', locale: 'en' },
-      page: { csrfToken: 'csrf-A', next: 'next-A' },
+      requested: { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'bad/keyset+cursor', locale: 'en' },
+      page: { kind: 'print', status: 'shelf', csrfToken: 'csrf-A', next: 'next-A' },
     });
     expect(value.page.copies[0]?.subject?.label).toBe('Prepared A edition');
     expect(prepareCalls - before).toBe(1);
@@ -230,6 +241,13 @@ test('Actual server exports certify only the exact native preparation, preserve 
       '/v1/copies',
       `/v1/subjects/${id(10)}`,
     ]);
+    const listAddresses = calls.slice(0, 2).map((call) => new URL(call.url).searchParams);
+    expect(listAddresses.map((query) => [query.get('subjectId'), query.get('kind'), query.get('status')])).toEqual([
+      [id(10), 'print', 'shelf'],
+      [id(10), 'print', 'shelf'],
+    ]);
+    expect(listAddresses[0]?.get('cursor')).toBe('bad/keyset+cursor');
+    expect(listAddresses[1]?.has('cursor')).toBe(false);
     expect(
       calls.every(
         (call) =>
@@ -270,11 +288,13 @@ test('Actual server exports certify only the exact native preparation, preserve 
     currentRequest = request();
     preparedViewer = 'B';
     expect(
-      await actions.readCopyDetailCurrent({ data: { id: id(1), subjectId: id(10), cursor: 'point-source' } }),
+      await actions.readCopyDetailCurrent({
+        data: { id: id(1), subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'point-source' },
+      }),
     ).toMatchObject({
       sessionSubject: 'B',
       id: id(1),
-      requested: { subjectId: id(10), cursor: 'point-source', locale: 'en' },
+      requested: { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'point-source', locale: 'en' },
     });
     expect(await actions.readCopySubjectCurrent({ data: { id: id(10), cursor: 'selected-source' } })).toMatchObject({
       sessionSubject: 'B',
@@ -645,6 +665,38 @@ test('The actual Copies route retires retained private rows and editor state on 
     absent('B');
     await refetch();
     await acceptList('B');
+
+    const priorFilterSearch: Search = {
+      subjectId: id(10),
+      kind: 'print',
+      status: 'shelf',
+      cursor: 'cursor-from-print',
+    };
+    search = priorFilterSearch;
+    await show(viewer('B'));
+    const delayedPriorFilter = lists.at(-1)!;
+    search = { subjectId: id(10), kind: 'digital', status: 'shelf' };
+    await show(viewer('B'));
+    absent('B');
+    const currentFilter = lists.at(-1)!;
+    const currentFilterResponse = response('B', search);
+    currentFilterResponse.page.copies[0]!.note = 'Current digital filter result';
+    await act(async () => currentFilter.resolve(currentFilterResponse));
+    await tick();
+    expect(host.textContent).toContain('Current digital filter result');
+    const staleFilterResponse = response('B', priorFilterSearch);
+    staleFilterResponse.page.copies[0]!.note = 'Cross-filter cursor result';
+    await act(async () => delayedPriorFilter.resolve(staleFilterResponse));
+    await tick();
+    expect(host.textContent).toContain('Current digital filter result');
+    expect(host.textContent).not.toContain('Cross-filter cursor result');
+    const next = [...host.querySelectorAll('a')].find((link) => link.textContent === m.library_copy_more());
+    expect(next).toBeDefined();
+    const nextAddress = new URL(next!.href);
+    expect(nextAddress.searchParams.get('subjectId')).toBe(id(10));
+    expect(nextAddress.searchParams.get('kind')).toBe('digital');
+    expect(nextAddress.searchParams.get('status')).toBe('shelf');
+    expect(nextAddress.searchParams.get('cursor')).toBe('next-B');
 
     // Explicit edition reads carry both source address and exact selected id; A IO never gates B.
     await show(viewer('A'));

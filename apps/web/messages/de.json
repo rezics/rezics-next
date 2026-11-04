@@ -8398,5 +8398,10 @@
   "draft_preview_account": "Kontoname",
   "draft_preview_view": "Ansicht",
   "draft_preview_correct": "Aktuelles Konto @{handle} verwenden",
-  "draft_preview_address": "Objekt-ID, Kontoname oder Route"
+  "draft_preview_address": "Objekt-ID, Kontoname oder Route",
+  "library_copy_filter_reset": "Exemplarfilter zurücksetzen",
+  "library_copy_filters_active": "Aktive Exemplarfilter",
+  "library_copy_matching_empty": "Keine Exemplare entsprechen diesen Filtern.",
+  "library_copies_address_filter_invalid": "Dieser Art- oder Statusfilter ist ungültig. Es wurden keine Exemplare geladen. Korrigieren Sie ihn oder starten Sie diese Ansicht neu.",
+  "library_copies_address_filter_label": "Art- oder Statusfilter"
 }

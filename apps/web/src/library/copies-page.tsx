@@ -1087,7 +1087,12 @@ function LoadedCopiesPage({
 }) {
   const [copies, setCopies] = useState(page.copies);
   const returnTo = copyInventoryReturnHref(
-    { subjectId: page.subjectId, cursor: page.requestedCursor ?? null },
+    {
+      subjectId: page.subjectId,
+      kind: page.kind ?? null,
+      status: page.status ?? null,
+      cursor: page.requestedCursor ?? null,
+    },
     locale(),
   );
   const [changed, setChanged] = useState(false);
@@ -1178,6 +1183,15 @@ function LoadedCopiesPage({
   }
   const filteredLabel = page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject?.label;
   const filteredTitle = filteredLabel ? displayLibraryTitle(filteredLabel, locale()).text : undefined;
+  const predicateFilters = [
+    ...(page.kind ? [`${m.library_copy_kind()}: ${page.kind}`] : []),
+    ...(page.status ? [`${m.library_copy_status()}: ${page.status}`] : []),
+  ];
+  const firstPageSearch = {
+    ...(page.subjectId ? { subjectId: page.subjectId } : {}),
+    ...(page.kind ? { kind: page.kind } : {}),
+    ...(page.status ? { status: page.status } : {}),
+  };
   const firstPageEmpty = !page.requestedCursor && !page.next && !page.copies.length && !changed;
   const recoverable = Boolean(page.requestedCursor) || (!copies.length && !firstPageEmpty);
   return (
@@ -1220,10 +1234,29 @@ function LoadedCopiesPage({
               onClick={(event) => {
                 if (!currentPage()) event.preventDefault();
               }}
-              search={{}}
+              search={{ ...(page.kind ? { kind: page.kind } : {}), ...(page.status ? { status: page.status } : {}) }}
               className="text-primary underline underline-offset-4"
             >
               {m.library_copy_all()}
+            </Link>
+          </Exposure>
+        </p>
+      ) : null}
+      {predicateFilters.length ? (
+        <p role="status" className="flex flex-wrap items-baseline gap-x-3 gap-y-2">
+          <span>
+            {m.library_copy_filters_active()}: {predicateFilters.join(' · ')}
+          </span>
+          <Exposure operation="copy.list">
+            <Link
+              to="/library/copies"
+              onClick={(event) => {
+                if (!currentPage('copy.list')) event.preventDefault();
+              }}
+              search={page.subjectId ? { subjectId: page.subjectId } : {}}
+              className="text-primary underline underline-offset-4"
+            >
+              {m.library_copy_filter_reset()}
             </Link>
           </Exposure>
         </p>
@@ -1250,7 +1283,9 @@ function LoadedCopiesPage({
           {firstPageEmpty
             ? page.subjectId
               ? m.library_copy_filtered_empty()
-              : m.library_copy_empty()
+              : predicateFilters.length
+                ? m.library_copy_matching_empty()
+                : m.library_copy_empty()
             : m.library_copy_page_empty()}
         </p>
       )}
@@ -1260,7 +1295,7 @@ function LoadedCopiesPage({
             {recoverable ? (
               <Link
                 to="/library/copies"
-                search={{ ...(page.subjectId ? { subjectId: page.subjectId } : {}) }}
+                search={firstPageSearch}
                 onClick={(event) => {
                   if (!currentPage('copy.list')) event.preventDefault();
                 }}
@@ -1275,7 +1310,7 @@ function LoadedCopiesPage({
                 onClick={(event) => {
                   if (!currentPage()) event.preventDefault();
                 }}
-                search={{ ...(page.subjectId ? { subjectId: page.subjectId } : {}), cursor: page.next }}
+                search={{ ...firstPageSearch, cursor: page.next }}
                 className={`${quiet} text-primary`}
               >
                 {m.library_copy_more()}

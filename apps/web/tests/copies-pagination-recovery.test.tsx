@@ -94,14 +94,23 @@ const copy = (viewer = 'A'): CopyItem => ({
   subject: { id: edition, type: 'Book', label: `Private edition ${viewer}`, cover: null },
   idempotencyKey: id(101),
 });
-type Search = { subjectId?: string; cursor?: string };
+type Search = { subjectId?: string; kind?: string; status?: string; cursor?: string };
 function response(search: Search, page: Partial<CopiesPageData> = {}, viewer = 'A'): CopiesCurrentRead {
   return {
     sessionSubject: viewer,
-    requested: { subjectId: search.subjectId ?? null, cursor: search.cursor ?? null, locale: 'en' },
+    requested: {
+      subjectId: search.subjectId ?? null,
+      kind: search.kind ?? null,
+      status: search.status ?? null,
+      cursor: search.cursor ?? null,
+      locale: 'en',
+    },
     page: {
       signedIn: true,
       subjectId: search.subjectId ?? null,
+      kind: search.kind ?? null,
+      status: search.status ?? null,
+      requestedCursor: search.cursor ?? null,
       copies: [],
       next: null,
       addKey: id(90),

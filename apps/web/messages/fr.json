@@ -8398,5 +8398,10 @@
   "draft_preview_account": "Identifiant du compte",
   "draft_preview_view": "Vue",
   "draft_preview_correct": "Utiliser le compte actuel @{handle}",
-  "draft_preview_address": "ID du sujet, identifiant du compte ou route"
+  "draft_preview_address": "ID du sujet, identifiant du compte ou route",
+  "library_copy_filter_reset": "Réinitialiser les filtres de copies",
+  "library_copy_filters_active": "Filtres de copies actifs",
+  "library_copy_matching_empty": "Aucune copie ne correspond à ces filtres.",
+  "library_copies_address_filter_invalid": "Ce filtre de type ou de statut est invalide. Aucune copie n’a été chargée. Corrigez-le ou recommencez cette vue.",
+  "library_copies_address_filter_label": "Filtre de type ou de statut"
 }

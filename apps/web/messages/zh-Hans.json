@@ -8398,5 +8398,10 @@
   "draft_preview_account": "账户名称",
   "draft_preview_view": "视图",
   "draft_preview_correct": "使用当前账户 @{handle}",
-  "draft_preview_address": "主题 ID、账户名称或路由"
+  "draft_preview_address": "主题 ID、账户名称或路由",
+  "library_copy_filter_reset": "重置复本筛选条件",
+  "library_copy_filters_active": "当前的复本筛选条件",
+  "library_copy_matching_empty": "没有符合这些筛选条件的复本。",
+  "library_copies_address_filter_invalid": "复本类型或状态筛选条件无效。尚未加载任何复本。请修正条件或重新打开此视图。",
+  "library_copies_address_filter_label": "类型或状态筛选条件"
 }

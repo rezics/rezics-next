@@ -8398,5 +8398,10 @@
   "draft_preview_account": "Nombre de cuenta",
   "draft_preview_view": "Vista",
   "draft_preview_correct": "Usar la cuenta actual @{handle}",
-  "draft_preview_address": "ID de entidad, nombre de cuenta o ruta"
+  "draft_preview_address": "ID de entidad, nombre de cuenta o ruta",
+  "library_copy_filter_reset": "Restablecer filtros de copias",
+  "library_copy_filters_active": "Filtros de copias activos",
+  "library_copy_matching_empty": "No hay copias que coincidan con estos filtros.",
+  "library_copies_address_filter_invalid": "Este filtro de tipo o estado no es válido. No se cargaron copias. Corrígelo o reinicia esta vista.",
+  "library_copies_address_filter_label": "Filtro de tipo o estado"
 }

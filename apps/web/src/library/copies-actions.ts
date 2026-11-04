@@ -94,6 +94,8 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
       page: {
         signedIn: !!subject,
         subjectId: requested.subjectId,
+        kind: requested.kind,
+        status: requested.status,
         requestedCursor: requested.cursor,
         copies: [],
         next: null,
@@ -103,7 +105,7 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
   }
   let origin: Preparation | undefined;
   let dispatched = false;
-  const client = observeCopiesRead(kernelClient(), (authorization) => {
+  const client = observeCopiesRead(kernelClient(requested.locale), (authorization) => {
     const actual = prepared(request, authorization);
     // The single invalid-cursor recovery must retain the original association too.
     if (!dispatched) origin = actual;
@@ -112,6 +114,8 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
   });
   const page = await loadCopiesPage(client, request, env as Partial<SessionEnv>, {
     ...(requested.subjectId ? { subjectId: requested.subjectId } : {}),
+    ...(requested.kind ? { kind: requested.kind } : {}),
+    ...(requested.status ? { status: requested.status } : {}),
     ...(requested.cursor ? { cursor: requested.cursor } : {}),
   });
   if (current && !origin?.subject) {
@@ -121,6 +125,8 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
       page: {
         signedIn: false,
         subjectId: requested.subjectId,
+        kind: requested.kind,
+        status: requested.status,
         requestedCursor: requested.cursor,
         copies: [],
         next: null,
@@ -177,7 +183,7 @@ async function copyDetailBody(input: unknown, current: boolean): Promise<CopyDet
   if (requested.issue)
     return { sessionSubject: null, requested, id: null, result: { ok: false, reason: 'unavailable' } };
   let origin: Preparation | undefined;
-  const client = observeCopiesRead(kernelClient(), (authorization) => {
+  const client = observeCopiesRead(kernelClient(requested.locale), (authorization) => {
     origin = prepared(request, authorization);
   });
   const result = await loadCopyDetail(client, request, env as Partial<SessionEnv>, input);
@@ -255,6 +261,7 @@ async function resolveSubject(
   id: string,
   capture: (origin: Preparation | undefined) => void,
   current = false,
+  locale?: string,
 ): Promise<CopySubjectResult> {
   if (!copiesSubjectId(id)) return { state: 'unavailable' };
   try {
@@ -263,7 +270,7 @@ async function resolveSubject(
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'forbidden' };
     capture(prepared(request, authorization));
-    const result = await kernelClient()
+    const result = await kernelClient(locale)
       .subjects({ id })
       .get({
         headers: { authorization },
@@ -295,7 +302,7 @@ export const readCopySubject = createServerFn({ method: 'GET' })
   .validator((input: unknown) => (typeof input === 'string' ? input : ''))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return resolveSubject(data, () => {});
+    return resolveSubject(data, () => {}, false, getLocale());
   });
 
 export const readCopySubjectCurrent = createServerFn({ method: 'GET' })
@@ -314,6 +321,7 @@ export const readCopySubjectCurrent = createServerFn({ method: 'GET' })
         origin = actual;
       },
       true,
+      requested.locale,
     );
     return {
       sessionSubject: origin?.subject ?? null,

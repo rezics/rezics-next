@@ -8510,5 +8510,10 @@
   "draft_preview_account": "Account handle",
   "draft_preview_view": "View",
   "draft_preview_correct": "Use current account @{handle}",
-  "draft_preview_address": "Subject ID, account handle or route"
+  "draft_preview_address": "Subject ID, account handle or route",
+  "library_copy_filter_reset": "Reset copy filters",
+  "library_copy_filters_active": "Active copy filters",
+  "library_copy_matching_empty": "No copies match these filters.",
+  "library_copies_address_filter_invalid": "This kind or status filter is invalid. No copies were loaded. Correct it or restart this view.",
+  "library_copies_address_filter_label": "Kind or status filter"
 }

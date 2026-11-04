@@ -33,6 +33,9 @@ function matches(value: CopiesCurrentRead | undefined, subject: string, address:
     sameCopiesAddress(value.requested, address) &&
     value.page?.signedIn &&
     value.page.subjectId === address.subjectId &&
+    (value.page.kind ?? null) === address.kind &&
+    (value.page.status ?? null) === address.status &&
+    (value.page.requestedCursor ?? null) === address.cursor &&
     (!address.subjectId || value.page.copies.every((copy) => !copy.subject || copy.subject.id === address.subjectId))
   );
 }
@@ -115,7 +118,12 @@ function CurrentCopiesRead({
 }) {
   const [lifetime] = useState(() => crypto.randomUUID());
   const [initialData] = useState(() => (seed && matches(initial, subject, address) ? initial : undefined));
-  const input = { subjectId: address.subjectId ?? undefined, cursor: address.cursor ?? undefined };
+  const input = {
+    subjectId: address.subjectId ?? undefined,
+    kind: address.kind ?? undefined,
+    status: address.status ?? undefined,
+    cursor: address.cursor ?? undefined,
+  };
   const queryKey = ['copies-current', subject, address, lifetime] as const;
   const query = useQuery({
     ...personalRead,

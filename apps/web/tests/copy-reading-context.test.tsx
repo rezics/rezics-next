@@ -14,7 +14,10 @@ const id = (tail: string) => `019a1b2c-3d4e-7f00-8a00-${tail.padStart(12, '0')}`
 const work = { id: id('1'), label: 'Shared work', labelLanguage: 'en' };
 
 test('available Work links return to the exact localized inventory address', async () => {
-  const returnTo = copyInventoryReturnHref({ subjectId: id('9'), cursor: 'opaque-next' }, 'en')!;
+  const returnTo = copyInventoryReturnHref(
+    { subjectId: id('9'), kind: 'print', status: 'shelf', cursor: 'opaque-next' },
+    'en',
+  )!;
   const context: CopyReadingContext = { state: 'available', work: [work], facts: [] };
   const window = new Window({ url: 'https://rezics.test' });
   try {
@@ -32,8 +35,10 @@ test('available Work links return to the exact localized inventory address', asy
       const via = new URL(destination.searchParams.get('via')!, 'https://rezics.test');
       expect(destination.pathname.split('/')[3]).toBe(work.id);
       expect(via.pathname).toBe('/en/library/copies');
-      expect([...via.searchParams.keys()]).toEqual(['subjectId', 'cursor']);
+      expect([...via.searchParams.keys()]).toEqual(['subjectId', 'kind', 'status', 'cursor']);
       expect(via.searchParams.get('subjectId')).toBe(id('9'));
+      expect(via.searchParams.get('kind')).toBe('print');
+      expect(via.searchParams.get('status')).toBe('shelf');
       expect(via.searchParams.get('cursor')).toBe('opaque-next');
       expect(link.href).not.toMatch(/private|note|source|location/i);
     }
