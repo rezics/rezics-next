@@ -93,7 +93,7 @@ export function BoardCommunity({
           sort={sort}
           page={threads}
           openingCards={page.openingCards}
-          reactionOrigin={reactionOrigin}
+          {...(reactionOrigin === undefined ? {} : { reactionOrigin })}
           authors={authors}
           now={now}
           actions={typeof start === 'function' ? start(page) : start}
