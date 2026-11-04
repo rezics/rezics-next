@@ -279,7 +279,8 @@ test('Relation Editor proposal/exact-slot family keeps independent native associ
     checkboxes[1]!.focus();
     await act(async () => user.keyboard(' '));
     expect(checkboxes[1]!.getAttribute('aria-checked')).toBe('false');
-    expect(ownFixtures.map((fixture) => fixture.calls.length)).toEqual([1, 1]);
+    // Initial public comparison and one native action batch; local consent toggles add no requests.
+    expect(ownFixtures.map((fixture) => fixture.calls.length)).toEqual([2, 2]);
     expect(ownRegions[1]!.textContent).toContain(m.statement_consent_unsourced());
 
     // Rank labels belong to separate accepted-candidate review panels, without adoption.
