@@ -1,6 +1,7 @@
 import { m } from '../../paraglide/messages.js';
 import { quantityPresentation } from '../../subject/quantity-presentation';
 import type { Related } from '../../subject/types';
+import type { SubjectSummary } from '../../media/summary';
 import { isRecord, type Stmt } from './shared';
 
 type QuantityContent = { amount: string; unit: string; lowerBound?: string; upperBound?: string };
@@ -12,7 +13,7 @@ type QualifiedQuantity = {
 export type QualifiedNote = {
   text: string;
   property?: string;
-  subject?: { id: string; label: string };
+  subject?: { id: string; label: string; summary?: SubjectSummary };
   language?: string;
   quantity?: QualifiedQuantity;
 };
@@ -71,12 +72,23 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
     if (snak.property.data_type === 'wikibase-item' && typeof content === 'string') {
       const summary = disclosedSummary(disclosed, content);
       const label = summaryLabel(summary)?.value;
+      const type = typeof summary?.type === 'string' ? summary.type : undefined;
       // A missing human label does not disclose the target or erase the qualifier's category.
       return [
         {
           property,
           text: `${prefix}: ${label ?? m.subject_value_unlabelled({}, options)}`,
-          ...(label ? { subject: { id: content, label } } : {}),
+          ...(label
+            ? {
+                subject: {
+                  id: content,
+                  label,
+                  ...(summary && type
+                    ? { summary: summary as unknown as SubjectSummary }
+                    : {}),
+                },
+              }
+            : {}),
         },
       ];
     }

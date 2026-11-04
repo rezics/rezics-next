@@ -1514,6 +1514,36 @@ Decision: original Person credit inspection opens disclosed destinations in a se
 window and focus; correction reads one exact slot page and uses only its authorized original candidate payload,
 remaining unavailable when that page cannot supply it. A public empty citation list means no disclosed citations.
 
+## Work cast comparison
+
+An admitted forward `wdt:P725` page groups the current returned credit window by the disclosed `wdt:P453` Character
+qualifier on each exact original statement. Each performance keeps that statement identity, the Person target, the
+Character target, and independent role and credited-as qualifiers. Multiple Character values on one assertion remain
+separate pairings; duplicate names do not merge assertions. Appearance membership never supplies a voice credit.
+Unlabelled or undisclosed Character targets stay unpaired and non-clickable. Regular staff credits and appearances keep
+their existing groups. The Character grouping and original credit order are both local presentations of the same native
+window; the scope label names that window, and the native continuation remains unchanged.
+
+Decision: disclosed Character and Person links open in same-locale new tabs, preserving the original work's loaded
+window, presentation, and focused link when the reader returns. An unlabelled target has no link.
+
+### Work cast Cost
+
+The adapter reads only the selected native relation response. A relation page is capped at 100 original rows and one
+current page is retained by the mounted relation stream. Native statements admit at most 16 qualifiers, so a page can
+produce at most `100 × 16 = 1,600` Character-pair references (or fewer when qualifiers repeat the same Character).
+Each pair retains the original row identity and references its already returned summaries; the page contains at most
+256 related-summary inputs. Grouping is linear in returned rows and qualifier values. A rendered pair can repeat at most
+15 non-Character qualifier notes beside its Person, for a structural maximum of `1,600 × 15 = 24,000` note rows.
+
+Those values are the native response values: qualifier strings stay subject to the current Definitions limits, and the
+UTF-8 byte charge is the exact existing relation body, with no cast fetch or second response serialization. A summary is
+the existing disclosed `SubjectSummary`; its cover is null or the current cover summary, with at most 12 variants and
+the native imported rights-text limits (8 KiB for cover-credit metadata). No missing summary is repaired from a cover
+or identifier. The Web adapter test charges typed calls, retained rows, and UTF-8 body bytes at 64, 512, and 4,096
+unrelated Subjects and historical assertions; those scales do not change this loaded window. This is not native SQL
+growth evidence; the directed-credit native growth acceptance remains separate.
+
 ## Scores on pages
 
 A score is never shown without its population, question, scale and count. The installed public headline is the
