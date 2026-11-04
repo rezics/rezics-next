@@ -51,9 +51,13 @@ only to the target's write alias. A stale event cannot restore a deleted key at 
 
 After population, the generation catches up its replay checkpoint and replays every native metadata population before
 reconciling indexed identities against current owner truth. Native replay finds newly eligible identities absent from
-the target; the indexed pass removes withdrawals. Each pass advances at most one admitted raw page per step, including
-pages whose candidates are all rejected. A changed observation restarts that producer's native pass. The durable
-`native_complete` flag distinguishes raw completion from indexed-hit exhaustion. Reconciliation repeats when native positions or owner revisions move. Publication requires every
+the target; the indexed pass removes withdrawals. Each advancement selects at most 128 durable owner/partition
+frontiers and settles them in groups of at most eight. Every page remains bounded by its native producer and commits
+its own cursor only after the exact target actions settle; a failed group is drained before its error is retried. This
+amortizes registry and capability-witness setup without inferring completion or dropping any producer evidence.
+Decision: Search discovery batches at most 128 durable owner/partition frontiers per advancement, with population concurrency 8 and final certification concurrency 16, preserving every producer evidence check and post-action cursor.
+A changed observation restarts that producer's native pass. The durable `native_complete` flag distinguishes raw
+completion from indexed-hit exhaustion. Reconciliation repeats when native positions or owner revisions move. Publication requires every
 producer population to be complete, replay to be current, all reconciliation partitions to be certified and the
 physical UUID to remain unchanged. Only then does an observed alias switch make the candidate active; the former
 generation becomes retiring after that observation.
@@ -88,11 +92,13 @@ Abandoned candidates retire immediately; a previously active target retains the 
 Collection, Review and Space reconciliation positions are compared only to their respective native readers. Core
 partition heads continue to certify Accounts/Subjects and relay checkpoints, not metadata domains.
 
-For producer i, complete preparation costs `sum(P_i * C_i(B_i))` plus actual action bytes, writes and durable state.
-A reconciliation restart adds another native raw pass and indexed cleanup; an epoch replacement adds a fresh physical
-population. Neither term is absorbed into a retained-count cap. The final fixed 4096-partition certification reads the
-Account witnesses and each required metadata owner's current observation, plus the capability recheck. Empty native
-reads and empty terminal pages still count. Unchanged keyed replay verifies the exact visible winner before advancing.
+For producer i, complete preparation costs `sum(P_i * C_i(B_i))` plus actual action bytes, writes and durable state;
+the 128-frontier selection and eight-page concurrency change elapsed time, not that sum. A reconciliation restart adds
+another native raw pass and indexed cleanup; an epoch replacement adds a fresh physical population. Neither term is
+absorbed into a retained-count cap. Final certification still examines all 4096 partitions: it reads Account witnesses
+in bounded groups of 100 and, for each partition, performs an actual empty-key current-position read for every required
+metadata producer, with at most 16 partitions in flight. Empty native reads and empty terminal pages still count.
+Unchanged keyed replay verifies the exact visible winner before advancing.
 
 Review's `C_i` includes five Content snapshots, two ancestry walks (`d <= 33`, `2d+25` local statements), Semantic
 reference transactions, nested Access/preparation/citation and optional question work, and full admitted body bytes

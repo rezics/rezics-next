@@ -177,7 +177,7 @@ test('a retired signed Review cut requests fresh population instead of retrying 
   );
 });
 
-test('interrupted metadata reconciliation resumes raw native keys even when the whole page is rejected', async () => {
+test('a later metadata reconciliation step resumes the committed raw frontier before indexed cleanup', async () => {
   const raw = { route: 160, id: '018f0000-0000-7000-8000-00a000000001' };
   const target = {
     prefix: 'search',
@@ -189,6 +189,7 @@ test('interrupted metadata reconciliation resumes raw native keys even when the 
     capability: { physicalTarget: 'searchdiscovery-g1', uuid: 'physical', incarnation: 'allocation', witnesses: {} },
   };
   let frontier: unknown[] | undefined;
+  let after: { route: number; id: string } | null = raw;
   const pool = {
     connect: async () => ({
       async query(sql: string, values?: unknown[]) {
@@ -199,8 +200,8 @@ test('interrupted metadata reconciliation resumes raw native keys even when the 
               {
                 partition: 10,
                 owner: 'collection',
-                after_route: raw.route,
-                after_id: raw.id,
+                after_route: after?.route ?? null,
+                after_id: after?.id ?? null,
                 continuation: null,
                 position: '7',
                 indexed: '0',
@@ -212,24 +213,28 @@ test('interrupted metadata reconciliation resumes raw native keys even when the 
           };
         if (sql.includes('SELECT index_uuid,incarnation::text,state'))
           return { rows: [{ index_uuid: target.uuid, incarnation: target.incarnation, state: target.state }] };
-        if (sql.includes('native_complete=$8')) frontier = values;
+        if (sql.includes('native_complete=$8')) {
+          frontier = values;
+          after = values?.[5] ? { route: Number(values[4]), id: String(values[5]) } : null;
+        }
         return { rows: [], rowCount: 1 };
       },
       release() {},
     }),
   } as unknown as Pool;
   let pages = 0;
+  const next = { ...raw, id: raw.id.replace(/1$/, '2') };
   const producer: DiscoveryMetadataProducer = {
     kind: 'collection',
     owner: 'commerce',
     readiness: async () => 'ready',
     async page(partition, after, continuation, limit) {
       pages++;
-      expect([partition, after, continuation, limit]).toEqual([10, raw, null, 100]);
+      expect([partition, after, continuation, limit]).toEqual([10, pages === 1 ? raw : next, null, 100]);
       return {
         position: 7n,
         epoch: 1,
-        next: { ...raw, id: raw.id.replace(/1$/, '2') },
+        next: pages === 1 ? next : null,
         continuation: null,
         keys: [],
         records: [],
@@ -247,16 +252,20 @@ test('interrupted metadata reconciliation resumes raw native keys even when the 
       return { status: 200, body: { 'searchdiscovery-g1': { settings: { index: { uuid: target.uuid } } } } };
     },
   } as unknown as OpenSearch;
-  await advanceDiscovery({
+  const options = {
     pool,
     search,
     prefix: target.prefix,
     listing: {} as never,
     registry: { entries: [account], get: () => account } as unknown as DiscoveryRegistry,
     metadataProducers: { collection: producer },
-  });
+  };
+  await advanceDiscovery(options);
   expect(pages).toBe(1);
-  expect(frontier?.slice(4, 9)).toEqual([160, raw.id.replace(/1$/, '2'), null, false, '7']);
+  expect(frontier?.slice(4, 9)).toEqual([160, next.id, null, false, '7']);
+  await advanceDiscovery(options);
+  expect(pages).toBe(2);
+  expect(frontier?.slice(4, 9)).toEqual([null, null, null, true, '7']);
 });
 
 test('the public reader preserves Collection typed readiness instead of returning empty discovery', async () => {
