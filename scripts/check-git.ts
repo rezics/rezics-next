@@ -101,6 +101,7 @@ lock=${shell(lock)}
 preparing_dir=${shell(preparingDir)}
 preparing=${shell(preparing)}
 mkdir -p ${shell(dirname(storePath))} "$(dirname "$root")"
+store_fetch_started=$(python3 -c 'import time; print(time.monotonic_ns())')
 exec 9>>"$lock"
 flock -x 9
 if [ ! -d "$store" ]; then git init --bare --quiet --template= --object-format=${objectFormat} "$store"; fi
@@ -113,6 +114,9 @@ mkdir -p "$preparing_dir"
 exec 8>>"$preparing"
 flock -x 8
 flock -u 9
+store_fetch_finished=$(python3 -c 'import time; print(time.monotonic_ns())')
+printf 'REMOTE_CHECK_PHASE\\tshared-store lock/fetch\\t%s\\n' "$((store_fetch_finished - store_fetch_started))"
+checkout_started=$(python3 -c 'import time; print(time.monotonic_ns())')
 stage=$(mktemp -d "$root.fetch-XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 git init --quiet --template= --object-format=${objectFormat} "$stage"
@@ -132,6 +136,8 @@ mkdir -p "$stage/.git/info"
 printf '%s\\n' '/.alive' '/.bun-install-complete' '/.remote-check-slot-count' '/bun-runtime-transpiler-cache/' '/command-phases.tsv' '/command-started' '/exit-status' >> "$stage/.git/info/exclude"
 mv -T -- "$stage" "$root"
 trap - EXIT
+checkout_finished=$(python3 -c 'import time; print(time.monotonic_ns())')
+printf 'REMOTE_CHECK_PHASE\\tcheckout\\t%s\\n' "$((checkout_finished - checkout_started))"
 flock -u 8
 rm -f -- "$preparing"
 exec 8>&-

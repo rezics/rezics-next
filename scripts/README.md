@@ -637,16 +637,22 @@ containers with that attempt label. Remote runs do not receive worker identity a
 A worker check reruns once under the same admission when every reported test failure is HTTP 503 `deadline_exceeded` or
 `overloaded`, retrying only attributed failing files or the whole command when attribution is unavailable.
 
-Stderr reports `remote-check: slot wait`, `Git snapshot staging`, `GitHub fetch`, `rsync`, `bun install` and `command`, each with seconds and host name.
+Stderr reports `remote-check: slot wait`, `Git snapshot staging`, `GitHub fetch`, `shared-store lock/fetch`, `checkout`,
+`rsync`, `bun install` and `command`, each with seconds and host name. The `GitHub fetch` duration remains the total
+host snapshot preparation time; its nested lock/fetch and checkout durations separate the shared-store critical section
+from each run's checkout.
 Set `REMOTE_CHECK_PRIORITY=landing` for a landing check to wait ahead of multi-slot and ordinary runs, while gates keep first priority.
 `.temp/goal/task-priority` is the control plane's per-worktree priority file (`critical` or `normal`), read at every worker check; the per-run record makes any other use visible.
 The `rsync` line also includes the bytes sent from rsync statistics, the uploaded file count and the transfer mode.
 If zstd is unavailable, the run reports that it uses rsync's default compression. Returned outputs add `rsync back`.
-Slot wait measures admission after upload; Git snapshot staging is local publication; GitHub fetch is the host store
-fetch; the `rsync` line measures the file transfer. Overlay rsync after a successful fetch is the expected path and is
-a few seconds; remaining check time is `bun install` and the admitted command (typecheck owner).
-Decision: after cache-aware admission, keep old and new upload populations separate; do not treat source integration
-as remote deployment. Hosts have no reclaim timer; admission reclaim stays one-shot per wait.
+Slot wait measures admission after upload; Git snapshot staging is local publication; GitHub fetch is host snapshot
+preparation; `shared-store lock/fetch` includes lock wait and fetch/ref verification; `checkout` measures the per-run
+checkout after the store lock is released; the `rsync` line measures the file transfer. Overlay rsync after a successful
+fetch is the expected path. Report its observed bytes, file count, mode and duration; do not assume a speedup. Remaining
+check time includes `bun install` and the admitted command (typecheck owner). Keep pre-change and post-change upload
+populations separate. Source integration does not establish remote deployment. The source has no periodic host reclaim
+timer; admission reclaim stays one-shot per wait. The supermanager confirms the deployed `remote-check` hash, cp-sync
+point and retirement state of any periodic reclaim stopgap.
 Rsync exit code 24 is accepted for uploads and returned outputs, with the number of vanished files logged.
 
 Uploads and returned-output copies have a 120-second no-progress limit by default, configured with

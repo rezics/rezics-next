@@ -5411,6 +5411,28 @@ function reportDuration(phase: string, started: number, host: string, bytesSent?
   );
 }
 
+function parseCheckGitPhaseTimings(
+  output: string,
+): { sharedStoreLockFetchSeconds: number; checkoutSeconds: number } | null {
+  const phases = new Map<'shared-store lock/fetch' | 'checkout', number>();
+  for (const line of output.slice(-4096).split(/\r?\n/)) {
+    const match = /^REMOTE_CHECK_PHASE\t(shared-store lock\/fetch|checkout)\t(\d+)$/.exec(line);
+    if (!match) continue;
+    const phase = match[1] as 'shared-store lock/fetch' | 'checkout';
+    const nanoseconds = Number(match[2]);
+    if (phases.has(phase) || !Number.isSafeInteger(nanoseconds) || nanoseconds < 0) return null;
+    phases.set(phase, nanoseconds / 1e9);
+  }
+  const sharedStoreLockFetchSeconds = phases.get('shared-store lock/fetch');
+  const checkoutSeconds = phases.get('checkout');
+  if (sharedStoreLockFetchSeconds === undefined || checkoutSeconds === undefined) return null;
+  return { sharedStoreLockFetchSeconds, checkoutSeconds };
+}
+
+function reportObservedDuration(phase: string, seconds: number, host: string): void {
+  console.error(`remote-check: ${phase} ${seconds.toFixed(3)} s on ${host}`);
+}
+
 function reportCancelledSlotWait(started: number): void {
   console.error(
     `remote-check: slot wait ${((performance.now() - started) / 1000).toFixed(3)} s (cancelled before a slot was acquired)`,
@@ -5877,6 +5899,11 @@ async function uploadRun(
             transferLimit,
           );
           if (result.code !== 0) throw new Error('check-git: host fetch failed');
+          const gitPhases = parseCheckGitPhaseTimings(result.output);
+          if (gitPhases) {
+            reportObservedDuration('shared-store lock/fetch', gitPhases.sharedStoreLockFetchSeconds, host.name);
+            reportObservedDuration('checkout', gitPhases.checkoutSeconds, host.name);
+          } else console.error(`remote-check: GitHub fetch phase details unavailable on ${host.name}`);
           const overlay = gitWorkspaceOverlay(options.workspace, files);
           if (overlay.removed.length) {
             const deleted = await boundedSsh(

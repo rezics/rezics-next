@@ -143,10 +143,10 @@ inside `compiler` so one receipt can split those commands. Slot wait and rsync r
 folded into those durations. Compare like command/source classes using command phases plus admission `inactive_file` /
 IO pressure; do not treat wrapper wall time as compiler work. Cache-aware admission counts reclaimable file cache as
 headroom (`3afee00d49` / `b1841e43808feae3d6f1c1f8617bc8ffdde2512f`) on current dev; that commit is not an ancestor of
-`main`, and a dev commit is not deployed behavior. The labelled-volume host-a Kernel typecheck (334s command, 324s
-compiler, 4.6s slot wait, 1.8s rsync, IO full 34% at start, pre-existing compiler errors) shows compiler dominating
-admitted command time on that a-host run. It does not identify the 10–25 minute host-b symptom, and a failed compiler
-cannot establish a successful full typecheck. Ledger Kernel typechecks on 2026-11-04 used revision
+`main`, and a dev commit is not deployed behavior. A single host-a Kernel typecheck can inform command diagnosis but
+cannot establish a representative per-run transfer distribution or a postdeployment result. It does not identify the
+10–25 minute host-b symptom, and a failed compiler cannot establish a successful full typecheck. Ledger Kernel
+typechecks on 2026-11-04 used revision
 `7a651ea717c21e8c659dc7f447d371e556a973d4`, ledger host `remote`, compiler exit 2, command 269–591s and wrapper
 330–1375s. A passing 2026-11-02 Kernel typecheck had command 223s and wrapper 1591s at slot wait 4.6s. File-cache
 pressure remains a correlation until a like-class b-host receipt records nested compiler phases, live producer hash,
@@ -155,6 +155,14 @@ remote-check transport hash or whether the supermanager's reclaim stopgap remain
 facts and a comparable b-host receipt with command/source identity, concurrency, readable slice anon/file/inactive_file
 and IO pressure, nested phase durations and compiler outcome. The one-run Kernel compiler database uses a labelled
 volume in the run slice, matching kernel check storage.
+
+For the host-a transfer question, use genuine required-check receipts from the deployed class, bound to the deployed
+`remote-check` hash, cp-sync point and periodic check-reclaim stopgap state. Compare the same command class, host, source
+and dirty-tree state, snapshot/base reuse and concurrency. Keep snapshot staging, shared-store lock/fetch, per-run
+checkout, delta rsync (actual bytes, file count and mode), dependencies, slot wait, command and return transfer
+separate. Report the observed sample and its selection limits; keep detailed run artifacts under `.temp`. Source
+integration, fixtures and one-off timings are not deployed throughput evidence. A native compiler error may still yield
+transport measurements, but it is not successful full-check acceptance.
 
 `worker-check`, `stack-run`, `check-run` and `remote-check` derive the performance pool from hosts explicitly marked
 `"performance": true` in the private hosts file. Missing or false flags exclude a host, including a or b; there is no
