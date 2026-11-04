@@ -247,7 +247,11 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
     });
   }
 
-  async function readNotice(accountId: string, noticeId: string, actor: Persona): Promise<ApiResult<InboxNoticeDetail>> {
+  async function readNotice(
+    accountId: string,
+    noticeId: string,
+    actor: Persona,
+  ): Promise<ApiResult<InboxNoticeDetail>> {
     const result = await request('GET', `/v1/accounts/${accountId}/notifications/${noticeId}`, actor);
     return resultMap(result, (body) => {
       const raw = object(body, 'Inbox notice detail');
