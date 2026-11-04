@@ -2,6 +2,12 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  buildCollectionSaveReviewPlan,
+  initialCollectionSaveOutcomes,
+  runCollectionSaveSteps,
+} from '../src/library/collection-member-edit-plan';
+import { CollectionSaveReview } from '../src/library/collection-save-review/review';
 import { CollectionMemberList } from '../src/library/collection-editor';
 import { loadEditableCollectionPage } from '../src/library/collection-load';
 import type { SessionEnv } from '../src/session/client';
@@ -22,6 +28,127 @@ const write = () =>
     method: 'POST',
     headers: { authorization: 'Bearer owner' },
   });
+
+test('captured review and execution plan keep duplicate occurrences distinct and in the same order', () => {
+  const sample = memberRecording.members[0]!;
+  const other = memberRecording.members[1]!;
+  const initial: CollectionMember[] = [
+    { ...sample, id: 'same-subject-a', note: 'A before' },
+    { ...sample, id: 'same-subject-b', note: 'B before' },
+    { ...other, id: 'other-c', note: null },
+    { ...other, id: 'removed-d', note: 'Keep this note in the removal review' },
+  ];
+  const desired = [
+    initial[1]!,
+    { ...initial[0]!, note: 'A after' },
+    initial[2]!,
+  ];
+  expect(initial[0]!.subjectId).toBe(initial[1]!.subjectId);
+  expect(initial[0]!.id).not.toBe(initial[1]!.id);
+  const plan = buildCollectionSaveReviewPlan({
+    collectionId,
+    revision: 7,
+    firstPage: true,
+    initial,
+    desired,
+    before: {
+      title: 'Before title',
+      description: 'Before description',
+      visibility: 'private',
+      presentationKind: null,
+      coverMediaId: null,
+    },
+    after: {
+      title: 'After title',
+      description: 'Before description',
+      visibility: 'private',
+      presentationKind: null,
+      coverMediaId: null,
+    },
+  });
+  expect(plan.steps.map((step) => step.id)).toEqual([
+    'metadata',
+    'remove:removed-d',
+    'note:same-subject-a',
+    'move:same-subject-b',
+  ]);
+  const html = renderToStaticMarkup(
+    createElement(CollectionSaveReview, { plan, initial, desired, types: [] }),
+  );
+  expect([...html.matchAll(/data-review-step="([^"]+)"/g)].map((match) => match[1])).toEqual(
+    plan.steps.map((step) => step.id),
+  );
+  expect(html).toContain('data-member-id="same-subject-a"');
+  expect(html).toContain('data-member-id="same-subject-b"');
+  expect(html).toContain('Keep this note in the removal review');
+  expect(html).toContain('data-operation-kind="remove"');
+});
+
+test('partial save reports settled outcomes and retries the original uncertain step without confirmed writes', async () => {
+  const initial: CollectionMember[] = memberRecording.members.slice(0, 2).map((member, index) => ({
+    ...member,
+    id: `partial-${index}`,
+    note: `before-${index}`,
+  }));
+  const desired = initial.map((member, index) => ({ ...member, note: `after-${index}` }));
+  const metadata = {
+    title: 'Shelf',
+    description: null,
+    visibility: 'private' as const,
+    presentationKind: null,
+    coverMediaId: null,
+  };
+  const plan = buildCollectionSaveReviewPlan({
+    collectionId,
+    revision: 4,
+    firstPage: true,
+    initial,
+    desired,
+    before: metadata,
+    after: { ...metadata, title: 'Renamed shelf' },
+  });
+  const outcomes = initialCollectionSaveOutcomes(plan);
+  const calls: { step: string; key: string }[] = [];
+  const keys = new Map<string, string>();
+  let ambiguousFirstWrite = true;
+  const execute = async (step: (typeof plan.steps)[number]) => {
+    const key = keys.get(step.id) ?? `captured-key-${keys.size + 1}`;
+    keys.set(step.id, key);
+    calls.push({ step: step.id, key });
+    if (step.id === 'note:partial-0' && ambiguousFirstWrite) {
+      ambiguousFirstWrite = false;
+      return { stepId: step.id, status: 'unknown' as const, reason: 'unavailable' };
+    }
+    return {
+      stepId: step.id,
+      status: 'confirmed' as const,
+      targetId: step.id,
+      revision: 20 + calls.length,
+    };
+  };
+
+  const first = await runCollectionSaveSteps(plan.steps, outcomes, execute, () => {});
+  expect(first).toEqual({ complete: false, stoppedAt: 1 });
+  expect(outcomes.map((outcome) => outcome.status)).toEqual(['confirmed', 'unknown', 'not-sent']);
+  expect(outcomes[0]).toMatchObject({ targetId: 'metadata', revision: 21 });
+  const originalKey = keys.get('note:partial-0');
+
+  const retry = await runCollectionSaveSteps(plan.steps, outcomes, execute, () => {});
+  expect(retry).toEqual({ complete: true, stoppedAt: null });
+  expect(calls.map((call) => call.step)).toEqual([
+    'metadata',
+    'note:partial-0',
+    'note:partial-0',
+    'note:partial-1',
+  ]);
+  expect(calls[1]!.key).toBe(calls[2]!.key);
+  expect(keys.get('note:partial-0')).toBe(originalKey);
+  expect(outcomes.map((outcome) => outcome.status)).toEqual(['confirmed', 'confirmed', 'confirmed']);
+  expect(outcomes.slice(1)).toMatchObject([
+    { targetId: 'note:partial-0', revision: 23 },
+    { targetId: 'note:partial-1', revision: 24 },
+  ]);
+});
 
 test('Named Collection editor review states remain visibly editable with compact generic rows and native bulk commands while only actual curator known totals render member counts', async () => {
   const members: CollectionMember[] = memberRecording.members.map((member) => ({
