@@ -1,4 +1,4 @@
-import { createResourcePublicEligibility, type ResourceEligibility } from '../access/index.ts';
+import { createResourcePublicEligibility, type ResourceEligibility } from '../access/eligibility.ts';
 import type {
   ResourceEligibilityPrepareContext,
   ResourceEligibilityVerifyContext,
