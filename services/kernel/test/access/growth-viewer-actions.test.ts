@@ -4,6 +4,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { checkGrowth } from '../support/growth.ts';
 import { createViewerActionsDriver } from './viewer-actions-outcomes-driver.ts';
 import type { ResourceReference, ViewerActionsResponse } from '../../../../specs/viewer-actions-driver.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 test('composition names a resource type exceeding its candidate or operation bound', async () => {
   const pool = new Pool({ connectionString: 'postgres://invalid/composition' });
@@ -15,6 +16,7 @@ test('composition names a resource type exceeding its candidate or operation bou
       expect(() =>
         createKernel({
           pool,
+          receiptKeys: testReceiptKeys(),
           routeKey: new Uint8Array(32),
           modules: [
             (app) => {
