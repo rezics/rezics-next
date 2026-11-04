@@ -496,7 +496,11 @@ function RelationEditorLive({
     current.authority.actions.state === 'available' &&
     current.authority.actions.context === candidateContext &&
     current.authority.actions.operations.includes(
-      operation === 'propose' ? 'subject.propose' : operation === 'adopt' ? 'subject.adopt' : `subject.${operation}_candidate`,
+      operation === 'propose'
+        ? 'subject.propose'
+        : operation === 'adopt'
+          ? 'subject.adopt'
+          : `subject.${operation}_candidate`,
     );
   const concealed = failure?.reason === 'denied' && !current;
   const uncertain = failure?.reason === 'unavailable' && !!request.current;
@@ -516,7 +520,8 @@ function RelationEditorLive({
           (current?.authority?.disclosure !== 'unreadable' ? picked.current[value] : undefined) ?? {
             id: value,
             title:
-              (current?.authority?.disclosure !== 'unreadable' && pickText(current?.public.related[value]?.labels ?? {}, locale).text) ||
+              (current?.authority?.disclosure !== 'unreadable' &&
+                pickText(current?.public.related[value]?.labels ?? {}, locale).text) ||
               m.subject_value_unlabelled({}, options),
             types: [],
             typeLabel: '',
@@ -969,7 +974,11 @@ function RelationEditorLive({
     setDraft(next);
     setOwnConsent(false);
     setConsentEntry(undefined);
-    setRead((previous) => (previous?.ok ? { ...previous, page: null, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } } : previous));
+    setRead((previous) =>
+      previous?.ok
+        ? { ...previous, page: null, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } }
+        : previous,
+    );
     setSlot(undefined);
     setCandidate(undefined);
     setResult(undefined);
@@ -1074,7 +1083,11 @@ function RelationEditorLive({
     const destination = { slot: address && { ...address }, cursor, session };
     reading.current = destination;
     // A previous page is never fresh authority after another read starts or fails.
-    setRead((previous) => (previous?.ok ? { ...previous, page: null, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } } : undefined));
+    setRead((previous) =>
+      previous?.ok
+        ? { ...previous, page: null, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } }
+        : undefined,
+    );
     setCandidate(undefined);
     setResult(undefined);
     setConsentEntry(undefined);
@@ -1129,7 +1142,10 @@ function RelationEditorLive({
   }
   async function prepareProposal() {
     const address = draftSlot();
-    if (!relationDraftWithinBounds(draft)) { setTargetFailure('invalid'); return; }
+    if (!relationDraftWithinBounds(draft)) {
+      setTargetFailure('invalid');
+      return;
+    }
     if (!editable() || !field || !address) return;
     const generation = ++targetCheck.current;
     const revision = draftRevision.current;
@@ -1138,15 +1154,23 @@ function RelationEditorLive({
     setTargetChecking(true);
     setTargetFailure(undefined);
     setFailure(undefined);
-    const active = () => mount.active() && visible && targetCheck.current === generation &&
-      draftRevision.current === revision && readGeneration.current === readRevision;
+    const active = () =>
+      mount.active() &&
+      visible &&
+      targetCheck.current === generation &&
+      draftRevision.current === revision &&
+      readGeneration.current === readRevision;
     try {
       // Re-read the exact slot and native actions together before explicit review. Public
       // readability, definition admission and command authority are independent observations.
       const next = await transport.read(address, undefined, nativeSession.current);
       if (!active()) return;
       if (!next.ok) {
-        setRead((previous) => previous?.ok ? { ...previous, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } } : previous);
+        setRead((previous) =>
+          previous?.ok
+            ? { ...previous, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } }
+            : previous,
+        );
         failed(next);
         return;
       }
@@ -1157,22 +1181,41 @@ function RelationEditorLive({
       pageCursor.current = undefined;
       nativeSession.current = next.session ?? nativeSession.current;
       const admitted = next.fields.find((item) => item.id === address.property);
-      if (!admitted || next.descriptor?.releaseDigest !== admittedRelease || !relationSlotMatches(draft, address, admitted)) {
+      if (
+        !admitted ||
+        next.descriptor?.releaseDigest !== admittedRelease ||
+        !relationSlotMatches(draft, address, admitted)
+      ) {
         failed({ ok: false, reason: 'stale' });
         return;
       }
-      if (next.authority?.disclosure !== 'available' || next.authority.actions.state !== 'available' ||
-        next.authority.actions.context !== candidateContext || !next.authority.actions.operations.includes('subject.propose')) return;
+      if (
+        next.authority?.disclosure !== 'available' ||
+        next.authority.actions.state !== 'available' ||
+        next.authority.actions.context !== candidateContext ||
+        !next.authority.actions.operations.includes('subject.propose')
+      )
+        return;
       if (resolveTarget && address.target) {
         const resolved = await resolveTarget(address.target);
         if (!active()) return;
-        if (!resolved.ok) { setTargetFailure(resolved.reason); return; }
-        if (!admitted.targets.includes(resolved.type)) { setTargetFailure('invalid'); return; }
+        if (!resolved.ok) {
+          setTargetFailure(resolved.reason);
+          return;
+        }
+        if (!admitted.targets.includes(resolved.type)) {
+          setTargetFailure('invalid');
+          return;
+        }
       }
       setConfirmation('propose');
     } catch {
       if (active()) {
-        setRead((previous) => previous?.ok ? { ...previous, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } } : previous);
+        setRead((previous) =>
+          previous?.ok
+            ? { ...previous, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } }
+            : previous,
+        );
         setTargetFailure('unavailable');
       }
     } finally {
@@ -1424,10 +1467,14 @@ function RelationEditorLive({
         current &&
         !concealed && (
           <>
-            {(!current.authority || current.authority.actions.state === 'unavailable' || current.authority.disclosure === 'unavailable') ? (
+            {!current.authority ||
+            current.authority.actions.state === 'unavailable' ||
+            current.authority.disclosure === 'unavailable' ? (
               <div role="status" className="space-y-2">
                 <p>{m.relation_actions_unavailable({}, options)}</p>
-                <Button variant="outline" disabled={frozen} onClick={(event) => reload(event)}>{m.candidate_reload({}, options)}</Button>
+                <Button variant="outline" disabled={frozen} onClick={(event) => reload(event)}>
+                  {m.candidate_reload({}, options)}
+                </Button>
               </div>
             ) : current.authority.disclosure === 'unreadable' ? (
               <p role="status">{m.relation_participants_unreadable({}, options)}</p>
@@ -1829,7 +1876,10 @@ function RelationEditorLive({
                               !draftSlot() ||
                               (!draft.references.length && !(field.disclosure === 'sourceOrConsent' && ownConsent)) ||
                               proposed ||
-                              !(current.authority?.actions.state === 'available' && current.authority.actions.operations.includes('subject.propose'))
+                              !(
+                                current.authority?.actions.state === 'available' &&
+                                current.authority.actions.operations.includes('subject.propose')
+                              )
                             }
                             onClick={() => void prepareProposal()}
                           >
@@ -1995,7 +2045,13 @@ function RelationEditorLive({
                             </ContentItemFrame>
                           </section>
                         </div>
-                        <p role="status">{candidate.decision === 'accepted' ? m.candidate_accepted({}, options) : candidate.decision === 'rejected' ? m.relation_rejected({}, options) : m.candidate_pending({}, options)}</p>
+                        <p role="status">
+                          {candidate.decision === 'accepted'
+                            ? m.candidate_accepted({}, options)
+                            : candidate.decision === 'rejected'
+                              ? m.relation_rejected({}, options)
+                              : m.candidate_pending({}, options)}
+                        </p>
                         {selected ? (
                           <p role="status">{m.candidate_selected({}, options)}</p>
                         ) : result && !current.page ? (
@@ -2032,9 +2088,14 @@ function RelationEditorLive({
                               <div className="flex flex-wrap gap-2">
                                 <Button
                                   className="min-h-11"
-                                  disabled={frozen || candidate.retracted !== null || !allows(candidate.decision === 'accepted' ? 'adopt' : 'accept')}
+                                  disabled={
+                                    frozen ||
+                                    candidate.retracted !== null ||
+                                    !allows(candidate.decision === 'accepted' ? 'adopt' : 'accept')
+                                  }
                                   onClick={() =>
-                                    editable() && allows(candidate.decision === 'accepted' ? 'adopt' : 'accept') &&
+                                    editable() &&
+                                    allows(candidate.decision === 'accepted' ? 'adopt' : 'accept') &&
                                     setConfirmation(candidate.decision === 'accepted' ? 'adopt' : 'accept')
                                   }
                                 >

@@ -264,10 +264,14 @@ test('relationship eligibility batches exact disclosure with separate mounted op
     disclosure: 'available',
   });
   expect(fixture.calls.filter((call) => call.path === '/v1/viewerActions')).toEqual([
-    expect.objectContaining({ body: { resources: [
-      { type: 'semantic.context', id: candidateContext },
-      ...[fixture.id, relationActor, relationRole].map((id) => ({ type: 'semantic.subject', id })),
-    ] } }),
+    expect.objectContaining({
+      body: {
+        resources: [
+          { type: 'semantic.context', id: candidateContext },
+          ...[fixture.id, relationActor, relationRole].map((id) => ({ type: 'semantic.subject', id })),
+        ],
+      },
+    }),
   ]);
   fixture.concealSubjects([relationActor]);
   const concealed = await fixture.transport.read(fixture.slot);
@@ -277,5 +281,9 @@ test('relationship eligibility batches exact disclosure with separate mounted op
   expect(unavailable.ok && unavailable.authority.actions).toEqual({ state: 'unavailable' });
   fixture.setActions([]);
   const denied = await fixture.transport.read(fixture.slot);
-  expect(denied.ok && denied.authority.actions).toEqual({ state: 'available', context: candidateContext, operations: [] });
+  expect(denied.ok && denied.authority.actions).toEqual({
+    state: 'available',
+    context: candidateContext,
+    operations: [],
+  });
 });

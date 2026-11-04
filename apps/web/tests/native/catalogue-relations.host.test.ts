@@ -123,20 +123,31 @@ describe('native catalogue relation contribution', () => {
     expect(first).toHaveLength(1);
     expect(first[0]?.decision).toBeNull();
     expect(first[0]?.statement.value).toEqual({ type: 'value', content: fixture.person.id });
-    expect(first[0]?.statement.qualifiers).toContainEqual(expect.objectContaining({
-      property: expect.objectContaining({ id: 'wdt:P453' }), value: { type: 'value', content: fixture.firstRole.id },
-    }));
-    expect(first[0]?.statement.references[0]?.parts).toContainEqual(expect.objectContaining({
-      property: expect.objectContaining({ id: 'schema:url' }), value: { type: 'value', content: citation },
-    }));
+    expect(first[0]?.statement.qualifiers).toContainEqual(
+      expect.objectContaining({
+        property: expect.objectContaining({ id: 'wdt:P453' }),
+        value: { type: 'value', content: fixture.firstRole.id },
+      }),
+    );
+    expect(first[0]?.statement.references[0]?.parts).toContainEqual(
+      expect.objectContaining({
+        property: expect.objectContaining({ id: 'schema:url' }),
+        value: { type: 'value', content: citation },
+      }),
+    );
     await playExpect(page.getByRole('button', { name: 'Accept suggestion', exact: true })).toBeDisabled();
     // The installed native projection, rather than the public target or session, owns each offered operation.
-    const authority = await fixture.stack.kernel('/v1/viewerActions', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ resources: [{ type: 'semantic.context', id: '00000000-0000-8000-8000-000000000000' }] }),
-    }, 'alice');
+    const authority = await fixture.stack.kernel(
+      '/v1/viewerActions',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ resources: [{ type: 'semantic.context', id: '00000000-0000-8000-8000-000000000000' }] }),
+      },
+      'alice',
+    );
     expect(authority.status).toBe(200);
-    const projected = await authority.json() as { resources: { viewerActions: { operations: string[] }[] }[] };
+    const projected = (await authority.json()) as { resources: { viewerActions: { operations: string[] }[] }[] };
     const operations = projected.resources[0]!.viewerActions.flatMap((entry) => entry.operations);
     expect(operations).toContain('subject.propose');
     expect(operations).not.toContain('subject.accept_candidate');

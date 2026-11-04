@@ -167,16 +167,32 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
     if (scenario === 'denied') return json({ code: 'forbidden' }, 403);
     if (url.pathname === '/v1/viewerActions' && body) {
       if (!actionsAvailable) return json({ code: 'dependency_unavailable' }, 503);
-      return json({ resources: (body.resources as { type: string; id: string }[]).map((resource) => ({
-        ...resource,
-        ...(concealedSubjects.includes(resource.id) ? { error: 'not_found' } : {
-          viewerActions: resource.type === 'semantic.context' ? [
-            { action: 'statement:propose', operations: operations.filter((value) => value === 'subject.propose') },
-            { action: 'context:accept', operations: operations.filter((value) => value.includes('_candidate')) },
-            { action: 'context:adopt', operations: operations.filter((value) => value === 'subject.adopt') },
-          ].filter((entry) => entry.operations.length) : [],
-        }),
-      })) });
+      return json({
+        resources: (body.resources as { type: string; id: string }[]).map((resource) => ({
+          ...resource,
+          ...(concealedSubjects.includes(resource.id)
+            ? { error: 'not_found' }
+            : {
+                viewerActions:
+                  resource.type === 'semantic.context'
+                    ? [
+                        {
+                          action: 'statement:propose',
+                          operations: operations.filter((value) => value === 'subject.propose'),
+                        },
+                        {
+                          action: 'context:accept',
+                          operations: operations.filter((value) => value.includes('_candidate')),
+                        },
+                        {
+                          action: 'context:adopt',
+                          operations: operations.filter((value) => value === 'subject.adopt'),
+                        },
+                      ].filter((entry) => entry.operations.length)
+                    : [],
+              }),
+        })),
+      });
     }
     if (url.pathname.endsWith('/candidates') && request.method === 'GET') {
       if (scenario === 'loading') return await new Promise<Response>(() => {});
@@ -293,7 +309,9 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
       actionsAvailable = next !== null;
       if (next) operations = [...next];
     },
-    concealSubjects(ids: string[]) { concealedSubjects = [...ids]; },
+    concealSubjects(ids: string[]) {
+      concealedSubjects = [...ids];
+    },
     setScenario(next: RelationScenario) {
       scenario = next;
     },

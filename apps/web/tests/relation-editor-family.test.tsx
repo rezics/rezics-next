@@ -1411,30 +1411,46 @@ test('mounted relationship preparation uses fresh proposal authority, participan
   const draw = async () => {
     const initial = await fixture.transport.read(fixture.slot);
     await render(null);
-    await render(h(RelationEditor, { id: fixture.id, locale: 'en', initial, transport: fixture.transport,
-      search: async () => [], composition: { statement: fixture.draft, slot: fixture.slot, positionEditable: true } }));
+    await render(
+      h(RelationEditor, {
+        id: fixture.id,
+        locale: 'en',
+        initial,
+        transport: fixture.transport,
+        search: async () => [],
+        composition: { statement: fixture.draft, slot: fixture.slot, positionEditable: true },
+      }),
+    );
   };
   try {
     fixture.setActions(['subject.propose']);
     await draw();
     await click(region(), m.candidate_review());
-    expect((within(region()).getByRole('button', { name: m.candidate_accept() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(region()).getByRole('button', { name: m.candidate_accept() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     fixture.setActions([]); // Revoked after the initial read, before deliberate preparation.
     await click(region(), m.relation_propose());
-    expect(within(region()).queryByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) })).toBeNull();
+    expect(
+      within(region()).queryByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) }),
+    ).toBeNull();
     expect(region().textContent).toContain(m.relation_actions_read_only());
     expect(fixture.calls.filter((call) => call.method === 'POST' && call.path.endsWith('/candidates'))).toHaveLength(0);
 
     fixture.setActions(null);
     await draw();
     expect(region().textContent).toContain(m.relation_actions_unavailable());
-    expect((within(region()).getByRole('button', { name: m.relation_propose() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(region()).getByRole('button', { name: m.relation_propose() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     fixture.setActions(['subject.propose']);
     await click(region(), m.candidate_reload());
     fixture.concealSubjects([fixture.slot.target!]);
     await click(region(), m.relation_propose());
     expect(region().textContent).toContain(m.relation_participants_unreadable());
-    expect(within(region()).queryByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) })).toBeNull();
+    expect(
+      within(region()).queryByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) }),
+    ).toBeNull();
 
     fixture.concealSubjects([]);
     fixture.setActions(['subject.accept_candidate']);
@@ -1443,7 +1459,9 @@ test('mounted relationship preparation uses fresh proposal authority, participan
     await ui.confirm(region(), m.candidate_accept());
     expect(region().textContent).toContain(m.candidate_accepted());
     expect(fixture.adopted).toBe(false);
-    expect((within(region()).getByRole('button', { name: m.candidate_adopt() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(region()).getByRole('button', { name: m.candidate_adopt() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     fixture.setActions(['subject.adopt']);
     await click(region(), m.candidate_reload());
     await click(region(), m.candidate_review());
@@ -1451,5 +1469,7 @@ test('mounted relationship preparation uses fresh proposal authority, participan
     expect(fixture.adopted).toBe(true);
     expect(region().textContent).toContain(m.candidate_accepted());
     expect(region().textContent).toContain(m.candidate_selected());
-  } finally { await ui.close(); }
+  } finally {
+    await ui.close();
+  }
 });
