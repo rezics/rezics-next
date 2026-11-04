@@ -410,25 +410,25 @@ test('independent publication creation, local corrections, immutable recovery an
     await scope().findByRole('heading', { name: m.catalogue_create_invalid(), level: 2 });
     const citation = urlIn(workSection());
     const references = workSection().querySelector('[id$="-references"]') as HTMLElement;
-    const amountControl = input(m.correction_amount());
-    const precisionControl = scope().getByRole('combobox', { name: m.correction_precision() }) as HTMLSelectElement;
+    const invalidAmount = input(m.correction_amount());
+    const invalidPrecision = scope().getByRole('combobox', { name: m.correction_precision() }) as HTMLSelectElement;
     const targetFor = (control: HTMLElement) =>
       [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].find(
         (link) => decodeURIComponent(link.hash.slice(1)) === control.id,
       );
-    expect(targetFor(amountControl)).toBeDefined();
-    expect(targetFor(precisionControl)).toBeDefined();
+    expect(targetFor(invalidAmount)).toBeDefined();
+    expect(targetFor(invalidPrecision)).toBeDefined();
     expect(targetFor(citation) || targetFor(references)).toBeDefined();
-    expect(amountControl.getAttribute('aria-invalid')).toBe('true');
-    expect(precisionControl.getAttribute('aria-invalid')).toBe('true');
+    expect(invalidAmount.getAttribute('aria-invalid')).toBe('true');
+    expect(invalidPrecision.getAttribute('aria-invalid')).toBe('true');
     expect(article().textContent).toContain(m.correction_citation_hint());
-    expect(amountControl.value).toBe('+240');
-    expect(precisionControl.value).toBe('10');
+    expect(invalidAmount.value).toBe('+240');
+    expect(invalidPrecision.value).toBe('10');
     expect(article().textContent).toContain('Supplied publisher');
     await associations(0);
 
-    await replace(amountControl, '+241');
-    await act(async () => user.selectOptions(precisionControl, '9'));
+    await replace(invalidAmount, '+241');
+    await act(async () => user.selectOptions(invalidPrecision, '9'));
     await replace(citation, 'https://publisher.example/edition');
     await create();
     await scope().findByRole('link', { name: m.catalogue_create_open() });
