@@ -2,7 +2,7 @@
 
 **Decision:** Collection privacy uses the existing private owner inventory and native `collection:update` advice; logical built-ins remain inspectable and read-only without a command revision.
 
-**Decision:** Collection privacy keeps a deliberate visibility choice through refusal/conflict reads. A validated replay receipt consumes the acknowledged choice; current readback adopts newer native visibility unless a later deliberate edit remains, and only explicit save or discard changes that draft.
+**Decision:** Collection privacy retains deliberate visibility across refusal/conflict reads for review. A validated replay receipt consumes the acknowledged choice and adopts newer native visibility unless a later deliberate edit remains; only explicit Save submits a retained choice, and explicit use-current/discard retires it.
 
 **Decision:** Within each native page, the first row for a Collection ID wins; every successful page replaces the current 20-row window.
 
