@@ -17,6 +17,7 @@ function fixture() {
   let current = true;
   let allowed = true;
   let fail = '';
+  let rejection = '';
   let afterDispatch = () => {};
   const calls: unknown[][] = [];
   const refreshes: string[][] = [];
@@ -33,6 +34,7 @@ function fixture() {
     calls.push([operation, ...structuredClone(args)]);
     afterDispatch();
     if (fail === operation) throw new Error('acknowledgement lost');
+    if (rejection) return { data: null, error: { code: rejection } };
     return { data: operation === 'review' ? structuredClone(evidence) : operation === 'confirm' ? confirmed : result, error: null };
   };
   const transport = Object.fromEntries(['review', 'confirm', 'apply', 'retry', 'cancel', 'result'].map((name) => [name, (...args: unknown[]) => send(name, ...args)])) as unknown as ReturnType<typeof consolidationClient>;
@@ -42,6 +44,7 @@ function fixture() {
     (...ids) => refreshes.push(ids), () => `key-${++keys}`);
   return { visit, calls, refreshes, result, retire: () => retire(), deny: () => { allowed = false; },
     stale: () => { current = false; }, fail: (operation: string) => { fail = operation; },
+    reject: (reason: string) => { rejection = reason; },
     after: (fn: () => void) => { afterDispatch = fn; } };
 }
 
@@ -106,4 +109,17 @@ test('native processing retry, cancel and result retain native observations', as
   expect(f.calls.at(-1)).toEqual(['retry', 'original-plan', 0, 'key-2']);
   expect(await f.visit.cancel()).toBe('accepted');
   expect(f.calls.at(-1)).toEqual(['cancel', 'original-plan', 'key-3']);
+});
+
+for (const reason of ['expired', 'changed']) test(`${reason} retains original confirmed operands`, async () => {
+  const f = fixture();
+  await f.visit.nextPage();
+  await f.visit.confirm();
+  f.reject(reason);
+  expect(await f.visit.apply()).toBe('rejected');
+  expect(f.visit.acknowledgementUnknown).toBe(false);
+  expect(await f.visit.confirm()).toBe('unavailable');
+  expect(await f.visit.recover()).toBe('rejected');
+  expect(f.calls.at(-1)).toEqual(f.calls.at(-2));
+  expect(f.refreshes).toEqual([]);
 });

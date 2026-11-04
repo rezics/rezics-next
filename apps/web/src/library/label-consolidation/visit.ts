@@ -25,6 +25,7 @@ export type VisitOutcome = 'accepted' | 'unknown' | 'rejected' | 'unavailable' |
 export class ConsolidationVisit {
   private retired = false;
   private busy = false;
+  private unknown = false;
   private command: Command | null = null;
   private confirmationValue: Confirmation | null = null;
   private resultValue: ConsolidationResult | null = null;
@@ -63,7 +64,7 @@ export class ConsolidationVisit {
     return structuredClone(this.resultValue);
   }
   get acknowledgementUnknown() {
-    return this.command !== null && !this.busy;
+    return this.command !== null && !this.busy && this.unknown;
   }
 
   async nextPage(): Promise<VisitOutcome> {
@@ -156,6 +157,7 @@ export class ConsolidationVisit {
     const captured = this.envelope.capture(command.operation);
     if (!captured || !captured.isCurrent()) return 'unavailable';
     this.command = structuredClone(command);
+    this.unknown = false;
     this.busy = true;
     try {
       const transport = this.transport(captured.headers);
@@ -176,7 +178,9 @@ export class ConsolidationVisit {
       this.command = null;
       return 'accepted';
     } catch {
-      return this.retired || !captured.isCurrent() ? this.discard() : 'unknown';
+      if (this.retired || !captured.isCurrent()) return this.discard();
+      this.unknown = true;
+      return 'unknown';
     } finally {
       // Definite rejection still retains original operands: expiry or drift must never rebase them.
       this.busy = false;
@@ -198,6 +202,7 @@ export class ConsolidationVisit {
     this.retired = true;
     this.review.retire();
     this.command = null;
+    this.unknown = false;
     this.confirmationValue = null;
     this.resultValue = null;
     this.release?.();
