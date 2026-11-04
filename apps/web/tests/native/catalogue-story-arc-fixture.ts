@@ -40,7 +40,7 @@ export async function startCatalogueStoryArcFixture(): Promise<NativeStoryArcFix
         body: JSON.stringify({
           resource: { route: 0, id: GLOBAL_CONTEXT },
           subject: { kind: 'account', id: aliceIdentity.accountId },
-          actions: ['statement:propose', 'context:accept', 'context:adopt'],
+          actions: ['subject:create', 'statement:propose', 'context:accept', 'context:adopt'],
           valid: '(,)',
         }),
       },

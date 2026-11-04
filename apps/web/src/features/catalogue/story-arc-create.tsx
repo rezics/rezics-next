@@ -81,6 +81,7 @@ export function StoryArcCreate({
       return result;
     },
     read: (id) => transport.creation.read(id),
+    ...(transport.creation.eligibility ? { eligibility: transport.creation.eligibility } : {}),
   };
 
   const metadataTypes = createTypesForRelease(active.release);

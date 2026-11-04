@@ -587,6 +587,18 @@ qualifier and grouped-reference holders, to that same prepared item. The contrib
 item and repairs native diagnostics before confirming. The workspace retains the acknowledged UUID and offers an
 explicit continue action; a work query remains a suggestion and creates no membership. A concealed or unavailable
 reader never becomes a fabricated success preview.
+Creation eligibility is the current Global Context `subject.create` observation on that existing parent. A disclosed
+work, released arc relation, classification return, or the future UUID cannot confer creation, later proposal,
+acceptance, or selection. Guest is session-derived. Admitted Story Arc and work descriptors stay readable when
+creation is unavailable. Commands reauthorize at execution.
+Decision: Story Arc identity creation uses the shared current parent `subject.create` observation; disclosed work
+and released arc relation remain admission evidence.
+
+### Create a Story Arc identity
+
+- Touches: one current Global Context `subject.create` observation, admitted StoryArc and optional work descriptors, one sealed create command, and one exact returned-identity read.
+- Bound: reuse the existing parent action observation, independently bounded definitions, and existing target/suggestion readers; no permission request per field or suggested identity, history scan, or polling. Retain existing field, statement, qualifier, serialized-command, and held-retry caps.
+- Growth check: hold one StoryArc type, one optional work, and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing StoryArc create fixture.
 
 Decision: the current StoryArc release gives its scalar properties no qualifier slots, so initial evidence uses
 their declared multiplicity and complete citation groups without inventing qualifier vocabulary.
