@@ -1122,7 +1122,7 @@ async function runGrowthCheck(
       pendingBackends = operationBackends();
     };
     for (let warmup = 0; warmup < warmups; warmup++) {
-      const warmupRun = await captureMeasuredRun(() =>
+      const warmupRun = await captureMeasuredRun(async () =>
         check.captureMode === 'cost-folded'
           ? captureFoldedWarmup(db, async () => {
               if (check.warmup) await check.warmup(db, scale, repetition);
@@ -1153,7 +1153,7 @@ async function runGrowthCheck(
         if (check.prepare) {
           const prepare = check.prepare;
           absorbUnmeasured(
-            await captureMeasuredRun(() =>
+            await captureMeasuredRun(async () =>
               check.captureMode === 'cost-folded'
                 ? captureFoldedWarmup(db, () => prepare(db, scale, repetition))
                 : captureWarmup(db, () => prepare(db, scale, repetition)),
@@ -1161,7 +1161,7 @@ async function runGrowthCheck(
           );
           await settlePending();
         }
-        const captured = await captureMeasuredRun(() =>
+        const captured = await captureMeasuredRun(async () =>
           check.captureMode === 'cost-folded'
             ? captureWithFoldedCost(db, () => check.operation(db, scale, repetition), { includeBackends: true })
             : capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
