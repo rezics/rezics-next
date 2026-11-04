@@ -174,14 +174,6 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     await click(b, m.catalogue_terms_retry_access());
     expect(button(b, m.catalogue_terms_save()).disabled).toBe(false);
     expect(control(nameB, m.catalogue_create_label()).value).toBe('Draft during access outage');
-    second.setScenario('action-denied');
-    await click(b, m.catalogue_terms_save());
-    expect(second.calls).toHaveLength(1);
-    expect(button(b, m.catalogue_terms_save()).disabled).toBe(true);
-    expect(b.textContent).toContain(m.catalogue_terms_read_only());
-    expect(control(nameB, m.catalogue_create_label()).value).toBe('Draft during access outage');
-    second.setScenario('uncertain');
-    await click(b, m.catalogue_terms_retry_access());
     const nameId = control(nameA, m.catalogue_create_label()).id;
     await replace(nameA, m.catalogue_create_label(), '');
     await click(a, m.catalogue_terms_save());
@@ -368,6 +360,26 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     expect(second.calls).toHaveLength(5);
     associations(a);
     associations(b);
+
+    // A fresh eligibility observation after revocation prevents a new command from the mounted draft.
+    const revoked = catalogueTermsFixture();
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <SubjectTermsPage id={termsSubjectId} locale="en" session="signed-in" transport={revoked.transport} />
+        </QueryClientProvider>,
+      ),
+    );
+    const c = host.querySelector<HTMLElement>('article')!;
+    await settle(() => !button(c, m.catalogue_terms_save()).disabled);
+    const nameC = fieldset(c, m.catalogue_create_label());
+    await select(nameC, m.catalogue_terms_action(), 'set');
+    await replace(nameC, m.catalogue_create_label(), 'Draft after revocation');
+    revoked.setScenario('action-denied');
+    await click(c, m.catalogue_terms_save());
+    expect(c.textContent).toContain(m.catalogue_terms_read_only());
+    expect(control(nameC, m.catalogue_create_label()).value).toBe('Draft after revocation');
+    expect(revoked.calls.filter((call) => call.method === 'PATCH')).toHaveLength(0);
 
     // Explicit read recovery retains its own credentials, command and keyboard intent.
     const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');

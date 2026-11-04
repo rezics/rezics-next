@@ -206,13 +206,14 @@ test('Multilingual terms show actionable field-specific corrections without chan
 
       const queuedChange = (element: object, value: string) => {
         const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
-        const props = Reflect.get(element, key) as { onChange: (event: unknown) => unknown };
+        const onChange = (Reflect.get(element, key) as { onChange?: (event: unknown) => unknown }).onChange;
+        if (!onChange) throw new Error('Expected a mounted Terms control change handler');
         const currentTarget = element as { value: string };
         return () => {
           const previousValue = currentTarget.value;
           currentTarget.value = value;
           try {
-            props.onChange({ target: { value }, currentTarget });
+            onChange({ target: { value }, currentTarget });
           } finally {
             currentTarget.value = previousValue;
           }
