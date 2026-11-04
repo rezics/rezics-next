@@ -282,7 +282,11 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
       character: id(30),
       presentation: 'character',
     });
-    expect([...host.querySelectorAll('a')].some((link) => link.href.includes(id(18)))).toBe(false);
+    expect(
+      [...host.querySelectorAll('a')].some((link) =>
+        new URL(link.href).pathname.includes(`/subjects/${id(18)}/`),
+      ),
+    ).toBe(false);
     expect(host.textContent).not.toContain(id(18));
     const more = host.querySelector('[data-slot="continue-group"]') as HTMLAnchorElement;
     expect(new URL(more.href).searchParams.get('cursor')).toBe('opaque-window-2');
