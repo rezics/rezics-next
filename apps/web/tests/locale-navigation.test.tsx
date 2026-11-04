@@ -23,6 +23,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: `https://site.invalid${entry}` });
   window.confirm = (() => true) as typeof window.confirm;
+  window.scrollTo = () => {};
   window.matchMedia = ((media: string) => ({
     media,
     matches: false,
@@ -56,6 +57,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
     'matchMedia',
     'requestAnimationFrame',
     'cancelAnimationFrame',
+    'scrollTo',
     'IS_REACT_ACT_ENVIRONMENT',
     'confirm',
   ];
@@ -164,7 +166,6 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
     await run(fixture);
   } finally {
     await act(async () => root.unmount());
-    await router.dispose();
     window.close();
     for (const [key, descriptor] of saved) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
