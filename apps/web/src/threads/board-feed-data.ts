@@ -3,8 +3,9 @@ import { BOARD_PINNED_SECTION_LIMIT, pinnedIdentitySet } from './board-pins/cont
 import type { PageAuthors } from '../identity/read';
 
 type LoadedCommunityBoardPage = Awaited<ReturnType<typeof loadBoardPageWithAuthors>>;
-export type CommunityBoardPage = Omit<LoadedCommunityBoardPage, 'openingCards'> & {
+export type CommunityBoardPage = Omit<LoadedCommunityBoardPage, 'openingCards' | 'authors'> & {
   openingCards?: LoadedCommunityBoardPage['openingCards'];
+  authors: BoardFeedAuthors;
 };
 export type BoardFeedThread = CommunityBoardPage['threads']['threads'][number];
 export type BoardThreadPage = CommunityBoardPage['threads'];
