@@ -101,18 +101,21 @@ async function closePending(deps: Pick<Dependencies, 'pool' | 'clock'>, key: Col
       );
       const result = await tx.query(
         `WITH keys AS MATERIALIZED (
-        SELECT ordinal FROM library.bulk_target WHERE route=$1 AND operation_id=$2 AND account_id=$3
-          AND state IN ('pending','reconciling')
-          AND (state='pending' OR CASE
-            WHEN target_kind='occurrence' THEN
-              get_byte(uuid_send(collection_id),10)*256+get_byte(uuid_send(collection_id),11)=route
-            WHEN target->>'collectionId' IS NULL THEN true
-            ELSE get_byte(uuid_send((target->>'collectionId')::uuid),10)*256+
-              get_byte(uuid_send((target->>'collectionId')::uuid),11)=route
+        SELECT manifest.ordinal FROM library.bulk_target AS manifest
+          WHERE manifest.route=$1 AND manifest.operation_id=$2 AND manifest.account_id=$3
+          AND manifest.state IN ('pending','reconciling')
+          AND (manifest.state='pending' OR CASE
+            WHEN manifest.target_kind='occurrence' THEN
+              get_byte(uuid_send(manifest.collection_id),10)*256+
+                get_byte(uuid_send(manifest.collection_id),11)=manifest.route
+            WHEN manifest.target->>'collectionId' IS NULL THEN true
+            ELSE get_byte(uuid_send((manifest.target->>'collectionId')::uuid),10)*256+
+              get_byte(uuid_send((manifest.target->>'collectionId')::uuid),11)=manifest.route
           END)
-          ORDER BY ordinal LIMIT 100)
-        UPDATE library.bulk_target AS target SET state=$4,reason=$5 FROM keys
-        WHERE target.route=$1 AND target.operation_id=$2 AND target.account_id=$3 AND target.ordinal=keys.ordinal`,
+          ORDER BY manifest.ordinal LIMIT 100)
+        UPDATE library.bulk_target AS target_row SET state=$4,reason=$5 FROM keys
+        WHERE target_row.route=$1 AND target_row.operation_id=$2 AND target_row.account_id=$3
+          AND target_row.ordinal=keys.ordinal`,
         [key.route, key.operationId, key.accountId, reason === 'authority_lost' ? 'denied' : 'cancelled', reason],
       );
       return {

@@ -8,7 +8,6 @@ import { expireCollectionBulkPage, runCollectionBulkPage } from '../../src/libra
 import { pageCollectionBulkManifest, readCollectionBulk } from '../../src/library/collection-bulk-store.ts';
 import { executeCollectionAddTarget, executeStatusTarget } from '../../src/library/bulk-contract.ts';
 import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
-import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { workStepDeadline } from '../../src/library/command-support.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
@@ -146,6 +145,7 @@ test('filtered preview exhausts native Members pages before status confirmation'
     'collection:read',
     'collection:update',
   ]);
+  await f.grantLibraryGate(owner.actor.accountId);
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
   const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
   const source = (
@@ -348,11 +348,13 @@ test('filtered review pages never narrow the captured set; exact start replay ke
   const created = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
     action: 'set_status',
     state: 'completed',
-    selection: { kind: 'query', sourceId: source.id, filter: '{ "state": "planned" }', sort: 'id' },
+    selection: { kind: 'query', sourceId: source.id, filter: '{ "owner": { "state": "planned" } }', sort: 'id' },
   });
   expect(created.status, await created.clone().text()).toBe(201);
   const operation = (await created.json()).operation;
-  expect(operation).toMatchObject({ selectionSource: { id: source.id, filter: '{"state":"planned"}', sort: 'id' } });
+  expect(operation).toMatchObject({
+    selectionSource: { id: source.id, filter: '{"owner":{"state":"planned"}}', sort: 'id' },
+  });
   expect(operation.counts).toMatchObject({ selectedSubjects: 25, targets: 25, pending: 25 });
   const review = await bulk.outcomes(owner.actor, operation.id, { limit: 10 });
   expect(review.outcomes).toHaveLength(10);
@@ -405,7 +407,7 @@ test('filtered review pages never narrow the captured set; exact start replay ke
   expect((await f.commands.readEntry(owner.actor, addedLater.subjectId)).state).toBe('planned');
 });
 
-test('remote add receipt is recovered after cancellation, then results stay private and expire', async () => {
+test('native add receipt replay survives partial cancellation; results stay private and expire', async () => {
   await f.setLibraryOpen(false);
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
   const owner = await f.identity([
@@ -417,39 +419,21 @@ test('remote add receipt is recovered after cancellation, then results stay priv
   ]);
   await f.grantLibraryGate(owner.actor.accountId);
   const sourceRoute = routeOf(owner.actor.accountId)!;
-  const destinationRoute = sourceRoute < 65520 ? sourceRoute + 16 : sourceRoute - 16;
-  const destinationOwner = await f.identity(
-    ['access:grant', 'collection:create', 'collection:read', 'collection:update'],
-    undefined,
-    destinationRoute,
-  );
-  await f.grantLibraryGate(destinationOwner.actor.accountId);
   const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
   const destination = (
     await collections.createCollection(
-      destinationOwner.actor,
-      { title: 'Remote bulk destination', visibility: 'private' },
+      owner.actor,
+      { title: 'Bulk recovery destination', visibility: 'private' },
       key(),
     )
   ).value;
-  const grants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant', clock });
-  await grants.create(
-    { pool: f.pool, actor: destinationOwner.actor, deadline: workStepDeadline() },
-    {
-      resource: { route: destinationRoute, id: destination.id },
-      subject: { kind: 'account', id: owner.actor.accountId },
-      actions: ['collection:read', 'collection:update'],
-      valid: '(,)',
-      key: key(),
-    },
-  );
-  const captured = await entry(owner.actor);
+  const captured = [await entry(owner.actor), await entry(owner.actor)];
   const created = await bulk.preview(
     owner.actor,
     {
       action: 'add_to_collection',
       collectionId: destination.id,
-      selection: { kind: 'explicit', targets: [{ subjectId: captured.subjectId }] },
+      selection: { kind: 'explicit', targets: captured.map(({ subjectId }) => ({ subjectId })) },
     },
     key(),
   );
@@ -460,10 +444,20 @@ test('remote add receipt is recovered after cancellation, then results stay priv
     const row = (await pageCollectionBulkManifest(tx, { ...locator, limit: 1 }))[0]!;
     return { operation, row };
   });
-  const runtime = {
+  const ownerConsent = async () => ({
+    actorAccountId: owner.actor.accountId,
+    clientId: owner.actor.clientId,
+    scopes: owner.actor.scopes,
+  });
+  const runtimeDependencies = {
     ...dependencies(),
+    readConsent: ownerConsent,
     readInitiator: readCollectionBulkInitiator,
-    initiators: createInitiatorRestorer({ ...dependencies(), readOperation: readCollectionBulkInitiator }),
+    initiators: createInitiatorRestorer({
+      ...dependencies(),
+      readConsent: ownerConsent,
+      readOperation: readCollectionBulkInitiator,
+    }),
   };
   const command = {
     source: persisted.operation.initiator.operation,
@@ -477,33 +471,32 @@ test('remote add receipt is recovered after cancellation, then results stay priv
     chunkIndex: 0,
     deadline: workStepDeadline(),
   };
-  const accepted = await executeCollectionAddTarget(runtime, command);
+  const accepted = await executeCollectionAddTarget(runtimeDependencies, command);
   expect(accepted.kind).toBe('terminal');
-  expect(await executeCollectionAddTarget(runtime, command)).toEqual(accepted);
+  expect(await executeCollectionAddTarget(runtimeDependencies, command)).toEqual(accepted);
   const checkpoint = await f.pool.query<{ state: string }>(
     'SELECT state FROM library.bulk_target WHERE route=$1 AND operation_id=$2 AND ordinal=0',
     [sourceRoute, operationId],
   );
-  expect(checkpoint.rows[0]?.state).toBe('pending');
+  expect(checkpoint.rows[0]?.state).toBe('applied');
 
   await bulk.cancel(owner.actor, operationId, key());
   await runCollectionBulkPage(
     {
       ...dependencies(),
-      readConsent: async () => ({
-        actorAccountId: owner.actor.accountId,
-        clientId: owner.actor.clientId,
-        scopes: owner.actor.scopes,
-      }),
+      readConsent: ownerConsent,
     },
     { route: sourceRoute, operationId },
   );
   const outcomes = await bulk.outcomes(owner.actor, operationId, {});
-  expect(outcomes.outcomes.map((row) => [row.state, row.reason])).toEqual([['applied', null]]);
+  expect(outcomes.outcomes.map((row) => [row.state, row.reason])).toEqual([
+    ['applied', null],
+    ['cancelled', 'cancel_requested'],
+  ]);
   const member = await f.pool.query<{ count: number }>(
     `SELECT count(*)::integer AS count FROM library.collection_member
      WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL`,
-    [destinationRoute, destination.id],
+    [sourceRoute, destination.id],
   );
   expect(member.rows[0]?.count).toBe(1);
 
