@@ -119,7 +119,9 @@ former-handle lookup, continuation, and Realm directory plus bounded hydration);
 seconds, caller cancellation composes with each deadline, and failures retain the existing unavailable/retry UI.
 
 Web preserves the server-derived automation marker even when operator hydration is unavailable; only an actual
-operator address may become a link. Profile editing must round-trip the actual Content avatar summary and every
+operator address may become a link. An operated actor whose operator has no readable public identity displays the
+localized “Operator unavailable” label without an operator identifier or inferred name; only a readable public
+identity becomes a link. Profile editing must round-trip the actual Content avatar summary and every
 public-view choice without widening content access. The [profiles report](research/accounts-design-agents-profiles.md)
 records existing gaps: avatar `{media}` versus the settings adapter's `id`, omitted Realms projection, form/API
 limits, handleless and managed-target loading, and representative explanation/release controls. These are whole
