@@ -6,9 +6,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { subjectHref } from '../src/subject/subject-href';
 import { boardReadingHref, captureBoardReadingReturn, parseBoardReadingReturn } from '../src/threads/board-reading';
-import boardThreadsRecording from '../src/kernel/recorded/board-realm-threads.json';
-import postRecording from '../src/kernel/recorded/board-realm-thread-posts.json';
-import threadRecording from '../src/kernel/recorded/board-realm-thread.json';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -72,36 +69,37 @@ test('the public Realm shelves lead to their exact work and board sources, then 
     }
     for (const board of page.realm.boards) expect(realmHtml).toContain(`/boards/${encodeURIComponent(board.id)}`);
 
-    const boardId = boardThreadsRecording.threads[0]!.boardId;
-    const board = page.realm.boards.find((candidate) => candidate.id === boardId);
-    expect(board).toBeDefined();
-    const boardRead = await readBoardPage({ data: { id: boardId, credentialMode: 'anonymous' } });
-    const thread = boardRead.page.threads.threads.find((candidate) => candidate.id === threadRecording.thread.id);
-    expect(thread).toBeDefined();
+    const board = page.realm.boards.find((candidate) => candidate.visibility === 'published');
+    if (!board) throw new Error('The admitted Realm has no readable board');
+    const boardId = board.id;
+    const boardRead = await readBoardPage({ data: { id: boardId, sort: 'new', credentialMode: 'anonymous' } });
+    const thread = boardRead.page.threads.threads.find((candidate) => candidate.availability === 'available');
+    if (!thread) throw new Error('The admitted board has no readable thread');
     const threadPage = await readThreadPage({
-      data: { id: threadRecording.thread.id, credentialMode: 'anonymous' },
+      data: { id: thread.id, credentialMode: 'anonymous' },
     });
-    if ('redirect' in threadPage) throw new Error('The recorded thread unexpectedly redirected');
+    if ('redirect' in threadPage) throw new Error('The native thread unexpectedly redirected');
 
-    const opening = postRecording.posts.find((post) => post.parentId === null)!;
-    const replies = postRecording.posts.filter((post) => post.parentId === opening.id);
-    expect(threadPage.posts.posts.map((post) => post.id)).toEqual(postRecording.posts.map((post) => post.id));
+    const openingId = threadPage.thread.firstPost.id;
+    const replies = threadPage.posts.posts.filter((post) => post.parentId === openingId);
     expect(replies.length).toBeGreaterThan(0);
-    expect(threadPage.posts.posts.find((post) => post.id === replies[0]!.id)?.parentId).toBe(opening.id);
+    expect(threadPage.posts.posts[0]?.id).toBe(openingId);
+    const earlierPostIds = new Set<string>();
+    for (const post of threadPage.posts.posts) {
+      if (post.parentId !== null) expect(earlierPostIds.has(post.parentId)).toBe(true);
+      earlierPostIds.add(post.id);
+    }
 
     const returnSource = captureBoardReadingReturn({
       boardId,
       sort: 'new',
       locale: 'en',
-      cursor: 'recorded-board-window',
-      focusThreadId: threadRecording.thread.id,
+      focusThreadId: thread.id,
     });
     expect(returnSource).not.toBeNull();
     const returnHref = boardReadingHref(returnSource!);
     expect(parseBoardReadingReturn(returnSource)).toEqual(returnSource);
-    expect(returnHref).toBe(
-      `/en/boards/${encodeURIComponent(boardId)}?sort=new&cursor=recorded-board-window#board-thread-${threadRecording.thread.id}`,
-    );
+    expect(returnHref).toBe(`/en/boards/${encodeURIComponent(boardId)}?sort=new#board-thread-${thread.id}`);
 
     setLocale('en', { reload: false });
     const reading = await render(
@@ -111,9 +109,9 @@ test('the public Realm shelves lead to their exact work and board sources, then 
         personal: undefined,
         session: 'signed-out',
         readerSubject: null,
-        returnTo: `/en/threads/${threadRecording.thread.id}`,
+        returnTo: `/en/threads/${thread.id}`,
         signedOut: createElement(SignInPrompt, {
-          returnTo: `/en/threads/${threadRecording.thread.id}`,
+          returnTo: `/en/threads/${thread.id}`,
           label: m.threads_sign_in_to_reply(),
         }),
         renderHeader: (title, current) =>
@@ -121,14 +119,16 @@ test('the public Realm shelves lead to their exact work and board sources, then 
         onMutation: async () => {},
         onPageRefresh: async () => threadPage,
       }),
-      `/en/threads/${threadRecording.thread.id}`,
+      `/en/threads/${thread.id}`,
     );
     expect(reading).toContain(m.thread_posts_heading());
     expect(reading).toContain(m.threads_sign_in_to_reply());
     expect(reading).toContain(`href="${returnHref}"`);
     for (const post of threadPage.posts.posts) {
-      const text = post.availability === 'available' ? JSON.stringify(post.body) : '';
-      if (text) expect(reading).toContain(text.slice(0, Math.min(text.length, 48)));
+      if (post.availability !== 'available') continue;
+      const firstBlock = post.body.doc.content[0] as { content?: { text?: string }[] } | undefined;
+      const text = firstBlock?.content?.map((node) => node.text ?? '').join('') ?? '';
+      if (text) expect(reading).toContain(text);
     }
   } finally {
     setLocale(oldLocale, { reload: false });
