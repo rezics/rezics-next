@@ -31,6 +31,8 @@ import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { LiteraryReaderEntry } from '../catalogue/literary-reader/entry';
+import { literaryGrain, literaryReaderType } from '../catalogue/literary-reader/model';
+import { literaryAddress } from '../catalogue/literary-reader/navigation';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
@@ -580,6 +582,23 @@ export function SubjectPage({
   const read = subjectBody(page);
   const visitReturn = subjectVisitReturn(returnTo, locale);
   const mangaSubject = read && !page.account && isMangaReaderType(read.subject.type) ? read.subject : undefined;
+  const literarySubject =
+    read &&
+    !page.account &&
+    (literaryReaderType(read.subject.type, read.summary?.types) ||
+      literaryGrain(read.subject.type, page.catalogue?.definitions))
+      ? read.subject
+      : undefined;
+  const literaryReturn = literarySubject
+    ? literaryAddress({
+        id: literarySubject.id,
+        label: subjectPageTitle(page, locale),
+        locale,
+        view,
+        realm: subjectPageRealm(page),
+        continuation: page.continuation,
+      })
+    : undefined;
   const mangaReturn = mangaSubject
     ? mangaReaderAddress({
         id: mangaSubject.id,
@@ -607,10 +626,10 @@ export function SubjectPage({
       const existingReturn = new URL(props.href, 'https://rezics.invalid').searchParams.get('via');
       const href = subjectVisitReturn(existingReturn, locale)
         ? props.href
-        : withSubjectVisitReturn(props.href, mangaReturn ?? visitReturn ?? '', locale);
+        : withSubjectVisitReturn(props.href, literaryReturn ?? mangaReturn ?? visitReturn ?? '', locale);
       return <Link {...props} href={contextHref(href, realm)} />;
     };
-  }, [link, locale, mangaReturn, realm, visitReturn]);
+  }, [link, locale, literaryReturn, mangaReturn, realm, visitReturn]);
   const renderedActions =
     read && !page.account && !realm ? (
       <>
@@ -791,12 +810,23 @@ export function SubjectPage({
           {...(!page.account && renderedActions ? { headerActions: renderedActions } : {})}
         >
           <div className="flex w-full flex-col gap-8">
-            {overview && !page.account && read?.subject.type === 'schema:Book' ? (
+            {literarySubject && (overview || view === 'contents' || view === 'editions') ? (
               <LiteraryReaderEntry
-                work={read.subject}
+                work={literarySubject}
+                related={read!.related}
                 source={page}
                 locale={locale}
-                context={page.context?.id ?? null}
+                context={page.context}
+                definitions={page.catalogue?.definitions}
+                descriptorState={page.catalogue?.state}
+                digest={page.catalogue?.digest}
+                directions={page.catalogue?.directions}
+                windows={profileRelationWindows(page)}
+                reader={reader ?? defaultReader}
+                view={view}
+                realm={realm}
+                continuation={page.continuation}
+                viewer={page.requestedReader ?? null}
               />
             ) : null}
             {!overview && heading && (
