@@ -859,11 +859,18 @@ export function createSearchGenerationPublication(
       for (const group of grouped.values()) {
         const before = await head(group.partition);
         await remember(job, before, client);
+        const discoveryKeys =
+          job.family === 'discovery'
+            ? group.keys.filter(
+                (key): key is DiscoveryKey => key.owner === 'semantic' || key.owner === 'accounts',
+              )
+            : undefined;
+        if (discoveryKeys && discoveryKeys.length !== group.keys.length) throw new Pending('source_pending');
         await reconcile(
           job,
           group.partition,
           group.ids,
-          job.family === 'discovery' ? group.keys : undefined,
+          discoveryKeys,
           BigInt(before.position),
           context,
           meter,
