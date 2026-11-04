@@ -81,10 +81,23 @@ function reading(statement: Stmt): Reading {
 }
 
 /** A source metric adapter. Its evidence stays on this exact association, outside viewer actions. */
-export function SourceTagWeight({ statement, locale }: { statement: Stmt; locale: string }) {
+export function SourceTagWeight({
+  statement,
+  locale,
+  showAbsent = false,
+}: {
+  statement: Stmt;
+  locale: string;
+  showAbsent?: boolean;
+}) {
   const result = reading(statement);
   const options = { locale: locale as never };
-  if (result.state === 'absent') return null;
+  if (result.state === 'absent')
+    return showAbsent ? (
+      <span data-slot="source-tag-weight" data-state="absent" className="text-xs text-muted-foreground">
+        {m.subject_source_tag_weight_absent({}, options)}
+      </span>
+    ) : null;
   if (result.state === 'unsupported')
     return (
       <span data-slot="source-tag-weight" data-state="unsupported" className="text-xs text-muted-foreground">

@@ -1,5 +1,15 @@
 # Subject page composition
 
+## Work tag reading
+
+Decision: show at most 12 source-order tag associations per local page, count only labelled tags disclosed in the retained Subject reading, open the original Concept target, and gate each over-threshold association as a whole.
+
+The Subject header reuses the released facet labels and `SourceTagWeight` for each admitted assertion. “Why this tag applies” opens the existing Concept filter with the exact property, that statement's spoiler qualifiers and the original work return; the Concept visit remains the owner of source evidence and `FactInspectionEntry`. Equal Concept targets remain separate assertions. Missing target labels stay unavailable and never fall back to identifiers.
+
+The page has no second Subject or Concept reader. Its next/previous controls only move through the already retained Subject response; native unavailable and refused reads remain owned by the page reader and are never shown as an empty tag set. Hidden associations do not contribute labels or counts until their own `SpoilerGate` opens.
+
+For the existing fact admission of at most 1 MiB UTF-8, 4,096 statements and 32 qualifiers, reference groups and parts per group, projection is O(B + T + Q), where B is admitted response bytes, T admitted tag statements and Q qualifier/reference parts. The view retains a single page of P = 12 rows; it builds Concept links and validates source weight only for that visible page, at O(P + Qₚ) additional work. No hidden history, per-tag read, or automatic load-all is introduced.
+
 ## Manga reading
 
 Decision: present only released Manga part semantics through the ordinary Subject and existing contents/edition views; use generic facts/relations when a specialized chapter structure is unsupported. No new chapter type/property/profile is adopted by this interface.
