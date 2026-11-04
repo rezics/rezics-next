@@ -46,7 +46,8 @@ test('Subject discussion and review summaries keep native read destinations and 
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
   const { createRoot } = await import('react-dom/client');
-  const { SubjectCommunityRegion } = await import('../src/features/pages/subject-community-view');
+  const { SubjectCommunityRegion, SubjectCommunityContext } =
+    await import('../src/features/pages/subject-community-view');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const require = createRequire(import.meta.url);
@@ -157,21 +158,26 @@ test('Subject discussion and review summaries keep native read destinations and 
     event.preventDefault();
     navigations.push(anchor.getAttribute('href')!);
   });
+  let observation = 0;
   const show = async (kind: CommunityKind, paged: boolean, region: CommunityRegion = ready, href = fullHref(kind)) => {
     await act(async () =>
       root.render(
-        <SubjectCommunityRegion
-          id="community"
-          kind={kind}
-          region={region}
-          authors={authors}
-          now={now}
-          subject={subject}
-          locale={locale}
-          href={href}
-          paged={paged}
-          node={node}
-        />,
+        <SubjectCommunityContext.Provider
+          value={{ regions: { [kind]: region }, authors, now, sourceKey: `native-observation-${++observation}` }}
+        >
+          <SubjectCommunityRegion
+            id="community"
+            kind={kind}
+            region={region}
+            authors={authors}
+            now={now}
+            subject={subject}
+            locale={locale}
+            href={href}
+            paged={paged}
+            node={node}
+          />
+        </SubjectCommunityContext.Provider>,
       ),
     );
   };
@@ -414,7 +420,42 @@ test('the production adapter preserves recorded citation, duplicate occurrences 
     const reads = { ...page.reads };
     for (const [key, descriptor] of Object.entries(plan.reads)) {
       if (descriptor.kind !== 'subjectThreads') continue;
-      const row = communityThread(descriptor.threadKind, false, subject);
+      const native = communityThread(descriptor.threadKind, false, subject);
+      const row = {
+        ...native,
+        reviewContext: {
+          target: {
+            state: 'available',
+            subject: {
+              id: communitySubject.id,
+              kind: 'work',
+              label: { value: 'Reviewed work · 星の王子さま與狐狸的漫長旅程'.repeat(4), language: 'ja' },
+            },
+          },
+          citation: { state: 'withheld' },
+        },
+        card: {
+          state: 'current',
+          authors: { thread: { state: 'withheld' } },
+          presentation: { state: 'current', language: 'en', spoiler: false },
+          media: { state: 'withheld' },
+          comments: { state: 'withheld' },
+          parentContext: { kind: 'reply', parent: { state: 'removed', id: '01a1a000-0000-7000-8000-000000000098' } },
+          actions: { state: 'current', retryable: false, references: [] },
+          reply: { state: 'denied' },
+          watch: { state: 'withheld' },
+          currentness: {
+            source: 'current',
+            place: 'current',
+            authors: 'unavailable',
+            reactions: 'current',
+            actions: 'current',
+            watch: 'current',
+            media: 'unavailable',
+            comments: 'current',
+          },
+        },
+      };
       const missing = { ...row };
       Reflect.deleteProperty(missing, 'reactions');
       reads[key] = {
@@ -441,6 +482,12 @@ test('the production adapter preserves recorded citation, duplicate occurrences 
       units: 14,
       revision: 2,
     });
+    expect(region.threads[0]!.reviewTarget).toMatchObject({
+      state: 'available',
+      subject: { id: communitySubject.id, kind: 'work' },
+    });
+    expect(region.threads[0]!.parentContext).toMatchObject({ kind: 'reply', parent: { state: 'removed' } });
+    expect(region.threads[0]!.nativeCard?.comments).toEqual({ state: 'withheld' });
     expect(region.threads[2]!.reactions).toEqual({});
     expect(region.threads[3]!.reactions).toBeUndefined();
     for (const locale of ['en', 'zh-Hant', 'ja'] as const) {
@@ -458,6 +505,8 @@ test('the production adapter preserves recorded citation, duplicate occurrences 
       expect(html).toContain('data-vote-revision="2"');
       expect(html).toContain('data-units="14"');
       expect(html).toContain('MIT');
+      expect(html).toContain('Reviewed work');
+      expect(html).toContain('post=01a1a000-0000-7000-8000-000000000098');
     }
   }
 });
