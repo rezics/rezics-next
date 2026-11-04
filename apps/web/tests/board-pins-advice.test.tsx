@@ -1,11 +1,7 @@
 import { expect, test } from 'bun:test';
-import {
-  boardPinAdviceInput,
-  inspectBoardPinAdvice,
-  nativeBoardPinAdvice,
-  type BoardPinAdviceQuery,
-  type BoardPinAdviceWire,
-} from '../src/threads/board-pins/advice';
+import { boardPinAdviceInput, receiveBoardPinAdvice, type BoardPinAdviceQuery } from '../src/threads/board-pins/advice';
+import { readBoardPinAdviceRequest } from '../src/threads/board-pins/native';
+import { productionBoardPinProducer } from '../src/threads/board-pins/producer';
 
 const boardId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b3';
 const threadId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b4';
@@ -27,9 +23,7 @@ const ready = () => ({
   management: 'allowed',
   threads: [{ threadId, pinned: true, actions: ['unpin'] }],
 });
-const wire = (data: unknown, status = 200): BoardPinAdviceWire => ({ post: async () => ({ status, data }) });
-
-test('selected advice rejects duplicates, foreign parents, malformed revisions and open inputs before transport', async () => {
+test('selected advice input rejects duplicates, foreign parents, malformed revisions and open fields', () => {
   const invalid = [
     { selected: [...selected, ...selected] },
     { selected: [{ ...selected[0], placeId: viewerId }] },
@@ -41,42 +35,16 @@ test('selected advice rejects duplicates, foreign parents, malformed revisions a
     { selected: [{ ...selected[0], pinned: true }] },
   ];
   for (const input of invalid) expect(boardPinAdviceInput(boardId, input)).toBeUndefined();
-  let calls = 0;
-  await inspectBoardPinAdvice(
-    { ...query(), selected: [...selected, ...selected] },
-    {
-      post: async () => {
-        calls++;
-        return { status: 200, data: ready() };
-      },
-    },
-    'Bearer original',
-  );
-  expect(calls).toBe(0);
+  expect(boardPinAdviceInput(boardId, { selected: [...selected, ...selected] })).toBeUndefined();
 });
 
-test('inspection sends frozen exact operands and credentials with cancellation and no-store', async () => {
-  const current = query();
-  const result = await inspectBoardPinAdvice(
-    current,
-    {
-      post: async (input, options) => {
-        expect(input).toEqual({ selected, pinRevision: '4' });
-        expect(Object.isFrozen(input.selected[0])).toBe(true);
-        expect(options).toEqual({
-          headers: { authorization: 'Bearer original' },
-          fetch: { signal: current.signal, cache: 'no-store' },
-        });
-        return { status: 200, data: ready() };
-      },
-    },
-    'Bearer original',
-  );
+test('the receiver binds viewer, Board, generation, and the exact bounded selected response', () => {
+  const result = receiveBoardPinAdvice(query(), 200, ready());
   expect(result).toEqual(ready());
   expect(Object.isFrozen(result)).toBe(true);
 });
 
-test('advice binds viewer, board, generation and only selected IDs; denial and full capacity invent no actions', async () => {
+test('malformed advice, denial and full capacity never invent selected actions', () => {
   const malformed = [
     { ...ready(), viewer: { kind: 'account', id: threadId } },
     { ...ready(), boardId: threadId },
@@ -87,33 +55,21 @@ test('advice binds viewer, board, generation and only selected IDs; denial and f
     { ...ready(), threads: [{ threadId, pinned: true, actions: ['pin'] }] },
     { ...ready(), hiddenPins: [viewerId] },
   ];
-  for (const body of malformed)
-    expect(await inspectBoardPinAdvice(query(), wire(body), 'credential')).toEqual({ state: 'unavailable' });
+  for (const body of malformed) expect(receiveBoardPinAdvice(query(), 200, body)).toEqual({ state: 'unavailable' });
   const denied = { ...ready(), management: 'denied', threads: [{ threadId, pinned: true, actions: [] }] };
-  expect(await inspectBoardPinAdvice(query(), wire(denied), 'credential')).toEqual(denied);
+  expect(receiveBoardPinAdvice(query(), 200, denied)).toEqual(denied);
   const full = { ...ready(), threads: [{ threadId, pinned: false, actions: [] }] };
-  expect(await inspectBoardPinAdvice(query(), wire(full), 'credential')).toEqual(full);
-  for (const status of [401, 403, 404])
-    expect(await inspectBoardPinAdvice(query(), wire({}, status), 'credential')).toEqual({ state: 'denied' });
-  expect(await inspectBoardPinAdvice(query(), wire({ state: 'stale' }), 'credential')).toEqual({ state: 'stale' });
+  expect(receiveBoardPinAdvice(query(), 200, full)).toEqual(full);
+  for (const status of [401, 403, 404]) expect(receiveBoardPinAdvice(query(), status, {})).toEqual({ state: 'denied' });
+  expect(receiveBoardPinAdvice(query(), 200, { state: 'stale' })).toEqual({ state: 'stale' });
 });
 
-test('absent published methods and aborted late completions stay unavailable', async () => {
-  expect(nativeBoardPinAdvice({ threads: {} })).toBeUndefined();
-  expect(nativeBoardPinAdvice({ 'pin-advice': {} })).toBeUndefined();
-  const method = wire(ready());
-  expect(nativeBoardPinAdvice({ 'pin-advice': method })).toBe(method);
-  expect(await inspectBoardPinAdvice(query(), undefined, 'credential')).toEqual({ state: 'unavailable' });
+test('the receiver stays unavailable until official client publication and withholds aborted results', async () => {
+  expect(await readBoardPinAdviceRequest()).toEqual({ state: 'unavailable' });
+  expect(await productionBoardPinProducer.inspectSelected?.(query())).toEqual({ state: 'unavailable' });
   const controller = new AbortController();
-  const result = await inspectBoardPinAdvice(
-    { ...query(), signal: controller.signal },
-    {
-      post: async () => {
-        controller.abort();
-        return { status: 200, data: ready() };
-      },
-    },
-    'credential',
-  );
-  expect(result).toEqual({ state: 'unavailable' });
+  controller.abort();
+  expect(receiveBoardPinAdvice({ ...query(), signal: controller.signal }, 200, ready())).toEqual({
+    state: 'unavailable',
+  });
 });

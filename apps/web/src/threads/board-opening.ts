@@ -1,5 +1,6 @@
 import type { BoardPageResponse } from '@rezics/client';
 import { boardCommunitySource } from './board-community-source';
+import { validBoardPinRevision } from './board-pins/contract';
 
 export type BoardOpeningCard = BoardPageResponse['threads'][number];
 export type BoardOpeningReactionOrigin = Readonly<{
@@ -44,6 +45,14 @@ export function receiveBoardOpeningPage(response: BoardPageResponse, now = new D
     for (const author of [selected.authors.thread, selected.authors.openingPost])
       if (author.state === 'available') authors[author.id] ??= author;
   }
+  const pinRevision =
+    response &&
+    typeof response === 'object' &&
+    !Array.isArray(response) &&
+    'pinRevision' in response &&
+    validBoardPinRevision(response.pinRevision)
+      ? response.pinRevision
+      : undefined;
   return {
     board: response.board,
     community: boardCommunitySource(response.board),
@@ -55,6 +64,7 @@ export function receiveBoardOpeningPage(response: BoardPageResponse, now = new D
       threads: response.threads.map((card) => card.thread),
       next: response.next,
       rankRefreshedAt: response.rankRefreshedAt,
+      ...(pinRevision === undefined ? {} : { pinRevision }),
     },
     authors,
     now,
