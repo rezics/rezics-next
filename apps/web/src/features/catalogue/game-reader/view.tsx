@@ -1,31 +1,31 @@
 import {
-  useEffect,
   useId,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type ComponentProps,
-  type MouseEvent,
   type ReactNode,
+  type MouseEvent,
 } from 'react';
-import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref, subjectUrlForView } from '../../../subject/subject-href';
-import { CandidateValue } from '../../pages/data';
 import { contextHref } from '../../pages/context-navigation';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { spoilerLevel } from '../../pages/shared';
 import { SpoilerGate } from '../../pages/values';
-import { historicalStatement } from '../release-fidelity/model';
-import { gameDatePresentation } from './date';
 import { profileSourceRecords } from '../music-reader';
-import type { GameReaderAddress, GameReaderRead, GameReaderReady, GameReaderTransport, GameStatement } from './model';
+import type { GameReaderAddress, GameReaderRead, GameReaderTransport, GameStatement } from './model';
 
-const action =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const linkClass = `${action} text-primary underline underline-offset-4`;
+import { action, linkClass } from './reading/controls';
+import { GameFact, GameEvidence } from './reading/evidence';
+import { useEditionWindow } from './reading/window';
+import { useReaderFocus } from './reading/focus';
+import { EditionInspection, type EditionSelection } from './reading/edition';
+import { RetiredReading, SafeNavigation } from './reading/recovery';
+
 type Props = GameReaderAddress & {
   locale: string;
   realm?: string | undefined;
@@ -34,6 +34,7 @@ type Props = GameReaderAddress & {
   spoiler?: number | undefined;
   transport: GameReaderTransport;
   initial?: GameReaderRead;
+  refresh?: () => Promise<void>;
 };
 
 /** Source and authority replacement retire the entire window, its cursors, reveal consent and focus intent. */
@@ -41,6 +42,29 @@ export function GameReader(props: Props) {
   const id = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const focused = useRef<EventTarget | null>(null);
+  const section = useRef<HTMLElement>(null);
+  const keyboard = useRef(true);
+  useEffect(() => {
+    const pointer = () => {
+      keyboard.current = false;
+      focused.current = null;
+    };
+    const key = () => {
+      keyboard.current = true;
+      focused.current = section.current?.contains(document.activeElement) ? document.activeElement : null;
+    };
+    const moved = (event: FocusEvent) => {
+      if (!section.current?.contains(event.target as Node)) focused.current = null;
+    };
+    document.addEventListener('pointerdown', pointer, true);
+    document.addEventListener('keydown', key, true);
+    document.addEventListener('focusin', moved, true);
+    return () => {
+      document.removeEventListener('pointerdown', pointer, true);
+      document.removeEventListener('keydown', key, true);
+      document.removeEventListener('focusin', moved, true);
+    };
+  }, []);
   const reading = useSubjectCommunityReading({
     source: props.source,
     reader: props.reader,
@@ -53,14 +77,20 @@ export function GameReader(props: Props) {
   const o = { locale: props.locale as never };
   return (
     <section
+      ref={section}
       data-slot="game-reader"
       aria-labelledby={id}
       className="min-w-0 space-y-4 [overflow-wrap:anywhere]"
       onFocusCapture={(event) => {
-        focused.current = event.target;
+        focused.current = keyboard.current ? event.target : null;
       }}
     >
-      <h2 id={id} ref={heading} tabIndex={-1} className="text-xl font-semibold">
+      <h2
+        id={id}
+        ref={heading}
+        tabIndex={-1}
+        className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
         {m.game_reader_title({}, o)}
       </h2>
       {reading.available ? (
@@ -71,7 +101,7 @@ export function GameReader(props: Props) {
           focusHeading={() => heading.current?.focus()}
         />
       ) : (
-        <p role="status">{m.game_reader_unavailable({}, o)}</p>
+        <RetiredReading {...props} />
       )}
     </section>
   );
@@ -90,97 +120,21 @@ function GameWindow({
   focusHeading,
 }: Props & { current: () => boolean; focusHeading: () => void }) {
   const o = { locale: locale as never };
-  const [page, setPage] = useState<GameReaderReady | undefined>(initial?.ok ? initial : undefined);
-  const [failure, setFailure] = useState<GameReaderRead | undefined>(initial && !initial.ok ? initial : undefined);
-  const [busy, setBusy] = useState(!initial);
-  const mounted = useRef(false);
-  const pending = useRef<GameReaderAddress>({ id, context, type });
-  const inFlight = useRef(false);
-  const sequence = useRef(0);
-  const acceptedCursors = useRef(new Set<string>());
-  const successfulWindows = useRef(initial?.ok ? 1 : 0);
-  const origin = useRef<HTMLAnchorElement | null>(null);
-  const navigate = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!current()) {
-      event.preventDefault();
-      return;
-    }
-    if (event.detail === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey) origin.current = event.currentTarget;
-  };
-  useEffect(() => {
-    const restore = () => {
-      const target = origin.current;
-      origin.current = null;
-      if (!current() || !target) return;
-      if (target.isConnected && (document.activeElement === target || document.activeElement === document.body))
-        target.focus();
-      else if (!target.isConnected && document.activeElement === document.body) focusHeading();
-    };
-    window.addEventListener('focus', restore);
-    return () => window.removeEventListener('focus', restore);
-  }, [current, focusHeading]);
-  const read = async (address: GameReaderAddress, trigger?: HTMLButtonElement, keyboard = false) => {
-    if (!mounted.current || !current() || inFlight.current) return;
-    inFlight.current = true;
-    pending.current = address;
-    const turn = ++sequence.current;
-    // A continuation replaces only its bounded release window. Keep the work reading available
-    // while the new window loads or its transport fails; never retain the old release destinations.
-    setPage((previous) => (address.cursor && previous ? { ...previous, editions: [], next: null } : undefined));
-    setFailure(undefined);
-    if (address.cursor && (acceptedCursors.current.has(address.cursor) || successfulWindows.current >= 64)) {
-      inFlight.current = false;
-      setBusy(false);
-      setFailure({ ok: false, reason: 'restart' });
-      return;
-    }
-    if (!address.cursor) {
-      acceptedCursors.current.clear();
-      successfulWindows.current = 0;
-    }
-    setBusy(true);
-    let result: GameReaderRead;
-    try {
-      result = await transport(address);
-    } catch {
-      result = { ok: false, reason: 'unavailable' };
-    }
-    if (!mounted.current || !current() || turn !== sequence.current) return;
-    inFlight.current = false;
-    setBusy(false);
-    if (
-      result.ok &&
-      result.public.subject.id === id &&
-      result.public.subject.context === context &&
-      result.public.subject.type === type
-    ) {
-      successfulWindows.current++;
-      if (address.cursor) acceptedCursors.current.add(address.cursor);
-      setPage(result);
-    } else {
-      const refused = result.ok || result.reason === 'withheld' || result.reason === 'invalid';
-      if (refused) setPage(undefined);
-      setFailure(result.ok ? { ok: false, reason: 'withheld' } : result);
-    }
-    if (
-      keyboard &&
-      trigger &&
-      (document.activeElement === trigger || (!trigger.isConnected && document.activeElement === document.body))
-    )
-      focusHeading();
-  };
-  useEffect(() => {
-    mounted.current = true;
-    if (!initial) void read({ id, context, type });
-    return () => {
-      mounted.current = false;
-      inFlight.current = false;
-      sequence.current++;
-      origin.current = null;
-    };
-  }, []);
-  const request = (address: GameReaderAddress) => (event: MouseEvent<HTMLButtonElement>) => {
-    void read(address, event.currentTarget, event.detail === 0);
+  const [selected, setSelected] = useState<EditionSelection | undefined>(undefined);
+  const focus = useReaderFocus(current, focusHeading);
+  const window = useEditionWindow({
+    address: { id, context, type },
+    initial,
+    transport,
+    current,
+    replaced: () => {
+      setSelected(undefined);
+      focus.clearDestination();
+    },
+  });
+  const { page, failure, busy } = window;
+  const request = (operation: () => Promise<boolean>) => (event: MouseEvent<HTMLButtonElement>) => {
+    void focus.request(event, operation);
   };
   const Link = (props: ComponentProps<'a'>) => (
     <a
@@ -189,7 +143,7 @@ function GameWindow({
       className={linkClass}
       target="_blank"
       rel="noopener"
-      onClick={navigate}
+      onClick={focus.navigate}
     />
   );
   const label = page ? pickText(page.public.subject.labels, locale) : undefined;
@@ -222,13 +176,15 @@ function GameWindow({
             ? m.game_reader_window_restart({}, o)
             : failure.reason === 'withheld'
               ? m.game_reader_withheld({}, o)
-              : m.game_reader_unavailable({}, o)}
+              : failure.reason === 'invalid'
+                ? m.game_reader_invalid({}, o)
+                : m.game_reader_unavailable({}, o)}
         </p>
         <button
           type="button"
           className={`${buttonVariants({ variant: 'outline' })} ${action}`}
           disabled={busy}
-          onClick={request(failure.reason === 'restart' ? { id, context, type } : pending.current)}
+          onClick={request(failure.reason === 'restart' ? window.start : window.retry)}
         >
           {failure.reason === 'restart' ? m.game_reader_refresh({}, o) : m.album_tracks_retry({}, o)}
         </button>
@@ -238,14 +194,50 @@ function GameWindow({
     <div className="min-w-0 space-y-5" aria-busy={busy}>
       <p className="text-sm text-muted-foreground">{m.game_reader_scope({}, o)}</p>
       <p className="text-sm text-muted-foreground">{m.game_reader_return({}, o)}</p>
-      {busy && !page ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
+      <div className="rounded-lg border border-border p-3 space-y-2" data-slot="game-window-address">
+        <p>
+          {busy
+            ? m.game_reader_requested({}, o)
+            : failure
+              ? m.game_reader_failed_address({}, o)
+              : m.game_reader_current_address({}, o)}
+        </p>
+        <p className="text-sm">
+          <code>{window.requested.cursor ?? m.game_reader_first_window({}, o)}</code>
+        </p>
+        <nav className="flex flex-wrap gap-3" aria-label={m.subject_editions({}, o)}>
+          <button
+            type="button"
+            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+            disabled={busy || !window.previous}
+            onClick={request(window.back)}
+          >
+            {m.game_reader_previous({}, o)}
+          </button>
+          <button
+            type="button"
+            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+            disabled={busy}
+            onClick={request(window.start)}
+          >
+            {m.game_reader_start({}, o)}
+          </button>
+        </nav>
+      </div>
+      {busy ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
+      {!page ? <SafeNavigation id={id} locale={locale} realm={realm} /> : null}
       {!page ? failureNotice : null}
       {page ? (
-        <>
+        <div key={window.revision} className="space-y-5">
           <p>
             <span lang={page.grain.lang ?? undefined}>{page.grain.text}</span> ·{' '}
             <span lang={label?.lang ?? undefined}>{label?.text}</span>
           </p>
+          {pickText(page.public.subject.descriptions, locale).text ? (
+            <p lang={pickText(page.public.subject.descriptions, locale).lang ?? undefined}>
+              {pickText(page.public.subject.descriptions, locale).text}
+            </p>
+          ) : null}
           {!page.admitted ? (
             <p role="status">{m.game_reader_unsupported({}, o)}</p>
           ) : (
@@ -336,6 +328,16 @@ function GameWindow({
                             ) : (
                               <p>{m.work_parts_unresolved({}, o)}</p>
                             )}
+                            <button
+                              type="button"
+                              className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                              onClick={(event) => {
+                                if (current())
+                                  setSelected({ page, row, opener: event.currentTarget, keyboard: event.detail === 0 });
+                              }}
+                            >
+                              {m.game_reader_inspect({}, o)}
+                            </button>
                             {statement ? (
                               <GameEvidence
                                 statement={statement}
@@ -343,6 +345,18 @@ function GameWindow({
                                 related={related}
                                 locale={locale}
                                 link={Link}
+                              />
+                            ) : (
+                              <p>{m.game_reader_assertion_unavailable({}, o)}</p>
+                            )}
+                            {selected && selected.page === page && selected.row === row ? (
+                              <EditionInspection
+                                selection={selected}
+                                page={page}
+                                locale={locale}
+                                current={current}
+                                link={Link}
+                                close={() => setSelected(undefined)}
                               />
                             ) : null}
                           </>
@@ -371,7 +385,7 @@ function GameWindow({
                         type="button"
                         className={`${buttonVariants({ variant: 'outline' })} ${action}`}
                         disabled={busy}
-                        onClick={request({ id, context, type, cursor: page.next })}
+                        onClick={request(() => window.next(page.next!))}
                       >
                         {m.work_parts_more({}, o)}
                       </button>
@@ -404,85 +418,12 @@ function GameWindow({
             type="button"
             className={`${buttonVariants({ variant: 'outline' })} ${action}`}
             disabled={busy}
-            onClick={request({ id, context, type })}
+            onClick={request(window.start)}
           >
             {m.game_reader_refresh({}, o)}
           </button>
-        </>
+        </div>
       ) : null}
-    </div>
-  );
-}
-
-type FactProps = {
-  statement: GameStatement;
-  page: GameReaderReady;
-  related: SubjectRead['related'];
-  locale: string;
-  link: typeof import('../../pages/shared').PlainLink;
-};
-function GameFact(props: FactProps & { date: boolean }) {
-  const { statement, page, related, locale, link: Link } = props;
-  const o = { locale: locale as never };
-  const date = props.date ? gameDatePresentation(statement, page.digest, locale) : undefined;
-  const content = statement.value.type === 'value' ? statement.value.content : undefined;
-  return (
-    <div className="space-y-2">
-      {date ? (
-        <p data-date-kind={date.kind}>
-          {date.structuredDate ? <time dateTime={date.structuredDate}>{date.text}</time> : date.text}
-        </p>
-      ) : statement.property.data_type === 'wikibase-item' &&
-        typeof content === 'string' &&
-        !pickText(related[content]?.labels ?? {}, locale).text ? (
-        <p>{m.work_parts_unresolved({}, o)}</p>
-      ) : (
-        <CandidateValue snak={statement} related={related} locale={locale} link={Link} />
-      )}
-      <GameEvidence {...props} />
-    </div>
-  );
-}
-
-function GameEvidence({ statement, page, related, locale, link: Link }: FactProps) {
-  const o = { locale: locale as never };
-  return (
-    <div className="space-y-2">
-      {statement.qualifiers.length ? (
-        <dl className="space-y-1 text-sm">
-          {statement.qualifiers.map((part, index) => (
-            <div key={index}>
-              <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
-                {page.labels[part.property.id]?.text || part.property.id}
-              </dt>
-              <dd>
-                <CandidateValue snak={part} related={related} locale={locale} link={Link} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-      {historicalStatement(statement, page.digest) ? (
-        <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
-      ) : null}
-      <details className="rounded-lg border border-border p-3">
-        <summary className={`${action} cursor-pointer`}>{m.sources_citations({}, o)}</summary>
-        {statement.references.map((reference, index) => (
-          <dl key={index} className="space-y-1">
-            {reference.parts.map((part, n) => (
-              <div key={n}>
-                <dt className="font-medium">{page.labels[part.property.id]?.text || part.property.id}</dt>
-                <dd>
-                  <CandidateValue snak={part} related={related} locale={locale} link={Link} />
-                </dd>
-              </div>
-            ))}
-          </dl>
-        ))}
-        <p className="text-sm">
-          {statement.id} · {statement.rank} · {statement.rezics.release}
-        </p>
-      </details>
     </div>
   );
 }
