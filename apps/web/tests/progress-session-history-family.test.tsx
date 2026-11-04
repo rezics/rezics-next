@@ -56,6 +56,7 @@ mock.module('@tanstack/react-start/server', () => import('../.storybook/react-st
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }));
 mock.module('../src/kernel/exposure', () => ({
   useOperation: (operation: string) => admitted.has(operation),
+  operationIsAdmitted: (operation: string) => admitted.has(operation),
   Exposure: ({ operation, children }: { operation: string; children: ReactNode }) =>
     admitted.has(operation) ? <Fragment>{children}</Fragment> : null,
 }));

@@ -52,6 +52,7 @@ afterAll(async () => {
 const operations = new Set<string>();
 mock.module('../src/kernel/exposure', () => ({
   useOperation: (operation: string) => operations.has(operation),
+  operationIsAdmitted: (operation: string, admitted?: readonly string[]) => admitted?.includes(operation) ?? false,
   Exposure: ({ operation, children }: { operation: string; children: ReactNode }) =>
     operations.has(operation) ? children : null,
 }));
