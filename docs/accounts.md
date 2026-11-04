@@ -133,6 +133,16 @@ verification state alone do not establish the final public-page outcome.
 
 Standalone management inventory and detail reads use a ten-second deadline through response decoding, composed with caller cancellation; optional exposure discovery uses two seconds and returns unknown on failure, preserving valid inventory and the existing localized unavailable/retry controls without granting permission.
 
+The native Settings directory supplies closed current-human viewer and allowed-navigation observations, with at
+most 20 rows per feed. Only current membership or management of a current active, unfenced responsibility target
+admits private detail navigation; a concealed target has no destination and a reconciling hold remains coordination
+evidence. Unavailable optional management preparation preserves an independently authorized readable inventory
+with unavailable navigation. Detail `authActions` retains its existing action authority. Content's official serial
+publisher derives the complete generated envelope and installed callable/root from the mounted Kernel source;
+handwritten client mirrors and method overrides are not substitutes. After publication, the retained consumer
+finishes independent replacement pages, cursor-free restart and admitted detail/back navigation. Installed
+transport, rendering and growth acceptance remain deferred.
+
 Managed-account settings lead with the supplied display name or handle and an initials avatar. A supplied
 identity without either label uses the unnamed-account treatment; an absent identity uses Identity unavailable.
 Exact supplied account IDs remain selectable inside closed account-detail disclosures for the target, operator,
