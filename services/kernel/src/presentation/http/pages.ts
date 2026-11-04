@@ -269,7 +269,7 @@ export function pageRoutes<App>(
         security: [{ bearerAuth: [] }, {}],
       },
     },
-    async ({ body, request, authorize, admission, job, actor, session: requestSession, set }) => {
+    async ({ body, request, authorize, admission, job, actor, session: requestSession, set }): Promise<Response> => {
       set.headers['cache-control'] = 'private, no-store';
       // A 308 preserves the POST body; its Location supplies the replacement page target.
       const encodedTarget = new URL(request.url).searchParams.get('target');
@@ -321,13 +321,15 @@ export function pageRoutes<App>(
         return result;
       };
       let selected: SelectedPage | undefined;
+      const liveAccess: Access = (
+        typeof access === 'function'
+          ? access({ actions: actionCatalogue(routed) })
+          : (access ?? createAccess({ actions: actionCatalogue(routed) }))
+      ) as Access;
       const authority = {
         deps: {
           pool,
-          access:
-            typeof access === 'function'
-              ? access({ actions: actionCatalogue(routed) })
-              : (access ?? createAccess({ actions: actionCatalogue(routed) })),
+          access: liveAccess,
           routeKey,
         },
         actor,
@@ -500,7 +502,7 @@ export function pageRoutes<App>(
         budget,
         probeSession,
         actor,
-        access: authority.deps.access,
+        access: liveAccess,
         pool,
         deadline: job.deadline,
         ...(languages === undefined ? {} : { languages }),
