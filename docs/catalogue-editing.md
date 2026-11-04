@@ -849,11 +849,15 @@ Creation sends only entered multilingual terms and explicitly added initial scal
 citation part for the existing quick-entry path. Additional parts stay in their chosen reference group and order;
 their datatypes, units and available qualifiers come from the exact admitted release. Untouched citation scaffolds
 are omitted, while typed zero and false values remain. No number, language, classification or relation is inferred
-from another field. Decision: Literary initial entry remains scalar-only; relation qualifiers stay in the existing
+from another field. The shared creator reads current `subject.create` authority on the Global Context parent and
+requires an allowed observation for fresh creation; guest, refusal and unavailable states stay distinct while
+released Book and BookSeries descriptors remain readable. It rechecks before the write, and native execution
+reauthorizes the command. Decision: Literary initial entry remains scalar-only; relation qualifiers stay in the existing
 post-creation relation editor. The form retains independent drafts across Type choices. Native rejection refreshes
 metadata while retaining the draft; uncertain delivery retains the exact command and key. The returned subject ID is
 reread before offering its canonical current-reader link, and the read must match the submitted ID and Type. A created
 identity with an unavailable reader is shown as created, with a separate read retry of that UUID, never another create.
+The existing publication entry after create is navigation only; it does not confer publication authority.
 
 Standalone Book and BookSeries creation reviews the exact prepared item before sealing: chosen Book versus BookSeries
 and its label language, every multilingual term and alias, and every admitted initial assertion with its qualifiers,
@@ -872,6 +876,13 @@ reference group lengths [7], [7, 16, 8] and [7, 16, 16, 16, 16, 16, 16, 16, 8], 
 counts 32→53, 128→149 and 512→533 under the existing 12-row and 16-part limits.
 
 Initial Literary metadata retry admits one read, retains its recovery action while pending, and moves focus to the creation heading only for still-current keyboard intent; failure retains the action and moved focus, pointer initiation or caller, locale or session retirement stays silent.
+Decision: Book and BookSeries creation uses the shared current parent `subject.create` observation, independent of session presence, definitions, current Subject actions, target suggestions, and later publication or relation commands.
+
+### Create a Book or BookSeries work
+
+- Touches: one current Global Context `subject.create` observation, admitted Book and BookSeries descriptors, one sealed create command, and one exact returned-identity read.
+- Bound: reuse the existing parent action observation, independently bounded definitions, and existing target readers; no permission request per field, history scan, or polling. Retain existing field, statement, serialized-command, and held-retry caps.
+- Growth check: hold one Book or BookSeries type and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing Literary create fixture.
 
 The current work groups identity/original names, bibliography/declared quantities, creator/series/classification
 relations and admitted original text. Bibliography reuses the multi-field editor and its independent results and

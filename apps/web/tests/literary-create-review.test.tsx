@@ -171,6 +171,9 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
     await waitFor(() => expect(canvas().getByRole('link', { name: m.catalogue_create_open() })).toBeDefined());
     expect(host.textContent).toContain(literaryWorkId);
+    expect(canvas().getByRole('link', { name: m.publication_add() }).getAttribute('href')).toBe(
+      `/en/catalogue/publication?work=${literaryWorkId}`,
+    );
     const book = fixture.calls.find((call) => call.method === 'POST')!.body as LiteraryCommand['item'];
     expect(book.type).toBe('schema:Book');
     expect(book.statements['schema:inLanguage']![0]!.references).toHaveLength(1);

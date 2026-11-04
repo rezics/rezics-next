@@ -8,6 +8,7 @@ import {
   type LiteraryType,
 } from '../../features/catalogue/literary-profile';
 import { readCreatedSubject } from '../../features/catalogue/create-subject-request';
+import { allowedCreateAuthority } from '../../features/catalogue/identity-intake';
 import { proposeFact, type FactsTransport } from '../../features/catalogue/subject-facts';
 import { readStatementEditor, type SnakInput, type StatementInput } from '../../features/catalogue/statement-editor';
 import type { LiteraryTransport } from '../../features/catalogue/literary-profile-view';
@@ -152,6 +153,7 @@ export function literaryFixture(
   });
   const transport: LiteraryTransport = {
     load: () => readLiteraryProfile(client, editing ? literaryWorkId : undefined),
+    eligibility: async () => allowedCreateAuthority,
     submit: (command) =>
       createLiteraryWork(
         client,

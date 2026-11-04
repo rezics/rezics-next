@@ -9,7 +9,7 @@ import { csrfHeaders } from '../../threads/composer';
 import { EditorFailure } from './statement-editor-view';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import { loadLiteraryProfile, createCatalogueLiteraryWork } from './literary-profile-actions';
 import { LiteraryProfile } from './literary-profile-view';
 import { readCorrection, readCorrectionReview, confirmCorrection } from './statement-editor-actions';
@@ -96,6 +96,7 @@ function LiteraryProfileSessionLive({ id, locale }: { id?: string; locale: strin
       session={state}
       transport={{
         load: () => loadLiteraryProfile({ data: id }),
+        eligibility: () => readCatalogueCreateEligibility(),
         submit: (command) =>
           createCatalogueLiteraryWork({
             data: editorRequest(command as LiteraryCommand, editorWork),
