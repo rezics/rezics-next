@@ -856,8 +856,8 @@ test('independent publication creation, local corrections, immutable recovery an
     await add('schema:isbn');
     await replace(input(m.correction_value()), '978-0-140-44430-8');
     await add('schema:publisher');
-    const publisherName = departure.fixture.release.properties['schema:publisher']!.labels.en!;
-    await act(async () => user.type(scope().getByRole('combobox', { name: publisherName }), 'Press'));
+    const departurePublisher = departure.fixture.release.properties['schema:publisher']!.labels.en!;
+    await act(async () => user.type(scope().getByRole('combobox', { name: departurePublisher }), 'Press'));
     await act(async () => user.click(await body.findByRole('option', { name: /Supplied publisher/ })));
     await replace(urlIn(workSection()), 'https://publisher.example/edition');
     const snapshot = () =>
