@@ -16,6 +16,7 @@ import { REACTION_KINDS } from './events.ts';
 import { MAX_RATING_STORED_UNITS } from '../rating/question-scale.ts';
 import type { AuthorPostEntry, AuthorThreadEntry } from './author-item-reads.ts';
 import { AuthorConversationActivitySchema } from './author-item-context-schema.ts';
+import { AuthorContributionSelectionSchema } from './author-contribution-actions-schema.ts';
 import type { BoardView } from './model.ts';
 import type { FeedReviewContext } from './model.ts';
 import { FeedReviewContextSchema } from './feed-context-schema.ts';
@@ -1239,6 +1240,7 @@ export const AuthorThreadsQuerySchema = t.Object(
 );
 export const AuthorThreadsResponseSchema = t.Object(
   {
+    actionSelection: t.Optional(AuthorContributionSelectionSchema),
     threads: t.Array(
       t.Unsafe<AuthorThreadEntry>(
         t.Object(
@@ -1266,6 +1268,7 @@ export const AuthorThreadsResponseSchema = t.Object(
 );
 export const AuthorPostsResponseSchema = t.Object(
   {
+    actionSelection: t.Optional(AuthorContributionSelectionSchema),
     posts: t.Array(
       t.Unsafe<AuthorPostEntry>(
         t.Object(

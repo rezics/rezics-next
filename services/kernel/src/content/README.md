@@ -4,6 +4,51 @@ Content owns boards, threads, posts, immutable documents, media state and public
 
 ## Public author contribution context
 
+Decision: anonymous native author pages issue a signed exact-cohort selection bound to the author, view,
+original cursor and native source observation; the private overlay consumes that selection without rereading
+the author frontier. This requires an additive `actionSelection` in `author-item-reads.ts` and its public schemas.
+
+Anonymous `GET /v1/accounts/{accountId}/posts` and `/threads` issue the optional public `actionSelection`
+only for a nonempty admitted page. Its `references` are the exact native thread/post, board, opening revision
+and authored revision; `proof` binds their order, author, public view, original cursor, author partition epoch
+and a digest of the native source observations. It expires with the existing fifteen-minute cursor protocol.
+It contains no own slots or action advice. Empty/private selections do not issue a proof. This adds no author
+enumeration and does not move or refill the existing frontier.
+
+`POST /v1/accounts/{accountId}/contribution-actions` (`author_contributions.actions`) accepts the closed
+`{view: 'posts'|'reviews'|'discussion', cursor: string|null, references, proof}` request. Both input and response
+are defined in `author-contribution-actions-schema.ts`. This is a private, no-store selected read, including
+for anonymous callers; it writes no command or receipt. Duplicate/oversized or altered selections fail before
+native enrichment. Another author is concealed. Native anonymous source disclosure and Accounts publicViews
+are required even for the author or an editor. The producer verifies the signed observation, runs the unchanged
+`createContentReadingCardBatch` selected/finish protocol under the current actor, then repeats full anonymous
+row/ancestry/place disclosure and Accounts publication checks. Withdrawal or changed exact sources fails the
+cohort without a replacement frontier. Shared own-reaction, aggregate freshness, action and thread-watch slots
+retain their native current/unavailable/anonymous/sign-in/denied meanings. Readback does not acknowledge a command.
+
+The mounted schemas are complete-input publisher inputs. Installed declarations and a production Web receiver
+are not delivered by this native part. The pending minimal public-wire consumer seam is named
+`AuthorContributionActionsWire`; its default production implementation must remain unavailable until the shared
+publisher installs the real method/DTO. It must consume this route, without importing private producer types.
+
+### Cost: selected author private overlay
+
+- Touches: proof verification; two single-account Accounts publicViews/partition transactions; two complete
+  native anonymous source rounds; one complete retained reading-card selection and finish under the actor.
+  Distinct thread observations share their round's native read. Each selected reply additionally performs the
+  existing native exact post/ancestor disclosure. Auth, Board/Realm/Subject/Access preparation and evaluations,
+  both native batch authority rounds, owner lookups, transaction controls and all pools/runners remain charged.
+- Bound: `S<=20`, distinct threads/boards `<=S`. Token and cursor are each at most 4 KiB; the closed request
+  bounds selected keys before enrichment. No history, membership, reaction or watch enumeration is added.
+  The original source bodies retain native 2 MiB-per-body and ancestry limits; hashing serializes each admitted
+  body and retains only a 64-character digest after its round. Charge these raw bodies, comparison copies and
+  serialization separately from the shared batch's own finite retention/envelope bounds. Its internal identity,
+  aggregate, watch and authority work is included, not treated as a free nested call.
+- Growth check: native tests exercise the real page/route, anonymous and signed-in readers, exact-cohort
+  tampering and asynchronous publication withdrawal. Independent 256/1024/4096 authored-row, history, membership,
+  reaction, watch and authority growth, examined rows/blocks, all runners and retained/serialized byte measurement
+  remain controller acceptance; no measured physical-growth pass is claimed by this implementation.
+
 `author_posts.list` adds `parentContext` and `conversationActivity`; `author_threads.list` adds
 `conversationActivity`. These additive public fields use the existing Web contribution renderers. They never
 contain viewer reactions, watches or action advice. The current anonymous parent producer is
