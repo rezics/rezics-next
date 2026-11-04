@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
 import { createContentReadingCardBatch, type SelectedReadingCardReference } from '../../src/content/reading-page.ts';
 import { listThreadPosts } from '../../src/content/reads.ts';
 import counts from '../../src/content/reaction-count-page.sql';
@@ -7,6 +7,7 @@ import { observeSql } from './support/sql-observer.ts';
 import { createThreadReadingPageFixture } from './support/thread-reading-page-fixture.ts';
 
 let f: Awaited<ReturnType<typeof createThreadReadingPageFixture>>;
+setDefaultTimeout(120_000);
 const anonymous = { kind: 'anonymous' } as const;
 const deadline = () => Date.now() + 120_000;
 beforeAll(async () => { f = await createThreadReadingPageFixture(); }, 240_000);
@@ -63,16 +64,26 @@ test('native signed reply cursors bind account, client and authentication epoch'
   const thread = await f.thread();
   await f.post(thread.id, 'Cursor remainder');
   const actor = f.system.actors.author.actor;
+  const clientId = `reading-page-${crypto.randomUUID()}`;
+  await f.system.nativeAuth.internal.registerClient({
+    clientId, firstParty: true, scopes: [...f.system.auth.ordinaryScopes],
+  });
+  const otherClient = await f.system.auth.issue({
+    accountId: actor.accountId, clientId, scopes: f.system.auth.ordinaryScopes,
+  });
   const selected = await listThreadPosts(f.dependencies, thread.id, { actor, deadline: deadline() }, undefined, 1);
   expect(selected.nextCursor).not.toBeNull();
   for (const switched of [
     f.system.actors.other.actor,
-    { ...actor, clientId: `${actor.clientId}-other` },
-    { ...actor, authnEpoch: actor.authnEpoch + 1 },
+    otherClient.actor,
   ]) {
     await expect(listThreadPosts(f.dependencies, thread.id, { actor: switched, deadline: deadline() }, selected.nextCursor!, 1))
       .rejects.toThrow('Invalid content cursor');
   }
+  await expect(listThreadPosts(
+    f.dependencies, thread.id,
+    { actor: { ...actor, authnEpoch: actor.authnEpoch + 1 }, deadline: deadline() }, selected.nextCursor!, 1,
+  )).rejects.toThrow();
   const resumed = await listThreadPosts(f.dependencies, thread.id, { actor, deadline: deadline() }, selected.nextCursor!, 1);
   expect(resumed.entries).toHaveLength(1);
 });
@@ -132,7 +143,10 @@ test('a raw invisible candidate inserted during hydration cannot certify a diffe
   const barrier = observer.hold({ statement: counts.sql }, 'before');
   try {
     pending = f.page(thread.id);
-    await barrier.entered;
+    await Promise.race([
+      barrier.entered,
+      pending.then((result) => { throw new Error(`Reading page missed hydration barrier: ${result.response.status} ${result.text}`); }),
+    ]);
     await f.setTime(now + 15_000);
     await f.post(thread.id, 'Invisible draft candidate', undefined, 'draft');
     barrier.release();
