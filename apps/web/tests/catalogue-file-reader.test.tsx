@@ -152,8 +152,6 @@ test('ordinary Subject separates file facts from its directed episode relation a
   expect(html).toContain('data-slot="catalogue-file-reader-correction"');
   const correction = html.match(/<nav[^>]*data-slot="catalogue-file-reader-correction"[^>]*>[\s\S]*?href="([^"]+)"/);
   expect(correction?.[1]).toContain('?fileSource=' + catalogueFile);
-  const correction = html.match(/<nav[^>]*data-slot="catalogue-file-reader-correction"[^>]*>[\s\S]*?href="([^"]+)"/);
-  expect(correction?.[1]).toContain('?fileSource=' + catalogueFile);
   expect(html).not.toContain('data-slot="catalogue-file-reader-ownership"');
 });
 
