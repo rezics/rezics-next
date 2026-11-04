@@ -5,6 +5,7 @@ import type {
   SourceVocabularyBindings,
   SourceVocabularyRequest,
   SourceVocabularyRow,
+  VndbVocabularyRow,
 } from '@rezics/conversion';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { vndbAppearanceRoleSchemeUri } from '@rezics/conversion/vndb-vocabulary';
@@ -357,16 +358,18 @@ function appearanceRows(
     const spoiler = copyInteger(record.spoil);
     if (spoiler === undefined || typeof record.role !== 'string' || typeof record.id !== 'string') continue;
     const releaseCode = record.rid === null || record.rid === undefined ? null : copyId(record.rid, releaseId);
-    rows.push({
+    const character = identities.get(record.id);
+    const row: VndbVocabularyRow = {
       kind: 'character-appearance',
       path: `/chars_vns/${record.id}/${record.vid}${releaseCode ? `/${releaseCode}` : ''}`,
       subject: work,
-      character: identities.get(record.id),
+      ...(character === undefined ? {} : { character }),
       characterCode: record.id,
       roleCode: record.role,
       spoiler,
       ...(releaseCode ? { releaseCode } : record.rid === null ? { releaseCode: null } : {}),
-    });
+    };
+    rows.push(row);
   }
   return rows;
 }
