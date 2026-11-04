@@ -168,8 +168,9 @@ function SubjectTermsPageLive({
     };
   }
   const visit = currentVisit.current!;
+  const transportKey = termsTransportKey(transport);
   const query = useQuery({
-    queryKey: [...['catalogue-terms', id, locale], lifetime.generation],
+    queryKey: ['catalogue-terms', id, locale, session, lifetime.generation, transportKey],
     queryFn: () => transport.read(id),
     retry: false,
     staleTime: Infinity,
@@ -188,7 +189,11 @@ function SubjectTermsPageLive({
   const [choices, setChoices] = useState<Record<string, ResolutionKind>>({});
   const [replacements, setReplacements] = useState<Record<string, TermEdit>>({});
   const [reviewed, setReviewed] = useState<string | null>(null);
-  const [saved, setSaved] = useState<Extract<TermsResult, { ok: true }>>();
+  const [savedState, setSavedState] = useState<{
+    transportKey: number;
+    result: Extract<TermsResult, { ok: true }>;
+  }>();
+  const saved = savedState?.transportKey === transportKey ? savedState.result : undefined;
   const [authorityOverride, setAuthorityOverride] = useState<{
     visit: TermsReadVisit;
     transportKey: number;
@@ -252,11 +257,10 @@ function SubjectTermsPageLive({
         : undefined;
   const stale = failure?.reason === 'stale' || failure?.reason === 'conflict';
   const authoritySnapshot = stale && comparison?.state === 'ready' ? comparison.snapshot : base;
-  const authorityTransportKey = termsTransportKey(transport);
   const authorityQuery = useQuery({
     queryKey: [
       'catalogue-terms-authority',
-      authorityTransportKey,
+      transportKey,
       id,
       locale,
       session,
@@ -266,7 +270,7 @@ function SubjectTermsPageLive({
       authoritySnapshot?.etag,
     ],
     queryFn: async () => ({
-      transportKey: authorityTransportKey,
+      transportKey,
       id: authoritySnapshot!.subject.id,
       etag: authoritySnapshot!.etag,
       authority: transport.readAuthority ? await transport.readAuthority() : unavailableTermsAuthority,
@@ -282,13 +286,13 @@ function SubjectTermsPageLive({
   function authorityFor(snapshot: TermsSnapshot): TermsPageAuthority {
     if (
       authorityOverride?.visit === visit &&
-      authorityOverride.transportKey === authorityTransportKey &&
+      authorityOverride.transportKey === transportKey &&
       authorityOverride.snapshot === snapshot
     )
       return authorityOverride.authority;
     const observed = authorityQuery.data;
     if (
-      observed?.transportKey === authorityTransportKey &&
+      observed?.transportKey === transportKey &&
       observed.id === snapshot.subject.id &&
       observed.etag === snapshot.etag
     )
@@ -389,7 +393,7 @@ function SubjectTermsPageLive({
         (!stale && base !== snapshot)
       )
         return;
-      setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: next });
+      setAuthorityOverride({ visit, transportKey, snapshot, authority: next });
     } catch {
       if (
         lifetime.active() &&
@@ -397,7 +401,7 @@ function SubjectTermsPageLive({
         currentReadScope.current === readScope &&
         (stale ? comparison?.state === 'ready' && comparison.snapshot === snapshot : base === snapshot)
       )
-        setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: unavailableTermsAuthority });
+        setAuthorityOverride({ visit, transportKey, snapshot, authority: unavailableTermsAuthority });
     } finally {
       if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
         setAuthorityChecking(false);
@@ -791,7 +795,7 @@ function SubjectTermsPageLive({
         (!stale && base !== snapshot)
       )
         return;
-      setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: freshAuthority });
+      setAuthorityOverride({ visit, transportKey, snapshot, authority: freshAuthority });
       if (!termsCorrectionAllowed(freshAuthority, snapshot)) return;
 
       if (stale && confirmed && !pending.current) {
@@ -838,7 +842,7 @@ function SubjectTermsPageLive({
       )
         return;
       if (result.ok) {
-        setSaved(result);
+        setSavedState({ transportKey, result });
         pending.current = null;
         unknownPendingRef.current = false;
         setUnknownPending(false);
@@ -874,10 +878,10 @@ function SubjectTermsPageLive({
               currentVisit.current === visit &&
               currentReadScope.current === readScope
             )
-              setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: refreshed });
+              setAuthorityOverride({ visit, transportKey, snapshot, authority: refreshed });
           } catch {
             if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
-              setAuthorityOverride({ visit, transportKey: authorityTransportKey, snapshot, authority: unavailableTermsAuthority });
+              setAuthorityOverride({ visit, transportKey, snapshot, authority: unavailableTermsAuthority });
           }
         }
       }
@@ -931,11 +935,11 @@ function SubjectTermsPageLive({
     try {
       const result = saved ? await transport.read(saved.id, saved.session) : await transport.read(id, base.session);
       if (!lifetime.active() || currentReadScope.current !== readScope) return;
-      if (saved) setSaved({ ...saved, reader: result });
+      if (saved) setSavedState({ transportKey, result: { ...saved, reader: result } });
       else setComparison(result);
     } catch {
       if (!lifetime.active() || currentReadScope.current !== readScope) return;
-      if (saved) setSaved({ ...saved, reader: { state: 'unavailable' } });
+      if (saved) setSavedState({ transportKey, result: { ...saved, reader: { state: 'unavailable' } } });
       else setComparison({ state: 'unavailable' });
     } finally {
       if (!lifetime.active()) return;
@@ -1578,6 +1582,7 @@ function SubjectTermsPageLive({
                 type="submit"
                 disabled={
                   busy ||
+                  !!activeDecision ||
                   session !== 'signed-in' ||
                   !correctionAllowed ||
                   (stale && (comparison?.state !== 'ready' || !reviewCurrent || !hasTermsPatch(resolved?.patch ?? {})))
