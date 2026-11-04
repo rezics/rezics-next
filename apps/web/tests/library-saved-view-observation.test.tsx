@@ -371,7 +371,7 @@ test('same-account ABA retires the visit through route variants, while a fresh a
     await visit.render({ addressRecovery: ['type'] });
     expect(visit.host.textContent).toContain(m.library_shelf_address_invalid_title());
     await visit.render({ sessionUnavailable: true, signInHref: '/en/sign-in' });
-    expect(visit.host.textContent).toContain(m.shell_account_unavailable());
+    expect(visit.host.textContent).toContain(m.dependency_unavailable_message());
     await visit.render(personalData(snapshot('aba-fresh')));
     expect(current(visit.host)?.dataset.layout).toBe('grid');
     await visit.render({
