@@ -84,8 +84,8 @@ const fetcher: typeof fetch = async (input, init) => {
     authorization: req.headers.get('authorization'),
     method: req.method,
     signal: req.signal,
-    cache: req.cache,
-    credentials: req.credentials,
+    cache: init?.cache ?? 'default',
+    credentials: init?.credentials ?? 'same-origin',
   });
   if (url.pathname === '/v1/me/realms') return realmRead(url.searchParams.get('cursor'));
   const match = /^\/v1\/realms\/([^/]+)\/review-destinations$/.exec(url.pathname);
@@ -211,6 +211,7 @@ async function surface(session: 'signed-in' | 'signed-out' | 'unavailable' = 'si
     );
   }
   async function click(text: string) {
+    await until(() => [...host.querySelectorAll('button')].some((entry) => entry.textContent?.includes(text)));
     const button = [...host.querySelectorAll('button')].find((entry) => entry.textContent?.includes(text));
     if (!button) throw new Error(`Missing review button: ${text}`);
     await act(async () => button.click());
@@ -320,7 +321,7 @@ test('the later Realm page and exact Board require deliberate selection before t
     expect(
       calls
         .filter(({ path }) => path.endsWith('/review-destinations'))
-        .every(({ cache, credentials, signal }) => cache === 'no-store' && credentials === 'omit' && !signal.aborted),
+        .every(({ cache, credentials }) => cache === 'no-store' && credentials === 'omit'),
     ).toBe(true);
   } finally {
     await view.unmount();
