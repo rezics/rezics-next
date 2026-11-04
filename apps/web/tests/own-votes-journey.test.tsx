@@ -172,10 +172,11 @@ function RatingsScreen() {
       } else heading.current?.focus();
     },
   });
+  const returnState = returnVisit.pending ? (returnVisit.failed ? 'unavailable' : 'preparing') : value.state;
   return (
     <OwnVotesWorkspace
-      state={value.state}
-      page={value.state === 'ready' ? value.page : null}
+      state={returnState}
+      page={returnVisit.pending || value.state !== 'ready' ? null : value.page}
       cursor={value.cursor}
       locale="en"
       isCurrent={() => true}

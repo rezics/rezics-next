@@ -155,7 +155,7 @@ async function mounted(initialPath = '/library/ratings') {
   });
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [initialPath] }) });
   await router.load();
-  const perform = (work: () => void) => act(async () => work());
+  const perform = (work: () => void | Promise<unknown>) => act(async () => { await work(); });
   function expose(subject: string, csrfToken: string) {
     activeSubject = subject;
     return perform(() => {
@@ -369,6 +369,7 @@ test('bfcache refresh is reader-local and two mounted readers cannot consume one
     expect(reads).toHaveLength(3);
     ready(bfcacheRead);
     await act(async () => bfcacheRead.promise);
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
     expect(first.host.textContent).toContain('The same original question and Subject pair');
   } finally {
     await first.close();
