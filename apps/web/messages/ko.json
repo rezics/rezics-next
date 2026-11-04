@@ -1,4 +1,7 @@
 {
+  "credit_return_unavailable": "이 크레딧이나 현재 표시 범위가 변경되었거나 사용할 수 없습니다. 현재 크레딧을 선택해 확인하세요.",
+  "credit_technical": "기술 세부 정보",
+  "credit_label_unavailable": "항목 이름을 사용할 수 없음",
   "credit_refresh_window": "이 크레딧 목록 새로 고침",
   "credit_inspect": "크레딧 살펴보기",
   "credit_original": "이 작품의 원래 진술입니다. 공개된 대상은 다른 탭에서 열려 현재 크레딧 목록이 유지됩니다.",

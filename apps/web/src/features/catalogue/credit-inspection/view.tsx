@@ -4,6 +4,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { m } from '../../../paraglide/messages.js';
 import { CandidateValue } from '../../pages/data';
 import type { LinkProps, Snak } from '../../pages/shared';
+import { subjectViewHref } from '../../../subject/subject-href';
+import { creditDestinationHref } from './destinations';
 import { candidateContext } from '../../../subject/candidates';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import type { RelationTransport } from '../../../subject/relation-candidates';
@@ -67,7 +69,8 @@ export function CreditInspection({
   const [attempt, setAttempt] = useState(0);
   const o = { locale: locale as never };
   const statement = credit.statement;
-  const related = creditRelated(credit);
+  const related = creditRelated(credit, locale);
+  const destination = (href: string) => creditDestinationHref(href, visit, credit, locale);
   useEffect(() => {
     let cancelled = false;
     if (!signedIn || !credit.slot || visit.context !== candidateContext || !current()) return;
@@ -113,21 +116,19 @@ export function CreditInspection({
     if (
       snak.property.data_type === 'wikibase-item' &&
       snak.value.type === 'value' &&
-      (typeof snak.value.content !== 'string' || !related[snak.value.content])
+      (typeof snak.value.content !== 'string' || !Object.hasOwn(related, snak.value.content))
     )
       return <span>{m.subject_value_unlabelled({}, o)}</span>;
-    const Target = (props: LinkProps) => (
-      <DisclosedTarget
-        {...props}
-        href={visit.realm ? `${props.href}?${new URLSearchParams({ realm: visit.realm })}` : props.href}
-      />
-    );
+    const Target = (props: LinkProps) => <DisclosedTarget {...props} href={destination(props.href)} />;
     return <CandidateValue snak={snak} related={related} locale={locale} link={Target} />;
   }
   function part(snak: Snak, index: number) {
     return (
       <li key={index} className="min-w-0 space-y-1" data-property={snak.property.id}>
-        <span className="text-muted-foreground">{snak.property.id}</span> {value(snak)}
+        <span className="text-muted-foreground">
+          {visit.labels?.[snak.property.id] || m.credit_label_unavailable({}, o)}
+        </span>{' '}
+        {value(snak)}
       </li>
     );
   }
@@ -148,10 +149,23 @@ export function CreditInspection({
         </DialogHeader>
         <div className="min-w-0 space-y-5 whitespace-pre-wrap [overflow-wrap:anywhere]">
           <p>
-            {propertyLabel} <span className="text-muted-foreground">({statement.property.id})</span> →{' '}
-            {value(statement)}
+            {propertyLabel} → {value(statement)}
           </p>
           <p>{m.credit_inverse({}, o)}</p>
+          <nav aria-label={m.credit_original({}, o)} className="flex flex-wrap gap-4">
+            <DisclosedTarget
+              className="inline-flex min-h-11 items-center underline"
+              href={destination(subjectViewHref({ id: credit.holder, label: title }, locale, 'overview'))}
+            >
+              {title}
+            </DisclosedTarget>
+            <DisclosedTarget
+              className="inline-flex min-h-11 items-center underline"
+              href={destination(subjectViewHref({ id: credit.holder, label: title }, locale, 'sources'))}
+            >
+              {m.subject_sources({}, o)}
+            </DisclosedTarget>
+          </nav>
           {statement.qualifiers.length > 0 && (
             <ul className="space-y-2" aria-label={m.credit_qualifiers({}, o)}>
               {statement.qualifiers.map(part)}
@@ -173,12 +187,21 @@ export function CreditInspection({
           </section>
           <section aria-label={m.credit_revision({}, o)} className="space-y-2">
             <h3 className="font-medium">{m.credit_revision({}, o)}</h3>
-            <p>
-              {m.credit_identity(
-                { statement: statement.id, revision: statement.rezics.revision, release: statement.rezics.release },
-                o,
-              )}
-            </p>
+            <details className="min-w-0">
+              <summary className="min-h-11 cursor-pointer py-2">{m.credit_technical({}, o)}</summary>
+              <p>{statement.property.id}</p>
+              <p>
+                {[...statement.qualifiers, ...statement.references.flatMap((reference) => reference.parts)]
+                  .map((part) => part.property.id)
+                  .join(' · ')}
+              </p>
+              <p>
+                {m.credit_identity(
+                  { statement: statement.id, revision: statement.rezics.revision, release: statement.rezics.release },
+                  o,
+                )}
+              </p>
+            </details>
             <p className="text-muted-foreground">{m.credit_metadata_meaning({}, o)}</p>
             <Button variant="outline" disabled={readingMetadata || editing} onClick={() => void inspectRevision()}>
               {readingMetadata
@@ -237,7 +260,7 @@ export function CreditInspection({
                 {correction?.state === 'stale' && (
                   <a
                     className="underline"
-                    href={creditWindowHref(visit, locale)}
+                    href={creditWindowHref(visit, locale, credit)}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

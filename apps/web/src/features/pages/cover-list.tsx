@@ -1,5 +1,6 @@
 import { lazy, Suspense, useRef, useState, type ReactNode } from 'react';
-import { Button } from '@rezics/ui/shadcn/button';
+import { creditDestinationHref } from '../catalogue/credit-inspection/destinations';
+import { CreditInspectionAction, CreditVisitReturn } from '../catalogue/credit-inspection/return';
 import { m } from '../../paraglide/messages.js';
 import type { CreditAssertion, CreditVisit } from '../catalogue/credit-inspection/model';
 import {
@@ -61,6 +62,9 @@ function ItemCard({
   openExactEdition = false,
   catalogue,
   inspect,
+  inspection,
+  retireInspection,
+  creditVisit,
 }: {
   item: Item;
   value: RowValue;
@@ -71,6 +75,9 @@ function ItemCard({
   openExactEdition?: boolean;
   catalogue?: CatalogueRowContext;
   inspect?: (trigger: HTMLButtonElement) => void;
+  inspection?: ReactNode;
+  retireInspection?: () => void;
+  creditVisit?: CreditVisit | undefined;
 }) {
   const title = item.label.text || value.unlabelled;
   const subject = coverSubject(item.id, title, item.summary, item.type);
@@ -98,7 +105,22 @@ function ItemCard({
     suitability: value.reader.suitability,
     labels: value.labels.cover,
   };
-  const href = relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
+  const destination = relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
+  const creditHref = (href: string) =>
+    creditVisit && item.credit ? creditDestinationHref(href, creditVisit, item.credit, value.locale) : href;
+  const href = creditHref(destination);
+  const creditValue =
+    creditVisit && item.credit
+      ? {
+          ...value,
+          link: (props: LinkProps) =>
+            item.label.text.trim().length > 0 ? (
+              <a {...props} href={creditHref(props.href)} target="_blank" rel="noopener noreferrer" />
+            ) : (
+              <value.link {...props} href={creditHref(props.href)} />
+            ),
+        }
+      : value;
   const exactEdition = openExactEdition && isExactEdition(item);
   const secondary = notes.length > 0 ? <MetaLine items={notes} /> : null;
   const card = credit ? (
@@ -109,13 +131,18 @@ function ItemCard({
       cover={cover}
       notes={notes}
       qualified={item.qualified ?? []}
-      value={value}
+      value={creditValue}
       openInNewTab={exactEdition || (!!inspect && item.label.text.trim().length > 0)}
       inspection={
         inspect ? (
-          <Button variant="outline" className="mt-2" onClick={(event) => inspect(event.currentTarget)}>
-            {m.credit_inspect({}, { locale: value.locale as never })}
-          </Button>
+          <CreditInspectionAction
+            statement={item.statement!}
+            locale={value.locale}
+            onOpen={inspect}
+            onRetire={retireInspection ?? (() => {})}
+          >
+            {inspection}
+          </CreditInspectionAction>
         ) : undefined
       }
     />
@@ -153,7 +180,12 @@ function ItemCard({
   // Only rendered facts and the resolved presentation matter, not adapter function identity or unused facts.
   const disclosure = contentIdentity([keyFacts, listPresentation]);
   return item.gated ? (
-    <SpoilerGate key={disclosure} label={value.spoilerShow} hideLabel={value.labels.spoilerHide}>
+    <SpoilerGate
+      key={disclosure}
+      label={value.spoilerShow}
+      hideLabel={value.labels.spoilerHide}
+      unmountOnHide={!!inspect}
+    >
       {cardWithSupport}
     </SpoilerGate>
   ) : (
@@ -195,6 +227,7 @@ export function CoverList({
   memberCatalogue?: Readonly<Record<string, CatalogueRowContext>>;
   creditVisit?: CreditVisit | undefined;
 }) {
+  const creditRoot = useRef<HTMLDivElement>(null);
   const context = value.context;
   const disclosure = [
     value.subject,
@@ -269,6 +302,10 @@ export function CoverList({
         credit={credits}
         {...(item.credit && creditVisit
           ? {
+              creditVisit,
+              inspection: liveInspection?.identity === contentIdentity(item) ? inspector : null,
+              retireInspection: () =>
+                setInspection((current) => (current?.identity === contentIdentity(item) ? undefined : current)),
               inspect: (trigger: HTMLButtonElement) => {
                 if (visitOwner.current !== owner) return;
                 setInspection({
@@ -290,7 +327,7 @@ export function CoverList({
     );
     return credits ? (
       <li key={key}>
-        <div data-statement={item.statement}>{card}</div>
+        <div data-statement={item.gated ? undefined : item.statement}>{card}</div>
       </li>
     ) : (
       <div
@@ -309,11 +346,30 @@ export function CoverList({
   });
   if (credits) {
     return (
-      <div className="@container">
+      <div className="@container" ref={creditRoot} tabIndex={-1} aria-label={label}>
+        {creditVisit && (
+          <CreditVisitReturn
+            visit={creditVisit}
+            items={items}
+            root={creditRoot}
+            locale={value.locale}
+            retired={!!inspection && !liveInspection}
+            open={(item, trigger) => {
+              if (visitOwner.current === owner && item.credit)
+                setInspection({
+                  owner,
+                  identity: contentIdentity(item),
+                  credit: item.credit,
+                  visit: creditVisit,
+                  title: item.label.text || value.unlabelled,
+                  trigger,
+                });
+            }}
+          />
+        )}
         <ul aria-label={label} className="grid min-w-0 gap-6 @2xl:grid-cols-2">
           {cards}
         </ul>
-        {inspector}
       </div>
     );
   }
