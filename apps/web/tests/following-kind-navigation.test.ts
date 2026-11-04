@@ -11,12 +11,16 @@ test('kind address admits the rebuilt target kinds without broadening unknown fi
     expect(followingKind(invalid)).toBeNull();
 });
 
-test('uninstalled whole-population producer never reads or filters a mixed page, even with a cursor', async () => {
-  let requests = 0;
+test('native reads select a complete kind, retain it on stale restart, and omit it for all', async () => {
+  const requests: URL[] = [];
   const client = createKernelClient('https://kernel.test', {
-    fetch: async () => {
-      requests++;
-      throw new Error('unsupported kind must not request a mixed page');
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      requests.push(url);
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer token');
+      if (url.searchParams.has('cursor'))
+        return Response.json({ code: 'stale_cursor' }, { status: 409 });
+      return Response.json({ follows: [], next: null });
     },
   });
   const env = {
@@ -33,7 +37,7 @@ test('uninstalled whole-population producer never reads or filters a mixed page,
       }),
     },
   } as unknown as Partial<SessionEnv>;
-  for (const kind of ['subject', 'collection', 'space', 'author']) {
+  for (const kind of ['subject', 'collection', 'space', 'all']) {
     const request = new Request('https://site.test/library/following', {
       headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
     });
@@ -41,9 +45,15 @@ test('uninstalled whole-population producer never reads or filters a mixed page,
     expect(page.signedIn).toBe(true);
     expect(page.follows).toEqual([]);
     expect(page.next).toBeNull();
-    expect(kind === 'author' ? page.addressInvalid : page.kindUnavailable).toBe(true);
+    expect(page.cursorReset).toBe(true);
+    expect(page.kindUnavailable).toBeUndefined();
+    for (const url of requests.splice(0)) {
+      expect(url.searchParams.get('targetType')).toBe(kind === 'all' ? null : kind);
+      expect(url.searchParams.get('limit')).toBe('20');
+      expect(url.searchParams.get('view')).toBe('FULL');
+    }
   }
-  expect(requests).toBe(0);
+  expect(requests).toEqual([]);
 });
 
 test('unavailable kind retires inspection and destinations without presenting an empty population', async () => {

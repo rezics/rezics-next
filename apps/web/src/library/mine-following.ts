@@ -60,11 +60,9 @@ export async function loadMineFollowingPage(
     !personalDirectoryAddress(input.cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following).valid
   )
     return { signedIn: true, follows: [], next: null, addressInvalid: true };
-  // Never approximate whole-population filtering using the current mixed page.
-  if (kind !== 'all') return { signedIn: true, follows: [], next: null, kindUnavailable: true };
   const read = async (cursor?: string) => {
     const result = await client.follows.get({
-      query: libraryListQuery(cursor, 20),
+      query: { ...libraryListQuery(cursor, 20), ...(kind === 'all' ? {} : { targetType: kind }) },
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
