@@ -192,15 +192,14 @@ const viewerFactsUnavailable = t.Object(
   },
   closed,
 );
+const viewerFactsCurrent = viewerFactsResponseSchema.anyOf[0];
+const viewerFact = viewerFactsCurrent.properties.rows.items;
 const searchViewerFacts = t.Object(
   {
-    ...viewerFactsResponseSchema.properties,
+    ...viewerFactsCurrent.properties,
     rows: t.Array(
       t.Object(
-        {
-          ...viewerFactsResponseSchema.properties.rows.items.properties,
-          resolvedSubjectId: t.Optional(t.String({ format: 'uuid' })),
-        },
+        { ...viewerFact.properties, resolvedSubjectId: t.Optional(t.String({ format: 'uuid' })) },
         closed,
       ),
       { maxItems: 100 },
