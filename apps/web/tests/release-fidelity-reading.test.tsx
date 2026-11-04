@@ -153,7 +153,6 @@ async function mount(
     await unmount();
     client.clear();
     host.remove();
-    router.dispose();
     for (const [key, descriptor] of previous)
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
