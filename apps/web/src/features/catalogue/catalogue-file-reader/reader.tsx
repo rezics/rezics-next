@@ -613,8 +613,8 @@ export function CatalogueFileReader({
   link?: PageLink;
   source?: object;
   descriptor?: string;
-  currentHref?: string;
-  recoverCurrentPage?: () => Promise<void>;
+  currentHref?: string | undefined;
+  recoverCurrentPage?: (() => Promise<void>) | undefined;
 }) {
   const o = options(visit.locale);
   const pickedTitle = pickText(visit.public.subject.labels, visit.locale);
@@ -782,8 +782,8 @@ export function CatalogueFileReaderOverview({
   locale: string;
   link?: PageLink;
   returning?: boolean;
-  currentHref?: string;
-  recoverCurrentPage?: () => Promise<void>;
+  currentHref?: string | undefined;
+  recoverCurrentPage?: (() => Promise<void>) | undefined;
 }) {
   const candidate = catalogueFileReaderCandidate(publicRead);
   if (!candidate) {
