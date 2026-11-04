@@ -8403,5 +8403,11 @@
   "library_copy_filters_active": "目前的複本篩選條件",
   "library_copy_matching_empty": "沒有符合這些篩選條件的複本。",
   "library_copies_address_filter_invalid": "複本類型或狀態篩選條件無效。尚未載入任何複本。請修正條件或重新開啟此檢視。",
-  "library_copies_address_filter_label": "類型或狀態篩選條件"
+  "library_copies_address_filter_label": "類型或狀態篩選條件",
+  "work_franchise_title": "相關作品",
+  "work_franchise_kind_visual_novel": "視覺小說",
+  "work_franchise_kind_game": "遊戲",
+  "work_franchise_kind_screen": "影視作品",
+  "work_franchise_kind_book": "書籍",
+  "work_franchise_relation_label_unavailable": "關係標籤無法使用"
 }

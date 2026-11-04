@@ -8403,5 +8403,11 @@
   "library_copy_filters_active": "Aktive Exemplarfilter",
   "library_copy_matching_empty": "Keine Exemplare entsprechen diesen Filtern.",
   "library_copies_address_filter_invalid": "Dieser Art- oder Statusfilter ist ungültig. Es wurden keine Exemplare geladen. Korrigieren Sie ihn oder starten Sie diese Ansicht neu.",
-  "library_copies_address_filter_label": "Art- oder Statusfilter"
+  "library_copies_address_filter_label": "Art- oder Statusfilter",
+  "work_franchise_title": "Verwandte Werke",
+  "work_franchise_kind_visual_novel": "Visual Novel",
+  "work_franchise_kind_game": "Spiel",
+  "work_franchise_kind_screen": "Film- oder Fernseharbeit",
+  "work_franchise_kind_book": "Buch",
+  "work_franchise_relation_label_unavailable": "Beziehungsbezeichnung nicht verfügbar"
 }

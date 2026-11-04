@@ -8403,5 +8403,11 @@
   "library_copy_filters_active": "활성 복본 필터",
   "library_copy_matching_empty": "이 필터와 일치하는 복본이 없습니다.",
   "library_copies_address_filter_invalid": "종류 또는 상태 필터가 올바르지 않습니다. 복본을 불러오지 않았습니다. 수정하거나 이 보기를 처음부터 여세요.",
-  "library_copies_address_filter_label": "종류 또는 상태 필터"
+  "library_copies_address_filter_label": "종류 또는 상태 필터",
+  "work_franchise_title": "관련 작품",
+  "work_franchise_kind_visual_novel": "비주얼 노벨",
+  "work_franchise_kind_game": "게임",
+  "work_franchise_kind_screen": "영상 작품",
+  "work_franchise_kind_book": "도서",
+  "work_franchise_relation_label_unavailable": "관계 라벨을 사용할 수 없습니다"
 }

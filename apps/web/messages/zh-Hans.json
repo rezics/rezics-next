@@ -8403,5 +8403,11 @@
   "library_copy_filters_active": "当前的复本筛选条件",
   "library_copy_matching_empty": "没有符合这些筛选条件的复本。",
   "library_copies_address_filter_invalid": "复本类型或状态筛选条件无效。尚未加载任何复本。请修正条件或重新打开此视图。",
-  "library_copies_address_filter_label": "类型或状态筛选条件"
+  "library_copies_address_filter_label": "类型或状态筛选条件",
+  "work_franchise_title": "相关作品",
+  "work_franchise_kind_visual_novel": "视觉小说",
+  "work_franchise_kind_game": "游戏",
+  "work_franchise_kind_screen": "影视作品",
+  "work_franchise_kind_book": "图书",
+  "work_franchise_relation_label_unavailable": "关系标签暂不可用"
 }

@@ -8403,5 +8403,11 @@
   "library_copy_filters_active": "Filtros de copias activos",
   "library_copy_matching_empty": "No hay copias que coincidan con estos filtros.",
   "library_copies_address_filter_invalid": "Este filtro de tipo o estado no es válido. No se cargaron copias. Corrígelo o reinicia esta vista.",
-  "library_copies_address_filter_label": "Filtro de tipo o estado"
+  "library_copies_address_filter_label": "Filtro de tipo o estado",
+  "work_franchise_title": "Obras relacionadas",
+  "work_franchise_kind_visual_novel": "Novela visual",
+  "work_franchise_kind_game": "Juego",
+  "work_franchise_kind_screen": "Obra audiovisual",
+  "work_franchise_kind_book": "Libro",
+  "work_franchise_relation_label_unavailable": "Etiqueta de relación no disponible"
 }
