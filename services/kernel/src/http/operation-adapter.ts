@@ -9,18 +9,12 @@ import { defineRateLimit, type RateLimitDeclaration } from './rate-limit.ts';
 
 type SchemaBinding<Schema> = Readonly<{ reference: string; schema: Schema }>;
 
-export type OperationSchemaBindings<
-  Params extends TSchema = TSchema,
-  Query extends TSchema = TSchema,
-  Headers extends TSchema = TSchema,
-  Body extends TSchema = TSchema,
-  Responses extends Readonly<Record<number, TSchema>> = Readonly<Record<number, TSchema>>,
-> = Readonly<{
-  params?: SchemaBinding<Params>;
-  query?: SchemaBinding<Query>;
-  headers?: SchemaBinding<Headers>;
-  body?: SchemaBinding<Body>;
-  response: SchemaBinding<Responses>;
+export type OperationSchemaBindings = Readonly<{
+  params?: SchemaBinding<TSchema>;
+  query?: SchemaBinding<TSchema>;
+  headers?: SchemaBinding<TSchema>;
+  body?: SchemaBinding<TSchema>;
+  response: SchemaBinding<Readonly<Record<number, TSchema>>>;
 }>;
 
 const rateLimits: Readonly<Record<OperationRateLimit, RateLimitDeclaration>> = Object.freeze({
@@ -71,17 +65,11 @@ function requireSchemaReference(
 }
 
 /** Binds framework schemas to pure references and projects all mounted metadata from one descriptor. */
-export function bindOperation<
-  Params extends TSchema = TSchema,
-  Query extends TSchema = TSchema,
-  Headers extends TSchema = TSchema,
-  Body extends TSchema = TSchema,
-  Responses extends Readonly<Record<number, TSchema>> = Readonly<Record<number, TSchema>>,
->(
+export function bindOperation<const Schemas extends OperationSchemaBindings>(
   catalogue: OperationCatalogue,
   operationId: string,
   expectedMethod: OperationMethod,
-  schemas: OperationSchemaBindings<Params, Query, Headers, Body, Responses>,
+  schemas: Schemas,
 ) {
   const descriptor = catalogue.get(operationId);
   if (!descriptor) throw new Error(operationId + ': operation descriptor is not registered');
