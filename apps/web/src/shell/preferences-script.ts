@@ -3,7 +3,7 @@ import { useRouter } from '@tanstack/react-router';
 
 // Runs synchronously in the head, before styles or body content can paint.
 // A literal keeps the bootstrap independent of bundler helpers and personal SSR reads.
-const preferences = String.raw`(() => {
+export const preferencesBootstrap = String.raw`(() => {
   const root = document.documentElement;
   let cookies = '';
   try {
@@ -28,5 +28,9 @@ const preferences = String.raw`(() => {
 
 export function PreferencesScript() {
   const nonce = useRouter().options.ssr?.nonce;
-  return createElement('script', { nonce, 'data-preferences': '', dangerouslySetInnerHTML: { __html: preferences } });
+  return createElement('script', {
+    nonce,
+    'data-preferences': '',
+    dangerouslySetInnerHTML: { __html: preferencesBootstrap },
+  });
 }

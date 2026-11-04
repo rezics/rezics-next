@@ -15,6 +15,7 @@ import {
   setCookie,
   validId,
 } from './cookies.ts';
+import { LOGIN_RETURN_COOKIE, safeRecoveryReturn } from './unavailable';
 
 const invalid = () => problem(400, 'invalid_request', 'Invalid Request');
 const redirect = (location: string, status = 303) => new Response(null, { status, headers: { location } });
@@ -49,6 +50,7 @@ function returnTarget(value: string | null, origin: string): string {
 
 async function signIn(request: Request, env: SessionEnv): Promise<Response> {
   const url = new URL(request.url);
+  const returnTo = returnTarget(url.searchParams.get('return_to'), url.origin);
   const config = await authClient(env);
   const verifier = oidc.randomPKCECodeVerifier();
   const state = oidc.randomState();
@@ -69,11 +71,15 @@ async function signIn(request: Request, env: SessionEnv): Promise<Response> {
     state,
     nonce,
     verifier,
-    returnTo: returnTarget(url.searchParams.get('return_to'), url.origin),
+    returnTo,
     expiresAt: Date.now() + LOGIN_SECONDS * 1000,
   });
   const response = redirect(location.href, 302);
   response.headers.append('set-cookie', setCookie(LOGIN_COOKIE, id, LOGIN_SECONDS));
+  response.headers.append(
+    'set-cookie',
+    setCookie(LOGIN_RETURN_COOKIE, safeRecoveryReturn(returnTo, url.origin) ?? '/', LOGIN_SECONDS),
+  );
   return response;
 }
 
@@ -177,7 +183,10 @@ export async function authRequest(
   } catch (error) {
     response = problemResponse(error);
   }
-  if (path === '/auth/callback') response.headers.append('set-cookie', clearCookie(LOGIN_COOKIE));
+  if (path === '/auth/callback') {
+    response.headers.append('set-cookie', clearCookie(LOGIN_COOKIE));
+    response.headers.append('set-cookie', clearCookie(LOGIN_RETURN_COOKIE));
+  }
   response.headers.set('cache-control', 'private, no-store');
   return response;
 }

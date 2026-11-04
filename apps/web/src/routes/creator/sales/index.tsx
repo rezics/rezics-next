@@ -4,7 +4,7 @@ import { CreatorSalesPage } from '../../../checkout/creator-sales-page';
 import { CreatorSalesCurrent } from '../../../checkout/creator-sales-current';
 import { creatorSalesAddressLoad, creatorSalesSearch, readCreatorSalesCurrent } from '../../../checkout/creator-sales';
 import { requirePrivatePageAccess } from '../../../session/guard';
-import { isSessionUnavailablePage, loadPrivatePage, SessionUnavailablePrompt } from '../../../session/private-page';
+import { loadPrivatePage } from '../../../session/private-page';
 import { pageHead } from '../../../shell/head';
 import { pageHeadContext } from '../../../shell/head-context';
 import { m } from '../../../paraglide/messages.js';
@@ -27,7 +27,6 @@ export const Route = createFileRoute('/creator/sales/')({
     const search = Route.useSearch();
     const initial = Route.useLoaderData();
     const locale = getLocale();
-    if (isSessionUnavailablePage(initial)) return <SessionUnavailablePrompt signInHref={initial.signInHref} />;
     if ('kind' in search)
       return (
         <CreatorSalesAddress locale={locale} {...(search.cursor === undefined ? {} : { cursor: search.cursor })} />

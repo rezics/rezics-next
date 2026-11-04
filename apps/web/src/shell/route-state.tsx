@@ -3,11 +3,11 @@ import { CircleAlert, House, LockKeyhole, RotateCw, Search, SearchX } from 'luci
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia } from '@rezics/ui/shadcn/empty';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, type Locale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from './page-heading';
 
-export type RouteStateKind = 'missing' | 'closed' | 'error';
+export type RouteStateKind = 'missing' | 'closed' | 'error' | 'unavailable';
 export const routeStateControl = 'min-h-11 h-auto max-w-full whitespace-normal break-words px-4 py-2 text-center';
 
 /** Route content uses the shared Empty slots; AppShell owns main, skip navigation and providers. */
@@ -20,28 +20,42 @@ export function RouteState({
   retryFailed = false,
   recovery,
   retryDisabled = false,
+  retryHref,
+  returnHref,
+  locale: suppliedLocale,
 }: {
   kind?: RouteStateKind;
+  locale?: Locale;
   heading?: string;
   message?: string;
   onRetry?: (() => void) | undefined;
+  retryHref?: string;
+  returnHref?: string;
   retrying?: boolean | undefined;
   retryFailed?: boolean;
   recovery?: ReactNode;
   retryDisabled?: boolean;
 }) {
-  const locale = getLocale();
+  const locale = suppliedLocale ?? getLocale();
   const Icon = kind === 'closed' ? LockKeyhole : kind === 'missing' ? SearchX : CircleAlert;
   const title =
     heading ??
-    (kind === 'closed' ? m.platform_closed_heading() : kind === 'missing' ? m.not_found_heading() : m.error_heading());
+    (kind === 'closed'
+      ? m.platform_closed_heading({}, { locale })
+      : kind === 'missing'
+        ? m.not_found_heading({}, { locale })
+        : kind === 'unavailable'
+          ? m.dependency_unavailable_heading({}, { locale })
+          : m.error_heading({}, { locale }));
   const description =
     message ??
     (kind === 'closed'
-      ? m.platform_closed_message()
+      ? m.platform_closed_message({}, { locale })
       : kind === 'missing'
-        ? m.not_found_message()
-        : m.route_error_description());
+        ? m.not_found_message({}, { locale })
+        : kind === 'unavailable'
+          ? m.dependency_unavailable_message({}, { locale })
+          : m.route_error_description({}, { locale }));
   const section = useRef<HTMLElement>(null);
   // Replacing a focused route control must not leave focus on body. Existing chrome focus stays put.
   useEffect(() => {
@@ -70,9 +84,29 @@ export function RouteState({
             aria-atomic="true"
             className={retrying || retryFailed ? 'text-sm text-muted-foreground' : 'sr-only'}
           >
-            {retrying ? m.status_retrying() : retryFailed ? m.route_retry_failed() : ''}
+            {
+              retrying
+                ? m.status_retrying({}, { locale })
+                : retryFailed
+                  ? m.route_retry_failed({}, { locale })
+                  : ''
+            }
           </p>
           <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-center">
+            {retryHref ? (
+              <a
+                data-slot="button"
+                data-dependency-retry=""
+                aria-disabled={retryDisabled || retrying ? 'true' : undefined}
+                tabIndex={retryDisabled || retrying ? -1 : undefined}
+                hidden={retryDisabled || retrying || undefined}
+                className={cn(buttonVariants({ size: 'lg', variant: 'default' }), routeStateControl)}
+                href={retryHref}
+              >
+                <RotateCw aria-hidden="true" className="size-4" />
+                {m.status_retry({}, { locale })}
+              </a>
+            ) : null}
             {onRetry ? (
               <Button
                 size="lg"
@@ -85,19 +119,25 @@ export function RouteState({
                   aria-hidden="true"
                   className={retrying ? 'size-4 motion-safe:animate-spin motion-reduce:animate-none' : 'size-4'}
                 />
-                {retrying ? m.status_retrying() : m.status_retry()}
+                {retrying ? m.status_retrying({}, { locale }) : m.status_retry({}, { locale })}
               </Button>
+            ) : null}
+            {returnHref ? (
+              <a
+                data-slot="button"
+                className={cn(buttonVariants({ size: 'lg', variant: retryHref || onRetry ? 'outline' : 'default' }), routeStateControl)}
+                href={returnHref}
+              >
+                {m.dependency_unavailable_return({}, { locale })}
+              </a>
             ) : null}
             <a
               data-slot="button"
-              className={cn(
-                buttonVariants({ size: 'lg', variant: onRetry ? 'outline' : 'default' }),
-                routeStateControl,
-              )}
+              className={cn(buttonVariants({ size: 'lg', variant: onRetry || retryHref || returnHref ? 'outline' : 'default' }), routeStateControl)}
               href={`/${locale}`}
             >
               <House aria-hidden="true" className="size-4" />
-              {m.status_home()}
+              {m.status_home({}, { locale })}
             </a>
             <a
               data-slot="button"
@@ -105,7 +145,7 @@ export function RouteState({
               href={`/${locale}/search`}
             >
               <Search aria-hidden="true" className="size-4" />
-              {m.status_search()}
+              {m.status_search({}, { locale })}
             </a>
           </div>
         </EmptyContent>

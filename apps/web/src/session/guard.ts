@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { redirect } from '@tanstack/react-router';
 import { normalizeSessionObservation } from './browser-state';
 import { sessionQuery } from './query';
+import { SessionUnavailableError } from './unavailable';
 
 type GuardContext = {
   context: { queryClient: QueryClient };
@@ -47,13 +48,19 @@ export async function requirePrivatePageAccess({ context, location }: GuardConte
   try {
     await context.queryClient.ensureQueryData(sessionQuery);
   } catch {
-    throw new Error('Session unavailable');
+    throw new SessionUnavailableError();
   }
 
   // ensureQueryData intentionally returns retained data after a failed fetch. Only the
   // successful current cache observation may authorize a personal route loader.
   const queryState = context.queryClient.getQueryState(sessionQuery.queryKey);
-  if (!queryState || queryState.status !== 'success') throw new Error('Session unavailable');
+  if (
+    !queryState ||
+    queryState.status !== 'success' ||
+    queryState.fetchStatus !== 'idle' ||
+    queryState.isInvalidated
+  )
+    throw new SessionUnavailableError();
   const session = normalizeSessionObservation(queryState.data);
   if (session.state === 'signed-out') {
     throw redirect({
@@ -62,11 +69,12 @@ export async function requirePrivatePageAccess({ context, location }: GuardConte
       reloadDocument: true,
     });
   }
-  return { state: session.state === 'signed-in' ? 'signed-in' : 'unavailable', signInHref };
+  if (session.state !== 'signed-in') throw new SessionUnavailableError();
+  return { state: 'signed-in', signInHref };
 }
 
 /** Existing guards keep throwing on an indeterminate session for routes without a prompt contract. */
 export async function requireSignedIn(context: GuardContext): Promise<void> {
   const access = await requirePrivatePageAccess(context);
-  if (access.state !== 'signed-in') throw new Error('Session unavailable');
+  if (access.state !== 'signed-in') throw new SessionUnavailableError();
 }

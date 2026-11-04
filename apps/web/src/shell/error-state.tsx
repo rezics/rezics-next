@@ -1,5 +1,6 @@
 import { isNotFound } from '@tanstack/react-router';
 import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isDependencyUnavailableError } from '../session/unavailable';
 import { pageHead, type HeadContext } from './head';
 
 type ErrorMatch = { status: string; error?: unknown; _notFound?: boolean };
@@ -18,6 +19,7 @@ function errorStatus(error: unknown): number | undefined {
 export function routeFailure(matches: readonly ErrorMatch[], nativeStatus = 200) {
   const failed = matches.find((match) => match.status === 'error');
   const closed = matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error));
+  const unavailable = matches.some((match) => match.status === 'error' && isDependencyUnavailableError(match.error));
   const missing =
     (matches.length === 1 && !failed) ||
     matches.some((match) => match._notFound || match.status === 'notFound' || isNotFound(match.error));
@@ -28,7 +30,7 @@ export function routeFailure(matches: readonly ErrorMatch[], nativeStatus = 200)
       ? (failed.error.headers as HeadersInit | undefined)
       : undefined;
   const retryAfter = safeRetryAfter(headers);
-  return { status, closed, missing, retryAfter };
+  return { status, closed, missing, unavailable, retryAfter };
 }
 
 export function errorPageHead(context: HeadContext) {
@@ -37,7 +39,7 @@ export function errorPageHead(context: HeadContext) {
 }
 
 /** Read one installed response header. Invalid or arbitrary text never becomes UI or an HTTP header. */
-function safeRetryAfter(headers: HeadersInit | undefined): string | null {
+export function safeRetryAfter(headers: HeadersInit | undefined): string | null {
   if (!headers) return null;
   try {
     const value = new Headers(headers).get('retry-after');

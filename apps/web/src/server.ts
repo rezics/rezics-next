@@ -50,6 +50,7 @@ import {
 } from './security/page-cache.ts';
 import { isPlatformClosedError } from './kernel/platform-closed.ts';
 import { createNonce, requestNonce } from './security/nonce.ts';
+import { adaptUnavailableDocument } from './shell/dependency-recovery/document';
 import {
   defineCustomServerStrategy,
   extractLocaleFromRequestAsync,
@@ -281,6 +282,16 @@ const mediaKeyPattern =
   /^m\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/i;
 const mediaPrefixPattern = /^m\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/$/i;
 
+async function documentResponse(request: Request, response: Response): Promise<Response> {
+  return adaptUnavailableDocument(request, response, {
+    fallbackLocale: () => extractLocaleFromRequestAsync(request),
+    stylesheet: async () => (await import('./styles.css?url')).default,
+    nonce: (source) => requestNonce(source) ?? createNonce(source),
+    issuer: (env as Partial<SessionEnv>).AUTH_ISSUER,
+    development: import.meta.env.DEV,
+  });
+}
+
 function xml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -405,12 +416,16 @@ async function fetchRequest(request: Request): Promise<Response> {
   )
     return problemResponse(problem(403, 'forbidden', 'Forbidden'));
   if (url.pathname === '/library/entry') {
-    const [{ libraryEntryFormResponse }, { kernelClient }, { default: stylesheet }] = await Promise.all([
-      import('./library/entry-form'),
-      import('./kernel/client'),
-      import('./styles.css?url'),
-    ]);
-    return libraryEntryFormResponse(request, sessionEnv, kernelClient(), stylesheet);
+    try {
+      const [{ libraryEntryFormResponse }, { kernelClient }, { default: stylesheet }] = await Promise.all([
+        import('./library/entry-form'),
+        import('./kernel/client'),
+        import('./styles.css?url'),
+      ]);
+      return documentResponse(request, await libraryEntryFormResponse(request, sessionEnv, kernelClient(), stylesheet));
+    } catch (error) {
+      return documentResponse(request, problemResponse(error));
+    }
   }
   const orderStatus = /^\/orders\/([^/]+)\/status$/.exec(url.pathname);
   if (orderStatus && request.method === 'GET') {
@@ -431,16 +446,16 @@ async function fetchRequest(request: Request): Promise<Response> {
     if (request.method !== 'POST')
       return problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow: 'POST' });
     try {
-      return await startCheckout(request, sessionEnv);
+      return documentResponse(request, await startCheckout(request, sessionEnv));
     } catch (error) {
-      return problemResponse(error);
+      return documentResponse(request, problemResponse(error));
     }
   }
   if (request.method === 'POST' && locales.some((locale) => url.pathname === `/${locale}/settings`)) {
     try {
-      return await submitNotificationForm(request);
+      return documentResponse(request, await submitNotificationForm(request));
     } catch (error) {
-      return problemResponse(error);
+      return documentResponse(request, problemResponse(error));
     }
   }
   const isRead = request.method === 'GET' || request.method === 'HEAD';
@@ -518,7 +533,7 @@ async function fetchRequest(request: Request): Promise<Response> {
         return problemResponse(problem(403, 'forbidden', 'Forbidden'));
       }
     }
-    return authRequest(request, sessionEnv);
+    return documentResponse(request, await authRequest(request, sessionEnv));
   }
   if (url.pathname === '/api/search/trending') return trendingResponse(request, sessionEnv);
   if (url.pathname === '/api/search/suggestions') {
