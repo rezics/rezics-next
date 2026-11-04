@@ -136,9 +136,11 @@ test('operator imports TVAnime original-run fields, keeps unknown totals and sch
     expect(run.every((command) => command.source.record_revision === 'unversioned')).toBe(true);
     expect(run.every((command) => command.subject === api.subjects.get(command.source.external_id))).toBe(true);
 
+    const unknownId = api.subjects.get('91002');
+    expect(unknownId).toBeDefined();
     const bound = current.convert(
       { external_id: '91002', record_revision: null, record: record(91002, unknownInfobox, '2024-04') },
-      { source: 'bangumi', subjectId: api.subjects.get('91002') },
+      { source: 'bangumi', subjectId: unknownId! },
     );
     expect(bound.diagnostics).toEqual(
       expect.arrayContaining([
