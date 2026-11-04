@@ -261,6 +261,9 @@ test('mounted signed-out search, overflow, exact copying, advice retry and A-B-A
     expect(host.textContent).toContain('does not allow');
     reply = async () => allowed;
     await draw(A);
+    expect(host.textContent).toContain('retired');
+    const C = { ...A, public: structuredClone(A.public) };
+    await draw(C);
     expect(host.textContent).toContain('allows proposing');
     let finishCopy!: () => void;
     write = () =>
@@ -275,10 +278,10 @@ test('mounted signed-out search, overflow, exact copying, advice retry and A-B-A
       new Promise((resolve) => {
         finishAdvice = resolve;
       });
-    await draw(B);
+    await draw({ ...A, public: structuredClone(A.public) });
     const oldAdvice = finishAdvice;
     reply = async () => denied;
-    await draw(A);
+    await draw({ ...A, public: structuredClone(A.public) });
     await act(async () => {
       finishCopy();
       oldAdvice(allowed);

@@ -9153,5 +9153,6 @@
   "subject_short_description": "Descripción breve",
   "subject_synopsis_advice_refused": "La recomendación de corrección indica que esta acción no está permitida.",
   "subject_synopsis_advice_unavailable": "La recomendación de corrección no está disponible.",
-  "subject_synopsis_return": "Volver a esta lectura"
+  "subject_synopsis_return": "Volver a esta lectura",
+  "work_names_return": "Volver a los nombres proporcionados"
 }

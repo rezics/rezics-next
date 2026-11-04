@@ -304,6 +304,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     if (
       fragment !== '#literary-reader' &&
       fragment !== '#connections' &&
+      !(subject && !subject[2] && fragment === '#supplied-names') &&
       !(subject && connectionReturnWindow(fragment)) &&
       !(subject && summaryReadingReturn(fragment)) &&
       fragment !== '#manga-reader' &&

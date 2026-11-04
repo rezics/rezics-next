@@ -9153,5 +9153,6 @@
   "subject_short_description": "簡短描述",
   "subject_synopsis_advice_refused": "更正建議表明此操作已被拒絕。",
   "subject_synopsis_advice_unavailable": "更正建議暫不可用。",
-  "subject_synopsis_return": "返回此閱讀位置"
+  "subject_synopsis_return": "返回此閱讀位置",
+  "work_names_return": "返回提供的名稱"
 }

@@ -1,156 +1,59 @@
-import { QueryClientContext } from '@tanstack/react-query';
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import type { SubjectRead } from '@rezics/client';
-import { browserObservation, type BrowserObservationSnapshot } from '../../../session/observation';
-import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { subjectHref } from '../../../subject/subject-href';
 import { PlainLink, type PageLink } from '../../pages/shared';
 import { catalogueEntries } from '../catalogue-entry';
-import type { TermsPageAuthority } from '../subject-terms';
-import { peopleNames, peopleNamesAdvice, type NamesAdvice } from './model';
+import { peopleNames } from './model';
 import { PeopleNamesView } from './view';
+import { useNamesLifetime } from '../work-names/lifetime';
+import { loadNamesAdvice, useNamesAdvice, type NamesAdviceLoader } from '../work-names/advice';
+import { NamesHandoff, namesReturnHref } from '../work-names/navigation';
+import { withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 
-const unknown: BrowserObservationSnapshot = { state: 'unknown' };
-const unobserved = { subscribe: () => () => {}, getSnapshot: () => unknown, getServerSnapshot: () => unknown };
 export type PeopleNamesReading = {
-  public: SubjectRead;
-  locale: string;
-  link?: PageLink;
-  release?: object;
-  reader?: object;
+  public: SubjectRead; locale: string; link?: PageLink; release?: object; reader?: object;
 };
-export type NamesAdviceLoader = (reader: string) => Promise<TermsPageAuthority>;
-const loadAdvice: NamesAdviceLoader = async (reader) => {
-  const { readCatalogueTermsAuthority } = await import('../subject-terms-actions');
-  return readCatalogueTermsAuthority({ data: { expectedReader: reader } });
-};
+export type { NamesAdviceLoader } from '../work-names/advice';
 
-/** One public projection and optional bounded Terms advice; never a Subject reread or per-language request. */
-export function PeopleNamesEntry({
-  reading,
-  adviceLoader = loadAdvice,
-}: {
-  reading: PeopleNamesReading;
-  adviceLoader?: NamesAdviceLoader;
+export function PeopleNamesEntry({ reading, adviceLoader = loadNamesAdvice }: {
+  reading: PeopleNamesReading; adviceLoader?: NamesAdviceLoader;
 }) {
   const { subject } = reading.public;
-  const client = useContext(QueryClientContext);
-  const store = client ? browserObservation(client) : unobserved;
-  const observation = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
-  const source = useRef({ subject, release: reading.release, reader: reading.reader, generation: 0 });
-  if (
-    source.current.subject !== subject ||
-    source.current.release !== reading.release ||
-    source.current.reader !== reading.reader
-  )
-    source.current = {
-      subject,
-      release: reading.release,
-      reader: reading.reader,
-      generation: source.current.generation + 1,
-    };
-  const work = useCatalogueLifetime(
-    JSON.stringify([
-      'people-names',
-      subject.id,
-      subject.type,
-      subject.context,
-      reading.locale,
-      source.current.generation,
-    ]),
-  );
-  const seen = useRef({ observation, work, retired: false });
-  if (seen.current.work !== work) seen.current = { observation, work, retired: false };
-  else if (seen.current.observation !== observation) {
-    // Initial cache observation may become known; subsequent changes require a replacement page source.
-    if (seen.current.observation.state !== 'unknown') seen.current.retired = true;
-    seen.current.observation = observation;
+  const incarnation = useRef({ public: reading.public, release: reading.release, reader: reading.reader });
+  const identity = useRef(0);
+  if (incarnation.current.public !== reading.public || incarnation.current.release !== reading.release || incarnation.current.reader !== reading.reader) {
+    incarnation.current = { public: reading.public, release: reading.release, reader: reading.reader };
+    identity.current++;
   }
-  const bound = seen.current;
-  const current = () => work.active() && !bound.retired && store.getSnapshot() === observation;
+  const lifetime = useNamesLifetime(reading.public, JSON.stringify([subject.id, subject.context, reading.locale, identity.current]));
   const host = useRef<HTMLDivElement>(null);
   const focused = useRef<EventTarget | null>(null);
   useLayoutEffect(() => {
     if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
       host.current?.querySelector<HTMLElement>('summary')?.focus();
-  }, [work.generation, bound.retired]);
+  }, [lifetime.generation, lifetime.retired]);
   const names = useMemo(() => peopleNames(subject, reading.locale), [subject, reading.locale]);
   const address = { id: subject.id, label: names.state === 'ready' ? names.selected.text : '', locale: reading.locale };
-  return (
-    <div
-      ref={host}
-      className="min-w-0"
-      onFocusCapture={(event) => {
-        focused.current = event.target;
-      }}
-    >
-      <NamesVisit
-        key={work.generation}
-        names={names}
-        locale={reading.locale}
-        retired={bound.retired}
-        current={current}
-        observation={observation}
-        adviceLoader={adviceLoader}
-        sourcesHref={`${subjectHref(address, reading.locale).href}/sources`}
-        termsHref={catalogueEntries.terms(address).href}
-        link={reading.link ?? PlainLink}
-      />
-    </div>
-  );
+  const href = subjectHref(address, reading.locale).href;
+  return <div ref={host} className="min-w-0" onFocusCapture={event => { focused.current = event.target; }}>
+    <NamesVisit key={lifetime.generation} {...{ names, reading, lifetime, adviceLoader, href }} termsHref={catalogueEntries.terms(address).href} />
+  </div>;
 }
 
-function NamesVisit({
-  observation,
-  adviceLoader,
-  current,
-  ...props
-}: Omit<Parameters<typeof PeopleNamesView>[0], 'advice' | 'retryAdvice' | 'current'> & {
-  current: () => boolean;
-  observation: BrowserObservationSnapshot;
-  adviceLoader: NamesAdviceLoader;
+function NamesVisit({ names, reading, lifetime, adviceLoader, href, termsHref }: {
+  names: ReturnType<typeof peopleNames>; reading: PeopleNamesReading; lifetime: ReturnType<typeof useNamesLifetime>;
+  adviceLoader: NamesAdviceLoader; href: string; termsHref: string;
 }) {
-  const [advice, setAdvice] = useState<NamesAdvice>('unavailable');
-  const [attempt, setAttempt] = useState(0);
-  const inFlight = useRef(false);
-  const latest = useRef(current);
-  latest.current = current;
-  useEffect(() => {
-    if (observation.state !== 'signed-in' || !latest.current()) return;
-    let active = true;
-    inFlight.current = true;
-    setAdvice('pending');
-    void adviceLoader(observation.observation.subject)
-      .then(
-        (result) => {
-          if (active && latest.current()) setAdvice(peopleNamesAdvice(result));
-        },
-        () => {
-          if (active && latest.current()) setAdvice('unavailable');
-        },
-      )
-      .finally(() => {
-        if (active) inFlight.current = false;
-      });
-    return () => {
-      active = false;
-      inFlight.current = false;
-    };
-  }, [observation, adviceLoader, attempt]);
-  return (
-    <PeopleNamesView
-      {...props}
-      current={current}
-      advice={
-        observation.state === 'signed-out' ? 'signed-out' : observation.state !== 'signed-in' ? 'unavailable' : advice
-      }
-      retryAdvice={
-        observation.state === 'signed-in'
-          ? () => {
-              if (!inFlight.current && current()) setAttempt((value) => value + 1);
-            }
-          : undefined
-      }
-    />
-  );
+  const advice = useNamesAdvice(lifetime.observation, lifetime.current, adviceLoader);
+  const subject = reading.public.subject;
+  const Link = reading.link ?? PlainLink;
+  // The page link adapter applies the selected Realm; capture the final link address at activation.
+  const returnHref = namesReturnHref(href, reading.locale);
+  const binding = lifetime.caller ? JSON.stringify([subject.id, subject.context, reading.locale,
+    Reflect.get(subject, 'release'), Reflect.get(subject, 'revision'), lifetime.caller]) : undefined;
+  return <NamesHandoff {...{ binding, returnHref }} locale={reading.locale} current={lifetime.current}>
+    {restored => <PeopleNamesView key={restored ? 'returned' : 'initial'} names={names} locale={reading.locale}
+      retired={lifetime.retired} current={lifetime.current} {...advice} restored={restored}
+      sourcesHref={`${href}/sources`} termsHref={withSubjectVisitReturn(termsHref, returnHref ?? '', reading.locale)} link={Link} />}
+  </NamesHandoff>;
 }

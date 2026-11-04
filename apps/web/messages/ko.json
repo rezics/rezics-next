@@ -9153,5 +9153,6 @@
   "subject_short_description": "짧은 설명",
   "subject_synopsis_advice_refused": "정정 안내에서 이 작업은 거부되었습니다.",
   "subject_synopsis_advice_unavailable": "정정 안내를 사용할 수 없습니다.",
-  "subject_synopsis_return": "이 읽기 위치로 돌아가기"
+  "subject_synopsis_return": "이 읽기 위치로 돌아가기",
+  "work_names_return": "제공된 이름으로 돌아가기"
 }

@@ -1,66 +1,48 @@
-import { useMemo, useRef, useSyncExternalStore } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { browserObservation } from '../../../session/observation';
+import { useMemo } from 'react';
+import type { Release } from '@rezics/definitions';
 import type { Subject } from '../../../subject/types';
-import { workNames, supportsWorkNames } from './model';
+import type { TermsPageAuthority } from '../subject-terms';
+import { PlainLink, type PageLink } from '../../pages/shared';
+import { subjectHref } from '../../../subject/subject-href';
+import { workNames, supportsReleasedWorkNames } from './model';
 import { WorkNamesView } from './view';
+import { useNamesLifetime } from './lifetime';
+import { loadNamesAdvice, useNamesAdvice, type NamesAdviceLoader } from './advice';
+import { NamesHandoff, namesReturnHref } from './navigation';
+import { withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 
-/** Uses the page's admitted terms; opening any group performs no native reads. */
-export function WorkNamesEntry({
-  subject,
-  ancestors,
-  source,
-  locale,
-  context,
-  sourcesHref,
+/** The page owns public disclosure and the current release; Terms owns all edit payloads and recovery. */
+export function WorkNamesEntry({ subject, source, locale, context, sourcesHref, release, releaseDigest,
+  termsAuthority, expectedReader, adviceLoader = loadNamesAdvice, link: Link = PlainLink,
 }: {
-  subject: Subject;
-  ancestors?: readonly string[] | undefined;
-  source: object;
-  locale: string;
-  context: string | null;
-  sourcesHref: string;
+  subject: Subject; ancestors?: readonly string[] | undefined; source: object; locale: string;
+  context: string | null; sourcesHref: string; release?: Pick<Release, 'types'> | undefined;
+  releaseDigest?: string | undefined; termsAuthority?: TermsPageAuthority | undefined;
+  expectedReader?: string | null | undefined; adviceLoader?: NamesAdviceLoader; link?: PageLink;
 }) {
-  const client = useQueryClient();
-  const store = browserObservation(client);
-  const observation = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
-  const seen = useRef(new WeakSet<object>());
-  const captured = useRef<{
-    source: object;
-    observation: typeof observation;
-    retired: boolean;
-    identity: string;
-    generation: number;
-  } | null>(null);
-  const identity = JSON.stringify([subject.id, context, locale]);
-  if (!captured.current || captured.current.source !== source) {
-    captured.current = {
-      source,
-      observation,
-      retired: seen.current.has(source),
-      identity,
-      generation: (captured.current?.generation ?? 0) + 1,
-    };
-    seen.current.add(source);
-  } else {
-    if (
-      captured.current.observation.state === 'unknown' &&
-      observation.state !== 'unknown' &&
-      !captured.current.retired
-    )
-      captured.current.observation = observation;
-    if (captured.current.observation !== observation || captured.current.identity !== identity)
-      captured.current.retired = true;
-  }
+  const lifetime = useNamesLifetime(source, JSON.stringify([subject.id, subject.type, Reflect.get(subject, 'revision'), subject.context, context, locale, releaseDigest]), expectedReader);
   const names = useMemo(() => workNames(subject, locale), [subject, source, locale]);
-  if (!supportsWorkNames(subject.type, ancestors)) return null;
-  return (
-    <WorkNamesView
-      key={captured.current.generation}
-      names={names}
-      locale={locale}
-      retired={captured.current.retired}
-      sourcesHref={sourcesHref}
-    />
-  );
+  if (!supportsReleasedWorkNames(subject.type, release)) return null;
+  const address = subjectHref({ id: subject.id, label: names.state === 'ready' ? names.selected.text : '' }, locale).href;
+  // The existing Sources address carries the actual selected Realm.
+  const url = new URL(sourcesHref, 'https://rezics.invalid');
+  url.pathname = address;
+  const returnHref = namesReturnHref(`${url.pathname}${url.search}`, locale);
+  const binding = lifetime.caller ? JSON.stringify([subject.id, subject.context, context, locale, releaseDigest,
+    Reflect.get(subject, 'revision'), lifetime.caller, returnHref]) : undefined;
+  const termsHref = withSubjectVisitReturn(`${address}/terms${url.search}`, returnHref ?? '', locale);
+  return <WorkNamesVisit key={lifetime.generation} {...{ names, locale, sourcesHref, termsHref, returnHref, binding,
+    termsAuthority, adviceLoader, lifetime, Link }} />;
+}
+
+function WorkNamesVisit({ names, locale, sourcesHref, termsHref, returnHref, binding, termsAuthority, adviceLoader, lifetime, Link }: {
+  names: ReturnType<typeof workNames>; locale: string; sourcesHref: string; termsHref: string;
+  returnHref: string | undefined; binding: string | undefined; termsAuthority: TermsPageAuthority | undefined;
+  adviceLoader: NamesAdviceLoader; lifetime: ReturnType<typeof useNamesLifetime>; Link: PageLink;
+}) {
+  const advice = useNamesAdvice(lifetime.observation, lifetime.current, adviceLoader, termsAuthority);
+  return <NamesHandoff {...{ binding, returnHref, locale }} current={lifetime.current}>
+    {restored => <WorkNamesView key={restored ? 'returned' : 'initial'} {...{ names, locale, sourcesHref, termsHref, restored }}
+      retired={lifetime.retired} current={lifetime.current} {...advice} link={Link} />}
+  </NamesHandoff>;
 }

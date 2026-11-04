@@ -1,9 +1,10 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../../paraglide/messages.js';
 import { languageName } from '../../../subject/language';
 import { PlainLink, type PageLink } from '../../pages/shared';
+import type { NamesWindow } from '../work-names/navigation';
 import type { WorkNameGroup } from '../work-names/model';
 import {
   filterPeopleNames,
@@ -28,6 +29,9 @@ export function PeopleNamesView({
   sourcesHref,
   termsHref,
   link: Link = PlainLink,
+  restored,
+  kind = 'people',
+  metadata,
 }: {
   names: PeopleNames;
   locale: string;
@@ -38,32 +42,35 @@ export function PeopleNamesView({
   sourcesHref: string;
   termsHref: string;
   link?: PageLink;
+  restored?: NamesWindow | undefined;
+  kind?: 'people' | 'work';
+  metadata?: ReactNode;
 }) {
   const o = { locale: locale as never };
   const id = useId();
   const filter = useRef<HTMLInputElement>(null);
   const summary = useRef<HTMLElement>(null);
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(0);
+  const [query, setQuery] = useState(restored?.query ?? '');
+  const [page, setPage] = useState(restored?.page ?? 0);
   const groups = useMemo(() => (names.state === 'ready' ? filterPeopleNames(names.groups, query) : []), [names, query]);
   const count = groups.reduce((sum, group) => sum + group.names.length, 0);
-  const offset = page * PEOPLE_NAME_GROUP_WINDOW;
+  const offset = Math.min(page, Math.max(0, Math.ceil(groups.length / PEOPLE_NAME_GROUP_WINDOW) - 1)) * PEOPLE_NAME_GROUP_WINDOW;
   return (
-    <section id="supplied-names" data-slot="supplied-names" className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
-      <h3 className="text-xl font-semibold">{m.people_names_heading({}, o)}</h3>
+    <section id="supplied-names" data-slot="supplied-names" className="min-w-0 space-y-3 [overflow-wrap:anywhere]" data-names-page={offset / PEOPLE_NAME_GROUP_WINDOW}>
+      {kind === 'people' && <h3 className="text-xl font-semibold">{m.people_names_heading({}, o)}</h3>}
       {!retired && names.state === 'ready' && names.selected.text && (
         <p className="text-sm text-muted-foreground">
           {names.selected.lang && names.selected.lang !== locale
-            ? m.people_names_fallback({}, o)
-            : m.people_names_selected({}, o)}{' '}
+            ? (kind === 'work' ? m.work_names_fallback({}, o) : m.people_names_fallback({}, o))
+            : (kind === 'work' ? m.work_names_selected({}, o) : m.people_names_selected({}, o))}{' '}
           <span lang={names.selected.lang ?? locale} dir="auto">
             {names.selected.text}
           </span>
         </p>
       )}
-      <details>
+      <details open={restored?.expanded}>
         <summary ref={summary} className={control}>
-          {m.people_names_open({}, o)}
+          {kind === 'work' ? m.work_names_title({}, o) : m.people_names_open({}, o)}
         </summary>
         {retired ? (
           <p role="status">{m.people_names_retired({}, o)}</p>
@@ -73,6 +80,7 @@ export function PeopleNamesView({
           </p>
         ) : (
           <div className="min-w-0 space-y-4 py-3">
+            {metadata}
             {names.groups.length === 0 ? (
               <p>{m.people_names_empty({}, o)}</p>
             ) : (
@@ -115,8 +123,8 @@ export function PeopleNamesView({
                 ) : (
                   <>
                     <div className="space-y-3" key={query}>
-                      {groups.slice(offset, offset + PEOPLE_NAME_GROUP_WINDOW).map((group) => (
-                        <NameGroup key={group.language} group={group} locale={locale} current={current} />
+                      {groups.slice(offset, offset + PEOPLE_NAME_GROUP_WINDOW).map((group, index) => (
+                        <NameGroup key={group.language} group={group} locale={locale} current={current} index={offset + index} restored={restored?.groups.find(g => g.index === offset + index)} />
                       ))}
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
@@ -179,9 +187,9 @@ export function PeopleNamesView({
                 {m.people_names_retry({}, o)}
               </Button>
             )}
-            <Link href={termsHref} className={control}>
-              {m.catalogue_terms_title({}, o)}
-            </Link>
+            <span data-names-terms>
+              <Link href={termsHref} className={control}>{m.catalogue_terms_title({}, o)}</Link>
+            </span>
             <Link href={sourcesHref} className={control}>
               {m.work_names_sources({}, o)}
             </Link>
@@ -192,13 +200,13 @@ export function PeopleNamesView({
   );
 }
 
-function NameGroup({ group, locale, current }: { group: WorkNameGroup; locale: string; current: () => boolean }) {
+function NameGroup({ group, locale, current, index, restored }: { group: WorkNameGroup; locale: string; current: () => boolean; index: number; restored?: NamesWindow['groups'][number] | undefined }) {
   const o = { locale: locale as never };
   const summary = useRef<HTMLElement>(null);
-  const [page, setPage] = useState(0);
-  const offset = page * PEOPLE_NAME_ROW_WINDOW;
+  const [page, setPage] = useState(restored?.page ?? 0);
+  const offset = Math.min(page, Math.max(0, Math.ceil(group.names.length / PEOPLE_NAME_ROW_WINDOW) - 1)) * PEOPLE_NAME_ROW_WINDOW;
   return (
-    <details className="min-w-0 rounded-md border border-border p-3" data-name-language={group.language}>
+    <details className="min-w-0 rounded-md border border-border p-3" data-name-language={group.language} data-name-index={index} data-name-page={offset / PEOPLE_NAME_ROW_WINDOW} open={restored?.open}>
       <summary ref={summary} className={control}>
         <span lang={group.language} dir="auto">
           {languageName(group.language, group.language) ?? group.language}

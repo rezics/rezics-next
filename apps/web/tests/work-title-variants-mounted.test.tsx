@@ -39,10 +39,10 @@ test('mounted disclosure exposes native language groups, copy controls and retir
     const copy = group.querySelector('button')!;
     copy.focus();
     expect(document.activeElement).toBe(copy);
-    expect(host.querySelector('a')?.getAttribute('href')).toBe(props.sourcesHref);
+    expect(host.querySelector(`a[href="${props.sourcesHref}"]`)).not.toBeNull();
     await act(async () => root.render(createElement(WorkNamesView, { ...props, retired: true })));
     expect(host.textContent).not.toContain('海の物語');
-    expect(host.textContent).toContain('unavailable');
+    expect(host.textContent).toContain('retired');
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous) {
