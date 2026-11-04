@@ -84,7 +84,11 @@ function assertExpectedBinding(
       !source ||
       source.kind !== 'supported' ||
       source.subjectId !== expected.subjectId ||
-      JSON.stringify(source.pin) !== JSON.stringify(expected.profilePin) ||
+      // Retained review documents canonicalize JSON keys; pin identity is field identity.
+      source.pin.provenance !== expected.profilePin.provenance ||
+      source.pin.releaseDigest !== expected.profilePin.releaseDigest ||
+      source.pin.acceptingType !== expected.profilePin.acceptingType ||
+      source.pin.profileId !== expected.profilePin.profileId ||
       (Object.hasOwn(expected, 'requestedSubjectId') &&
         observation.anchor.requestedSubjectId !== expected.requestedSubjectId) ||
       observation.anchor.acceptingType !== expected.acceptingType ||
