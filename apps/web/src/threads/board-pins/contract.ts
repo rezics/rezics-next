@@ -246,11 +246,11 @@ export function parseBoardPinBoard(boardId: string, body: unknown): BoardPinBoar
   const next = body.next === null || typeof body.next === 'string' ? body.next : undefined;
   const rankRefreshedAt =
     body.rankRefreshedAt === null || typeof body.rankRefreshedAt === 'string' ? body.rankRefreshedAt : undefined;
-  const pinRevision = body.pinRevision;
+  const pinRevision = validBoardPinRevision(body.pinRevision) ? body.pinRevision : undefined;
   if (
     next === undefined ||
     rankRefreshedAt === undefined ||
-    (Object.hasOwn(body, 'pinRevision') && !validBoardPinRevision(pinRevision))
+    (Object.hasOwn(body, 'pinRevision') && pinRevision === undefined)
   )
     return { state: 'unavailable' };
   const management = body.management === 'allowed' ? 'allowed' : 'denied';
