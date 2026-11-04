@@ -165,7 +165,7 @@ test('the Search route retires pending Retry focus when the observed session cha
   expect(focusedResults()).toBe(false);
 });
 
-test('stable session observation still recovers current Retry focus', async () => {
+test('stable session observation recovers focus on the current Refresh action', async () => {
   setLocale('en', { reload: false });
   const client = await show(viewer());
   await retryCurrent();
@@ -173,7 +173,7 @@ test('stable session observation still recovers current Retry focus', async () =
     client.setQueryData(sessionQuery.queryKey, viewer('one', 'rotated'));
   });
   await settle(ready);
-  expect(focusedResults()).toBe(true);
+  expect(document.activeElement?.textContent).toBe(m.search_context_refresh());
 
   await act(async () => root.unmount());
   root = undefined!;
@@ -181,13 +181,13 @@ test('stable session observation still recovers current Retry focus', async () =
   await show(viewer());
   await retryCurrent();
   await settle(ready);
-  expect(focusedResults()).toBe(true);
+  expect(document.activeElement?.textContent).toBe(m.search_context_refresh());
 });
 
 test('sign-out retires a retained scoped request and quarantines its late response', async () => {
   setLocale('en', { reload: false });
   const filter = JSON.stringify({ realm: { id: '5a522c45-d94f-4d36-8b2a-3af80d988cff' } });
-  const client = await show(viewer(), `/search?q=Mira&filter=${encodeURIComponent(filter)}`);
+  const client = await show(viewer(), `/search?q=Mira&filter=${encodeURIComponent(JSON.stringify(filter))}`);
   expect(reads).toHaveLength(1);
 
   await act(async () => {
