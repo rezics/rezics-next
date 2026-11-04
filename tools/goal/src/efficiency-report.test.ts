@@ -51,6 +51,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
         JSON.stringify({ taskId: 'queued', attempt: 1, declaredPaths: ['services/sample/src/index.ts'] }),
       );
     const at = (minute: number) => new Date(Date.parse(bucket) + minute * 60_000).toISOString();
+    task(h.db, 'guarded', 'integrated', 'fixture');
     recordFlow(h.db, {
       taskId: 'landed',
       attempt: 2,

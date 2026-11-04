@@ -47,7 +47,8 @@ test('a main landing lists changes outside declared paths and integrates them', 
   const h = integrationHarness();
   try {
     h.ensureDev();
-    const task = h.dispatch('declared.txt', [], ['true'], 'fixture', 'main');
+    git(h.root, 'branch', 'stabilize', h.head('main'));
+    const task = h.dispatch('declared.txt', [], ['true'], 'fixture', 'stabilize');
     await h.start(task);
     writeFileSync(join(task.worktree, 'outside.txt'), 'required fix');
     git(task.worktree, 'add', 'outside.txt');
@@ -60,7 +61,7 @@ test('a main landing lists changes outside declared paths and integrates them', 
     expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
       'Changed outside declared paths (allowed): outside.txt',
     );
-    expect(git(h.root, 'show', 'main:outside.txt')).toBe('required fix');
+    expect(git(h.root, 'show', 'stabilize:outside.txt')).toBe('required fix');
   } finally {
     h.dispose();
   }

@@ -993,6 +993,15 @@ function refuseNoEffect(
   appendFileSync(logPath, `${reason}\n`);
 }
 
+function refuseRebaseConflict(result: GateOutcome, path: string, reason: string, logPath: string): void {
+  const paths = canonicalConflictPaths([path]);
+  result.stage = 'rebase';
+  result.conflictedFiles = paths;
+  result.refusal = { kind: 'rebase-conflict', paths };
+  result.firstFailure = firstFailure(reason);
+  appendFileSync(logPath, `${reason}\n`);
+}
+
 function refuseFrozenAcceptanceChange(result: GateOutcome, paths: readonly string[], logPath: string): void {
   const canonical = canonicalConflictPaths(paths);
   result.stage = 'rebase';
@@ -2237,9 +2246,26 @@ export class MergeTrain {
           const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
           const frozenAtStart = frozenFilesForTask(o.stateDirectory, request.taskId);
           const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
-          let worked = this.git(trainTree, 'diff', '--name-only', originalBase, tip)
-            .split('\n')
-            .some((path) => path && !frozenPaths.has(path));
+          const sourcePaths = changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge);
+          const sourceFrozenChanges = sourcePaths.filter((path) => frozenPaths.has(path));
+          const frozenNotOnTarget = sourceFrozenChanges.filter((path) => {
+            const difference = mergeGit(
+              o.mainCheckout,
+              ['diff', '--quiet', tip, previous, '--', path],
+              this.options.policy?.merge,
+            );
+            if (difference.error || difference.status === null || difference.status > 1)
+              throw new Error(difference.stderr?.trim() || difference.error?.message || `Cannot compare frozen path ${path}`);
+            return difference.status === 1;
+          });
+          if (frozenNotOnTarget.length) {
+            refuseFrozenAcceptanceChange(result, frozenNotOnTarget, logPath);
+            result.conflictedFiles = canonicalConflictPaths(frozenNotOnTarget);
+            localOutcomes.set(entry.id, result);
+            resetTo(trainTree, previous);
+            continue;
+          }
+          let worked = sourcePaths.some((path) => !frozenPaths.has(path));
           if (!worked) {
             const prepared = this.commitDirtySource(request, tip, frozenAtStart, logPath);
             if (prepared.frozenPaths.length) {
@@ -2252,9 +2278,9 @@ export class MergeTrain {
             if (prepared.committed) {
               tip = prepared.tip;
               originalBase = this.git(o.mainCheckout, 'merge-base', tip, base);
-              worked = this.git(trainTree, 'diff', '--name-only', originalBase, tip)
-                .split('\n')
-                .some((path) => path && !frozenPaths.has(path));
+              worked = changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge).some(
+                (path) => !frozenPaths.has(path),
+              );
             } else {
               acceptAlreadyPresent(result, previous, [], logPath);
               localOutcomes.set(entry.id, result);
@@ -2324,7 +2350,8 @@ export class MergeTrain {
                   resolution,
                 };
               }
-              refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
+              if (error.detail) refuseRebaseConflict(result, error.path, error.message, logPath);
+              else acceptAlreadyPresent(result, previous, [error.path], logPath);
               result.conflictResolution = {
                 method: 'worker',
                 tokens: request.devResolution?.tokens ?? emptyTokens(),
@@ -3487,17 +3514,30 @@ export class MergeTrain {
         stabilize = false;
         integratesIntoDev = false;
       }
-      if (!workspace && !request.devResolution && !request.managerLanding && !request.unchangedClaim) {
+      if (!workspace && !request.devResolution && !request.managerLanding) {
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
         const frozenPaths = new Set(frozen.map((file) => file.path));
         const sourceBase =
           controlPlaneFork ?? this.git(o.mainCheckout, 'merge-base', sourceTip, target());
-        const hasCommittedWork = changedPathsBetween(
-          o.mainCheckout,
-          sourceBase,
-          sourceTip,
-          this.options.policy?.merge,
-        ).some((path) => !frozenPaths.has(path));
+        const committedPaths = changedPathsBetween(o.mainCheckout, sourceBase, sourceTip, this.options.policy?.merge);
+        const frozenNotOnTarget = committedPaths.filter((path) => {
+          if (!frozenPaths.has(path)) return false;
+          const difference = mergeGit(
+            o.mainCheckout,
+            ['diff', '--quiet', sourceTip, target(), '--', path],
+            this.options.policy?.merge,
+          );
+          if (difference.error || difference.status === null || difference.status > 1)
+            throw new Error(difference.stderr?.trim() || difference.error?.message || `Cannot compare frozen path ${path}`);
+          return difference.status === 1;
+        });
+        if (frozenNotOnTarget.length) {
+          stage = 'rebase';
+          refuseFrozenAcceptanceChange(result, frozenNotOnTarget, logPath);
+          result.conflictedFiles = canonicalConflictPaths(frozenNotOnTarget);
+          return finish();
+        }
+        const hasCommittedWork = committedPaths.some((path) => !frozenPaths.has(path));
         if (!hasCommittedWork) {
           const prepared = this.commitDirtySource(request, sourceTip, frozen, logPath);
           if (prepared.frozenPaths.length) {
@@ -3507,13 +3547,22 @@ export class MergeTrain {
             return finish();
           }
           if (!prepared.committed) {
-            acceptAlreadyPresent(result, target(), [], logPath);
-            return finish();
+            if (!request.unchangedClaim || request.sourceDirtyAtSettlement) {
+              delete request.unchangedClaim;
+              delete request.contractHash;
+              delete request.sourceDirtyAtSettlement;
+              acceptAlreadyPresent(result, target(), [], logPath);
+              return finish();
+            }
+          } else {
+            delete request.unchangedClaim;
+            delete request.contractHash;
+            delete request.sourceDirtyAtSettlement;
+            sourceTip = tip = prepared.tip;
+            workerCommit = prepared.tip;
+            request.workerCommit = prepared.tip;
           }
-          sourceTip = tip = prepared.tip;
-          workerCommit = prepared.tip;
-          request.workerCommit = prepared.tip;
-          if (controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
+          if (prepared.committed && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
             const fork = this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
             const taskChanges = changedPathsBetween(o.mainCheckout, fork, sourceTip, this.options.policy?.merge);
             controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
@@ -3730,7 +3779,9 @@ export class MergeTrain {
               result.firstFailure = firstFailure(error.message, this.options.policy?.merge);
               return this.devResolutionHandoff(entry, result, base, [error.path]);
             }
-            refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
+            if (error.detail) refuseRebaseConflict(result, error.path, error.message, logPath);
+            else if (integratesIntoDev && !stabilize) acceptAlreadyPresent(result, base, [error.path], logPath);
+            else refuseNoEffect(result, [error.path], logPath);
             if (integratesIntoDev && !stabilize && !controlPlane) {
               result.conflictResolution = {
                 method: 'worker',
