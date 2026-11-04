@@ -32,11 +32,15 @@ test('overview keeps native panels identified and returns Diary-owned navigation
     },
     actions: {
       diary: { operationId: 'library_diary.list', query: { year: 2020 } },
-      months: [{ month: 1, query: { year: 2020, month: 1 } }],
       unallocatedMonth: { query: { year: 2020, month: 'unallocated' } },
     },
   });
   expect(value.actions.months).toHaveLength(12);
+  expect(value.actions.months[0]).toEqual({
+    month: 1,
+    operationId: 'library_diary.list',
+    query: { year: 2020, month: 1 },
+  });
 });
 
 test('an absent assessment installation leaves the other overview panels usable', async () => {
