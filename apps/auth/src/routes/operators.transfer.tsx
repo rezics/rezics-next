@@ -1277,9 +1277,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
                     ? m.auth_transfer_recovery_retry_exact()
                     : attempt.side === 'destination'
                     ? m.auth_transfer_accept()
-                    : attempt.phase === 'readback'
-                      ? m.auth_transfer_readback()
-                      : m.auth_transfer_submit()}
+                    : m.auth_transfer_submit()}
                 </Button>
               </form>
             ) : null}
