@@ -15,7 +15,10 @@ type ReadingScenario = 'admitted' | 'detail-unavailable';
 
 function ReleaseFidelityReadingStory({ scenario = 'admitted' }: { scenario?: ReadingScenario }) {
   const locale = getLocale();
-  const fixture = useMemo(() => releaseFidelityFixture(scenario, locale, 22), [locale, scenario]);
+  const fixture = useMemo(
+    () => releaseFidelityFixture(scenario === 'admitted' ? 'ready' : scenario, locale, 22),
+    [locale, scenario],
+  );
   const transport = useMemo<ReleaseFidelityTransport>(
     () => ({
       read: fixture.read,
