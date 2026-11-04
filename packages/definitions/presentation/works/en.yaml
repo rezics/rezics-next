@@ -50,4 +50,3 @@ propertyDescriptions:
   schema:about: 'The creative work this quotation cites. Exact work or part identity is required; a substring match is not a relationship.'
   schema:creator: 'A person or organization credited for this quotation, kept separate from the fictional speaker.'
   schema:actor: 'An optional performing voice. A speaker never implies a voice actor without a qualified source assertion.'
-

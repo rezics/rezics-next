@@ -50,4 +50,3 @@ propertyDescriptions:
   schema:about: 'L’œuvre que cette citation cite. L’identité exacte de l’œuvre ou de la partie est requise ; une sous-chaîne ne crée pas de relation.'
   schema:creator: 'Une personne ou une organisation créditée pour cette citation, distincte du locuteur fictif.'
   schema:actor: 'Une voix interprétée facultative. Un locuteur n’implique pas un comédien de voix sans assertion de source qualifiée.'
-

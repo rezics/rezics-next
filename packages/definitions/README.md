@@ -839,8 +839,8 @@ locally without a translation service.
 | `wdt:P725`                  | [voice actor](https://www.wikidata.org/wiki/Property:P725)                                                                                                 |
 | `schema:contributor`        | [contributor](https://schema.org/contributor), mapped to [contributor to the creative work or subject (P767)](https://www.wikidata.org/wiki/Property:P767) |
 | `schema:Quotation`          | [Quotation](https://schema.org/Quotation), an authored quotation of a work                                                                                 |
-| `schema:text`               | [text](https://schema.org/text), the exact authored quotation document                                                                                    |
-| `schema:spokenByCharacter`  | [spokenByCharacter](https://schema.org/spokenByCharacter), the fictional speaker                                                                          |
+| `schema:text`               | [text](https://schema.org/text), the exact authored quotation document                                                                                     |
+| `schema:spokenByCharacter`  | [spokenByCharacter](https://schema.org/spokenByCharacter), the fictional speaker                                                                           |
 | `schema:about`              | [about](https://schema.org/about), the cited work; a substring match never creates this relationship                                                       |
 | `schema:creator`            | [creator](https://schema.org/creator), a credited person or organization, never the fictional speaker                                                      |
 | `schema:actor`              | [actor](https://schema.org/actor), an optional performing voice; a speaker never infers a voice actor                                                      |

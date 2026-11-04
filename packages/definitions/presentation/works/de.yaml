@@ -50,4 +50,3 @@ propertyDescriptions:
   schema:about: 'Das Werk, das dieses Zitat belegt. Die genaue Werk- oder Teilidentität gilt; eine Teilzeichenkette erzeugt keine Beziehung.'
   schema:creator: 'Eine Person oder Organisation, der dieses Zitat zugeschrieben wird, getrennt vom fiktiven Sprecher.'
   schema:actor: 'Eine optionale Stimme. Ein Sprecher impliziert ohne qualifizierte Quellenaussage keine Stimme.'
-

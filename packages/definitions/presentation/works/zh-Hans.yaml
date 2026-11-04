@@ -50,4 +50,3 @@ propertyDescriptions:
   schema:about: '这段引文所指向的作品。需要准确的作品或部分身份；子串匹配不会建立关系。'
   schema:creator: '这段引文具名的人物或组织，与虚构说话者分开。'
   schema:actor: '可选的配音。说话者不会在没有合格来源断言时被当成配音。'
-

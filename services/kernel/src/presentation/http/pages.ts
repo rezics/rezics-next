@@ -891,7 +891,11 @@ async function pageAnswer(input: {
       ...(quotationAuthority ? { viewer: quotationAuthority.viewer } : {}),
       reads,
       ...(input.overlay ? { meanings: input.overlay.meanings, unavailable: input.overlay.unavailable } : {}),
-      ...(quotationAuthority ? { actions: quotationAuthority.actions } : viewerEnvelope ? { actions: viewerEnvelope.actions } : {}),
+      ...(quotationAuthority
+        ? { actions: quotationAuthority.actions }
+        : viewerEnvelope
+          ? { actions: viewerEnvelope.actions }
+          : {}),
     },
     readSession,
     true,

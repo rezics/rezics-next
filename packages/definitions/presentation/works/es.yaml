@@ -50,4 +50,3 @@ propertyDescriptions:
   schema:about: 'La obra que cita esta cita. Se exige la identidad exacta de la obra o parte; una coincidencia parcial no crea relación.'
   schema:creator: 'Una persona u organización acreditada por esta cita, distinta del locutor ficticio.'
   schema:actor: 'Una voz interpretativa opcional. Un locutor no implica un actor de voz sin una afirmación de fuente cualificada.'
-

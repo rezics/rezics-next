@@ -236,4 +236,3 @@ slots:
       relation_group: association
       inverse: rezics:quotationsVoiced
       relation_order: name
-
