@@ -2258,9 +2258,7 @@ at 64/512/4096 unrelated Subjects and obsolete history charge the same local pro
 work. They establish no native examined-row bound or executed browser/visual result; native and browser acceptance
 remain integration-owned.
 
-## Person and Character supplied names
-
-### Character document previews
+## Character document previews
 
 Decision: a direct native Character read opts into public document previews with `includeDocuments=true`; page
 composition keeps its existing dependent document plan, so a page does not hydrate each body twice.
@@ -2286,6 +2284,8 @@ work-population or relationship scan is added. Page composition retains its exis
 2-MiB document limit, and includes the Character profile's admitted document fields even when a template omits
 Summary. Character profile rendering accepts either the native or composed map through the same exact
 `statementDocument` binding. Appearance and qualified voice associations retain their separate relation authority.
+
+## Person and Character supplied names
 
 The existing public Person and Character profiles expose one compact supplied-names disclosure. The selected page
 label and a supplied fallback are distinguished from supplied labels and aliases. Matching text never joins a Person
