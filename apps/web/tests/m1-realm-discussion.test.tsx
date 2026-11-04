@@ -18,7 +18,8 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const kernel = createKernelClient('http://kernel.local', {
   fetch: (await import('../src/kernel/fake')).createStoryRecordedKernelFetch(),
 });
-mock.module('../src/kernel/client', () => ({ kernelClient: () => kernel }));
+const kernelClientModule = await import('../src/kernel/client');
+mock.module('../src/kernel/client', () => ({ ...kernelClientModule, kernelClient: () => kernel }));
 
 const session = await import('../src/session/query');
 let currentSession: { state: 'signed-in' | 'signed-out'; csrfToken: string | null; subject: string | null } = {
