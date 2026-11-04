@@ -2877,7 +2877,8 @@ the account ID, keeping preference values out of the event data. Invalid values 
 
 Read cost: one exact `(route, account_id)` primary-key seek, at most one row and one statement, with logarithmic
 blocks in accounts plus a constant number of TOAST blocks, since the stored shelf is capped at 16,384 bytes and
-notification overrides at 2,048 bytes.
+notification overrides at 2,048 bytes. `page` is computed in memory from the catalogue after that seek and adds no
+statements at the 256, 1024 and 4096 preference scales.
 Set cost: one preference row and the command envelope's receipt, with constant rows and statements; the merge is in
 memory over at most 32 + 6 + 2 shelf entries and 32 notification kinds. Authentication and native authorization
 retain their existing bounds. `test/access/growth-preferences.test.ts` grows accounts with stored

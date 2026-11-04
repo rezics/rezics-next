@@ -108,9 +108,9 @@ test('versioned partial writes replay once, reject stale versions and bind the i
     ).rows,
   ).toHaveLength(1);
   expect((await call(owner.accountId, owner.bearer, { ...body, spoilerLevel: 1 }, key)).response.status).toBe(422);
-  expect((await call(owner.accountId, owner.bearer, { expectedVersion: 0, suitability: 'show' })).response.status).toBe(
-    409,
-  );
+  const conflict = await call(owner.accountId, owner.bearer, { expectedVersion: 0, suitability: 'show' });
+  expect(conflict.response.status).toBe(409);
+  expect(conflict.value.page).toEqual(shown({ spoilerLevel: 2, version: 1 }).page);
   expect((await call(owner.accountId, owner.bearer, { expectedVersion: 1, suitability: 'show' })).value).toEqual(
     shown({ spoilerLevel: 2, suitability: 'show', version: 2 }),
   );

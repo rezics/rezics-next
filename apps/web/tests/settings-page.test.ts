@@ -1,4 +1,5 @@
 import { readSessionToken } from './session-token';
+import { settingsPreferencePage } from '../src/kernel/fake/settings-notifications';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -59,6 +60,12 @@ const profile = {
   verified: false,
   subject: null,
 };
+
+const notifications = { reply: true, mention: true, thread_watch: true, board_activity: true };
+
+function present(current: Stored) {
+  return { ...current, shelf: {}, notifications, page: settingsPreferencePage(notifications, current.version) };
+}
 
 function reset() {
   calls.length = 0;
@@ -205,14 +212,15 @@ const fake = Bun.serve({
     if (url.pathname === '/v1/accounts' && request.method === 'GET') return json({ accounts: [profile], next: null });
     if (url.pathname === '/v1/accounts/alice' && request.method === 'PATCH') return json({ accountId: 'alice' });
     if (url.pathname !== '/v1/accounts/alice/preferences') return json(apiProblem(404, 'not_found'), 404, true);
-    if (request.method === 'GET') return json(stored);
+    if (request.method === 'GET') return json(present(stored));
     if (request.method === 'PATCH') {
       const change = body as Partial<Stored> & { expectedVersion: number };
-      if (change.expectedVersion !== stored.version) return json(apiProblem(409, 'conflict'), 409, true);
+      if (change.expectedVersion !== stored.version)
+        return json({ ...apiProblem(409, 'conflict'), page: present(stored).page }, 409, true);
       const next = { ...stored, ...change, version: stored.version + 1 } as Stored & { expectedVersion?: number };
       delete next.expectedVersion;
-      stored = next;
-      return json(stored);
+      stored = { spoilerLevel: next.spoilerLevel, suitability: next.suitability, version: next.version };
+      return json(present(stored));
     }
     return json(apiProblem(404, 'not_found'), 404, true);
   },
@@ -538,7 +546,7 @@ test(
       const radios = page.getByRole('radio');
       expect(await radios.count()).toBe(3);
       for (let index = 0; index < 3; index += 1) expect(await radios.nth(index).isDisabled()).toBe(true);
-      expect(await page.getByRole('switch').isDisabled()).toBe(true);
+      expect(await page.getByRole('switch', { name: 'Show covers withheld for suitability' }).isDisabled()).toBe(true);
       // Nothing can be changed, so nothing is written.
       expect(patches()).toHaveLength(0);
     } finally {

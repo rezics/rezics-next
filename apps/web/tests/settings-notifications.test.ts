@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { csrfTokenFromRequest } from '../src/session/csrf';
+import { settingsPreferencePage } from '../src/kernel/fake/settings-notifications';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type Page } from 'playwright';
 
@@ -37,7 +38,13 @@ let rejectNotifications = false;
 let delayNotifications = false;
 let stored: Stored;
 
-function reset(notifications: Record<string, boolean> = { reply: true, mention: true, weekly_digest: true }) {
+const catalogue = { reply: true, mention: true, thread_watch: true, board_activity: true };
+
+function present(current: Stored) {
+  return { ...current, shelf: {}, page: settingsPreferencePage(current.notifications, current.version) };
+}
+
+function reset(notifications: Record<string, boolean> = catalogue) {
   calls.length = 0;
   rejectNotifications = false;
   delayNotifications = false;
@@ -170,10 +177,11 @@ const fake = Bun.serve({
       body,
     });
     if (url.pathname !== '/v1/accounts/alice/preferences') return json(apiProblem(404, 'not_found'), 404, true);
-    if (request.method === 'GET') return json(stored);
+    if (request.method === 'GET') return json(present(stored));
     if (request.method === 'PATCH') {
       const change = body as { expectedVersion?: number; notifications?: Record<string, boolean | null> | null };
-      if (change.expectedVersion !== stored.version) return json(apiProblem(409, 'conflict'), 409, true);
+      if (change.expectedVersion !== stored.version)
+        return json({ ...apiProblem(409, 'conflict'), page: present(stored).page }, 409, true);
       if (delayNotifications)
         return Response.json(apiProblem(400, 'invalid_request'), {
           status: 400,
@@ -181,13 +189,15 @@ const fake = Bun.serve({
         });
       if (rejectNotifications && 'notifications' in change) return json(apiProblem(400, 'invalid_request'), 400, true);
       if (change.notifications === null) {
-        stored.notifications = Object.fromEntries(Object.keys(stored.notifications).map((kind) => [kind, true]));
+        stored.notifications = { ...catalogue };
       } else if (change.notifications) {
-        for (const [kind, value] of Object.entries(change.notifications))
+        for (const [kind, value] of Object.entries(change.notifications)) {
+          if (!(kind in catalogue)) continue;
           stored.notifications[kind] = value === null ? true : value;
+        }
       }
       stored = { ...stored, version: stored.version + 1 };
-      return json(stored);
+      return json(present(stored));
     }
     return json(apiProblem(404, 'not_found'), 404, true);
   },
@@ -310,9 +320,9 @@ afterAll(async () => {
 });
 
 test(
-  'notification switches follow the preferences map order, use localized names and humanize unknown kinds',
+  'notification switches follow the owner page, omit unknown kinds and explain compulsory policy',
   async () => {
-    reset({ reply: true, mention: true, weekly_digest: true });
+    reset({ ...catalogue, weekly_digest: true });
     const first = await readPage('/en/settings');
     expect(first.status).toBe(200);
     expect(calls.filter((call) => call.method === 'GET')).toHaveLength(2);
@@ -328,22 +338,28 @@ test(
       await page.getByRole('heading', { level: 2, name: 'Notifications' }).waitFor();
       const group = page.getByRole('group', { name: 'Notifications' });
       const switches = group.getByRole('switch');
-      expect(await switches.count()).toBe(3);
-      expect(await switches.allTextContents()).toEqual(['', '', '']);
+      expect(await switches.count()).toBe(4);
       expect(await switches.nth(0).getAttribute('aria-label')).toBe('Replies to your posts');
       expect(await switches.nth(1).getAttribute('aria-label')).toBe('Mentions of you');
-      expect(await switches.nth(2).getAttribute('aria-label')).toBe('Weekly Digest');
-      const mandatory = group.getByText('Moderation decisions about your content are always sent.');
+      expect(await switches.nth(2).getAttribute('aria-label')).toBe('Activity in threads you watch');
+      expect(await switches.nth(3).getAttribute('aria-label')).toBe('New threads on boards you watch');
+      expect(await group.getByRole('switch', { name: 'Weekly Digest' }).count()).toBe(0);
+      expect(first.html).not.toContain('Weekly Digest');
+      await group.getByRole('heading', { name: 'Always sent' }).waitFor();
+      await group.getByText('Moderation, report and appeal outcomes', { exact: true }).waitFor();
+      await group.getByRole('link', { name: 'Manage thread and board watches' }).waitFor();
+      expect(await group.getByText('Default: on').count()).toBe(4);
+      const mandatory = group.getByText(
+        'Moderation decisions about your content, report outcomes and appeal outcomes are always sent.',
+      );
       await mandatory.waitFor();
       expect(await mandatory.evaluate((node) => node.tagName)).toBe('P');
-      expect(await mandatory.locator('[role="switch"]').count()).toBe(0);
-      expect(await mandatory.evaluate((node) => node.parentElement?.lastElementChild === node)).toBe(true);
-      expect(await group.getByRole('switch').count()).toBe(3);
+      expect(await group.getByRole('switch', { name: 'Moderation, report and appeal outcomes' }).count()).toBe(0);
     } finally {
       await page.context().close();
     }
 
-    reset({ reply: true, mention: true });
+    reset(catalogue);
     const translated = await readPage('/zh-Hans/settings');
     expect(calls.filter((call) => call.method === 'GET')).toHaveLength(1);
     const chinese = await open('/zh-Hans/settings', translated.cookie!);
@@ -352,7 +368,10 @@ test(
       const group = chinese.getByRole('group', { name: '通知' });
       expect(await group.getByRole('switch').nth(0).getAttribute('aria-label')).toBe('有人回复了你的帖子');
       expect(await group.getByRole('switch').nth(1).getAttribute('aria-label')).toBe('有人提到了你');
-      await group.getByText('关于你内容的审核决定始终会发送。').waitFor();
+      expect(await group.getByRole('switch').nth(2).getAttribute('aria-label')).toBe('你关注的主题有新活动');
+      expect(await group.getByRole('switch').nth(3).getAttribute('aria-label')).toBe('你关注的看板有新主题');
+      await group.getByRole('heading', { name: '始终发送' }).waitFor();
+      await group.getByText('与你的内容有关的审核决定、举报结果和申诉结果始终会发送通知。').waitFor();
     } finally {
       await chinese.context().close();
     }
@@ -363,7 +382,7 @@ test(
 test(
   'changing one notification sends one merge patch and Restore defaults sends notifications null',
   async () => {
-    reset({ reply: true, mention: true });
+    reset(catalogue);
     const first = await readPage('/en/settings');
     const page = await open('/en/settings', first.cookie!);
     try {
@@ -379,13 +398,13 @@ test(
         contentType: 'application/merge-patch+json',
       });
       expect(patches()[0]!.key).toMatch(/^"[0-9a-f-]{36}"$/i);
-      expect(stored.notifications).toEqual({ reply: false, mention: true });
+      expect(stored.notifications).toEqual({ ...catalogue, reply: false });
 
       await group.getByRole('button', { name: 'Restore defaults' }).click();
       await page.getByText('Saved', { exact: true }).waitFor();
       expect(patches()).toHaveLength(2);
       expect(patches()[1]).toMatchObject({ body: { expectedVersion: 4, notifications: null } });
-      expect(stored.notifications).toEqual({ reply: true, mention: true });
+      expect(stored.notifications).toEqual(catalogue);
     } finally {
       await page.context().close();
     }
@@ -396,7 +415,7 @@ test(
 test(
   'notification autosave and Restore cannot bypass the native retry delay, and expiry sends nothing',
   async () => {
-    reset({ reply: true, mention: true, weekly_digest: false });
+    reset({ ...catalogue, thread_watch: false });
     const first = await readPage('/en/settings');
     const page = await open('/en/settings', first.cookie!);
     try {
@@ -410,7 +429,12 @@ test(
       await replies.click();
       await group.getByText('Wait before trying again.', { exact: true }).waitFor();
       const requests = calls.length;
-      for (const control of [replies, group.getByRole('switch', { name: 'Weekly Digest' }), restore, reload]) {
+      for (const control of [
+        replies,
+        group.getByRole('switch', { name: 'Activity in threads you watch' }),
+        restore,
+        reload,
+      ]) {
         expect(await control.isDisabled()).toBe(true);
         expect(await control.getAttribute('aria-describedby')).toBeTruthy();
       }
@@ -435,7 +459,7 @@ test(
       expect(patches()).toHaveLength(2);
       expect(patches()[1]!.body).toEqual({ expectedVersion: 3, notifications: null });
       expect(patches()[1]!.key).not.toBe(patches()[0]!.key);
-      expect(await group.getByRole('switch', { name: 'Weekly Digest' }).isChecked()).toBe(true);
+      expect(await group.getByRole('switch', { name: 'Activity in threads you watch' }).isChecked()).toBe(true);
     } finally {
       await page.context().close();
     }
@@ -467,19 +491,19 @@ test(
 test(
   'notification preferences can be saved by the form action without JavaScript',
   async () => {
-    reset({ reply: true, mention: true, weekly_digest: true });
+    reset(catalogue);
     const first = await readPage('/en/settings');
     const page = await open('/en/settings', first.cookie!, false);
     try {
-      const digest = page.getByRole('switch', { name: 'Weekly Digest' });
-      await digest.click();
-      const form = digest.locator('xpath=ancestor::form');
+      const watches = page.getByRole('switch', { name: 'Activity in threads you watch' });
+      await watches.click();
+      const form = watches.locator('xpath=ancestor::form');
       await form.getByRole('button', { name: 'Save' }).click();
-      await page.getByRole('switch', { name: 'Weekly Digest' }).waitFor();
-      expect(await page.getByRole('switch', { name: 'Weekly Digest' }).isChecked()).toBe(false);
+      await page.getByRole('switch', { name: 'Activity in threads you watch' }).waitFor();
+      expect(await page.getByRole('switch', { name: 'Activity in threads you watch' }).isChecked()).toBe(false);
       expect(patches()).toHaveLength(1);
       expect(patches()[0]).toMatchObject({
-        body: { notifications: { weekly_digest: false } },
+        body: { notifications: { thread_watch: false } },
         contentType: 'application/merge-patch+json',
       });
     } finally {
@@ -550,14 +574,14 @@ test(
   'Every notification preference has a shared keyboard-operable switch and comfortable labelled row while its real no-JavaScript form and original recovery command remain intact',
   async () => {
     for (const javascriptEnabled of [false, true]) {
-      reset({ reply: true, mention: true, weekly_digest_with_a_long_optional_notification_name_for_wrapping: true });
+      reset(catalogue);
       const first = await readPage('/en/settings');
       const page = await open('/en/settings', first.cookie!, javascriptEnabled);
       try {
         const group = page.getByRole('group', { name: 'Notifications' });
         const switches = group.getByRole('switch');
-        expect(await switches.count()).toBe(3);
-        expect(await group.getByRole('button', { name: 'Save', exact: true }).count()).toBe(javascriptEnabled ? 0 : 3);
+        expect(await switches.count()).toBe(4);
+        expect(await group.getByRole('button', { name: 'Save', exact: true }).count()).toBe(javascriptEnabled ? 0 : 4);
         for (const width of [390, 1280]) {
           await page.setViewportSize({ width, height: 900 });
           for (const control of await switches.all()) {
