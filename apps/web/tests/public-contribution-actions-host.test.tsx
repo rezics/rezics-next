@@ -261,6 +261,7 @@ test('mounted host shares reader retirement and reacquires only the current orig
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
     Node: window.Node,
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   })) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
