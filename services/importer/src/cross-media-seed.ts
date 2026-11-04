@@ -158,7 +158,10 @@ export type CrossMediaTableScanLimits = {
   consumeRow?: (bytes: number) => void;
 };
 export class CrossMediaTableScanLimitError extends Error {
-  constructor(readonly provider: Provider, readonly table: string) {
+  constructor(
+    readonly provider: Provider,
+    readonly table: string,
+  ) {
     super(`Cross-media ${provider}/${table} exceeded its bounded scan`);
     this.name = 'CrossMediaTableScanLimitError';
   }
@@ -1202,7 +1205,9 @@ export async function planCrossMediaSeed(
     chars = new Set<string>(),
     aliases = new Set<string>();
   if (selection?.includeReleases !== false && vnIds.size) {
-    const releasePlan = await (await import('./vndb-release-fidelity.ts')).planVndbReleaseFidelity(input, {
+    const releasePlan = await (
+      await import('./vndb-release-fidelity.ts')
+    ).planVndbReleaseFidelity(input, {
       selectedWorkIds: [...vnIds],
     });
     const existingWorkRecords = new Set(plan.records.vndb.map((record) => record.key));
@@ -1876,16 +1881,14 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
     private readonly bangumi: string,
     private readonly vndb: string,
   ) {}
-  async *rows(
-    provider: Provider,
-    table: string,
-    limits?: CrossMediaTableScanLimits,
-  ): AsyncGenerator<Row> {
+  async *rows(provider: Provider, table: string, limits?: CrossMediaTableScanLimits): AsyncGenerator<Row> {
     ensure(/^[a-z][a-z_-]*$/.test(table), 'Invalid dump table name');
     if (
       limits &&
-      (!Number.isSafeInteger(limits.maxRows) || limits.maxRows < 1 ||
-        !Number.isSafeInteger(limits.maxBytes) || limits.maxBytes < 1)
+      (!Number.isSafeInteger(limits.maxRows) ||
+        limits.maxRows < 1 ||
+        !Number.isSafeInteger(limits.maxBytes) ||
+        limits.maxBytes < 1)
     )
       throw new TypeError('Invalid cross-media table scan limit');
     const file = provider === 'bangumi' ? join(this.bangumi, `${table}.jsonlines`) : join(this.vndb, 'db', table);
@@ -2054,13 +2057,15 @@ function currentReleaseEndpoint(
   failure?: unknown,
 ): ReleaseEndpointCurrentness {
   if (!read) return failure === undefined ? 'unavailable' : currentReleaseReadFailure(failure);
-  const subject = (read as {
-    subject?: {
-      id?: unknown;
-      type?: unknown;
-      statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[] | undefined>;
-    };
-  }).subject;
+  const subject = (
+    read as {
+      subject?: {
+        id?: unknown;
+        type?: unknown;
+        statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[] | undefined>;
+      };
+    }
+  ).subject;
   if (!subject) return 'unknown';
   if (typeof expectedType !== 'string' || expectedType !== 'wd:Q20631656') return 'wrong_type';
   if (subject.id !== nativeSubjectId) return 'identity_mismatch';

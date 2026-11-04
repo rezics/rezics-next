@@ -192,7 +192,9 @@ export function graphEdgeKey(draft: GraphEdgeDraft): string {
 }
 
 function isVndbReleaseSupersession(draft: GraphEdgeDraft): boolean {
-  return draft.source === 'vndb' && draft.table === 'releases_supersedes' && draft.property === 'rezics:releaseSupersedes';
+  return (
+    draft.source === 'vndb' && draft.table === 'releases_supersedes' && draft.property === 'rezics:releaseSupersedes'
+  );
 }
 
 export class CrossMediaGraph {
@@ -257,9 +259,11 @@ export class CrossMediaGraph {
       'SELECT status,command_payload AS command,native_candidate AS candidate FROM cross_media_graph WHERE edge_key=?',
     );
     return drafts.map((draft) => {
-      const row = read.get(graphEdgeKey(draft)) as
-        | { status: string; command: string | null; candidate: string | null }
-        | null;
+      const row = read.get(graphEdgeKey(draft)) as {
+        status: string;
+        command: string | null;
+        candidate: string | null;
+      } | null;
       const status = row?.status === 'proposed' ? 'proposed' : row?.status === 'unresolved' ? 'unresolved' : 'planned';
       const command = row?.command
         ? ((JSON.parse(row.command) as { commands?: BatchCommand[] }).commands?.[0] ?? undefined)
@@ -297,10 +301,7 @@ export class CrossMediaGraph {
   async deliver(input: {
     claim(owner: { source: string; external_id: string }): Claim | null;
     nativeType(externalId: string, alias?: string): string | undefined;
-    currentReleaseEndpoint?: (
-      externalId: string,
-      nativeSubjectId: string,
-    ) => Promise<ReleaseEndpointCurrentness>;
+    currentReleaseEndpoint?: (externalId: string, nativeSubjectId: string) => Promise<ReleaseEndpointCurrentness>;
     fence(input: {
       source: string;
       externalId: string;
@@ -642,16 +643,29 @@ export class CrossMediaGraph {
         url: draft.url,
         qualifiers,
       });
-      const statement =
-        isVndbReleaseSupersession(draft)
-          ? {
-              ...statementBase,
-              references: [
-                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: vndbRecordUrl(draft.holder) } }] },
-                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: vndbRecordUrl(draft.target) } }] },
-              ],
-            }
-          : statementBase;
+      const statement = isVndbReleaseSupersession(draft)
+        ? {
+            ...statementBase,
+            references: [
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value' as const, content: vndbRecordUrl(draft.holder) },
+                  },
+                ],
+              },
+              {
+                parts: [
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value' as const, content: vndbRecordUrl(draft.target) },
+                  },
+                ],
+              },
+            ],
+          }
+        : statementBase;
       const command: BatchCommand = {
         op: 'propose',
         key: commandKey([draft.alias, draft.holder, graphEdgeKey(draft), 'relation']),
@@ -719,7 +733,9 @@ export class CrossMediaGraph {
           const receipt = result.results[index];
           const status = receipt?.status;
           const journaled = !!(
-            entry.draft.relation || entry.draft.producerParent || isVndbReleaseSupersession(entry.draft)
+            entry.draft.relation ||
+            entry.draft.producerParent ||
+            isVndbReleaseSupersession(entry.draft)
           );
           if (status === 200) {
             unchanged++;

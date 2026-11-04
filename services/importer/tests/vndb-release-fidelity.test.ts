@@ -444,7 +444,13 @@ test('default selected-family traversal acquires directed release endpoints and 
     });
     expect(attemptedRelations).toHaveLength(1);
     expect(attemptedRelations[0]).toEqual(exactCommand);
-    expect(releaseReads(currentReadCounts[0]!)).toEqual(new Map([['r1', 1], ['r2', 1], ['r3', 1]]));
+    expect(releaseReads(currentReadCounts[0]!)).toEqual(
+      new Map([
+        ['r1', 1],
+        ['r2', 1],
+        ['r3', 1],
+      ]),
+    );
     expect(relationFenceSnapshots[0]?.at(-1)).toMatchObject({
       source: crossMediaAliases.vndb,
       externalId: 'r1',
@@ -457,13 +463,25 @@ test('default selected-family traversal acquires directed release endpoints and 
       expect.objectContaining({ property: 'rezics:releaseSupersedes', reason: 'current_release_refused:r2' }),
     );
     expect(attemptedRelations).toHaveLength(1);
-    expect(releaseReads(currentReadCounts[1]!)).toEqual(new Map([['r1', 1], ['r2', 1], ['r3', 1]]));
+    expect(releaseReads(currentReadCounts[1]!)).toEqual(
+      new Map([
+        ['r1', 1],
+        ['r2', 1],
+        ['r3', 1],
+      ]),
+    );
 
     const delivered = await seedCrossMedia(plan, statePath, makePort());
     expect(delivered.releaseSupersessions?.[0]).toMatchObject({ status: 'proposed', command: exactCommand });
     expect(delivered.releaseSupersessions?.[0]?.candidate).toMatch(/^[0-9a-f-]{36}$/u);
     expect(attemptedRelations).toHaveLength(2);
-    expect(releaseReads(currentReadCounts[2]!)).toEqual(new Map([['r1', 1], ['r2', 1], ['r3', 1]]));
+    expect(releaseReads(currentReadCounts[2]!)).toEqual(
+      new Map([
+        ['r1', 1],
+        ['r2', 1],
+        ['r3', 1],
+      ]),
+    );
     expect(relationFenceSnapshots[1]?.at(-1)).toMatchObject({
       source: crossMediaAliases.vndb,
       externalId: 'r1',
@@ -478,7 +496,13 @@ test('default selected-family traversal acquires directed release endpoints and 
     });
     expect(attemptedRelations[1]).toEqual(exactCommand);
     expect(attemptedRelations).toHaveLength(2);
-    expect(releaseReads(currentReadCounts[3]!)).toEqual(new Map([['r1', 1], ['r2', 1], ['r3', 1]]));
+    expect(releaseReads(currentReadCounts[3]!)).toEqual(
+      new Map([
+        ['r1', 1],
+        ['r2', 1],
+        ['r3', 1],
+      ]),
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

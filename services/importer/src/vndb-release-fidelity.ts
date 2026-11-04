@@ -532,8 +532,7 @@ export async function planVndbReleaseFidelity(
       if (color === 1) {
         cycleEdges.add(edgeKey(relation));
         const start = nodeStack.lastIndexOf(relation.rid);
-        for (let index = start; index < edgeStack.length; index += 1)
-          cycleEdges.add(edgeKey(edgeStack[index]!));
+        for (let index = start; index < edgeStack.length; index += 1) cycleEdges.add(edgeKey(edgeStack[index]!));
       } else if (color === 0) {
         edgeStack.push(relation);
         visit(relation.rid);
@@ -646,13 +645,7 @@ export async function planVndbReleaseFidelity(
       gap('vn', { id }, 'Missing selected VNDB record: ' + id);
       continue;
     }
-    if (
-      !workScanComplete ||
-      !extraWorkScanComplete ||
-      !titlesScanComplete ||
-      !revisionsScanComplete
-    )
-      continue;
+    if (!workScanComplete || !extraWorkScanComplete || !titlesScanComplete || !revisionsScanComplete) continue;
     readyWorkIds.add(id);
     if (rootWorkIds.has(id)) facts.works.set(id, { devstatus: decodeVndbDevstatus(row.devstatus) });
     const vn: Row = {
@@ -674,11 +667,11 @@ export async function planVndbReleaseFidelity(
   for (const id of releaseIds) {
     const allLinks = linkRows.filter((link) => link.id === id);
     const selectedLinks = allLinks.filter((link) => readyWorkIds.has(link.vid));
-    releaseLinks.set(id, selectedLinks.map(({ vid, completeness }) => ({ vid, completeness })));
-    linksCompleteForRelease.set(
+    releaseLinks.set(
       id,
-      selectedLinks.length === allLinks.length && !incompleteMembershipReleases.has(id),
+      selectedLinks.map(({ vid, completeness }) => ({ vid, completeness })),
     );
+    linksCompleteForRelease.set(id, selectedLinks.length === allLinks.length && !incompleteMembershipReleases.has(id));
   }
 
   let platformScanComplete = true;
@@ -829,10 +822,7 @@ export async function planVndbReleaseFidelity(
   plan.records.vndb.sort((a, b) => a.key.localeCompare(b.key));
   plan.entities.vndb.sort((a, b) => a.key.localeCompare(b.key));
   plan.edges.sort(
-    (a, b) =>
-      a.table.localeCompare(b.table) ||
-      a.holder.localeCompare(b.holder) ||
-      a.target.localeCompare(b.target),
+    (a, b) => a.table.localeCompare(b.table) || a.holder.localeCompare(b.holder) || a.target.localeCompare(b.target),
   );
   plan.releaseFacts = facts;
   return { ...plan, facts, releasePlatforms: releasePlatforms.byRelease };

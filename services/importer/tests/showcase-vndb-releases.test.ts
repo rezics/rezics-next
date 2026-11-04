@@ -269,7 +269,9 @@ function port(
     async readReviewedSubject(id) {
       const row = known[id];
       if (!row) {
-        const sourceId = [...created].find(([key, subjectId]) => key.startsWith('source:') && subjectId === id)?.[0].slice(7);
+        const sourceId = [...created]
+          .find(([key, subjectId]) => key.startsWith('source:') && subjectId === id)?.[0]
+          .slice(7);
         return {
           subject: sourceId
             ? {
