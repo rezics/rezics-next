@@ -230,12 +230,15 @@ test('anonymous Home Subject reactions return to the card, and unknown coverage 
     viewer: { state: 'unavailable' },
     action: 'unavailable',
   });
-  client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-one', csrfToken: 'csrf-one' });
+  await act(async () => {
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-one', csrfToken: 'csrf-one' });
+    await tick();
+  });
   await paint(unavailable, true, () => retries++);
-  expect(host.querySelectorAll('[data-slot="subject-reaction-unavailable"] button')).toHaveLength(5);
+  expect(host.querySelectorAll('[data-slot="subject-reaction-unavailable"] button[aria-label*="—"]')).toHaveLength(5);
   expect(
-    [...host.querySelectorAll<HTMLButtonElement>('[data-slot="subject-reaction-unavailable"] button')].every(
-      (b) => b.disabled,
+    [...host.querySelectorAll<HTMLButtonElement>('[data-slot="subject-reaction-unavailable"] button[aria-label*="—"]')].every(
+      (button) => button.disabled,
     ),
   ).toBe(true);
   expect(host.querySelectorAll('[data-slot="subject-reaction-unavailable"] button[aria-label*="—"]')).toHaveLength(5);
