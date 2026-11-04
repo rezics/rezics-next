@@ -2688,7 +2688,7 @@
   "correction_intro": "Proposez un fait sourcé à examiner. La lecture actuelle reste inchangée.",
   "correction_global": "Cette proposition concerne cet objet dans le catalogue partagé (Global).",
   "correction_denied": "Vous ne pouvez pas proposer cette correction pour le moment. Votre brouillon est conservé.",
-  "correction_actions_unavailable": "Impossible de confirmer les autorisations actuelles de proposition et d’examen. Les faits restent consultables ; les nouveaux envois et les actions d’examen sont désactivés.",
+  "correction_actions_unavailable": "Impossible de confirmer l’autorisation actuelle de proposer. Les faits restent consultables ; les nouvelles propositions sont désactivées.",
   "correction_stale": "Le champ ou les définitions ont changé. Rechargez et vérifiez ; votre brouillon est conservé.",
   "correction_invalid": "Vérifiez la valeur et les citations. Votre brouillon est conservé.",
   "correction_unavailable": "Le service est indisponible. Réessayez avec le même brouillon.",

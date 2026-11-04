@@ -2688,7 +2688,7 @@
   "correction_intro": "出典付きの事実を審査に提出します。現在の表示は変わりません。",
   "correction_global": "この提案は共有カタログ（グローバル）のこの項目に適用されます。",
   "correction_denied": "現在、訂正を提案できません。下書きは保持されます。",
-  "correction_actions_unavailable": "提案と審査に関する現在の権限を確認できません。事実は引き続き閲覧できますが、新しい提案と審査操作は無効です。",
+  "correction_actions_unavailable": "提案に関する現在の権限を確認できません。事実は引き続き閲覧できますが、新しい提案は無効です。",
   "correction_stale": "項目または定義が変わりました。再読込して確認してください。下書きは保持されます。",
   "correction_invalid": "値と出典を確認してください。下書きは保持されます。",
   "correction_unavailable": "サービスを利用できません。同じ下書きで再試行できます。",

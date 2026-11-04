@@ -2688,7 +2688,7 @@
   "correction_intro": "Propón un dato con citas para su revisión. La lectura actual no cambia.",
   "correction_global": "Esta propuesta se refiere a este objeto del catálogo compartido (Global).",
   "correction_denied": "Ahora no puedes proponer esta corrección. Se conserva tu borrador.",
-  "correction_actions_unavailable": "No se pudieron confirmar los permisos actuales para proponer y revisar. Los datos siguen disponibles; los nuevos envíos y las acciones de revisión están desactivados.",
+  "correction_actions_unavailable": "No se pudo confirmar el permiso actual para proponer. Los datos siguen disponibles; los nuevos envíos están desactivados.",
   "correction_stale": "El campo o las definiciones cambiaron. Recarga y revisa; se conserva tu borrador.",
   "correction_invalid": "Revisa el valor y las citas. Se conserva tu borrador.",
   "correction_unavailable": "El servicio no está disponible. Reintenta con el mismo borrador.",

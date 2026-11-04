@@ -2688,7 +2688,7 @@
   "correction_intro": "Eine belegte Angabe zur Prüfung vorschlagen. Die aktuelle Ansicht bleibt erhalten.",
   "correction_global": "Dieser Vorschlag betrifft dieses Objekt im gemeinsamen Katalog (Global).",
   "correction_denied": "Du kannst diese Korrektur derzeit nicht vorschlagen. Dein Entwurf bleibt erhalten.",
-  "correction_actions_unavailable": "Die aktuellen Berechtigungen für Vorschläge und Prüfungen konnten nicht bestätigt werden. Fakten bleiben lesbar; neue Vorschläge und Prüfaktionen sind deaktiviert.",
+  "correction_actions_unavailable": "Die aktuellen Berechtigungen für Vorschläge konnten nicht bestätigt werden. Fakten bleiben lesbar; neue Vorschläge sind deaktiviert.",
   "correction_stale": "Feld oder Definitionen haben sich geändert. Neu laden und prüfen; dein Entwurf bleibt erhalten.",
   "correction_invalid": "Prüfe Wert und Belege. Dein Entwurf bleibt erhalten.",
   "correction_unavailable": "Der Dienst ist nicht verfügbar. Mit demselben Entwurf erneut versuchen.",
