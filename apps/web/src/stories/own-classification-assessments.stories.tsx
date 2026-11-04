@@ -66,7 +66,8 @@ function sample(mode: Mode): OwnClassificationsPage {
     row.target.label = 'A carefully qualified classification concept · '.repeat(20);
   }
   if (mode === 'read-only') row.actions = { state: 'read-only', set: null, clear: null, readback: path };
-  if (mode === 'withdraw-only') row.actions = { state: 'withdraw-only', set: null, clear: `${path}?expectedRevision=1`, readback: null };
+  if (mode === 'withdraw-only')
+    row.actions = { state: 'withdraw-only', set: null, clear: `${path}?expectedRevision=1`, readback: null };
   if (mode === 'identity-changed' && row.state === 'available') {
     row.subject.label = 'Current subject identity after replacement';
     row.association.revision = 2;

@@ -242,92 +242,104 @@ test('Realm management advice composes native immutable creation, caption CAS an
   }
 }, 600_000);
 
-test.serial('management keeps deleted caption authors canonical and failed history continuation retryable', async () => {
-  const driver = await createCommunityDriver();
-  try {
-    const fixture = await driver.provision();
-    const { system } = communityFixtureRuntime();
-    const deletion = accountDeletionRuntime(system);
-    const author = await deletion.person();
-    const authorAccount: Account = { id: author.accountId, bearer: author.bearer };
-    const call = (method: Method, path: string, actor: Account | null, body?: unknown, key = randomUUID()) =>
-      driver.request({ method, path, actor, body, key: JSON.stringify(key) });
-    const json = async (response: Response, status = 200) => {
-      if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
-      return response.json();
-    };
-    const space = (await json(await call('POST', '/v1/spaces', fixture.owner, { title: 'Caption history' }), 201)).space;
-    const realmId: string = (
+test.serial(
+  'management keeps deleted caption authors canonical and failed history continuation retryable',
+  async () => {
+    const driver = await createCommunityDriver();
+    try {
+      const fixture = await driver.provision();
+      const { system } = communityFixtureRuntime();
+      const deletion = accountDeletionRuntime(system);
+      const author = await deletion.person();
+      const authorAccount: Account = { id: author.accountId, bearer: author.bearer };
+      const call = (method: Method, path: string, actor: Account | null, body?: unknown, key = randomUUID()) =>
+        driver.request({ method, path, actor, body, key: JSON.stringify(key) });
+      const json = async (response: Response, status = 200) => {
+        if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
+        return response.json();
+      };
+      const space = (await json(await call('POST', '/v1/spaces', fixture.owner, { title: 'Caption history' }), 201))
+        .space;
+      const realmId: string = (
+        await json(
+          await call('POST', '/v1/realms', fixture.owner, {
+            spaceId: space.spaceId,
+            title: 'Deleted caption author',
+            visibility: 'protected',
+            contextId: fixture.contextId,
+          }),
+          201,
+        )
+      ).realm.realmId;
       await json(
-        await call('POST', '/v1/realms', fixture.owner, {
-          spaceId: space.spaceId,
-          title: 'Deleted caption author',
-          visibility: 'protected',
-          contextId: fixture.contextId,
+        await call('POST', `/v1/realms/${realmId}/members`, fixture.owner, { accountId: author.accountId }),
+        202,
+      );
+      await driver.settle();
+      await json(
+        await call('POST', '/v1/grants', fixture.owner, {
+          resource: { route: routeOf(realmId), id: realmId },
+          subject: { kind: 'account', id: author.accountId },
+          actions: ['realm:manage'],
+          valid: '(,)',
         }),
         201,
-      )
-    ).realm.realmId;
-    await json(await call('POST', `/v1/realms/${realmId}/members`, fixture.owner, { accountId: author.accountId }), 202);
-    await driver.settle();
-    await json(
-      await call('POST', '/v1/grants', fixture.owner, {
-        resource: { route: routeOf(realmId), id: realmId },
-        subject: { kind: 'account', id: author.accountId },
-        actions: ['realm:manage'],
-        valid: '(,)',
-      }),
-      201,
-    );
-    const created = await json(
-      await call('POST', `/v1/realms/${realmId}/rating-questions`, authorAccount, definition),
-      201,
-    );
-    await json(
-      await call('PUT', `/v1/rating-questions/${created.id}/label`, authorAccount, {
-        expectedLabelRevision: 1,
+      );
+      const created = await json(
+        await call('POST', `/v1/realms/${realmId}/rating-questions`, authorAccount, definition),
+        201,
+      );
+      await json(
+        await call('PUT', `/v1/rating-questions/${created.id}/label`, authorAccount, {
+          expectedLabelRevision: 1,
+          label: 'A caption by a retained author',
+        }),
+      );
+      await deletePersona({ pool: system.database.pool, auth: deletion.auth }, author);
+      await driver.settle();
+
+      const management = `/v1/realms/${realmId}/rating-questions/management?selectedQuestionId=${created.id}`;
+      const selected = await json(await call('GET', management, fixture.owner));
+      expect(selected.selected.question).toMatchObject({
+        id: created.id,
+        canonicalLabel: definition.label,
         label: 'A caption by a retained author',
-      }),
-    );
-    await deletePersona({ pool: system.database.pool, auth: deletion.auth }, author);
-    await driver.settle();
+        labelRevision: 2,
+        revision: 1,
+      });
+      const historyPath = `${selected.selected.history}?limit=1`;
+      const first = await json(await call('GET', historyPath, fixture.owner));
+      expect(first.labels[0]).toMatchObject({
+        questionId: created.id,
+        labelRevision: 1,
+        label: definition.label,
+        at: null,
+        author: { id: author.accountId, state: 'deleted' },
+      });
+      expect(first.labels[0].author).not.toHaveProperty('displayName');
+      const continuation = `${historyPath}&cursor=${encodeURIComponent(first.next)}`;
+      const expected = await json(await call('GET', continuation, fixture.owner));
+      expect(expected.labels[0].author).toMatchObject({ id: author.accountId, state: 'deleted' });
 
-    const management = `/v1/realms/${realmId}/rating-questions/management?selectedQuestionId=${created.id}`;
-    const selected = await json(await call('GET', management, fixture.owner));
-    expect(selected.selected.question).toMatchObject({
-      id: created.id,
-      canonicalLabel: definition.label,
-      label: 'A caption by a retained author',
-      labelRevision: 2,
-      revision: 1,
-    });
-    const historyPath = `${selected.selected.history}?limit=1`;
-    const first = await json(await call('GET', historyPath, fixture.owner));
-    expect(first.labels[0]).toMatchObject({
-      questionId: created.id,
-      labelRevision: 1,
-      label: definition.label,
-      at: null,
-      author: { id: author.accountId, state: 'deleted' },
-    });
-    expect(first.labels[0].author).not.toHaveProperty('displayName');
-    const continuation = `${historyPath}&cursor=${encodeURIComponent(first.next)}`;
-    const expected = await json(await call('GET', continuation, fixture.owner));
-    expect(expected.labels[0].author).toMatchObject({ id: author.accountId, state: 'deleted' });
-
-    const observer = observeSql(system.database.pool);
-    observer.armFault({ match: { statement: labelPage.sql }, boundary: 'before', error: new Error('History page unavailable') });
-    try {
-      expect((await call('GET', continuation, fixture.owner)).status).toBe(503);
-      expect(await json(await call('GET', continuation, fixture.owner))).toEqual(expected);
+      const observer = observeSql(system.database.pool);
+      observer.armFault({
+        match: { statement: labelPage.sql },
+        boundary: 'before',
+        error: new Error('History page unavailable'),
+      });
+      try {
+        expect((await call('GET', continuation, fixture.owner)).status).toBe(503);
+        expect(await json(await call('GET', continuation, fixture.owner))).toEqual(expected);
+      } finally {
+        await observer.close();
+      }
     } finally {
-      await observer.close();
+      await driver.close();
+      await closeCommunityDrivers();
     }
-  } finally {
-    await driver.close();
-    await closeCommunityDrivers();
-  }
-}, 600_000);
+  },
+  600_000,
+);
 
 test('Realm management keeps raw, selected, byte and cursor bounds under independent unrelated growth', async () => {
   const route = 0x5371;
@@ -350,50 +362,50 @@ test('Realm management keeps raw, selected, byte and cursor bounds under indepen
     try {
       await setupClient.query('BEGIN');
       await setupClient.query(
-      `INSERT INTO community.space (route, space_id, state, head_revision_id, created_at, creator)
+        `INSERT INTO community.space (route, space_id, state, head_revision_id, created_at, creator)
        VALUES ($1, $2, 'active', $3, $4, $5)`,
         [route, spaceId, spaceRevisionId, now, ownerId],
       );
       await setupClient.query(
-      `INSERT INTO community.space_revision
+        `INSERT INTO community.space_revision
          (route, space_id, revision_id, predecessor, title, summary, created_at, author)
        VALUES ($1, $2, $3, NULL, 'Question management growth', '', $4, $5)`,
         [route, spaceId, spaceRevisionId, now, ownerId],
       );
       await setupClient.query(
-      `INSERT INTO community.realm
+        `INSERT INTO community.realm
          (route, realm_id, space_id, state, visibility, context_id, head_revision_id, created_at, creator)
        VALUES ($1, $2, $3, 'active', 'protected', $4, $5, $6, $7)`,
         [route, realmId, spaceId, GLOBAL_CONTEXT, realmRevisionId, now, ownerId],
       );
       await setupClient.query(
-      `INSERT INTO community.realm_revision
+        `INSERT INTO community.realm_revision
          (route, realm_id, revision_id, predecessor, title, summary, visibility, context_id, created_at, author)
        VALUES ($1, $2, $3, NULL, 'Question management growth', '', 'protected', $4, $5, $6)`,
         [route, realmId, realmRevisionId, GLOBAL_CONTEXT, now, ownerId],
       );
       await setupClient.query(
-      `INSERT INTO access.resource_initialization
+        `INSERT INTO access.resource_initialization
          (route, resource_id, resource_type, creator_id, initialized_at)
        VALUES ($1, $2, 'community.space', $4, $5), ($1, $3, 'community.realm', $4, $5)`,
         [route, spaceId, realmId, ownerId, now],
       );
       await setupClient.query(
-      `INSERT INTO access.resource_role_grant
+        `INSERT INTO access.resource_role_grant
          (route, resource_id, subject_kind, subject_id, subject_role, grant_role, valid, transaction_id)
        VALUES ($1, $2, 'identity', $3, '', 'community.realm.owner', '(,)', $4),
               ($1, $5, 'identity', $3, '', 'community.space.owner', '(,)', $4)`,
         [route, realmId, ownerId, transactionId, spaceId],
       );
       await setupClient.query(
-      `INSERT INTO rating.question
+        `INSERT INTO rating.question
          (id, owner_id, realm_id, revision, meaning, label, grain, minimum_units, maximum_units, step_units)
        VALUES ($1, $2, $3, 1, 'Recorded target definition', 'Target question', 'release', 0, 20, 2),
               ($4, $2, $3, 1, 'Unrelated definition', 'Unrelated question', 'release', 0, 20, 2)`,
         [targetId, ownerId, realmId, unrelatedId],
       );
       await setupClient.query(
-      `INSERT INTO rating.question_label_head (question_id, revision, label) VALUES ($1, 1, 'Unrelated question')`,
+        `INSERT INTO rating.question_label_head (question_id, revision, label) VALUES ($1, 1, 'Unrelated question')`,
         [unrelatedId],
       );
       await setupClient.query('COMMIT');
@@ -411,12 +423,7 @@ test('Realm management keeps raw, selected, byte and cursor bounds under indepen
     const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(57)]]) };
     const input = { realmId, selectedQuestionId: targetId };
     const read = () =>
-      readQuestionManagementPage(
-        { pool: database.pool, access, tokens },
-        actor,
-        input,
-        Date.now() + 30_000,
-      );
+      readQuestionManagementPage({ pool: database.pool, access, tokens }, actor, input, Date.now() + 30_000);
     const axes = ['questions', 'caption revisions', 'votes', 'authority'] as const;
     for (const axis of axes) {
       const report = await checkGrowth(database, {

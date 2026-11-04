@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
-import { executeQuestionManagementIntent, readQuestionManagementForViewer, readQuestionManagementHistory } from './actions';
+import {
+  executeQuestionManagementIntent,
+  readQuestionManagementForViewer,
+  readQuestionManagementHistory,
+} from './actions';
 import { OwnVotesDeparture } from '../own-votes/departure';
 import {
   captureQuestionManagementIntent,
@@ -297,14 +301,21 @@ export function QuestionManagementContent({
             </button>
           ) : (
             <div className="space-y-4 rounded-2xl border p-4 sm:p-6">
-              <h2 ref={createHeading} tabIndex={-1} id="realm-question-create-heading" className="text-xl font-semibold">
+              <h2
+                ref={createHeading}
+                tabIndex={-1}
+                id="realm-question-create-heading"
+                className="text-xl font-semibold"
+              >
                 {createReview ? m.realm_question_review_definition() : m.realm_question_create()}
               </h2>
               <p className="max-w-prose text-sm text-muted-foreground">{m.realm_question_immutable_notice()}</p>
               {createReview ? (
                 <dl className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1 sm:col-span-2">
-                    <dt className="text-sm font-medium text-muted-foreground">{m.realm_question_management_meaning()}</dt>
+                    <dt className="text-sm font-medium text-muted-foreground">
+                      {m.realm_question_management_meaning()}
+                    </dt>
                     <dd className="whitespace-pre-wrap">{definition.meaning}</dd>
                   </div>
                   <div>
@@ -340,7 +351,9 @@ export function QuestionManagementContent({
                       className="w-full rounded-md border bg-background p-3"
                       value={definition.meaning}
                       disabled={createState === 'uncertain' || requireFreshInspection}
-                      onChange={(event) => setDefinition((current) => ({ ...current, meaning: event.currentTarget.value }))}
+                      onChange={(event) =>
+                        setDefinition((current) => ({ ...current, meaning: event.currentTarget.value }))
+                      }
                     />
                   </label>
                   <label className="space-y-1">
@@ -351,7 +364,9 @@ export function QuestionManagementContent({
                       className="w-full rounded-md border bg-background px-3 py-2"
                       value={definition.label}
                       disabled={createState === 'uncertain' || requireFreshInspection}
-                      onChange={(event) => setDefinition((current) => ({ ...current, label: event.currentTarget.value }))}
+                      onChange={(event) =>
+                        setDefinition((current) => ({ ...current, label: event.currentTarget.value }))
+                      }
                     />
                   </label>
                   <label className="space-y-1">
@@ -376,11 +391,16 @@ export function QuestionManagementContent({
                   </label>
                   <fieldset className="grid gap-3 sm:col-span-2 sm:grid-cols-3">
                     <legend className="mb-2 text-sm font-medium">{m.realm_question_management_units()}</legend>
-                    {([
-                      ['min', m.guide_minimum()],
-                      ['max', m.guide_maximum()],
-                      ['displayStep', m.realm_question_management_display_step({ step: String(definition.scale.displayStep) })],
-                    ] as const).map(([key, label]) => (
+                    {(
+                      [
+                        ['min', m.guide_minimum()],
+                        ['max', m.guide_maximum()],
+                        [
+                          'displayStep',
+                          m.realm_question_management_display_step({ step: String(definition.scale.displayStep) }),
+                        ],
+                      ] as const
+                    ).map(([key, label]) => (
                       <label key={key} className="space-y-1">
                         <span className="block text-sm">{label}</span>
                         <input
@@ -515,7 +535,10 @@ export function QuestionManagementContent({
           </section>
 
           {page.selected.actions.caption && onCaption ? (
-            <section className="space-y-4 rounded-2xl border p-4 sm:p-6" aria-labelledby="realm-question-caption-heading">
+            <section
+              className="space-y-4 rounded-2xl border p-4 sm:p-6"
+              aria-labelledby="realm-question-caption-heading"
+            >
               {!captionOpen ? (
                 <button
                   ref={captionButton}
@@ -528,13 +551,22 @@ export function QuestionManagementContent({
                 </button>
               ) : (
                 <div className="space-y-4">
-                  <h2 ref={captionHeading} tabIndex={-1} id="realm-question-caption-heading" className="text-xl font-semibold">
+                  <h2
+                    ref={captionHeading}
+                    tabIndex={-1}
+                    id="realm-question-caption-heading"
+                    className="text-xl font-semibold"
+                  >
                     {captionReview ? m.realm_question_review_definition() : m.realm_question_caption_edit()}
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    {m.realm_question_management_caption_revision({ revision: String(page.selected.question.labelRevision) })}
+                    {m.realm_question_management_caption_revision({
+                      revision: String(page.selected.question.labelRevision),
+                    })}
                   </p>
-                  {captionReview ? <p className="break-words font-medium">{caption}</p> : (
+                  {captionReview ? (
+                    <p className="break-words font-medium">{caption}</p>
+                  ) : (
                     <label className="block max-w-xl space-y-1">
                       <span className="block text-sm font-medium">{m.home_question_label()}</span>
                       <input
@@ -590,9 +622,14 @@ export function QuestionManagementContent({
           ) : null}
 
           {page.selected.actions.lifecycle && onLifecycle ? (
-            <section className="space-y-4 rounded-2xl border p-4 sm:p-6" aria-labelledby="realm-question-lifecycle-heading">
+            <section
+              className="space-y-4 rounded-2xl border p-4 sm:p-6"
+              aria-labelledby="realm-question-lifecycle-heading"
+            >
               <h2 id="realm-question-lifecycle-heading" className="text-xl font-semibold">
-                {page.selected.question.lifecycle.state === 'active' ? m.realm_question_retire() : m.realm_question_restore()}
+                {page.selected.question.lifecycle.state === 'active'
+                  ? m.realm_question_retire()
+                  : m.realm_question_restore()}
               </h2>
               <p>
                 {page.selected.question.lifecycle.state === 'active'
@@ -663,7 +700,9 @@ export function QuestionManagementPage({
   const [historyRetry, setHistoryRetry] = useState(0);
   const [history, setHistory] = useState<QuestionManagementHistoryRead | undefined>();
   const [intents, setIntents] = useState<Partial<Record<QuestionManagementAction, QuestionManagementIntent>>>({});
-  const [commandStates, setCommandStates] = useState<Partial<Record<QuestionManagementAction, QuestionManagementActionState>>>({});
+  const [commandStates, setCommandStates] = useState<
+    Partial<Record<QuestionManagementAction, QuestionManagementActionState>>
+  >({});
   const [dirty, setDirty] = useState(false);
   const [requiresFreshInspection, setRequiresFreshInspection] = useState(false);
   const generation = useRef(0);
@@ -678,24 +717,21 @@ export function QuestionManagementPage({
   intentRef.current = intents;
   stateRef.current = commandStates;
 
-  useEffect(
-    () => {
+  useEffect(() => {
+    visitGeneration.current++;
+    for (const controller of commandControllers.current.values()) controller.abort();
+    commandControllers.current.clear();
+    setIntents({});
+    setCommandStates({});
+    setHistory(undefined);
+    setHistoryCursor(null);
+    setRequiresFreshInspection(false);
+    return () => {
       visitGeneration.current++;
       for (const controller of commandControllers.current.values()) controller.abort();
       commandControllers.current.clear();
-      setIntents({});
-      setCommandStates({});
-      setHistory(undefined);
-      setHistoryCursor(null);
-      setRequiresFreshInspection(false);
-      return () => {
-        visitGeneration.current++;
-        for (const controller of commandControllers.current.values()) controller.abort();
-        commandControllers.current.clear();
-      };
-    },
-    [visitKey],
-  );
+    };
+  }, [visitKey]);
 
   useEffect(() => {
     let alive = true;

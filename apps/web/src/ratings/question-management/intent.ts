@@ -26,27 +26,27 @@ function validDefinition(value: unknown): value is QuestionDefinitionInput {
   const scale = record(body?.scale);
   return Boolean(
     body &&
-      exactKeys(body, ['meaning', 'label', 'grain', 'scale']) &&
-      typeof body.meaning === 'string' &&
-      [...body.meaning].length >= 1 &&
-      [...body.meaning].length <= 2000 &&
-      !body.meaning.includes('\0') &&
-      typeof body.label === 'string' &&
-      [...body.label].length >= 1 &&
-      [...body.label].length <= 200 &&
-      body.label.trim().length > 0 &&
-      !body.label.includes('\0') &&
-      ['work', 'release', 'episode', 'character'].includes(String(body.grain)) &&
-      scale &&
-      exactKeys(scale, ['min', 'max', 'displayStep']) &&
-      Number.isSafeInteger(scale.min) &&
-      Number.isSafeInteger(scale.max) &&
-      Number.isSafeInteger(scale.displayStep) &&
-      (scale.min as number) >= 0 &&
-      (scale.max as number) <= 20 &&
-      (scale.min as number) < (scale.max as number) &&
-      (scale.displayStep as number) > 0 &&
-      ((scale.max as number) - (scale.min as number)) % (scale.displayStep as number) === 0,
+    exactKeys(body, ['meaning', 'label', 'grain', 'scale']) &&
+    typeof body.meaning === 'string' &&
+    [...body.meaning].length >= 1 &&
+    [...body.meaning].length <= 2000 &&
+    !body.meaning.includes('\0') &&
+    typeof body.label === 'string' &&
+    [...body.label].length >= 1 &&
+    [...body.label].length <= 200 &&
+    body.label.trim().length > 0 &&
+    !body.label.includes('\0') &&
+    ['work', 'release', 'episode', 'character'].includes(String(body.grain)) &&
+    scale &&
+    exactKeys(scale, ['min', 'max', 'displayStep']) &&
+    Number.isSafeInteger(scale.min) &&
+    Number.isSafeInteger(scale.max) &&
+    Number.isSafeInteger(scale.displayStep) &&
+    (scale.min as number) >= 0 &&
+    (scale.max as number) <= 20 &&
+    (scale.min as number) < (scale.max as number) &&
+    (scale.displayStep as number) > 0 &&
+    ((scale.max as number) - (scale.min as number)) % (scale.displayStep as number) === 0,
   );
 }
 
@@ -54,14 +54,14 @@ function validCaption(value: unknown): value is QuestionCaptionInput {
   const body = record(value);
   return Boolean(
     body &&
-      exactKeys(body, ['expectedLabelRevision', 'label']) &&
-      Number.isSafeInteger(body.expectedLabelRevision) &&
-      (body.expectedLabelRevision as number) >= 1 &&
-      typeof body.label === 'string' &&
-      [...body.label].length >= 1 &&
-      [...body.label].length <= 200 &&
-      body.label.trim().length > 0 &&
-      !body.label.includes('\0'),
+    exactKeys(body, ['expectedLabelRevision', 'label']) &&
+    Number.isSafeInteger(body.expectedLabelRevision) &&
+    (body.expectedLabelRevision as number) >= 1 &&
+    typeof body.label === 'string' &&
+    [...body.label].length >= 1 &&
+    [...body.label].length <= 200 &&
+    body.label.trim().length > 0 &&
+    !body.label.includes('\0'),
   );
 }
 
@@ -69,9 +69,9 @@ function validLifecycle(value: unknown): value is QuestionLifecycleInput {
   const body = record(value);
   return Boolean(
     body &&
-      exactKeys(body, ['expectedLifecycleRevision']) &&
-      Number.isSafeInteger(body.expectedLifecycleRevision) &&
-      (body.expectedLifecycleRevision as number) >= 1,
+    exactKeys(body, ['expectedLifecycleRevision']) &&
+    Number.isSafeInteger(body.expectedLifecycleRevision) &&
+    (body.expectedLifecycleRevision as number) >= 1,
   );
 }
 
@@ -79,11 +79,7 @@ export function validQuestionManagementBody(
   action: QuestionManagementAction,
   body: unknown,
 ): body is QuestionDefinitionInput | QuestionCaptionInput | QuestionLifecycleInput {
-  return action === 'create'
-    ? validDefinition(body)
-    : action === 'caption'
-      ? validCaption(body)
-      : validLifecycle(body);
+  return action === 'create' ? validDefinition(body) : action === 'caption' ? validCaption(body) : validLifecycle(body);
 }
 
 function hrefFor(action: QuestionManagementAction, realmId: string, questionId: string | null) {
@@ -153,7 +149,10 @@ export function parseQuestionManagementIntent(value: unknown): QuestionManagemen
 
   const body = Object.freeze(
     action === 'create'
-      ? { ...(input.body as QuestionDefinitionInput), scale: Object.freeze({ ...(input.body as QuestionDefinitionInput).scale }) }
+      ? {
+          ...(input.body as QuestionDefinitionInput),
+          scale: Object.freeze({ ...(input.body as QuestionDefinitionInput).scale }),
+        }
       : { ...(input.body as QuestionCaptionInput | QuestionLifecycleInput) },
   );
   return Object.freeze({ ...input, action, questionId, body }) as QuestionManagementIntent;
@@ -195,12 +194,13 @@ export async function captureQuestionManagementIntent(input: {
     questionId = selected.question.id;
     href =
       input.action === 'caption'
-        ? selected.actions.caption?.href ?? null
-        : selected.actions.lifecycle?.href ?? null;
+        ? (selected.actions.caption?.href ?? null)
+        : (selected.actions.lifecycle?.href ?? null);
     if (!href) throw new TypeError('Question management action is unavailable');
     if (
       (input.action === 'caption' &&
-        (input.body as QuestionCaptionInput).expectedLabelRevision !== selected.actions.caption?.expectedLabelRevision) ||
+        (input.body as QuestionCaptionInput).expectedLabelRevision !==
+          selected.actions.caption?.expectedLabelRevision) ||
       ((input.action === 'retire' || input.action === 'restore') &&
         (input.body as QuestionLifecycleInput).expectedLifecycleRevision !==
           selected.actions.lifecycle?.expectedLifecycleRevision)
@@ -247,15 +247,16 @@ export function questionManagementIntentMatchesVisit(
     intent.credentialEpisode !== visit.credentialEpisode ||
     intent.csrfEpisode !== visit.csrfEpisode ||
     intent.csrfToken !== csrfToken ||
-    (intent.action === 'create'
-      ? visit.selectedQuestionId !== null
-      : visit.selectedQuestionId !== intent.questionId)
+    (intent.action === 'create' ? visit.selectedQuestionId !== null : visit.selectedQuestionId !== intent.questionId)
   )
     return null;
   return intent;
 }
 
-export function questionManagementIntentMatchesPage(intent: QuestionManagementIntent, page: QuestionManagementPageData) {
+export function questionManagementIntentMatchesPage(
+  intent: QuestionManagementIntent,
+  page: QuestionManagementPageData,
+) {
   if (intent.realmId !== page.realmId || intent.viewer !== page.viewer.accountId) return false;
   if (intent.action === 'create') return intent.questionId === null && page.actions.create?.href === intent.href;
   if (page.selected?.question.id !== intent.questionId) return false;

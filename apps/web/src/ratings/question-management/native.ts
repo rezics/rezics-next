@@ -217,23 +217,34 @@ export async function createQuestionManagementClient(input: {
     try {
       let response:
         | Awaited<ReturnType<ReturnType<typeof client.realms>['rating-questions']['post']>>
-        | Awaited<ReturnType<ReturnType<typeof client['rating-questions']>['label']['put']>>
-        | Awaited<ReturnType<ReturnType<typeof client['rating-questions']>['$retire']['post']>>;
+        | Awaited<ReturnType<ReturnType<(typeof client)['rating-questions']>['label']['put']>>
+        | Awaited<ReturnType<ReturnType<(typeof client)['rating-questions']>['$retire']['post']>>;
       if (intent.action === 'create') {
         response = await client.realms({ realmId: intent.realmId })['rating-questions'].post(intent.body, options);
       } else if (intent.action === 'caption') {
         response = await client['rating-questions']({ questionId: intent.questionId }).label.put(intent.body, options);
       } else if (intent.action === 'retire') {
-        response = await client['rating-questions']({ questionId: intent.questionId })['$retire'].post(intent.body, options);
+        response = await client['rating-questions']({ questionId: intent.questionId })['$retire'].post(
+          intent.body,
+          options,
+        );
       } else {
-        response = await client['rating-questions']({ questionId: intent.questionId })['$restore'].post(intent.body, options);
+        response = await client['rating-questions']({ questionId: intent.questionId })['$restore'].post(
+          intent.body,
+          options,
+        );
       }
       if (response.status === 409 || response.status === 404) return { kind: 'stale' };
       if (response.status === 401 || response.status === 403) return { kind: 'denied' };
       if (response.status === 400 || response.status === 422) return { kind: 'invalid' };
       if (response.status < 200 || response.status >= 300) {
         const problem = response.error?.value;
-        if (problem && typeof problem === 'object' && 'effect_status' in problem && problem.effect_status === 'not_applied')
+        if (
+          problem &&
+          typeof problem === 'object' &&
+          'effect_status' in problem &&
+          problem.effect_status === 'not_applied'
+        )
           return { kind: 'unavailable' };
         return { kind: 'uncertain' };
       }
@@ -291,4 +302,3 @@ export async function createQuestionManagementClient(input: {
 
   return { history, execute };
 }
-

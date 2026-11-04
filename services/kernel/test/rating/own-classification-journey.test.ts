@@ -102,7 +102,11 @@ test('own classification retains exact private state, current advice, same-key r
     expect(first.next).toEqual(expect.any(String));
     const selectedAssociation = associationIds[20]!;
     const selected = await json(
-      await request('owner', 'GET', `${pagePath}?selectedSubjectId=${subject.id}&selectedAssociationId=${selectedAssociation}`),
+      await request(
+        'owner',
+        'GET',
+        `${pagePath}?selectedSubjectId=${subject.id}&selectedAssociationId=${selectedAssociation}`,
+      ),
     );
     expect(selected.items).toHaveLength(21);
     expect(
@@ -116,7 +120,9 @@ test('own classification retains exact private state, current advice, same-key r
     );
     expect(continuation.items).toHaveLength(2);
     expect(continuation.traversal).toBe('complete');
-    expect((await request('other', 'GET', `${pagePath}?cursor=${encodeURIComponent(first.next as string)}`)).status).toBe(400);
+    expect(
+      (await request('other', 'GET', `${pagePath}?cursor=${encodeURIComponent(first.next as string)}`)).status,
+    ).toBe(400);
 
     const actor: AccountActor = {
       kind: 'account',
@@ -234,7 +240,13 @@ test('own classification retains exact private state, current advice, same-key r
       [routeOf(ownerId), ownerId, subject.id, firstAssociation, 'f'.repeat(64)],
     );
     expect(bindingChange.rowCount).toBe(1);
-    const mismatch = await json(await request('owner', 'GET', `${pagePath}?selectedSubjectId=${subject.id}&selectedAssociationId=${firstAssociation}`));
+    const mismatch = await json(
+      await request(
+        'owner',
+        'GET',
+        `${pagePath}?selectedSubjectId=${subject.id}&selectedAssociationId=${firstAssociation}`,
+      ),
+    );
     expect(mismatch.items[0]).toMatchObject({
       state: 'withheld',
       subject: null,
@@ -255,7 +267,11 @@ test('own classification retains exact private state, current advice, same-key r
       [subjectRoute, subject.id],
     );
     const hiddenSelection = await json(
-      await request('owner', 'GET', `${pagePath}?selectedSubjectId=${subject.id}&selectedAssociationId=${firstAssociation}`),
+      await request(
+        'owner',
+        'GET',
+        `${pagePath}?selectedSubjectId=${subject.id}&selectedAssociationId=${firstAssociation}`,
+      ),
     );
     expect(hiddenSelection.items[0]).toMatchObject({
       state: 'withheld',
@@ -286,7 +302,6 @@ test('own classification retains exact private state, current advice, same-key r
     await request('owner', 'DELETE', clearPath, undefined, clearKey);
     expect((await request('owner', 'DELETE', clearPath, undefined, clearKey)).status).toBe(204);
     expect((await json(await request('owner', 'GET', pagePath))).items).toHaveLength(21);
-
   } finally {
     await database.close();
   }

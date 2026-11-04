@@ -193,7 +193,11 @@ test('creation acknowledgment selects the exact created id and a lost acknowledg
     grain: 'work' as const,
     scale: { min: 0, max: 20, displayStep: 2 },
   };
-  const createPage = { ...page, selected: null, actions: { create: { method: 'POST' as const, href: `/v1/realms/${realmId}/rating-questions` } } };
+  const createPage = {
+    ...page,
+    selected: null,
+    actions: { create: { method: 'POST' as const, href: `/v1/realms/${realmId}/rating-questions` } },
+  };
   const createRead: Extract<QuestionManagementRead, { state: 'ready' }> = {
     ...selectedRead,
     selectedQuestionId: null,
@@ -253,7 +257,9 @@ test('a different credential episode cannot send a retained original intent', as
     csrfToken,
     body: { expectedLifecycleRevision: 2 },
   });
-  const harness = clientHarness(() => Response.json({ questionId: retiredId, lifecycle: { state: 'active', revision: 3 } }));
+  const harness = clientHarness(() =>
+    Response.json({ questionId: retiredId, lifecycle: { state: 'active', revision: 3 } }),
+  );
   const replacement = await createQuestionManagementClient({
     origin: 'https://kernel.test',
     authorization: 'Bearer replacement',

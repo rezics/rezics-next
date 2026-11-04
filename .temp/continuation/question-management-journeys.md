@@ -34,16 +34,16 @@ acceptance:
   command:
     - bun
     - run
-    - "--cwd"
+    - '--cwd'
     - services/kernel
     - check
     - test/rating/question-management-journey.test.ts
     - test/rating/own-classification-journey.test.ts
   placement: default
   tests:
-    - "Both mounted journeys abort stale reads and commands on credential replacement or away/return while retaining the original action bindings, focus, and dirty-exit behavior."
-    - "The shared complete-input publisher consumes mounted management schema/OpenAPI inputs and the delivered installed declaration head is recorded."
-    - "Native execution, installed method typing, browser interaction, and recorded presentation pass as separate gates."
+    - 'Both mounted journeys abort stale reads and commands on credential replacement or away/return while retaining the original action bindings, focus, and dirty-exit behavior.'
+    - 'The shared complete-input publisher consumes mounted management schema/OpenAPI inputs and the delivered installed declaration head is recorded.'
+    - 'Native execution, installed method typing, browser interaction, and recorded presentation pass as separate gates.'
   failing: true
 estimate:
   lines: 800

@@ -264,7 +264,13 @@ export const readQuestionManagementHistory = createServerFn({ method: 'GET' })
         currentVisit.csrfEpisode !== data.visit.csrfEpisode
       )
         return unavailable('unavailable', data.questionId, data.cursor);
-      if (!session.origin || !session.authorization || !session.csrf || !session.credentialEpisode || !session.csrfEpisode)
+      if (
+        !session.origin ||
+        !session.authorization ||
+        !session.csrf ||
+        !session.credentialEpisode ||
+        !session.csrfEpisode
+      )
         return unavailable('unavailable', data.questionId, data.cursor);
       const client = await createQuestionManagementClient({
         origin: session.origin,

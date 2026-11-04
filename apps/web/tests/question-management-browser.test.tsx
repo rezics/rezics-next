@@ -4,7 +4,10 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { m } from '../src/paraglide/messages.js';
 import { QuestionManagementContent } from '../src/ratings/question-management/page';
-import type { QuestionManagementHistoryRead, QuestionManagementPageData } from '../src/ratings/question-management/types';
+import type {
+  QuestionManagementHistoryRead,
+  QuestionManagementPageData,
+} from '../src/ratings/question-management/types';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -155,7 +158,9 @@ test('creation needs a deliberate review and confirmation, and focus returns to 
 test('caption saves only the caption revision, restore has separate confirmation, and history preserves native author fields', async () => {
   const captions: unknown[] = [];
   const lifecycle: unknown[] = [];
-  const { host, root } = await render({ callbacks: { caption: (body) => captions.push(body), lifecycle: (...value) => lifecycle.push(value) } });
+  const { host, root } = await render({
+    callbacks: { caption: (body) => captions.push(body), lifecycle: (...value) => lifecycle.push(value) },
+  });
   try {
     expect(host.textContent).toContain(viewerId);
     expect(host.textContent).toContain(m.realm_question_author_deleted());
@@ -184,7 +189,11 @@ test('stale history offers cursor restart and unavailable authority hides all co
   try {
     expect(stale.host.textContent).toContain(m.realm_question_history_stale());
     expect(stale.host.querySelector('button')?.textContent).not.toBe(m.realm_question_history_restart());
-    expect([...stale.host.querySelectorAll('button')].some((node) => node.textContent === m.realm_question_history_restart())).toBe(true);
+    expect(
+      [...stale.host.querySelectorAll('button')].some(
+        (node) => node.textContent === m.realm_question_history_restart(),
+      ),
+    ).toBe(true);
   } finally {
     await act(async () => stale.root.unmount());
     stale.host.remove();

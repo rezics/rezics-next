@@ -71,9 +71,7 @@ const activePage: QuestionManagementPageData = {
 const unavailablePage: QuestionManagementPageData = {
   ...page,
   actions: { create: null },
-  selected: page.selected
-    ? { ...page.selected, actions: { caption: null, lifecycle: null } }
-    : null,
+  selected: page.selected ? { ...page.selected, actions: { caption: null, lifecycle: null } } : null,
 };
 const captionHistory: QuestionManagementHistoryRead = {
   state: 'ready',
@@ -136,14 +134,19 @@ type Story = StoryObj<typeof meta>;
 
 export const RetiredDefinitionInspection: Story = {};
 
-export const ActiveSelection: Story = { args: { page: activePage, address: { selectedQuestionId: activeId, cursor: null } } };
+export const ActiveSelection: Story = {
+  args: { page: activePage, address: { selectedQuestionId: activeId, cursor: null } },
+};
 
 export const CreationReview: Story = {
   args: { page: { ...page, selected: null } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.realm_question_create() }));
-    await userEvent.type(canvas.getByLabelText(m.realm_question_management_meaning()), 'Rate adaptation fidelity independently.');
+    await userEvent.type(
+      canvas.getByLabelText(m.realm_question_management_meaning()),
+      'Rate adaptation fidelity independently.',
+    );
     await userEvent.type(canvas.getByLabelText(m.home_question_label()), 'Adaptation fidelity');
     await userEvent.click(canvas.getByRole('button', { name: m.realm_question_review_definition() }));
     await expect(canvas.getByRole('button', { name: m.realm_question_confirm_create() })).toBeVisible();
