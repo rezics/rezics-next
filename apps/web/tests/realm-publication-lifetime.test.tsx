@@ -118,7 +118,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const spaceActions = await import('../src/community/space-actions');
 mock.module('../src/community/space-actions', () => ({
+  ...spaceActions,
   changeRealmPublication: async () => ({ kind: 'unavailable' }),
   readRealmBoards: async () => ({ kind: 'page', items: [], next: null, unavailable: 0 }),
   readRealmPublicationPreparation: async () => ({ kind: 'unavailable' }),
