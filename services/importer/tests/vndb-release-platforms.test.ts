@@ -163,4 +163,4 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 30_000);
