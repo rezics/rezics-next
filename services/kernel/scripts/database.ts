@@ -77,6 +77,10 @@ export function developmentEnv(existing: string, url: string): string {
   const defaults: Record<string, string> = {
     KERNEL_RECEIPT_KEYS: `1:${randomBytes(32).toString('base64url')}`,
     KERNEL_WRITE_RATE_SECRET: randomBytes(32).toString('base64url'),
+    KERNEL_WRITE_RATE_OVERRIDES: JSON.stringify({
+      'new-account': { write: { maximum: 100000, seconds: 60 } },
+      member: { write: { maximum: 100000, seconds: 60 } },
+    }),
     AUTH_ISSUER: 'http://127.0.0.1:4200',
     AUTH_AUDIENCE: 'https://api.rezics.test',
     AUTH_JWKS_URL: 'http://127.0.0.1:4200/.well-known/jwks.json',

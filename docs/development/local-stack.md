@@ -46,7 +46,10 @@ even on its first invocation. Keep `task dev` running and wait for normal readin
 task reuses the developer, importer key and ordinary exposure command keys; no manual platform grant is needed.
 The persona owns the development platform governance role, including `gate:any`, Access grant authority and the
 cross-media importer's subject, statement, source-statistic, source-fence and media-import permissions. The importer
-client requests only its import scopes. The same person can sign into Web using the printed password.
+client requests only its import scopes. The same person can sign into Web using the printed password. Local database setup supplies a finite
+100,000-command/minute write budget for new and member accounts through the ordinary deployment override, so
+a fresh persona can submit the bounded dataset batches. Explicit existing overrides are preserved; all other rate
+families, authorization and operator checks retain their normal policy.
 
 Decision: local persona setup opens mounted anonymous GET exposure groups plus the explicit M1 `search` (path 9,
 mixed Search) and `search_advanced` (path 10, filters and POST `/v1/subjects:facets`) groups through ordinary platform
