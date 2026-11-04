@@ -358,7 +358,7 @@ export function createNativeCollectionDiscoveryAdapter(
                   actor: context.actor,
                   partition,
                   deadline: context.deadline,
-                  languages: context.languages,
+                  ...(context.languages ? { languages: context.languages } : {}),
                 }),
                 batch,
               );
