@@ -384,7 +384,7 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         await page.locator('#transfer-confirm').check();
         await page.getByRole('button', { name: copy.auth_transfer_submit, exact: true }).click();
         await page.getByRole('alert').filter({ hasText: copy.auth_transfer_denied }).waitFor();
-        expect(await page.locator('#transfer-confirm').isChecked()).toBe(false);
+        expect(await page.locator('#transfer-confirm').count()).toBe(0);
         expect(writes).toHaveLength(beforeExit + 1);
         await boundedReview();
         const savedTransfer = await page.evaluate(() => sessionStorage.getItem('rezics.operator-transfer.attempt'));
@@ -589,7 +589,7 @@ test('Default Security and deletion flows show a genuine recognizable current si
       await page.locator('#security-sessions-heading').waitFor();
       page.once('dialog', (dialog) => void dialog.accept());
       await page.locator('section[aria-labelledby="security-sessions-heading"] article button').first().click();
-      await page.getByRole('link', { name: copy.auth_security_sign_in, exact: true }).waitFor();
+      await page.waitForURL(`${origin}/login`);
       releaseIdentity!();
       await page.waitForLoadState('networkidle');
       expect(await page.locator('.auth-card').innerText()).not.toContain(secondEmail);
