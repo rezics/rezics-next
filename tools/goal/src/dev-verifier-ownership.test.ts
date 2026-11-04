@@ -7,6 +7,7 @@ import { verifyDev } from './dev-verifier.ts';
 import type { Settings, Task } from './types.ts';
 
 const roots: string[] = [];
+const fixturePackageManager = `bun@${Bun.version}`;
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -28,6 +29,26 @@ function repo(): string {
   writeFileSync(join(root, 'services', 'kernel', 'base.ts'), 'export const base = true;\n');
   writeFileSync(join(root, 'scripts', 'typecheck.ts'), 'process.exit(0);\n');
   writeFileSync(join(root, 'scripts', 'acceptance.ts'), 'process.exit(0);\n');
+  writeFileSync(join(root, '.gitignore'), 'node_modules/\n');
+  mkdirSync(join(root, 'toolchain/bin'), { recursive: true });
+  writeFileSync(
+    join(root, 'toolchain/package.json'),
+    JSON.stringify({ name: 'bun', version: Bun.version, bin: { bun: 'bin/bun.exe' } }),
+  );
+  writeFileSync(join(root, 'toolchain/bin/bun.exe'), `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify({
+      name: 'verifier-owner-fixture',
+      packageManager: fixturePackageManager,
+      dependencies: { bun: 'file:./toolchain' },
+    }),
+  );
+  const lock = spawnSync(process.execPath, ['install', '--lockfile-only', '--ignore-scripts'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (lock.status !== 0) throw new Error(lock.stderr);
   git(root, 'add', '.');
   git(root, 'commit', '-m', 'base');
   git(root, 'branch', 'dev');
