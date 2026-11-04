@@ -448,11 +448,14 @@ function projectStaffNames(
     const owner = own(row, 'id', `${pointer}/id`);
     if (owner !== expected) fail(`${pointer}/id`, 'invalid_identifier');
     const aid = copyAid(own(row, 'aid', `${pointer}/aid`), `${pointer}/aid`);
-    const aliasName = text(
-      own(row, 'name', `${pointer}/name`),
-      `${pointer}/name`,
-      vndbStaffNameLimits.maxNameChars,
-    );
+    const aliasName = own(row, 'name', `${pointer}/name`);
+    if (
+      typeof aliasName !== 'string' ||
+      !aliasName.isWellFormed() ||
+      !aliasName.trim() ||
+      [...aliasName].length > vndbStaffNameLimits.maxNameChars
+    )
+      fail(`${pointer}/name`);
     if (seen.has(aid)) fail(`${pointer}/aid`, 'duplicate_alias_key');
     seen.set(aid, aliasName);
     aliases.push({ id: expected, aid, name: aliasName });

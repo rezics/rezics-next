@@ -915,7 +915,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       typeof aliasName !== 'string' ||
       !aliasName.isWellFormed() ||
       !aliasName.trim() ||
-      aliasName.length > vndbStaffNameLimits.maxNameChars
+      [...aliasName].length > vndbStaffNameLimits.maxNameChars
     ) {
       gap('vndb', 'staff_alias', row, 'Staff alias name is not admitted as a native name fact');
       continue;
