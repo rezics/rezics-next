@@ -11,9 +11,24 @@ export type SignupBody = {
 };
 
 export type SignupFailure =
-  | { field: 'password'; message: string }
-  | { field: 'handle'; message: string }
-  | { field: 'form'; message: string; conflict: boolean };
+  | { kind: 'local-password'; field: 'password'; message: string }
+  | {
+      kind: 'request-rejected';
+      status: 400;
+      code: 'registration_denied';
+      retryAfter: null;
+      message: string;
+    }
+  | {
+      kind: 'handle-unavailable';
+      status: 409;
+      code: 'handle_unavailable';
+      retryAfter: null;
+      message: string;
+    }
+  | { kind: 'conflict'; status: 409; code: string; retryAfter: null; message: string }
+  | { kind: 'rate-limited'; status: 429; code: string; retryAfter: string | null; message: string }
+  | { kind: 'uncertain'; status: number; code: string; retryAfter: string | null; message: string };
 
 export type SignupSubmission = { ok: true } | { ok: false; failure: SignupFailure };
 export type SignupPasswordLimits = { minLength: number; maxLength: number };
@@ -39,6 +54,7 @@ export async function submitSignup(input: SignupBody, limits: SignupPasswordLimi
     return {
       ok: false,
       failure: {
+        kind: 'local-password',
         field: 'password',
         message: m.auth_signup_password_invalid({
           minimum: String(limits.minLength),
@@ -54,16 +70,22 @@ export async function submitSignup(input: SignupBody, limits: SignupPasswordLimi
 }
 
 export function explainSignup(status: number, code: string, retryAfter: string | null): SignupFailure {
-  if (status === 409 && code === 'handle_unavailable') {
-    return { field: 'handle', message: m.auth_signup_handle_unavailable() };
-  }
-  if (status === 409) return { field: 'form', message: m.auth_signup_conflict(), conflict: true };
   if (status === 400 && code === 'registration_denied') {
-    return { field: 'form', message: m.auth_signup_denied(), conflict: false };
+    return {
+      kind: 'request-rejected',
+      status,
+      code,
+      retryAfter: null,
+      message: m.auth_signup_denied(),
+    };
   }
+  if (status === 409 && code === 'handle_unavailable') {
+    return { kind: 'handle-unavailable', status, code, retryAfter: null, message: m.auth_signup_handle_unavailable() };
+  }
+  if (status === 409) return { kind: 'conflict', status, code, retryAfter: null, message: m.auth_signup_conflict() };
   if (status === 429)
-    return { field: 'form', message: failureMessage(429, 'rate_limited', retryAfter), conflict: false };
-  return { field: 'form', message: failureMessage(503, 'unavailable', null), conflict: false };
+    return { kind: 'rate-limited', status, code, retryAfter, message: failureMessage(429, 'rate_limited', retryAfter) };
+  return { kind: 'uncertain', status, code, retryAfter, message: failureMessage(503, 'unavailable', null) };
 }
 
 export function explainSignIn(result: Exclude<SignInResult, { ok: true }>): string {

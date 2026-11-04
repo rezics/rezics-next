@@ -103,37 +103,43 @@ acceptance test compares the browser pattern's source with the kernel's claim pa
 dependency on kernel or Auth modules. Reserved handles are checked by the server and get the same taken-or-reserved
 field message as taken handles.
 
-The page creates one random key for the form and reuses it when a submit is retried after a network failure. It loads
-the Turnstile script once and renders the widget explicitly with the public `TURNSTILE_SITE_KEY`, `action: "signup"`
-and the page locale. In development, `TURNSTILE_SCRIPT_URL` replaces the script address. The submit button is enabled
-before a token arrives; submitting without one shows a localized message beside the widget and sends no request.
-While a request is pending, the button shows its loading state. Every request uses a new token, and the widget resets
-after every request that does not end in 201.
+The page loads the Turnstile script once and renders the widget explicitly with the public `TURNSTILE_SITE_KEY`,
+`action: "signup"` and the page locale. In development, `TURNSTILE_SCRIPT_URL` replaces the script address. The
+submit button is enabled before a token arrives; submitting without one shows a localized message beside the widget
+and sends no request. A local password confirmation must match but adds no Auth policy. Password and confirmation
+visibility are independent, and both password fields use Auth's native length bounds.
 
-`POST /signup` sends `{ key, handle, email, password, turnstile_token }` as JSON with same-origin credentials. In
-development that POST is forwarded to AUTH_ORIGIN; GET /signup remains this page. A 201 response is `{ accountId }`
-and sets no session. Creation and automatic sign-in are distinct stages: after creation the creation form is removed,
-private inputs are cleared, and the page signs in once with `POST /signin`, resuming with `signInTarget` on success.
-If sign-in fails, the creation confirmation and sign-in/recovery links retain the original query; retrying sign-in
-uses the existing login page and never repeats creation. `src/sign-in.ts` supplies the shared sign-in result and
-validated destination helpers (there is no separate login-attempt helper in this base).
+`POST /signup` sends `{ key, handle, email, password, turnstile_token }` as JSON with same-origin credentials. The
+captured handle is lowercase, email is trimmed and lowercase, and the password is preserved exactly. In development
+that POST is forwarded to AUTH_ORIGIN; GET /signup remains this page. A 201 response confirms creation even if its
+body cannot be read, and sets no session. Creation and automatic sign-in are distinct stages: after 201 the form and
+retained creation credentials are cleared, and the page signs in once with the captured email and exact password.
+On success it resumes with `signInTarget`. If sign-in fails or its response is uncertain, the created-account panel
+and sign-in/recovery links retain the original query; repairing sign-in uses the existing login page and never
+repeats creation. `src/sign-in.ts` supplies the shared sign-in result and validated destination helpers (there is no
+separate login-attempt helper in this base).
 The page starts with one no-store Auth registration read containing the current viewer, native field limits and
 available actions. An already signed-in viewer gets Continue through the existing safe `signInTarget` plus a Sign in
 link that replaces the active account; `return_to` remains navigation only. A failed read or missing Turnstile
 configuration shows an unavailable state before the form. This read is advice only; `POST /signup` repeats native
 validation and verification.
 Decision: an already signed-in visitor continues with the current account and can choose Sign in to replace it.
-Decision: nonblank handle/email, any password or a pending creation prompts Stay/Leave; Stay preserves input, validation and the same key, while creation completion releases the warning even during subsequent sign-in.
-Reload/close warns only for that unfinished work; Leave clears in-memory details and retires browser continuations without undoing a dispatched creation.
-Departure or history replacement retires pending browser continuations before the next stage or navigation;
-it cannot undo a server write. A cached-document return starts an empty fresh form without automatically retrying
-creation or sign-in. An uncertain creation is retried only by explicit submission with the existing key and a fresh
-Turnstile token while the same journey remains open. Password bounds come from Auth's native configuration and are
-shown before submission. 400
-`registration_denied` reports bad input or a refused token. 409 `handle_unavailable` is shown on the handle field.
-Any other 409, including an email already in use, shows the same generic message with links to sign in and recovery,
-and does not say whether the address exists. 429 includes a valid `Retry-After` duration. 503 and network failures
-ask the person to try again later.
+Decision: nonblank handle/email, any password or confirmation, or a pending creation prompts Stay/Leave; Stay
+preserves input, validation and the same attempt, while confirmed creation releases the warning before sign-in.
+Reload/close warns only for that unfinished work; Leave clears in-memory details and retires browser continuations
+without undoing a dispatched creation. A cached-document return starts an empty fresh journey and never retries a
+write automatically.
+
+Decision: an uncertain acknowledgement retains the normalized original business input and request key in the
+mounted journey, shows the retained handle/email without the password, and allows only an explicit exact retry with
+a fresh Turnstile token or sign-in/recovery. A failed verification or refusal of that retry does not resolve the
+earlier unknown result. A retry-after delay gates the explicit retry without claiming to cancel creation.
+
+Decision: only a first-response 409 `handle_unavailable` establishes the safe handle-correction transition. It has no
+account effects; after choosing a different valid handle, the page starts a new request with a new key. A 400
+`registration_denied` before any uncertain result permits the same draft to continue with a fresh challenge. Generic
+409 responses remain non-enumerating and offer sign-in/recovery without opening a changed registration request.
+Network failures, unread responses and 503 responses stay uncertain. A malformed 201 body still confirms creation.
 
 ## Consent
 
