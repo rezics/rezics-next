@@ -180,6 +180,7 @@ test('notice actor composition admits Media variants independently and retires c
     { id, kind: 'actor' as const, state: 'deleted' as const },
   ]) expect(await read(async () => [changed])).toBeUndefined();
   expect(await read(async () => [])).toBeUndefined();
+  await expect(read(async () => { throw new Error('Account observation unavailable'); })).rejects.toThrow('Account observation unavailable');
   await fixture.db.admin.query('UPDATE content.media SET taken_down=true WHERE route=$1 AND media_id=$2', [r, media]);
   expect(await read()).toMatchObject({ state: 'available', displayName: 'Current member', avatar: null, avatarUrl: null });
   const thin = await readNoticeActors(fixture.db.pool, [id], Date.now() + 30_000);
