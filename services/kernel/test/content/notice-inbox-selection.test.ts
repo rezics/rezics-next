@@ -7,12 +7,17 @@ import {
 } from '../../src/content/notice-inbox.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { reactionFixture } from './reactions.test.ts';
 import { observeSql } from './support/sql-observer.ts';
 
 let fixture: Awaited<ReturnType<typeof reactionFixture>>;
 let kernel: ReturnType<typeof createKernel>;
+const originalReceiptKeys = process.env.KERNEL_RECEIPT_KEYS;
 beforeAll(async () => {
+  process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
+    .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+    .join(',');
   fixture = await reactionFixture();
   kernel = createKernel({
     pool: fixture.db.pool,
@@ -21,7 +26,11 @@ beforeAll(async () => {
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) },
   });
 }, 120_000);
-afterAll(async () => fixture?.close());
+afterAll(async () => {
+  await fixture?.close();
+  if (originalReceiptKeys === undefined) delete process.env.KERNEL_RECEIPT_KEYS;
+  else process.env.KERNEL_RECEIPT_KEYS = originalReceiptKeys;
+});
 
 async function call(path: string) {
   const response = await kernel.handle(

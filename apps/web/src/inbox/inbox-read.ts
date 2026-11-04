@@ -1,8 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
@@ -503,13 +501,23 @@ async function readNoticePage(
   return decodeInboxPage(result.data, accountId);
 }
 
-/** One native page contains all current disclosure and exact admitted destinations. */
+async function inboxSessionEnv(): Promise<Partial<SessionEnv>> {
+  const { env } = await import('cloudflare:workers');
+  return env as Partial<SessionEnv>;
+}
+
+async function inboxKernelClient() {
+  const { kernelClient } = await import('../kernel/client');
+  return kernelClient();
+}
+
 function inboxPageQueryOf(value: InboxPageQuery | string | undefined): InboxPageQuery {
   if (value === undefined) return { selection: DEFAULT_INBOX_SELECTION };
   if (typeof value === 'string') return { selection: DEFAULT_INBOX_SELECTION, cursor: value };
   return { selection: value.selection, ...(value.cursor ? { cursor: value.cursor } : {}) };
 }
 
+/** One native page contains all current disclosure and exact admitted destinations. */
 export async function loadInboxPage(
   client: KernelClient,
   accountId: string,
@@ -545,14 +553,14 @@ export const readInboxPage = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     try {
       const request = getRequest();
-      await prepareSession(request, env as Partial<SessionEnv>);
+      await prepareSession(request, await inboxSessionEnv());
       const authorization = viewerCredential(request);
       const accountId = sessionSubject(request);
       if (!authorization || !accountId) return { signedIn: false };
       return {
         signedIn: true,
         state: 'ready',
-        ...(await loadInboxPage(kernelClient(), accountId, authorization, data, request.signal)),
+        ...(await loadInboxPage(await inboxKernelClient(), accountId, authorization, data, request.signal)),
       };
     } catch (error) {
       return inboxReadFailure(error);
@@ -625,7 +633,7 @@ export async function loadUnreadCount(
 export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async (): Promise<UnreadCount> => {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
-  return loadUnreadCount(kernelClient(), request, env as Partial<SessionEnv>, request.signal);
+  return loadUnreadCount(await inboxKernelClient(), request, await inboxSessionEnv(), request.signal);
 });
 
 export type InboxSeenAttempt = { through: string; idempotencyKey: string };
@@ -732,7 +740,7 @@ export const markInboxSeen = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadInboxSeen(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return loadInboxSeen(await inboxKernelClient(), getRequest(), await inboxSessionEnv(), data);
   });
 
 export async function loadInboxNoticeSeen(
@@ -767,5 +775,5 @@ export const markInboxItemSeen = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadInboxNoticeSeen(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return loadInboxNoticeSeen(await inboxKernelClient(), getRequest(), await inboxSessionEnv(), data);
   });
