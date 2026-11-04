@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { albumFixture, albumId, artistId, roleId, seriesId } from '../src/kernel/fake/catalogue-album-profile';
 import { RecordingReader } from '../src/features/catalogue/recording-reader/view';
 import { recordingReaderVisit, recordingType } from '../src/features/catalogue/recording-reader/model';
+import { recordingStatementReturnHref } from '../src/features/catalogue/recording-reader/review/navigation';
 import { connectionReturnHref, subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import { m } from '../src/paraglide/messages.js';
 
@@ -41,7 +42,7 @@ test('the current release leaves Recording honest and unsupported', () => {
   expect(visit.type).toBe(recordingType);
   expect(visit.type).not.toBe('schema:MusicAlbum');
   expect(visit.grain.text).toBe('');
-  expect(html).toContain(m.recording_reader_unsupported({}, { locale: 'en' }));
+  expect(html.replaceAll('&#x27;', "'")).toContain(m.recording_reader_unsupported({}, { locale: 'en' }));
   expect(html).toContain('/details');
   expect(html).toContain('/relations');
 });
@@ -88,8 +89,9 @@ test('admitted credits retain exact targets, qualifiers, partial dates and retur
   expect(contributionMarkup).toContain('1');
   expect(contributionMarkup).toContain('Harbour story arc');
   expect(html).not.toContain('artist.example');
-  expect(target(artistId)?.searchParams.get('via')).toBe(returnTo);
-  expect(target(roleId)?.searchParams.get('via')).toBe(returnTo);
+  const statementReturn = recordingStatementReturnHref(returnTo, albumId, contribution.id, 'en');
+  expect(target(artistId)?.searchParams.get('via')).toBe(statementReturn);
+  expect(target(roleId)?.searchParams.get('via')).toBe(statementReturn);
   expect(target(artistId)?.pathname).not.toContain(albumId);
   const continuation = links.find((link) => link.pathname.endsWith('/relations'));
   expect(continuation?.searchParams.get('via')).toBe(returnTo);
