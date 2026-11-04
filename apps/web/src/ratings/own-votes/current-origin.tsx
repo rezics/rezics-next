@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient, queryOptions } from '@tanstack/react-query';
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { getLocale } from '../../paraglide/runtime.js';
 import { useWorkspaceAdmission } from '../../reader/workspace-admission';
 import {
@@ -12,6 +12,7 @@ import { personalRead } from '../../kernel/query';
 import { readOwnVotesForViewer, type OwnVotesRead } from './actions';
 import type { OwnVotesPage } from './types';
 import { OWN_VOTES_OPERATION, OWN_VOTES_SOURCE, OWN_VOTES_CONTEXT } from './inventory';
+import type { OwnVotesReturnOwner } from './return';
 
 const operations = [OWN_VOTES_OPERATION] as const;
 
@@ -21,6 +22,7 @@ export function ownVotesQuery(
   locale: string,
   originKey: string,
   current: () => boolean,
+  tracker?: { start: () => number; complete: (id: number, value: OwnVotesRead) => void },
 ) {
   return queryOptions({
     ...personalRead,
@@ -35,10 +37,12 @@ export function ownVotesQuery(
       originKey,
     ],
     queryFn: async ({ signal }) => {
+      const requestId = tracker?.start();
       assertReaderCurrent(current, signal);
       try {
         const result = await readOwnVotesForViewer({ data: cursor === null ? {} : { cursor } });
         assertReaderCurrent(current, signal);
+        if (requestId !== undefined) tracker?.complete(requestId, result);
         return result;
       } catch (error) {
         assertReaderCurrent(current, signal);
@@ -81,6 +85,8 @@ export function useOwnVotesCurrentOrigin(
   initial: OwnVotesRead,
   requestedCursor: string | null,
   invalidAddress = false,
+  suspendInitial = false,
+  responseVersion = 0,
 ) {
   const client = useQueryClient();
   const locale = getLocale();
@@ -88,21 +94,37 @@ export function useOwnVotesCurrentOrigin(
   const address = useReaderAddress('/library/ratings', cursor ?? undefined, locale);
   const originAddress = invalidAddress ? `${address.key}:invalid` : address.key;
   const origin = useReaderCurrentOrigin(originAddress, operations, initial.subject);
-  const admission = useWorkspaceAdmission(operations).value;
+  const { store, value: admission } = useWorkspaceAdmission(operations);
   const reading = origin.readLease(0);
   const current = () => address.isCurrent() && reading.current();
-  const options = ownVotesQuery(origin.subject ?? '', cursor, locale, origin.readKey(0), current);
+  const responseReads = useRef<{ started: number; completed: number; data: OwnVotesRead | undefined }>({
+    started: 0,
+    completed: 0,
+    data: undefined,
+  });
+  const tracker = useMemo(
+    () => ({
+      start: () => ++responseReads.current.started,
+      complete: (id: number, value: OwnVotesRead) => {
+        responseReads.current.completed = id;
+        responseReads.current.data = value;
+      },
+    }),
+    [],
+  );
+  const options = ownVotesQuery(origin.subject ?? '', cursor, locale, origin.readKey(0), current, tracker);
   const query = useQuery(
     {
       ...options,
       enabled:
         personalRead.enabled &&
         !invalidAddress &&
+        !suspendInitial &&
         origin.hydrated &&
         !!origin.subject &&
         origin.allowed[0] === true &&
         address.isCurrent(),
-      ...(origin.seed && !invalidAddress && origin.subject && matches(initial, origin.subject, cursor, locale)
+      ...(origin.seed && !invalidAddress && !suspendInitial && origin.subject && matches(initial, origin.subject, cursor, locale)
         ? { initialData: initial, initialDataUpdatedAt: Date.now() }
         : {}),
     },
@@ -140,9 +162,15 @@ export function useOwnVotesCurrentOrigin(
   }, [invalidAddress, query.isError, data, origin, admission, readIsCurrent]);
   const page = state === 'ready' && data?.state === 'ready' ? data.page : null;
   const dataUpdatedAt = client.getQueryState(options.queryKey)?.dataUpdatedAt ?? 0;
-  const visit = useRef({ data, dataUpdatedAt, generation: 0 });
-  if (visit.current.data !== data || visit.current.dataUpdatedAt !== dataUpdatedAt)
-    visit.current = { data, dataUpdatedAt, generation: visit.current.generation + 1 };
+  const dataUpdateCount = client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
+  const visit = useRef({ data, dataUpdatedAt, dataUpdateCount, generation: 0 });
+  const consumedRouteResponse = useRef<number | null>(null);
+  if (
+    visit.current.data !== data ||
+    visit.current.dataUpdatedAt !== dataUpdatedAt ||
+    visit.current.dataUpdateCount !== dataUpdateCount
+  )
+    visit.current = { data, dataUpdatedAt, dataUpdateCount, generation: visit.current.generation + 1 };
   const viewKey = JSON.stringify([
     origin.boundary.lifetime,
     origin.lifetime(0),
@@ -151,6 +179,81 @@ export function useOwnVotesCurrentOrigin(
     OWN_VOTES_SOURCE,
     visit.current.generation,
   ]);
+  const captureReturnOwner = useCallback((previousResponseVersion = -1): OwnVotesReturnOwner => {
+    const responseCount = client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
+    const requestNumber = responseReads.current.started;
+    const responseSubject = origin.subject;
+    const departureAdmission = store.read();
+    const canRead = () =>
+      !invalidAddress && getLocale() === locale && address.isCurrent() && origin.current(0, false);
+    return {
+      visitKey: viewKey,
+      responseVersion,
+      subject: responseSubject,
+      cursor,
+      locale,
+      source: OWN_VOTES_SOURCE,
+      eligible: () => {
+        const currentAdmission = store.read();
+        if (
+          !responseSubject ||
+          getLocale() !== locale ||
+          currentAdmission.subject !== responseSubject ||
+          currentAdmission.viewer !== departureAdmission.viewer ||
+          currentAdmission.dispatch[0] !== departureAdmission.dispatch[0] ||
+          currentAdmission.allowed[0] !== true
+        )
+          return false;
+        const state = client.getQueryState(options.queryKey);
+        // The zero-retention query may be gone after leaving. A changed response on the old key retires its bookmark.
+        return !state || state.dataUpdateCount === responseCount;
+      },
+      canRead,
+      validateResult: (result) => {
+        if (!canRead() || !result || typeof result !== 'object') return null;
+        const candidate = result as { data?: unknown; isSuccess?: boolean };
+        const state = client.getQueryState(options.queryKey);
+        const exactQueryRead =
+          responseReads.current.started === requestNumber + 1 &&
+          responseReads.current.completed === requestNumber + 1 &&
+          responseReads.current.data === candidate.data;
+        const exactRouteRead =
+          candidate.responseVersion === responseVersion &&
+          responseVersion > previousResponseVersion &&
+          responseReads.current.started === requestNumber;
+        if (
+          candidate.isSuccess !== true ||
+          state?.status !== 'success' ||
+          state.dataUpdateCount !== responseCount + 1 ||
+          (!exactQueryRead && !exactRouteRead) ||
+          state.data !== candidate.data ||
+          !isOwnVotesRead(candidate.data) ||
+          !matches(candidate.data, responseSubject, cursor, locale)
+        )
+          return null;
+        return candidate.data;
+      },
+    };
+  }, [client, options.queryKey, origin, invalidAddress, address, locale, cursor, viewKey, store, responseVersion]);
+
+  const admitRouteResponse = useCallback(
+    (read: OwnVotesRead, previousResponseVersion: number): Promise<unknown> | null => {
+      if (
+        responseVersion <= previousResponseVersion ||
+        consumedRouteResponse.current === responseVersion
+      )
+        return null;
+      consumedRouteResponse.current = responseVersion;
+      if (
+        current() &&
+        isOwnVotesRead(read) &&
+        matches(read, origin.subject, cursor, locale)
+      )
+        client.setQueryData(options.queryKey, read);
+      return Promise.resolve({ isSuccess: true, data: read, responseVersion });
+    },
+    [responseVersion, current, origin.subject, cursor, locale, client, options.queryKey],
+  );
 
   return {
     state,
@@ -161,6 +264,8 @@ export function useOwnVotesCurrentOrigin(
     locale,
     viewKey,
     isCurrent,
+    captureReturnOwner,
+    admitRouteResponse,
     // A failed reader has no admitted data, but its account/address may still explicitly retry the same cursor.
     refresh: () => (current() && !invalidAddress ? query.refetch() : Promise.resolve(undefined)),
     updatePage: (update: (page: OwnVotesPage) => OwnVotesPage) => {
@@ -176,6 +281,8 @@ export function useOwnVotesCurrentOrigin(
       );
       // A supported exact readback updates this visit; a replacement inventory starts another visit.
       visit.current.data = client.getQueryData<OwnVotesRead>(options.queryKey);
+      visit.current.dataUpdatedAt = client.getQueryState(options.queryKey)?.dataUpdatedAt ?? 0;
+      visit.current.dataUpdateCount = client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
     },
   };
 }

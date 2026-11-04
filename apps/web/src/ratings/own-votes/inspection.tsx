@@ -12,12 +12,14 @@ export function OwnVotesInspection({
   selectedPair,
   disabled,
   onSelect,
+  onVisit,
 }: {
   entries: readonly OwnVoteEntry[];
   locale: string;
   selectedPair: string | null;
   disabled: boolean;
   onSelect: (entry: OwnVoteEntry) => void;
+  onVisit?: (entry: OwnVoteEntry) => void;
 }) {
   if (entries.length === 0) return null;
   return (
@@ -27,13 +29,20 @@ export function OwnVotesInspection({
         const destination = subjectHref({ id: entry.subject.id, label: ownVoteSubjectLabel(entry, locale) }, locale);
         const changedAt = ownVoteChangedAt(entry, locale);
         return (
-          <li key={pair} data-own-vote-pair={pair} className="rounded-xl border p-4">
+          <li
+            key={pair}
+            data-own-vote-pair={pair}
+            data-own-vote-target={entry.targetId}
+            data-own-vote-question={entry.questionId}
+            className="rounded-xl border p-4"
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 space-y-1">
                 <Link
                   className="break-words font-semibold underline-offset-4 hover:underline"
                   to={destination.to}
                   params={destination.params}
+                  onClick={() => onVisit?.(entry)}
                 >
                   {ownVoteSubjectLabel(entry, locale)}
                 </Link>

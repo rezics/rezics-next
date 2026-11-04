@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type Ref } from 'react';
-import { Link } from '@tanstack/react-router';
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { Link, useRouterState } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../../shell/page-heading';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -9,11 +9,15 @@ import { executeOwnVoteIntent, voteReadbackForIntent, type OwnVotesRead } from '
 import { useOwnVotesCurrentOrigin } from './current-origin';
 import { OwnVotesDeparture } from './departure';
 import { OwnVoteEditor, type OwnVoteFeedback } from './editor';
-import { indexOwnVotes, removeOwnVote, replaceOwnVote, votePairKey } from './inventory';
+import { indexOwnVotes, removeOwnVote, replaceOwnVote, votePairKey, type VotePair } from './inventory';
 import { createOwnVoteIntent, isAdmittedVoteAction, type OwnVoteIntent } from './intent';
 import type { OwnVoteReadback } from './readback';
 import { OwnVotesInspection } from './inspection';
-import { useOwnVotesReturn } from './return';
+import {
+  useOwnVotesReturn,
+  useOwnVotesReturnReceipt,
+  type OwnVotesReturnOutcome,
+} from './return';
 
 type Execute = (input: { data: OwnVoteIntent }) => Promise<Awaited<ReturnType<typeof executeOwnVoteIntent>>>;
 type Review = (input: { data: { intent: OwnVoteIntent; after: 'REVIEW' } }) => Promise<OwnVoteReadback>;
@@ -22,27 +26,69 @@ export function CurrentViewerOwnVotesPage({
   initial,
   cursor,
   invalidAddress = false,
+  responseVersion = 0,
 }: {
   initial: OwnVotesRead;
   cursor: string | null;
   invalidAddress?: boolean;
+  responseVersion?: number;
 }) {
-  const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress);
+  const historyKey = useRouterState({ select: (state) => state.location.key });
+  const locale = getLocale();
+  const receipt = useOwnVotesReturnReceipt(historyKey, cursor, locale);
+  const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress, !!receipt, responseVersion);
+  const refresh = useCallback(() => {
+    if (receipt) {
+      const routeRead = origin.admitRouteResponse(initial, receipt.owner.responseVersion);
+      if (routeRead) return routeRead;
+    }
+    return origin.refresh();
+  }, [receipt, origin, initial]);
   const heading = useRef<HTMLHeadingElement>(null);
-  useOwnVotesReturn(origin.viewKey, origin.isCurrent, origin.refresh, () => heading.current?.focus());
+  const [returnOutcome, setReturnOutcome] = useState<OwnVotesReturnOutcome | null>(null);
+  const [returnIndex, setReturnIndex] = useState<{ page: OwnVotesPage; index: Map<string, OwnVoteEntry> } | null>(null);
+  const returnVisit = useOwnVotesReturn({
+    visitKey: origin.viewKey,
+    cursor: origin.cursor,
+    locale: origin.locale,
+    owner: () => origin.captureReturnOwner(receipt?.owner.responseVersion ?? -1),
+    isCurrent: origin.isCurrent,
+    refresh,
+    receipt,
+    onResolved: (outcome, index, page) => {
+      setReturnOutcome(outcome);
+      setReturnIndex({ page, index });
+    },
+    onFocus: (outcome) => {
+      if (outcome.kind === 'found') {
+        const row = Array.from(document.querySelectorAll<HTMLElement>('[data-own-vote-target]')).find(
+          (candidate) =>
+            candidate.dataset.ownVoteTarget === outcome.pair.targetId &&
+            candidate.dataset.ownVoteQuestion === outcome.pair.questionId,
+        );
+        row?.querySelector<HTMLButtonElement>('button')?.focus();
+      } else if (outcome.kind === 'refreshed') heading.current?.focus();
+    },
+  });
+  const state = returnVisit.pending ? (returnVisit.failed ? 'unavailable' : 'preparing') : origin.state;
+  const page = returnVisit.pending ? null : origin.page;
   return (
     <OwnVotesWorkspace
       key={origin.viewKey}
-      state={origin.state}
-      page={origin.page}
+      state={state}
+      page={page}
       cursor={origin.cursor}
       locale={origin.locale}
       isCurrent={origin.isCurrent}
-      onRefresh={origin.refresh}
+      onRefresh={returnVisit.refresh}
       onUpdatePage={origin.updatePage}
       headingRef={heading}
       execute={executeOwnVoteIntent}
       review={({ data }) => voteReadbackForIntent(data.intent, data.after)}
+      returnPending={returnVisit.pending && !returnVisit.failed}
+      returnOutcome={returnOutcome}
+      returnIndex={returnIndex?.page === page ? returnIndex.index : undefined}
+      onDeparturePair={returnVisit.inspect}
     />
   );
 }
@@ -59,6 +105,10 @@ export function OwnVotesWorkspace({
   headingRef,
   execute,
   review,
+  returnPending = false,
+  returnOutcome = null,
+  returnIndex,
+  onDeparturePair,
 }: {
   state: OwnVotesRead['state'];
   page: OwnVotesPage | null;
@@ -70,6 +120,10 @@ export function OwnVotesWorkspace({
   headingRef: Ref<HTMLHeadingElement>;
   execute: Execute;
   review: Review;
+  returnPending?: boolean;
+  returnOutcome?: OwnVotesReturnOutcome | null;
+  returnIndex?: Map<string, OwnVoteEntry>;
+  onDeparturePair?: (pair: VotePair | null) => void;
 }) {
   const [selectedPair, setSelectedPair] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -89,13 +143,14 @@ export function OwnVotesWorkspace({
     [],
   );
   const index = useMemo(() => {
+    if (page && returnIndex) return returnIndex;
     if (!page) return new Map<string, OwnVoteEntry>();
     try {
       return indexOwnVotes(page);
     } catch {
       return new Map<string, OwnVoteEntry>();
     }
-  }, [page]);
+  }, [page, returnIndex]);
   const indexedPageValid = !page || index.size === page.votes.length;
   const activeEntry = selectedPair ? (index.get(selectedPair) ?? null) : null;
   // A new action observation requires a new explicit selection. Local readback retains the actions object.
@@ -143,6 +198,7 @@ export function OwnVotesWorkspace({
     setEditing(false);
     setDraft('');
     setSelectedPair(votePairKey(entry));
+    onDeparturePair?.(entry);
   }
 
   function replaceFromReadback(readback: OwnVoteReadback, active: OwnVoteIntent) {
@@ -292,7 +348,7 @@ export function OwnVotesWorkspace({
       case 'denied':
         return m.library_my_ratings_denied();
       case 'preparing':
-        return m.library_my_ratings_preparing();
+        return returnPending ? m.library_my_ratings_return_refreshing() : m.library_my_ratings_preparing();
       case 'unavailable':
         return m.library_my_ratings_unavailable();
       case 'invalid-cursor':
@@ -329,6 +385,15 @@ export function OwnVotesWorkspace({
 
       {state === 'ready' && page && indexedPageValid ? (
         <>
+          {returnOutcome ? (
+            <p role="status" data-own-vote-return-status>
+              {returnOutcome.kind === 'found'
+                ? m.library_my_ratings_return_found()
+                : returnOutcome.kind === 'missing'
+                  ? m.library_my_ratings_return_missing()
+                  : m.library_my_ratings_return_refreshed()}
+            </p>
+          ) : null}
           <p className="text-sm text-muted-foreground">{m.library_my_ratings_page_order()}</p>
           {page.votes.length === 0 ? (
             feedback?.kind === 'cleared' || feedback?.kind === 'review-cleared' ? null : (
@@ -341,6 +406,7 @@ export function OwnVotesWorkspace({
               selectedPair={selectedPair}
               disabled={locked}
               onSelect={select}
+              onVisit={(entry) => onDeparturePair?.(entry)}
             />
           )}
           {activeEntry && selectedCurrent() ? (

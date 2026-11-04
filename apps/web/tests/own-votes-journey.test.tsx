@@ -8,13 +8,20 @@ import {
   createRouter,
   Outlet,
   RouterProvider,
+  useRouterState,
 } from '@tanstack/react-router';
 import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/rating/own-votes-page.ts';
 import type { OwnVoteIntent } from '../src/ratings/own-votes/intent';
 import type { OwnVoteCommandResult, OwnVotesRead } from '../src/ratings/own-votes/actions';
 import type { OwnVoteReadback } from '../src/ratings/own-votes/readback';
 import { OwnVotesWorkspace } from '../src/ratings/own-votes/page';
-import { useOwnVotesReturn } from '../src/ratings/own-votes/return';
+import {
+  OwnVotesReturnProvider,
+  useOwnVotesReturn,
+  useOwnVotesReturnReceipt,
+  type OwnVotesReturnOutcome,
+  type OwnVotesReturnOwner,
+} from '../src/ratings/own-votes/return';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 
@@ -60,16 +67,53 @@ type Harness = {
   review: (input: { data: { intent: OwnVoteIntent; after: 'REVIEW' } }) => Promise<OwnVoteReadback>;
   refresh: () => Promise<unknown>;
 };
+type RefreshPlan = (input: {
+  page: OwnVotesPage;
+  replace: (page: OwnVotesPage, state?: OwnVotesRead['state']) => void;
+}) => Promise<unknown>;
 const Context = createContext<Harness | null>(null);
 function RatingsScreen() {
   const value = useContext(Context)!;
   const heading = useRef<HTMLHeadingElement>(null);
-  useOwnVotesReturn(
-    'journey',
-    () => true,
-    value.refresh,
-    () => heading.current?.focus(),
-  );
+  const historyKey = useRouterState({ select: (state) => state.location.key });
+  const receipt = useOwnVotesReturnReceipt(historyKey, value.cursor, 'en');
+  const [outcome, setOutcome] = useState<OwnVotesReturnOutcome | null>(null);
+  const owner = (): OwnVotesReturnOwner => ({
+    visitKey: 'journey',
+    responseVersion: 0,
+    subject: viewer,
+    cursor: value.cursor,
+    locale: 'en',
+    source: 'rating.own_votes_page/v1',
+    eligible: () => true,
+    canRead: () => true,
+    validateResult: (result) => {
+      if (!result || typeof result !== 'object' || !('data' in result) || !('isSuccess' in result) || result.isSuccess !== true)
+        return null;
+      const read = result.data as OwnVotesRead;
+      return read.state === 'ready' && read.subject === viewer && read.cursor === value.cursor ? read : null;
+    },
+  });
+  const returnVisit = useOwnVotesReturn({
+    visitKey: 'journey',
+    cursor: value.cursor,
+    locale: 'en',
+    owner,
+    isCurrent: () => true,
+    refresh: value.refresh,
+    receipt,
+    onResolved: (next) => setOutcome(next),
+    onFocus: (next) => {
+      if (next.kind === 'found') {
+        const row = Array.from(document.querySelectorAll<HTMLElement>('[data-own-vote-target]')).find(
+          (candidate) =>
+            candidate.dataset.ownVoteTarget === next.pair.targetId &&
+            candidate.dataset.ownVoteQuestion === next.pair.questionId,
+        );
+        row?.querySelector<HTMLButtonElement>('button')?.focus();
+      } else heading.current?.focus();
+    },
+  });
   return (
     <OwnVotesWorkspace
       state={value.state}
@@ -77,16 +121,19 @@ function RatingsScreen() {
       cursor={value.cursor}
       locale="en"
       isCurrent={() => true}
-      onRefresh={value.refresh}
+      onRefresh={returnVisit.refresh}
       onUpdatePage={(update) => value.setPage(update(value.page))}
       headingRef={heading}
       execute={value.execute}
       review={value.review}
+      returnPending={returnVisit.pending && !returnVisit.failed}
+      returnOutcome={outcome}
+      onDeparturePair={returnVisit.inspect}
     />
   );
 }
 
-const rootRoute = createRootRoute({ component: Outlet });
+const rootRoute = createRootRoute({ component: () => <OwnVotesReturnProvider><Outlet /></OwnVotesReturnProvider> });
 const ratingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/library/ratings',
@@ -107,6 +154,7 @@ async function setup(
     cursor?: string;
     review?: Harness['review'];
     recovered?: OwnVotesPage;
+    refresh?: RefreshPlan;
   } = {},
 ) {
   const history = createMemoryHistory({ initialEntries: ['/library/ratings'] });
@@ -116,6 +164,9 @@ async function setup(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://site.test/library/ratings' });
+  const outside = window.document.createElement('button');
+  outside.textContent = 'Other page control';
+  window.document.body.append(outside);
   const globals = {
     window,
     document: window.document,
@@ -173,7 +224,20 @@ async function setup(
       refresh: async () => {
         refreshCount.value += 1;
         refreshCursors.push(options.cursor ?? null);
-        if (options.recovered) replace(options.recovered);
+        if (options.refresh) return options.refresh({ page, replace });
+        const refreshed = options.recovered ?? page;
+        replace(refreshed);
+        return {
+          isSuccess: true,
+          data: {
+            state: 'ready',
+            page: refreshed,
+            subject: viewer,
+            cursor: options.cursor ?? null,
+            locale: 'en',
+            source: 'rating.own_votes_page/v1',
+          } satisfies OwnVotesRead,
+        };
       },
     };
     return (
@@ -187,6 +251,7 @@ async function setup(
   await act(async () => root.render(<Provider />));
   return {
     host,
+    outside,
     window,
     router,
     calls,
@@ -198,6 +263,7 @@ async function setup(
     },
     close: async () => {
       await act(async () => root.unmount());
+      outside.remove();
       await setLocale(previousLocale, { reload: false });
       await window.happyDOM.close();
       for (const [key, descriptor] of saved) {
@@ -212,6 +278,14 @@ async function click(view: Awaited<ReturnType<typeof setup>>, button: Element) {
   await act(async () =>
     button.dispatchEvent(new view.window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
   );
+}
+
+async function back(view: Awaited<ReturnType<typeof setup>>) {
+  await act(async () => {
+    view.router.history.back();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
 }
 
 test('mounted journey keeps zero and original key, confirms exact readback, opens Subject and rereads on return', async () => {
@@ -250,10 +324,81 @@ test('mounted journey keeps zero and original key, confirms exact readback, open
       [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!,
     );
     expect(view.host.textContent).toContain('Subject reader');
-    await act(async () => view.router.navigate({ to: '/library/ratings' }));
-    await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
+    await back(view);
     expect(view.refreshCount.value).toBe(1);
-    expect(document.activeElement).toBe(view.host.querySelector('h1'));
+    expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
+    expect(view.window.document.activeElement).toBe(
+      view.host.querySelector(`[data-own-vote-target="${target}"][data-own-vote-question="${question}"] button`),
+    );
+    expect(view.calls).toHaveLength(1);
+    await click(view, button(view, m.library_my_ratings_inspect()));
+    await click(view, [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!);
+    await back(view);
+    expect(view.refreshCount.value).toBe(2);
+    expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
+  } finally {
+    await view.close();
+  }
+});
+
+test('failed return stays unavailable until the user retries the same page', async () => {
+  const page = pageOf(row());
+  let attempts = 0;
+  const view = await setup(page, async () => ({ kind: 'uncertain' }), {
+    refresh: async ({ replace }) => {
+      attempts += 1;
+      if (attempts === 1) return { isSuccess: false };
+      replace(page);
+      return {
+        isSuccess: true,
+        data: { state: 'ready', page, subject: viewer, cursor: null, locale: 'en', source: 'rating.own_votes_page/v1' },
+      };
+    },
+  });
+  try {
+    await click(view, button(view, m.library_my_ratings_inspect()));
+    await click(view, [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!);
+    await back(view);
+    await act(async () => Promise.resolve());
+    expect(view.host.textContent).toContain(m.library_my_ratings_unavailable());
+    expect(view.host.textContent).not.toContain(m.library_my_ratings_sparse());
+    await click(view, button(view, m.library_my_ratings_retry_page()));
+    await act(async () => Promise.resolve());
+    expect(view.refreshCount.value).toBe(2);
+    expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
+    expect(view.calls).toHaveLength(0);
+  } finally {
+    await view.close();
+  }
+});
+
+test('a missing original pair is reported on the admitted sparse page without scanning its continuation', async () => {
+  const first = pageOf(row());
+  const sparse: OwnVotesPage = { viewer: { accountId: viewer }, votes: [], next: 'opaque-next/+sealed=' };
+  const pending = deferred<unknown>();
+  const view = await setup(first, async () => ({ kind: 'uncertain' }), {
+    refresh: async ({ replace }) => {
+      const result = await pending.promise;
+      replace(sparse);
+      return result;
+    },
+  });
+  try {
+    await click(view, button(view, m.library_my_ratings_inspect()));
+    await click(view, [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!);
+    await back(view);
+    view.outside.focus();
+    pending.resolve({
+      isSuccess: true,
+      data: { state: 'ready', page: sparse, subject: viewer, cursor: null, locale: 'en', source: 'rating.own_votes_page/v1' },
+    });
+    await act(async () => pending.promise);
+    await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
+    expect(view.host.textContent).toContain(m.library_my_ratings_return_missing());
+    expect(view.host.textContent).toContain(m.library_my_ratings_sparse());
+    expect(view.host.querySelector('a[href*="cursor"]')?.getAttribute('href')).toContain(encodeURIComponent(sparse.next!));
+    expect(view.refreshCount.value).toBe(1);
+    expect(view.window.document.activeElement).toBe(view.outside);
   } finally {
     await view.close();
   }

@@ -38,6 +38,7 @@ import { catalogueNavigation } from '../features/catalogue/navigation';
 import { importReviewNavigation } from '../features/import-review/navigation';
 import { communityNavigation } from '../community/navigation';
 import { libraryNavigation } from '../library/navigation';
+import { OwnVotesReturnProvider } from '../ratings/own-votes/return';
 
 export const commerceNavigation = createNavigation([
   ...contextsNavigation,
@@ -136,10 +137,19 @@ export const Route = createRootRouteWithContext<{
     };
   },
   shellComponent: Root,
-  component: Outlet,
+  component: RootRoutes,
   notFoundComponent: NotFoundPage,
   errorComponent: ClosedErrorPage,
 });
+
+function RootRoutes() {
+  return (
+    <OwnVotesReturnProvider>
+      <Outlet />
+    </OwnVotesReturnProvider>
+  );
+}
+
 // This listener precedes the module entry and survives a failed import of client.tsx itself.
 // Only an observed module failure exposes recovery; a pending operation has no deadline.
 const clientLoadRecovery = String.raw`(() => {
