@@ -248,6 +248,7 @@ function port(
           if (command.op === 'create') {
             const id = created.get(command.key) ?? randomUUID();
             created.set(command.key, id);
+            created.set(`source:${command.source.external_id}`, id);
             return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
           }
           return {
@@ -267,7 +268,7 @@ function port(
     async readReviewedSubject(id) {
       const row = known[id];
       if (!row) {
-        const sourceId = [...created].find(([, subjectId]) => subjectId === id)?.[0];
+        const sourceId = [...created].find(([key, subjectId]) => key.startsWith('source:') && subjectId === id)?.[0].slice(7);
         return {
           subject: sourceId
             ? {
@@ -659,9 +660,15 @@ test('malformed and retracted source states withhold only affected claims', asyn
       true,
     );
     expect(first.gaps.some((row) => row.reason.includes('finite reviewed inventory'))).toBe(true);
-    expect(
-      plan.edges.some((edge) => edge.table === 'releases_supersedes' && edge.holder === 'r1' && edge.target === 'r5'),
-    ).toBe(false);
+    expect(plan.edges).toContainEqual(
+      expect.objectContaining({
+        table: 'releases_supersedes',
+        holder: 'r1',
+        target: 'r5',
+        property: 'rezics:releaseSupersedes',
+        fields: ['releases_supersedes.id', 'releases_supersedes.rid'],
+      }),
+    );
     expect(
       plan.gaps.some(
         (row) =>
@@ -670,7 +677,7 @@ test('malformed and retracted source states withhold only affected claims', asyn
           row.record.id === 'r1' &&
           row.record.rid === 'r5',
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(JSON.stringify(proposed)).not.toContain('wdt:P155');
     const workId = first.identities.find((row) => row.key === 'v1')?.subjectId;
     const releaseId = first.identities.find((row) => row.key === 'r1')?.subjectId;
