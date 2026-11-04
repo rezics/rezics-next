@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import { converter_revision as selectedFamilyRevision } from '@rezics/conversion/cross-media-entities';
+import { crossMediaBangumiRevision as selectedFamilyRevision } from '../src/source-registry.ts';
 import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
 import { extractBangumiSubjectNames } from '../../../packages/conversion/src/bangumi-subject-names.ts';
 import {
