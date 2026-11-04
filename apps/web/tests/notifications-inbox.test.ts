@@ -248,7 +248,7 @@ test('report destination reads remain reporter-scoped after the Inbox admits the
         expect(path).toBe(`/v1/reports/${report}`);
         return Response.json(
           status === 200
-            ? { report: { ...moderator, partition: 1, transactionId: 'private-transaction' } }
+            ? { report: { ...moderator, targetAvailability: 'unavailable', partition: 1, transactionId: 'private-transaction' } }
             : { code: status === 503 ? 'dependency_unavailable' : 'not_found' },
           { status },
         );
